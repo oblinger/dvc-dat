@@ -52,6 +52,7 @@ class Inst(object):
       .spec ................. Is the 'spec' dict for this inst
       .path ................. Returns the Path for this inst
       .name ................. Returns the name for this inst
+      .version .............. Returns the version for this inst
       .load(path) ........... Universal loader for all Persistables
       .save([path]) ......... Saves persistable to disk (optionally sets its path)
 
@@ -267,7 +268,7 @@ class InstContainer(Inst, Generic[T]):
 
     Examples
     --------
-    >>> game_set: InstContainer[Inst] = InstContainer.load("name/of/game/set")
+    >>> game_set: InstContainer[Inst] = InstContainer.load_file("name/of/game/set")
     >>> game_set.insts[0]  # a Game inst!
 
     Notes
