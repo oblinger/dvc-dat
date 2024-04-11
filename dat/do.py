@@ -25,18 +25,16 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 from typing import Type, Union, Any, Dict
-    
-from dat import inst
+
 from dat.inst import Inst
 
 # The loadable "do" fns, scripts, configs, and methods are in the do_folder
-dat_config, _do_folder = {}, ''
 _DAT_FILE = ".datconfig"
 _INST_FOLDER_KEY = "inst_data_folder"
 _DO_FOLDER_KEY = "do_folder"
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
 _DO_ERROR_FLAG = tuple("multiple loadable modules have this same name")
-_DO_INDEX = None
+_DO_NULL = tuple("arg not specified")
 
 _MAIN_BASE = "main.base"
 _MAIN_DO = "main.do"              # the main fn to execute
@@ -46,134 +44,137 @@ _MAIN_KWARGS = "main.kwargs"      # default kwargs for the main.do method
 Spec = Dict[str, Any]
 
 
-def do(do_spec: Union[Spec, str], *args, **kwargs) -> Any:
-    """Loads and executes a 'do-method'.
+class DoManager(object):
+    """Manages the loading and execution of 'do' methods."""
 
-    A "do function" or "do method" is a configurable dynamically loadable function call.
-    Each 'do' accepts a multi-level configuration dict as its first
-    argument followed by any number of additional fixed and keyword arguments.
+    def __init__(self, *, do_folder):
+        self.do_index = None
+        self.do_folder = do_folder
 
-    If "do_spec" is a:
-    - STRING: then 'do.load' is used to get the value to use in its place
-    - DICT: then its 'main.do' sub-key specifies the function to execute
-      If it is a string then, get_loadable is used to get fn to execute
-      Otherwise it is directly called.
-    - CALLABLE: then it is directly called with the specified args and kwargs
+    def __call__(self, do_spec: Union[Spec, str], *args, **kwargs) -> Any:
+        """Loads and executes a 'do-method'.
 
-    The function found is called with the spec dict found as its first
-    argument, then specified args and kwargs after that.
-    """
-    obj = load(do_spec) if isinstance(do_spec, str) else do_spec
-    if callable(obj):
-        result = obj(*args, **kwargs)
+        A "do function" or "do method" is a configurable dynamically loadable function
+        call. Each 'do' accepts a multi-level configuration dict as its first
+        argument followed by any number of additional fixed and keyword arguments.
+
+        If "do_spec" is a:
+        - STRING: then 'do.load' is used to get the value to use in its place
+        - DICT: then its 'main.do' sub-key specifies the function to execute
+          If it is a string then, get_loadable is used to get fn to execute
+          Otherwise it is directly called.
+        - CALLABLE: then it is directly called with the specified args and kwargs
+
+        The function found is called with the spec dict found as its first
+        argument, then specified args and kwargs after that.
+        """
+        obj = self.load(do_spec) if isinstance(do_spec, str) else do_spec
+        if callable(obj):
+            result = obj(*args, **kwargs)
+            return result
+        try:
+            obj = self.expand_spec(obj, context=do_spec)
+            fn_spec = Inst.get(obj, _MAIN_DO)
+        except IOError:
+            raise Exception(F"The loadable {do_spec!r} is not a callable or config")
+        if isinstance(fn_spec, str):
+            fn_spec = self.load(fn_spec)
+        if not callable(fn_spec):
+            raise Exception(F"'{_MAIN_DO}' in {do_spec!r} of type {type(fn_spec)} "
+                            + "is not callable")
+        result = fn_spec(obj, *args, **kwargs)
         return result
-    try:
-        obj = expand_spec(obj, context=do_spec)
-        fn_spec = Inst.get(obj, _MAIN_DO)
-    except IOError:
-        raise Exception(F"The loadable {do_spec!r} is not a callable or config")
-    if isinstance(fn_spec, str):
-        fn_spec = load(fn_spec)
-    if not callable(fn_spec):
-        raise Exception(F"'{_MAIN_DO}' in {do_spec!r} of type {type(fn_spec)} "
-                        + "is not callable")
-    result = fn_spec(obj, *args, **kwargs)
-    return result
 
-
-def merge_configs(base, override):
-    """Recursively merges the 'override' dict trees over the 'base' tree of dicts."""
-    if isinstance(override, dict) and isinstance(base, dict):
-        merge = dict(base)
-        for k, v in override.items():
-            merge[k] = merge_configs(merge.get(k), v)
-        # if BASE in base:
-        #     merge[BASE] = base[BASE]
-        return merge
-    elif override:
-        return override
-    else:
-        return base
-
-
-def expand_spec(spec: Union[Spec | str], context: str = None) -> Spec:
-    """Expands a spec by recursively loading and expanding its 'main.base' spec,
-    and then merging its keys as an override to the expanded base."""
-    if isinstance(spec, str):
-        spec = load(spec, context=context)
-        spec = copy.deepcopy(spec)
-    if base := Inst.get(spec, _MAIN_BASE):
-        sub_spec = expand_spec(base, context=context)
-        return merge_configs(sub_spec, spec)
-    else:
-        return spec
-
-
-#
-
-
-def load(dotted_name: str, default_value: Any = None, *, kind: Type = None,
-         context=None) -> Any:
-    """Uses 'dotted_name' do find a "loadable" python object, and then dynamically
-    load this object from within the loadables folder.
-
-    - If NAME contains a dot ("."), then the first part is called the
-      FILENAME, and the second part is called the PART-NAME.  If there is
-      no dot, then "NAME" is used twice for both FILENAME and PART-NAME.
-
-    - If FILENAME.* is found multiple times in the loadable's folder, then
-      an error is generated indicating the ambiguity in loading this name.
-
-    - If FILENAME.json or FILENAME.yaml is found, then it is loaded, and its
-      parsed contents are returned.  (PART-NAME is ignored)
-
-
-    """
-    global _DO_INDEX
-    _DO_INDEX = index = _DO_INDEX or _build_loadables_index()
-    # _DO_INDEX = index = _build_loadables_index()
-    #  <<<<<<<<< remove in order to start using cached index (once debugging is done)
-    ctx = "" if context is None else F" {context}"
-    values = dotted_name.split(".")
-    if len(values) < 2:
-        values = [dotted_name, dotted_name]
-    prefix, suffix = values[0], values[1]
-    # if "." in dotted_name:
-    #     prefix, suffix = dotted_name.split(".", 1)
-    # else:
-    #     prefix, suffix = dotted_name, dotted_name
-    if prefix not in index:
-        raise Exception(F"Loadable module {prefix!r} does not exist{ctx}")
-    elif isinstance(path := index[prefix], str):
-        index[path] = obj = _load_file(os.path.splitext(path)[0])
-    elif path == _DO_ERROR_FLAG:
-        raise Exception(F"Loadable {prefix!r} is defined multiple times.{ctx}")
-    else:
-        obj = path[0]   # loaded object is stored in ele 0 of the tuple
-
-    if isinstance(obj, ModuleType):
-        if hasattr(obj, suffix):
-            result = getattr(obj, suffix)
+    def merge_configs(self, base, override):
+        """Recursively merges the 'override' dict trees over 'base' tree of dicts."""
+        if isinstance(override, dict) and isinstance(base, dict):
+            merge = dict(base)
+            for k, v in override.items():
+                merge[k] = self.merge_configs(merge.get(k), v)
+            # if BASE in base:
+            #     merge[BASE] = base[BASE]
+            return merge
+        elif override:
+            return override
         else:
-            raise Exception(
-                F"Loadable '{prefix}.py' does not define {suffix!r}{ctx}")
-    elif "." not in dotted_name:
-        result = obj
-    elif isinstance(obj, dict):
-        result = Inst.gets(obj, suffix)[0]
-    else:
-        raise Exception(F"Illegal value {obj!r} for {dotted_name}{ctx}")
+            return base
 
-    if len(values) > 2:
-        result = Inst.get(result, values[2:])
-    if result is None and default_value is not None:
-        return default_value
-    if result is None:
-        raise Exception(F"Required loadable {dotted_name!r} is missing")
-    if kind and not isinstance(result, kind):
-        raise Exception(F"Expected loadable {dotted_name!r} of type {kind} " +
-                        F"but found {result!r}")
-    return result
+    def expand_spec(self, spec: Union[Spec | str], context: str = None) -> Spec:
+        """Expands a spec by recursively loading and expanding its 'main.base' spec,
+        and then merging its keys as an override to the expanded base."""
+        if isinstance(spec, str):
+            spec = self.load(spec, context=context)
+            spec = copy.deepcopy(spec)
+        if base := Inst.get(spec, _MAIN_BASE):
+            sub_spec = self.expand_spec(base, context=context)
+            return self.merge_configs(sub_spec, spec)
+        else:
+            return spec
+
+    def load(self, dotted_name: str, *, default: Any = _DO_NULL, kind: Type = None,
+             context=None) -> Any:
+        """Uses 'dotted_name' do find a "loadable" python object, and then dynamically
+        load this object from within the loadables folder.
+
+        - If NAME contains a dot ("."), then the first part is called the
+          FILENAME, and the second part is called the PART-NAME. If there is
+          no dot, then "NAME" is used twice for both FILENAME and PART-NAME.
+
+        - If FILENAME.* is found multiple times in the loadable's folder, then
+          an error is generated indicating the ambiguity in loading this name.
+
+        - If FILENAME.json or FILENAME.yaml is found, then it is loaded, and its
+          parsed contents are returned.  (PART-NAME is ignored)
+
+
+        """
+        self.do_index = index = self.do_index or _build_loadables_index()
+        # _DO_INDEX = index = _build_loadables_index()
+        #  <<<<<<< remove in order to start using cached index (once debugging is done)
+        ctx = "" if context is None else F" {context}"
+        values = dotted_name.split(".")
+        if len(values) < 2:
+            values = [dotted_name, dotted_name]
+        prefix, suffix = values[0], values[1]
+        # if "." in dotted_name:
+        #     prefix, suffix = dotted_name.split(".", 1)
+        # else:
+        #     prefix, suffix = dotted_name, dotted_name
+        if prefix not in index:
+            if default is _DO_NULL:
+                raise Exception(F"Loadable module {prefix!r} does not exist{ctx}")
+            else:
+                return default
+        elif isinstance(path := index[prefix], str):
+            index[path] = obj = _load_file(os.path.splitext(path)[0])
+        elif path == _DO_ERROR_FLAG:
+            raise Exception(F"Loadable {prefix!r} is defined multiple times.{ctx}")
+        else:
+            obj = path[0]   # loaded object is stored in ele 0 of the tuple
+
+        if isinstance(obj, ModuleType):
+            if hasattr(obj, suffix):
+                result = getattr(obj, suffix)
+            else:
+                raise Exception(
+                    F"Loadable '{prefix}.py' does not define {suffix!r}{ctx}")
+        elif "." not in dotted_name:
+            result = obj
+        elif isinstance(obj, dict):
+            result = Inst.gets(obj, suffix)[0]
+        else:
+            raise Exception(F"Illegal value {obj!r} for {dotted_name}{ctx}")
+
+        if len(values) > 2:
+            result = Inst.get(result, values[2:])
+        if result is None and default is not _DO_NULL:
+            return default
+        if result is None:
+            raise Exception(F"Required loadable {dotted_name!r} is missing")
+        if kind and not isinstance(result, kind):
+            raise Exception(F"Expected loadable {dotted_name!r} of type {kind} " +
+                            F"but found {result!r}")
+        return result
 
 
 def _load_file(path_base: str) -> Union[ModuleType, Spec]:
@@ -202,9 +203,9 @@ def _load_module(path_base: str) -> ModuleType:
 
 
 def _build_loadables_index() -> Dict:
-    global _DO_EXTENSIONS, _do_folder
+    global _DO_EXTENSIONS
     result = {}
-    for path in Path(_do_folder).rglob('*'):
+    for path in Path(dat_config.do_folder).rglob('*'):
         base, ext = os.path.splitext(os.path.basename(path))
         if not path.is_file() or ext not in _DO_EXTENSIONS or \
                 base == '__init__':
@@ -278,14 +279,14 @@ def do_argv(argv):
     elif len(args) == 0 and "usage" not in kwargs:
         print("Error: No do-command specified.")
         return
-    cmd = load(args[0])
-    spec = expand_spec(cmd) if hasattr(cmd, "__getitem__") else {}
-    spec = merge_configs(spec, overrides)
+    cmd = do.load(args[0])
+    spec = do.expand_spec(cmd) if hasattr(cmd, "__getitem__") else {}
+    spec = do.merge_configs(spec, overrides)
     # for keys, value in overrides:
     #     Inst.set(spec, keys, value)
     if "usage" in kwargs:
         try:
-            usage = load(args[0].split(".")[0] + ".usage")
+            usage = do.load(args[0].split(".")[0] + ".usage")
         except IOError:
             usage = spec.get("usage") or USAGE
         print(usage)
@@ -361,31 +362,38 @@ def _get_flag(arg):
         return None
 
 
-def _dat_setup():
-    def lookup_path(folder_path, config_dict, key, default):
-        if key in config_dict:
-            path = os.path.join(folder_path, config_dict[key])
+class DatConfig(object):
+    config: Dict[str, Any]
+    do_folder: str
+    inst_folder: str
+
+    def _lookup_path(self, folder_path, key, default):
+        if key in self.config:
+            path = os.path.join(folder_path, self.config[key])
         else:
             path = os.path.join(os.getcwd(), default)
         os.makedirs(path, exist_ok=True)
         return path
-    global _do_folder, dat_config
-    dat_config, folder = {}, os.getcwd()
-    while True:
-        if os.path.exists(config := os.path.join(folder, _DAT_FILE)):
-            with open(config, 'r') as f:
-                dat_config = json.load(f)
+
+    def __init__(self):
+        self.config = {}
+        folder = os.getcwd()
+        while True:
+            if os.path.exists(config := os.path.join(folder, _DAT_FILE)):
+                with open(config, 'r') as f:
+                    self.config = json.load(f)
+                    break
+            if folder == '/':
+                folder = os.getcwd()
                 break
-        if folder == '/':
-            folder = os.getcwd()
-            break
-        folder = os.path.dirname(folder)
-    _do_folder = lookup_path(folder, dat_config, _DO_FOLDER_KEY, "do")
-    inst.data_folder = lookup_path(folder, dat_config, _INST_FOLDER_KEY, "inst_data")
-    print(F"# DO_FOLDER = {_do_folder}\n# INST_DATA_FOLDER = {inst.data_folder}")
+            folder = os.path.dirname(folder)
+        self.do_folder = self._lookup_path(folder, _DO_FOLDER_KEY, "do")
+        self.inst_folder = self._lookup_path(folder, _INST_FOLDER_KEY, "inst_data")
+        # print(F"# DO_FLDR = {self.do_folder}\n# INST_DATA = {self.inst_folder}")
 
 
-_dat_setup()
+dat_config = DatConfig()
+do = DoManager(do_folder=dat_config.do_folder)
 
 
 if __name__ == '__main__':
