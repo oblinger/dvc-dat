@@ -5,8 +5,8 @@ The 'do' module provides a way to dynamically load and execute python code.
 
 
 API
-    do(do_spec, *args, **kwargs) -> Any    # loads, caches, and executes a do-method
-    load(dotted_name) -> Any               # loads and caches a python object
+    do(do_spec, *args, **kwargs) -> Any    # loads, caches, and executes a do-fn
+    load(dotted_name) -> Any               # loads, caches, and returns a python object
     do_argv(sys.argv) -> None              # Executes a do command from the command line
 
 
@@ -24,7 +24,7 @@ import yaml
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import Type, Union, Any, Dict
+from typing import Type, Union, Any, Dict, Callable
 
 from dat.inst import Inst
 
@@ -45,10 +45,21 @@ Spec = Dict[str, Any]
 
 
 class DoManager(object):
-    """Manages the loading and execution of 'do' methods."""
+    """Manages the loading and execution of 'do' methods.
+
+    The 'do' method is a configurable dynamically loadable function call.  API:
+
+    do(do_spec, *args, **kwargs) -> Any   # loads, caches, and executes a do-fn
+    do.load(dotted_name) -> Any           # loads, caches, and returns a python object
+    do.define_module(base, path)          # specifies the full path of the python module
+    do.define_fn(base, name, fn)          # specifies a fn to be used in a do call
+    """
+    do_index: Dict[str, Union[str, ModuleType]]   # path to module or module itself
+    do_fns: Dict[str, Dict[str, Callable]]        # externally defined fns
 
     def __init__(self, *, do_folder):
-        self.do_index = None
+        self.do_index = {}
+        self.do_fns = {}
         self.do_folder = do_folder
 
     def __call__(self, do_spec: Union[Spec, str], *args, **kwargs) -> Any:
@@ -84,6 +95,18 @@ class DoManager(object):
                             + "is not callable")
         result = fn_spec(obj, *args, **kwargs)
         return result
+
+    def define_module(self, base: str, path: str, *, allow_redefine=False):
+        """Specifies the full path of the python module to load for a given base name"""
+        if not allow_redefine and base in self.do_index:
+            raise Exception(F"Base {base!r} is already defined")
+        self.do_index[base] = path
+
+    def define_fn(self, base: str, name: str, fn: Callable):
+        """Specifies a fn to be used in a do call."""
+        if base not in self.do_fns:
+            self.do_fns[base] = {}
+        self.do_fns[base][name] = fn
 
     def merge_configs(self, base, override):
         """Recursively merges the 'override' dict trees over 'base' tree of dicts."""
@@ -140,6 +163,8 @@ class DoManager(object):
         #     prefix, suffix = dotted_name.split(".", 1)
         # else:
         #     prefix, suffix = dotted_name, dotted_name
+        if prefix in self.do_fns and suffix in self.do_fns[prefix]:
+            return self.do_fns[prefix][suffix]
         if prefix not in index:
             if default is _DO_NULL:
                 raise Exception(F"Loadable module {prefix!r} does not exist{ctx}")
@@ -195,7 +220,7 @@ def _load_module(path_base: str) -> ModuleType:
     assert isinstance(path_base, object)
     f = F"{path_base}.py"
     if not os.path.exists(f):
-        raise Exception(F"Missing spec file: {path_base} ...")
+        raise Exception(F"Missing module file: {f} ...")
     spec = importlib.util.spec_from_file_location("module_name", f)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

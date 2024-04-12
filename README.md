@@ -11,7 +11,7 @@ pip install -e .
 ## Usage
 
 ```bash
-python -m src.main
+cd tests; ./do hello_world
 ```
 
 ## Testing
