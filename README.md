@@ -28,6 +28,7 @@ python -m black src
 
 
 ## Todo
+- [ ] Split ml-cube into a separate package
 - [ ] Add a `requirements.txt` file
 - [ ] Add a `setup.py` file
 - [ ] make inst use the datconfig defined folder

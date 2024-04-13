@@ -6,7 +6,7 @@ import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dat.do import do, DoManager
+from ml_dat.do import do, DoManager
 
 
 @pytest.fixture

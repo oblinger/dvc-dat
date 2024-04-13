@@ -3,8 +3,8 @@ import pandas as pd
 from typing import List, Dict, Any, Union, Iterable, Optional, Callable
 
 # from do.hello.cube_examples.cube_hello_inst import Alignment
-from dat.inst import Inst, InstContainer
-from dat.do import do
+from ml_dat.inst import Inst, InstContainer
+from ml_dat.do import do
 
 
 Points = List[Dict[str, Any]]

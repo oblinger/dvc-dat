@@ -17,7 +17,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Type, Union, Any, Dict, Callable
 
-from dat.inst import Inst
+from ml_dat.inst import Inst
 
 # The loadable "do" fns, scripts, configs, and methods are in the do_folder
 _DAT_FILE = ".datconfig"

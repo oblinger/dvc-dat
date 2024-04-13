@@ -8,10 +8,10 @@
 #
 # sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 #
-# from dat.do import do
-# from dat.cube import Cube
-# import dat.inst as inst_module
-# from dat.inst import MAIN_CLASS, Inst, InstContainer
+# from ml_dat.do import do
+# from ml_dat.cube import Cube
+# import ml_dat.inst as inst_module
+# from ml_dat.inst import MAIN_CLASS, Inst, InstContainer
 #
 #
 # TMP_PATH = "/tmp/job_test"

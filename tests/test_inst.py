@@ -8,7 +8,7 @@ import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dat.inst import MAIN_CLASS, Inst, InstContainer
+from ml_dat.inst import MAIN_CLASS, Inst, InstContainer
 
 
 TMP_PATH = "/tmp/job_test"
@@ -44,7 +44,7 @@ def game_spec():
 
 @pytest.fixture
 def mock_inst_root(monkeypatch: pytest.MonkeyPatch) -> tempfile.TemporaryDirectory:
-    import dat.inst as inst
+    import ml_dat.inst as inst
     temp_dir = tempfile.TemporaryDirectory()
     monkeypatch.setattr(inst, "INST_ROOT", temp_dir.name)
     return temp_dir

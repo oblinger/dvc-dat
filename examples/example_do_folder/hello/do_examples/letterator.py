@@ -1,4 +1,4 @@
-from dat.do import do
+from ml_dat.do import do
 
 """Silly configurable tool for applying rules to a sequence of letters."""
 letterator = {
