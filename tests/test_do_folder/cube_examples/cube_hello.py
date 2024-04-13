@@ -16,9 +16,9 @@ cube_hello.r ..... Marble prediction recall.
 CreateHello10 .... Creates the fake dataset of 10 runs in /tmp/hello10.
 
 """
-from inst import Inst
-from synch.communication.models import ShotAnnotationsAlignment
-from do.reports.cube import align_pr
+from ml_dat.inst import Inst
+# from synch.communication.models import ShotAnnotationsAlignment
+# from do.reports.cube import align_pr
 
 metrics = ["cube_hello", "cube_hello.p", "cube_hello.r", "rpt", "CreateHello10"]
 

@@ -1,17 +1,17 @@
-# import os
-# import sys
-# import json
-# import tempfile
-# from pathlib import Path
-# from typing import Dict
-# import pytest
-#
-# sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-#
-# from ml_dat.do import do
-# from ml_dat.cube import Cube
-# import ml_dat.inst as inst_module
-# from ml_dat.inst import MAIN_CLASS, Inst, InstContainer
+import os
+import sys
+import json
+import tempfile
+from pathlib import Path
+from typing import Dict
+import pytest
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+from ml_dat.do import do
+from ml_dat.cube import Cube
+import ml_dat.inst as inst_module
+from ml_dat.inst import MAIN_CLASS, Inst, InstContainer
 #
 #
 # TMP_PATH = "/tmp/job_test"
@@ -108,13 +108,13 @@
 #     return mock_inst_root
 #
 #
-# class TestDoHello:
-#     def test_load_do(self):
-#         assert do("cube_hello", show=True)
-#
-#
+class TestDoHello:
+    def test_load_do(self):
+        assert do("cube_hello", show=True)
+
+
 # class TestCreate:
-#     def test_null_create(self, spec1):
+#     def test_null_create(self):
 #         assert Cube(), "Couldn't create Persistable"
 #
 #     def test_add_do_fn(self):
