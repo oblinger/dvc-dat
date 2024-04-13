@@ -3,17 +3,8 @@
 """
 The 'do' module provides a way to dynamically load and execute python code.
 
+See DoManager class for details.
 
-API
-    do(do_spec, *args, **kwargs) -> Any    # loads, caches, and executes a do-fn
-    load(dotted_name) -> Any               # loads, caches, and returns a python object
-    do_argv(sys.argv) -> None              # Executes a do command from the command line
-
-
-.datconfig
-    The do module search CWD and all its parent folders for the '.datconfig' file.
-    If it is found, it expects a JSON object with a 'do_folder' key that indicates
-    the path (relative to the .datconfig file itself) of the "do folder"
 """
 
 import os
@@ -34,7 +25,7 @@ _INST_FOLDER_KEY = "inst_data_folder"
 _DO_FOLDER_KEY = "do_folder"
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
 _DO_ERROR_FLAG = tuple("multiple loadable modules have this same name")
-_DO_NULL = tuple("arg not specified")
+_DO_NULL = tuple("-no-value-")
 
 _MAIN_BASE = "main.base"
 _MAIN_DO = "main.do"              # the main fn to execute
@@ -45,21 +36,45 @@ Spec = Dict[str, Any]
 
 
 class DoManager(object):
-    """Manages the loading and execution of 'do' methods.
+    """'Do' maps dotted strings to python objects dynamically loaded from .py files.
 
-    The 'do' method is a configurable dynamically loadable function call.  API:
+    API:
+      .load(dotted_name) ............. # Loads and returns the indexed object
+      (do_spec, *args, **kwargs)  .... # Calls the object loaded from the spec name
+      .register_value(name, value) ... # Defines value to be returned by load
+      .register_module(base, path) ... # Specifies path of module to be loaded
 
-    do(do_spec, *args, **kwargs) -> Any   # loads, caches, and executes a do-fn
-    do.load(dotted_name) -> Any           # loads, caches, and returns a python object
-    do.define_module(base, path)          # specifies the full path of the python module
-    do.define_fn(base, name, fn)          # specifies a fn to be used in a do call
+
+    DOTTED-NAMES
+    - The first part of the dotted string is called the "base" and it indicates the
+        python module, JSON, or YAML file where the value is loaded from.
+    - The second part, called the attribute, indicates the attribute of the module
+        where the object is found.
+    - Any remaining dotted-names are used to recursively index within the object.
+    - As a special case if the dotted-name is a single part, and the module
+
+    DO_FOLDER
+    - Like GIT the 'do' module searches CWD and all its parent folders for the
+      '.datconfig' file. If it is found, it expects it to contain a JSON object.
+    - If it contains the 'do_folder' key its value specifies the relative path from
+      the datconfig file to the "do folder" where the loadable python objects are found.
+    - Otherwise, the do folder is assumed to be a folder named 'do' in the CWD.
+    - Either way the do folder is scanned as the filenames (but not their paths) are
+      used as the "base" part of the dotted names.
+
+    SPEC EXPANSION
+    - Spec expansion is the process of recursively loading and merging a spec dict:
+    - If a spec has a "main.base" key, then it is loaded and merged with the spec.
+        - This process is repeated until no more "main.base" keys are found.
+
     """
-    do_index: Dict[str, Union[str, ModuleType]]   # path to module or module itself
-    do_fns: Dict[str, Dict[str, Callable]]        # externally defined fns
+    do_index: Dict[str, Union[str, ModuleType]]    # path to module or module itself
+    do_fns: Dict[str, Dict[str, Callable]]         # externally defined fns
+    registered_values: Union[None, Dict[str, Any]] # values to be returned by load
 
     def __init__(self, *, do_folder):
         self.do_index = {}
-        self.do_fns = {}
+        self.registered_values = None
         self.do_folder = do_folder
 
     def __call__(self, do_spec: Union[Spec, str], *args, **kwargs) -> Any:
@@ -96,17 +111,17 @@ class DoManager(object):
         result = fn_spec(obj, *args, **kwargs)
         return result
 
-    def define_module(self, base: str, path: str, *, allow_redefine=False):
+    def register_module(self, base: str, path: str, *, allow_redefine=False):
         """Specifies the full path of the python module to load for a given base name"""
         if not allow_redefine and base in self.do_index:
             raise Exception(F"Base {base!r} is already defined")
         self.do_index[base] = path
 
-    def define_fn(self, base: str, name: str, fn: Callable):
-        """Specifies a fn to be used in a do call."""
-        if base not in self.do_fns:
-            self.do_fns[base] = {}
-        self.do_fns[base][name] = fn
+    def register_value(self, dotted_name: str, value: Any):
+        """Defines a value to be returned by 'load' for the given dotted name."""
+        if self.registered_values is None:
+            self.registered_values = {}
+        Inst.set(self.registered_values, dotted_name, value)
 
     def merge_configs(self, base, override):
         """Recursively merges the 'override' dict trees over 'base' tree of dicts."""
@@ -148,56 +163,48 @@ class DoManager(object):
 
         - If FILENAME.json or FILENAME.yaml is found, then it is loaded, and its
           parsed contents are returned.  (PART-NAME is ignored)
-
-
         """
-        self.do_index = index = self.do_index or _build_loadables_index()
-        # _DO_INDEX = index = _build_loadables_index()
-        #  <<<<<<< remove in order to start using cached index (once debugging is done)
+        self.do_index = index = self.do_index or _build_loadables_index(self.do_folder)
         ctx = "" if context is None else F" {context}"
-        values = dotted_name.split(".")
-        if len(values) < 2:
-            values = [dotted_name, dotted_name]
-        prefix, suffix = values[0], values[1]
-        # if "." in dotted_name:
-        #     prefix, suffix = dotted_name.split(".", 1)
-        # else:
-        #     prefix, suffix = dotted_name, dotted_name
-        if prefix in self.do_fns and suffix in self.do_fns[prefix]:
-            return self.do_fns[prefix][suffix]
+        parts = dotted_name.split(".")
+        prefix = parts[0]
+        if self.registered_values:
+            value = Inst.get(self.registered_values, parts, _DO_NULL)
+            if value is not _DO_NULL:
+                return value
         if prefix not in index:
             if default is _DO_NULL:
-                raise Exception(F"Loadable module {prefix!r} does not exist{ctx}")
+                raise Exception(F"DO: Module {prefix!r} does not exist{ctx}")
             else:
                 return default
-        elif isinstance(path := index[prefix], str):
-            index[path] = obj = _load_file(os.path.splitext(path)[0])
-        elif path == _DO_ERROR_FLAG:
-            raise Exception(F"Loadable {prefix!r} is defined multiple times.{ctx}")
+        elif isinstance(cached_obj := index[prefix], str):
+            index[prefix] = obj = _load_file(os.path.splitext(cached_obj)[0])
+        elif cached_obj == _DO_ERROR_FLAG:
+            raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
         else:
-            obj = path[0]   # loaded object is stored in ele 0 of the tuple
+            obj = cached_obj   # loaded object is stored in ele 0 of the tuple
 
         if isinstance(obj, ModuleType):
-            if hasattr(obj, suffix):
-                result = getattr(obj, suffix)
+            if len(parts) > 1:
+                suffix, rest_idx = parts[1], 2
             else:
-                raise Exception(
-                    F"Loadable '{prefix}.py' does not define {suffix!r}{ctx}")
-        elif "." not in dotted_name:
+                suffix, rest_idx = prefix, 1
+            result = getattr(obj, suffix) if hasattr(obj, suffix) else None
+            if result and len(parts) > rest_idx:
+                result = Inst.get(result, parts[rest_idx:])
+        elif len(parts) == 1:
             result = obj
         elif isinstance(obj, dict):
-            result = Inst.gets(obj, suffix)[0]
+            result = Inst.get(obj, parts[1:])
         else:
-            raise Exception(F"Illegal value {obj!r} for {dotted_name}{ctx}")
+            raise Exception(F"DO: Illegal value {obj!r} for {dotted_name}{ctx}")
 
-        if len(values) > 2:
-            result = Inst.get(result, values[2:])
         if result is None and default is not _DO_NULL:
             return default
         if result is None:
-            raise Exception(F"Required loadable {dotted_name!r} is missing")
+            raise Exception(F"DO: Required value {dotted_name!r} is missing")
         if kind and not isinstance(result, kind):
-            raise Exception(F"Expected loadable {dotted_name!r} of type {kind} " +
+            raise Exception(F"DO: Expected {dotted_name!r} of type {kind} " +
                             F"but found {result!r}")
         return result
 
@@ -227,10 +234,12 @@ def _load_module(path_base: str) -> ModuleType:
     return module
 
 
-def _build_loadables_index() -> Dict:
+def _build_loadables_index(do_folder: str) -> Dict:
     global _DO_EXTENSIONS
     result = {}
-    for path in Path(dat_config.do_folder).rglob('*'):
+    if not do_folder or not os.path.exists(do_folder):
+        return result
+    for path in Path(do_folder).rglob('*'):
         base, ext = os.path.splitext(os.path.basename(path))
         if not path.is_file() or ext not in _DO_EXTENSIONS or \
                 base == '__init__':
@@ -388,6 +397,13 @@ def _get_flag(arg):
 
 
 class DatConfig(object):
+    """Configuration info for the 'dat' module loaded from the .datconfig file.
+
+    .datconfig
+        The do module search CWD and all its parent folders for the '.datconfig' file.
+        If it is found, it expects a JSON object with a 'do_folder' key that indicates
+        the path (relative to the .datconfig file itself) of the "do folder"
+    """
     config: Dict[str, Any]
     do_folder: str
     inst_folder: str

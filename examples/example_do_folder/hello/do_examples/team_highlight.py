@@ -9,7 +9,7 @@ have agreed 80% is the minimum approved threshold required for product ship.
 from inst import Inst
 
 def reg_quick_test():
-    run_result = Inst.load_file("reg1_latest")   # Reg1 is the pickle for a special 5-min game snipit
+    run_result = Inst.load("reg1_latest")   # Reg1 is the pickle for a special 5-min game snipit
     assert do("team_highlight_money", run_result) > .65
 
 reg_full_test = "std_full1"  # indicates full regression testing is part of 'std_full1'

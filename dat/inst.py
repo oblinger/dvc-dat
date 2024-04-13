@@ -81,14 +81,16 @@ class Inst(object):
         self.spec: Dict = spec
 
     @staticmethod
-    def get(source: Union["Inst", dict], keys) -> Any:
+    def get(source: Union["Inst", dict],
+            keys: Union[str, List[str]],
+            default_value=None) -> Any:
         """Utility method to get value from a recursive dict tree or return None."""
         d = source.spec if isinstance(source, Inst) else source
         if isinstance(keys, str):
             keys = keys.split(".")
         for k in keys:
             if d is None:
-                break
+                return default_value
             elif not isinstance(d, dict):
                 raise Exception(f"GET: Expected dict value for {k!r} not {d!r}")
             else:

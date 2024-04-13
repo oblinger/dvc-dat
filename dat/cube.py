@@ -4,7 +4,8 @@ from typing import List, Dict, Any, Union, Iterable, Optional, Callable
 
 # from do.hello.cube_examples.cube_hello_inst import Alignment
 from dat.inst import Inst, InstContainer
-from dat.do import load
+from dat.do import do
+
 
 Points = List[Dict[str, Any]]
 
@@ -92,7 +93,7 @@ class Cube(object):
     def add_point_fns(self, do_fns: List[str]):
         """Adds a list of dat functions to the cube."""
         for do_name in do_fns:
-            self.point_fns.append(load(do_name))
+            self.point_fns.append(do.load(do_name))
 
     def add_insts(self, source: Union[Inst, str, Iterable]) -> None:
         """Recursively scans 'source' adding points derived from each Inst.

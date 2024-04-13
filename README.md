@@ -25,3 +25,9 @@ python -m pytest
 ```bash
 python -m black src
 ```
+
+
+## Todo
+- [ ] Add a `requirements.txt` file
+- [ ] Add a `setup.py` file
+- [ ] make inst use the datconfig defined folder

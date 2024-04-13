@@ -1,4 +1,4 @@
-from dat.do import load
+from dat.do import do
 
 """Silly configurable tool for applying rules to a sequence of letters."""
 letterator = {
@@ -15,7 +15,7 @@ def run(spec):
     for idx in range(spec["start"], spec["end"]):
         text = chr(idx)
         for step, rule_name in spec["rules"]:
-            fn = load(rule_name)
+            fn = do.load(rule_name)
             if idx % step == 0:
                 text = fn(idx, text)
         results.append(text)

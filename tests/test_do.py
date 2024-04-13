@@ -6,7 +6,12 @@ import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dat.do import do
+from dat.do import do, DoManager
+
+
+@pytest.fixture
+def empty_do_mgr():
+    return DoManager(do_folder=None)
 
 
 def run_capture(line: str) -> str:
@@ -25,7 +30,8 @@ class TestLoad:
     def test_load_with_default(self):
         assert do.load("not_there", default="hello") == "hello"
         assert do.load("not_there", default=None) is None
-        assert isinstance(do.load("hello_world", default="hello"), Callable)
+        huh = do.load("hello_world", default="hello")
+        assert isinstance(huh, Callable)
 
     def test_multiple_values_in_one_loadable(self):
         assert isinstance(do.load("hello_again"), Callable)
@@ -75,6 +81,8 @@ class TestCommandLine:
         assert result == "MAXIM, MY LUCKY NUMBER IS 999!\n(999, 'Maxim, My lucky number is 999')"
 
 
+
+
     def test_run_configuration_from_cmdline(self):
         result = run_capture("./do my_letters")
         assert result == "The Letterator\na  jackpot   ccc  D  e  fff  g  h  JACKPOT JACKPOT JACKPOT   j  k  lll  m  N  ooo  jackpot   q  rrr  S  t  uuu  v  jackpot   XXX  y"
@@ -93,11 +101,37 @@ class TestCommandLine:
                  """D  e  fff  g  h  JACKPOT JACKPOT JACKPOT   j  k  lll  m"""
         assert run_capture(line) == expect
 
-    def test_defining_modules_paths(self):
-        path = os.path.join(os.path.dirname(__file__), "test_do_folder/hello_world.py")
-        do.define_module("xxx", path)
-        assert do("xxx.hello_world") == "hello world!"
 
-    def test_defining_do_fns(self):
-        do.define_fn("foo", "bar", lambda: "baz")
-        assert do("foo.bar") == "baz"
+class TestRegisteringStuff:
+
+    def test_registering_simple_values(self, empty_do_mgr):
+        do_ = empty_do_mgr
+        do_.register_value("foo", "bar")
+        assert do_.load("foo") == "bar"
+
+        do_.register_value("another.bar", "baz")
+        assert do_.load("another.bar") == "baz"
+
+        do_.register_value("three.levels.deep", 333.333)
+        assert do_.load("three.levels.deep") == 333.333
+
+    def test_loading_missing_values(self, empty_do_mgr):
+        do_ = empty_do_mgr
+        assert do_.load("this.is.not_there", default="hello") == "hello"
+        assert do_.load("not_there", default=None) is None
+
+    def test_registering_simple_functions(self, empty_do_mgr):
+        do_ = empty_do_mgr
+        do_.register_value("foo", lambda: "bar")
+        assert do_("foo") == "bar"
+
+    def test_registering_do_fns(self, empty_do_mgr):
+        do_ = empty_do_mgr
+        do_.register_value("foo.bar", lambda: "baz")
+        assert do_("foo.bar") == "baz"
+
+    def test_registering_modules_paths(self):
+        do_ = DoManager(do_folder=None)
+        path = os.path.join(os.path.dirname(__file__), "test_do_folder/hello_world.py")
+        do_.register_module("xxx", path)
+        assert do_("xxx.hello_world") == "hello world!"
