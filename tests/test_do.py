@@ -130,8 +130,10 @@ class TestRegisteringStuff:
         do_.register_value("foo.bar", lambda: "baz")
         assert do_("foo.bar") == "baz"
 
-    def test_registering_modules_paths(self):
-        do_ = DoManager(do_folder=None)
+    def test_registering_modules_paths(self, empty_do_mgr):
+        do_ = empty_do_mgr
         path = os.path.join(os.path.dirname(__file__), "test_do_folder/hello_world.py")
         do_.register_module("xxx", path)
         assert do_("xxx.hello_world") == "hello world!"
+        do_.register_module("yyy", "ml_dat.do")  # The already loaded do.py module
+        assert do_.load("yyy._DAT_FILE") == ".datconfig"

@@ -14,14 +14,7 @@ METRICS = "metrics"
 TITLE = "title"
 
 INDICIES = "indicies"   # Temp key used to store the indicies in cube points
-
-
-# TODO:
-# - Add basic readme
-# - Implement the 'merge_keys' method
-# - Implement the 'get_csv' method
-# - Support inst 'Cube' section that build data cube and cube reports
-# - Support cube of cubes with cached points in sub cubes
+do.register_module("cube", "ml_dat.cube")
 
 
 class Cube(object):

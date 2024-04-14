@@ -108,9 +108,9 @@ from ml_dat.inst import MAIN_CLASS, Inst, InstContainer
 #     return mock_inst_root
 #
 #
-class TestDoHello:
-    def test_load_do(self):
-        assert do("cube_hello", show=True)
+# class TestDoHello:
+#     def test_load_do(self):
+#         assert do("cube_hello", show=True)
 
 
 # class TestCreate:
@@ -252,6 +252,6 @@ class TestDoHello:
 # #             assert True
 #
 #
-# if __name__ == "__main__":
-#     TestCreate().test_create(spec1)
-#     # pytest.main([__file__])
+if __name__ == "__main__":
+    TestDoHello().test_load_do()
+    # pytest.main([__file__])

@@ -31,4 +31,10 @@ python -m black src
 - [ ] Split ml-cube into a separate package
 - [ ] Add a `requirements.txt` file
 - [ ] Add a `setup.py` file
-- [ ] make inst use the datconfig defined folder
+- [ ] make inst use the datconfig defined folder 
+TODO for cube.py
+- Add basic readme
+- Implement the 'merge_keys' method
+- Implement the 'get_csv' method
+- Support inst 'Cube' section that build data cube and cube reports
+- Support cube of cubes with cached points in sub cubes

@@ -11,6 +11,8 @@ import os
 import sys
 import copy
 import json
+from importlib import import_module
+
 import yaml
 import importlib.util
 from pathlib import Path
@@ -25,7 +27,7 @@ _INST_FOLDER_KEY = "inst_data_folder"
 _DO_FOLDER_KEY = "do_folder"
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
 _DO_ERROR_FLAG = tuple("multiple loadable modules have this same name")
-_DO_NULL = tuple("-no-value-")
+_DO_NULL = tuple(["-no-value-"])
 
 _MAIN_BASE = "main.base"
 _MAIN_DO = "main.do"              # the main fn to execute
@@ -68,12 +70,12 @@ class DoManager(object):
         - This process is repeated until no more "main.base" keys are found.
 
     """
-    do_index: Dict[str, Union[str, ModuleType]]    # path to module or module itself
+    module_index: Dict[str, Union[str, ModuleType]]    # path to module or module itself
     do_fns: Dict[str, Dict[str, Callable]]         # externally defined fns
     registered_values: Union[None, Dict[str, Any]] # values to be returned by load
 
-    def __init__(self, *, do_folder):
-        self.do_index = {}
+    def __init__(self, *, do_folder=None):
+        self.module_index = _build_loadables_index(do_folder)
         self.registered_values = None
         self.do_folder = do_folder
 
@@ -111,11 +113,18 @@ class DoManager(object):
         result = fn_spec(obj, *args, **kwargs)
         return result
 
-    def register_module(self, base: str, path: str, *, allow_redefine=False):
-        """Specifies the full path of the python module to load for a given base name"""
-        if not allow_redefine and base in self.do_index:
+    def register_module(self, base: str, module_spec: Union[str, ModuleType], *,
+                        allow_redefine=False):
+        """Specifies the module associated with a dotted name prefix.
+
+        The module can be specified using
+        - The full path to the python source (which will be loaded separately from the
+          import system.),
+        - The module's import name, or
+        - by providing the already loaded module object."""
+        if not allow_redefine and base in self.module_index:
             raise Exception(F"Base {base!r} is already defined")
-        self.do_index[base] = path
+        self.module_index[base] = module_spec
 
     def register_value(self, dotted_name: str, value: Any):
         """Defines a value to be returned by 'load' for the given dotted name."""
@@ -164,7 +173,7 @@ class DoManager(object):
         - If FILENAME.json or FILENAME.yaml is found, then it is loaded, and its
           parsed contents are returned.  (PART-NAME is ignored)
         """
-        self.do_index = index = self.do_index or _build_loadables_index(self.do_folder)
+
         ctx = "" if context is None else F" {context}"
         parts = dotted_name.split(".")
         prefix = parts[0]
@@ -172,26 +181,30 @@ class DoManager(object):
             value = Inst.get(self.registered_values, parts, _DO_NULL)
             if value is not _DO_NULL:
                 return value
-        if prefix not in index:
+        if prefix not in self.module_index:
             if default is _DO_NULL:
-                raise Exception(F"DO: Module {prefix!r} does not exist{ctx}")
+                raise Exception(
+                    f"DO: Module {prefix!r} not found under {self.do_folder!r}{ctx}")
             else:
                 return default
-        elif isinstance(cached_obj := index[prefix], str):
-            index[prefix] = obj = _load_file(os.path.splitext(cached_obj)[0])
+        elif isinstance(cached_obj := self.module_index[prefix], str):
+            self.module_index[prefix] = obj = _load_file(cached_obj)
         elif cached_obj == _DO_ERROR_FLAG:
             raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
         else:
             obj = cached_obj   # loaded object is stored in ele 0 of the tuple
 
         if isinstance(obj, ModuleType):
-            if len(parts) > 1:
-                suffix, rest_idx = parts[1], 2
-            else:
-                suffix, rest_idx = prefix, 1
-            result = getattr(obj, suffix) if hasattr(obj, suffix) else None
-            if result and len(parts) > rest_idx:
-                result = Inst.get(result, parts[rest_idx:])
+            idx = 1 if len(parts) > 1 else 0
+            result = getattr(obj, parts[idx]) if hasattr(obj, parts[idx]) else None
+            if len(parts) > 2:
+                result = Inst.get(result, parts[2:])
+            # else:
+            #     result = getattr(obj, parts[0]) if hasattr(obj, parts[0]) else None
+            # else:
+            #     suffix, rest_idx = prefix, 1
+            # if result and len(parts) > rest_idx:
+            #     result = Inst.get(result, parts[rest_idx:])
         elif len(parts) == 1:
             result = obj
         elif isinstance(obj, dict):
@@ -209,26 +222,30 @@ class DoManager(object):
         return result
 
 
-def _load_file(path_base: str) -> Union[ModuleType, Spec]:
-    if os.path.exists(name := F"{path_base}.json"):
-        with open(name, 'r') as f:
+def _load_file(path: str) -> Union[ModuleType, Spec]:
+    ext = os.path.splitext(path)[1]
+    if ext == ".py" or "/" not in path:
+        return _load_module_helper(path)
+    elif ext == ".json":    # os.path.exists(name := F"{path_base}.json"):
+        with open(path, 'r') as f:
             try:
                 return json.load(f)
             except Exception as e:
-                raise Exception(F"While parsing {name}, {e}")
-    elif os.path.exists(name := F"{path_base}.yaml"):
-        with open(name, 'r') as f:
+                raise Exception(F"While parsing {path}, {e}")
+    elif ext == ".yaml":     # os.path.exists(name := F"{path}.yaml"):
+        with open(path, 'r') as f:
             return yaml.safe_load(f)
     else:
-        return _load_module(path_base)
+        raise Exception(F"DO: Unsupported file type {path}")
 
 
-def _load_module(path_base: str) -> ModuleType:
-    assert isinstance(path_base, object)
-    f = F"{path_base}.py"
-    if not os.path.exists(f):
-        raise Exception(F"Missing module file: {f} ...")
-    spec = importlib.util.spec_from_file_location("module_name", f)
+def _load_module_helper(module_spec: str) -> ModuleType:
+    if "/" not in module_spec:
+        return import_module(module_spec)
+    assert isinstance(module_spec, object)
+    if not os.path.exists(module_spec):
+        raise Exception(F"Missing module file: {module_spec} ...")
+    spec = importlib.util.spec_from_file_location("module_name", module_spec)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
