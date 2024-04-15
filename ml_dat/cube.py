@@ -8,6 +8,7 @@ from ml_dat.do import do
 
 
 Points = List[Dict[str, Any]]
+PointFn = Callable[[Inst], Any]
 
 SOURCE = "source"
 METRICS = "metrics"
@@ -31,15 +32,15 @@ class Cube(object):
 
     API
     Cube(points=, axes=, do_fns=, insts=)   ....  Constructor
-      .add_insts  ......  Adds insts to the cube and computes point
-      .add_do_fns  .....  Adds do_fns to the cube
-      .points  .........  An editable list of dict points representing cube data
-      .point_fns  ......  An editable list of dat fns that are applied to added Insts
-      .get_df  .........  Cube points expressed as a Pandas DataFrame
-      .get_excel  ......  Writes cube as an Excel file
-      .get_csv  ........  Writes cube as a CSV file
+      .add_insts ....... Adds insts to the cube and computes point
+      .add_point_fns ... Adds do_fns to the cube
+      .points .......... An editable list of dict points representing cube data
+      .point_fns ....... An editable list of dat fns that are applied to added Insts
+      .get_df .......... Cube points expressed as a Pandas DataFrame
+      .get_excel ....... Writes cube as an Excel file
+      .get_csv ......... Writes cube as a CSV file
 
-      cube1 + cube2.....  Calls __add__ to combine points from two cubes.
+      cube1 + cube2 .... Calls __add__ to combine points from two cubes.
 
     DO FNs:
     Point functions are invoked on each Inst as they are added to the cube, the results
@@ -53,7 +54,7 @@ class Cube(object):
 
     def __init__(self, *, points: Points = None,
                  insts: Union[List, str, Inst] = None,
-                 point_fns: List = None):
+                 point_fns: List[Union[str, PointFn]] = None):
         # JUAN: most times the points list past is a freshly constructed list.
         # is it acceptable that we dat not copy this list when accepting it?
         # if so, then a deep copy?
@@ -66,10 +67,12 @@ class Cube(object):
             self.add_insts(insts)
 
     def __str__(self):
-        return f"Cube({self.get_inst().name!r}, {len(self.points)} points)"
+        name = self.insts[0].name if self.insts else "No Insts"
+        return f"Cube({name!r}, {len(self.points)} points)"
 
     def __repr__(self):
-        result = f"+---- Cube({self.get_inst().name!r}, {len(self.insts)} insts, " + \
+        name = self.insts[0].name if self.insts else "No Insts"
+        result = f"+---- Cube({name!r}, {len(self.insts)} insts, " + \
                  f"{len(self.points)} points, {len(self.point_fns)} do_fns) ----\n"
         for point in self.points:
             items = [f"{k}={v!r}" for k, v in point.items()]
@@ -83,13 +86,14 @@ class Cube(object):
         and retains the dat functions of the first cube."""
         return Cube(points=self.points + other.points, point_fns=self.point_fns)
 
-    def add_point_fns(self, do_fns: List[str]):
+    def add_point_fns(self, point_fns: List[Union[str, PointFn]]):
         """Adds a list of dat functions to the cube."""
-        for do_name in do_fns:
-            self.point_fns.append(do.load(do_name))
+        for fn_spec in point_fns:
+            fn = do.load(fn_spec) if isinstance(fn_spec, str) else fn_spec
+            self.point_fns.append(fn)
 
     def add_insts(self, source: Union[Inst, str, Iterable]) -> None:
-        """Recursively scans 'source' adding points derived from each Inst.
+        """Recursively scans the provided 'source' adding points derived from each Inst.
 
         If 'source' is:
         - an Iterable, it is scanned, and its elements are added.
@@ -150,11 +154,9 @@ class Cube(object):
     def get_csv(self):
         raise NotImplementedError
 
-    def get_inst(self):
-        """Returns the first Inst added to this Cube."""
-        if not self.insts:
-            raise Exception("No Insts have been added to this Cube")
-        return self.insts[0]
+    # def get_inst(self):
+    #     """Returns the first Inst added to this Cube."""
+    #     return self.insts[0] if self.insts else None
 
     def _add_insts(self, source: Union[Inst, str, Iterable],
                    this_index: Union[int, str], indicies: Dict[str, str]) -> None:
@@ -200,8 +202,8 @@ class Cube(object):
                 return renaming[key]
             if key not in point_keys and isinstance(key, str):
                 return key
-            # "idx" used for unique unnamed indicies (encoded as ints)
-            new_key = base = "idx" if isinstance(key, int) else key
+            # "list" used for unique unnamed indicies (encoded as ints)
+            new_key = base = "list" if isinstance(key, int) else key
             i = 2
             while new_key in point_keys:
                 i += 1
@@ -220,7 +222,7 @@ class Cube(object):
 
 def metrics_matrix(spec: Inst, source: Inst = None, *,
                    metrics: List = None, title: str = None,
-                   show: bool = False) -> None:
+                   show: bool = False) -> Cube:
     """A dat script that runs the specified metrics over the specified "Insts".
 
     Parameters
@@ -241,6 +243,7 @@ def metrics_matrix(spec: Inst, source: Inst = None, *,
     title = title or Inst.get(spec, TITLE)
     cube = Cube(insts=source, point_fns=metrics)
     cube.get_excel(title=title, verbose=True, show=show)
+    return cube
 
 
 # def align_pr(source: Inst, metric: Callable[[Alignment], Any]) \
@@ -339,3 +342,4 @@ def example():
 
 if __name__ == "__main__":
     example()
+

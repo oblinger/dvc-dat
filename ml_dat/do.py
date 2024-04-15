@@ -447,6 +447,8 @@ class DatConfig(object):
             folder = os.path.dirname(folder)
         self.do_folder = self._lookup_path(folder, _DO_FOLDER_KEY, "do")
         self.inst_folder = self._lookup_path(folder, _INST_FOLDER_KEY, "inst_data")
+        import ml_dat.inst
+        ml_dat.inst.data_folder = self.inst_folder
         # print(F"# DO_FLDR = {self.do_folder}\n# INST_DATA = {self.inst_folder}")
 
 

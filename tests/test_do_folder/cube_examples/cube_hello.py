@@ -16,6 +16,9 @@ cube_hello.r ..... Marble prediction recall.
 CreateHello10 .... Creates the fake dataset of 10 runs in /tmp/hello10.
 
 """
+import importlib
+
+from ml_dat.do import do
 from ml_dat.inst import Inst
 # from synch.communication.models import ShotAnnotationsAlignment
 # from do.reports.cube import align_pr
@@ -36,8 +39,8 @@ Build an excel showing cube_hello metrics over the Hello10_runs.
 """
 cube_hello = {
     "main": {"do": "cube.metrics_matrix"},
-    "source": ["/tmp/Hello10_runs", "/tmp/Hello5_runs"],
-    "metrics": ["cube_hello.is_prime", "cube_hello.data", "color_p"],
+    "source": ["runs/example/hello10", "runs/example/hello5"],
+    "metrics": ["cube_hello.is_prime", "cube_hello.data", "cube_hello.color_p"],
     "title": "The Hello Report",
 }
 
@@ -51,6 +54,20 @@ def data(inst: Inst):
     """Returns the data from the run."""
     return "-".join(map(str, Inst.get(inst.spec, "main.data")))
 
+
+def color_p(inst: Inst):
+    """Marble prediction precision."""
+    return .4
+
+
+
+
+def always_4(inst: Inst):
+    return 4
+
+
+def always_5(inst: Inst):
+    return 5
 
 
 # def all(inst: Inst):

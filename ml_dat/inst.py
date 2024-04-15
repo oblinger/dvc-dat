@@ -75,9 +75,13 @@ class Inst(object):
       - If lazy loading is beneficial
 
     """
+    path: str
+    name: str
+    spec: Dict
 
     def __init__(self, *, path: str, spec: Dict):
         self.path: str = os.path.abspath(path)
+        self.name: str = self._path2name(self.path)
         self.spec: Dict = spec
 
     @staticmethod
@@ -96,6 +100,20 @@ class Inst(object):
             else:
                 d = d.get(k)
         return d
+
+    def __repr__(self):
+        # kind = Inst.get(self, MAIN_CLASS) or "Inst"
+        # parent = os.path.basename(os.path.dirname(self.path))
+        # folder_name = os.path.basename(self.path)
+        return f"<{self.__class__.__name__.upper()} {self.name}>"
+
+    def __str__(self):
+        return self.__repr__()
+
+    @property
+    def shortname(self):
+        """Returns the shortname (last part of the name) of this Instantiable."""
+        return self.name.split(".")[-1]
 
     @staticmethod
     def set(source: dict, keys, value) -> None:
@@ -187,47 +205,20 @@ class Inst(object):
                 with open(os.path.join(path, SPEC_YAML)) as f:
                     spec = yaml.safe_load(f)
         except FileNotFoundError:
-            raise Exception(
-                f"Folder {path} is not an instantiable.  "
-                + "It does not have a _spec_... file."
-            )
+            if not os.path.exists(path):
+                raise Exception(
+                    f"Folder {path} is not an instantiable; it doesn't exist.")
+            else:
+                raise Exception(
+                    f"Folder {path} is not an instantiable.  "
+                    + "It does not have a _spec_... file."
+                )
         klass_name = Inst.get(spec, MAIN_CLASS) or "Inst"
         klass = Inst._find_subclass_by_name(Inst, klass_name)
         if not klass:
             raise Exception(f"Class {klass_name} is not a subclass of Inst")
         inst = klass(path=path, spec=spec, **kwargs)
         return inst
-
-    def __repr__(self):
-        # kind = Inst.get(self, MAIN_CLASS) or "Inst"
-        # parent = os.path.basename(os.path.dirname(self.path))
-        # folder_name = os.path.basename(self.path)
-        return f"<{self.__class__.__name__.upper()} {self.name}>"
-
-    def __str__(self):
-        return self.__repr__()
-
-    @property
-    def name(self):
-        """Returns the name of this Instantiable.
-
-        - Name is a string that can be passed to "Load.inst()"
-        - It is typically a suffix portion of its path with slashes replaced by dots
-        """
-        try:
-            prefix = os.path.commonpath([os.getcwd(), self.path])
-            return self.path[len(prefix):].replace("/", ".")
-        except ValueError:
-            try:
-                prefix = os.path.commonpath([data_folder, self.path])
-                return self.path[len(prefix):].replace("/", ".")
-            except ValueError:
-                return self.path
-
-    @property
-    def shortname(self):
-        """Returns the shortname (last part of the name) of this Instantiable."""
-        return self.name.split(".")[-1]
 
     def save(self) -> None:
         """Writes an instantiable to disk.
@@ -250,6 +241,19 @@ class Inst(object):
             if result := Inst._find_subclass_by_name(sub, name):
                 return result
         return None
+
+    def _path2name(self, path):
+        try:
+            prefix = os.path.commonpath([data_folder, path])
+            return path[len(prefix):].replace("/", ".")
+        except ValueError:
+            return "$" + path.replace("/", ".")[1:]
+
+    def _name2path(self, name):
+        if name and name[0] == "$":
+            return name[1:].replace(".", "/")
+        else:
+            return os.path.join(data_folder, name.replace(".", "/"))
 
 
 class InstContainer(Inst, Generic[T]):

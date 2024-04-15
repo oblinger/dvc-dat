@@ -4,7 +4,7 @@ from typing import List
 
 from ml_dat.inst import InstContainer, Inst
 # from settings import dataclass
-from ml_dat.do import do
+from ml_dat.do import do, dat_config
 
 
 class Annotation:
@@ -27,8 +27,13 @@ class CubeHelloAnnotation(Annotation):
     time: float
 
 
+def build_hello_insts():
+    build_hello_runs(5)
+    build_hello_runs(10)
+
+
 def build_hello_runs(num):
-    path = f"/tmp/hello{num}_runs"
+    path = f"{dat_config.inst_folder}/runs/example/hello{num}"
     os.system(f"rm -r {path}")
     c = InstContainer(path=path, spec={})
     c.save()
@@ -42,9 +47,8 @@ def build_hello_runs(num):
         run.save()
 
 
-if __name__ == "__main__":
-    print("The CWD = ", os.getcwd())
-    build_hello_runs(5)
-    build_hello_runs(10)
-    do("cube_hello", show=True)
+# if __name__ == "__main__":
+#     print("The CWD = ", os.getcwd())
+#     build_hello_insts()
+#     do("cube_hello", show=True)
 
