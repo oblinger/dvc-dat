@@ -16,10 +16,8 @@ cube_hello.r ..... Marble prediction recall.
 CreateHello10 .... Creates the fake dataset of 10 runs in /tmp/hello10.
 
 """
-import importlib
 
-from ml_dat.do import do
-from ml_dat.inst import Inst
+from ml_dat import Inst
 # from synch.communication.models import ShotAnnotationsAlignment
 # from do.reports.cube import align_pr
 
@@ -55,52 +53,14 @@ def data(inst: Inst):
     return "-".join(map(str, Inst.get(inst.spec, "main.data")))
 
 
-def color_p(inst: Inst):
+def color_p(_inst: Inst):
     """Marble prediction precision."""
     return .4
 
 
-
-
-def always_4(inst: Inst):
+def always_4(_inst: Inst):
     return 4
 
 
-def always_5(inst: Inst):
+def always_5(_inst: Inst):
     return 5
-
-
-# def all(inst: Inst):
-#     """Returns precision, recall, and F1 score over color prediction alignments."""
-#     return align_pr(inst, color_match)
-#
-#
-#
-# def color_match(align: ShotAnnotationsAlignment):
-#     """Returns: None if no marble found in ground truth, else
-#                 True if the color prediction was correct, or
-#                 False if the color prediction was incorrect."""
-#     return None if align.gt_annotation is None else \
-#         True if align.gt_annotation == align.ai_annotation else False
-#
-# class ColorMatchAligner(Aligner):
-#     def measure(self, alignment: AlignmentEntry) -> PR_Result:
-#         xxxx
-#
-#
-# InstMetric = Callable[[Inst, Any]]
-# SimpleInstMetric = Callable[[Inst, Union[float, int, str]]]
-#
-#
-# color_p, color_r, color_f1 = ColorMatchAligner.precision_recall_fns()
-#
-#
-# class Aligner:
-#     @staticmethod
-#     def precision_recall_fns(self) -> tuple[SimpleInstMetric, SimpleInstMetric, SimpleInstMetrc]:
-#         return None
-#
-#     PR_Result = Enum()
-#
-#     @abstractmethod
-#     def measure(self, al: AlignmentEntry) -> PR_Result:

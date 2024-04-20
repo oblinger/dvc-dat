@@ -2,20 +2,19 @@ import os
 import pandas as pd
 from typing import List, Dict, Any, Union, Iterable, Optional, Callable
 
+
 # from do.hello.cube_examples.cube_hello_inst import Alignment
-from ml_dat.inst import Inst, InstContainer
-from ml_dat.do import do
+import ml_dat as md
 
 
 Points = List[Dict[str, Any]]
-PointFn = Callable[[Inst], Any]
+PointFn = Callable[[md.Inst], Any]
 
 SOURCE = "source"
 METRICS = "metrics"
 TITLE = "title"
 
 INDICIES = "indicies"   # Temp key used to store the indicies in cube points
-do.register_module("cube", "ml_dat.cube")
 
 
 class Cube(object):
@@ -52,19 +51,20 @@ class Cube(object):
     ==> Index keys are added to each dict to indicate which inst it came from.
     """
 
-    def __init__(self, *, points: Points = None,
-                 insts: Union[List, str, Inst] = None,
-                 point_fns: List[Union[str, PointFn]] = None):
-        # JUAN: most times the points list past is a freshly constructed list.
-        # is it acceptable that we dat not copy this list when accepting it?
-        # if so, then a deep copy?
-        self.insts: List[Inst] = []
-        self.point_fns: List[Callable[[Inst], Points]] = []
+    @staticmethod
+    def build(*, insts: Union[md.Inst, str, Iterable],
+              point_fns: List[Union[str, PointFn]]) -> 'Cube':
+        cube = Cube()
+        cube.add_point_fns(point_fns)
+        # cube.add_insts(insts)
+        cube._add_insts(insts, 1, {})
+        cube._inject_indicies()
+        return cube
+
+    def __init__(self, *, points: Points = None):
+        self.insts: List[md.Inst] = []
+        self.point_fns: List[Callable[[md.Inst], Points]] = []
         self.points: Points = list(points) if points else []
-        if point_fns:
-            self.add_point_fns(point_fns)
-        if insts:
-            self.add_insts(insts)
 
     def __str__(self):
         name = self.insts[0].name if self.insts else "No Insts"
@@ -73,7 +73,7 @@ class Cube(object):
     def __repr__(self):
         name = self.insts[0].name if self.insts else "No Insts"
         result = f"+---- Cube({name!r}, {len(self.insts)} insts, " + \
-                 f"{len(self.points)} points, {len(self.point_fns)} do_fns) ----\n"
+            f"{len(self.points)} points, {len(self.point_fns)} do_fns) ----\n"
         for point in self.points:
             items = [f"{k}={v!r}" for k, v in point.items()]
             result += f"| {', '.join(items)}\n"
@@ -84,15 +84,15 @@ class Cube(object):
 
         Adds the points from the second cube onto those of the first cube,
         and retains the dat functions of the first cube."""
-        return Cube(points=self.points + other.points, point_fns=self.point_fns)
+        return Cube(points=self.points + other.points)
 
     def add_point_fns(self, point_fns: List[Union[str, PointFn]]):
         """Adds a list of dat functions to the cube."""
         for fn_spec in point_fns:
-            fn = do.load(fn_spec) if isinstance(fn_spec, str) else fn_spec
+            fn = md.do.load(fn_spec) if isinstance(fn_spec, str) else fn_spec
             self.point_fns.append(fn)
 
-    def add_insts(self, source: Union[Inst, str, Iterable]) -> None:
+    def add_insts(self, source: Union[md.Inst, str, Iterable]) -> None:
         """Recursively scans the provided 'source' adding points derived from each Inst.
 
         If 'source' is:
@@ -158,12 +158,12 @@ class Cube(object):
     #     """Returns the first Inst added to this Cube."""
     #     return self.insts[0] if self.insts else None
 
-    def _add_insts(self, source: Union[Inst, str, Iterable],
+    def _add_insts(self, source: Union[md.Inst, str, Iterable],
                    this_index: Union[int, str], indicies: Dict[str, str]) -> None:
-        """Recursively scans 'source' adding points derived from each Inst."""
-        if isinstance(source, InstContainer):
+        """Recursively scans 'source' adding points derived from each md.Inst."""
+        if isinstance(source, md.InstContainer):
             self._add_insts(source.insts, source.name, indicies)
-        elif isinstance(source, Inst):
+        elif isinstance(source, md.Inst):
             the_point, points = {}, []
             for fn in self.point_fns:
                 output = fn(source)
@@ -186,7 +186,7 @@ class Cube(object):
             self.points += points
             self.insts.append(source)
         elif isinstance(source, str):
-            self._add_insts(Inst.load(source), this_index, indicies)
+            self._add_insts(md.Inst.load(source), this_index, indicies)
         elif isinstance(source, List):
             for element in source:
                 self._add_insts(element, len(indicies)+1, indicies)
@@ -220,7 +220,55 @@ class Cube(object):
             del point[INDICIES]
 
 
-def metrics_matrix(spec: Inst, source: Inst = None, *,
+class DataFrames(object):
+    """A class of helper methods for working with Pandas DataFrames."""
+
+    @staticmethod
+    def get_excel(df: pd.DataFrame, *,
+                  sections: List[str] = None,
+                  sheets: List[str] = None,
+                  title: str = None,
+                  _verbose: bool = False,
+                  _show: bool = False):
+        """
+        Split a pandas DataFrame into multiple DataFrames based on the values of their
+        columns.  The first set of columns split the DataFrame into slices, called
+        sections which separate it into different Excel files.  Then a second set of
+        columns are used to slice into separate sheets within each Excel file.
+        """
+
+        # If no sections or sheets are provided, save as a single sheet
+        if not sections and not sheets:
+            with pd.ExcelWriter(f'{title or "output"}.xlsx') as writer:
+                df.to_excel(writer, index=False)
+            return
+
+        # If sections are provided, split the dataframe into multiple Excel files
+        if sections:
+            for section_values, section_df in df.groupby(sections):
+                section_values = [section_values] if isinstance(section_values, str) \
+                    else list(section_values)
+                section_title = '-'.join(section_values)
+                with pd.ExcelWriter(f'{section_title}.xlsx') as writer:
+                    if sheets:
+                        DataFrames._create_sheets(writer, section_df, sheets)
+                    else:
+                        section_df.to_excel(writer, index=False)
+        # If only sheets, split into multiple sheets in a single Excel file
+        elif sheets:
+            with pd.ExcelWriter(f'{title or "output"}.xlsx') as writer:
+                DataFrames._create_sheets(writer, df, sheets)
+
+    @staticmethod
+    def _create_sheets(writer, df, sheets):
+        for sheet_values, sheet_df in df.groupby(sheets):
+            sheet_values = [sheet_values] if isinstance(sheet_values,
+                                                        str) else list(sheet_values)
+            sheet_title = '-'.join(sheet_values)
+            sheet_df.to_excel(writer, sheet_name=sheet_title, index=False)
+
+
+def metrics_matrix(spec: md.Inst, source: md.Inst = None, *,
                    metrics: List = None, title: str = None,
                    show: bool = False) -> Cube:
     """A dat script that runs the specified metrics over the specified "Insts".
@@ -238,108 +286,13 @@ def metrics_matrix(spec: Inst, source: Inst = None, *,
     show: bool
         If True, the report is displayed in a window.
     """
-    source = source or Inst.get(spec, SOURCE)
-    metrics = metrics or Inst.get(spec, METRICS)
-    title = title or Inst.get(spec, TITLE)
-    cube = Cube(insts=source, point_fns=metrics)
+    source = source or md.Inst.get(spec, SOURCE)
+    metrics = metrics or md.Inst.get(spec, METRICS)
+    title = title or md.Inst.get(spec, TITLE)
+    cube = Cube.build(insts=source, point_fns=metrics)
     cube.get_excel(title=title, verbose=True, show=show)
     return cube
 
 
-# def align_pr(source: Inst, metric: Callable[[Alignment], Any]) \
-#               -> Dict[str, float]:
-#    """Scans all alignments from the given sources and returns precision-recall data"""
-#     count, recall, precision = 0, 0, 0
-#     if isinstance(source, InstContainer):
-#         itr = source.insts
-#     else:
-#         itr = iter([source])
-#     for inst in itr:
-#         for align in inst.aligns:
-#             count += 1
-#             result = do(metric, align)
-#             if result is not None:
-#                 recall += 1
-#                 if result is not False:
-#                     precision += 1
-#     return dict(
-#         count=count,
-#         recall=0 if count == 0 else recall/count,
-#         precision=0 if recall == 0 else precision/recall,
-#         f1=0 if recall == 0 else (precision*recall)/(precision+recall))
-
-
-def example():
-
-    # Data encoded as a list of dictionaries with simple keys
-    simple_data_dicts = [
-        {'Store': 'Store A', 'Month': 'January', 'Product': 'Product 1',
-         'Metric': 'Units Sold', 'Value': 8},
-        {'Store': 'Store A', 'Month': 'January', 'Product': 'Product 1',
-         'Metric': 'Revenue', 'Value': 23},
-        {'Store': 'Store A', 'Month': 'January', 'Product': 'Product 2',
-         'Metric': 'Units Sold', 'Value': 80},
-        {'Store': 'Store A', 'Month': 'January', 'Product': 'Product 2',
-         'Metric': 'Revenue', 'Value': 88},
-        {'Store': 'Store A', 'Month': 'February', 'Product': 'Product 1',
-         'Metric': 'Units Sold', 'Value': 76},
-        {'Store': 'Store A', 'Month': 'February', 'Product': 'Product 1',
-         'Metric': 'Revenue', 'Value': 18},
-        {'Store': 'Store A', 'Month': 'February', 'Product': 'Product 2',
-         'Metric': 'Units Sold', 'Value': 54},
-        {'Store': 'Store A', 'Month': 'February', 'Product': 'Product 2',
-         'Metric': 'Revenue', 'Value': 98},
-        {'Store': 'Store B', 'Month': 'January', 'Product': 'Product 1',
-         'Metric': 'Units Sold', 'Value': 51},
-        {'Store': 'Store B', 'Month': 'January', 'Product': 'Product 1',
-         'Metric': 'Revenue', 'Value': 25},
-        {'Store': 'Store B', 'Month': 'January', 'Product': 'Product 2',
-         'Metric': 'Units Sold', 'Value': 85},
-        {'Store': 'Store B', 'Month': 'January', 'Product': 'Product 2',
-         'Metric': 'Revenue', 'Value': 31},
-        {'Store': 'Store B', 'Month': 'February', 'Product': 'Product 1',
-         'Metric': 'Units Sold', 'Value': 95},
-        {'Store': 'Store B', 'Month': 'February', 'Product': 'Product 1',
-         'Metric': 'Revenue', 'Value': 82},
-        {'Store': 'Store B', 'Month': 'February', 'Product': 'Product 2',
-         'Metric': 'Units Sold', 'Value': 55},
-        {'Store': 'Store B', 'Month': 'February', 'Product': 'Product 2',
-         'Metric': 'Revenue', 'Value': 4},
-    ]
-
-    # Convert the list of dictionaries to a DataFrame
-    simple_df = pd.DataFrame(simple_data_dicts)
-
-    # # Pivot the DataFrame to create multi-level index and columns
-    # pivoted_df = simple_df.pivot_table(index=['Store', 'Month'],
-    #                                    columns=['Product', 'Metric'],
-    #                                    values='Value')
-
-    # Assum'simple_df' has been created with the initial list of dictionaries as before
-
-    simple_df2 = pd.DataFrame(simple_df)
-    # Update the 'Month' column in 'simple_df' to 'Jan-Feb' for all entries
-    simple_df2['Month'] = 'Jan-Feb'
-
-    # Group by 'Store', 'Month', 'Product', and 'Metric', then sum the 'Value'
-    aggregated_df = simple_df2.groupby(['Store', 'Month', 'Product', 'Metric'],
-                                      as_index=False).sum()
-
-    # Pivot the aggregated DataFrame to create multi-level index and columns
-    merged_pivoted_df = aggregated_df.pivot_table(index=['Store', 'Month'],
-                                                  columns=['Product', 'Metric'],
-                                                  values='Value')
-
-    # Display the pivoted DataFrame
-    print(simple_df)
-
-    # Display the pivoted DataFrame
-    print(aggregated_df)
-
-    # Display the pivoted DataFrame
-    print(merged_pivoted_df)
-
-
-if __name__ == "__main__":
-    example()
-
+import ml_dat
+ml_dat.Cube = Cube

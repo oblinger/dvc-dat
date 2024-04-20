@@ -6,17 +6,20 @@ This is the Jason approved metric associated with our team highlights product, a
 have agreed 80% is the minimum approved threshold required for product ship.
 """
 
-from inst import Inst
+from ml_dat import do, Inst
+
 
 def reg_quick_test():
-    run_result = Inst.load("reg1_latest")   # Reg1 is the pickle for a special 5-min game snipit
+    run_result = Inst.load("reg1_latest")   # Reg1 pickle for a special 5-min snipit
     assert do("team_highlight_money", run_result) > .65
+
 
 reg_full_test = "std_full1"  # indicates full regression testing is part of 'std_full1'
 
-def money(run_result: Inst) -> float:
-    return -1 # implementation goes here
+
+def money(_run_result: Inst) -> float:
+    return -1  # implementation goes here
 
     
-def precision(run_result: Inst) -> float:
-    return -1 # implementation goes here
+def precision(_run_result: Inst) -> float:
+    return -1  # implementation goes here

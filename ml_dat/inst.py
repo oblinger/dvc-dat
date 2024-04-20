@@ -2,8 +2,8 @@ import json
 import os
 from enum import Enum, auto
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
-
 import yaml
+
 
 # TODO:
 # - Refactor Martin accessors into static methods
@@ -188,12 +188,12 @@ class Inst(object):
         :param cwd: used instead of current working dir for inst search
         :param kwargs: other kwargs are passed to the Inst constructor
         """
-
+        from . import dat_config
         if os.path.isabs(name_or_path):
             path = name_or_path
         elif os.path.exists(path := os.path.join(cwd or os.getcwd(), name_or_path)):
             pass
-        elif os.path.exists(path := os.path.join(data_folder, name_or_path)):
+        elif os.path.exists(path := os.path.join(dat_config.inst_folder, name_or_path)):
             pass
         else:
             path = os.path.abspath(path).replace(".", "/")
@@ -206,8 +206,7 @@ class Inst(object):
                     spec = yaml.safe_load(f)
         except FileNotFoundError:
             if not os.path.exists(path):
-                raise Exception(
-                    f"Folder {path} is not an instantiable; it doesn't exist.")
+                raise Exception(F"Folder {path} isn't an instantiable, it's missing.")
             else:
                 raise Exception(
                     f"Folder {path} is not an instantiable.  "
@@ -242,14 +241,16 @@ class Inst(object):
                 return result
         return None
 
-    def _path2name(self, path):
+    @staticmethod
+    def _path2name(path):
         try:
             prefix = os.path.commonpath([data_folder, path])
             return path[len(prefix):].replace("/", ".")
         except ValueError:
             return "$" + path.replace("/", ".")[1:]
 
-    def _name2path(self, name):
+    @staticmethod
+    def _name2path(name):
         if name and name[0] == "$":
             return name[1:].replace(".", "/")
         else:
@@ -324,3 +325,13 @@ class InstContainer(Inst, Generic[T]):
         assert os.path.abspath(results[0]) == os.path.abspath(root_path)
         del results[0]
         return results
+
+
+load_inst = Inst.load
+
+# import ml_dat
+# from ml_dat import ml_dat_config
+# ml_dat.Inst = Inst
+# ml_dat.InstContainer = InstContainer
+# ml_dat.load_inst = load_inst
+# data_folder = ml_dat_config.dat_config.inst_folder

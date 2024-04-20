@@ -1,5 +1,5 @@
 
-from ml_dat.do import do
+from ml_dat import do
 
 my_data = [111, 222, 333]
 

@@ -6,7 +6,7 @@ import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from ml_dat.do import do, DoManager
+from ml_dat import do, DoManager
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ class TestLoad:
                   name="hello", emphasis=True, lucky_number=7) == \
                (7, "hello, My lucky number is 7")
 
-    def test_do_within_deep_subfolders(self, capsys):
+    def test_do_within_deep_sub_folders(self, capsys):
         do("deep_hello")
         captured = capsys.readouterr()
         assert captured.out == "hello echoing out from deep in the filesystem!\n"
@@ -78,14 +78,14 @@ class TestCommandLine:
 
     def test_commandline_fixed_and_key_args(self):
         result = run_capture("./do hello_again.salutation Maxim --emphasis")
-        assert result == "MAXIM, MY LUCKY NUMBER IS 999!\n(999, 'Maxim, My lucky number is 999')"
-
-
-
+        assert result == "MAXIM, MY LUCKY NUMBER IS 999!\n" + \
+               "(999, 'Maxim, My lucky number is 999')"
 
     def test_run_configuration_from_cmdline(self):
         result = run_capture("./do my_letters")
-        assert result == "The Letterator\na  jackpot   ccc  D  e  fff  g  h  JACKPOT JACKPOT JACKPOT   j  k  lll  m  N  ooo  jackpot   q  rrr  S  t  uuu  v  jackpot   XXX  y"
+        assert result == ("The Letterator\na  jackpot   ccc  D  e  fff  g  h  "
+                          "JACKPOT JACKPOT JACKPOT   j  k  lll  m  N  ooo  jackpot"
+                          "   q  rrr  S  t  uuu  v  jackpot   XXX  y")
 
     def test_tweaking_command_from_cmdline(self):
         line = """./do my_letters --set main.title "Re-configured letterator" """ + \
@@ -93,7 +93,6 @@ class TestCommandLine:
         expect = """Re-configured letterator\na  bbb  c  ddd  e  fff  g  hhh  i""" + \
                  """  jjj  k  lll  m  nnn  o  ppp  q  rrr  s  ttt  u  vvv  w  xxx  y"""
         assert run_capture(line) == expect
-
 
     def test_setting_multiple_params_at_once(self):
         line = """./do my_letters --sets main.title=Quickie,start=100,end=110"""
@@ -135,5 +134,6 @@ class TestRegisteringStuff:
         path = os.path.join(os.path.dirname(__file__), "test_do_folder/hello_world.py")
         do_.register_module("xxx", path)
         assert do_("xxx.hello_world") == "hello world!"
-        do_.register_module("yyy", "ml_dat.do")  # The already loaded do.py module
-        assert do_.load("yyy._DAT_FILE") == ".datconfig"
+        do_.register_module("yyy", "ml_dat")  # The already loaded 'ml_dat' module
+        from ml_dat import dat_config
+        assert do_.load("yyy.dat_config") == dat_config

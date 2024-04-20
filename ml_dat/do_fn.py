@@ -22,9 +22,6 @@ from typing import Type, Union, Any, Dict, Callable
 from ml_dat.inst import Inst
 
 # The loadable "do" fns, scripts, configs, and methods are in the do_folder
-_DAT_FILE = ".datconfig"
-_INST_FOLDER_KEY = "inst_data_folder"
-_DO_FOLDER_KEY = "do_folder"
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
 _DO_ERROR_FLAG = tuple("multiple loadable modules have this same name")
 _DO_NULL = tuple(["-no-value-"])
@@ -58,7 +55,7 @@ class DoManager(object):
     DO_FOLDER
     - Like GIT the 'do' module searches CWD and all its parent folders for the
       '.datconfig' file. If it is found, it expects it to contain a JSON object.
-    - If it contains the 'do_folder' key its value specifies the relative path from
+    - If it contains the 'do_folder' key, its value specifies the relative path from
       the datconfig file to the "do folder" where the loadable python objects are found.
     - Otherwise, the do folder is assumed to be a folder named 'do' in the CWD.
     - Either way the do folder is scanned as the filenames (but not their paths) are
@@ -70,14 +67,13 @@ class DoManager(object):
         - This process is repeated until no more "main.base" keys are found.
 
     """
+    do_folder: str  #
     module_index: Dict[str, Union[str, ModuleType]]    # path to module or module itself
-    do_fns: Dict[str, Dict[str, Callable]]         # externally defined fns
-    registered_values: Union[None, Dict[str, Any]] # values to be returned by load
+    do_fns: Dict[str, Dict[str, Callable]]             # externally defined fns
+    registered_values: Union[None, Dict[str, Any]]     # values to be returned by load
 
     def __init__(self, *, do_folder=None):
-        self.module_index = _build_loadables_index(do_folder)
-        self.registered_values = None
-        self.do_folder = do_folder
+        self.set_do_folder(do_folder)
 
     def __call__(self, do_spec: Union[Spec, str], *args, **kwargs) -> Any:
         """Loads and executes a 'do-method'.
@@ -112,6 +108,13 @@ class DoManager(object):
                             + "is not callable")
         result = fn_spec(obj, *args, **kwargs)
         return result
+
+    def set_do_folder(self, do_folder):
+        """Sets the folder where the loadable python objects are found, and clears all
+        cached modules and values."""
+        self.do_folder = do_folder
+        self.module_index = _build_loadables_index(do_folder)
+        self.registered_values = None
 
     def register_module(self, base: str, module_spec: Union[str, ModuleType], *,
                         allow_redefine=False):
@@ -322,6 +325,7 @@ def do_argv(argv):
     --usage will Look up "CMD_NAME.usage" to see if usage was specified, else it
     looks at the "usage" key in config for usage, else print default usage
     """
+    from . import do
     overrides, args, kwargs = _parse_argv(argv[1:])
     # print(F"DO  args={args!r}   kwargs={kwargs!r}")
     if "usage" in kwargs or (not args and not kwargs):
@@ -413,47 +417,12 @@ def _get_flag(arg):
         return None
 
 
-class DatConfig(object):
-    """Configuration info for the 'dat' module loaded from the .datconfig file.
-
-    .datconfig
-        The do module search CWD and all its parent folders for the '.datconfig' file.
-        If it is found, it expects a JSON object with a 'do_folder' key that indicates
-        the path (relative to the .datconfig file itself) of the "do folder"
-    """
-    config: Dict[str, Any]
-    do_folder: str
-    inst_folder: str
-
-    def _lookup_path(self, folder_path, key, default):
-        if key in self.config:
-            path = os.path.join(folder_path, self.config[key])
-        else:
-            path = os.path.join(os.getcwd(), default)
-        os.makedirs(path, exist_ok=True)
-        return path
-
-    def __init__(self):
-        self.config = {}
-        folder = os.getcwd()
-        while True:
-            if os.path.exists(config := os.path.join(folder, _DAT_FILE)):
-                with open(config, 'r') as f:
-                    self.config = json.load(f)
-                    break
-            if folder == '/':
-                folder = os.getcwd()
-                break
-            folder = os.path.dirname(folder)
-        self.do_folder = self._lookup_path(folder, _DO_FOLDER_KEY, "do")
-        self.inst_folder = self._lookup_path(folder, _INST_FOLDER_KEY, "inst_data")
-        import ml_dat.inst
-        ml_dat.inst.data_folder = self.inst_folder
-        # print(F"# DO_FLDR = {self.do_folder}\n# INST_DATA = {self.inst_folder}")
-
-
-dat_config = DatConfig()
-do = DoManager(do_folder=dat_config.do_folder)
+import ml_dat
+# if not hasattr(ml_dat, "dat_config"):
+#     ml_dat.dat_config = ml_dat.ml_dat_config.DatConfig()
+ml_dat.DoManager = DoManager
+ml_dat.do = ml_dat.dodo = DoManager(do_folder=ml_dat.ml_dat_config.dat_config.do_folder)
+ml_dat.argv = do_argv
 
 
 if __name__ == '__main__':

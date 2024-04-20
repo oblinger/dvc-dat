@@ -9,5 +9,6 @@ show_bad_arc_layups = {
   }
 }
 
+
 def filter_fn(align):
-  return "layup" in align.scores and align.ui.player_id != align.ai.player_id
+    return "layup" in align.scores and align.ui.player_id != align.ai.player_id

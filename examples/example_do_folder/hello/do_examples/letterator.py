@@ -1,4 +1,4 @@
-from ml_dat.do import do
+from ml_dat import do
 
 """Silly configurable tool for applying rules to a sequence of letters."""
 letterator = {
@@ -9,6 +9,7 @@ letterator = {
     "start": 48,
     "end": 122
 }
+
 
 def run(spec):
     results = []

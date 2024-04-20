@@ -2,9 +2,7 @@ import os
 import random
 from typing import List
 
-from ml_dat.inst import InstContainer, Inst
-# from settings import dataclass
-from ml_dat.do import do, dat_config
+from ml_dat import dat_config, InstContainer, Inst
 
 
 class Annotation:
@@ -46,9 +44,4 @@ def build_hello_runs(num):
         run.spec["main"].update(dict(start=start, range=range_, count=count, data=data))
         run.save()
 
-
-# if __name__ == "__main__":
-#     print("The CWD = ", os.getcwd())
-#     build_hello_insts()
-#     do("cube_hello", show=True)
 

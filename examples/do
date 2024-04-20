@@ -2,6 +2,6 @@
 import os.path
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from ml_dat.do import do_argv
+from ml_dat import do_argv
 do_argv(sys.argv)
 
