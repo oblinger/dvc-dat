@@ -17,7 +17,7 @@ SPEC_YAML = "_spec_.yaml"
 MAIN_CLASS = "main.class"
 
 # This default value is overridden by do._dat_setup()
-data_folder = os.path.join(os.path.dirname(__file__), "inst_data")
+# data_folder = os.path.join(os.path.dirname(__file__), "inst_data")
 
 
 class DataState(Enum):
@@ -99,7 +99,7 @@ class Inst(object):
                 raise Exception(f"GET: Expected dict value for {k!r} not {d!r}")
             else:
                 d = d.get(k)
-        return d
+        return d or default_value
 
     def __repr__(self):
         # kind = Inst.get(self, MAIN_CLASS) or "Inst"
@@ -177,11 +177,11 @@ class Inst(object):
         Inst loading is generally lazy, so its attributes are loaded and
         cached only when accessed.
 
-        When passed a name, it is searched in the following order:
-        (1) searches the current working directory
-        (2) then searches under INST_ROOT
-        (3) then searches S3 (LATER)
-        (4) then searches existing ML Flow artifacts (LATER)
+        Inst are searched in the following order:
+        (1) as a fullpath to the folder of the Inst to load
+        (2) as a relative path from the current working directory or cwd parameter
+        (3) as a named inst under the INST_ROOT folder
+        (4) as a named inst on S3 (LATER)
 
         :param name_or_path: Either the fullpath to the folder of the Inst to
             load or its name to be searched for
@@ -189,14 +189,17 @@ class Inst(object):
         :param kwargs: other kwargs are passed to the Inst constructor
         """
         from . import dat_config
+        from_name = Inst._name2path(name_or_path)
         if os.path.isabs(name_or_path):
             path = name_or_path
         elif os.path.exists(path := os.path.join(cwd or os.getcwd(), name_or_path)):
             pass
-        elif os.path.exists(path := os.path.join(dat_config.inst_folder, name_or_path)):
+        elif os.path.exists(path := os.path.join(dat_config.inst_folder,
+                                                 Inst._name2path(name_or_path))):
             pass
         else:
-            path = os.path.abspath(path).replace(".", "/")
+            raise Exception(f"LOAD_INST: Could not find {name_or_path!r}")
+            # path = os.path.abspath(path).replace(".", "/")
         try:
             if os.path.exists(fpath := os.path.join(path, SPEC_JSON)):
                 with open(fpath) as f:
@@ -206,12 +209,10 @@ class Inst(object):
                     spec = yaml.safe_load(f)
         except FileNotFoundError:
             if not os.path.exists(path):
-                raise Exception(F"Folder {path} isn't an instantiable, it's missing.")
+                raise Exception(F"LOAD_INST: Folder missing {path!r}.")
             else:
-                raise Exception(
-                    f"Folder {path} is not an instantiable.  "
-                    + "It does not have a _spec_... file."
-                )
+                raise Exception(f"LOAD_INST: Folder {path!r} " 
+                                "does not have a _spec_... file.")
         klass_name = Inst.get(spec, MAIN_CLASS) or "Inst"
         klass = Inst._find_subclass_by_name(Inst, klass_name)
         if not klass:
@@ -243,18 +244,20 @@ class Inst(object):
 
     @staticmethod
     def _path2name(path):
+        from . import dat_config
         try:
-            prefix = os.path.commonpath([data_folder, path])
+            prefix = os.path.commonpath([dat_config.inst_folder, path])
             return path[len(prefix):].replace("/", ".")
         except ValueError:
             return "$" + path.replace("/", ".")[1:]
 
     @staticmethod
     def _name2path(name):
+        from . import dat_config
         if name and name[0] == "$":
             return name[1:].replace(".", "/")
         else:
-            return os.path.join(data_folder, name.replace(".", "/"))
+            return os.path.join(dat_config.inst_folder, name.replace(".", "/"))
 
 
 class InstContainer(Inst, Generic[T]):

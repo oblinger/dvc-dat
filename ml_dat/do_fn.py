@@ -133,7 +133,16 @@ class DoManager(object):
         """Defines a value to be returned by 'load' for the given dotted name."""
         if self.registered_values is None:
             self.registered_values = {}
-        Inst.set(self.registered_values, dotted_name, value)
+        self.registered_values[dotted_name] = value
+
+    def get_base_object(self, base: str) -> Any:
+        """Returns the module associated with the given base name."""
+        if base not in self.module_index:
+            return None
+        elif isinstance(self.module_index[base], str):
+            return _load_base_entity(self.module_index[base])
+        else:
+            return self.module_index[base]
 
     def merge_configs(self, base, override):
         """Recursively merges the 'override' dict trees over 'base' tree of dicts."""
@@ -180,34 +189,25 @@ class DoManager(object):
         ctx = "" if context is None else F" {context}"
         parts = dotted_name.split(".")
         prefix = parts[0]
-        if self.registered_values:
-            value = Inst.get(self.registered_values, parts, _DO_NULL)
-            if value is not _DO_NULL:
-                return value
-        if prefix not in self.module_index:
-            if default is _DO_NULL:
-                raise Exception(
+        obj = self.module_index.get(prefix)
+        if isinstance(obj, str):
+            self.module_index[prefix] = obj = _load_base_entity(obj)
+        if self.registered_values and _DO_NULL != \
+                (value := self.registered_values.get(dotted_name, _DO_NULL)):
+            return value
+        elif obj is None and default is _DO_NULL:
+            raise Exception(
                     f"DO: Module {prefix!r} not found under {self.do_folder!r}{ctx}")
-            else:
-                return default
-        elif isinstance(cached_obj := self.module_index[prefix], str):
-            self.module_index[prefix] = obj = _load_file(cached_obj)
-        elif cached_obj == _DO_ERROR_FLAG:
+        elif obj is None:
+            return default
+        elif obj == _DO_ERROR_FLAG:
             raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
-        else:
-            obj = cached_obj   # loaded object is stored in ele 0 of the tuple
 
         if isinstance(obj, ModuleType):
             idx = 1 if len(parts) > 1 else 0
             result = getattr(obj, parts[idx]) if hasattr(obj, parts[idx]) else None
             if len(parts) > 2:
                 result = Inst.get(result, parts[2:])
-            # else:
-            #     result = getattr(obj, parts[0]) if hasattr(obj, parts[0]) else None
-            # else:
-            #     suffix, rest_idx = prefix, 1
-            # if result and len(parts) > rest_idx:
-            #     result = Inst.get(result, parts[rest_idx:])
         elif len(parts) == 1:
             result = obj
         elif isinstance(obj, dict):
@@ -218,33 +218,40 @@ class DoManager(object):
         if result is None and default is not _DO_NULL:
             return default
         if result is None:
-            raise Exception(F"DO: Required value {dotted_name!r} is missing")
+            if obj is None:
+                raise Exception(F"DO: Module {prefix!r} not found{ctx}")
+            else:
+                raise Exception(
+                    F"DO: Value {dotted_name[len(prefix)+1:]!r} is missing from {obj}")
         if kind and not isinstance(result, kind):
             raise Exception(F"DO: Expected {dotted_name!r} of type {kind} " +
                             F"but found {result!r}")
         return result
 
 
-def _load_file(path: str) -> Union[ModuleType, Spec]:
-    ext = os.path.splitext(path)[1]
-    if ext == ".py" or "/" not in path:
-        return _load_module_helper(path)
+def _load_base_entity(source_spec: str) -> Union[ModuleType, Spec]:
+    ext = os.path.splitext(source_spec)[1]
+    if ext == ".py" or "/" not in source_spec:
+        return _load_module(source_spec)
     elif ext == ".json":    # os.path.exists(name := F"{path_base}.json"):
-        with open(path, 'r') as f:
+        with open(source_spec, 'r') as f:
             try:
                 return json.load(f)
             except Exception as e:
-                raise Exception(F"While parsing {path}, {e}")
+                raise Exception(F"While parsing {source_spec}, {e}")
     elif ext == ".yaml":     # os.path.exists(name := F"{path}.yaml"):
-        with open(path, 'r') as f:
+        with open(source_spec, 'r') as f:
             return yaml.safe_load(f)
     else:
-        raise Exception(F"DO: Unsupported file type {path}")
+        raise Exception(F"DO: Unsupported file type {source_spec}")
 
 
-def _load_module_helper(module_spec: str) -> ModuleType:
+def _load_module(module_spec: str) -> ModuleType:
     if "/" not in module_spec:
-        return import_module(module_spec)
+        try:
+            return import_module(module_spec)
+        except ModuleNotFoundError:
+            raise Exception(F"DO.LOAD: Module {module_spec!r} not found.")
     assert isinstance(module_spec, object)
     if not os.path.exists(module_spec):
         raise Exception(F"Missing module file: {module_spec} ...")
@@ -426,6 +433,7 @@ ml_dat.argv = do_argv
 
 
 if __name__ == '__main__':
+    # do_argv([None, "dt.list"])
     # do_argv([None, "cmdln_example", "--show-spec"])
     # do_argv([None, "my_letters", "--set", "main.title", "Re-configured letterator",
     # "--json", "rules", '[[2, "my_letters.triple_it"]]'])

@@ -18,8 +18,6 @@ CreateHello10 .... Creates the fake dataset of 10 runs in /tmp/hello10.
 """
 
 from ml_dat import Inst
-# from synch.communication.models import ShotAnnotationsAlignment
-# from do.reports.cube import align_pr
 
 metrics = ["cube_hello", "cube_hello.p", "cube_hello.r", "rpt", "CreateHello10"]
 
@@ -36,8 +34,8 @@ descriptions = {
 Build an excel showing cube_hello metrics over the Hello10_runs.
 """
 cube_hello = {
-    "main": {"do": "cube.metrics_matrix"},
-    "source": ["runs/example/hello10", "runs/example/hello5"],
+    "main": {"do": "df_tools.metrics_matrix"},
+    "source": ["runs.example.hello10", "runs.example.hello5"],
     "metrics": ["cube_hello.is_prime", "cube_hello.data", "cube_hello.color_p"],
     "title": "The Hello Report",
 }
