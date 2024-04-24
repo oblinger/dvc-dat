@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from ml_dat import do
 from ml_dat import Inst
-from ml_dat.df_tools import get_excel, Cube, from_inst
+from ml_dat.dat_tools import get_excel, Cube, from_inst
 
 if not do.get_base_object("test_df_tools"):  # Module might repeatedly load
     do.register_module("test_df_tools", "tests.test_df_tools")
@@ -180,9 +180,17 @@ class TestMetricsMatrix:
         assert df.shape == (16, 6), "Couldn't create metrics matrix"
 
     def test_default_report(self, df_sales):
+        df = do("rpt")
+        print(df.shape)
+        assert df.shape == (16, 6), "Couldn't create metrics matrix"
+
+    def test_my_test(self, df_sales):
         df = do("rpt.my_test")
         print(df.shape)
         assert df.shape == (16, 6), "Couldn't create metrics matrix"
+
+
+#
 
 
 class Example:

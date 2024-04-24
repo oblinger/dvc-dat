@@ -1,7 +1,7 @@
 import json
 
 from ml_dat import Inst
-from ml_dat import df_tools as dt
+from ml_dat import dat_tools as dt
 
 
 def load_points_json(inst: Inst):
@@ -31,7 +31,7 @@ rpt = {
         "metrics": [load_points_json],
         "docs": ["Store"],
         "sheets": ["Month", "Product"],
-        "show": True,
+        "show": False,
     }
 }
 
@@ -39,7 +39,7 @@ rpt = {
 def my_test_code(inst: Inst):
     df = dt.metrics_matrix(inst)
     print(df)
-    dt.get_excel(df, title="My Test", show=True)
+    dt.get_excel(df, title="My Test", show=False)
     return df
 
 
@@ -50,6 +50,6 @@ my_test = {
         "source": "Datasets.Retail Data",
         "metrics": [load_points_json],
         "sheets": ["Store"],
-        "show": True,
+        "show": False,
     }
 }
