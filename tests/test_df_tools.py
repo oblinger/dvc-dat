@@ -46,7 +46,7 @@ def always_18(_inst: Inst):
     return 18
 
 
-simple_data_dicts = [
+sales_data_points = [
     {'Store': 'Store A', 'Month': 'January', 'Product': 'Product 1',
      'Metric': 'Units Sold', 'Value': 8},
     {'Store': 'Store A', 'Month': 'January', 'Product': 'Product 1',
@@ -84,7 +84,7 @@ simple_data_dicts = [
 
 @pytest.fixture
 def df_sales():
-    return DataFrame(simple_data_dicts)
+    return DataFrame(sales_data_points)
 
 
 class TestDoIsWorking:
@@ -107,7 +107,8 @@ class TestCube:
         assert cube.points == pts, "Couldn't add Inst to Cube"
 
     def test_do_style_registered_module_fn(self, inst1):
-        do.register_module("registered_cube", "test_do_folder.cube_examples.cube_hello")
+        do.register_module("registered_cube",
+                           "test_do_folder.df_tools_examples.cube_hello")
         cube = Cube(point_fns=["registered_cube.always_5"], insts=[inst1])
         assert cube.points == [{'always_5': 5, 'list': 'job_test'}]
 
@@ -168,9 +169,20 @@ class TestGetExcel:
 
     def test_complex_sheet_and_doc_splitting(self, df_sales):
         get_excel(df_sales, title="Test3",
-                  docs=["Store"], sheets=["Month", "Product"], show=True)
+                  docs=["Store"], sheets=["Month", "Product"], show=False)
         assert True
 
+
+class TestMetricsMatrix:
+    def test_metrics_matrix(self, df_sales):
+        df = do("rpt.simple")
+        # print(df.shape)
+        assert df.shape == (16, 6), "Couldn't create metrics matrix"
+
+    def test_default_report(self, df_sales):
+        df = do("rpt.my_test")
+        print(df.shape)
+        assert df.shape == (16, 6), "Couldn't create metrics matrix"
 
 
 class Example:
@@ -178,7 +190,7 @@ class Example:
         # Data encoded as a list of dictionaries with simple keys
 
         # Convert the list of dictionaries to a DataFrame
-        simple_df = DataFrame(simple_data_dicts)
+        simple_df = DataFrame(sales_data_points)
 
         # # Pivot the DataFrame to create multi-level index and columns
         # pivoted_df = simple_df.pivot_table(index=['Store', 'Month'],
@@ -212,4 +224,5 @@ class Example:
 
 if __name__ == "__main__":
     # pytest.main([__file__])
-    TestDoIsWorking().test_load_do()
+    # TestDoIsWorking().test_load_do()
+    TestMetricsMatrix().test_default_report(DataFrame(sales_data_points))

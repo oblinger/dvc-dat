@@ -1,5 +1,5 @@
 import os
-from typing import Union, Iterable, Dict, List, Any, Callable, Hashable, Tuple
+from typing import Union, Iterable, Dict, List, Any, Callable, Tuple
 
 from pandas import DataFrame, ExcelWriter
 from ml_dat import Inst, InstContainer, load_inst, do
@@ -28,6 +28,11 @@ _INDICIES = "indicies"   # Temp key used to store the indicies in cube points
 SOURCE = "source"
 METRICS = "metrics"
 TITLE = "title"
+FOLDER = "folder"
+DOCS = "docs"
+SHEETS = "sheets"
+VERBOSE = "verbose"
+SHOW = "show"
 
 
 def cmd_list(prefix: str = ""):
@@ -35,10 +40,10 @@ def cmd_list(prefix: str = ""):
         if prefix not in k:
             continue
         elif isinstance(v, str):
-            l = len(os.path.commonpath([v, do.do_folder]))
-            print(f"  {k:25} -->   .../{v[l+1:]}")
+            size = len(os.path.commonpath([v, do.do_folder]))
+            print(f"  {k:25} --> .../{v[size+1:]}")   # noqa
         else:
-            print(f"  {k:25} --> {v}")
+            print(f"  {k:25} --> {v}")  # noqa
 
 
 do.register_value("dt.list", cmd_list)
@@ -53,10 +58,10 @@ def from_inst(source: Union[Inst, str, Iterable],
 
 
 def get_excel(df: DataFrame, *,
+              title: str = None,
               folder: str = None,
               docs: List[str] = None,
               sheets: List[str] = None,
-              title: str = None,
               verbose: bool = True,
               show: bool = False):
     """
@@ -68,7 +73,7 @@ def get_excel(df: DataFrame, *,
     folder = folder or os.getcwd()
     if not docs:       # saves as a single excel file
         path = os.path.join(folder, f'{title or "output"}.xlsx')
-        _create_sheets(path, df, "Sheet1", sheets, verbose, show)
+        _create_sheets(path, df, "", sheets, verbose, show)
         return path
     else:   # Splits the dataframe into multiple Excel files
         section_values: Tuple
@@ -77,50 +82,74 @@ def get_excel(df: DataFrame, *,
             #     else list(section_values)
             section_path = (title + " " if title else "") + '-'.join(section_values)
             section_path = os.path.join(folder, section_path + ".xlsx")
-            _create_sheets(section_path, section_df, "Sheet1", sheets, verbose, show)
+            _create_sheets(section_path, section_df, "", sheets, verbose, show)
         return folder
 
 
 def _create_sheets(path, df, sheet_prefix, sheets, verbose, show):
+    if os.path.exists(path):
+        os.remove(path)
     with ExcelWriter(path, engine='xlsxwriter') as writer:
         if not sheets:
-            df.to_excel(writer, sheet_name='Sheet1', index=False)
+            df.to_excel(writer, sheet_name=sheet_prefix or "Sheet1", index=False)
         else:
             for sheet_values, sheet_df in df.groupby(sheets):
                 sheet_values = [sheet_values] if isinstance(sheet_values,
                                                             str) else list(sheet_values)
-                sheet_title = '-'.join(sheet_values)
+                sheet_title = sheet_prefix+" " if sheet_prefix else ''
+                sheet_title += '-'.join(sheet_values)
                 sheet_df.to_excel(writer, sheet_name=sheet_title, index=False)
     if verbose:
-        # print(repr(df))
         print(f"# Dataframe written to {path}")
     if show:
         os.system(f'open "{path}" &')
 
 
-def metrics_matrix(spec: Inst, source: Inst = None, *,
-               metrics: List = None, title: str = None,
-               show: bool = False) -> DataFrame:
+def metrics_matrix(spec: Inst, *,
+                   title: str = None,
+                   folder: str = None,
+                   source: Inst = None,
+                   metrics: List = None,
+                   docs: List[str] = None,
+                   sheets: List[str] = None,
+                   verbose: bool = True,
+                   show: bool = False) -> DataFrame:
     """A dat script that runs the specified metrics over the specified "Insts".
 
     Parameters
     ----------
     spec: Inst
-        Provides default parameters for the report.
-    source: Union[Inst, str, Iterable]
-        The source of 'Insts' to be analyzed.  (See Cube.add_insts.)
-    metrics: List
-        A list of functions that are applied to each Inst.
+        Default parameters for the report are in the 'metrics_matrix' section.
     title: str
-        The title of the report.
+        The title (filename base) for the report.
+    folder: str
+        The folder where the report is saved.
+    source: Union[Inst, str, Iterable]
+        The source of 'Insts' to be analyzed, uses the 'spec' inst if not provided.
+    metrics: List
+        A list of fns to apply to each Inst (See Cube point_fns for details).
+    docs: List[str]
+        The columns to join together to split the report into separate Excel files.
+    sheets: List[str]
+        The columns to join together to split the report into separate sheets.
+    verbose: bool,
+        If True, the report is printed to the console.  (default True???)
     show: bool
         If True, the report is displayed in a window.
     """
-    source = source or Inst.get(spec, SOURCE)
-    metrics = metrics or Inst.get(spec, METRICS)
-    title = title or Inst.get(spec, TITLE)
+    d = spec.spec if isinstance(spec, Inst) else spec
+    mm = d.get("metrics_matrix") or {}
+    title = title or mm.get(TITLE)    # or spec.shortname
+    folder = folder or mm.get(FOLDER) or os.getcwd()
+    source = source or mm.get(SOURCE) or (isinstance(spec, Inst) and spec)
+    metrics = metrics or mm.get(METRICS)
+    docs = docs or mm.get(DOCS)
+    sheets = sheets or mm.get(SHEETS)
+    verbose = verbose or mm.get(VERBOSE)
+    show = show or mm.get(SHOW)
     df = Cube(insts=source, point_fns=metrics).get_df()
-    get_excel(df, title=title, verbose=True, show=show)
+    get_excel(df, title=title, folder=folder, docs=docs, sheets=sheets,
+              verbose=verbose, show=show)
     return df
 
 
@@ -147,9 +176,10 @@ class Cube(object):
     """
     @staticmethod
     def from_df(df: DataFrame):
-        return Cube(points=df.to_dict(orient='records'))
+        points: Points = df.to_dict(orient='records')
+        return Cube(points=points)
 
-    def __init__(self, *, points: List[Points] = None,
+    def __init__(self, *, points: Points = None,
                  insts: Union[Inst, str, Iterable] = None,
                  point_fns: List[Union[str, PointFn]] = None):
         from . import do
@@ -210,7 +240,7 @@ class Cube(object):
             for element in source:
                 self._add_insts(element, len(indicies) + 1, indicies)
         else:
-            raise Exception(f"Illegal inst source: {source!r}")
+            raise Exception(f"Expected an Inst, not: {source!r}")
 
     def _inject_indicies(self) -> None:
         """Scans points to find all existing indicies and builds a safe renaming
@@ -238,43 +268,3 @@ class Cube(object):
             for k, v in point[_INDICIES].items():
                 point[rename_index(k)] = v
             del point[_INDICIES]
-
-    #
-    # # noinspection PyUnusedLocal
-    # def get_df(self, *,
-    #            slices: Optional[List[str]] = None,
-    #            rows: Optional[List[str]] = None,
-    #            columns: Optional[List[str]] = None,
-    #            values: Optional[List[str]] = None):
-    #     """Returns contents of a cube as a pandas DataFrame.
-    #
-    #     Parameters
-    #     ----------
-    #     slices: Optional[List[str]]
-    #         Multiple DataFrames are constructed by partitioning points
-    #         into unique combinations of values from these slice keys.
-    #     rows: Optional[List[str]]
-    #         If specified, these keys serve as the index or multi-index
-    #     values: Optional[List[str]]
-    #         If specified, these keys are merged into a single value
-    #     columns: Optional[List[str]]
-    #         If specified, these keys define the columns for the
-    #         all unique
-    #     """
-    #     return DataFrame(self.points)
-    #
-    # def get_excel(self, *, name: str = None, title: str = None,
-    #               verbose: bool = False,
-    #               show: bool = False, **kwargs):
-    #     """Writes the cube to an Excel file.
-    #
-    #     Uses the 'as_df' method to create a DataFrame, and then writes it.
-    #     """
-    #     path = self.insts[0].path if self.insts else os.getcwd()
-    #     file_path = os.path.join(path, name or 'Report') + ".xlsx"
-    #     df = self.get_df(**kwargs)
-    #
-    #     # Write the dataframe to an Excel file
-    #     with ExcelWriter(file_path, engine='xlsxwriter') as writer:
-    #         df.to_excel(writer, sheet_name=title or 'Sheet1', index=False)
-    #     pass

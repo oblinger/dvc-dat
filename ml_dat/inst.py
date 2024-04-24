@@ -46,7 +46,7 @@ class Inst(object):
       - a dict, or
       - or the name of a loadable dict
     - In either case it is recursively expanded (see )
-    - The expanded spec is saved in _spec_.json or _spec_.yaml in its folder.
+    - The expanded spec is saved in _spec_.yaml or _spec_.yaml in its folder.
 
     Persistable API
       .spec ................. Is the 'spec' dict for this inst
@@ -96,7 +96,7 @@ class Inst(object):
             if d is None:
                 return default_value
             elif not isinstance(d, dict):
-                raise Exception(f"GET: Expected dict value for {k!r} not {d!r}")
+                raise ValueError(f"GET: Expected dict value for {k!r} not {d!r}")
             else:
                 d = d.get(k)
         return d or default_value
@@ -205,14 +205,13 @@ class Inst(object):
                 with open(fpath) as f:
                     spec = json.load(f)
             else:
-                with open(os.path.join(path, SPEC_YAML)) as f:
+                with open(fpath := os.path.join(path, SPEC_YAML)) as f:
                     spec = yaml.safe_load(f)
-        except FileNotFoundError:
+        except Exception as e:
             if not os.path.exists(path):
                 raise Exception(F"LOAD_INST: Folder missing {path!r}.")
             else:
-                raise Exception(f"LOAD_INST: Folder {path!r} " 
-                                "does not have a _spec_... file.")
+                raise Exception(f"LOAD_INST: Error loading {path!r}s spec file: {e}")
         klass_name = Inst.get(spec, MAIN_CLASS) or "Inst"
         klass = Inst._find_subclass_by_name(Inst, klass_name)
         if not klass:

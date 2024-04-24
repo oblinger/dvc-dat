@@ -98,9 +98,12 @@ class DoManager(object):
             return result
         try:
             obj = self.expand_spec(obj, context=do_spec)
+        except ValueError as e:
+            raise Exception(F"DO - Error during expansion of {do_spec!r}: {e}")
+        try:
             fn_spec = Inst.get(obj, _MAIN_DO)
-        except IOError:
-            raise Exception(F"The loadable {do_spec!r} is not a callable or config")
+        except ValueError:
+            raise Exception(F"DO: Error {do_spec!r} is not a callable or config")
         if isinstance(fn_spec, str):
             fn_spec = self.load(fn_spec)
         if not callable(fn_spec):
@@ -134,6 +137,7 @@ class DoManager(object):
         if self.registered_values is None:
             self.registered_values = {}
         self.registered_values[dotted_name] = value
+        # print(f"Registered {dotted_name} as {value} in {self}")
 
     def get_base_object(self, base: str) -> Any:
         """Returns the module associated with the given base name."""

@@ -59,13 +59,13 @@ def temp_root_with_gameset(
     gameset_path = Path(mock_inst_root.name, "gamesets/bb/baller10")
     gameset_path.mkdir(parents=True, exist_ok=True)
 
-    with (gameset_path / "_spec_.json").open("w") as f:
+    with (gameset_path / "_spec_.yaml").open("w") as f:
         json.dump(instcontainer_spec, f)
 
     game_1_path = gameset_path / "1"
     game_1_path.mkdir(exist_ok=True, parents=True)
 
-    with (game_1_path / "_spec_.json").open("w") as f:
+    with (game_1_path / "_spec_.yaml").open("w") as f:
         json.dump(game_spec, f)
 
     return mock_inst_root
@@ -83,7 +83,7 @@ def temp_root_with_runset(
     runset_path = Path(mock_inst_root.name, "runsets/bb/baller10")
     runset_path.mkdir(parents=True, exist_ok=True)
 
-    with (runset_path / "_spec_.json").open("w") as f:
+    with (runset_path / "_spec_.yaml").open("w") as f:
         json.dump(instcontainer_spec, f)
 
     run_1_path = runset_path / "1"
@@ -99,7 +99,7 @@ def temp_root_with_runset(
         },
     }
 
-    with (run_1_path / "_spec_.json").open("w") as f:
+    with (run_1_path / "_spec_.yaml").open("w") as f:
         json.dump(run_spec, f)
 
     return mock_inst_root
