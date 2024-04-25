@@ -69,6 +69,7 @@ df = DataFrames.build_from_insts(insts, point_fns, data_folder)
 - add .datconfig registry for module and value loads
 - add ability to have value redirecting loads????
 - Inject indicies should not inject for degenerate indicies w/ only one value
+- Change semantics of Inst.save to Inst.place
 
 ## Later
 - [ ] Split ml-cube into a separate package
@@ -80,4 +81,5 @@ TODO for cube.py
 - Implement the 'merge_keys' method
 - Implement the 'get_csv' method
 - Support inst 'Cube' section that build data cube and cube reports
-l
+
+## Done

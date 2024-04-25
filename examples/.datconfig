@@ -1,3 +1,4 @@
 {
-    "do_folder": "example_do_folder"   # do_folder is relative to this .datconfig file
+    "do_folder": "example_do_folder",
+    "inst_data_folder": "example_inst_data_folder"
 }

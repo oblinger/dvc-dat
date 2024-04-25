@@ -5,13 +5,6 @@ from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 import yaml
 
 
-# TODO:
-# - Refactor Martin accessors into static methods
-# - Get Inst into the folder structure properly, and provide
-#   a copy of this for others to download locally for themselves
-# - (with Dan) Get agreement from the team on toplevel on the inst folder.
-
-
 SPEC_JSON = "_spec_.json"
 SPEC_YAML = "_spec_.yaml"
 MAIN_CLASS = "main.class"
@@ -83,6 +76,7 @@ class Inst(object):
         self.path: str = os.path.abspath(path)
         self.name: str = self._path2name(self.path)
         self.spec: Dict = spec
+        self.save()
 
     @staticmethod
     def get(source: Union["Inst", dict],

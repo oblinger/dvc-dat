@@ -176,7 +176,9 @@ class TestInstLoadingAndSaving:
 
 class TestInstContainers:
     def test_create(self):
+        os.system(f"rm -r '{TMP_PATH}'")
         container = InstContainer(path=TMP_PATH, spec={})
+        x = container.inst_paths
         assert isinstance(container, InstContainer)
         assert container.inst_paths == []
         assert container.insts == []

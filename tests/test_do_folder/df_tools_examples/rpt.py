@@ -1,4 +1,4 @@
-import json
+import json  # noqa
 
 from ml_dat import Inst
 from ml_dat import dat_tools as dt
@@ -29,8 +29,8 @@ rpt = {
         "title": "RPT",
         "source": "Datasets.Retail Data",
         "metrics": [load_points_json],
-        "docs": ["Store"],
-        "sheets": ["Month", "Product"],
+        "docs": ["list"],
+        "sheets": ["Store", "Month"],
         "show": False,
     }
 }
@@ -47,9 +47,16 @@ my_test = {
     "main": {"do": my_test_code},
     "metrics_matrix": {
         "title": "My Test",
-        "source": "Datasets.Retail Data",
+        "source": "Datasets.Retail Data.Berkeley",
         "metrics": [load_points_json],
         "sheets": ["Store"],
         "show": False,
     }
 }
+
+
+def fully_manual():
+    df = dt.from_inst("Datasets.Retail Data", [load_points_json])
+    print(df)
+    dt.get_excel(df, title="fully manual test", show=False)
+    return df

@@ -177,60 +177,28 @@ class TestMetricsMatrix:
     def test_metrics_matrix(self, df_sales):
         df = do("rpt.simple")
         # print(df.shape)
-        assert df.shape == (16, 6), "Couldn't create metrics matrix"
+        assert df.shape == (48, 6), "Couldn't create metrics matrix"
 
     def test_default_report(self, df_sales):
         df = do("rpt")
         print(df.shape)
-        assert df.shape == (16, 6), "Couldn't create metrics matrix"
+        assert df.shape == (48, 6), "Couldn't create metrics matrix"
 
     def test_my_test(self, df_sales):
         df = do("rpt.my_test")
         print(df.shape)
         assert df.shape == (16, 6), "Couldn't create metrics matrix"
 
+    def test_fully_manual(self, df_sales):
+        df = do("rpt.fully_manual")
+        print(df.shape)
+        assert df.shape == (48, 6), "Couldn't create metrics matrix"
+
 
 #
 
 
-class Example:
-    def example(self):   # noqa
-        # Data encoded as a list of dictionaries with simple keys
-
-        # Convert the list of dictionaries to a DataFrame
-        simple_df = DataFrame(sales_data_points)
-
-        # # Pivot the DataFrame to create multi-level index and columns
-        # pivoted_df = simple_df.pivot_table(index=['Store', 'Month'],
-        #                                    columns=['Product', 'Metric'],
-        #                                    values='Value')
-
-        # Assume 'simple_df' has been created with the initial list of dicts as before
-
-        simple_df2 = DataFrame(simple_df)
-        # Update the 'Month' column in 'simple_df' to 'Jan-Feb' for all entries
-        simple_df2['Month'] = 'Jan-Feb'
-
-        # Group by 'Store', 'Month', 'Product', and 'Metric', then sum the 'Value'
-        aggregated_df = simple_df2.groupby(['Store', 'Month', 'Product', 'Metric'],
-                                           as_index=False).sum()
-
-        # Pivot the aggregated DataFrame to create multi-level index and columns
-        merged_pivoted_df = aggregated_df.pivot_table(index=['Store', 'Month'],
-                                                      columns=['Product', 'Metric'],
-                                                      values='Value')
-
-        # Display the pivoted DataFrame
-        print(simple_df)
-
-        # Display the pivoted DataFrame
-        print(aggregated_df)
-
-        # Display the pivoted DataFrame
-        print(merged_pivoted_df)
-
-
 if __name__ == "__main__":
-    # pytest.main([__file__])
+    pytest.main([__file__])
     # TestDoIsWorking().test_load_do()
-    TestMetricsMatrix().test_default_report(DataFrame(sales_data_points))
+    #TestMetricsMatrix().test_default_report(DataFrame(sales_data_points))

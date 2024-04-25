@@ -33,9 +33,12 @@ class DatConfig(object):
         folder = folder or os.getcwd()
         while True:
             if os.path.exists(config := os.path.join(folder, _DAT_FILE)):
-                with open(config, 'r') as f:
-                    self.config = json.load(f)
-                    break
+                try:
+                    with open(config, 'r') as f:
+                        self.config = json.load(f)
+                except json.JSONDecodeError as e:
+                    raise Exception(f"Error loading .datconfig: {e}")
+                break
             if folder == '/':
                 folder = os.getcwd()
                 break

@@ -1,3 +1,0 @@
-main:
-  base: Game   # This is sort of like Game input data, so I am using that base class
-  points: points.json
