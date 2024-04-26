@@ -1,0 +1,7 @@
+{
+  "main": {
+    "base": "Game",
+    "points": "points.json",
+    "class": "Inst"
+  }
+}

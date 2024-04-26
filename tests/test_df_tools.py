@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from ml_dat import do
 from ml_dat import Inst
-from ml_dat.dat_tools import get_excel, Cube, from_inst
+from ml_dat.dat_tools import to_excel, Cube, from_inst
 
 if not do.get_base_object("test_df_tools"):  # Module might repeatedly load
     do.register_module("test_df_tools", "tests.test_df_tools")
@@ -152,24 +152,24 @@ class TestFromInst:
 
 class TestGetExcel:
     def test_get_excel(self, df_sales):
-        path = get_excel(df_sales, title="test1", show=False)
+        path = to_excel(df_sales, title="test1", show=False)
         assert os.path.exists(path), "Couldn't create excel file"
 
     def test_sheet_splitting(self, df_sales):
-        get_excel(df_sales, title="test2", sheets=["Store"], show=False)
+        to_excel(df_sales, title="test2", sheets=["Store"], show=False)
         assert True
 
     def test_complex_sheet_splitting(self, df_sales):
-        get_excel(df_sales, title="test2", sheets=["Store", "Month"], show=False)
+        to_excel(df_sales, title="test2", sheets=["Store", "Month"], show=False)
         assert True
 
     def test_doc_splitting(self, df_sales):
-        get_excel(df_sales, title="test2", docs=["Store"], show=False)
+        to_excel(df_sales, title="test2", docs=["Store"], show=False)
         assert True
 
     def test_complex_sheet_and_doc_splitting(self, df_sales):
-        get_excel(df_sales, title="Test3",
-                  docs=["Store"], sheets=["Month", "Product"], show=False)
+        to_excel(df_sales, title="Test3",
+                 docs=["Store"], sheets=["Month", "Product"], show=False)
         assert True
 
 

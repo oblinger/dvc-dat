@@ -128,7 +128,8 @@ class DoManager(object):
           import system.),
         - The module's import name, or
         - by providing the already loaded module object."""
-        if not allow_redefine and base in self.module_index:
+        if not allow_redefine and base in self.module_index and \
+                True:
             raise Exception(F"Base {base!r} is already defined")
         self.module_index[base] = module_spec
 

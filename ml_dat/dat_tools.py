@@ -57,13 +57,13 @@ def from_inst(source: Union[Inst, str, Iterable],
     return df
 
 
-def get_excel(df: DataFrame, *,
-              title: str = None,
-              folder: str = None,
-              docs: List[str] = None,
-              sheets: List[str] = None,
-              verbose: bool = True,
-              show: bool = False):
+def to_excel(df: DataFrame, *,
+             title: str = None,
+             folder: str = None,
+             docs: List[str] = None,
+             sheets: List[str] = None,
+             verbose: bool = True,
+             show: bool = False):
     """
     Splits a pandas DataFrame into multiple DataFrames based on the values of their
     columns.  The first set of columns split the DataFrame into slices, called
@@ -148,8 +148,8 @@ def metrics_matrix(spec: Inst, *,
     verbose = verbose or mm.get(VERBOSE)
     show = show or mm.get(SHOW)
     df = Cube(insts=source, point_fns=metrics).get_df()
-    get_excel(df, title=title, folder=folder, docs=docs, sheets=sheets,
-              verbose=verbose, show=show)
+    to_excel(df, title=title, folder=folder, docs=docs, sheets=sheets,
+             verbose=verbose, show=show)
     return df
 
 

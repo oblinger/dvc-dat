@@ -1,4 +1,4 @@
-import json  # noqa
+import json
 
 from ml_dat import Inst
 from ml_dat import dat_tools as dt
