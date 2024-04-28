@@ -36,7 +36,7 @@ SHOW = "show"
 
 
 def cmd_list(prefix: str = ""):
-    for k, v in do.module_index.items():
+    for k, v in do.base_locations.items():
         if prefix not in k:
             continue
         elif isinstance(v, str):

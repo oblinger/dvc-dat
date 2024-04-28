@@ -67,13 +67,15 @@ class DoManager(object):
         - This process is repeated until no more "main.base" keys are found.
 
     """
-    do_folder: str  #
-    module_index: Dict[str, Union[str, ModuleType]]    # path to module or module itself
+    do_folder: str                                     # root loadables folder
+    base_locations: Dict[str, str]                     # path to module or module itself
+    base_objects: Dict[str, Any]                       # loaded modules or objects
     do_fns: Dict[str, Dict[str, Callable]]             # externally defined fns
     registered_values: Union[None, Dict[str, Any]]     # values to be returned by load
 
     def __init__(self, *, do_folder=None):
         self.set_do_folder(do_folder)
+        self.base_objects = {}
 
     def __call__(self, do_spec: Union[Spec, str], *args, **kwargs) -> Any:
         """Loads and executes a 'do-method'.
@@ -116,7 +118,7 @@ class DoManager(object):
         """Sets the folder where the loadable python objects are found, and clears all
         cached modules and values."""
         self.do_folder = do_folder
-        self.module_index = _build_loadables_index(do_folder)
+        self.base_locations = _build_loadables_index(do_folder)
         self.registered_values = None
 
     def register_module(self, base: str, module_spec: Union[str, ModuleType], *,
@@ -128,26 +130,45 @@ class DoManager(object):
           import system.),
         - The module's import name, or
         - by providing the already loaded module object."""
-        if not allow_redefine and base in self.module_index and \
-                True:
+        if not allow_redefine and base in self.base_locations and \
+                self.base_locations[base] != module_spec:
             raise Exception(F"Base {base!r} is already defined")
-        self.module_index[base] = module_spec
+        if isinstance(module_spec, ModuleType):
+            self.base_locations[base] = "--directly-assigned--"
+            self.base_objects[base] = module_spec
+        else:
+            self.base_locations[base] = module_spec
 
     def register_value(self, dotted_name: str, value: Any):
         """Defines a value to be returned by 'load' for the given dotted name."""
         if self.registered_values is None:
             self.registered_values = {}
         self.registered_values[dotted_name] = value
-        # print(f "Registered {dotted_name} as {value} in {self}")
+        # base = dotted_name.split(".")[0]
+        # if base not in self.base_locations:
+        #     self.base_locations[base] = "--registered-value--"
+        #     self.base_objects[base] = {}
+        # # print(f "Registered {dotted_name} as {value} in {self}")
 
-    def get_base_object(self, base: str) -> Any:
-        """Returns the module associated with the given base name."""
-        if base not in self.module_index:
-            return None
-        elif isinstance(self.module_index[base], str):
-            return _load_base_entity(base, self.module_index[base])
+    def get_base(self, base: str, default: Any = _DO_NULL) -> Any:
+        """Returns the module or base object associated with a given base name.
+
+        Parameters
+        ----------
+        base: str
+            The base name to look up
+        default: Any
+            The value to return if the base name is not found
+        """
+        if base in self.base_objects:
+            return self.base_objects[base]
+        elif base in self.base_locations:
+            self.base_objects[base] = _load_base_entity(base, self.base_locations[base])
+            return self.base_objects[base]
+        elif default is _DO_NULL:
+            raise Exception(f"DO: Base {base!r} is not defined.")
         else:
-            return self.module_index[base]
+            return default
 
     def merge_configs(self, base: Spec, override: Spec) -> Spec:
         """Recursively merges the 'override' dict trees over 'base' tree of dicts."""
@@ -190,25 +211,28 @@ class DoManager(object):
         - If FILENAME.json or FILENAME.yaml is found, then it is loaded, and its
           parsed contents are returned.  (PART-NAME is ignored)
         """
-
-        ctx = "" if context is None else F" {context}"
-        parts = dotted_name.split(".")
-        prefix = parts[0]
-        obj = self.module_index.get(prefix)
-        if isinstance(obj, str):
-            self.module_index[prefix] = obj = _load_base_entity(prefix, obj)
         if self.registered_values and _DO_NULL != \
                 (value := self.registered_values.get(dotted_name, _DO_NULL)):
             return value
-        elif obj is None and default is _DO_NULL:
-            raise Exception(
-                    f"DO: Module {prefix!r} not found under {self.do_folder!r}{ctx}")
-        elif obj is None:
-            return default
-        elif obj == _DO_ERROR_FLAG:
-            raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
+        ctx = "" if context is None else F" {context}"
+        parts = dotted_name.split(".")
+        prefix = parts[0]
+        obj = self.get_base(prefix, default=_DO_NULL if default == _DO_NULL else None)
+        # obj = self.base_locations.get(prefix)
+        # if isinstance(obj, str):
+        #     self.base_locations[prefix] = obj = _load_base_entity(prefix, obj)
+        # if self.registered_values and _DO_NULL != \
+        #         (value := self.registered_values.get(dotted_name, _DO_NULL)):
+        #     return value
+        # elif obj is None and default is _DO_NULL:
+        #     raise Exception(
+        #             f"DO: Module {prefix!r} not found under {self.do_folder!r}{ctx}")
+        # elif obj is None:
+        #     return default
 
-        if isinstance(obj, ModuleType):
+        if obj == _DO_ERROR_FLAG:
+            raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
+        elif isinstance(obj, ModuleType):
             idx = 1 if len(parts) > 1 else 0
             result = getattr(obj, parts[idx]) if hasattr(obj, parts[idx]) else None
             if len(parts) > 2:
@@ -217,13 +241,15 @@ class DoManager(object):
             result = obj
         elif isinstance(obj, dict):
             result = Inst.get(obj, parts[1:])
+        elif obj is None:
+            return default
         else:
             raise Exception(F"DO: Illegal value {obj!r} for {dotted_name}{ctx}")
 
-        if result is None and default is not _DO_NULL:
-            return default
         if result is None:
-            if obj is None:
+            if default is not _DO_NULL:
+                return default
+            elif obj is None:
                 raise Exception(F"DO: Module {prefix!r} not found{ctx}")
             else:
                 raise Exception(
@@ -266,7 +292,7 @@ def _load_module(base, module_spec: str) -> ModuleType:
     return module
 
 
-def _build_loadables_index(do_folder: str) -> Dict:
+def _build_loadables_index(do_folder: str) -> Dict[str, Any]:
     global _DO_EXTENSIONS
     result = {}
     if not do_folder or not os.path.exists(do_folder):

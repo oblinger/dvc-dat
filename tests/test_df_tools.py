@@ -8,9 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from ml_dat import do
 from ml_dat import Inst
 from ml_dat.dat_tools import to_excel, Cube, from_inst
-
-if not do.get_base_object("test_df_tools"):  # Module might repeatedly load
-    do.register_module("test_df_tools", "tests.test_df_tools")
+do.register_module("test_df_tools", "tests.test_df_tools")
 
 TMP_PATH = "/tmp/job_test"
 TMP_PATH2 = "/tmp/job_test2"
