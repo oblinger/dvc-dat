@@ -62,6 +62,8 @@ def to_excel(df: DataFrame, *,
              folder: str = None,
              docs: List[str] = None,
              sheets: List[str] = None,
+             columns: List[str] = None,
+             formatted_columns: List[str] = None,
              verbose: bool = True,
              show: bool = False):
     """
@@ -70,22 +72,24 @@ def to_excel(df: DataFrame, *,
     sections which separate it into different Excel files.  Then a second set of
     columns are used to slice into separate sheets within each Excel file.
     """
-    print(f"# TOEXCEL {docs=} {sheets=} {verbose=} {show=}")
+    df = df.copy()
+    if formatted_columns:
+        add_formatted_columns(df, formatted_columns)
     folder = folder or os.getcwd()
     if not docs:       # saves as a single excel file
         path = os.path.join(folder, f'{title or "output"}.xlsx')
-        _create_sheets(path, df, "", sheets, verbose, show)
+        _create_sheets(path, df, "", sheets, columns, verbose, show)
         return path
     else:   # Splits the dataframe into multiple Excel files
         section_values: Tuple
         for section_values, section_df in df.groupby(docs):
             section_path = (title + " " if title else "") + '-'.join(section_values)
             section_path = os.path.join(folder, section_path + ".xlsx")
-            _create_sheets(section_path, section_df, "", sheets, verbose, show)
+            _create_sheets(section_path, section_df, "", sheets, columns, verbose, show)
         return folder
 
 
-def _create_sheets(path, df, sheet_prefix, sheets, verbose, show):
+def _create_sheets(path, df, sheet_prefix, sheets, columns, verbose, show):
     if os.path.exists(path):
         os.remove(path)
     with ExcelWriter(path, engine='xlsxwriter') as writer:
@@ -97,12 +101,14 @@ def _create_sheets(path, df, sheet_prefix, sheets, verbose, show):
                                                             str) else list(sheet_values)
                 sheet_title = sheet_prefix+" " if sheet_prefix else ''
                 sheet_title += '-'.join(sheet_values)
+                if columns:
+                    sheet_df = sheet_df[[col for col in columns if col in sheet_df.columns]]
                 sheet_df.to_excel(writer, sheet_name=sheet_title, index=False)
     if verbose:
         print(f"# Dataframe written to {path}")
     if show:
-        print(f'  $ open "{path}" &')
-        os.system("pwd")
+        # print(f'  $ open "{path}" &')
+        # os.system("pwd")
         os.system(f'open "{path}" &')
 
 
@@ -128,6 +134,7 @@ def metrics_matrix(spec: Inst, *,
                    metrics: List = None,
                    docs: List[str] = None,
                    sheets: List[str] = None,
+                   columns: List[str] = None,
                    formatted_columns: List[str] = None,
                    verbose: bool = True,
                    show: bool = None) -> DataFrame:
@@ -149,6 +156,8 @@ def metrics_matrix(spec: Inst, *,
         The columns to join together to split the report into separate Excel files.
     sheets: List[str]
         The columns to join together to split the report into separate sheets.
+    columns: List[str]
+        Trims report down to only list the specified columns.
     formatted_columns: List[str]
         A list of formatted columns to add to the report.
     verbose: bool,
@@ -164,13 +173,13 @@ def metrics_matrix(spec: Inst, *,
     metrics = metrics or mm.get(METRICS)
     docs = docs or mm.get(DOCS)
     sheets = sheets or mm.get(SHEETS)
+    columns = columns or mm.get("columns")
     formatted_columns = formatted_columns or mm.get("formatted_columns")
     verbose = mm.get(VERBOSE) if verbose is None else verbose
     show = mm.get(SHOW) if show is None else show
     df = Cube(insts=source, point_fns=metrics).get_df()
-    if formatted_columns:
-        add_formatted_columns(df, formatted_columns)
     to_excel(df, title=title, folder=folder, docs=docs, sheets=sheets,
+             columns=columns, formatted_columns=formatted_columns,
              verbose=verbose, show=show)
     return df
 

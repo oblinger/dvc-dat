@@ -15,6 +15,8 @@ add_col = {
         "title": "S23b",
         "formatted_columns": [
             " new_col <== {0}-{1} <== is_prime, color_p "
-        ]
+        ],
+        "show": False,
+        "verbose": False,
     }
 }
