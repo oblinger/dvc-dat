@@ -108,7 +108,7 @@ class TestCube:
 
     def test_do_style_registered_module_fn(self, inst1):
         do.register_module("registered_cube",
-                           "test_do_folder.df_tools_examples.cube_hello")
+                           "test_do_folder.dat_tools_examples.cube_hello")
         cube = Cube(point_fns=["registered_cube.always_5"], insts=[inst1])
         assert cube.points == [{'always_5': 5, 'list': 'job_test'}]
 

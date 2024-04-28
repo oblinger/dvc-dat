@@ -138,18 +138,18 @@ class DoManager(object):
         if self.registered_values is None:
             self.registered_values = {}
         self.registered_values[dotted_name] = value
-        # print(f"Registered {dotted_name} as {value} in {self}")
+        # print(f "Registered {dotted_name} as {value} in {self}")
 
     def get_base_object(self, base: str) -> Any:
         """Returns the module associated with the given base name."""
         if base not in self.module_index:
             return None
         elif isinstance(self.module_index[base], str):
-            return _load_base_entity(self.module_index[base])
+            return _load_base_entity(base, self.module_index[base])
         else:
             return self.module_index[base]
 
-    def merge_configs(self, base, override):
+    def merge_configs(self, base: Spec, override: Spec) -> Spec:
         """Recursively merges the 'override' dict trees over 'base' tree of dicts."""
         if isinstance(override, dict) and isinstance(base, dict):
             merge = dict(base)
@@ -196,7 +196,7 @@ class DoManager(object):
         prefix = parts[0]
         obj = self.module_index.get(prefix)
         if isinstance(obj, str):
-            self.module_index[prefix] = obj = _load_base_entity(obj)
+            self.module_index[prefix] = obj = _load_base_entity(prefix, obj)
         if self.registered_values and _DO_NULL != \
                 (value := self.registered_values.get(dotted_name, _DO_NULL)):
             return value
@@ -234,10 +234,10 @@ class DoManager(object):
         return result
 
 
-def _load_base_entity(source_spec: str) -> Union[ModuleType, Spec]:
+def _load_base_entity(base, source_spec: str) -> Union[ModuleType, Spec]:
     ext = os.path.splitext(source_spec)[1]
     if ext == ".py" or "/" not in source_spec:
-        return _load_module(source_spec)
+        return _load_module(base, source_spec)
     elif ext == ".json":    # os.path.exists(name := F"{path_base}.json"):
         with open(source_spec, 'r') as f:
             try:
@@ -251,16 +251,16 @@ def _load_base_entity(source_spec: str) -> Union[ModuleType, Spec]:
         raise Exception(F"DO: Unsupported file type {source_spec}")
 
 
-def _load_module(module_spec: str) -> ModuleType:
+def _load_module(base, module_spec: str) -> ModuleType:
     if "/" not in module_spec:
         try:
             return import_module(module_spec)
         except ModuleNotFoundError:
-            raise Exception(F"DO.LOAD: Module {module_spec!r} not found.")
+            raise Exception(F"DO.LOAD: Could not import module {module_spec!r}")
     assert isinstance(module_spec, object)
     if not os.path.exists(module_spec):
         raise Exception(F"Missing module file: {module_spec} ...")
-    spec = importlib.util.spec_from_file_location("module_name", module_spec)
+    spec = importlib.util.spec_from_file_location(base, module_spec)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

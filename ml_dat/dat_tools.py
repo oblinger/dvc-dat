@@ -1,7 +1,7 @@
 import os
 from typing import Union, Iterable, Dict, List, Any, Callable, Tuple
 
-from pandas import DataFrame, ExcelWriter
+from pandas import DataFrame, ExcelWriter, Series
 from ml_dat import Inst, InstContainer, load_inst, do
 
 """
@@ -70,6 +70,7 @@ def to_excel(df: DataFrame, *,
     sections which separate it into different Excel files.  Then a second set of
     columns are used to slice into separate sheets within each Excel file.
     """
+    print(f"# TOEXCEL {docs=} {sheets=} {verbose=} {show=}")
     folder = folder or os.getcwd()
     if not docs:       # saves as a single excel file
         path = os.path.join(folder, f'{title or "output"}.xlsx')
@@ -78,8 +79,6 @@ def to_excel(df: DataFrame, *,
     else:   # Splits the dataframe into multiple Excel files
         section_values: Tuple
         for section_values, section_df in df.groupby(docs):
-            # section_values = [section_values] if isinstance(section_values, str) \
-            #     else list(section_values)
             section_path = (title + " " if title else "") + '-'.join(section_values)
             section_path = os.path.join(folder, section_path + ".xlsx")
             _create_sheets(section_path, section_df, "", sheets, verbose, show)
@@ -102,7 +101,24 @@ def _create_sheets(path, df, sheet_prefix, sheets, verbose, show):
     if verbose:
         print(f"# Dataframe written to {path}")
     if show:
+        print(f'  $ open "{path}" &')
+        os.system("pwd")
         os.system(f'open "{path}" &')
+
+
+def add_formatted_columns(df: DataFrame, format_cmds: List[str]):
+    """Adds formatted columns to a DataFrame."""
+    arg_names, format_str = [], ""
+
+    def build_str(row: Series):
+        d = row.to_dict()
+        args = map(lambda x: d[x], arg_names)
+        return format_str.format(*args)
+    for spec in format_cmds:
+        column_name, format_str, arg_names = map(str.strip, spec.split("<=="))
+        arg_names = list(map(str.strip, arg_names.split(",")))
+        df[column_name] = df.apply(build_str, axis=1)
+
 
 
 def metrics_matrix(spec: Inst, *,
@@ -112,8 +128,9 @@ def metrics_matrix(spec: Inst, *,
                    metrics: List = None,
                    docs: List[str] = None,
                    sheets: List[str] = None,
+                   formatted_columns: List[str] = None,
                    verbose: bool = True,
-                   show: bool = False) -> DataFrame:
+                   show: bool = None) -> DataFrame:
     """A dat script that runs the specified metrics over the specified "Insts".
 
     Parameters
@@ -132,6 +149,8 @@ def metrics_matrix(spec: Inst, *,
         The columns to join together to split the report into separate Excel files.
     sheets: List[str]
         The columns to join together to split the report into separate sheets.
+    formatted_columns: List[str]
+        A list of formatted columns to add to the report.
     verbose: bool,
         If True, the report is printed to the console.  (default True???)
     show: bool
@@ -145,9 +164,12 @@ def metrics_matrix(spec: Inst, *,
     metrics = metrics or mm.get(METRICS)
     docs = docs or mm.get(DOCS)
     sheets = sheets or mm.get(SHEETS)
-    verbose = verbose or mm.get(VERBOSE)
-    show = show or mm.get(SHOW)
+    formatted_columns = formatted_columns or mm.get("formatted_columns")
+    verbose = mm.get(VERBOSE) if verbose is None else verbose
+    show = mm.get(SHOW) if show is None else show
     df = Cube(insts=source, point_fns=metrics).get_df()
+    if formatted_columns:
+        add_formatted_columns(df, formatted_columns)
     to_excel(df, title=title, folder=folder, docs=docs, sheets=sheets,
              verbose=verbose, show=show)
     return df
