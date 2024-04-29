@@ -76,7 +76,21 @@ class Inst(object):
         self.path: str = os.path.abspath(path)
         self.name: str = self._path2name(self.path)
         self.spec: Dict = spec
-        self.save()
+        self._place()
+
+    def __repr__(self):
+        # kind = Inst.get(self, MAIN_CLASS) or "Inst"
+        # parent = os.path.basename(os.path.dirname(self.path))
+        # folder_name = os.path.basename(self.path)
+        return f"<{self.__class__.__name__.upper()} {self.name}>"
+
+    def __str__(self):
+        return self.__repr__()
+
+    @property
+    def shortname(self):
+        """Returns the shortname (last part of the name) of this Instantiable."""
+        return self.name.split(".")[-1]
 
     @staticmethod
     def get(source: Union["Inst", dict],
@@ -95,36 +109,21 @@ class Inst(object):
                 d = d.get(k)
         return d or default_value
 
-    def __repr__(self):
-        # kind = Inst.get(self, MAIN_CLASS) or "Inst"
-        # parent = os.path.basename(os.path.dirname(self.path))
-        # folder_name = os.path.basename(self.path)
-        return f"<{self.__class__.__name__.upper()} {self.name}>"
-
-    def __str__(self):
-        return self.__repr__()
-
-    @property
-    def shortname(self):
-        """Returns the shortname (last part of the name) of this Instantiable."""
-        return self.name.split(".")[-1]
-
     @staticmethod
     def set(source: dict, keys, value) -> None:
         """Utility method into a recursive dict tree."""
         assert source is not None, "set method requires a non None dict"
         assert len(keys) > 0, "set method requires at least one key"
-        d = source.spec if isinstance(source, Inst) else source
         if isinstance(keys, str):
             keys = keys.split(".")
         for k in keys[:-1]:
-            if not isinstance(d, dict):
-                raise Exception(f"Expected dict value for {k!r} not {d!r}")
-            sub = d.get(k)
+            if not isinstance(source, dict):
+                raise Exception(f"Expected dict value for {k!r} not {source!r}")
+            sub = source.get(k)
             if sub is None:
-                sub = d[k] = {}
-            d = sub
-        d[keys[-1]] = value
+                sub = source[k] = {}
+            source = sub
+        source[keys[-1]] = value
 
     @staticmethod
     def gets(source: Union["Inst", dict], *dotted_keys) -> List[Any]:
@@ -218,6 +217,9 @@ class Inst(object):
 
         LATER: this will also push to S3 or ML Flow store
         """
+        pass
+
+    def _place(self) -> None:
         Inst.set(self.spec, MAIN_CLASS, self.__class__.__name__)
         if not os.path.exists(self.path):
             os.makedirs(self.path)

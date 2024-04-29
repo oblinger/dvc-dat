@@ -193,8 +193,9 @@ class TestInstContainers:
         container.save()
         for i in range(10):
             name = f"sub_{i}"
-            sub = Inst(path=os.path.join(container.path, name), spec={})
-            Inst.set(sub.spec, "main.my_nifty_name", name)
+            spec = {}
+            Inst.set(spec, "main.my_nifty_name", name)
+            sub = Inst(path=os.path.join(container.path, name), spec=spec)
             sub.save()
 
         reload: InstContainer[Inst] = InstContainer.load(TMP_PATH)
