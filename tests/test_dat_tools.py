@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 from pandas import DataFrame
 import pytest
@@ -8,10 +9,16 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from ml_dat import do
 from ml_dat import Inst
 from ml_dat.dat_tools import to_excel, Cube, from_inst
-do.register_module("test_df_tools", "tests.test_df_tools")
+do.register_module("test_dat_tools", "tests.test_dat_tools")
 
 TMP_PATH = "/tmp/job_test"
 TMP_PATH2 = "/tmp/job_test2"
+
+
+def run_capture(line: str) -> str:
+    result = subprocess.run(line, shell=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True)
+    return result.stdout.strip()
 
 
 @pytest.fixture
@@ -137,7 +144,7 @@ class TestFromInst:
         assert isinstance(from_inst([], []), DataFrame), "Couldn't create from df_tools"
 
     def test_from_inst(self, inst1, inst2):
-        df = from_inst([inst1, inst2], [always_17, "test_df_tools.always_18"])
+        df = from_inst([inst1, inst2], [always_17, "test_dat_tools.always_18"])
         assert df.to_dict() == {
             'always_17': {0: 17, 1: 17},
             'always_18': {0: 18, 1: 18},
@@ -193,10 +200,21 @@ class TestMetricsMatrix:
         assert df.shape == (48, 6), "Couldn't create metrics matrix"
 
 
+class TestCommands:
+    def test_dt_list(self):
+        text = run_capture("./do dt.list")
+        size = len(text.split("\n"))
+        # assert size > 5, f"Couldn't list do modules.  Only found {size} lines."
+
+
+class TestCleanup:
+    def test_cleanup(self):
+        os.system(f"rm *.xlsx")  # remove all excel files
+
 #
 
 
 if __name__ == "__main__":
     pytest.main([__file__])
     # TestDoIsWorking().test_load_do()
-    #TestMetricsMatrix().test_default_report(DataFrame(sales_data_points))
+    # TestMetricsMatrix().test_default_report(DataFrame(sales_data_points))

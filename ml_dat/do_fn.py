@@ -218,17 +218,6 @@ class DoManager(object):
         parts = dotted_name.split(".")
         prefix = parts[0]
         obj = self.get_base(prefix, default=_DO_NULL if default == _DO_NULL else None)
-        # obj = self.base_locations.get(prefix)
-        # if isinstance(obj, str):
-        #     self.base_locations[prefix] = obj = _load_base_entity(prefix, obj)
-        # if self.registered_values and _DO_NULL != \
-        #         (value := self.registered_values.get(dotted_name, _DO_NULL)):
-        #     return value
-        # elif obj is None and default is _DO_NULL:
-        #     raise Exception(
-        #             f"DO: Module {prefix!r} not found under {self.do_folder!r}{ctx}")
-        # elif obj is None:
-        #     return default
 
         if obj == _DO_ERROR_FLAG:
             raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
@@ -458,9 +447,9 @@ def _get_flag(arg):
 import ml_dat
 # if not hasattr(ml_dat, "dat_config"):
 #     ml_dat.dat_config = ml_dat.ml_dat_config.DatConfig()
-ml_dat.DoManager = DoManager
-ml_dat.do = ml_dat.dodo = DoManager(do_folder=ml_dat.ml_dat_config.dat_config.do_folder)
-ml_dat.argv = do_argv
+# ml_dat.DoManager = DoManager
+# ml_dat.do = ml_dat.dodo = DoManager(do_folder=ml_dat.ml_dat_config.dat_config.do_folder)
+# ml_dat.argv = do_argv
 
 
 if __name__ == '__main__':

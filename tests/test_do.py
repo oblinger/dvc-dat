@@ -17,8 +17,6 @@ def empty_do_mgr():
 def run_capture(line: str) -> str:
     result = subprocess.run(line, shell=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True)
-    # Optionally, assert that there was no error
-    # assert result.returncode == 0
     return result.stdout.strip()
 
 

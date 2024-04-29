@@ -2,7 +2,7 @@ import os
 from typing import Union, Iterable, Dict, List, Any, Callable, Tuple
 
 from pandas import DataFrame, ExcelWriter, Series
-from ml_dat import Inst, InstContainer, load_inst, do
+from ml_dat import Inst, InstContainer, load_inst, do, DoManager
 
 """
 Helper functions for creating data frames and manipulating data frames.
@@ -36,17 +36,15 @@ SHOW = "show"
 
 
 def cmd_list(prefix: str = ""):
+    print(f"\nBase names matching: '{prefix}*'")
     for k, v in do.base_locations.items():
         if prefix not in k:
             continue
-        elif isinstance(v, str):
+        elif isinstance(v, str) and v[0] != '-' and do.do_folder:
             size = len(os.path.commonpath([v, do.do_folder]))
-            print(f"  {k:25} --> .../{v[size+1:]}")   # noqa
+            print(f"  {k:25} -->  .../{v[size+1:]}")   # noqa
         else:
-            print(f"  {k:25} --> {v}")  # noqa
-
-
-do.register_value("dt.list", cmd_list)
+            print(f"  {k:25} -->  {v}")  # noqa
 
 
 def from_inst(source: Union[Inst, str, Iterable],
@@ -63,6 +61,7 @@ def to_excel(df: DataFrame, *,
              docs: List[str] = None,
              sheets: List[str] = None,
              columns: List[str] = None,
+             transform: Callable[[DataFrame], DataFrame] = None,
              formatted_columns: List[str] = None,
              verbose: bool = True,
              show: bool = False):
@@ -73,6 +72,8 @@ def to_excel(df: DataFrame, *,
     columns are used to slice into separate sheets within each Excel file.
     """
     df = df.copy()
+    if transform:
+        df = transform(df)
     if formatted_columns:
         add_formatted_columns(df, formatted_columns)
     folder = folder or os.getcwd()

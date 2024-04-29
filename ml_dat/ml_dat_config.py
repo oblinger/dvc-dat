@@ -20,12 +20,13 @@ class DatConfig(object):
     do_folder: str
     inst_folder: str
 
-    def _lookup_path(self, folder_path, key, default):
-        if key in self.config:
-            path = os.path.join(folder_path, self.config[key])
+    def _lookup_path(self, folder_path, key, default=None):
+        suffix = self.config[key] if key in self.config else default
+        if suffix:
+            path = os.path.join(folder_path, suffix)
+            os.makedirs(path, exist_ok=True)
         else:
-            path = os.path.join(os.getcwd(), default)
-        os.makedirs(path, exist_ok=True)
+            path = None  # os.path.join(os.getcwd(), default)
         return path
 
     def __init__(self, folder=None):
@@ -43,11 +44,11 @@ class DatConfig(object):
                 folder = os.getcwd()
                 break
             folder = os.path.dirname(folder)
-        self.do_folder = self._lookup_path(folder, _DO_FOLDER_KEY, "do")
+        self.do_folder = self._lookup_path(folder, _DO_FOLDER_KEY)
         self.inst_folder = self._lookup_path(folder, _INST_FOLDER_KEY, "inst_data")
         # ### ml_dat.inst.data_folder = self.inst_folder
         # print(F"# DO_FLDR = {self.do_folder}\n# INST_DATA = {self.inst_folder}")
-        assert self.do_folder
+        # assert self.do_folder
         assert self.inst_folder
 
 
