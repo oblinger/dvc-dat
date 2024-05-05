@@ -48,7 +48,7 @@ def is_prime(inst: Inst):
 
 def data(inst: Inst):
     """Returns the data from the run."""
-    return "-".join(map(str, Inst.get(inst.spec, "main.data")))
+    return "-".join(map(str, Inst.get(inst._spec, "main.data")))
 
 
 def color_p(_inst: Inst):

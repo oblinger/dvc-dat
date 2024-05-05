@@ -2,7 +2,7 @@ import os
 from typing import Union, Iterable, Dict, List, Any, Callable, Tuple
 
 from pandas import DataFrame, ExcelWriter, Series
-from ml_dat import Inst, InstContainer, load_inst, do, DoManager
+from ml_dat import Inst, InstContainer, load_inst, do
 
 """
 Helper functions for creating data frames and manipulating data frames.
@@ -103,7 +103,8 @@ def _create_sheets(path, df, sheet_prefix, sheets, columns, verbose, show):
                 sheet_title = sheet_prefix+" " if sheet_prefix else ''
                 sheet_title += '-'.join(sheet_values)
                 if columns:
-                    sheet_df = sheet_df[[col for col in columns if col in sheet_df.columns]]
+                    sheet_df = sheet_df[[col for col in columns
+                                         if col in sheet_df.columns]]
                 sheet_df.to_excel(writer, sheet_name=sheet_title, index=False)
     if verbose:
         print(f"# Dataframe written to {path}")
@@ -125,7 +126,6 @@ def add_formatted_columns(df: DataFrame, format_cmds: List[str]):
         column_name, format_str, arg_names = map(str.strip, spec.split("<=="))
         arg_names = list(map(str.strip, arg_names.split(",")))
         df[column_name] = df.apply(build_str, axis=1)
-
 
 
 def metrics_matrix(spec: Inst, *,
@@ -166,7 +166,7 @@ def metrics_matrix(spec: Inst, *,
     show: bool
         If True, the report is displayed in a window.
     """
-    d = spec.spec if isinstance(spec, Inst) else spec
+    d: dict = spec.get_spec() if isinstance(spec, Inst) else spec
     mm = d.get("metrics_matrix") or {}
     title = title or mm.get(TITLE)    # or spec.shortname
     folder = folder or mm.get(FOLDER) or os.getcwd()
@@ -243,7 +243,7 @@ class Cube(object):
                    this_index: Union[int, str], indicies: Dict[str, str]) -> None:
         """Recursively scans 'source' adding points derived from each md.Inst."""
         if isinstance(source, InstContainer):
-            self._add_insts(source.insts, source.name, indicies)
+            self._add_insts(source.insts, source.get_path_name(), indicies)
         elif isinstance(source, Inst):
             the_point, points = {}, []
             for fn in self.point_fns:
@@ -263,7 +263,7 @@ class Cube(object):
                 points.append(the_point)
             for point in points:
                 sub_indicies = dict(indicies)
-                sub_indicies[this_index] = source.shortname
+                sub_indicies[this_index] = source.get_path_tail()
                 point[_INDICIES] = sub_indicies
             self.points += points
         elif isinstance(source, str):

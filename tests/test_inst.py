@@ -16,9 +16,16 @@ TMP_PATH2 = "/tmp/job_test2"
 
 
 @pytest.fixture
+def do():
+    from ml_dat import do
+    return do
+
+
+@pytest.fixture
 def spec1():
     return {
-        "main": {"my_key1": "my_val1", "my_key2": "my_val2"}
+        "main": {"path": "test_insts/YY-MM Insts{unique}",
+                 "my_key1": "my_val1", "my_key2": "my_val2"}
     }
 
 
@@ -29,11 +36,13 @@ def inst1(spec1):
 
 @pytest.fixture
 def spec2():
-    return {"main": {"my_key1": "my_val1", "my_key2": "my_val2"}, "other": "key_value"}
+    return {"main": {"path": "test_insts/YY-MM Insts{unique}",
+                     "my_key1": "my_val111", "my_key2": "my_val222"},
+            "other": "key_value"}
 
 
 @pytest.fixture
-def instcontainer_spec():
+def inst_container_spec():
     return {"main": {"class": "InstContainer"}}
 
 
@@ -53,14 +62,13 @@ def mock_inst_root(monkeypatch: pytest.MonkeyPatch) -> tempfile.TemporaryDirecto
 @pytest.fixture
 def temp_root_with_gameset(
     mock_inst_root: tempfile.TemporaryDirectory,
-    instcontainer_spec: Dict,
-    game_spec: Dict,
-) -> tempfile.TemporaryDirectory:
+        inst_container_spec,
+        game_spec: Dict) -> tempfile.TemporaryDirectory:
     gameset_path = Path(mock_inst_root.name, "gamesets/bb/baller10")
     gameset_path.mkdir(parents=True, exist_ok=True)
 
     with (gameset_path / "_spec_.yaml").open("w") as f:
-        json.dump(instcontainer_spec, f)
+        json.dump(inst_container_spec, f)
 
     game_1_path = gameset_path / "1"
     game_1_path.mkdir(exist_ok=True, parents=True)
@@ -73,18 +81,14 @@ def temp_root_with_gameset(
 
 @pytest.fixture
 def temp_root_with_runset(
-    temp_root_with_gameset: tempfile.TemporaryDirectory,
-    instcontainer_spec: Dict,
-) -> tempfile.TemporaryDirectory:
-    # temp_root_with_gameset contains the dir to the mocked
-    # INST_ROOT, just with the gamesets already setup
+        temp_root_with_gameset: tempfile.TemporaryDirectory,
+        inst_container_spec) -> tempfile.TemporaryDirectory:
     mock_inst_root = temp_root_with_gameset
-
     runset_path = Path(mock_inst_root.name, "runsets/bb/baller10")
     runset_path.mkdir(parents=True, exist_ok=True)
 
     with (runset_path / "_spec_.yaml").open("w") as f:
-        json.dump(instcontainer_spec, f)
+        json.dump(inst_container_spec, f)
 
     run_1_path = runset_path / "1"
     run_1_path.mkdir(exist_ok=True, parents=True)
@@ -103,6 +107,27 @@ def temp_root_with_runset(
         json.dump(run_spec, f)
 
     return mock_inst_root
+
+
+# Tests
+
+
+class TestTemplatedInstCreationAndDeletion:
+    def test_empty_creation_and_deletion(self, do):
+        assert (inst := do.inst_from_template({})), "Couldn't create Persistable"
+        assert inst.delete(), "Couldn't delete Persistable"
+
+    def test_creation_and_deletion_with_spec(self, do, spec1):
+        assert (inst := do.inst_from_template(spec1)), "Couldn't create Persistable"
+        assert inst.delete(), "Couldn't delete Persistable"
+
+
+class TestInstCreationInStaticFolders:
+    def test_create_with_spec(self, spec1):
+        assert Inst(path=TMP_PATH, spec=spec1), "Couldn't create Persistable"
+
+    def test_create_with_spec_and_path(self, spec1):
+        assert Inst(path=TMP_PATH, spec=spec1), "Couldn't create Persistable"
 
 
 class TestCreateSaveAndLoad:
@@ -156,10 +181,10 @@ class TestInstLoadingAndSaving:
         assert Inst(spec={}, path=TMP_PATH), "Couldn't create Persistable"
 
     def test_path_accessor(self, inst1):
-        assert inst1.path == TMP_PATH
+        assert inst1._path == TMP_PATH
 
     def test_spec_accessors(self, spec1, inst1):
-        assert inst1.spec == spec1
+        assert inst1._spec == spec1
 
     def test_save(self, inst1):
         inst1.save()
@@ -171,14 +196,13 @@ class TestInstLoadingAndSaving:
 
         inst = Inst.load(TMP_PATH)
         assert isinstance(inst, Inst), "Did not load the Persistable"
-        assert inst.spec == spec1
+        assert inst._spec == spec1
 
 
 class TestInstContainers:
     def test_create(self):
         os.system(f"rm -r '{TMP_PATH}'")
         container = InstContainer(path=TMP_PATH, spec={})
-        x = container.inst_paths
         assert isinstance(container, InstContainer)
         assert container.inst_paths == []
         assert container.insts == []
@@ -186,7 +210,7 @@ class TestInstContainers:
     def test_save_empty_container(self):
         container = InstContainer(path=TMP_PATH, spec={})
         container.save()
-        assert Inst.get(container.spec, MAIN_CLASS) == "InstContainer"
+        assert Inst.get(container._spec, MAIN_CLASS) == "InstContainer"
 
     def test_composite_inst_container(self):
         container = InstContainer(path=TMP_PATH, spec={})
@@ -195,12 +219,12 @@ class TestInstContainers:
             name = f"sub_{i}"
             spec = {}
             Inst.set(spec, "main.my_nifty_name", name)
-            sub = Inst(path=os.path.join(container.path, name), spec=spec)
+            sub = Inst(path=os.path.join(container._path, name), spec=spec)
             sub.save()
 
         reload: InstContainer[Inst] = InstContainer.load(TMP_PATH)
         assert isinstance(reload, InstContainer)
-        assert Inst.get(reload.spec, MAIN_CLASS) == "InstContainer"
+        assert Inst.get(reload._spec, MAIN_CLASS) == "InstContainer"
 
         paths = reload.inst_paths
         assert isinstance(paths, list)
@@ -213,40 +237,3 @@ class TestInstContainers:
 
         os.system(f"rm -r '{TMP_PATH}'")
 
-
-# from src.inst.builtins import Game, MCProcRun
-
-# class TestBaller10:
-#     def test_scanning_baller10_games(
-#         self,
-#         temp_root_with_gameset: tempfile.TemporaryDirectory,
-#     ):
-#         with temp_root_with_gameset:
-#             b10: InstContainer[Game] = InstContainer.load("gamesets/bb/baller10")
-#             assert isinstance(b10, InstContainer)
-#
-#             for game in b10.insts:
-#                 assert isinstance(game, Game)
-#                 print(f"The views for {game} are {game.views}")
-#             assert True
-#
-#     def test_scanning_baller10_runs(
-#         self,
-#         temp_root_with_runset: tempfile.TemporaryDirectory,
-#     ):
-#         with temp_root_with_runset:
-#           runs10: InstContainer[MCProcRun] = InstContainer.load("runsets/bb/baller10")
-#             assert isinstance(runs10, InstContainer)
-#
-#             for run in runs10.insts:
-#                 assert isinstance(run, MCProcRun)
-#
-#                 views = run.game.views
-#                 assert isinstance(views, list)
-#
-#                 target_view = views[0]
-#                 assert isinstance(target_view, str)
-#
-#                 assert isinstance(run.game, Game)
-#
-#             assert True

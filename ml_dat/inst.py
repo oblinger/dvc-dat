@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 from enum import Enum, auto
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 import yaml
@@ -32,7 +33,7 @@ class Inst(object):
 
     Each Inst:
     - Is defined by a spec and a path that are supplied at its creation.
-    - The path indicating a folder in the local filesystem where the data for
+    - The path indicating a folder in the local filesystem where the modifiable data for
       this persistable is stored.  (This path may also be the local caching
       for source contents that are stored in S3 or other locations.)
     - The spec can be
@@ -41,14 +42,18 @@ class Inst(object):
     - In either case it is recursively expanded (see )
     - The expanded spec is saved in _spec_.yaml or _spec_.yaml in its folder.
 
+    loc == path or name
+
     Persistable API
-      .spec ................. Is the 'spec' dict for this inst
-      .path ................. Returns the Path for this inst
-      .name ................. Returns the name for this inst
+      Inst(path, spec) ...... Constructor
       .load(path) ........... Universal loader for all Persistables
+      .get_spec() ........... Is the 'spec' dict for this inst
+      .get_path() ........... Returns inst's path (its absolute path)
+      .get_path_name() ........... Returns inst's name (its path relative to inst_folder)
+      .get_path_tail() ...... Returns inst's shortname (last part of its path)
       .save([path]) ......... Saves persistable to disk (optionally sets its path)
 
-    Utility Methods
+    Static Utility Methods
       .get(Inst|dict, [key1, key2, ...])
       .get(Inst|dict, "dotted.key.path")
       .set(dict, [key1, key2, ...], value)
@@ -67,37 +72,16 @@ class Inst(object):
       - If the data should be a candidate for caching
       - If lazy loading is beneficial
 
-    """
-    path: str
-    name: str
-    spec: Dict
-
-    def __init__(self, *, path: str, spec: Dict):
-        self.path: str = os.path.abspath(path)
-        self.name: str = self._path2name(self.path)
-        self.spec: Dict = spec
-        self._place()
-
-    def __repr__(self):
-        # kind = Inst.get(self, MAIN_CLASS) or "Inst"
-        # parent = os.path.basename(os.path.dirname(self.path))
-        # folder_name = os.path.basename(self.path)
-        return f"<{self.__class__.__name__.upper()} {self.name}>"
-
-    def __str__(self):
-        return self.__repr__()
-
-    @property
-    def shortname(self):
-        """Returns the shortname (last part of the name) of this Instantiable."""
-        return self.name.split(".")[-1]
+    """   # noqa
+    _path: str   # The immutable absolute path of this Inst
+    _spec: Dict  # The immutable spec of this Inst
 
     @staticmethod
     def get(source: Union["Inst", dict],
             keys: Union[str, List[str]],
             default_value=None) -> Any:
         """Utility method to get value from a recursive dict tree or return None."""
-        d = source.spec if isinstance(source, Inst) else source
+        d = source._spec if isinstance(source, Inst) else source
         if isinstance(keys, str):
             keys = keys.split(".")
         for k in keys:
@@ -128,7 +112,7 @@ class Inst(object):
     @staticmethod
     def gets(source: Union["Inst", dict], *dotted_keys) -> List[Any]:
         assert source is not None, "gets method requires a non None dict"
-        source_ = source.spec if isinstance(source, Inst) else source
+        source_ = source._spec if isinstance(source, Inst) else source
         results = []
         for dotted_key in dotted_keys:
             keys = dotted_key.split(".")
@@ -157,14 +141,15 @@ class Inst(object):
                     value = suffix
             Inst.set(source, keys, value)
 
+    @staticmethod
+    def exists(path: str) -> bool:
+        """Checks if a given Inst exists (by looking for its _spec_ file)."""
+        return os.path.exists(Inst._resolve_path(os.path.join(path, SPEC_JSON))) or \
+            os.path.exists(Inst._resolve_path(os.path.join(path, SPEC_YAML)))
+
     @classmethod
-    def load(
-        cls: Type[T],
-        name_or_path: str,
-        *,
-        cwd: Optional[str] = None,
-        **kwargs,
-    ) -> T:
+    def load(cls: Type[T], name_or_path: str, *,
+             cwd: Optional[str] = None, **kwargs) -> T:
         """Loads (Instantiates) this Inst from disk.
 
         Inst loading is generally lazy, so its attributes are loaded and
@@ -182,23 +167,21 @@ class Inst(object):
         :param kwargs: other kwargs are passed to the Inst constructor
         """
         from . import dat_config
-        from_name = Inst._name2path(name_or_path)
         if os.path.isabs(name_or_path):
             path = name_or_path
         elif os.path.exists(path := os.path.join(cwd or os.getcwd(), name_or_path)):
             pass
         elif os.path.exists(path := os.path.join(dat_config.inst_folder,
-                                                 Inst._name2path(name_or_path))):
+                                                 Inst._resolve_path(name_or_path))):
             pass
         else:
             raise Exception(f"LOAD_INST: Could not find {name_or_path!r}")
-            # path = os.path.abspath(path).replace(".", "/")
         try:
             if os.path.exists(fpath := os.path.join(path, SPEC_JSON)):
                 with open(fpath) as f:
                     spec = json.load(f)
             else:
-                with open(fpath := os.path.join(path, SPEC_YAML)) as f:
+                with open(os.path.join(path, SPEC_YAML)) as f:
                     spec = yaml.safe_load(f)
         except Exception as e:
             if not os.path.exists(path):
@@ -212,21 +195,58 @@ class Inst(object):
         inst = klass(path=path, spec=spec, **kwargs)
         return inst
 
-    def save(self) -> None:
-        """Writes an instantiable to disk.
+    def __init__(self, *, path: str = None, spec: Dict = None):
+        self._path: str = self._resolve_path(path)
+        self._spec: Dict = spec or {}
+        Inst.set(self._spec, MAIN_CLASS, self.__class__.__name__)
+        if not os.path.exists(self._path):
+            os.makedirs(self._path)
+        spec = self.get_spec()
+        try:
+            txt = json.dumps(spec, indent=2)
+        except Exception as e:
+            raise Exception(f"Error non-JSON in Inst.spec: {e}\nSPEC={spec}")
+        with open(os.path.join(self._path, SPEC_JSON), "w") as out:
+            out.write(txt)
+            out.write("\n")
 
-        LATER: this will also push to S3 or ML Flow store
+    def __repr__(self):
+        return f"<{self.__class__.__name__.upper()} {self.get_path_name()}>"
+
+    def __str__(self):
+        return self.__repr__()
+
+    def get_spec(self):
+        """Returns the spec of this Instantiable."""
+        return self._spec
+
+    def get_path(self):
+        """Returns the absolute path of this Instantiable."""
+        return self._path
+
+    def get_path_name(self):
+        """Returns the name (relative path) of this Instantiable."""
+        return self._path2name(self._path)
+
+    def get_path_tail(self):
+        """Returns the shortname (last part of the path) of this Instantiable."""
+        return self._path.split("/")[-1]
+
+    def save(self) -> None:
+        """Flags an instantiable to have a version of its folder's contents saved
+        to in the backing store.
         """
         pass
 
-    def _place(self) -> None:
-        Inst.set(self.spec, MAIN_CLASS, self.__class__.__name__)
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
-        with open(os.path.join(self.path, SPEC_JSON), "w") as out:
-            txt = json.dumps(self.spec, indent=2)
-            out.write(txt)
-            out.write("\n")
+    def delete(self):
+        """Deletes the folder and its contents from the filesystem.
+        This deletion will also be reflected as a deletion pushed to git.
+        Still, the backing store will retain all previous versions of this Inst."""
+        try:
+            shutil.rmtree(self._path)
+        except FileNotFoundError:
+            raise Exception(f"INST DELETE: Folder missing {self._path!r}.")
+        return True
 
     @staticmethod
     def _find_subclass_by_name(klass, name):
@@ -242,17 +262,19 @@ class Inst(object):
         from . import dat_config
         try:
             prefix = os.path.commonpath([dat_config.inst_folder, path])
-            return path[len(prefix):].replace("/", ".")
+            return path[len(prefix):]    # .replace("/", ".")
         except ValueError:
-            return "$" + path.replace("/", ".")[1:]
+            return path    # "$" + path.replace("/", ".")[1:]
 
     @staticmethod
-    def _name2path(name):
+    def _resolve_path(name):
         from . import dat_config
-        if name and name[0] == "$":
-            return name[1:].replace(".", "/")
-        else:
-            return os.path.join(dat_config.inst_folder, name.replace(".", "/"))
+        return os.path.join(dat_config.inst_folder, name)
+
+        # if name and name[0] == "$":
+        #     return name[1:].replace(".", "/")
+        # else:
+        #     return os.path.join(dat_config.inst_folder, name.replace(".", "/"))
 
 
 class InstContainer(Inst, Generic[T]):
@@ -295,7 +317,7 @@ class InstContainer(Inst, Generic[T]):
     def inst_paths(self) -> List[str]:
         """Lazy loaded list of full paths for the contained Inst."""
         if self._inst_paths is DataState.NOT_LOADED:
-            self._inst_paths = InstContainer._find_inst_under(self.path)
+            self._inst_paths = InstContainer._find_inst_under(self._path)
         return self._inst_paths
 
     @property

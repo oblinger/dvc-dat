@@ -11,13 +11,14 @@ import os
 import sys
 import copy
 import json
+from datetime import datetime
 from importlib import import_module
 
 import yaml
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import Type, Union, Any, Dict, Callable
+from typing import Type, Union, Any, Dict, Callable, List, Tuple
 
 from ml_dat.inst import Inst
 
@@ -26,10 +27,13 @@ _DO_EXTENSIONS = [".json", ".yaml", ".py"]
 _DO_ERROR_FLAG = tuple("multiple loadable modules have this same name")
 _DO_NULL = tuple(["-no-value-"])
 
-_MAIN_BASE = "main.base"
-_MAIN_DO = "main.do"              # the main fn to execute
-_MAIN_ARGS = "main.args"          # prefix args for the main.do method
-_MAIN_KWARGS = "main.kwargs"      # default kwargs for the main.do method
+# Inst Template Parameters
+_MAIN_BASE = "main.base"        # the base spec to expand
+_MAIN_PATH = "main.path"        # the template for the inst's path
+_MAIN_DO = "main.do"            # the main fn to execute
+_MAIN_ARGS = "main.args"        # prefix args for the main.do method
+_MAIN_KWARGS = "main.kwargs"    # default kwargs for the main.do method
+_DEFAULT_PATH_TEMPLATE = "anonymous/Inst{unique}"
 
 Spec = Dict[str, Any]
 
@@ -73,6 +77,46 @@ class DoManager(object):
     do_fns: Dict[str, Dict[str, Callable]]             # externally defined fns
     registered_values: Union[None, Dict[str, Any]]     # values to be returned by load
 
+    def inst_from_template(self,
+                           spec: Spec,
+                           *,
+                           path: str = None,
+                           args: Tuple[Any] = None,
+                           kwargs: Dict[str, Any] = None,
+                           ctx: str = ""
+                           ) -> Inst:
+        """Instantiates an object from a template spec."""
+        spec, count = copy.deepcopy(spec), 1
+        Inst.set(spec, _MAIN_ARGS, args or [])
+        Inst.set(spec, _MAIN_KWARGS, kwargs or {})
+        path = path or Inst.get(spec, _MAIN_PATH, _DEFAULT_PATH_TEMPLATE)
+        try:
+            spec = self.expand_spec(spec)
+        except ValueError as e:
+            raise Exception(F"DO - Error during expansion of {ctx!r}: {e}")
+        path_name = _expand_inst_path(path, unique="", variables={})
+        while Inst.exists(path_name):
+            count += 1
+            path_name = _expand_inst_path(path, unique=f"_{count}", variables={})
+        return Inst(path=path_name, spec=spec)
+
+    def run_inst(self, inst: Inst, ctx: str = "") -> Any:
+        """Runs the main.do method of an instantiated object."""
+        obj = inst.get_spec()
+        try:
+            fn_spec = Inst.get(obj, _MAIN_DO)
+        except ValueError:
+            raise Exception(F"DO: Error {ctx!r} is not a callable or config")
+        if isinstance(fn_spec, str):
+            fn_spec = self.load(fn_spec)
+        if not callable(fn_spec):
+            raise Exception(F"'{_MAIN_DO}' in {ctx!r} of type {type(fn_spec)} "
+                            + "is not callable")
+        args = Inst.get(obj, _MAIN_ARGS) or []
+        kwargs = Inst.get(obj, _MAIN_KWARGS) or {}
+        result = fn_spec(obj, *args, **kwargs)
+        return result
+
     def __init__(self, *, do_folder=None):
         self.set_do_folder(do_folder)
         self.base_objects = {}
@@ -98,21 +142,9 @@ class DoManager(object):
         if callable(obj):
             result = obj(*args, **kwargs)
             return result
-        try:
-            obj = self.expand_spec(obj, context=do_spec)
-        except ValueError as e:
-            raise Exception(F"DO - Error during expansion of {do_spec!r}: {e}")
-        try:
-            fn_spec = Inst.get(obj, _MAIN_DO)
-        except ValueError:
-            raise Exception(F"DO: Error {do_spec!r} is not a callable or config")
-        if isinstance(fn_spec, str):
-            fn_spec = self.load(fn_spec)
-        if not callable(fn_spec):
-            raise Exception(F"'{_MAIN_DO}' in {do_spec!r} of type {type(fn_spec)} "
-                            + "is not callable")
-        result = fn_spec(obj, *args, **kwargs)
-        return result
+        else:
+            obj = self.inst_from_template(spec=obj, args=args, kwargs=kwargs)
+            return self.run_inst(obj)
 
     def set_do_folder(self, do_folder):
         """Sets the folder where the loadable python objects are found, and clears all
@@ -161,14 +193,17 @@ class DoManager(object):
             The value to return if the base name is not found
         """
         if base in self.base_objects:
-            return self.base_objects[base]
+            result = self.base_objects[base]
         elif base in self.base_locations:
             self.base_objects[base] = _load_base_entity(base, self.base_locations[base])
-            return self.base_objects[base]
+            result = self.base_objects[base]
         elif default is _DO_NULL:
             raise Exception(f"DO: Base {base!r} is not defined.")
         else:
-            return default
+            result = default
+        if isinstance(result, dict):
+            result = copy.deepcopy(result)
+        return result
 
     def merge_configs(self, base: Spec, override: Spec) -> Spec:
         """Recursively merges the 'override' dict trees over 'base' tree of dicts."""
@@ -213,7 +248,7 @@ class DoManager(object):
         """
         if self.registered_values and _DO_NULL != \
                 (value := self.registered_values.get(dotted_name, _DO_NULL)):
-            return value
+            return copy.deepcopy(value) if isinstance(value, dict) else value
         ctx = "" if context is None else F" {context}"
         parts = dotted_name.split(".")
         prefix = parts[0]
@@ -246,7 +281,7 @@ class DoManager(object):
         if kind and not isinstance(result, kind):
             raise Exception(F"DO: Expected {dotted_name!r} of type {kind} " +
                             F"but found {result!r}")
-        return result
+        return copy.deepcopy(result) if isinstance(result, dict) else result
 
 
 def _load_base_entity(base, source_spec: str) -> Union[ModuleType, Spec]:
@@ -298,6 +333,44 @@ def _build_loadables_index(do_folder: str) -> Dict[str, Any]:
         else:
             result[base] = str(path)
     return result
+
+
+def _expand_inst_path(path_spec: str, unique: str, variables: Dict[str, Any]) -> str:
+    """
+    Expands a path spec into a full path.
+
+    Uses Python's format command with the following variables defined:
+        {YYYY} {YY} {MM} {DD} {HH} {mm} {SS}   -- based on time now or vars['time']
+        {cwd}    -- the current working directory
+        {repo}   -- the repository root
+        {unique} -- a counter or UUID that makes the entire path unique.
+
+    Args:
+        path_spec (str): The path specification string with placeholders.
+        variables (Dict[str, Any]): Additional variables provided by the user.
+
+    Returns:
+        str: The fully expanded path.
+
+    Examples:
+        _expand_path_spec("/data/{YYYY}/{MM}/{DD}/file_{unique}.txt", {})
+        -> "/data/2024/05/03/file_123e4567-e89b-12d3-a456-426614174000.txt"
+    """
+    from . import dat_config
+    if "{unique}" not in path_spec:
+        path_spec += "{unique}"
+    now = datetime.now()
+    format_vars = {
+        "YYYY": now.strftime("%Y"), "YY": now.strftime("%Y")[2:],
+        "MM": now.strftime("%m"),   "DD": now.strftime("%d"),
+        "HH": now.strftime("%H"),   "mm": now.strftime("%M"),
+        "SS": now.strftime("%S"),
+        "unique": unique,
+        "cwd": os.getcwd(),  # Current working directory
+        **variables
+    }
+    expanded_path = path_spec.format_map(format_vars)
+    return expanded_path
 
 
 USAGE = """

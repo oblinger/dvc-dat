@@ -36,12 +36,12 @@ def build_hello_runs(num):
     c = InstContainer(path=path, spec={})
     c.save()
     for i in range(10):
-        run = Inst(path=os.path.join(c.path, f"{i}"), spec={"main": {}})
+        run = Inst(path=os.path.join(c._path, f"{i}"), spec={"main": {}})
         start = random.randint(0, 10)
         range_ = random.randint(0, 10)
         count = 10   # random.choice(20)
         data = [random.randint(0, range_) + start for _ in range(count)]
-        run.spec["main"].update(dict(start=start, range=range_, count=count, data=data))
+        run._spec["main"].update(dict(start=start, range=range_, count=count, data=data))
         run.save()
 
 
