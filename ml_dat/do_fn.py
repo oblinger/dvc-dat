@@ -11,14 +11,13 @@ import os
 import sys
 import copy
 import json
-from datetime import datetime
 from importlib import import_module
 
 import yaml
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import Type, Union, Any, Dict, Callable, List, Tuple
+from typing import Type, Union, Any, Dict, Callable, Tuple
 
 from ml_dat.inst import Inst
 
@@ -33,7 +32,6 @@ _MAIN_PATH = "main.path"        # the template for the inst's path
 _MAIN_DO = "main.do"            # the main fn to execute
 _MAIN_ARGS = "main.args"        # prefix args for the main.do method
 _MAIN_KWARGS = "main.kwargs"    # default kwargs for the main.do method
-_DEFAULT_PATH_TEMPLATE = "anonymous/Inst{unique}"
 
 Spec = Dict[str, Any]
 
@@ -89,19 +87,16 @@ class DoManager(object):
         spec, count = copy.deepcopy(spec), 1
         Inst.set(spec, _MAIN_ARGS, args or [])
         Inst.set(spec, _MAIN_KWARGS, kwargs or {})
-        path = path or Inst.get(spec, _MAIN_PATH, _DEFAULT_PATH_TEMPLATE)
+        path = path or Inst.get(spec, _MAIN_PATH)
         try:
             spec = self.expand_spec(spec)
         except ValueError as e:
             raise Exception(F"DO - Error during expansion of {ctx!r}: {e}")
-        path_name = _expand_inst_path(path, unique="", variables={})
-        while Inst.exists(path_name):
-            count += 1
-            path_name = _expand_inst_path(path, unique=f"_{count}", variables={})
+        path_name = Inst._expand_inst_path(path)  # noqa
         return Inst(path=path_name, spec=spec)
 
     def run_inst(self, inst: Inst, ctx: str = "") -> Any:
-        """Runs the main.do method of an instantiated object."""
+        """Runs the main.do method of an instantiated object."""   # noqa
         obj = inst.get_spec()
         try:
             fn_spec = Inst.get(obj, _MAIN_DO)
@@ -198,7 +193,7 @@ class DoManager(object):
             self.base_objects[base] = _load_base_entity(base, self.base_locations[base])
             result = self.base_objects[base]
         elif default is _DO_NULL:
-            raise Exception(f"DO: Base {base!r} is not defined.")
+            raise Exception(f"DO: The base {base!r} is not defined.")
         else:
             result = default
         if isinstance(result, dict):
@@ -333,44 +328,6 @@ def _build_loadables_index(do_folder: str) -> Dict[str, Any]:
         else:
             result[base] = str(path)
     return result
-
-
-def _expand_inst_path(path_spec: str, unique: str, variables: Dict[str, Any]) -> str:
-    """
-    Expands a path spec into a full path.
-
-    Uses Python's format command with the following variables defined:
-        {YYYY} {YY} {MM} {DD} {HH} {mm} {SS}   -- based on time now or vars['time']
-        {cwd}    -- the current working directory
-        {repo}   -- the repository root
-        {unique} -- a counter or UUID that makes the entire path unique.
-
-    Args:
-        path_spec (str): The path specification string with placeholders.
-        variables (Dict[str, Any]): Additional variables provided by the user.
-
-    Returns:
-        str: The fully expanded path.
-
-    Examples:
-        _expand_path_spec("/data/{YYYY}/{MM}/{DD}/file_{unique}.txt", {})
-        -> "/data/2024/05/03/file_123e4567-e89b-12d3-a456-426614174000.txt"
-    """
-    from . import dat_config
-    if "{unique}" not in path_spec:
-        path_spec += "{unique}"
-    now = datetime.now()
-    format_vars = {
-        "YYYY": now.strftime("%Y"), "YY": now.strftime("%Y")[2:],
-        "MM": now.strftime("%m"),   "DD": now.strftime("%d"),
-        "HH": now.strftime("%H"),   "mm": now.strftime("%M"),
-        "SS": now.strftime("%S"),
-        "unique": unique,
-        "cwd": os.getcwd(),  # Current working directory
-        **variables
-    }
-    expanded_path = path_spec.format_map(format_vars)
-    return expanded_path
 
 
 USAGE = """
@@ -517,11 +474,12 @@ def _get_flag(arg):
         return None
 
 
-import ml_dat
+# import ml_dat
 # if not hasattr(ml_dat, "dat_config"):
 #     ml_dat.dat_config = ml_dat.ml_dat_config.DatConfig()
 # ml_dat.DoManager = DoManager
-# ml_dat.do = ml_dat.dodo = DoManager(do_folder=ml_dat.ml_dat_config.dat_config.do_folder)
+# ml_dat.do = ml_dat.dodo = DoManager(do_folder=
+#           ml_dat.ml_dat_config.dat_config.do_folder)
 # ml_dat.argv = do_argv
 
 

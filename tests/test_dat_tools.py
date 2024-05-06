@@ -204,7 +204,7 @@ class TestCommands:
     def test_dt_list(self):
         text = run_capture("./do dt.list")
         size = len(text.split("\n"))
-        # assert size > 5, f"Couldn't list do modules.  Only found {size} lines."
+        assert size > 5, f"Couldn't list do modules.  Only found {size} lines."
 
 
 class TestCleanup:

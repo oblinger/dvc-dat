@@ -24,7 +24,7 @@ def do():
 @pytest.fixture
 def spec1():
     return {
-        "main": {"path": "test_insts/YY-MM Insts{unique}",
+        "main": {"path": "test_insts/{YY}-{MM} Insts{unique}",
                  "my_key1": "my_val1", "my_key2": "my_val2"}
     }
 
@@ -36,7 +36,7 @@ def inst1(spec1):
 
 @pytest.fixture
 def spec2():
-    return {"main": {"path": "test_insts/YY-MM Insts{unique}",
+    return {"main": {"path": "test_insts/{YY}-{MM} Insts{unique}",
                      "my_key1": "my_val111", "my_key2": "my_val222"},
             "other": "key_value"}
 
@@ -119,10 +119,11 @@ class TestTemplatedInstCreationAndDeletion:
 
     def test_creation_and_deletion_with_spec(self, do, spec1):
         assert (inst := do.inst_from_template(spec1)), "Couldn't create Persistable"
+        assert inst.get_path_name().startswith("test_insts/"), "Wrong path"
         assert inst.delete(), "Couldn't delete Persistable"
 
 
-class TestInstCreationInStaticFolders:
+class TestInstCreationFromStaticFolders:
     def test_create_with_spec(self, spec1):
         assert Inst(path=TMP_PATH, spec=spec1), "Couldn't create Persistable"
 
@@ -236,4 +237,3 @@ class TestInstContainers:
         assert Inst.get(sub_insts[8], "main.my_nifty_name") == "sub_8"
 
         os.system(f"rm -r '{TMP_PATH}'")
-

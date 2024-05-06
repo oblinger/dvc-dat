@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+from datetime import datetime
 from enum import Enum, auto
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 import yaml
@@ -9,6 +10,8 @@ import yaml
 SPEC_JSON = "_spec_.json"
 SPEC_YAML = "_spec_.yaml"
 MAIN_CLASS = "main.class"
+_DEFAULT_PATH_TEMPLATE = "anonymous/Inst{unique}"
+
 
 # This default value is overridden by do._dat_setup()
 # data_folder = os.path.join(os.path.dirname(__file__), "inst_data")
@@ -196,6 +199,8 @@ class Inst(object):
         return inst
 
     def __init__(self, *, path: str = None, spec: Dict = None):
+        if not path:
+            path = self._expand_inst_path(None)
         self._path: str = self._resolve_path(path)
         self._spec: Dict = spec or {}
         Inst.set(self._spec, MAIN_CLASS, self.__class__.__name__)
@@ -211,7 +216,7 @@ class Inst(object):
             out.write("\n")
 
     def __repr__(self):
-        return f"<{self.__class__.__name__.upper()} {self.get_path_name()}>"
+        return f"<{self.__class__.__name__} {self.get_path_name()!r}>"
 
     def __str__(self):
         return self.__repr__()
@@ -249,6 +254,48 @@ class Inst(object):
         return True
 
     @staticmethod
+    def _expand_inst_path(path_spec: Union[str, None], *,
+                          variables: Dict[str, Any] = None) -> str:
+        """
+        Expands a path spec into a full path.
+
+        Uses Python's format command with the following variables defined:
+            {YYYY} {YY} {MM} {DD} {HH} {mm} {SS}   -- based on time now or vars['time']
+            {cwd}    -- the current working directory
+            {repo}   -- the repository root
+            {unique} -- a counter or UUID that makes the entire path unique.
+
+        Args:
+            path_spec (str): The path specification string with placeholders.
+            variables (Dict[str, Any]): Additional variables provided by the user.
+
+        Returns:
+            str: The fully expanded path.
+
+        Examples:
+            _expand_path_spec("/data/{YYYY}/{MM}/{DD}/file_{unique}.txt", {})
+            -> "/data/2024/05/03/file_123e4567-e89b-12d3-a456-426614174000.txt"
+        """
+        if not path_spec:
+            path_spec = _DEFAULT_PATH_TEMPLATE
+        if "{unique}" not in path_spec:
+            path_spec += "{unique}"
+        now, count = datetime.now(), 1
+        while True:
+            format_vars = {
+                "YYYY": now.strftime("%Y"), "YY": now.strftime("%Y")[2:],
+                "MM": now.strftime("%m"), "DD": now.strftime("%d"),
+                "HH": now.strftime("%H"), "mm": now.strftime("%M"),
+                "SS": now.strftime("%S"),
+                "unique": "" if count == 1 else f"_{count}",
+                "cwd": os.getcwd(),  # Current working directory
+                **(variables or {})}
+            expanded_path = path_spec.format_map(format_vars)
+            if not os.path.exists(expanded_path):
+                return expanded_path
+            count += 1
+
+    @staticmethod
     def _find_subclass_by_name(klass, name):
         if klass.__name__ == name:
             return klass
@@ -261,10 +308,10 @@ class Inst(object):
     def _path2name(path):
         from . import dat_config
         try:
-            prefix = os.path.commonpath([dat_config.inst_folder, path])
-            return path[len(prefix):]    # .replace("/", ".")
+            match = 1 + len(os.path.commonpath([dat_config.inst_folder, path]))
+            return path[match:] if match > 2 else path
         except ValueError:
-            return path    # "$" + path.replace("/", ".")[1:]
+            return path
 
     @staticmethod
     def _resolve_path(name):
