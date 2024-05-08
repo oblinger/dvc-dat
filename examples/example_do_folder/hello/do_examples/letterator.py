@@ -11,7 +11,8 @@ letterator = {
 }
 
 
-def run(spec):
+def run(inst):
+    spec = inst.get_spec()
     results = []
     for idx in range(spec["start"], spec["end"]):
         text = chr(idx)

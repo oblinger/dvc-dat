@@ -43,12 +43,12 @@ cube_hello = {
 
 def is_prime(inst: Inst):
     """Returns True if the run number is prime"""
-    return int(inst.shortname) in [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+    return int(inst.get_path_tail()) in [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
 
 
 def data(inst: Inst):
     """Returns the data from the run."""
-    return "-".join(map(str, Inst.get(inst._spec, "main.data")))
+    return "-".join(map(str, Inst.get(inst.get_spec(), "main.data")))
 
 
 def color_p(_inst: Inst):

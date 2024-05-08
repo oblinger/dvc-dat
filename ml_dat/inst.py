@@ -195,13 +195,40 @@ class Inst(object):
         klass = Inst._find_subclass_by_name(Inst, klass_name)
         if not klass:
             raise Exception(f"Class {klass_name} is not a subclass of Inst")
-        inst = klass(path=path, spec=spec, **kwargs)
+
+        # inst = Inst.__new__(klass)
+        # inst._path, inst._spec = path, spec
+        inst = klass(path=path, spec=spec, raw=True, **kwargs)
         return inst
 
-    def __init__(self, *, path: str = None, spec: Dict = None):
-        if not path:
-            path = self._expand_inst_path(None)
-        self._path: str = self._resolve_path(path)
+    def __init__(self,
+                 *,
+                 path: str = None,
+                 spec: Dict = None,
+                 overwrite: bool = False,
+                 raw: bool = False):
+        """Creates a new Inst folder with the specified spec dict and path string.
+
+        exists_action: "error" | "overwrite" | "use"
+
+        PATH EXPANSION RULES:
+        - Path is relative to the Inst.path_root() folder.
+        - Time and other variables below are used to expand the path.
+        - If the path is None, the _DEFAULT_PATH_TEMPLATE is used
+        - If '{unique}' is in the path is assigned a number to make the path unique.
+        - Otherwise an error is generated on path collision, or
+          If 'overwrite' is True, the old folder contents are erased instead.
+        - Variables used for path expansion:
+            {YYYY} {YY} {MM} {DD} {HH} {mm} {SS}   -- based on time now or vars['time']
+            {cwd}    -- the current working directory
+            {unique} -- a counter or UUID that makes the entire path unique.
+        """
+        super().__init__()
+        if raw:
+            self._path, self._spec = path, spec
+            return
+        self._path: str = self._resolve_path(
+            self._expand_inst_path(path, overwrite=overwrite))
         self._spec: Dict = spec or {}
         Inst.set(self._spec, MAIN_CLASS, self.__class__.__name__)
         if not os.path.exists(self._path):
@@ -255,19 +282,15 @@ class Inst(object):
 
     @staticmethod
     def _expand_inst_path(path_spec: Union[str, None], *,
-                          variables: Dict[str, Any] = None) -> str:
+                          variables: Dict[str, Any] = None,
+                          overwrite: bool = False) -> str:
         """
-        Expands a path spec into a full path.
-
-        Uses Python's format command with the following variables defined:
-            {YYYY} {YY} {MM} {DD} {HH} {mm} {SS}   -- based on time now or vars['time']
-            {cwd}    -- the current working directory
-            {repo}   -- the repository root
-            {unique} -- a counter or UUID that makes the entire path unique.
+        Expands a path spec into a full path.  See __init__ for expansion rules.
 
         Args:
             path_spec (str): The path specification string with placeholders.
             variables (Dict[str, Any]): Additional variables provided by the user.
+            overwrite (bool): If True, the path will be overwritten if it exists.
 
         Returns:
             str: The fully expanded path.
@@ -293,7 +316,13 @@ class Inst(object):
             expanded_path = path_spec.format_map(format_vars)
             if not os.path.exists(expanded_path):
                 return expanded_path
-            count += 1
+            elif overwrite:
+                shutil.rmtree(expanded_path)
+                return expanded_path
+            elif "{unique}" not in path_spec:
+                raise Exception(f"INST: Create failed, dir {expanded_path!r} exists")
+            else:
+                count += 1
 
     @staticmethod
     def _find_subclass_by_name(klass, name):

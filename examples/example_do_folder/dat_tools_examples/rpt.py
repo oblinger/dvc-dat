@@ -5,7 +5,7 @@ from ml_dat import dat_tools as dt
 
 
 def load_points_json(inst: Inst):
-    with open(f"{inst._path}/points.json") as f:
+    with open(f"{inst.get_path()}/points.json") as f:
         return json.load(f)
 
 

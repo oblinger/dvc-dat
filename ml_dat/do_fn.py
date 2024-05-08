@@ -75,14 +75,15 @@ class DoManager(object):
     do_fns: Dict[str, Dict[str, Callable]]             # externally defined fns
     registered_values: Union[None, Dict[str, Any]]     # values to be returned by load
 
-    def inst_from_template(self,
-                           spec: Spec,
-                           *,
-                           path: str = None,
-                           args: Tuple[Any] = None,
-                           kwargs: Dict[str, Any] = None,
-                           ctx: str = ""
-                           ) -> Inst:
+    def inst_from_template(
+            self,
+            spec: Spec,
+            *,
+            path: str = None,
+            args: Tuple[Any] = None,
+            kwargs: Dict[str, Any] = None,
+            ctx: str = ""
+    ) -> Inst:
         """Instantiates an object from a template spec."""
         spec, count = copy.deepcopy(spec), 1
         Inst.set(spec, _MAIN_ARGS, args or [])
@@ -109,7 +110,7 @@ class DoManager(object):
                             + "is not callable")
         args = Inst.get(obj, _MAIN_ARGS) or []
         kwargs = Inst.get(obj, _MAIN_KWARGS) or {}
-        result = fn_spec(obj, *args, **kwargs)
+        result = fn_spec(inst, *args, **kwargs)
         return result
 
     def __init__(self, *, do_folder=None):
@@ -138,8 +139,8 @@ class DoManager(object):
             result = obj(*args, **kwargs)
             return result
         else:
-            obj = self.inst_from_template(spec=obj, args=args, kwargs=kwargs)
-            return self.run_inst(obj)
+            inst = self.inst_from_template(spec=obj, args=args, kwargs=kwargs)
+            return self.run_inst(inst)
 
     def set_do_folder(self, do_folder):
         """Sets the folder where the loadable python objects are found, and clears all

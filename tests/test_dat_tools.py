@@ -30,7 +30,7 @@ def spec1():
 
 @pytest.fixture
 def inst1(spec1):
-    return Inst(spec=spec1, path=TMP_PATH)
+    return Inst(spec=spec1, path=TMP_PATH, overwrite=True)
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def spec2():
 
 @pytest.fixture
 def inst2(spec2):
-    return Inst(spec=spec2, path=TMP_PATH2)
+    return Inst(spec=spec2, path=TMP_PATH2, overwrite=True)
 
 
 def always_17(_inst: Inst):

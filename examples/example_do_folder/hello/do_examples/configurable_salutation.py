@@ -1,4 +1,5 @@
-def configurable_salutation(spec, name=None, *, emphasis=False, lucky_number=None):
+def configurable_salutation(inst, name=None, *, emphasis=False, lucky_number=None):
+    spec = inst.get_spec()
     name = spec.get("name") if name is None else name
     emphasis = spec.get("emphasis") or emphasis
     lucky_number = spec.get("lucky_number") or lucky_number

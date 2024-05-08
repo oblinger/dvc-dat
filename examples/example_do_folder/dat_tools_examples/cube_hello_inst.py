@@ -1,4 +1,4 @@
-import os
+import os   # noqa
 import random
 from typing import List
 

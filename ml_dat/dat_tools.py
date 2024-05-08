@@ -179,9 +179,10 @@ def metrics_matrix(spec: Inst, *,
     verbose = mm.get(VERBOSE) if verbose is None else verbose
     show = mm.get(SHOW) if show is None else show
     df = Cube(insts=source, point_fns=metrics).get_df()
+    if formatted_columns:
+        add_formatted_columns(df, formatted_columns)
     to_excel(df, title=title, folder=folder, docs=docs, sheets=sheets,
-             columns=columns, formatted_columns=formatted_columns,
-             verbose=verbose, show=show)
+             columns=columns, verbose=verbose, show=show)
     return df
 
 

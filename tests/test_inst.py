@@ -31,7 +31,7 @@ def spec1():
 
 @pytest.fixture
 def inst1(spec1):
-    return Inst(spec=spec1, path=TMP_PATH)
+    return Inst(spec=spec1, path=TMP_PATH, overwrite=True)
 
 
 @pytest.fixture
@@ -214,7 +214,7 @@ class TestInstContainers:
         assert Inst.get(container._spec, MAIN_CLASS) == "InstContainer"
 
     def test_composite_inst_container(self):
-        container = InstContainer(path=TMP_PATH, spec={})
+        container = InstContainer(path=TMP_PATH, spec={}, overwrite=True)
         container.save()
         for i in range(10):
             name = f"sub_{i}"
