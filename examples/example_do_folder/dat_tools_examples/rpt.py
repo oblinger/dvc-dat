@@ -1,11 +1,11 @@
 import json
 
-from ml_dat import Inst
-from ml_dat import dat_tools as dt
+from dvc_dat import Dat
+from dvc_dat import dat_tools as dt
 
 
-def load_points_json(inst: Inst):
-    with open(f"{inst.get_path()}/points.json") as f:
+def load_points_json(dat: Dat):
+    with open(f"{dat.get_path()}/points.json") as f:
         return json.load(f)
 
 
@@ -36,8 +36,8 @@ rpt = {
 }
 
 
-def my_test_code(inst: Inst):
-    df = dt.metrics_matrix(inst)
+def my_test_code(dat: Dat):
+    df = dt.metrics_matrix(dat)
     print(df)
     dt.to_excel(df, title="My Test", show=False)
     return df
@@ -56,7 +56,7 @@ my_test = {
 
 
 def fully_manual():
-    df = dt.from_inst("Datasets/Retail Data", ["rpt.load_points_json"])
+    df = dt.from_dat("Datasets/Retail Data", ["rpt.load_points_json"])
     print(df)
     dt.to_excel(df, title="fully manual test", show=False)
     return df

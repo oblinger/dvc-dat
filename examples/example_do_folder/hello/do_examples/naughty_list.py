@@ -6,19 +6,19 @@ and verifies they are (1) properly documented, (2) they execute their full regre
 Any metric, tool, dataset that is not fully compliant is indicated on the naughty list.
 """
 
-from ml_dat import load_inst
+from dvc_dat import load_dat
 
 
 def naughty_list():
     # this double for loop checks docs exist, regression test exists, and passes etc.
-    for section, supported_insts in load_inst("supported").items():
-        for name in supported_insts:
-            inst = load_inst(name)
-            if not hasattr(inst, "__DOC__"):
+    for section, supported_dats in load_dat("supported").items():
+        for name in supported_dats:
+            dat = load_dat(name)
+            if not hasattr(dat, "__DOC__"):
                 print(F"   {section} {name} does not have a valid doc string")
-            # if not hasattr(inst, ):
+            # if not hasattr(dat, ):
             #     print(F"   {section} {name} does not have a valid doc string")
-            if not hasattr(inst, "reg_quick_test"):
+            if not hasattr(dat, "reg_quick_test"):
                 print(F"   {section} {name} doesn't have a valid quick regression test")
-            if not hasattr(inst, "reg_full_test"):
+            if not hasattr(dat, "reg_full_test"):
                 print(F"   {section} {name} doesn't have a valid full regression test")

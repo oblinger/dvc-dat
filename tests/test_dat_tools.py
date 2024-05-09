@@ -6,9 +6,9 @@ import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from ml_dat import do
-from ml_dat import Inst
-from ml_dat.dat_tools import to_excel, Cube, from_inst
+from dvc_dat import do
+from dvc_dat import Dat
+from dvc_dat.dat_tools import to_excel, Cube, from_dat
 do.register_module("test_dat_tools", "tests.test_dat_tools")
 
 TMP_PATH = "/tmp/job_test"
@@ -29,8 +29,8 @@ def spec1():
 
 
 @pytest.fixture
-def inst1(spec1):
-    return Inst(spec=spec1, path=TMP_PATH, overwrite=True)
+def dat1(spec1):
+    return Dat(spec=spec1, path=TMP_PATH, overwrite=True)
 
 
 @pytest.fixture
@@ -39,15 +39,15 @@ def spec2():
 
 
 @pytest.fixture
-def inst2(spec2):
-    return Inst(spec=spec2, path=TMP_PATH2, overwrite=True)
+def dat2(spec2):
+    return Dat(spec=spec2, path=TMP_PATH2, overwrite=True)
 
 
-def always_17(_inst: Inst):
+def always_17(_dat: Dat):
     return 17
 
 
-def always_18(_inst: Inst):
+def always_18(_dat: Dat):
     return 18
 
 
@@ -102,49 +102,49 @@ class TestCube:
         assert Cube(), "Couldn't create Cube"
 
     def test_add_do_fn(self):
-        cube = Cube(point_fns=[always_17], insts=[])
+        cube = Cube(point_fns=[always_17], dats=[])
         return cube
 
-    def test_add_inst(self, inst1, inst2):
-        cube = Cube(insts=[inst1, inst2], point_fns=[always_17])
+    def test_add_dat(self, dat1, dat2):
+        cube = Cube(dats=[dat1, dat2], point_fns=[always_17])
         pts = [{'always_17': 17, 'list': 'job_test'},
                {'always_17': 17, 'list': 'job_test2'}]
-        assert cube.points == pts, "Couldn't add Inst to Cube"
+        assert cube.points == pts, "Couldn't add Dat to Cube"
 
-    def test_do_style_registered_module_fn(self, inst1):
+    def test_do_style_registered_module_fn(self, dat1):
         do.register_module("registered_cube",
                            "test_do_folder.dat_tools_examples.cube_hello")
-        cube = Cube(point_fns=["registered_cube.always_5"], insts=[inst1])
+        cube = Cube(point_fns=["registered_cube.always_5"], dats=[dat1])
         assert cube.points == [{'always_5': 5, 'list': 'job_test'}]
 
-    def test_do_style_point_fns(self, inst1, inst2):
-        cube = Cube(insts=[inst1, inst2],
+    def test_do_style_point_fns(self, dat1, dat2):
+        cube = Cube(dats=[dat1, dat2],
                     point_fns=["cube_hello.always_4", "registered_cube.always_5"])
         pts = [{'always_4': 4, 'always_5': 5,  'list': 'job_test'},
                {'always_4': 4, 'always_5': 5, 'list': 'job_test2'}]
-        assert cube.points == pts, "Couldn't add Inst to Cube"
+        assert cube.points == pts, "Couldn't add Dat to Cube"
 
-    def test_multi_value_point_fns(self, inst1):
-        fns = [always_17, lambda inst: {"val1": 111, "val2": 2222}]
-        cube = Cube(insts=[inst1], point_fns=fns)
+    def test_multi_value_point_fns(self, dat1):
+        fns = [always_17, lambda dat: {"val1": 111, "val2": 2222}]
+        cube = Cube(dats=[dat1], point_fns=fns)
         assert cube.points == [{'val1': 111, 'val2': 2222,
                                 'always_17': 17, 'list': 'job_test'}]
 
-    def test_multi_point_point_fns(self, inst1):
-        fns = [always_17, always_18, lambda inst: [{"val1": 1, "val2": 2}, {"val3": 3}]]
-        cube = Cube(insts=[inst1], point_fns=fns)
+    def test_multi_point_point_fns(self, dat1):
+        fns = [always_17, always_18, lambda dat: [{"val1": 1, "val2": 2}, {"val3": 3}]]
+        cube = Cube(dats=[dat1], point_fns=fns)
         assert cube.points == [
             {'list': 'job_test', 'val1': 1, 'val2': 2},
             {'list': 'job_test', 'val3': 3},
             {'always_17': 17, 'always_18': 18, 'list': 'job_test'}]
 
 
-class TestFromInst:
+class TestFromDat:
     def test_null_df_create(self):
-        assert isinstance(from_inst([], []), DataFrame), "Couldn't create from df_tools"
+        assert isinstance(from_dat([], []), DataFrame), "Couldn't create from df_tools"
 
-    def test_from_inst(self, inst1, inst2):
-        df = from_inst([inst1, inst2], [always_17, "test_dat_tools.always_18"])
+    def test_from_dat(self, dat1, dat2):
+        df = from_dat([dat1, dat2], [always_17, "test_dat_tools.always_18"])
         assert df.to_dict() == {
             'always_17': {0: 17, 1: 17},
             'always_18': {0: 18, 1: 18},

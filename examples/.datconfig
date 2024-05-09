@@ -1,4 +1,4 @@
 {
     "do_folder": "example_do_folder",
-    "inst_data_folder": "example_inst_data_folder"
+    "dat_data_folder": "example_dat_data_folder"
 }

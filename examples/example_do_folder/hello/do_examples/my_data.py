@@ -1,4 +1,4 @@
-from ml_dat import do
+from dvc_dat import do
 
 my_data = [111, 222, 333]
 message = "Hello from my_data!"

@@ -2,7 +2,7 @@ import os   # noqa
 import random
 from typing import List
 
-from ml_dat import dat_config, InstContainer, Inst
+from dvc_dat import dat_config, DatContainer, Dat
 
 
 class Annotation:
@@ -25,18 +25,18 @@ class CubeHelloAnnotation(Annotation):
     time: float
 
 
-def build_hello_insts():
+def build_hello_dats():
     build_hello_runs(5)
     build_hello_runs(10)
 
 
 def build_hello_runs(num):
-    path = f"{dat_config.inst_folder}/runs/example/hello{num}"
+    path = f"{dat_config.dat_folder}/runs/example/hello{num}"
     os.system(f"rm -r {path}")
-    c = InstContainer(path=path, spec={})
+    c = DatContainer(path=path, spec={})
     c.save()
     for i in range(10):
-        run = Inst(path=os.path.join(c._path, f"{i}"), spec={"main": {}})
+        run = Dat(path=os.path.join(c._path, f"{i}"), spec={"main": {}})
         start = random.randint(0, 10)
         range_ = random.randint(0, 10)
         count = 10   # random.choice(20)

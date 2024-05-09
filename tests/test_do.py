@@ -6,7 +6,7 @@ import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from ml_dat import do, DoManager
+from dvc_dat import do, DoManager
 
 
 @pytest.fixture
@@ -132,6 +132,6 @@ class TestRegisteringStuff:
         path = os.path.join(os.path.dirname(__file__), "test_do_folder/hello_world.py")
         do_.register_module("xxx", path)
         assert do_("xxx.hello_world") == "hello world!"
-        do_.register_module("yyy", "ml_dat")  # The already loaded 'ml_dat' module
-        from ml_dat import dat_config
+        do_.register_module("yyy", "dvc_dat")  # The already loaded 'dvc_dat' module
+        from dvc_dat import dat_config
         assert do_.load("yyy.dat_config") == dat_config

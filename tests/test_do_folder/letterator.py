@@ -1,4 +1,4 @@
-from ml_dat import do   # noqa
+from dvc_dat import do   # noqa
 
 """Silly configurable tool for applying rules to a sequence of letters."""
 letterator = {
@@ -11,8 +11,8 @@ letterator = {
 }
 
 
-def run(inst):
-    spec = inst.get_spec()
+def run(dat):
+    spec = dat.get_spec()
     results = []
     for idx in range(spec["start"], spec["end"]):
         text = chr(idx)

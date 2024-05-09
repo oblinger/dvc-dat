@@ -17,7 +17,7 @@ CreateHello10 .... Creates the fake dataset of 10 runs in /tmp/hello10.
 
 """
 
-from ml_dat import Inst
+from dvc_dat import Dat
 
 metrics = ["cube_hello", "cube_hello.p", "cube_hello.r", "rpt", "CreateHello10"]
 
@@ -41,24 +41,24 @@ cube_hello = {
 }
 
 
-def is_prime(inst: Inst):
+def is_prime(dat: Dat):
     """Returns True if the run number is prime"""
-    return int(inst.shortname) in [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+    return int(dat.shortname) in [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
 
 
-def data(inst: Inst):
+def data(dat: Dat):
     """Returns the data from the run."""
-    return "-".join(map(str, Inst.get(inst._spec, "main.data")))
+    return "-".join(map(str, Dat.get(dat._spec, "main.data")))
 
 
-def color_p(_inst: Inst):
+def color_p(_dat: Dat):
     """Marble prediction precision."""
     return .4
 
 
-def always_4(_inst: Inst):
+def always_4(_dat: Dat):
     return 4
 
 
-def always_5(_inst: Inst):
+def always_5(_dat: Dat):
     return 5
