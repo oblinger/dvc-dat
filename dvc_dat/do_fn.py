@@ -11,13 +11,14 @@ import os
 import sys
 import copy
 import json
+from enum import Enum
 from importlib import import_module
 
 import yaml
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import Type, Union, Any, Dict, Callable, Tuple
+from typing import Type, Union, Any, Dict, Callable, Tuple, List
 
 from dvc_dat.dat import Dat
 
@@ -42,8 +43,8 @@ class DoManager(object):
     API:
       .load(dotted_name) ............. # Loads and returns the indexed object
       (do_spec, *args, **kwargs)  .... # Calls the object loaded from the spec name
-      .register_value(name, value) ... # Defines value to be returned by load
-      .register_module(base, path) ... # Specifies path of module to be loaded
+      .mount(at=, value=) ............ # Defines value to be returned by load
+      .mount(at=, module=) ........... # Specifies path of module to be loaded
 
 
     DOTTED-NAMES
@@ -149,35 +150,6 @@ class DoManager(object):
         self.base_locations = _build_loadables_index(do_folder)
         self.registered_values = None
 
-    def register_module(self, base: str, module_spec: Union[str, ModuleType], *,
-                        allow_redefine=False):
-        """Specifies the module associated with a dotted name prefix.
-
-        The module can be specified using
-        - The full path to the python source (which will be loaded separately from the
-          import system.),
-        - The module's import name, or
-        - by providing the already loaded module object."""
-        if not allow_redefine and base in self.base_locations and \
-                self.base_locations[base] != module_spec:
-            raise Exception(F"Base {base!r} is already defined")
-        if isinstance(module_spec, ModuleType):
-            self.base_locations[base] = "--directly-assigned--"
-            self.base_objects[base] = module_spec
-        else:
-            self.base_locations[base] = module_spec
-
-    def register_value(self, dotted_name: str, value: Any):
-        """Defines a value to be returned by 'load' for the given dotted name."""
-        if self.registered_values is None:
-            self.registered_values = {}
-        self.registered_values[dotted_name] = value
-        # base = dotted_name.split(".")[0]
-        # if base not in self.base_locations:
-        #     self.base_locations[base] = "--registered-value--"
-        #     self.base_objects[base] = {}
-        # # print(f "Registered {dotted_name} as {value} in {self}")
-
     def get_base(self, base: str, default: Any = _DO_NULL) -> Any:
         """Returns the module or base object associated with a given base name.
 
@@ -279,6 +251,104 @@ class DoManager(object):
                             F"but found {result!r}")
         return copy.deepcopy(result) if isinstance(result, dict) else result
 
+    def mount(self, *,
+              at: str,
+              file: str = None,
+              module: Union[ModuleType, str, None] = None,
+              value: Any = None,
+              files_shallowly: str = None,
+              ):
+        """Mounts a value at a given location."""
+        if 1 != sum(bool(x) for x in (file, module, value, files_shallowly)):
+            raise Exception("MOUNT: Exactly one of 'file', 'module', 'value', or " +
+                            "'files_shallowly' must be specified.")
+        elif file:
+            self.base_locations[at] = file
+        elif module:
+            self.reg_module(at, module)
+        elif value:
+            self.reg_value(at, value)
+        elif files_shallowly:
+            orig = self.base_locations
+            self.base_locations = _build_loadables_index(files_shallowly)
+            self.base_locations.update(orig)
+        else:
+            assert False
+
+    def reg_module(self, at: str, module_spec: Union[str, ModuleType], *,
+                        allow_redefine=False):
+        """Specifies the module associated with a dotted name prefix.
+
+        The module can be specified using
+        - The full path to the python source (which will be loaded separately from the
+          import system.),
+        - The module's import name, or
+        - by providing the already loaded module object."""
+        if not allow_redefine and at in self.base_locations and \
+                self.base_locations[at] != module_spec:
+            raise Exception(F"Base {at!r} is already defined")
+        if isinstance(module_spec, ModuleType):
+            self.base_locations[at] = "--directly-assigned--"
+            self.base_objects[at] = module_spec
+        else:
+            self.base_locations[at] = module_spec
+
+    def reg_value(self, dotted_name: str, value: Any):
+        """Defines a value to be returned by 'load' for the given dotted name."""
+        if self.registered_values is None:
+            self.registered_values = {}
+        self.registered_values[dotted_name] = value
+        # base = dotted_name.split(".")[0]
+        # if base not in self.base_locations:
+        #     self.base_locations[base] = "--registered-value--"
+        #     self.base_objects[base] = {}
+        # # print(f "Registered {dotted_name} as {value} in {self}")
+
+    # def mount(self, *,
+    #           at: str,
+    #           file: str = None,
+    #           module: str = None,
+    #           value: Any = None,
+    #           files_shallowly: str = None,
+    #           ):
+    #     """Mounts a value at a given location."""
+    #     node = _DoNode.traverse(self._root_node, at)
+    #     if 1 != sum(bool(x) for x in (file, module, value, files_shallowly)):
+    #         raise Exception("MOUNT: Exactly one of 'file', 'module', 'value', or " +
+    #                         "'files_shallowly' must be specified.")
+    #     elif file:
+    #         node.source = file
+    #     elif module:
+    #         node.source = module
+    #     elif value:
+    #         node.value = value
+    #     elif files_shallowly:
+    #         pass
+    #     else:
+    #         assert False
+    #
+    # def grab(self, path, default=None):
+    #     parts, idx = path.split("."), 0
+    #     node, value = self._root_node, None
+    #     while idx < len(parts):
+    #         idx += 1
+    #         if parts[idx] in node.children:
+    #             node = node.children[parts[idx]]
+    #         else:
+    #             break
+    #     value = node.value
+    #     if value is _nil:
+    #         value = _load_base_entity(7777, node.source)
+    #     if isinstance(value, ModuleType):
+    #         pass
+    #     while idx < len(parts):
+    #         if isinstance(value, dict):
+    #             value = value.get(parts[idx], _nil)
+    #         elif isinstance(value, list):
+    #             value = value[int(parts[idx])]
+    #         else:
+    #             return default  # or should this raise an exception?
+
 
 def _load_base_entity(base, source_spec: str) -> Union[ModuleType, Spec]:
     ext = os.path.splitext(source_spec)[1]
@@ -295,7 +365,6 @@ def _load_base_entity(base, source_spec: str) -> Union[ModuleType, Spec]:
             return yaml.safe_load(f)
     else:
         raise Exception(F"DO: Unsupported file type {source_spec}")
-
 
 
 def _load_module(base, module_spec: str) -> ModuleType:
@@ -330,6 +399,24 @@ def _build_loadables_index(do_folder: str) -> Dict[str, Any]:
         else:
             result[base] = str(path)
     return result
+
+
+class _DoNode(object):
+    class Kind(Enum):
+        VALUE = 1
+        LIVE_VALUE = 2
+    def __init__(self):
+        self.source = None
+        self.value = None
+        self.children = {}
+
+    @staticmethod
+    def mount(root: '_DoNode', path: List[str], kind, value: Any):
+        node = root
+        for part in path:
+            if part not in node.children:
+                node = node.children[part] = _DoNode()
+            root = root.children[part]
 
 
 USAGE = """

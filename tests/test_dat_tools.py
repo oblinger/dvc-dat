@@ -9,7 +9,8 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from dvc_dat import do
 from dvc_dat import Dat
 from dvc_dat.dat_tools import to_excel, Cube, from_dat
-do.register_module("test_dat_tools", "tests.test_dat_tools")
+# do.register_module("test_dat_tools", "tests.test_dat_tools")
+do.mount(at="test_dat_tools", module="tests.test_dat_tools")
 
 TMP_PATH = "/tmp/job_test"
 TMP_PATH2 = "/tmp/job_test2"
@@ -112,8 +113,8 @@ class TestCube:
         assert cube.points == pts, "Couldn't add Dat to Cube"
 
     def test_do_style_registered_module_fn(self, dat1):
-        do.register_module("registered_cube",
-                           "test_do_folder.dat_tools_examples.cube_hello")
+        do.mount(at="registered_cube",
+                 module="test_do_folder.dat_tools_examples.cube_hello")
         cube = Cube(point_fns=["registered_cube.always_5"], dats=[dat1])
         assert cube.points == [{'always_5': 5, 'list': 'job_test'}]
 

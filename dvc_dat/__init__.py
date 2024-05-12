@@ -11,9 +11,13 @@ do = DoManager(do_folder=dat_config.do_folder)  # not available during load of d
 from .dat import Dat, DatContainer, load_dat
 from . import dat_tools
 
-do.register_module("dat_tools", dat_tools)
-do.register_module("dt", dat_tools)
-do.register_value("dt.list", dat_tools.cmd_list)
+# do.register_module("dat_tools", dat_tools)
+# do.register_module("dt", dat_tools)
+# do.register_value("dt.list", dat_tools.cmd_list)
+do.mount(module=dat_tools, at="dat_tools")
+do.mount(module=dat_tools, at="dt")
+do.mount(value=dat_tools.cmd_list, at="dt.list")
+do.mount(value=dat_tools.cmd_list, at="dat_tools.list")
 
 __all__ = ["dat_config", "Dat", "DatContainer", "load_dat", "DoManager",
            "do", "do_argv", "dat_tools"]

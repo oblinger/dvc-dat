@@ -103,13 +103,13 @@ class TestRegisteringStuff:
 
     def test_registering_simple_values(self, empty_do_mgr):
         do_ = empty_do_mgr
-        do_.register_value("foo", "bar")
+        do_.mount(at="foo", value="bar")
         assert do_.load("foo") == "bar"
 
-        do_.register_value("another.bar", "baz")
+        do_.mount(at="another.bar", value="baz")
         assert do_.load("another.bar") == "baz"
 
-        do_.register_value("three.levels.deep", 333.333)
+        do_.mount(at="three.levels.deep", value=333.333)
         assert do_.load("three.levels.deep") == 333.333
 
     def test_loading_missing_values(self, empty_do_mgr):
@@ -119,19 +119,19 @@ class TestRegisteringStuff:
 
     def test_registering_simple_functions(self, empty_do_mgr):
         do_ = empty_do_mgr
-        do_.register_value("foo", lambda: "bar")
+        do_.mount(at="foo", value=lambda: "bar")
         assert do_("foo") == "bar"
 
     def test_registering_do_fns(self, empty_do_mgr):
         do_ = empty_do_mgr
-        do_.register_value("foo.bar", lambda: "baz")
+        do_.mount(at="foo.bar", value=lambda: "baz")
         assert do_("foo.bar") == "baz"
 
     def test_registering_modules_paths(self, empty_do_mgr):
         do_ = empty_do_mgr
         path = os.path.join(os.path.dirname(__file__), "test_do_folder/hello_world.py")
-        do_.register_module("xxx", path)
+        do_.mount(at="xxx", module=path)
         assert do_("xxx.hello_world") == "hello world!"
-        do_.register_module("yyy", "dvc_dat")  # The already loaded 'dvc_dat' module
+        do_.mount(at="yyy", module="dvc_dat")  # The already loaded 'dvc_dat' module
         from dvc_dat import dat_config
         assert do_.load("yyy.dat_config") == dat_config

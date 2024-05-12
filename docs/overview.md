@@ -64,17 +64,19 @@ It has one key class and four key functions:
 
 #### Loading objects from source-code
 
-| Method                                | Description                                 |
-|---------------------------------------|---------------------------------------------|
-| do.load(NAME) -> Any                  | Loads Python source-code obj by dotted.name |
-| do.register_module(BASE, SPEC)        | Register a python module by name            |
-| do.get_module(BASE) -> MODULE         | Load a python module from a string spec     |
-| do.register_value(NAME, VALUE)        | Register a python object by name.           |
-| do(NAME) -> Any                       | Load a python object from a string spec.    |
-| do.set_do_folder(PATH) -> None        | Set the folder to load python objects from. |
-| do.get_base_object(BASE) -> Any       | Get the base object based on it name.       |
-| do.merge_configs(BASE, override)      | Merge a config with an override.            |
-| do.expand_spec(SPEC) -> SPEC          | Recursively merges spec with base spec.     |
+| Method                           | Description                                  |
+|----------------------------------|----------------------------------------------|
+| do.load(NAME) -> Any             | Loads Python source-code obj by dotted.name  |
+| do.mount(module=, at=)           | Registers a python module by name            |
+| do.mount(file=, at=)             | Registers a .json, .yaml, or .py file        |
+| do.mount(value=, at=)            | Registers structured value in do space       |
+| do.mount(files_shallowly=, at=)  | Registers ALL .json, .yaml, or .py shallowly | 
+| do.get_module(BASE) -> MODULE    | Load a python module from a string spec      |
+| do(NAME) -> Any                  | Load a python object from a string spec.     |
+| do.set_do_folder(PATH) -> None   | Set the folder to load python objects from.  |
+| do.get_base_object(BASE) -> Any  | Get the base object based on it name.        |
+| do.merge_configs(BASE, override) | Merge a config with an override.             |
+| do.expand_spec(SPEC) -> SPEC     | Recursively merges spec with base spec.      |
 
 
 #### DAT_TOOLS - Data Frame manipulation
