@@ -24,7 +24,9 @@ class DataState(Enum):
 # A Value is possibly recursive dict of parameters within the Dat's spec.
 # Often it is a dict of dict, but single level is ok as long as keys are
 # strings.  The spec is stored in the _spec_ file in the Persistable's folder.
-Value = Union[str, int, float, Dict[str, "Value"]]
+Value = Union[str, int, float, bool, None, 'Spec']
+
+Spec = Dict[str, Value]
 
 T = TypeVar("T", bound="Dat")
 
@@ -248,19 +250,19 @@ class Dat(object):
     def __str__(self):
         return self.__repr__()
 
-    def get_spec(self):
+    def get_spec(self) -> Spec:
         """Returns the spec of this Dat."""
         return self._spec
 
-    def get_path(self):
+    def get_path(self) -> str:
         """Returns the absolute path of this Dat."""
         return self._path
 
-    def get_path_name(self):
+    def get_path_name(self) -> str:
         """Returns the name (relative path) of this Dat."""
         return self._path2name(self._path)
 
-    def get_path_tail(self):
+    def get_path_tail(self) -> str:
         """Returns the shortname (last part of the path) of this Dat."""
         return self._path.split("/")[-1]
 
@@ -270,20 +272,23 @@ class Dat(object):
         """
         pass
 
-    def delete(self):
+    def delete(self, *, must_exist=True) -> bool:
         """Deletes the folder and its contents from the filesystem.
         This deletion will also be reflected as a deletion pushed to git.
         Still, the backing store will retain all previous versions of this Dat."""
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
-            raise Exception(f"DAT DELETE: Folder missing {self._path!r}.")
+            if must_exist:
+                raise Exception(f"DAT DELETE: Folder missing {self._path!r}.")
+            else:
+                return False
         return True
 
     @staticmethod
     def _expand_dat_path(path_spec: Union[str, None], *,
-                          variables: Dict[str, Any] = None,
-                          overwrite: bool = False) -> str:
+                         variables: Dict[str, Any] = None,
+                         overwrite: bool = False) -> str:
         """
         Expands a path spec into a full path.  See __init__ for expansion rules.
 
@@ -371,7 +376,7 @@ class DatContainer(Dat, Generic[T]):
     Examples
     --------
     >>> game_set: DatContainer[Dat] = DatContainer.load("name/of/game/set")
-    >>> game_set.dats[0]  # a Game dat!
+    >>> game_set.get_dats()[0]  # a Game dat!
 
     Notes
     -----
@@ -389,15 +394,13 @@ class DatContainer(Dat, Generic[T]):
         self._dat_paths: Union[DataState, List[str]] = DataState.NOT_LOADED
         self._dats: Union[DataState, List[T]] = DataState.NOT_LOADED
 
-    @property
-    def dat_paths(self) -> List[str]:
+    def get_dat_paths(self) -> List[str]:
         """Lazy loaded list of full paths for the contained Dat."""
         if self._dat_paths is DataState.NOT_LOADED:
             self._dat_paths = DatContainer._find_dat_under(self._path)
         return self._dat_paths
 
-    @property
-    def dats(self) -> List[T]:
+    def get_dats(self) -> List[T]:
         """List of contained Dat objects.
 
         WARNING: ALL Dats remain in memory until this container is released.
@@ -406,7 +409,7 @@ class DatContainer(Dat, Generic[T]):
             # these will load as the Dat class that was defined in each spec's
             # main.class, but we're loading them dynamically from Dat directly,
             # so we'll ignore the type and assume they will all be List[T]
-            self._dats = [Dat.load(p) for p in self.dat_paths]  # type: ignore
+            self._dats = [Dat.load(p) for p in self.get_dat_paths()]  # type: ignore
         return self._dats  # type: ignore
 
     @staticmethod

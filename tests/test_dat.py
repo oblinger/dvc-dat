@@ -205,8 +205,8 @@ class TestDatContainers:
         os.system(f"rm -r '{TMP_PATH}'")
         container = DatContainer(path=TMP_PATH, spec={})
         assert isinstance(container, DatContainer)
-        assert container.dat_paths == []
-        assert container.dats == []
+        assert container.get_dat_paths() == []
+        assert container.get_dats() == []
 
     def test_save_empty_container(self):
         container = DatContainer(path=TMP_PATH, spec={})
@@ -227,11 +227,11 @@ class TestDatContainers:
         assert isinstance(reload, DatContainer)
         assert Dat.get(reload._spec, MAIN_CLASS) == "DatContainer"
 
-        paths = reload.dat_paths
+        paths = reload.get_dat_paths()
         assert isinstance(paths, list)
         assert isinstance(paths[3], str)
 
-        sub_dats = reload.dats
+        sub_dats = reload.get_dats()
         assert isinstance(sub_dats, list)
         assert isinstance(sub_dats[3], Dat)
         assert Dat.get(sub_dats[8], "main.my_nifty_name") == "sub_8"

@@ -226,7 +226,8 @@ class DoManager(object):
             raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
         elif isinstance(obj, ModuleType):
             idx = 1 if len(parts) > 1 else 0
-            result = getattr(obj, parts[idx]) if hasattr(obj, parts[idx]) else None
+            attr = parts[idx]
+            result = getattr(obj, attr) if hasattr(obj, attr) else None
             if len(parts) > 2:
                 result = Dat.get(result, parts[2:])
         elif len(parts) == 1:

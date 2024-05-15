@@ -244,7 +244,7 @@ class Cube(object):
                    this_index: Union[int, str], indicies: Dict[str, str]) -> None:
         """Recursively scans 'source' adding points derived from each md.Dat."""
         if isinstance(source, DatContainer):
-            self._add_dats(source.dats, source.get_path_name(), indicies)
+            self._add_dats(source.get_dats(), source.get_path_name(), indicies)
         elif isinstance(source, Dat):
             the_point, points = {}, []
             for fn in self.point_fns:
