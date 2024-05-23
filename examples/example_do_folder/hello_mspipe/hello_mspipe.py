@@ -4,11 +4,13 @@ from dvc_dat import Dat, do, DatContainer
 
 hello_mspipe = {
     "main": {
+        "kind": "Mspipe",
         "class": "DatContainer",
-        "do": "hello_mspipe.pipe_run"
+        "do": "hello_mspipe.msproc_build_and_run",
     },
     "common": {
         "main": {
+            "kind": "Mspipe",
             "base": "hello_std_args_ex",
             "do": "hello_mspipe.mcproc_pass",
         }
@@ -49,14 +51,14 @@ def mcproc_pass(dat: Dat):
     Returns a string describing how many output files were built by this fake 'pass'
     """
     def build_line(template):
-        if template.startswith("$$"):
+        if template.startswith(">>"):
             return template[2:]
-        elif template.startswith(">>"):
+        elif template.startswith("<<"):
             path = os.path.join(dat.get_path(), template[2:])
             with open(path) as f:
                 return f.read()
     name = Dat.get(dat, "main.name")
-    outputs = Dat.get(dat, "mcproc.outputs")
+    outputs = Dat.get(dat, "outputs")
     for output in outputs:
         path = os.path.join(dat.get_path(), output[0])
         parts = [build_line(part) for part in output[1:]]

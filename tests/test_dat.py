@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Dict
 import pytest
 
+from dvc_dat import dat_config
+
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from dvc_dat.dat import MAIN_CLASS, Dat, DatContainer
@@ -121,6 +123,26 @@ class TestTemplatedDatCreationAndDeletion:
         assert (dat := do.dat_from_template(spec1)), "Couldn't create Persistable"
         assert dat.get_path_name().startswith("test_dats/"), "Wrong path"
         assert dat.delete(), "Couldn't delete Persistable"
+
+
+class TestDatAccessors:
+    def test_path_accessors(self, spec1):
+        dat = Dat(spec=spec1, path="any/path/goes/here/my_dat")
+        assert dat.get_path() == f"{dat_config.dat_folder}/any/path/goes/here/my_dat"
+        assert dat.get_path_name() == "any/path/goes/here/my_dat"
+        assert dat.get_path_tail() == "my_dat"
+        assert dat.delete()
+
+    def test_spec_and_result_accessors(self, spec1):
+        my_name = "any/path/my_dat"
+        dat = Dat(spec=spec1, path=my_name)
+        assert dat.get_spec() == spec1
+        assert dat.get_results() == {}
+        Dat.set(dat.get_results(), "main.my_key1", "my_val1")
+        dat.save()
+        dat2 = Dat.load(my_name)  # Reloads the dat
+        assert Dat.get(dat2.get_results(), "main.my_key1") == "my_val1"
+        assert dat.delete()
 
 
 class TestDatCreationFromStaticFolders:

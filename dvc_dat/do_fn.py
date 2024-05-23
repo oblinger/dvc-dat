@@ -81,11 +81,11 @@ class DoManager(object):
             spec: Spec,
             *,
             path: str = None,
-            args: Tuple[Any] = None,
+            args: Tuple[Any, ...] = None,
             kwargs: Dict[str, Any] = None,
             ctx: str = ""
     ) -> Dat:
-        """Datantiates an object from a template spec."""
+        """Instantiates an object from a template spec."""
         spec, count = copy.deepcopy(spec), 1
         Dat.set(spec, _MAIN_ARGS, args or [])
         Dat.set(spec, _MAIN_KWARGS, kwargs or {})
@@ -95,7 +95,7 @@ class DoManager(object):
         except ValueError as e:
             raise Exception(F"DO - Error during expansion of {ctx!r}: {e}")
         path_name = Dat._expand_dat_path(path)  # noqa
-        return Dat(path=path_name, spec=spec)
+        return Dat.create(path=path_name, spec=spec)
 
     def run_dat(self, dat: Dat, ctx: str = "") -> Any:
         """Runs the main.do method of an instantiated object."""   # noqa
@@ -166,7 +166,7 @@ class DoManager(object):
             self.base_objects[base] = _load_base_entity(base, self.base_locations[base])
             result = self.base_objects[base]
         elif default is _DO_NULL:
-            raise Exception(f"DO: The base {base!r} is not defined.")
+            raise Exception(f"The base {base!r} is not defined.")
         else:
             result = default
         if isinstance(result, dict):
@@ -220,7 +220,10 @@ class DoManager(object):
         ctx = "" if context is None else F" {context}"
         parts = dotted_name.split(".")
         prefix = parts[0]
-        obj = self.get_base(prefix, default=_DO_NULL if default == _DO_NULL else None)
+        try:
+            obj = self.get_base(prefix, default=_DO_NULL if default == _DO_NULL else None)
+        except Exception as e:
+            raise Exception(F"Error loading {dotted_name!r}{ctx}: {e}")
 
         if obj == _DO_ERROR_FLAG:
             raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")

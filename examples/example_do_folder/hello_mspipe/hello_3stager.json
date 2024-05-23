@@ -1,0 +1,42 @@
+{
+  "main": {
+    "kind": "super3",
+    "base": "hello_mspipe",
+    "path_template": "runs/super_runs/{YYYY}-{MM}-super3{unique}"
+  },
+  "common": {
+    "debug_level": 3
+  },
+  "stages": {
+    "preprocessing": {
+      "outputs": [
+        ["gallery.txt",
+          ">>This is not really a gallery",
+          ">>It's just a file called gallery!"],
+        ["results.txt",
+          ">>Stage 1: Result line1",
+          ">>Stage 1: Result line2"]
+      ]
+    },
+    "doubler_stage": {
+      "outputs": [
+        ["double_trouble.txt",
+          ">>If results are good, more results are better!",
+          "<<../preprocessing/results.txt",
+          "<<../preprocessing/results.txt"
+        ]
+      ]
+    },
+    "final_stage": {
+      "outputs": [
+        ["final_results.txt",
+          ">>Final results are in!  Gallery first:",
+          "<<../preprocessing/gallery.txt",
+          ">>And now the results.  Doubled once more, just to be sure:",
+          "<<../doubler_stage/double_trouble.txt",
+          "<<../doubler_stage/double_trouble.txt"
+        ]
+      ]
+    }
+  }
+}

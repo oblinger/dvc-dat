@@ -9,7 +9,9 @@ import yaml
 
 SPEC_JSON = "_spec_.json"
 SPEC_YAML = "_spec_.yaml"
+RESULT_JSON = "_result_.json"
 MAIN_CLASS = "main.class"
+MAIN_KIND = "main.kind"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
 
 
@@ -78,8 +80,9 @@ class Dat(object):
       - If lazy loading is beneficial
 
     """   # noqa
-    _path: str   # The immutable absolute path of this Dat
-    _spec: Dict  # The immutable spec of this Dat
+    _path: str      # The immutable absolute path of this Dat
+    _spec: Spec     # The immutable spec of this Dat
+    _result: Spec   # The mutable state or result of this Dat
 
     @staticmethod
     def get(source: Union["Dat", dict],
@@ -155,12 +158,12 @@ class Dat(object):
     @classmethod
     def load(cls: Type[T], name_or_path: str, *,
              cwd: Optional[str] = None, **kwargs) -> T:
-        """Loads (Datantiates) this Dat from disk.
+        """Loads (Instantiates) this Dat from disk.
 
-        Dat loading is generally lazy, so its attributes are loaded and
+        Dat-loading is generally lazy, so its attributes are loaded and
         cached only when accessed.
 
-        Dat are searched in the following order:
+        Dats are searched in the following order:
         (1) as a fullpath to the folder of the Dat to load
         (2) as a relative path from the current working directory or cwd parameter
         (3) as a named dat under the DAT_ROOT folder
@@ -193,23 +196,46 @@ class Dat(object):
                 raise Exception(F"LOAD_DAT: Folder missing {path!r}.")
             else:
                 raise Exception(f"LOAD_DAT: Error loading {path!r}s spec file: {e}")
-        klass_name = Dat.get(spec, MAIN_CLASS) or "Dat"
-        klass = Dat._find_subclass_by_name(Dat, klass_name)
-        if not klass:
-            raise Exception(f"Class {klass_name} is not a subclass of Dat")
-
-        # dat = Dat.__new__(klass)
-        # dat._path, dat._spec = path, spec
-        dat = klass(path=path, spec=spec, raw=True, **kwargs)
+        dat = Dat._make_dat_instance(path, spec)
+        try:
+            with open(os.path.join(path, RESULT_JSON)) as f:
+                dat._result = json.load(f)
+        except FileNotFoundError:
+            pass
         return dat
+
+    @classmethod
+    def create(cls, path: str, spec: Spec, *, overwrite: bool = False) -> "Dat":
+        """Creates a new Dat with the specified name and spec dict."""
+        path: str = Dat._resolve_path(
+            Dat._expand_dat_path(path, overwrite=overwrite))
+        spec: Dict = spec or {}
+        # Dat.set(spec, MAIN_CLASS, cls.__name__)
+        if not os.path.exists(path):
+            os.makedirs(path)
+        try:
+            txt = json.dumps(spec, indent=2)
+        except Exception as e:
+            raise Exception(f"Error non-JSON in Dat.spec: {e}\nSPEC={spec}")
+        with open(os.path.join(path, SPEC_JSON), "w") as out:
+            out.write(txt)
+            out.write("\n")
+
+        return Dat._make_dat_instance(path, spec)
 
     def __init__(self,
                  *,
                  path: str = None,
                  spec: Dict = None,
                  overwrite: bool = False,
-                 raw: bool = False):
-        """Creates a new Dat folder with the specified spec dict and path string.
+                 _no_backing: bool = False):
+        """Creates a new Dat with the specified spec dict and backing folder at path.
+
+        Args:
+            path (str): The path to the folder where the Dat is stored.
+            spec (Dict): The spec dict that describes the Dat.
+            overwrite (bool): If True, the path will be overwritten if it exists.
+            _no_backing (bool): If True, the Dat is created without a backing folder.
 
         exists_action: "error" | "overwrite" | "use"
 
@@ -226,7 +252,8 @@ class Dat(object):
             {unique} -- a counter or UUID that makes the entire path unique.
         """
         super().__init__()
-        if raw:
+        self._result = {}
+        if _no_backing:
             self._path, self._spec = path, spec
             return
         self._path: str = self._resolve_path(
@@ -245,7 +272,8 @@ class Dat(object):
             out.write("\n")
 
     def __repr__(self):
-        return f"<{self.__class__.__name__} {self.get_path_name()!r}>"
+        kind = Dat.get(self._spec, MAIN_KIND, self.__class__.__name__)
+        return f"<{kind}: {self.get_path_name()}>"
 
     def __str__(self):
         return self.__repr__()
@@ -253,6 +281,10 @@ class Dat(object):
     def get_spec(self) -> Spec:
         """Returns the spec of this Dat."""
         return self._spec
+
+    def get_results(self) -> Spec:
+        """Returns the spec of this Dat."""
+        return self._result
 
     def get_path(self) -> str:
         """Returns the absolute path of this Dat."""
@@ -270,7 +302,9 @@ class Dat(object):
         """Flags a Dat to have a version of its folder's contents saved
         to in the backing store.
         """
-        pass
+        if self._result:
+            with open(os.path.join(self._path, RESULT_JSON), "w") as out:
+                out.write(json.dumps(self._result, indent=2))
 
     def delete(self, *, must_exist=True) -> bool:
         """Deletes the folder and its contents from the filesystem.
@@ -328,6 +362,17 @@ class Dat(object):
                 raise Exception(f"DAT: Create failed, dir {expanded_path!r} exists")
             else:
                 count += 1
+
+    @staticmethod
+    def _make_dat_instance(path: str, spec: Dict) -> "Dat":
+
+        klass_name = Dat.get(spec, MAIN_CLASS) or "Dat"
+        klass = Dat._find_subclass_by_name(Dat, klass_name)
+        if not klass:
+            raise Exception(f"Class {klass_name} is not a subclass of Dat")
+
+        dat = klass(path=path, spec=spec, _no_backing=True)
+        return dat
 
     @staticmethod
     def _find_subclass_by_name(klass, name):
