@@ -1,4 +1,4 @@
-my_letters = {
+main = {
   "main": {"base": "letterator"},
   "start": 97,
   "rules": [

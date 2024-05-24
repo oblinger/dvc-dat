@@ -52,14 +52,16 @@ class Dat(object):
     loc == path or name
 
     Persistable API
-      Dat.create(path=, spec=) ...... Constructor
-      Dat.create_from_template(path, spec) ...... Constructor
-      .load(path) ........... Universal loader for all Persistables
-      .get_spec() ........... Is the 'spec' dict for this dat
-      .get_path() ........... Returns dat's path (its absolute path)
+      Dat.create(path=, spec=) ... Constructor
+      .load(path) ................ Universal loader for all Persistables
+      .get_spec() ................ Is the 'spec' dict for this dat
+      .get_path() ................ Returns dat's path (its absolute path)
       .get_path_name() ........... Returns dat's name (its path relative to dat_folder)
-      .get_path_tail() ...... Returns dat's shortname (last part of its path)
-      .save([path]) ......... Saves persistable to disk (optionally sets its path)
+      .get_path_tail() ........... Returns dat's shortname (last part of its path)
+      .delete() .................. Deletes the dat from the filesystem
+      .copy() .................... Copies the dat to a new location
+      .move() .................... Moves the dat to a new location
+      .save([path]) .............. Saves persistable to disk (optionally sets its path)
 
     Static Utility Methods
       .get(Dat|dict, [key1, key2, ...])
@@ -307,6 +309,27 @@ class Dat(object):
                 return False
         return True
 
+    # NOT TESTED
+    # def copy(self, new_path: str, *, overwrite: bool = False) -> "Dat":
+    #     """Copies this Dat to a new location."""
+    #     new_path = Dat._resolve_path(new_path)
+    #     if not overwrite and os.path.exists(new_path):
+    #         raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
+    #     shutil.copytree(self._path, new_path)
+    #     result = Dat.load(new_path)
+    #     result.save()
+    #     return result
+    #
+    # def move(self, new_path: str, *, overwrite: bool = False) -> "Dat":
+    #     """Moves this Dat to a new location."""
+    #     new_path = Dat._resolve_path(new_path)
+    #     if not overwrite and os.path.exists(new_path):
+    #         raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
+    #     shutil.move(self._path, new_path)
+    #     result = Dat.load(new_path)
+    #     result.save()
+    #     return result
+
     @staticmethod
     def _expand_dat_path(path_spec: Union[str, None], *,
                          variables: Dict[str, Any] = None,
@@ -385,11 +408,6 @@ class Dat(object):
         from . import dat_config
         return os.path.join(dat_config.dat_folder, name)
 
-        # if name and name[0] == "$":
-        #     return name[1:].replace(".", "/")
-        # else:
-        #     return os.path.join(dat_config.dat_folder, name.replace(".", "/"))
-
 
 class DatContainer(Dat, Generic[T]):
     """Container of multiple Dats.
@@ -460,10 +478,3 @@ class DatContainer(Dat, Generic[T]):
 
 
 load_dat = Dat.load
-
-# import dvc_dat
-# from dvc_dat import ml_dat_config
-# dvc_dat.Dat = Dat
-# dvc_dat.DatContainer = DatContainer
-# dvc_dat.load_dat = load_dat
-# data_folder = ml_dat_config.dat_config.dat_folder

@@ -1,4 +1,4 @@
-show_bad_arc_layups = {
+main = {
   "main": {
     "do": "shot_visualizer"   # code used to run visualizer plus some defaults
                               # also specifies baller10 as default input

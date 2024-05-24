@@ -1,2 +1,2 @@
-def shot_visualizer(_spec):
+def main(_spec):
     print("Creating visualization")

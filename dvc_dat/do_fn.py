@@ -26,6 +26,7 @@ from dvc_dat.dat import Dat
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
 _DO_ERROR_FLAG = tuple("multiple loadable modules have this same name")
 _DO_NULL = tuple(["-no-value-"])
+_MAIN = "main"                  # default module var to use when none specified
 
 # Dat Template Parameters
 _MAIN_BASE = "main.base"        # the base spec to expand
@@ -228,11 +229,18 @@ class DoManager(object):
             if obj == _DO_ERROR_FLAG:
                 raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
             elif isinstance(obj, ModuleType):
-                idx = 1 if len(parts) > 1 else 0
-                attr = parts[idx]
-                result = getattr(obj, attr) if hasattr(obj, attr) else None
-                if len(parts) > 2:
+                if len(parts) < 2:
+                    result = getattr(obj, _MAIN) if hasattr(obj, _MAIN) else None
+                else:
+                    attr = parts[1]
+                    result = getattr(obj, attr) if hasattr(obj, attr) else None
                     result = Dat.get(result, parts[2:])
+
+                # idx = 1 if len(parts) > 1 else 0
+                # attr = parts[idx]
+                # result = getattr(obj, attr) if hasattr(obj, attr) else None
+                # if len(parts) > 2:
+                #     result = Dat.get(result, parts[2:])
             elif len(parts) == 1:
                 result = obj
             elif isinstance(obj, dict):

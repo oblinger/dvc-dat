@@ -1,7 +1,7 @@
 from dvc_dat import do
 
 """Silly configurable tool for applying rules to a sequence of letters."""
-letterator = {
+main = {
     "main": {
       "do": "letterator.run",      # example of a complex tool config
       "title": "The Letterator"

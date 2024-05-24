@@ -9,7 +9,7 @@ Any metric, tool, dataset that is not fully compliant is indicated on the naught
 from dvc_dat import load_dat
 
 
-def naughty_list():
+def main():
     # this double for loop checks docs exist, regression test exists, and passes etc.
     for section, supported_dats in load_dat("supported").items():
         for name in supported_dats:

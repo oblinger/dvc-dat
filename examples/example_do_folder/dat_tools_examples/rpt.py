@@ -23,7 +23,7 @@ simple = {
 
 
 # this is the default report
-rpt = {
+main = {
     "main": {"do": "dt.metrics_matrix"},
     "metrics_matrix": {
         "title": "RPT",

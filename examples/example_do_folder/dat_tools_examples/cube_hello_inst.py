@@ -41,7 +41,8 @@ def build_hello_runs(num):
         range_ = random.randint(0, 10)
         count = 10   # random.choice(20)
         data = [random.randint(0, range_) + start for _ in range(count)]
-        run._spec["main"].update(dict(start=start, range=range_, count=count, data=data))
+        run.get_spec()["main"].update(dict(start=start, range=range_,
+                                           count=count, data=data))
         run.save()
 
 

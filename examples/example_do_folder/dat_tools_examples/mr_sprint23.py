@@ -1,4 +1,4 @@
-mr_sprint23 = {
+main = {
     "main": {"do": "dt.metrics_matrix"},
     "metrics_matrix": {
         "title": "S23",
