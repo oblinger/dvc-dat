@@ -48,18 +48,19 @@ It has one key class and four key functions:
 
 #### Managing data folders
 
-| Method                   | Description                                   |
-|--------------------------|-----------------------------------------------|
-| Dat(SPEC, PATH) -> Dat | Create a new Dat with a given spec and path. |
-| Dat.load(NAME) -> Dat  | Load a Dat by name                          |
-| .spec -> Dict            | Get the spec of the Dat.                     |
-| .path -> Path            | Get the path of the Dat.                     |
-| .name -> Str             | Get the name of the Dat.                     |
-| .save() -> None          | Save the Dat to the filesystem.              |
-| .load() -> None          | Load the Dat from the filesystem.            |
-| .delete() -> None        | Delete the Dat from the filesystem.          |
-| .copy() -> Dat          | Copy the Dat to a new location.              |
-| .move() -> Dat          | Move the Dat to a new location.              |
+| Method                          | Description                                      |
+|---------------------------------|--------------------------------------------------|
+| Dat.create(path=, spec=) -> Dat | Create a new Dat with a given spec and path.     |
+| Dat.create_from_template(...)   | Creates after performing spec expansion          |
+| Dat.load(NAME) -> Dat           | Load a Dat by name                               |
+| .get_spec() -> Dict             | Get the spec of the Dat.                         |
+| .get_path() -> Path             | Get the path of the Dat.                         |
+| .get_path_name() -> str         | Get the name of the Dat (relative to repo)       |
+| .get_path_tail() -> str         | Get last part of path (used as Dat's short name) |
+| .save() -> None                 | Save the Dat to the filesystem.                  |
+| .delete() -> None               | Delete the Dat from the filesystem.              |
+| .copy(PATH) -> Dat              | Copy the Dat to a new location.                  |
+| .move(PATH) -> Dat              | Move the Dat to a new location.                  |
 
 
 #### Loading objects from source-code

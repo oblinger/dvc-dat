@@ -1,13 +1,16 @@
 {
   "main": {
+    "__doc__": "",
+
     "kind": "super3",
     "base": "hello_mspipe",
-    "path_template": "runs/super_runs/{YYYY}-{MM}-super3{unique}"
+    "path": "runs/super_runs/{YYYY}-{MM}-super3{unique}"
   },
   "common": {
     "debug_level": 3
   },
   "stages": {
+
     "preprocessing": {
       "outputs": [
         ["gallery.txt",

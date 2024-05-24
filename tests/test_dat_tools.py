@@ -31,7 +31,7 @@ def spec1():
 
 @pytest.fixture
 def dat1(spec1):
-    return Dat(spec=spec1, path=TMP_PATH, overwrite=True)
+    return Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def spec2():
 
 @pytest.fixture
 def dat2(spec2):
-    return Dat(spec=spec2, path=TMP_PATH2, overwrite=True)
+    return Dat.create(spec=spec2, path=TMP_PATH2, overwrite=True)
 
 
 def always_17(_dat: Dat):

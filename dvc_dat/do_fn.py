@@ -94,8 +94,8 @@ class DoManager(object):
             spec = self.expand_spec(spec)
         except ValueError as e:
             raise Exception(F"DO - Error during expansion of {ctx!r}: {e}")
-        path_name = Dat._expand_dat_path(path)  # noqa
-        return Dat.create(path=path_name, spec=spec)
+        path = Dat._expand_dat_path(path)  # noqa
+        return Dat.create(path=path, spec=spec)
 
     def run_dat(self, dat: Dat, ctx: str = "") -> Any:
         """Runs the main.do method of an instantiated object."""   # noqa
@@ -166,7 +166,7 @@ class DoManager(object):
             self.base_objects[base] = _load_base_entity(base, self.base_locations[base])
             result = self.base_objects[base]
         elif default is _DO_NULL:
-            raise Exception(f"The base {base!r} is not defined.")
+            raise Exception(f"The file {base+'...'!r} is not defined.")
         else:
             result = default
         if isinstance(result, dict):
@@ -214,46 +214,49 @@ class DoManager(object):
         - If FILENAME.json or FILENAME.yaml is found, then it is loaded, and its
           parsed contents are returned.  (PART-NAME is ignored)
         """
-        if self.registered_values and _DO_NULL != \
-                (value := self.registered_values.get(dotted_name, _DO_NULL)):
-            return copy.deepcopy(value) if isinstance(value, dict) else value
         ctx = "" if context is None else F" {context}"
         parts = dotted_name.split(".")
         prefix = parts[0]
+        if self.registered_values and _DO_NULL != \
+                (value := self.registered_values.get(dotted_name, _DO_NULL)):
+            return copy.deepcopy(value) if isinstance(value, dict) else value
+        obj = self.get_base(prefix, default=_DO_NULL if default == _DO_NULL else None)
         try:
-            obj = self.get_base(prefix, default=_DO_NULL if default == _DO_NULL else None)
-        except Exception as e:
-            raise Exception(F"Error loading {dotted_name!r}{ctx}: {e}")
+            # except Exception as e:
+            #     raise Exception(F"--Error loading {dotted_name!r}{ctx}") from e
 
-        if obj == _DO_ERROR_FLAG:
-            raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
-        elif isinstance(obj, ModuleType):
-            idx = 1 if len(parts) > 1 else 0
-            attr = parts[idx]
-            result = getattr(obj, attr) if hasattr(obj, attr) else None
-            if len(parts) > 2:
-                result = Dat.get(result, parts[2:])
-        elif len(parts) == 1:
-            result = obj
-        elif isinstance(obj, dict):
-            result = Dat.get(obj, parts[1:])
-        elif obj is None:
-            return default
-        else:
-            raise Exception(F"DO: Illegal value {obj!r} for {dotted_name}{ctx}")
-
-        if result is None:
-            if default is not _DO_NULL:
-                return default
+            if obj == _DO_ERROR_FLAG:
+                raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
+            elif isinstance(obj, ModuleType):
+                idx = 1 if len(parts) > 1 else 0
+                attr = parts[idx]
+                result = getattr(obj, attr) if hasattr(obj, attr) else None
+                if len(parts) > 2:
+                    result = Dat.get(result, parts[2:])
+            elif len(parts) == 1:
+                result = obj
+            elif isinstance(obj, dict):
+                result = Dat.get(obj, parts[1:])
             elif obj is None:
-                raise Exception(F"DO: Module {prefix!r} not found{ctx}")
+                return default
             else:
-                raise Exception(
-                    F"DO: Value {dotted_name[len(prefix)+1:]!r} is missing from {obj}")
-        if kind and not isinstance(result, kind):
-            raise Exception(F"DO: Expected {dotted_name!r} of type {kind} " +
-                            F"but found {result!r}")
-        return copy.deepcopy(result) if isinstance(result, dict) else result
+                raise Exception(F"DO: Illegal value {obj!r} for {dotted_name}{ctx}")
+
+            if result is None:
+                if default is not _DO_NULL:
+                    return default
+                elif obj is None:
+                    raise Exception(F"DO: Module {prefix!r} not found{ctx}")
+                else:
+                    name = dotted_name[len(prefix)+1:]
+                    o = obj.__file__ if isinstance(obj, ModuleType) else obj
+                    raise Exception(F"do: value {name!r} is missing from {o!r}")
+            if kind and not isinstance(result, kind):
+                raise Exception(F"DO: Expected {dotted_name!r} of type {kind} " +
+                                F"but found {result!r}")
+            return copy.deepcopy(result) if isinstance(result, dict) else result
+        except Exception as e:
+            raise Exception(F"{e}  WHILE loading {dotted_name!r}{ctx}")
 
     def mount(self, *,
               at: str,

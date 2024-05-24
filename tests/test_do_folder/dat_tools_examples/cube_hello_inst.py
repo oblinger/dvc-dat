@@ -36,7 +36,7 @@ def build_hello_runs(num):
     c = DatContainer(path=path, spec={})
     c.save()
     for i in range(10):
-        run = Dat(path=os.path.join(c._path, f"{i}"), spec={"main": {}})
+        run = Dat.create(path=os.path.join(c._path, f"{i}"), spec={"main": {}})
         start = random.randint(0, 10)
         range_ = random.randint(0, 10)
         count = 10   # random.choice(20)

@@ -52,7 +52,8 @@ class Dat(object):
     loc == path or name
 
     Persistable API
-      Dat(path, spec) ...... Constructor
+      Dat.create(path=, spec=) ...... Constructor
+      Dat.create_from_template(path, spec) ...... Constructor
       .load(path) ........... Universal loader for all Persistables
       .get_spec() ........... Is the 'spec' dict for this dat
       .get_path() ........... Returns dat's path (its absolute path)
@@ -216,7 +217,7 @@ class Dat(object):
         try:
             txt = json.dumps(spec, indent=2)
         except Exception as e:
-            raise Exception(f"Error non-JSON in Dat.spec: {e}\nSPEC={spec}")
+            raise Exception(f"Error non-JSON data in Dat.spec: {e}\nSPEC={spec}")
         with open(os.path.join(path, SPEC_JSON), "w") as out:
             out.write(txt)
             out.write("\n")
@@ -255,21 +256,8 @@ class Dat(object):
         self._result = {}
         if _no_backing:
             self._path, self._spec = path, spec
-            return
-        self._path: str = self._resolve_path(
-            self._expand_dat_path(path, overwrite=overwrite))
-        self._spec: Dict = spec or {}
-        Dat.set(self._spec, MAIN_CLASS, self.__class__.__name__)
-        if not os.path.exists(self._path):
-            os.makedirs(self._path)
-        spec = self.get_spec()
-        try:
-            txt = json.dumps(spec, indent=2)
-        except Exception as e:
-            raise Exception(f"Error non-JSON in Dat.spec: {e}\nSPEC={spec}")
-        with open(os.path.join(self._path, SPEC_JSON), "w") as out:
-            out.write(txt)
-            out.write("\n")
+        else:
+            raise Exception("Use Dat.create() to create a new Dat instances.")
 
     def __repr__(self):
         kind = Dat.get(self._spec, MAIN_KIND, self.__class__.__name__)

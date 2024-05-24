@@ -23,4 +23,4 @@ def run_it(dat: Dat):
 
 
 if __name__ == "__main__":
-    do("sprint25")
+    do("hello_doubler")

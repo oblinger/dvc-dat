@@ -33,7 +33,7 @@ def spec1():
 
 @pytest.fixture
 def dat1(spec1):
-    return Dat(spec=spec1, path=TMP_PATH, overwrite=True)
+    return Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
 
 
 @pytest.fixture
@@ -127,7 +127,7 @@ class TestTemplatedDatCreationAndDeletion:
 
 class TestDatAccessors:
     def test_path_accessors(self, spec1):
-        dat = Dat(spec=spec1, path="any/path/goes/here/my_dat")
+        dat = Dat.create(spec=spec1, path="any/path/goes/here/my_dat")
         assert dat.get_path() == f"{dat_config.dat_folder}/any/path/goes/here/my_dat"
         assert dat.get_path_name() == "any/path/goes/here/my_dat"
         assert dat.get_path_tail() == "my_dat"
@@ -135,7 +135,7 @@ class TestDatAccessors:
 
     def test_spec_and_result_accessors(self, spec1):
         my_name = "any/path/my_dat"
-        dat = Dat(spec=spec1, path=my_name)
+        dat = Dat.create(spec=spec1, path=my_name)
         assert dat.get_spec() == spec1
         assert dat.get_results() == {}
         Dat.set(dat.get_results(), "main.my_key1", "my_val1")
@@ -147,15 +147,15 @@ class TestDatAccessors:
 
 class TestDatCreationFromStaticFolders:
     def test_create_with_spec(self, spec1):
-        assert Dat(path=TMP_PATH, spec=spec1), "Couldn't create Persistable"
+        assert Dat.create(path=TMP_PATH, spec=spec1), "Couldn't create Persistable"
 
     def test_create_with_spec_and_path(self, spec1):
-        assert Dat(path=TMP_PATH, spec=spec1), "Couldn't create Persistable"
+        assert Dat.create(path=TMP_PATH, spec=spec1), "Couldn't create Persistable"
 
 
 class TestCreateSaveAndLoad:
     def test_create(self, spec1):  # Creation needed to work for these tests
-        assert Dat(path=TMP_PATH, spec=spec1), "Couldn't create Persistable"
+        assert Dat.create(path=TMP_PATH, spec=spec1), "Couldn't create Persistable"
 
     def test_get(self, spec1):
         assert Dat.get(spec1, ["main", "my_key1"]) == "my_val1"
@@ -179,12 +179,12 @@ class TestCreateSaveAndLoad:
         assert Dat.get(spec1, ["level1", "level2", "level3", "lev4"]) == "val"
 
     def test_persistable_get_set(self, spec1):
-        dat = Dat(spec=spec1, path=TMP_PATH)
+        dat = Dat.create(spec=spec1, path=TMP_PATH)
         assert Dat.get(dat, ["main", "my_key1"]) == "my_val1"
         assert Dat.get(dat, ["main"]) == spec1["main"]
 
     def test_gets(self, spec1):
-        dat = Dat(spec=spec1, path=TMP_PATH)
+        dat = Dat.create(spec=spec1, path=TMP_PATH)
         assert Dat.gets(dat, "main.my_key1", "main") == [
             "my_val1",
             spec1["main"],
@@ -201,7 +201,7 @@ class TestCreateSaveAndLoad:
 
 class TestDatLoadingAndSaving:
     def test_create(self):
-        assert Dat(spec={}, path=TMP_PATH), "Couldn't create Persistable"
+        assert Dat.create(spec={}, path=TMP_PATH), "Couldn't create Persistable"
 
     def test_path_accessor(self, dat1):
         assert dat1._path == TMP_PATH
@@ -214,7 +214,7 @@ class TestDatLoadingAndSaving:
         assert True
 
     def test_load(self, spec1):
-        original = Dat(spec=spec1, path=TMP_PATH)
+        original = Dat.create(spec=spec1, path=TMP_PATH)
         original.save()
 
         dat = Dat.load(TMP_PATH)
@@ -225,24 +225,25 @@ class TestDatLoadingAndSaving:
 class TestDatContainers:
     def test_create(self):
         os.system(f"rm -r '{TMP_PATH}'")
-        container = DatContainer(path=TMP_PATH, spec={})
+        container = Dat.create(path=TMP_PATH, spec={"main": {"class": "DatContainer"}})
         assert isinstance(container, DatContainer)
         assert container.get_dat_paths() == []
         assert container.get_dats() == []
 
     def test_save_empty_container(self):
-        container = DatContainer(path=TMP_PATH, spec={})
+        container = Dat.create(path=TMP_PATH, spec={"main": {"class": "DatContainer"}})
         container.save()
         assert Dat.get(container._spec, MAIN_CLASS) == "DatContainer"
 
     def test_composite_dat_container(self):
-        container = DatContainer(path=TMP_PATH, spec={}, overwrite=True)
+        container = Dat.create(path=TMP_PATH, spec={"main": {"class": "DatContainer"}},
+                               overwrite=True)
         container.save()
         for i in range(10):
             name = f"sub_{i}"
             spec = {}
             Dat.set(spec, "main.my_nifty_name", name)
-            sub = Dat(path=os.path.join(container._path, name), spec=spec)
+            sub = Dat.create(path=os.path.join(container._path, name), spec=spec)
             sub.save()
 
         reload: DatContainer[Dat] = DatContainer.load(TMP_PATH)
