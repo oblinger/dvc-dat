@@ -243,7 +243,7 @@ class Dat(object):
         try:
             txt = json.dumps(spec, indent=2)
         except Exception as e:
-            raise Exception(f"Error non-JSON data in Dat.spec: {e}\nSPEC={spec}")
+            raise Exception(f"Non-JSON data in Dat.spec: {e}\nSPEC={spec}")
         with open(os.path.join(path, SPEC_JSON), "w") as out:
             out.write(txt)
             out.write("\n")
@@ -292,7 +292,7 @@ class Dat(object):
         """Flags a Dat to have a version of its folder's contents saved
         to in the backing store.
         """
-        if self._result:
+        if True or self._result:
             with open(os.path.join(self._path, RESULT_JSON), "w") as out:
                 out.write(json.dumps(self._result, indent=2))
 

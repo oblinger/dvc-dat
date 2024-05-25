@@ -13,7 +13,7 @@ The real multi-stage pipe might can be patterned from this example with
 # It specifies that all stages will use "fake_mcproc_pass" by default,
 # and constructs its output folders by overwriting "mspipe" in the CWD
 # (specific multistage pipes will usually over-ride this to direct output elsewhere).
-hello_mspipe = {
+main = {
     "main": {                          # Section controls execution of whole pipeline
         "kind": "Mspipe",              # "subtype" common to all multi-stage runs
         "class": "DatContainer",       # The python class for a multi-stage runs
@@ -22,11 +22,11 @@ hello_mspipe = {
     "common": {
         "main": {
             "kind": "Mcproc",                  # Default "subtype" for all mcproc runs
-            "base": "hello_std_args_ex",       # Default parameters for an mcproc run
+            "base": "hello_std_args",          # Default parameters for an mcproc run
             "do": "hello_mspipe.fake_mcproc_runner",  # Runs one mcproc stage
         }
     },
-    "stages": {}                         # Section defines stages of the pipeline
+    "stages": {}                               # Section defines stages of the pipeline
 }
 
 
@@ -49,9 +49,12 @@ def mspipe_build(dc: DatContainer):
 
 def msproc_run(dc: DatContainer):
     """Sequentially runs each stage in the pipeline."""
-    for stage in dc.get_dat_paths():
-        do(stage)
-    dc.save()
+    for stage_name, stage_spec in dc.get_spec()["stages"].items():
+        dat_name = f"{dc.get_path_name()}/{stage_name}"
+        stage_dat = Dat.load(dat_name)
+        print(f"Running {dat_name}")
+        do.run_dat(stage_dat)
+    return f"Ran {len(dc.get_spec()['stages'])} stages in {dc.get_path_name()}"
 
 
 def fake_mcproc_runner(dat: Dat):
@@ -74,7 +77,6 @@ def fake_mcproc_runner(dat: Dat):
             path = os.path.join(dat.get_path(), template[2:])
             with open(path) as f:
                 return f.read()
-    name = Dat.get(dat, "main.name")
     outputs = Dat.get(dat, "outputs")
     for path_spec, output_spec in outputs.items():
         path = os.path.join(dat.get_path(), path_spec)

@@ -27,15 +27,18 @@ from dvc_dat.dat import Dat
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
 _DO_ERROR_FLAG = tuple("multiple loadable modules have this same name")
 _DO_NULL = tuple(["-no-value-"])
-_MAIN = "main"                  # default module var to use when none specified
+_MAIN = "main"                   # default module var to use when none specified
 
 # Dat Template Parameters
-_MAIN_BASE = "main.base"        # the base spec to expand
-_MAIN_PATH = "main.path"        # the template for the dat's path
+_MAIN_BASE = "main.base"         # the base spec to expand
+_MAIN_PATH = "main.path"         # the template for the dat's path
 _MAIN_PATH_OVERWRITE = "main.path_overwrite"  # overwrite the path
-_MAIN_DO = "main.do"            # the main fn to execute
-_MAIN_ARGS = "main.args"        # prefix args for the main.do method
-_MAIN_KWARGS = "main.kwargs"    # default kwargs for the main.do method
+_MAIN_DO = "main.do"             # the main fn to execute
+_MAIN_ARGS = "main.args"         # prefix args for the main.do method
+_MAIN_KWARGS = "main.kwargs"     # default kwargs for the main.do method
+# _MAIN_RESULT = "main.result"    # the result of the main.do, stored in __results__.json
+_MAIN_RUN_AT = "main.run_at"     # the time at with main.do was run
+_MAIN_DURATION = "main.duration" # the duration of the main.do run
 
 Spec = Dict[str, Any]
 
@@ -102,12 +105,15 @@ class DoManager(object):
         argument, then specified args and kwargs after that.
         """
         obj = self.load(do_spec) if isinstance(do_spec, str) else do_spec
-        if callable(obj):
-            result = obj(*args, **kwargs)
-            return result
-        else:
-            dat = self.dat_from_template(spec=obj, args=args, kwargs=kwargs)
-            return self.run_dat(dat)
+        try:
+            if callable(obj):
+                result = obj(*args, **kwargs)
+                return result
+            else:
+                dat = self.dat_from_template(spec=obj)
+                return self.run_dat(dat, *args, **kwargs)
+        except Exception as e:
+            raise Exception(F"In {do_spec!r}, {e}")
 
     def load(self, dotted_name: str, *, default: Any = _DO_NULL, kind: Type = None,
              context=None) -> Any:
@@ -136,7 +142,8 @@ class DoManager(object):
             #     raise Exception(F"--Error loading {dotted_name!r}{ctx}") from e
 
             if obj == _DO_ERROR_FLAG:
-                raise Exception(F"DO: Module {prefix!r} is defined multiple times.{ctx}")
+                raise Exception(
+                    F"DO: Module {prefix!r} is defined multiple times.{ctx}")
             elif isinstance(obj, ModuleType):
                 if len(parts) < 2:
                     result = getattr(obj, _MAIN) if hasattr(obj, _MAIN) else None
@@ -165,7 +172,7 @@ class DoManager(object):
                 elif obj is None:
                     raise Exception(F"DO: Module {prefix!r} not found{ctx}")
                 else:
-                    name = dotted_name[len(prefix)+1:]
+                    name = dotted_name[len(prefix)+1:] or _MAIN
                     o = obj.__file__ if isinstance(obj, ModuleType) else obj
                     raise Exception(F"do: value {name!r} is missing from {o!r}")
             if kind and not isinstance(result, kind):
@@ -173,7 +180,7 @@ class DoManager(object):
                                 F"but found {result!r}")
             return copy.deepcopy(result) if isinstance(result, dict) else result
         except Exception as e:
-            raise Exception(F"{e}  WHILE loading {dotted_name!r}{ctx}")
+            raise e from Exception(F"WHILE loading {dotted_name!r}{ctx}")
 
     def add_do_folder(self, do_folder):
         """Sets the folder where the loadable python objects are found, and clears all
@@ -235,7 +242,7 @@ class DoManager(object):
                                                             base])
             result = self.base_objects[base]
         elif default is _DO_NULL:
-            raise Exception(f"The file {base + '...'!r} is not defined.")
+            raise Exception(f"The do base file {base + '...'!r} is not defined.")
         else:
             result = default
         if isinstance(result, dict):
@@ -302,40 +309,42 @@ class DoManager(object):
             self,
             spec: Spec,
             *,
-            path: str = None,
-            args: Tuple[Any, ...] = None,
-            kwargs: Dict[str, Any] = None,
-            ctx: str = ""
+            path: str = None
     ) -> Dat:
         """Creates a mew Dat object from a template spec."""
         spec, count = copy.deepcopy(spec), 1
-        Dat.set(spec, _MAIN_ARGS, args or [])
-        Dat.set(spec, _MAIN_KWARGS, kwargs or {})
+        # Dat.set(spec, _MAIN_ARGS, args or [])
+        # Dat.set(spec, _MAIN_KWARGS, kwargs or {})
         path = path or Dat.get(spec, _MAIN_PATH)
         overwrite = Dat.get(spec, _MAIN_PATH_OVERWRITE, False) and \
             path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
-        try:
-            spec = self.expand_spec(spec)
-        except ValueError as e:
-            raise Exception(F"DO - Error during expansion of {ctx!r}: {e}")
+        # try:
+        spec = self.expand_spec(spec)
+        # except Exception as e:
+        #    raise Exception(F"DO - Error during expansion of {ctx!r}: {e}")
         path = Dat._expand_dat_path(path)  # noqa
         return Dat.create(path=path, spec=spec, overwrite=overwrite)
 
-    def run_dat(self, dat: Dat, ctx: str = "") -> Any:
+    def run_dat(self, dat: Dat, *args, **kwargs) -> Any:
         """Runs the main.do method of an instantiated object."""   # noqa
         obj = dat.get_spec()
         try:
             fn_spec = Dat.get(obj, _MAIN_DO)
         except ValueError:
-            raise Exception(F"DO: Error {ctx!r} is not a callable or config")
+            raise Exception(F"DO: Error {fn_spec!r} is not a callable or config")
         if isinstance(fn_spec, str):
             fn_spec = self.load(fn_spec)
         if not callable(fn_spec):
-            raise Exception(F"'{_MAIN_DO}' in {ctx!r} of type {type(fn_spec)} "
+            raise Exception(F"'{_MAIN_DO}' in {dat!r} of type {type(fn_spec)} "
                             + "is not callable")
-        args = Dat.get(obj, _MAIN_ARGS) or []
-        kwargs = Dat.get(obj, _MAIN_KWARGS) or {}
         result = fn_spec(dat, *args, **kwargs)
+        if args:
+            Dat.set(dat.get_results(), _MAIN_ARGS, args)
+        if kwargs:
+            Dat.set(dat.get_results(), _MAIN_KWARGS, kwargs)
+        Dat.set(dat.get_results(), _MAIN_RUN_AT, "at")
+        Dat.set(dat.get_results(), _MAIN_DURATION, "for")
+        dat.save()
         return result
 
 
