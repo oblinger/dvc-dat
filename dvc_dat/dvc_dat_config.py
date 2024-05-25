@@ -6,6 +6,7 @@ from typing import Dict, Any
 _DAT_FILE = ".datconfig"
 _DAT_FOLDER_KEY = "dat_data_folder"
 _DO_FOLDER_KEY = "do_folder"
+_MOUNTS_KEY = "mounts"
 
 
 class DatConfig(object):
@@ -20,7 +21,30 @@ class DatConfig(object):
     do_folder: str
     dat_folder: str
 
-    def _lookup_path(self, folder_path, key, default=None):
+    def __init__(self, folder=None):
+        self.folder = folder or os.getcwd()
+        while True:
+            if os.path.exists(config := os.path.join(self.folder, _DAT_FILE)):
+                try:
+                    with open(config, 'r') as f:
+                        self.config = json.load(f)
+                except json.JSONDecodeError as e:
+                    raise Exception(f"Error loading .datconfig: {e}")
+                break
+            if self.folder == '/':
+                self.folder = os.getcwd()
+                break
+            self.folder = os.path.dirname(self.folder)
+
+        self.do_folder = self._lookup_path(self.folder, _DO_FOLDER_KEY)
+        self.dat_folder = self._lookup_path(self.folder, _DAT_FOLDER_KEY, "dat_data")
+        # self.config = {}
+        # ### dvc_dat.dat.data_folder = self.dat_folder
+        # print(F"# DO_FLDR = {self.do_folder}\n# DAT_DATA = {self.dat_folder}")
+        # assert self.do_folder
+        assert self.dat_folder
+
+    def _lookup_path(self, folder_path, key, default=None) -> str:
         suffix = self.config[key] if key in self.config else default
         if suffix:
             path = os.path.join(folder_path, suffix)
@@ -28,28 +52,6 @@ class DatConfig(object):
         else:
             path = None  # os.path.join(os.getcwd(), default)
         return path
-
-    def __init__(self, folder=None):
-        self.config = {}
-        folder = folder or os.getcwd()
-        while True:
-            if os.path.exists(config := os.path.join(folder, _DAT_FILE)):
-                try:
-                    with open(config, 'r') as f:
-                        self.config = json.load(f)
-                except json.JSONDecodeError as e:
-                    raise Exception(f"Error loading .datconfig: {e}")
-                break
-            if folder == '/':
-                folder = os.getcwd()
-                break
-            folder = os.path.dirname(folder)
-        self.do_folder = self._lookup_path(folder, _DO_FOLDER_KEY)
-        self.dat_folder = self._lookup_path(folder, _DAT_FOLDER_KEY, "dat_data")
-        # ### dvc_dat.dat.data_folder = self.dat_folder
-        # print(F"# DO_FLDR = {self.do_folder}\n# DAT_DATA = {self.dat_folder}")
-        # assert self.do_folder
-        assert self.dat_folder
 
 
 dat_config = DatConfig()

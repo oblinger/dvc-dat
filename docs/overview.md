@@ -67,24 +67,24 @@ It has one key class and four key functions:
 | Method                          | Description                                  |
 |---------------------------------|----------------------------------------------|
 | (NAME, *args, **kwargs) -> Any  | Loads python fn and calls it.                |
-| .dat_from_template(path=,spec=) | Dat.creates from expanded spec.              |
 | .load(NAME) -> Any              | Loads Python source-code obj by dotted.name  |
 | .mount(module=, at=)            | Registers a python module by name            |
 | .mount(file=, at=)              | Registers a .json, .yaml, or .py file        |
 | .mount(value=, at=)             | Registers structured value in do space       |
 | .mount(files_shallowly=, at=)   | Registers ALL .json, .yaml, or .py shallowly | 
 | .get_module(BASE) -> MODULE     | Load a python module from a string spec      |
-| .set_do_folder(PATH) -> None    | Set the folder to load python objects from.  |
+| .add_do_folder(PATH) -> None    | Set the folder to load python objects from.  |
 | .get_base_object(BASE) -> Any   | Get the base object based on it name.        |
 | .merge_configs(BASE, override)  | Merge a config with an override.             |
 | .expand_spec(SPEC) -> SPEC      | Recursively merges spec with base spec.      |
+| .dat_from_template(path=,spec=) | Dat.creates from an expanded spec.           |
 
 
 #### DAT_TOOLS - Data Frame manipulation
 
 |                                                |                            |
 |------------------------------------------------|----------------------------|
-| dt.from_dat([Dat, ...], [point_fn, ...]) -> DF | Applies point_fns to dats |
+| dt.from_dat([Dat, ...], [point_fn, ...]) -> DF | Applies point_fns to dats  |
 | dt.to_excel(DF, PATH) -> None                  | Save a DF to an excel file |
 
     

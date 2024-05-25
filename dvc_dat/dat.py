@@ -182,8 +182,7 @@ class Dat(object):
             path = name_or_path
         elif os.path.exists(path := os.path.join(cwd or os.getcwd(), name_or_path)):
             pass
-        elif os.path.exists(path := os.path.join(dat_config.dat_folder,
-                                                 Dat._resolve_path(name_or_path))):
+        elif os.path.exists(path := Dat._resolve_path(name_or_path)):
             pass
         else:
             raise Exception(f"LOAD_DAT: Could not find {name_or_path!r}")
@@ -208,30 +207,11 @@ class Dat(object):
         return dat
 
     @classmethod
-    def create(cls, path: str, spec: Spec, *, overwrite: bool = False) -> "Dat":
-        """Creates a new Dat with the specified name and spec dict."""
-        path: str = Dat._resolve_path(
-            Dat._expand_dat_path(path, overwrite=overwrite))
-        spec: Dict = spec or {}
-        # Dat.set(spec, MAIN_CLASS, cls.__name__)
-        if not os.path.exists(path):
-            os.makedirs(path)
-        try:
-            txt = json.dumps(spec, indent=2)
-        except Exception as e:
-            raise Exception(f"Error non-JSON data in Dat.spec: {e}\nSPEC={spec}")
-        with open(os.path.join(path, SPEC_JSON), "w") as out:
-            out.write(txt)
-            out.write("\n")
-
-        return Dat._make_dat_instance(path, spec)
-
-    def __init__(self,
-                 *,
-                 path: str = None,
-                 spec: Dict = None,
-                 overwrite: bool = False,
-                 _no_backing: bool = False):
+    def create(cls, *,
+               path: str = None,
+               spec: Spec = None,
+               overwrite: bool = False
+               ) -> "Dat":
         """Creates a new Dat with the specified spec dict and backing folder at path.
 
         Args:
@@ -254,6 +234,25 @@ class Dat(object):
             {cwd}    -- the current working directory
             {unique} -- a counter or UUID that makes the entire path unique.
         """
+        path: str = Dat._resolve_path(
+            Dat._expand_dat_path(path, overwrite=overwrite))
+        spec: Dict = spec or {}
+        if not os.path.exists(path):
+            os.makedirs(path)
+        try:
+            txt = json.dumps(spec, indent=2)
+        except Exception as e:
+            raise Exception(f"Error non-JSON data in Dat.spec: {e}\nSPEC={spec}")
+        with open(os.path.join(path, SPEC_JSON), "w") as out:
+            out.write(txt)
+            out.write("\n")
+        return Dat._make_dat_instance(path, spec)
+
+    def __init__(self,
+                 *,
+                 path: str = None,
+                 spec: Dict = None,
+                 _no_backing: bool = False):
         super().__init__()
         self._result = {}
         if _no_backing:
@@ -335,7 +334,9 @@ class Dat(object):
                          variables: Dict[str, Any] = None,
                          overwrite: bool = False) -> str:
         """
-        Expands a path spec into a full path.  See __init__ for expansion rules.
+        Expands a path spec into a full path.
+
+        See __init__ for expansion rules.
 
         Args:
             path_spec (str): The path specification string with placeholders.
@@ -349,6 +350,7 @@ class Dat(object):
             _expand_path_spec("/data/{YYYY}/{MM}/{DD}/file_{unique}.txt", {})
             -> "/data/2024/05/03/file_123e4567-e89b-12d3-a456-426614174000.txt"
         """
+        from . import dat_config
         if not path_spec:
             path_spec = _DEFAULT_PATH_TEMPLATE
         if "{unique}" not in path_spec:
@@ -363,7 +365,8 @@ class Dat(object):
                 "unique": "" if count == 1 else f"_{count}",
                 "cwd": os.getcwd(),  # Current working directory
                 **(variables or {})}
-            expanded_path = path_spec.format_map(format_vars)
+            expanded_path = os.path.join(dat_config.dat_folder,
+                                         path_spec.format_map(format_vars))
             if not os.path.exists(expanded_path):
                 return expanded_path
             elif overwrite:

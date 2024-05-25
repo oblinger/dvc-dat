@@ -11,7 +11,7 @@ from dvc_dat import do, DoManager
 
 @pytest.fixture
 def empty_do_mgr():
-    return DoManager(do_folder=None)
+    return DoManager()
 
 
 def run_capture(line: str) -> str:

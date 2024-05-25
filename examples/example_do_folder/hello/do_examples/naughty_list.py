@@ -6,14 +6,17 @@ and verifies they are (1) properly documented, (2) they execute their full regre
 Any metric, tool, dataset that is not fully compliant is indicated on the naughty list.
 """
 
-from dvc_dat import load_dat
+from dvc_dat import do
 
 
 def main():
     # this double for loop checks docs exist, regression test exists, and passes etc.
-    for section, supported_dats in load_dat("supported").items():
+    for section, supported_dats in do.load("supported").items():
         for name in supported_dats:
-            dat = load_dat(name)
+            dat = do.load(name, default=None)
+            if dat is None:
+                print(F"   {section} {name} does not exist")
+                continue
             if not hasattr(dat, "__DOC__"):
                 print(F"   {section} {name} does not have a valid doc string")
             # if not hasattr(dat, ):

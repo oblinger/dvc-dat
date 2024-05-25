@@ -20,6 +20,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Type, Union, Any, Dict, Callable, Tuple, List
 
+from dvc_dat import DatConfig
 from dvc_dat.dat import Dat
 
 # The loadable "do" fns, scripts, configs, and methods are in the do_folder
@@ -77,47 +78,10 @@ class DoManager(object):
     do_fns: Dict[str, Dict[str, Callable]]             # externally defined fns
     registered_values: Union[None, Dict[str, Any]]     # values to be returned by load
 
-    def dat_from_template(
-            self,
-            spec: Spec,
-            *,
-            path: str = None,
-            args: Tuple[Any, ...] = None,
-            kwargs: Dict[str, Any] = None,
-            ctx: str = ""
-    ) -> Dat:
-        """Instantiates an object from a template spec."""
-        spec, count = copy.deepcopy(spec), 1
-        Dat.set(spec, _MAIN_ARGS, args or [])
-        Dat.set(spec, _MAIN_KWARGS, kwargs or {})
-        path = path or Dat.get(spec, _MAIN_PATH)
-        try:
-            spec = self.expand_spec(spec)
-        except ValueError as e:
-            raise Exception(F"DO - Error during expansion of {ctx!r}: {e}")
-        path = Dat._expand_dat_path(path)  # noqa
-        return Dat.create(path=path, spec=spec)
-
-    def run_dat(self, dat: Dat, ctx: str = "") -> Any:
-        """Runs the main.do method of an instantiated object."""   # noqa
-        obj = dat.get_spec()
-        try:
-            fn_spec = Dat.get(obj, _MAIN_DO)
-        except ValueError:
-            raise Exception(F"DO: Error {ctx!r} is not a callable or config")
-        if isinstance(fn_spec, str):
-            fn_spec = self.load(fn_spec)
-        if not callable(fn_spec):
-            raise Exception(F"'{_MAIN_DO}' in {ctx!r} of type {type(fn_spec)} "
-                            + "is not callable")
-        args = Dat.get(obj, _MAIN_ARGS) or []
-        kwargs = Dat.get(obj, _MAIN_KWARGS) or {}
-        result = fn_spec(dat, *args, **kwargs)
-        return result
-
-    def __init__(self, *, do_folder=None):
-        self.set_do_folder(do_folder)
+    def __init__(self):
         self.base_objects = {}
+        self.base_locations = {}
+        self.registered_values = None
 
     def __call__(self, do_spec: Union[Spec, str], *args, **kwargs) -> Any:
         """Loads and executes a 'do-method'.
@@ -143,62 +107,6 @@ class DoManager(object):
         else:
             dat = self.dat_from_template(spec=obj, args=args, kwargs=kwargs)
             return self.run_dat(dat)
-
-    def set_do_folder(self, do_folder):
-        """Sets the folder where the loadable python objects are found, and clears all
-        cached modules and values."""
-        self.do_folder = do_folder
-        self.base_locations = _build_loadables_index(do_folder)
-        self.registered_values = None
-
-    def get_base(self, base: str, default: Any = _DO_NULL) -> Any:
-        """Returns the module or base object associated with a given base name.
-
-        Parameters
-        ----------
-        base: str
-            The base name to look up
-        default: Any
-            The value to return if the base name is not found
-        """
-        if base in self.base_objects:
-            result = self.base_objects[base]
-        elif base in self.base_locations:
-            self.base_objects[base] = _load_base_entity(base, self.base_locations[base])
-            result = self.base_objects[base]
-        elif default is _DO_NULL:
-            raise Exception(f"The file {base+'...'!r} is not defined.")
-        else:
-            result = default
-        if isinstance(result, dict):
-            result = copy.deepcopy(result)
-        return result
-
-    def merge_configs(self, base: Spec, override: Spec) -> Spec:
-        """Recursively merges the 'override' dict trees over 'base' tree of dicts."""
-        if isinstance(override, dict) and isinstance(base, dict):
-            merge = dict(base)
-            for k, v in override.items():
-                merge[k] = self.merge_configs(merge.get(k), v)
-            # if BASE in base:
-            #     merge[BASE] = base[BASE]
-            return merge
-        elif override:
-            return override
-        else:
-            return base
-
-    def expand_spec(self, spec: Union[Spec | str], context: str = None) -> Spec:
-        """Expands a spec by recursively loading and expanding its 'main.base' spec,
-        and then merging its keys as an override to the expanded base."""
-        if isinstance(spec, str):
-            spec = self.load(spec, context=context)
-            spec = copy.deepcopy(spec)
-        if base := Dat.get(spec, _MAIN_BASE):
-            sub_spec = self.expand_spec(base, context=context)
-            return self.merge_configs(sub_spec, spec)
-        else:
-            return spec
 
     def load(self, dotted_name: str, *, default: Any = _DO_NULL, kind: Type = None,
              context=None) -> Any:
@@ -266,6 +174,13 @@ class DoManager(object):
         except Exception as e:
             raise Exception(F"{e}  WHILE loading {dotted_name!r}{ctx}")
 
+    def add_do_folder(self, do_folder):
+        """Sets the folder where the loadable python objects are found, and clears all
+        cached modules and values."""
+        self.do_folder = do_folder
+        self.base_locations = _build_loadables_index(do_folder)
+        self.registered_values = None
+
     def mount(self, *,
               at: str,
               file: str = None,
@@ -283,12 +198,75 @@ class DoManager(object):
             self.reg_module(at, module)
         elif value:
             self.reg_value(at, value)
-        elif files_shallowly:
-            orig = self.base_locations
-            self.base_locations = _build_loadables_index(files_shallowly)
-            self.base_locations.update(orig)
         else:
             assert False
+
+    def mount_all(self, mount_commands: List[Dict[str, Any]], relative_to: str):
+        """Executes a sequence of mount and add_do_folder commands like these:
+            {"at": "base.dotted.name", "file": "path/to/file.py"}
+            {"at": "base.dotted.name", "module": "module_name"}
+            {"at": "base.dotted.name", "value": "value"}
+            {"add_do_folder": "path/to/folder"}
+
+        NOTE: Currently modules and files can only be loaded at the root level.
+        """
+        for cmd in mount_commands:
+            if do_folder := cmd.get("add_do_folder"):
+                self.add_do_folder(os.path.join(relative_to, do_folder))
+            else:
+                self.mount(**cmd)
+
+    def get_base(self, base: str, default: Any = _DO_NULL) -> Any:
+        """Returns the module or base object associated with a given base name.
+
+        Parameters
+        ----------
+        base: str
+            The base name to look up
+        default: Any
+            The value to return if the base name is not found
+        """
+        if base in self.base_objects:
+            result = self.base_objects[base]
+        elif base in self.base_locations:
+            self.base_objects[base] = _load_base_entity(base,
+                                                        self.base_locations[
+                                                            base])
+            result = self.base_objects[base]
+        elif default is _DO_NULL:
+            raise Exception(f"The file {base + '...'!r} is not defined.")
+        else:
+            result = default
+        if isinstance(result, dict):
+            result = copy.deepcopy(result)
+        return result
+
+    def merge_configs(self, base: Spec, override: Spec) -> Spec:
+        """Recursively merges the 'override' dict trees over 'base' tree of dicts."""
+        if isinstance(override, dict) and isinstance(base, dict):
+            merge = dict(base)
+            for k, v in override.items():
+                merge[k] = self.merge_configs(merge.get(k), v)
+            # if BASE in base:
+            #     merge[BASE] = base[BASE]
+            return merge
+        elif override:
+            return override
+        else:
+            return base
+
+    def expand_spec(self, spec: Union[Spec | str],
+                    context: str = None) -> Spec:
+        """Expands a spec by recursively loading and expanding its 'main.base' spec,
+        and then merging its keys as an override to the expanded base."""
+        if isinstance(spec, str):
+            spec = self.load(spec, context=context)
+            spec = copy.deepcopy(spec)
+        if base := Dat.get(spec, _MAIN_BASE):
+            sub_spec = self.expand_spec(base, context=context)
+            return self.merge_configs(sub_spec, spec)
+        else:
+            return spec
 
     def reg_module(self, at: str, module_spec: Union[str, ModuleType], *,
                         allow_redefine=False):
@@ -319,50 +297,43 @@ class DoManager(object):
         #     self.base_objects[base] = {}
         # # print(f "Registered {dotted_name} as {value} in {self}")
 
-    # def mount(self, *,
-    #           at: str,
-    #           file: str = None,
-    #           module: str = None,
-    #           value: Any = None,
-    #           files_shallowly: str = None,
-    #           ):
-    #     """Mounts a value at a given location."""
-    #     node = _DoNode.traverse(self._root_node, at)
-    #     if 1 != sum(bool(x) for x in (file, module, value, files_shallowly)):
-    #         raise Exception("MOUNT: Exactly one of 'file', 'module', 'value', or " +
-    #                         "'files_shallowly' must be specified.")
-    #     elif file:
-    #         node.source = file
-    #     elif module:
-    #         node.source = module
-    #     elif value:
-    #         node.value = value
-    #     elif files_shallowly:
-    #         pass
-    #     else:
-    #         assert False
-    #
-    # def grab(self, path, default=None):
-    #     parts, idx = path.split("."), 0
-    #     node, value = self._root_node, None
-    #     while idx < len(parts):
-    #         idx += 1
-    #         if parts[idx] in node.children:
-    #             node = node.children[parts[idx]]
-    #         else:
-    #             break
-    #     value = node.value
-    #     if value is _nil:
-    #         value = _load_base_entity(7777, node.source)
-    #     if isinstance(value, ModuleType):
-    #         pass
-    #     while idx < len(parts):
-    #         if isinstance(value, dict):
-    #             value = value.get(parts[idx], _nil)
-    #         elif isinstance(value, list):
-    #             value = value[int(parts[idx])]
-    #         else:
-    #             return default  # or should this raise an exception?
+    def dat_from_template(
+            self,
+            spec: Spec,
+            *,
+            path: str = None,
+            args: Tuple[Any, ...] = None,
+            kwargs: Dict[str, Any] = None,
+            ctx: str = ""
+    ) -> Dat:
+        """Creates a mew Dat object from a template spec."""
+        spec, count = copy.deepcopy(spec), 1
+        Dat.set(spec, _MAIN_ARGS, args or [])
+        Dat.set(spec, _MAIN_KWARGS, kwargs or {})
+        path = path or Dat.get(spec, _MAIN_PATH)
+        try:
+            spec = self.expand_spec(spec)
+        except ValueError as e:
+            raise Exception(F"DO - Error during expansion of {ctx!r}: {e}")
+        path = Dat._expand_dat_path(path)  # noqa
+        return Dat.create(path=path, spec=spec)
+
+    def run_dat(self, dat: Dat, ctx: str = "") -> Any:
+        """Runs the main.do method of an instantiated object."""   # noqa
+        obj = dat.get_spec()
+        try:
+            fn_spec = Dat.get(obj, _MAIN_DO)
+        except ValueError:
+            raise Exception(F"DO: Error {ctx!r} is not a callable or config")
+        if isinstance(fn_spec, str):
+            fn_spec = self.load(fn_spec)
+        if not callable(fn_spec):
+            raise Exception(F"'{_MAIN_DO}' in {ctx!r} of type {type(fn_spec)} "
+                            + "is not callable")
+        args = Dat.get(obj, _MAIN_ARGS) or []
+        kwargs = Dat.get(obj, _MAIN_KWARGS) or {}
+        result = fn_spec(dat, *args, **kwargs)
+        return result
 
 
 def _load_base_entity(base, source_spec: str) -> Union[ModuleType, Spec]:
@@ -420,6 +391,7 @@ class _DoNode(object):
     class Kind(Enum):
         VALUE = 1
         LIVE_VALUE = 2
+
     def __init__(self):
         self.source = None
         self.value = None
@@ -576,15 +548,6 @@ def _get_flag(arg):
         return arg[1]
     else:
         return None
-
-
-# import dvc_dat
-# if not hasattr(dvc_dat, "dat_config"):
-#     dvc_dat.dat_config = dvc_dat.ml_dat_config.DatConfig()
-# dvc_dat.DoManager = DoManager
-# dvc_dat.do = dvc_dat.dodo = DoManager(do_folder=
-#           dvc_dat.ml_dat_config.dat_config.do_folder)
-# dvc_dat.argv = do_argv
 
 
 if __name__ == '__main__':

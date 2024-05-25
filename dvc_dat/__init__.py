@@ -1,23 +1,19 @@
-# do = "do is not defined"
-# print(f"__init__:  type of do is {type(do)}")
 import sys
 
-from .ml_dat_config import DatConfig
+from .dvc_dat_config import DatConfig
 from .do_fn import DoManager, do_argv
 
 dat_config = DatConfig()
-do = DoManager(do_folder=dat_config.do_folder)  # not available during load of do_fn
+do = DoManager()  # not available during load of do_fn
 
 from .dat import Dat, DatContainer, load_dat
 from . import dat_tools
 
-# do.register_module("dat_tools", dat_tools)
-# do.register_module("dt", dat_tools)
-# do.register_value("dt.list", dat_tools.cmd_list)
+do.mount_all(dat_config.config.get("mount_commands", []), relative_to=dat_config.folder)
 do.mount(module=dat_tools, at="dat_tools")
 do.mount(module=dat_tools, at="dt")
 do.mount(value=dat_tools.cmd_list, at="dt.list")
 do.mount(value=dat_tools.cmd_list, at="dat_tools.list")
 
-__all__ = ["dat_config", "Dat", "DatContainer", "load_dat", "DoManager",
-           "do", "do_argv", "dat_tools"]
+__all__ = ["dat_config", "Dat", "DatContainer", "DatConfig", "DoManager",
+           "do", "do_argv", "dat_tools", "load_dat"]
