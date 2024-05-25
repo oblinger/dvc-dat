@@ -9,20 +9,18 @@ DVC-DAT - Thin python wrapper for DVC-based ML-datasets and workflows
 
 
 
-
-
 ## OVERVIEW
 
 ML-DAT provides a simple way to manage data for machine learning projects.
 It has one key class and four key functions:
 
-1. **Dat class** -- named, DVC-version, folder with associated meta data and 
-    action-code bindings.
+1. **Dat class** -- A named, DVC-version, folder with associated metadata and 
+    python action bindings.
 
 2. **do function** -- maps source-code structures and function into a space of 
    dotted.name.strings for easy reference within text configuration files.
 
-3. **from_isdatance function** -- builds a pandas DataFrame by applying a set of 
+3. **from_dat function** -- builds a pandas DataFrame by applying a set of 
    metrics (python code-bindings) over a set of Dats.
 
 4. **to_excel function** -- slices and formats a pandas DataFrame into a collection 
@@ -36,38 +34,54 @@ It has one key class and four key functions:
 
 #### Manipulating dict trees
 
-| Method                                   | Description                 |
-|------------------------------------------|-----------------------------|
-| Dat.get(Dat/dict, [key1,...]) -> value | Get from tree of dict       |
-| Dat.get(Dat/dict, "dotted.key.name")   | Get using dotted.names      |
-| Dat.set(dict, [key1, key2, ...], value) | Sets into a tree of dict    |
-| Dat.set(dict, "dotted.key.path", value) | Set using dotted names      |
-| Dat.gets(Dat/dict, NAMES) -> VALUES    | Get multiple values at once |
-| Dat.sets(dict, ASSIGNMENTS)             | Set multiple values at once |
+| Method                                            | Description                 |
+|---------------------------------------------------|-----------------------------|
+| Dat.get(Dat/dict, [key1,...], [default]) -> value | Get from tree of dict       |
+| Dat.get(Dat/dict, "dotted.key.name", [default])   | Get using dotted.names      |
+| Dat.set(dict, [key1, key2, ...], value)           | Sets into a tree of dict    |
+| Dat.set(dict, "dotted.key.path", value)           | Set using dotted names      |
+| Dat.gets(Dat/dict, NAMES) -> VALUES               | Get multiple values at once |
+| Dat.sets(dict, ASSIGNMENTS)                       | Set multiple values at once |
 
 
-#### Managing data folders
+#### Managing Dat data folders
 
-| Method                          | Description                                      |
-|---------------------------------|--------------------------------------------------|
-| Dat.create(path=, spec=) -> Dat | Create a new Dat from path template and spec.    |
-| Dat.load(NAME) -> Dat           | Load a Dat by name                               |
-| .get_spec() -> Dict             | Get the spec of the Dat.                         |
-| .get_path() -> Path             | Get the path of the Dat.                         |
-| .get_path_name() -> str         | Get the name of the Dat (relative to repo)       |
-| .get_path_tail() -> str         | Get last part of path (used as Dat's short name) |
-| .save() -> None                 | Save the Dat to the filesystem.                  |
-| .delete() -> None               | Delete the Dat from the filesystem.              |
-| .copy(PATH) -> Dat              | Copy the Dat to a new location.                  |
-| .move(PATH) -> Dat              | Move the Dat to a new location.                  |
+| Method                          | Description                                    |
+|---------------------------------|------------------------------------------------|
+| Dat.create(path=, spec=) -> Dat | Create a new Dat from path template and spec.  |
+| Dat.load(NAME) -> Dat           | Load a Dat by name                             |
+| Dat.exists(NAME) -> bool        | Returns True iff named Dat exists              |
+| .get_spec() -> Spec             | Returns the spec Dict tree for this Dat.       |
+| .get_results() -> Spec          | Returns the results Dict tree for this Dat.    |
+| .get_path() -> Path             | Get the path of the Dat.                       |
+| .get_path_name() -> str         | Get the name of the Dat (relative to repo)     |
+| .get_path_tail() -> str         | Get last part of path (used as its short name) |
+| .save() -> None                 | Saves Dat's results to the filesystem.         |
+| .delete() -> None               | Delete the Dat from the filesystem.            |
+| .copy(NAME) -> Dat              | Copy the Dat to a new location.                |
+| .move(NAME) -> Dat              | Move the Dat to a new location.                |
+
+Note: NAME can be a full path, a path relative to the repo root or CWD.
+
+
+Dat Containers are Dats that recursively contain other Dats.
+
+| DatContainer Methods      | Description                                      |
+|---------------------------|--------------------------------------------------|
+| .get_dat_paths() -> [str] | Get the paths of all sub-Dats in the container.  |
+| .get_dats() -> [Dat]      | Loads and returns all the Dats in the container. |
 
 
 #### Loading objects from source-code
 
+A DoManager (usually accessed via the 'do' singelton) is used to load python 
+source code objects and functions.
+
 | Method                          | Description                                  |
 |---------------------------------|----------------------------------------------|
-| (NAME, *args, **kwargs) -> Any  | Loads python fn and calls it.                |
-| .load(NAME) -> Any              | Loads Python source-code obj by dotted.name  |
+| DoManager()                     | Creates a new do namespace.                  |
+| .load(NAME, default=) -> Any    | Loads Python source-code obj by dotted.name  |
+| (NAME, *args, **kwargs) -> Any  | Loads the named Python fn and calls it.     |
 | .mount(module=, at=)            | Registers a python module by name            |
 | .mount(file=, at=)              | Registers a .json, .yaml, or .py file        |
 | .mount(value=, at=)             | Registers structured value in do space       |
@@ -79,6 +93,7 @@ It has one key class and four key functions:
 | .expand_spec(SPEC) -> SPEC      | Recursively merges spec with base spec.      |
 | .dat_from_template(path=,spec=) | Dat.creates from an expanded spec.           |
 
+NAME is a dotted.name.string that refers to a python object or function.
 
 #### DAT_TOOLS - Data Frame manipulation
 

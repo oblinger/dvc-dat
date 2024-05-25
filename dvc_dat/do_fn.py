@@ -4,7 +4,6 @@
 The 'do' module provides a way to dynamically load and execute python code.
 
 See DoManager class for details.
-
 """
 
 import os
@@ -18,9 +17,8 @@ import yaml
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import Type, Union, Any, Dict, Callable, Tuple, List
+from typing import Type, Union, Any, Dict, Callable, List
 
-from dvc_dat import DatConfig
 from dvc_dat.dat import Dat
 
 # The loadable "do" fns, scripts, configs, and methods are in the do_folder
@@ -36,9 +34,9 @@ _MAIN_PATH_OVERWRITE = "main.path_overwrite"  # overwrite the path
 _MAIN_DO = "main.do"             # the main fn to execute
 _MAIN_ARGS = "main.args"         # prefix args for the main.do method
 _MAIN_KWARGS = "main.kwargs"     # default kwargs for the main.do method
-# _MAIN_RESULT = "main.result"    # the result of the main.do, stored in __results__.json
+# _MAIN_RESULT = "main.result"   # the result of the main.do, stored in __results__.json
 _MAIN_RUN_AT = "main.run_at"     # the time at with main.do was run
-_MAIN_DURATION = "main.duration" # the duration of the main.do run
+_MAIN_DURATION = "main.duration"  # the duration of the main.do run
 
 Spec = Dict[str, Any]
 
@@ -115,8 +113,12 @@ class DoManager(object):
         except Exception as e:
             raise Exception(F"In {do_spec!r}, {e}")
 
-    def load(self, dotted_name: str, *, default: Any = _DO_NULL, kind: Type = None,
-             context=None) -> Any:
+    def load(self,
+             dotted_name: str,
+             *,
+             default: Any = _DO_NULL,
+             kind: Type = None
+             ) -> Any:
         """Uses 'dotted_name' do find a "loadable" python object, and then dynamically
         load this object from within the loadables folder.
 
@@ -130,7 +132,6 @@ class DoManager(object):
         - If FILENAME.json or FILENAME.yaml is found, then it is loaded, and its
           parsed contents are returned.  (PART-NAME is ignored)
         """
-        ctx = "" if context is None else F" {context}"
         parts = dotted_name.split(".")
         prefix = parts[0]
         if self.registered_values and _DO_NULL != \
@@ -138,12 +139,9 @@ class DoManager(object):
             return copy.deepcopy(value) if isinstance(value, dict) else value
         obj = self.get_base(prefix, default=_DO_NULL if default == _DO_NULL else None)
         try:
-            # except Exception as e:
-            #     raise Exception(F"--Error loading {dotted_name!r}{ctx}") from e
-
             if obj == _DO_ERROR_FLAG:
                 raise Exception(
-                    F"DO: Module {prefix!r} is defined multiple times.{ctx}")
+                    F"DO: Module {prefix!r} is defined multiple times.")
             elif isinstance(obj, ModuleType):
                 if len(parts) < 2:
                     result = getattr(obj, _MAIN) if hasattr(obj, _MAIN) else None
@@ -151,12 +149,6 @@ class DoManager(object):
                     attr = parts[1]
                     result = getattr(obj, attr) if hasattr(obj, attr) else None
                     result = Dat.get(result, parts[2:])
-
-                # idx = 1 if len(parts) > 1 else 0
-                # attr = parts[idx]
-                # result = getattr(obj, attr) if hasattr(obj, attr) else None
-                # if len(parts) > 2:
-                #     result = Dat.get(result, parts[2:])
             elif len(parts) == 1:
                 result = obj
             elif isinstance(obj, dict):
@@ -164,13 +156,13 @@ class DoManager(object):
             elif obj is None:
                 return default
             else:
-                raise Exception(F"DO: Illegal value {obj!r} for {dotted_name}{ctx}")
+                raise Exception(F"DO: Illegal value {obj!r} for {dotted_name}")
 
             if result is None:
                 if default is not _DO_NULL:
                     return default
                 elif obj is None:
-                    raise Exception(F"DO: Module {prefix!r} not found{ctx}")
+                    raise Exception(F"DO: Module {prefix!r} not found")
                 else:
                     name = dotted_name[len(prefix)+1:] or _MAIN
                     o = obj.__file__ if isinstance(obj, ModuleType) else obj
@@ -180,7 +172,7 @@ class DoManager(object):
                                 F"but found {result!r}")
             return copy.deepcopy(result) if isinstance(result, dict) else result
         except Exception as e:
-            raise e from Exception(F"WHILE loading {dotted_name!r}{ctx}")
+            raise e from Exception(F"WHILE loading {dotted_name!r}")
 
     def add_do_folder(self, do_folder):
         """Sets the folder where the loadable python objects are found, and clears all
@@ -268,16 +260,16 @@ class DoManager(object):
         """Expands a spec by recursively loading and expanding its 'main.base' spec,
         and then merging its keys as an override to the expanded base."""
         if isinstance(spec, str):
-            spec = self.load(spec, context=context)
+            spec = self.load(spec)
             spec = copy.deepcopy(spec)
         if base := Dat.get(spec, _MAIN_BASE):
-            sub_spec = self.expand_spec(base, context=context)
+            sub_spec = self.expand_spec(base)
             return self.merge_configs(sub_spec, spec)
         else:
             return spec
 
     def reg_module(self, at: str, module_spec: Union[str, ModuleType], *,
-                        allow_redefine=False):
+            allow_redefine=False):
         """Specifies the module associated with a dotted name prefix.
 
         The module can be specified using
@@ -321,17 +313,17 @@ class DoManager(object):
         # try:
         spec = self.expand_spec(spec)
         # except Exception as e:
-        #    raise Exception(F"DO - Error during expansion of {ctx!r}: {e}")
+        #    raise Exception(F "DO - Error during expansion of {ctx!r}: {e}")
         path = Dat._expand_dat_path(path)  # noqa
         return Dat.create(path=path, spec=spec, overwrite=overwrite)
 
     def run_dat(self, dat: Dat, *args, **kwargs) -> Any:
         """Runs the main.do method of an instantiated object."""   # noqa
         obj = dat.get_spec()
-        try:
-            fn_spec = Dat.get(obj, _MAIN_DO)
-        except ValueError:
-            raise Exception(F"DO: Error {fn_spec!r} is not a callable or config")
+        # try:
+        fn_spec = Dat.get(obj, _MAIN_DO)
+        # except ValueError:
+        #     raise Exception(F"DO: Error {fn_spec!r} is not a callable or config")
         if isinstance(fn_spec, str):
             fn_spec = self.load(fn_spec)
         if not callable(fn_spec):
@@ -410,7 +402,7 @@ class _DoNode(object):
         self.children = {}
 
     @staticmethod
-    def mount(root: '_DoNode', path: List[str], kind, value: Any):
+    def mount(root: '_DoNode', path: List[str], _kind, _value: Any):
         node = root
         for part in path:
             if part not in node.children:

@@ -2,7 +2,7 @@ import os
 from typing import Union, Iterable, Dict, List, Any, Callable, Tuple
 
 from pandas import DataFrame, ExcelWriter, Series
-from dvc_dat import Dat, DatContainer, load_dat, do
+from dvc_dat import Dat, DatContainer, do
 
 """
 Helper functions for creating data frames and manipulating data frames.
@@ -48,7 +48,7 @@ def cmd_list(prefix: str = ""):
 
 
 def from_dat(source: Union[Dat, str, Iterable],
-              point_fns: Any) -> DataFrame:
+        point_fns: Any) -> DataFrame:
     """Creates a DataFrame from one or more Dats and a list of point_fns."""
     cube = Cube(dats=source, point_fns=point_fns)
     df = cube.get_df()
@@ -77,7 +77,7 @@ def to_excel(df: DataFrame, *,
     if formatted_columns:
         add_formatted_columns(df, formatted_columns)
     folder = folder or os.getcwd()
-    if not docs:       # saves as a single excel file
+    if not docs:       # saves as a single Excel file
         path = os.path.join(folder, f'{title or "output"}.xlsx')
         _create_sheets(path, df, "", sheets, columns, verbose, show)
         return path
@@ -128,6 +128,7 @@ def add_formatted_columns(df: DataFrame, format_cmds: List[str]):
         df[column_name] = df.apply(build_str, axis=1)
 
 
+# TODO rename dat_report
 def metrics_matrix(spec: Dat, *,
                    title: str = None,
                    folder: str = None,
@@ -241,7 +242,7 @@ class Cube(object):
         return DataFrame(self.points)
 
     def _add_dats(self, source: Union[Dat, str, Iterable],
-                   this_index: Union[int, str], indicies: Dict[str, str]) -> None:
+            this_index: Union[int, str], indicies: Dict[str, str]) -> None:
         """Recursively scans 'source' adding points derived from each md.Dat."""
         if isinstance(source, DatContainer):
             self._add_dats(source.get_dats(), source.get_path_name(), indicies)
@@ -268,7 +269,7 @@ class Cube(object):
                 point[_INDICIES] = sub_indicies
             self.points += points
         elif isinstance(source, str):
-            self._add_dats(load_dat(source), this_index, indicies)
+            self._add_dats(Dat.load(source), this_index, indicies)
         elif isinstance(source, List):
             for element in source:
                 self._add_dats(element, len(indicies) + 1, indicies)

@@ -6,7 +6,6 @@ from enum import Enum, auto
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 import yaml
 
-
 SPEC_JSON = "_spec_.json"
 SPEC_YAML = "_spec_.yaml"
 RESULT_JSON = "_result_.json"
@@ -14,10 +13,6 @@ MAIN_CLASS = "main.class"
 MAIN_KIND = "main.kind"
 MAIN_PATH_OVERWRITE = "main.path_overwrite"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
-
-
-# This default value is overridden by do._dat_setup()
-# data_folder = os.path.join(os.path.dirname(__file__), "dat_data")
 
 
 class DataState(Enum):
@@ -106,7 +101,7 @@ class Dat(object):
         return d or default_value
 
     @staticmethod
-    def set(source: dict, keys, value) -> None:
+    def set(source: Spec, keys, value) -> None:
         """Utility method into a recursive dict tree."""
         assert source is not None, "set method requires a non None dict"
         assert len(keys) > 0, "set method requires at least one key"
@@ -122,7 +117,7 @@ class Dat(object):
         source[keys[-1]] = value
 
     @staticmethod
-    def gets(source: Union["Dat", dict], *dotted_keys) -> List[Any]:
+    def gets(source: Union["Dat", Spec], *dotted_keys) -> List[Any]:
         assert source is not None, "gets method requires a non None dict"
         source_ = source._spec if isinstance(source, Dat) else source
         results = []
@@ -153,73 +148,18 @@ class Dat(object):
                     value = suffix
             Dat.set(source, keys, value)
 
-    @staticmethod
-    def exists(path: str) -> bool:
-        """Checks if a given Dat exists (by looking for its _spec_ file)."""
-        return os.path.exists(Dat._resolve_path(os.path.join(path, SPEC_JSON))) or \
-            os.path.exists(Dat._resolve_path(os.path.join(path, SPEC_YAML)))
-
-    @classmethod
-    def load(cls: Type[T], name_or_path: str, *,
-             cwd: Optional[str] = None, **kwargs) -> T:
-        """Loads (Instantiates) this Dat from disk.
-
-        Dat-loading is generally lazy, so its attributes are loaded and
-        cached only when accessed.
-
-        Dats are searched in the following order:
-        (1) as a fullpath to the folder of the Dat to load
-        (2) as a relative path from the current working directory or cwd parameter
-        (3) as a named dat under the DAT_ROOT folder
-        (4) as a named dat on S3 (LATER)
-
-        :param name_or_path: Either the fullpath to the folder of the Dat to
-            load or its name to be searched for
-        :param cwd: used instead of current working dir for dat search
-        :param kwargs: other kwargs are passed to the Dat constructor
-        """
-        from . import dat_config
-        if os.path.isabs(name_or_path):
-            path = name_or_path
-        elif os.path.exists(path := os.path.join(cwd or os.getcwd(), name_or_path)):
-            pass
-        elif os.path.exists(path := Dat._resolve_path(name_or_path)):
-            pass
-        else:
-            raise Exception(f"LOAD_DAT: Could not find {name_or_path!r}")
-        try:
-            if os.path.exists(fpath := os.path.join(path, SPEC_JSON)):
-                with open(fpath) as f:
-                    spec = json.load(f)
-            else:
-                with open(os.path.join(path, SPEC_YAML)) as f:
-                    spec = yaml.safe_load(f)
-        except Exception as e:
-            if not os.path.exists(path):
-                raise Exception(F"LOAD_DAT: Folder missing {path!r}.")
-            else:
-                raise Exception(f"LOAD_DAT: Error loading {path!r}s spec file: {e}")
-        dat = Dat._make_dat_instance(path, spec)
-        try:
-            with open(os.path.join(path, RESULT_JSON)) as f:
-                dat._result = json.load(f)
-        except FileNotFoundError:
-            pass
-        return dat
-
     @classmethod
     def create(cls, *,
                path: str = None,
                spec: Spec = None,
                overwrite=()
                ) -> "Dat":
-        """Creates a new Dat with the specified spec dict and backing folder at path.
+        """Creates a new Dat with the specified spec dict and backing folder at 'path'.
 
         Args:
             path (str): The path to the folder where the Dat is stored.
             spec (Dict): The spec dict that describes the Dat.
             overwrite (bool): If True, the path will be overwritten if it exists.
-            _no_backing (bool): If True, the Dat is created without a backing folder.
 
         exists_action: "error" | "overwrite" | "use"
 
@@ -248,6 +188,58 @@ class Dat(object):
             out.write(txt)
             out.write("\n")
         return Dat._make_dat_instance(path, spec)
+
+    @classmethod
+    def load(cls: Type[T], name_or_path: str, *,
+             cwd: Optional[str] = None) -> T:
+        """Loads (Instantiates) this Dat from disk.
+
+        Dat-loading is generally lazy, so its attributes are loaded and
+        cached only when accessed.
+
+        Dats are searched in the following order:
+        (1) as a fullpath to the folder of the Dat to load
+        (2) as a relative path from the current working directory or cwd parameter
+        (3) as a named dat under the DAT_ROOT folder
+        (4) as a named dat on S3 (LATER)
+
+        :param name_or_path: Either the fullpath to the folder of the Dat to
+            load or its name to be searched for
+        :param cwd: used instead of current working dir for dat search
+        """
+        if os.path.isabs(name_or_path):
+            path = name_or_path
+        elif os.path.exists(path := os.path.join(cwd or os.getcwd(), name_or_path)):
+            pass
+        elif os.path.exists(path := Dat._resolve_path(name_or_path)):
+            pass
+        else:
+            raise Exception(f"LOAD_DAT: Could not find {name_or_path!r}")
+        try:
+            if os.path.exists(fpath := os.path.join(path, SPEC_JSON)):
+                with open(fpath) as f:
+                    spec = json.load(f)
+            else:
+                with open(os.path.join(path, SPEC_YAML)) as f:
+                    spec = yaml.safe_load(f)
+        except Exception as e:
+            if not os.path.exists(path):
+                raise Exception(F"LOAD_DAT: Folder missing {path!r}.")
+            else:
+                raise Exception(f"LOAD_DAT: Error loading {path!r}s spec file: {e}")
+        dat = Dat._make_dat_instance(path, spec)
+        try:
+            with open(os.path.join(path, RESULT_JSON)) as f:
+                dat._result = json.load(f)
+        except FileNotFoundError:
+            pass
+        return dat
+
+    @staticmethod
+    def exists(path: str) -> bool:
+        """Checks if a given Dat exists (by looking for its _spec_ file)."""
+        return os.path.exists(Dat._resolve_path(os.path.join(path, SPEC_JSON))) or \
+            os.path.exists(Dat._resolve_path(os.path.join(path, SPEC_YAML)))
 
     def __init__(self,
                  *,
@@ -431,7 +423,7 @@ class DatContainer(Dat, Generic[T]):
     Examples
     --------
     >>> game_set: DatContainer[Dat] = DatContainer.load("name/of/game/set")
-    >>> game_set.get_dats()[0]  # a Game dat!
+    >>> game_set.get_dats()[0] # a Game Dat!
 
     Notes
     -----
@@ -461,7 +453,7 @@ class DatContainer(Dat, Generic[T]):
         WARNING: ALL Dats remain in memory until this container is released.
         """
         if self._dats is DataState.NOT_LOADED:
-            # these will load as the Dat class that was defined in each spec's
+            # these will load as the Dat class as defined in each spec's
             # main.class, but we're loading them dynamically from Dat directly,
             # so we'll ignore the type and assume they will all be List[T]
             self._dats = [Dat.load(p) for p in self.get_dat_paths()]  # type: ignore
@@ -481,4 +473,3 @@ class DatContainer(Dat, Generic[T]):
         return results
 
 
-load_dat = Dat.load

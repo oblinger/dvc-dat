@@ -55,4 +55,3 @@ class DatConfig(object):
 
 
 dat_config = DatConfig()
-

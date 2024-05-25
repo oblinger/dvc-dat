@@ -6,7 +6,7 @@ from .do_fn import DoManager, do_argv
 dat_config = DatConfig()
 do = DoManager()  # not available during load of do_fn
 
-from .dat import Dat, DatContainer, load_dat
+from .dat import Dat, DatContainer
 from . import dat_tools
 
 do.mount_all(dat_config.config.get("mount_commands", []), relative_to=dat_config.folder)
@@ -16,4 +16,4 @@ do.mount(value=dat_tools.cmd_list, at="dt.list")
 do.mount(value=dat_tools.cmd_list, at="dat_tools.list")
 
 __all__ = ["dat_config", "Dat", "DatContainer", "DatConfig", "DoManager",
-           "do", "do_argv", "dat_tools", "load_dat"]
+           "do", "do_argv", "dat_tools"]
