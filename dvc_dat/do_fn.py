@@ -32,6 +32,7 @@ _MAIN = "main"                  # default module var to use when none specified
 # Dat Template Parameters
 _MAIN_BASE = "main.base"        # the base spec to expand
 _MAIN_PATH = "main.path"        # the template for the dat's path
+_MAIN_PATH_OVERWRITE = "main.path_overwrite"  # overwrite the path
 _MAIN_DO = "main.do"            # the main fn to execute
 _MAIN_ARGS = "main.args"        # prefix args for the main.do method
 _MAIN_KWARGS = "main.kwargs"    # default kwargs for the main.do method
@@ -311,12 +312,14 @@ class DoManager(object):
         Dat.set(spec, _MAIN_ARGS, args or [])
         Dat.set(spec, _MAIN_KWARGS, kwargs or {})
         path = path or Dat.get(spec, _MAIN_PATH)
+        overwrite = Dat.get(spec, _MAIN_PATH_OVERWRITE, False) and \
+            path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
         try:
             spec = self.expand_spec(spec)
         except ValueError as e:
             raise Exception(F"DO - Error during expansion of {ctx!r}: {e}")
         path = Dat._expand_dat_path(path)  # noqa
-        return Dat.create(path=path, spec=spec)
+        return Dat.create(path=path, spec=spec, overwrite=overwrite)
 
     def run_dat(self, dat: Dat, ctx: str = "") -> Any:
         """Runs the main.do method of an instantiated object."""   # noqa

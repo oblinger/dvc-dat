@@ -12,6 +12,7 @@ SPEC_YAML = "_spec_.yaml"
 RESULT_JSON = "_result_.json"
 MAIN_CLASS = "main.class"
 MAIN_KIND = "main.kind"
+MAIN_PATH_OVERWRITE = "main.path_overwrite"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
 
 
@@ -210,7 +211,7 @@ class Dat(object):
     def create(cls, *,
                path: str = None,
                spec: Spec = None,
-               overwrite: bool = False
+               overwrite=()
                ) -> "Dat":
         """Creates a new Dat with the specified spec dict and backing folder at path.
 
@@ -234,9 +235,9 @@ class Dat(object):
             {cwd}    -- the current working directory
             {unique} -- a counter or UUID that makes the entire path unique.
         """
+        spec: Dict = spec or {}
         path: str = Dat._resolve_path(
             Dat._expand_dat_path(path, overwrite=overwrite))
-        spec: Dict = spec or {}
         if not os.path.exists(path):
             os.makedirs(path)
         try:
