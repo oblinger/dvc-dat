@@ -77,29 +77,36 @@ Dat Containers are Dats that recursively contain other Dats.
 A DoManager (usually accessed via the 'do' singelton) is used to load python 
 source code objects and functions.
 
-| Method                          | Description                                  |
-|---------------------------------|----------------------------------------------|
-| DoManager()                     | Creates a new do namespace.                  |
-| .load(NAME, default=) -> Any    | Loads Python source-code obj by dotted.name  |
-| (NAME, *args, **kwargs) -> Any  | Loads the named Python fn and calls it.      |
-| .mount(module=, at=)            | Registers a python module by name            |
-| .mount(file=, at=)              | Registers a .json, .yaml, or .py file        |
-| .mount(value=, at=)             | Registers structured value in do space       |
-| .mount(files_shallowly=, at=)   | Registers ALL .json, .yaml, or .py shallowly | 
-| .add_do_folder(PATH) -> None    | Set the folder to load python objects from.  |
-| .get_base(BASE) -> Any          | Get the base object based on it name.        |
-| .merge_configs(BASE, override)  | Merge a config with an override.             |
-| .expand_spec(SPEC) -> SPEC      | Recursively merges spec with base spec.      |
-| .dat_from_template(path=,spec=) | Dat.creates from an expanded spec.           |
+| Method                           | Description                                   |
+|----------------------------------|-----------------------------------------------|
+| DoManager()                      | Creates a new do namespace.                   |
+| .load(NAME, default=) -> Any     | Loads Python source-code obj by dotted.name   |
+| do(NAME, *args, **kwargs) -> Any | Loads the named Python fn and calls it.       |
+| do(DAT, *args, **kwargs) -> Any  | Invokes fn at 'main.do' within the Dat's spec |
+| .mount(module=, at=)             | Registers a python module by name             |
+| .mount(file=, at=)               | Registers a .json, .yaml, or .py file         |
+| .mount(value=, at=)              | Registers structured value in do space        |
+| .mount(files_shallowly=, at=)    | Registers ALL .json, .yaml, or .py shallowly  | 
+| .add_do_folder(PATH) -> None     | Set the folder to load python objects from.   |
+| .get_base(BASE) -> Any           | Get the base object based on it name.         |
+| .merge_configs(BASE, override)   | Merge a config with an override.              |
+| .expand_spec(SPEC) -> SPEC       | Recursively merges spec with base spec.       |
+| .dat_from_template(path=,spec=)  | Expands spec and uses it to call Dat.creates  |
 
 NAME is a dotted.name.string that refers to a python object or function.
 
 #### DAT_TOOLS - Data Frame manipulation
 
-|                                                |                            |
-|------------------------------------------------|----------------------------|
-| dt.from_dat([Dat, ...], [point_fn, ...]) -> DF | Applies point_fns to dats  |
-| dt.to_excel(DF, PATH) -> None                  | Save a DF to an excel file |
+| Dat Tools Functions                               | Description                    |
+|---------------------------------------------------|--------------------------------|
+| list([prefix])                                    | Do cmd to list defined do cmds |
+| dt.from_dat([Dat, ...], [point_fn, ...]) -> DF    | Applies point_fns to dats      |
+| dt.to_excel(DF, PATH) -> None                     | Save a DF to an excel file     |
+| dt.metrics_matrix(spec, title=, folder=, source=, | Build Excel report from Dats   |
+| ....  metrics=, docs=, sheets=, columns=          |                                |
+| ....  formatted_columns=, verbose=, show=) -> DF  |                                |
+| Cube(points=, dats=, point_fns=)                  | Creates a Data Cube from Dats  |
+
 
     
 

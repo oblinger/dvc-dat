@@ -36,6 +36,7 @@ SHOW = "show"
 
 
 def cmd_list(prefix: str = ""):
+    """Lists all do names with a given prefix."""
     print(f"\nBase names matching: '{prefix}*'")
     for k, v in do.base_locations.items():
         if prefix not in k:
@@ -49,7 +50,7 @@ def cmd_list(prefix: str = ""):
 
 def from_dat(source: Union[Dat, str, Iterable],
         point_fns: Any) -> DataFrame:
-    """Creates a DataFrame from one or more Dats and a list of point_fns."""
+    """Creates a pandas DataFrame from one or more Dats and a list of do fns."""
     cube = Cube(dats=source, point_fns=point_fns)
     df = cube.get_df()
     return df
@@ -75,7 +76,7 @@ def to_excel(df: DataFrame, *,
     if transform:
         df = transform(df)
     if formatted_columns:
-        add_formatted_columns(df, formatted_columns)
+        _add_formatted_columns(df, formatted_columns)
     folder = folder or os.getcwd()
     if not docs:       # saves as a single Excel file
         path = os.path.join(folder, f'{title or "output"}.xlsx')
@@ -114,7 +115,7 @@ def _create_sheets(path, df, sheet_prefix, sheets, columns, verbose, show):
         os.system(f'open "{path}" &')
 
 
-def add_formatted_columns(df: DataFrame, format_cmds: List[str]):
+def _add_formatted_columns(df: DataFrame, format_cmds: List[str]):
     """Adds formatted columns to a DataFrame."""
     arg_names, format_str = [], ""
 
@@ -181,7 +182,7 @@ def metrics_matrix(spec: Dat, *,
     show = mm.get(SHOW) if show is None else show
     df = Cube(dats=source, point_fns=metrics).get_df()
     if formatted_columns:
-        add_formatted_columns(df, formatted_columns)
+        _add_formatted_columns(df, formatted_columns)
     to_excel(df, title=title, folder=folder, docs=docs, sheets=sheets,
              columns=columns, verbose=verbose, show=show)
     return df
