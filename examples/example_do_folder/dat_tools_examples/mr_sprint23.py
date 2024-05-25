@@ -8,7 +8,7 @@ main = {
 }
 
 add_col = {
-    "main": {"base": "mr_sprint23.mr_sprint23"},
+    "main": {"base": "mr_sprint23"},
     "metrics_matrix": {
         "title": "S23b", "show": False, "verbose": False,
         "formatted_columns":
