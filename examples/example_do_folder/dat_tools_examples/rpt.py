@@ -12,8 +12,8 @@ def load_points_json(dat: Dat):
 #
 
 simple = {
-    "main": {"do": "dt.metrics_matrix"},
-    "metrics_matrix": {
+    "main": {"do": "dt.dat_report"},
+    "dat_report": {
         "title": "Retail Data Matrix",
         "source": "Datasets/Retail Data",
         "metrics": ["rpt.load_points_json"],
@@ -24,8 +24,8 @@ simple = {
 
 # this is the default report
 main = {
-    "main": {"do": "dt.metrics_matrix"},
-    "metrics_matrix": {
+    "main": {"do": "dt.dat_report"},
+    "dat_report": {
         "title": "RPT",
         "source": "Datasets/Retail Data",
         "metrics": ["rpt.load_points_json"],
@@ -37,7 +37,7 @@ main = {
 
 
 def my_test_code(dat: Dat):
-    df = dt.metrics_matrix(dat)
+    df = dt.dat_report(dat)
     print(df)
     dt.to_excel(df, title="My Test", show=False)
     return df
@@ -45,7 +45,7 @@ def my_test_code(dat: Dat):
 
 my_test = {
     "main": {"do": my_test_code},
-    "metrics_matrix": {
+    "dat_report": {
         "title": "My Test",
         "source": "Datasets/Retail Data/Berkeley",
         "metrics": ["rpt.load_points_json"],

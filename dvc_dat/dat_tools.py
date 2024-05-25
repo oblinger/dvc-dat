@@ -130,7 +130,7 @@ def _add_formatted_columns(df: DataFrame, format_cmds: List[str]):
 
 
 # TODO rename dat_report
-def metrics_matrix(spec: Dat, *,
+def dat_report(spec: Dat, *,
                    title: str = None,
                    folder: str = None,
                    source: Dat = None,
@@ -146,7 +146,7 @@ def metrics_matrix(spec: Dat, *,
     Parameters
     ----------
     spec: Dat
-        Default parameters for the report are in the 'metrics_matrix' section.
+        Default parameters for the report are in the 'dat_report' section.
     title: str
         The title (filename base) for the report.
     folder: str
@@ -169,7 +169,7 @@ def metrics_matrix(spec: Dat, *,
         If True, the report is displayed in a window.
     """
     d: dict = spec.get_spec() if isinstance(spec, Dat) else spec
-    mm = d.get("metrics_matrix") or {}
+    mm = d.get("dat_report") or {}
     title = title or mm.get(TITLE)    # or spec.shortname
     folder = folder or mm.get(FOLDER) or os.getcwd()
     source = source or mm.get(SOURCE) or (isinstance(spec, Dat) and spec)

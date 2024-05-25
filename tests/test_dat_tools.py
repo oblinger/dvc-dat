@@ -180,7 +180,7 @@ class TestGetExcel:
 
 
 class TestMetricsMatrix:
-    def test_metrics_matrix(self, df_sales):
+    def test_dat_report(self, df_sales):
         df = do("rpt.simple")
         # print(df.shape)
         assert df.shape == (48, 6), "Couldn't create metrics matrix"

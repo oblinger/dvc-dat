@@ -26,7 +26,7 @@ It has one key class and four key functions:
 4. **to_excel function** -- slices and formats a pandas DataFrame into a collection 
    of Execl documents and sheets for presentation.
    
-5. **metrics_matrix function** -- wraps these functions into configurable report 
+5. **dat_report function** -- wraps these functions into configurable report 
    generator.
 
 
@@ -97,15 +97,15 @@ NAME is a dotted.name.string that refers to a python object or function.
 
 #### DAT_TOOLS - Data Frame manipulation
 
-| Dat Tools Functions                               | Description                    |
-|---------------------------------------------------|--------------------------------|
-| list([prefix])                                    | Do cmd to list defined do cmds |
-| dt.from_dat([Dat, ...], [point_fn, ...]) -> DF    | Applies point_fns to dats      |
-| dt.to_excel(DF, PATH) -> None                     | Save a DF to an excel file     |
-| dt.metrics_matrix(spec, title=, folder=, source=, | Build Excel report from Dats   |
-| ....  metrics=, docs=, sheets=, columns=          |                                |
-| ....  formatted_columns=, verbose=, show=) -> DF  |                                |
-| Cube(points=, dats=, point_fns=)                  | Creates a Data Cube from Dats  |
+| Dat Tools Functions                               | Description                     |
+|---------------------------------------------------|---------------------------------|
+| list([prefix])                                    | Lists defined do cmds w/ prefix |
+| dt.from_dat([Dat, ...], [point_fn, ...]) -> DF    | Applies point_fns to dats       |
+| dt.to_excel(DF, PATH) -> None                     | Save a DF to an excel file      |
+| dt.dat_report(spec, title=, folder=, source=, | Build Excel report from Dats    |
+| ....  metrics=, docs=, sheets=, columns=          |                                 |
+| ....  formatted_columns=, verbose=, show=) -> DF  |                                 |
+| Cube(points=, dats=, point_fns=)                  | Creates a Data Cube from Dats   |
 
 
     
