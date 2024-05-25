@@ -53,7 +53,7 @@ def msproc_run(dc: DatContainer):
         dat_name = f"{dc.get_path_name()}/{stage_name}"
         stage_dat = Dat.load(dat_name)
         print(f"Running {dat_name}")
-        do.run_dat(stage_dat)
+        do(stage_dat)
     return f"Ran {len(dc.get_spec()['stages'])} stages in {dc.get_path_name()}"
 
 

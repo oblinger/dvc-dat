@@ -85,7 +85,7 @@ class DoManager(object):
         self.base_locations = {}
         self.registered_values = None
 
-    def __call__(self, do_spec: Union[Spec, str], *args, **kwargs) -> Any:
+    def __call__(self, do_spec: Union[Spec, Dat, str], *args, **kwargs) -> Any:
         """Loads and executes a 'do-method'.
 
         A "do function" or "do method" is a configurable dynamically loadable function
@@ -104,12 +104,14 @@ class DoManager(object):
         """
         obj = self.load(do_spec) if isinstance(do_spec, str) else do_spec
         try:
-            if callable(obj):
+            if isinstance(obj, Dat):
+                return self._run_dat(obj, *args, **kwargs)
+            elif callable(obj):
                 result = obj(*args, **kwargs)
                 return result
             else:
                 dat = self.dat_from_template(spec=obj)
-                return self.run_dat(dat, *args, **kwargs)
+                return self._run_dat(dat, *args, **kwargs)
         except Exception as e:
             raise Exception(F"In {do_spec!r}, {e}")
 
@@ -174,13 +176,6 @@ class DoManager(object):
         except Exception as e:
             raise e from Exception(F"WHILE loading {dotted_name!r}")
 
-    def add_do_folder(self, do_folder):
-        """Sets the folder where the loadable python objects are found, and clears all
-        cached modules and values."""
-        self.do_folder = do_folder
-        self.base_locations = _build_loadables_index(do_folder)
-        self.registered_values = None
-
     def mount(self, *,
               at: str,
               file: str = None,
@@ -195,9 +190,9 @@ class DoManager(object):
         elif file:
             self.base_locations[at] = file
         elif module:
-            self.reg_module(at, module)
+            self._reg_module(at, module)
         elif value:
-            self.reg_value(at, value)
+            self._reg_value(at, value)
         else:
             assert False
 
@@ -215,6 +210,13 @@ class DoManager(object):
                 self.add_do_folder(os.path.join(relative_to, do_folder))
             else:
                 self.mount(**cmd)
+
+    def add_do_folder(self, do_folder):
+        """Sets the folder where the loadable python objects are found, and clears all
+        cached modules and values."""
+        self.do_folder = do_folder
+        self.base_locations = _build_loadables_index(do_folder)
+        self.registered_values = None
 
     def get_base(self, base: str, default: Any = _DO_NULL) -> Any:
         """Returns the module or base object associated with a given base name.
@@ -255,8 +257,7 @@ class DoManager(object):
         else:
             return base
 
-    def expand_spec(self, spec: Union[Spec | str],
-                    context: str = None) -> Spec:
+    def expand_spec(self, spec: Union[Spec | str]) -> Spec:
         """Expands a spec by recursively loading and expanding its 'main.base' spec,
         and then merging its keys as an override to the expanded base."""
         if isinstance(spec, str):
@@ -267,35 +268,6 @@ class DoManager(object):
             return self.merge_configs(sub_spec, spec)
         else:
             return spec
-
-    def reg_module(self, at: str, module_spec: Union[str, ModuleType], *,
-            allow_redefine=False):
-        """Specifies the module associated with a dotted name prefix.
-
-        The module can be specified using
-        - The full path to the python source (which will be loaded separately from the
-          import system.),
-        - The module's import name, or
-        - by providing the already loaded module object."""
-        if not allow_redefine and at in self.base_locations and \
-                self.base_locations[at] != module_spec:
-            raise Exception(F"Base {at!r} is already defined")
-        if isinstance(module_spec, ModuleType):
-            self.base_locations[at] = "--directly-assigned--"
-            self.base_objects[at] = module_spec
-        else:
-            self.base_locations[at] = module_spec
-
-    def reg_value(self, dotted_name: str, value: Any):
-        """Defines a value to be returned by 'load' for the given dotted name."""
-        if self.registered_values is None:
-            self.registered_values = {}
-        self.registered_values[dotted_name] = value
-        # base = dotted_name.split(".")[0]
-        # if base not in self.base_locations:
-        #     self.base_locations[base] = "--registered-value--"
-        #     self.base_objects[base] = {}
-        # # print(f "Registered {dotted_name} as {value} in {self}")
 
     def dat_from_template(
             self,
@@ -317,7 +289,7 @@ class DoManager(object):
         path = Dat._expand_dat_path(path)  # noqa
         return Dat.create(path=path, spec=spec, overwrite=overwrite)
 
-    def run_dat(self, dat: Dat, *args, **kwargs) -> Any:
+    def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
         """Runs the main.do method of an instantiated object."""   # noqa
         obj = dat.get_spec()
         # try:
@@ -338,6 +310,35 @@ class DoManager(object):
         Dat.set(dat.get_results(), _MAIN_DURATION, "for")
         dat.save()
         return result
+
+    def _reg_module(self, at: str, module_spec: Union[str, ModuleType], *,
+                    allow_redefine=False):
+        """Specifies the module associated with a dotted name prefix.
+
+        The module can be specified using
+        - The full path to the python source (which will be loaded separately from the
+          import system.),
+        - The module's import name, or
+        - by providing the already loaded module object."""
+        if not allow_redefine and at in self.base_locations and \
+                self.base_locations[at] != module_spec:
+            raise Exception(F"Base {at!r} is already defined")
+        if isinstance(module_spec, ModuleType):
+            self.base_locations[at] = "--directly-assigned--"
+            self.base_objects[at] = module_spec
+        else:
+            self.base_locations[at] = module_spec
+
+    def _reg_value(self, dotted_name: str, value: Any):
+        """Defines a value to be returned by 'load' for the given dotted name."""
+        if self.registered_values is None:
+            self.registered_values = {}
+        self.registered_values[dotted_name] = value
+        # base = dotted_name.split(".")[0]
+        # if base not in self.base_locations:
+        #     self.base_locations[base] = "--registered-value--"
+        #     self.base_objects[base] = {}
+        # # print(f "Registered {dotted_name} as {value} in {self}")
 
 
 def _load_base_entity(base, source_spec: str) -> Union[ModuleType, Spec]:

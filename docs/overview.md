@@ -81,14 +81,13 @@ source code objects and functions.
 |---------------------------------|----------------------------------------------|
 | DoManager()                     | Creates a new do namespace.                  |
 | .load(NAME, default=) -> Any    | Loads Python source-code obj by dotted.name  |
-| (NAME, *args, **kwargs) -> Any  | Loads the named Python fn and calls it.     |
+| (NAME, *args, **kwargs) -> Any  | Loads the named Python fn and calls it.      |
 | .mount(module=, at=)            | Registers a python module by name            |
 | .mount(file=, at=)              | Registers a .json, .yaml, or .py file        |
 | .mount(value=, at=)             | Registers structured value in do space       |
 | .mount(files_shallowly=, at=)   | Registers ALL .json, .yaml, or .py shallowly | 
-| .get_module(BASE) -> MODULE     | Load a python module from a string spec      |
 | .add_do_folder(PATH) -> None    | Set the folder to load python objects from.  |
-| .get_base_object(BASE) -> Any   | Get the base object based on it name.        |
+| .get_base(BASE) -> Any          | Get the base object based on it name.        |
 | .merge_configs(BASE, override)  | Merge a config with an override.             |
 | .expand_spec(SPEC) -> SPEC      | Recursively merges spec with base spec.      |
 | .dat_from_template(path=,spec=) | Dat.creates from an expanded spec.           |
