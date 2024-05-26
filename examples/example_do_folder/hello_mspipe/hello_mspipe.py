@@ -36,7 +36,7 @@ main = {
 # a distributed farm of cloud instances.
 def mspipe_build_and_run(dc: DatContainer):
     mspipe_build(dc)
-    msproc_run(dc)
+    return msproc_run(dc)
 
 def mspipe_build(dc: DatContainer):
     """Builds the sub-dats representing each stage."""
@@ -46,11 +46,13 @@ def mspipe_build(dc: DatContainer):
         subpath: str = os.path.join(path, stage_name)
         subspec = do.merge_configs(stage_template, common_template)
         Dat.create(path=subpath, spec=subspec)
+    return dc
 
 
 def msproc_run(dc: DatContainer):
     """Sequentially runs each stage in the pipeline."""
-    for stage_name, stage_spec in dc.get_spec()["stages"].items():
+    xx =  dc.get_spec()["stages"]
+    for stage_name, stage_spec in xx.items():
         dat_name = f"{dc.get_path_name()}/{stage_name}"
         stage_dat = Dat.load(dat_name)
         print(f"Running {dat_name}")
@@ -86,6 +88,3 @@ def fake_mcproc_runner(dat: Dat):
             f.write('\n'.join(parts))
     return f"Produced {len(outputs)} for run {dat.get_path_name()!r}"
 
-
-if __name__ == "__main__":
-    do("hello_mspipe")

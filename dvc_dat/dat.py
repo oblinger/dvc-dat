@@ -102,7 +102,7 @@ class Dat(object):
                 d = d.get(k)
         else:
             result = d
-        if result:
+        if result is not None:
             return result
         elif default_value is _NO_ARG:
             raise KeyError(f"GET: Key {keys} not found in {source!r}")
