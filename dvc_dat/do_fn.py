@@ -10,6 +10,8 @@ import os
 import sys
 import copy
 import json
+import time
+from datetime import datetime
 from enum import Enum
 from importlib import import_module
 
@@ -36,7 +38,7 @@ _MAIN_ARGS = "main.args"         # prefix args for the main.do method
 _MAIN_KWARGS = "main.kwargs"     # default kwargs for the main.do method
 # _MAIN_RESULT = "main.result"   # the result of the main.do, stored in __results__.json
 _MAIN_RUN_AT = "main.run_at"     # the time at with main.do was run
-_MAIN_DURATION = "main.duration"  # the duration of the main.do run
+_MAIN_RUN_TIME = "main.run_time"  # the duration of the main.do run
 
 Spec = Dict[str, Any]
 
@@ -283,11 +285,8 @@ class DoManager(object):
         path = path or Dat.get(spec, _MAIN_PATH, None)
         overwrite = Dat.get(spec, _MAIN_PATH_OVERWRITE, False) and \
             path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
-        # try:
         spec = self.expand_spec(spec)
-        # except Exception as e:
-        #    raise Exception(F "DO - Error during expansion of {ctx!r}: {e}")
-        path = Dat._expand_dat_path(path)  # noqa
+        path = Dat._expand_dat_path(path, overwrite=overwrite)  # noqa
         return Dat.create(path=path, spec=spec, overwrite=overwrite)
 
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
@@ -302,13 +301,18 @@ class DoManager(object):
         if not callable(fn_spec):
             raise Exception(F"'{_MAIN_DO}' in {dat!r} of type {type(fn_spec)} "
                             + "is not callable")
+        run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        before = time.time()
         result = fn_spec(dat, *args, **kwargs)
+        time_ms = (time.time() - before) * 1000
         if args:
             Dat.set(dat.get_results(), _MAIN_ARGS, args)
         if kwargs:
             Dat.set(dat.get_results(), _MAIN_KWARGS, kwargs)
-        Dat.set(dat.get_results(), _MAIN_RUN_AT, "at")
-        Dat.set(dat.get_results(), _MAIN_DURATION, "for")
+        Dat.set(dat.get_results(), _MAIN_RUN_AT, run_at)
+        exec_time = (time.strftime("%H:%M:%S", time.gmtime(time_ms // 1000)) +
+                     ".{:03d}".format(int(time_ms % 1000)))
+        Dat.set(dat.get_results(), _MAIN_RUN_TIME, exec_time)
         dat.save()
         return result
 

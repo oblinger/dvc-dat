@@ -8,7 +8,7 @@ import yaml
 
 SPEC_JSON = "_spec_.json"
 SPEC_YAML = "_spec_.yaml"
-RESULT_JSON = "_result_.json"
+RESULT_JSON = "_results_.json"
 MAIN_CLASS = "main.class"
 MAIN_KIND = "main.kind"
 MAIN_PATH_OVERWRITE = "main.path_overwrite"
@@ -356,8 +356,6 @@ class Dat(object):
         from . import dat_config
         if not path_spec:
             path_spec = _DEFAULT_PATH_TEMPLATE
-        if "{unique}" not in path_spec:
-            path_spec += "{unique}"
         now, count = datetime.now(), 1
         while True:
             format_vars = {

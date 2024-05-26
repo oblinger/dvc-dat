@@ -2,7 +2,7 @@
 from .dvc_dat_config import DatConfig
 from .do_fn import DoManager, do_argv
 
-VERSION = "1.0.00 (2024-05-25)"
+DAT_VERSION = "1.0.00 (2024-05-25)"
 dat_config = DatConfig()
 do = DoManager()  # not available during load of do_fn
 
@@ -15,5 +15,5 @@ do.mount(module=dat_tools, at="dt")
 do.mount(value=dat_tools.cmd_list, at="dt.list")
 do.mount(value=dat_tools.cmd_list, at="dat_tools.list")
 
-__all__ = ["VERSION", "dat_config", "Dat", "DatContainer", "DatConfig", "DoManager",
+__all__ = ["DAT_VERSION", "dat_config", "Dat", "DatContainer", "DatConfig", "DoManager",
            "do", "do_argv", "dat_tools"]

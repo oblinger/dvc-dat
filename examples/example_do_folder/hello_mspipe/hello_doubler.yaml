@@ -1,6 +1,6 @@
 ---
 main:
-  __doc__: >
+  __doc__: |
     Each toplevel multi-stage pipeline will have a configuration file like this one.
     
     This (inane) multi-state pipeline has three stages:
