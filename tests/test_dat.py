@@ -211,6 +211,24 @@ class TestDatLoadingAndSaving:
         assert dat._spec == spec1
 
 
+class TestDatCopyMoveDelete:
+    def test_copy_exists_and_delete(self):
+        dat = Dat.create(spec={"zap": 77})
+        assert isinstance(dat2 := dat.copy("Datasets/a_copy"), Dat)
+        assert Dat.get(dat2, "zap") == 77
+        assert Dat.exists("Datasets/a_copy") is True
+        assert dat2.delete()
+        assert dat.delete()
+        assert Dat.exists("Datasets/a_copy") is False
+
+    def test_move(self):
+        dat = Dat.create(spec={"zap": 88})
+        original_name = dat.get_path_name()
+        assert isinstance(dat2 := dat.move("Datasets/moved"), Dat)
+        assert Dat.get(dat2, "zap") == 88
+        assert Dat.exists("Datasets/moved") is True
+        assert Dat.exists(original_name) is False
+        assert dat2.delete()
 
 
 class TestDatContainers:

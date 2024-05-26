@@ -312,25 +312,23 @@ class Dat(object):
         return True
 
     # NOT TESTED
-    # def copy(self, new_path: str, *, overwrite: bool = False) -> "Dat":
-    #     """Copies this Dat to a new location."""
-    #     new_path = Dat._resolve_path(new_path)
-    #     if not overwrite and os.path.exists(new_path):
-    #         raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
-    #     shutil.copytree(self._path, new_path)
-    #     result = Dat.load(new_path)
-    #     result.save()
-    #     return result
-    #
-    # def move(self, new_path: str, *, overwrite: bool = False) -> "Dat":
-    #     """Moves this Dat to a new location."""
-    #     new_path = Dat._resolve_path(new_path)
-    #     if not overwrite and os.path.exists(new_path):
-    #         raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
-    #     shutil.move(self._path, new_path)
-    #     result = Dat.load(new_path)
-    #     result.save()
-    #     return result
+    def copy(self, new_path: str) -> "Dat":
+        """Copies this Dat to a new location."""
+        new_path_ = Dat._resolve_path(new_path)
+        if os.path.exists(new_path_):
+            raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
+        shutil.copytree(self._path, new_path_)
+        result = Dat.load(new_path_)
+        return result
+
+    def move(self, new_path: str) -> "Dat":
+        """Moves this Dat to a new location."""
+        new_path_ = Dat._resolve_path(new_path)
+        if os.path.exists(new_path_):
+            raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
+        shutil.move(self._path, new_path_)
+        result = Dat.load(new_path_)
+        return result
 
     @staticmethod
     def _expand_dat_path(path_spec: Union[str, None], *,
