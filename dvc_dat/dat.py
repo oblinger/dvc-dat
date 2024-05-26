@@ -13,6 +13,7 @@ MAIN_CLASS = "main.class"
 MAIN_KIND = "main.kind"
 MAIN_PATH_OVERWRITE = "main.path_overwrite"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
+_NO_ARG = "$$NO_ARG$$"
 
 
 class DataState(Enum):
@@ -86,19 +87,27 @@ class Dat(object):
     @staticmethod
     def get(source: Union["Dat", dict],
             keys: Union[str, List[str]],
-            default_value=None) -> Any:
+            default_value=_NO_ARG) -> Any:
         """Utility method to get value from a recursive dict tree or return None."""
         d = source._spec if isinstance(source, Dat) else source
         if isinstance(keys, str):
             keys = keys.split(".")
         for k in keys:
             if d is None:
-                return default_value
+                result = None
+                break
             elif not isinstance(d, dict):
                 raise ValueError(f"GET: Expected dict value for {k!r} not {d!r}")
             else:
                 d = d.get(k)
-        return d or default_value
+        else:
+            result = d
+        if result:
+            return result
+        elif default_value is _NO_ARG:
+            raise KeyError(f"GET: Key {keys} not found in {source!r}")
+        else:
+            return default_value
 
     @staticmethod
     def set(source: Spec, keys, value) -> None:
@@ -286,7 +295,8 @@ class Dat(object):
         """
         if True or self._result:
             with open(os.path.join(self._path, RESULT_JSON), "w") as out:
-                out.write(json.dumps(self._result, indent=2))
+                txt = json.dumps(self._result, indent=2)
+                out.write(txt)
 
     def delete(self, *, must_exist=True) -> bool:
         """Deletes the folder and its contents from the filesystem.
@@ -373,7 +383,7 @@ class Dat(object):
     @staticmethod
     def _make_dat_instance(path: str, spec: Dict) -> "Dat":
 
-        klass_name = Dat.get(spec, MAIN_CLASS) or "Dat"
+        klass_name = Dat.get(spec, MAIN_CLASS, "Dat")
         klass = Dat._find_subclass_by_name(Dat, klass_name)
         if not klass:
             raise Exception(f"Class {klass_name} is not a subclass of Dat")

@@ -17,7 +17,8 @@ main = {
     "main": {                          # Section controls execution of whole pipeline
         "kind": "Mspipe",              # "subtype" common to all multi-stage runs
         "class": "DatContainer",       # The python class for a multi-stage runs
-        "do": "hello_mspipe.mspipe_build_and_run",   # Actually runs the pipeline
+        "path": "runs/mspipe/{YY}-{MM}{unique}",  # Template for Dat's location
+        "do": "hello_mspipe.mspipe_build_and_run",   # Creates and runs the pipeline
     },
     "common": {
         "main": {
@@ -84,3 +85,7 @@ def fake_mcproc_runner(dat: Dat):
         with open(path, 'w') as f:
             f.write('\n'.join(parts))
     return f"Produced {len(outputs)} for run {dat.get_path_name()!r}"
+
+
+if __name__ == "__main__":
+    do("hello_mspipe")

@@ -263,7 +263,7 @@ class DoManager(object):
         if isinstance(spec, str):
             spec = self.load(spec)
             spec = copy.deepcopy(spec)
-        if base := Dat.get(spec, _MAIN_BASE):
+        if base := Dat.get(spec, _MAIN_BASE, None):
             sub_spec = self.expand_spec(base)
             return self.merge_configs(sub_spec, spec)
         else:
@@ -279,7 +279,7 @@ class DoManager(object):
         spec, count = copy.deepcopy(spec), 1
         # Dat.set(spec, _MAIN_ARGS, args or [])
         # Dat.set(spec, _MAIN_KWARGS, kwargs or {})
-        path = path or Dat.get(spec, _MAIN_PATH)
+        path = path or Dat.get(spec, _MAIN_PATH, None)
         overwrite = Dat.get(spec, _MAIN_PATH_OVERWRITE, False) and \
             path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
         # try:
@@ -491,8 +491,8 @@ def do_argv(argv):
         print(F"  do({', '.join(args + kwargs)})")
         return
     elif spec:
-        args_ = Dat.get(spec, _MAIN_ARGS) or []
-        kwargs_ = Dat.get(spec, _MAIN_KWARGS) or {}
+        args_ = Dat.get(spec, _MAIN_ARGS, [])
+        kwargs_ = Dat.get(spec, _MAIN_KWARGS, {})
         kwargs_.update(kwargs)
         result = do(spec, *args_ + args[1:], **kwargs_)
     elif not callable(cmd):

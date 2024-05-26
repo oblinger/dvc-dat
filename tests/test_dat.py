@@ -127,7 +127,7 @@ class TestTemplatedDatCreationAndDeletion:
 
 class TestDatAccessors:
     def test_path_accessors(self, spec1):
-        dat = Dat.create(spec=spec1, path="any/path/goes/here/my_dat")
+        dat = Dat.create(spec=spec1, path="any/path/goes/here/my_dat", overwrite=True)
         assert dat.get_path() == f"{dat_config.dat_folder}/any/path/goes/here/my_dat"
         assert dat.get_path_name() == "any/path/goes/here/my_dat"
         assert dat.get_path_tail() == "my_dat"
@@ -140,7 +140,7 @@ class TestDatAccessors:
         assert dat.get_results() == {}
         Dat.set(dat.get_results(), "main.my_key1", "my_val1")
         dat.save()
-        dat2 = Dat.load(my_name)  # Reloads the dat
+        dat2 = Dat.load(dat.get_path_name())  # Reloads the dat
         assert Dat.get(dat2.get_results(), "main.my_key1") == "my_val1"
         assert dat.delete()
 
