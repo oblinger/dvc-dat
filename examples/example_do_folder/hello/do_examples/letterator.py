@@ -1,4 +1,4 @@
-from dvc_dat import do
+from dvc_dat import do  # noqa
 
 """Silly configurable tool for applying rules to a sequence of letters."""
 main = {

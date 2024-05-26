@@ -1,4 +1,3 @@
-import sys
 
 from .dvc_dat_config import DatConfig
 from .do_fn import DoManager, do_argv

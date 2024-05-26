@@ -18,7 +18,7 @@ main:
   path: "runs/doubler/{YYYY}-{MM}{unique}"  # where result runs are stored
 
 common:
-  debug_level: 3    # The only new config paramter common to all stages
+  debug_level: 3    # The only new config parameter common to all stages
 
 stages:
 
@@ -27,7 +27,7 @@ stages:
     debug_level: 1
     outputs:
       gallery.txt:
-        - ">>This is not really a gallery"
+        - ">>This is not really a gallery."
         - ">>It's just a file called gallery!"
       results.txt:
         - ">>Stage 1: Results.txt line1"

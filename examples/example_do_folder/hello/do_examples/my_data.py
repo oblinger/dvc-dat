@@ -2,10 +2,10 @@ from dvc_dat import do
 
 main = [111, 222, 333]
 message = "Hello from my_data!"
-def my_function():
+def my_function(): # noqa
     print("Hello from my_function!")
     return 123
-a_tree = {
+a_tree = {  # noqa
     "a": do.load("my_yaml_data"),
     "b": 2,
     "c": {
@@ -14,4 +14,4 @@ a_tree = {
         "f": {
             "g": 5,
             "h": 6,
-            "i": 7  } } }
+            "i": 7}}}

@@ -41,9 +41,9 @@ def cmd_list(prefix: str = ""):
     for k, v in do.base_locations.items():
         if prefix not in k:
             continue
-        elif isinstance(v, str) and v[0] != '-' and do.do_folder:
-            size = len(os.path.commonpath([v, do.do_folder]))
-            print(f"  {k:25} -->  .../{v[size+1:]}")   # noqa
+        # elif isinstance(v, str) and v[0] != '-' and do.do_folder:
+        #     size = len(os.path.commonpath([v, do.do_folder]))
+        #     print(f"  {k:25} -->  .../{v[size+1:]}")   # noqa
         else:
             print(f"  {k:25} -->  {v}")  # noqa
 
@@ -130,17 +130,19 @@ def _add_formatted_columns(df: DataFrame, format_cmds: List[str]):
 
 
 # TODO rename dat_report
-def dat_report(spec: Dat, *,
-                   title: str = None,
-                   folder: str = None,
-                   source: Dat = None,
-                   metrics: List = None,
-                   docs: List[str] = None,
-                   sheets: List[str] = None,
-                   columns: List[str] = None,
-                   formatted_columns: List[str] = None,
-                   verbose: bool = True,
-                   show: bool = None) -> DataFrame:
+def dat_report(
+        spec: Dat,
+        *,
+        title: str = None,
+        folder: str = None,
+        source: Dat = None,
+        metrics: List = None,
+        docs: List[str] = None,
+        sheets: List[str] = None,
+        columns: List[str] = None,
+        formatted_columns: List[str] = None,
+        verbose: bool = True,
+        show: bool = None) -> DataFrame:
     """A dat script that runs the specified metrics over the specified "Dats".
 
     Parameters

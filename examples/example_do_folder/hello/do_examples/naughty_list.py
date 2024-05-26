@@ -22,6 +22,8 @@ def main():
             # if not hasattr(dat, ):
             #     print(F"   {section} {name} does not have a valid doc string")
             if not hasattr(dat, "reg_quick_test"):
-                print(F"   {section} {name} doesn't have a valid quick regression test")
+                print(F"   Error in {section} {name!r} " +
+                      "doesn't have a valid quick regression test")
             if not hasattr(dat, "reg_full_test"):
-                print(F"   {section} {name} doesn't have a valid full regression test")
+                print(F"   Error in {section} {name!r} " +
+                      "doesn't have a valid full regression test")

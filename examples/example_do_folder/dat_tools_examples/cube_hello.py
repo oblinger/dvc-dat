@@ -1,4 +1,4 @@
-
+# noqa
 
 """
 Cube Hello defines a couple of metrics and an execl table that reports on them.
@@ -8,7 +8,7 @@ Each run predicts a sequence of colored marbles, and the input dataset also has 
 ground truth sequence of marbles. These metrics specify how accurately the system
 predicted the ground truth marbles.
 
-rpt .............. Generates an excel w/ all metrics run over all games from Hello10.
+rpt .............. Generates an Excel w/ all metrics run over all games from Hello10.
 cube_hello ....... This is the 'main' cube metric, it's an alias for the F1 score.
 cube_hello.p ..... Marble prediction precision.
 cube_hello.r ..... Marble prediction recall.

@@ -74,7 +74,7 @@ class DoManager(object):
         - This process is repeated until no more "main.base" keys are found.
 
     """
-    do_folder: str                                     # root loadables folder
+    do_folder: str                                     # last added loadables folder
     base_locations: Dict[str, str]                     # path to module or module itself
     base_objects: Dict[str, Any]                       # loaded modules or objects
     do_fns: Dict[str, Dict[str, Callable]]             # externally defined fns
@@ -215,7 +215,8 @@ class DoManager(object):
         """Sets the folder where the loadable python objects are found, and clears all
         cached modules and values."""
         self.do_folder = do_folder
-        self.base_locations = _build_loadables_index(do_folder)
+        for base, path in _build_loadables_index(do_folder).items():
+            self._reg_module(base, path)
         self.registered_values = None
 
     def get_base(self, base: str, default: Any = _DO_NULL) -> Any:

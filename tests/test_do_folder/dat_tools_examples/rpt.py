@@ -4,8 +4,8 @@ from dvc_dat import Dat
 from dvc_dat import dat_tools as dt
 
 
-def load_points_json(dat: Dat):
-    with open(f"{dat._path}/points.json") as f:
+def load_points_json(dat: Dat):  # noqa
+    with open(f"{dat.get_path()}/points.json") as f:
         return json.load(f)
 
 

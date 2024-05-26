@@ -7,11 +7,11 @@ main = {
     (5, "my_letters.all_caps_it")]
 }
 
-def triple_it(_idx, text):
+def triple_it(_idx, text):  # noqa
     return F"{text}{text}{text}"
 
-def all_caps_it(_idx, text):
+def all_caps_it(_idx, text):  # noqa
     return text.upper()
 
-def jackpot(_idx, _text):
+def jackpot(_idx, _text):  # noqa
     return "jackpot "
