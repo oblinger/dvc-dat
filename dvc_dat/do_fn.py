@@ -292,10 +292,13 @@ class DoManager(object):
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
         """Runs the main.do method of an instantiated object."""   # noqa
         obj = dat.get_spec()
-        # try:
+        if main_args := Dat.get(obj, _MAIN_ARGS, None):
+            args = main_args + list(args)
+        if main_kwargs := Dat.get(obj, _MAIN_KWARGS, None):
+            main_kwargs = dict(main_kwargs)
+            main_kwargs.update(kwargs)
+            kwargs = main_kwargs
         fn_spec = Dat.get(obj, _MAIN_DO)
-        # except ValueError:
-        #     raise Exception(F"DO: Error {fn_spec!r} is not a callable or config")
         if isinstance(fn_spec, str):
             fn_spec = self.load(fn_spec)
         if not callable(fn_spec):

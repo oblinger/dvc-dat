@@ -135,3 +135,41 @@ class TestRegisteringStuff:
         do_.mount(at="yyy", module="dvc_dat")  # The already loaded 'dvc_dat' module
         from dvc_dat import dat_config
         assert do_.load("yyy.dat_config") == dat_config
+
+
+class TestTemplatedDatCreationAndDeletion:
+    def test_empty_creation_and_deletion(self):
+        from dvc_dat import do
+        assert (dat := do.dat_from_template({})), "Couldn't create Persistable"
+        assert dat.delete(), "Couldn't delete Persistable"
+
+    def test_creation_and_deletion_with_spec(self):
+        from dvc_dat import do
+        spec1 = {"main": {"path": "test_dats/{YY}-{MM} Dats{unique}"}}
+        assert (dat := do.dat_from_template(spec1)), "Couldn't create Persistable"
+        assert dat.get_path_name().startswith("test_dats/"), "Wrong path"
+        assert dat.delete(), "Couldn't delete Persistable"
+
+
+class TestDatCallArgs:
+    def test_call_args(self, empty_do_mgr):
+        def foo(dat, *args, **_kwargs):
+            return list(args)
+        do_ = empty_do_mgr
+        do_.mount(at="foo", value=foo)
+        do_.mount(at="bar", value={"main": {"do": "foo"}})
+        assert do_("bar", 1, 2, 3) == [1, 2, 3]
+        do_.mount(at="baz", value={"main": {"do": "foo", "args": [4, 5, 6]}})
+        assert do_("baz") == [4, 5, 6]
+        assert do_("baz", 1, 2, 3) == [4, 5, 6, 1, 2, 3]
+
+    def test_call_kwargs(self, empty_do_mgr):
+        def foo(dat, *_args, **kwargs):
+            return dict(kwargs)
+        do_ = empty_do_mgr
+        do_.mount(at="foo", value=foo)
+        do_.mount(at="bar", value={"main": {"do": "foo"}})
+        assert do_("bar", a=1, b=2, c=3) == {"a": 1, "b": 2, "c": 3}
+        do_.mount(at="baz", value={"main": {"do": "foo", "kwargs": {"c": 33, "d": 44}}})
+        assert do_("baz") == {"c": 33, "d": 44}
+        assert do_("baz", a=1, b=2, c=3) == {"a": 1, "b": 2, "c": 3, "d": 44}
