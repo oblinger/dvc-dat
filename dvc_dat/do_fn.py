@@ -312,10 +312,12 @@ class DoManager(object):
             Dat.set(dat.get_results(), _MAIN_ARGS, args)
         if kwargs:
             Dat.set(dat.get_results(), _MAIN_KWARGS, kwargs)
-        Dat.set(dat.get_results(), _MAIN_RUN_AT, run_at)
         exec_time = (time.strftime("%H:%M:%S", time.gmtime(time_ms // 1000)) +
                      ".{:03d}".format(int(time_ms % 1000)))
         Dat.set(dat.get_results(), _MAIN_RUN_TIME, exec_time)
+        Dat.set(dat.get_results(), _MAIN_RUN_AT, run_at)
+        Dat.set(dat.get_results(), _MAIN_ARGS, args)
+        Dat.set(dat.get_results(), _MAIN_KWARGS, kwargs)
         dat.save()
         return result
 
