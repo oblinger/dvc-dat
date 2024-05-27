@@ -15,12 +15,10 @@ def main():
         for name in supported_dats:
             dat = do.load(name, default=None)
             if dat is None:
-                print(F"   {section} {name} does not exist")
+                print(F"   Error in {section} {name!r} does not exist")
                 continue
             if not hasattr(dat, "__DOC__"):
-                print(F"   {section} {name} does not have a valid doc string")
-            # if not hasattr(dat, ):
-            #     print(F"   {section} {name} does not have a valid doc string")
+                print(F"   Error in {section} {name!r} doesn't have a valid doc string")
             if not hasattr(dat, "reg_quick_test"):
                 print(F"   Error in {section} {name!r} " +
                       "doesn't have a valid quick regression test")

@@ -14,25 +14,27 @@ DVC-DAT - Thin python wrapper for DVC-based ML-datasets and workflows
 ML-DAT provides a simple way to manage data for machine learning projects.
 It has one key class and four key functions:
 
-1. **Dat class** -- A named, DVC-version, folder with associated metadata and 
+1. **Dat** -- A named, DVC-version, folder with associated metadata and 
     python action bindings.
 
-2. **do function** -- maps source-code structures and function into a space of 
+2. **do** -- Loads source-code structures and function into a space of 
    dotted.name.strings for easy reference within text configuration files.
 
-3. **from_dat function** -- builds a pandas DataFrame by applying a set of 
+3. **from_dat** -- builds a pandas DataFrame by applying a set of 
    metrics (python code-bindings) over a set of Dats.
 
-4. **to_excel function** -- slices and formats a pandas DataFrame into a collection 
+4. **to_excel** -- slices and formats a pandas DataFrame into a collection 
    of Execl documents and sheets for presentation.
    
-5. **dat_report function** -- wraps these functions into configurable report 
+5. **dat_report** -- wraps these functions into configurable report 
    generator.
 
 
 ### API OVERVIEW
 
 #### Manipulating dict trees
+
+Getters and setters for nested dictionaries.
 
 | Method                                            | Description                 |
 |---------------------------------------------------|-----------------------------|
@@ -44,32 +46,38 @@ It has one key class and four key functions:
 | Dat.sets(dict, ASSIGNMENTS)                       | Set multiple values at once |
 
 
+Examples:
+x = {}
+Dat.set(x, "a.b.c", 1)  # x = {'a': {'b': {'c': 1}}}
+Dat.get(x, "a.b.c")     # returns 1
+
+
 #### Managing Dat data folders
 
-| Method                          | Description                                    |
-|---------------------------------|------------------------------------------------|
-| Dat.create(path=, spec=) -> Dat | Create a new Dat from path template and spec.  |
-| Dat.load(NAME) -> Dat           | Load a Dat by name                             |
-| Dat.exists(NAME) -> bool        | Returns True iff named Dat exists              |
-| .get_spec() -> Spec             | Returns the spec Dict tree for this Dat.       |
-| .get_results() -> Spec          | Returns the results Dict tree for this Dat.    |
-| .get_path() -> Path             | Get the path of the Dat.                       |
-| .get_path_name() -> str         | Get the name of the Dat (relative to repo)     |
-| .get_path_tail() -> str         | Get last part of path (used as its short name) |
-| .save() -> None                 | Saves Dat's results to the filesystem.         |
-| .delete() -> None               | Delete the Dat from the filesystem.            |
-| .copy(NAME) -> Dat              | Copy the Dat to a new location.                |
-| .move(NAME) -> Dat              | Move the Dat to a new location.                |
+| Method                          | Description                                       |
+|---------------------------------|---------------------------------------------------|
+| Dat.create(path=, spec=) -> Dat | Create a new Dat from path template and spec.     |
+| Dat.load(NAME) -> Dat           | Load a Dat by name                                |
+| Dat.exists(NAME) -> bool        | Returns True iff named Dat exists                 |
+| .get_spec() -> Spec             | Returns the spec Dict tree for this Dat.          |
+| .get_results() -> Spec          | Returns the results Dict tree for this Dat.       |
+| .get_path() -> Path             | Get the path of the Dat.                          |
+| .get_path_name() -> str         | Get the name of the Dat (relative to repo)        |
+| .get_path_tail() -> str         | Get last part of path (used as its short name)    |
+| .save() -> None                 | Saves Dat's results to the filesystem.            |
+| .delete() -> None               | Delete the Dat from the filesystem.               |
+| .copy(NAME) -> Dat              | Copy the Dat to a new location.                   |
+| .move(NAME) -> Dat              | Move the Dat to a new location.                   |
+| ------------------------------- | ------------------------------------------------- |
+| DatContainer Methods            | Description                                      |
+| ------------------------------- |--------------------------------------------------|
+| .get_dat_paths() -> [str]       | Get the paths of all sub-Dats in the container.  |
+| .get_dats() -> [Dat]            | Loads and returns all the Dats in the container. |
 
 Note: NAME can be a full path, a path relative to the repo root or CWD.
 
 
 Dat Containers are Dats that recursively contain other Dats.
-
-| DatContainer Methods      | Description                                      |
-|---------------------------|--------------------------------------------------|
-| .get_dat_paths() -> [str] | Get the paths of all sub-Dats in the container.  |
-| .get_dats() -> [Dat]      | Loads and returns all the Dats in the container. |
 
 
 #### Loading objects from source-code
