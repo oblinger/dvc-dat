@@ -142,10 +142,12 @@ class TestCube:
 
 class TestFromDat:
     def test_null_df_create(self):
-        assert isinstance(from_dat([], []), DataFrame), "Couldn't create from df_tools"
+        assert isinstance(from_dat([], []), DataFrame), \
+            "Couldn't create from df_tools"
 
     def test_from_dat(self, dat1, dat2):
-        df = from_dat([dat1, dat2], [always_17, "test_dat_tools.always_18"])
+        df = from_dat([dat1, dat2],
+                      [always_17, "test_dat_tools.always_18"])
         assert df.to_dict() == {
             'always_17': {0: 17, 1: 17},
             'always_18': {0: 18, 1: 18},
@@ -210,7 +212,10 @@ class TestCommands:
 
 class TestCleanup:
     def test_cleanup(self):
-        os.system(f"rm *.xlsx")  # remove all excel files
+        os.system("rm *.xlsx")  # remove all excel files
+        os.system("rm -r test_dat_data_folder/anonymous")  # remove all anon dats
+        Dat.load("simple_report").delete()
+        Dat.load("dat_report").delete()
 
 #
 

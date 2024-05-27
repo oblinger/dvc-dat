@@ -34,7 +34,11 @@ descriptions = {
 Build an excel showing cube_hello metrics over the Hello10_runs.
 """
 main = {
-    "main": {"do": "dt.dat_report"},
+    "main": {
+        "do": "dt.dat_report",
+        "path": "dat_report",
+        "path_overwrite": True
+    },
     "source": ["runs.example.hello10", "runs.example.hello5"],
     "metrics": ["cube_hello.is_prime", "cube_hello.data", "cube_hello.color_p"],
     "title": "The Hello Report",

@@ -173,3 +173,8 @@ class TestDatCallArgs:
         do_.mount(at="baz", value={"main": {"do": "foo", "kwargs": {"c": 33, "d": 44}}})
         assert do_("baz") == {"c": 33, "d": 44}
         assert do_("baz", a=1, b=2, c=3) == {"a": 1, "b": 2, "c": 3, "d": 44}
+
+
+class TestCleanup:
+    def test_cleanup(self):
+        os.system("rm -r test_dat_data_folder/anonymous")  # remove all anon dats

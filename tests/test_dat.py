@@ -136,10 +136,10 @@ class TestDatAccessors:
 
 class TestDatCreationFromStaticFolders:
     def test_create_with_spec(self, spec1):
-        assert Dat.create(path=TMP_PATH, spec=spec1, overwrite=True), "Couldn't create Persistable"
+        assert Dat.create(path=TMP_PATH, spec=spec1, overwrite=True)
 
     def test_create_with_spec_and_path(self, spec1):
-        assert Dat.create(path=TMP_PATH, spec=spec1, overwrite=True), "Couldn't create Persistable"
+        assert Dat.create(path=TMP_PATH, spec=spec1, overwrite=True)
 
 
 class TestCreateSaveAndLoad:
@@ -190,7 +190,7 @@ class TestCreateSaveAndLoad:
 
 class TestDatLoadingAndSaving:
     def test_create(self):
-        assert Dat.create(spec={}, path=TMP_PATH, overwrite=True), "Couldn't create Persistable"
+        assert Dat.create(spec={}, path=TMP_PATH, overwrite=True)
 
     def test_path_accessor(self, dat1):
         assert dat1._path == TMP_PATH
@@ -233,8 +233,9 @@ class TestDatCopyMoveDelete:
 
 class TestDatContainers:
     def test_create(self):
-        os.system(f"rm -r '{TMP_PATH}'")
-        container = Dat.create(path=TMP_PATH, spec={"main": {"class": "DatContainer"}})
+        # os.system(f"rm -r '{TMP_PATH}'")
+        container = Dat.create(path=TMP_PATH, spec={"main": {"class": "DatContainer"}},
+                               overwrite=True)
         assert isinstance(container, DatContainer)
         assert container.get_dat_paths() == []
         assert container.get_dats() == []
@@ -253,12 +254,12 @@ class TestDatContainers:
             name = f"sub_{i}"
             spec = {}
             Dat.set(spec, "main.my_nifty_name", name)
-            sub = Dat.create(path=os.path.join(container._path, name), spec=spec)
+            sub = Dat.create(path=os.path.join(container.get_path(), name), spec=spec)
             sub.save()
 
         reload: DatContainer[Dat] = DatContainer.load(TMP_PATH)
         assert isinstance(reload, DatContainer)
-        assert Dat.get(reload._spec, MAIN_CLASS) == "DatContainer"
+        assert Dat.get(reload.get_spec(), MAIN_CLASS) == "DatContainer"
 
         paths = reload.get_dat_paths()
         assert isinstance(paths, list)
@@ -270,3 +271,8 @@ class TestDatContainers:
         assert Dat.get(sub_dats[8], "main.my_nifty_name") == "sub_8"
 
         os.system(f"rm -r '{TMP_PATH}'")
+
+
+class TestCleanup:
+    def test_cleanup(self):
+        os.system("rm -r test_dat_data_folder/anonymous")  # remove all anon dats

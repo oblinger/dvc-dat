@@ -12,7 +12,11 @@ def load_points_json(dat: Dat):  # noqa
 #
 
 simple = {
-    "main": {"do": "dt.dat_report"},
+    "main": {
+        "do": "dt.dat_report",
+        "path": "simple_report",
+        "path_overwrite": True
+    },
     "dat_report": {
         "title": "Retail Data Matrix",
         "source": "Datasets/Retail Data",
@@ -24,7 +28,11 @@ simple = {
 
 # this is the default report
 main = {
-    "main": {"do": "dt.dat_report"},
+    "main": {
+        "do": "dt.dat_report",
+        "path": "dat_report",
+        "path_overwrite": True
+    },
     "dat_report": {
         "title": "RPT",
         "source": "Datasets/Retail Data",
@@ -44,7 +52,11 @@ def my_test_code(dat: Dat):
 
 
 my_test = {
-    "main": {"do": "rpt.my_test_code"},
+    "main": {
+        "do": "rpt.my_test_code",
+        "path": "dat_report",
+        "path_overwrite": True
+    },
     "dat_report": {
         "title": "My Test",
         "source": "Datasets/Retail Data/Berkeley",
