@@ -12,7 +12,7 @@ def load_points_json(dat: Dat):  # noqa
 #
 
 simple = {
-    "main": {
+    "dat": {
         "do": "dt.dat_report",
         "path": "simple_report",
         "path_overwrite": True
@@ -28,7 +28,7 @@ simple = {
 
 # this is the default report
 main = {
-    "main": {
+    "dat": {
         "do": "dt.dat_report",
         "path": "dat_report",
         "path_overwrite": True
@@ -52,7 +52,7 @@ def my_test_code(dat: Dat):
 
 
 my_test = {
-    "main": {
+    "dat": {
         "do": "rpt.my_test_code",
         "path": "dat_report",
         "path_overwrite": True

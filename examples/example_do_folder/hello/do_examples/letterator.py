@@ -2,7 +2,7 @@ from dvc_dat import do  # noqa
 
 """Silly configurable tool for applying rules to a sequence of letters."""
 main = {
-    "main": {
+    "dat": {
       "do": "letterator.run",      # example of a complex tool config
       "title": "The Letterator"
     },   
@@ -21,5 +21,5 @@ def run(dat):
             if idx % step == 0:
                 text = fn(idx, text)
         results.append(text)
-    print(spec["main"]["title"])
+    print(spec["dat"]["title"])
     return "  ".join(results)

@@ -30,15 +30,15 @@ _DO_NULL = tuple(["-no-value-"])
 _MAIN = "main"                   # default module var to use when none specified
 
 # Dat Template Parameters
-_MAIN_BASE = "main.base"         # the base spec to expand
-_MAIN_PATH = "main.path"         # the template for the dat's path
-_MAIN_PATH_OVERWRITE = "main.path_overwrite"  # overwrite the path
-_MAIN_DO = "main.do"             # the main fn to execute
-_MAIN_ARGS = "main.args"         # prefix args for the main.do method
-_MAIN_KWARGS = "main.kwargs"     # default kwargs for the main.do method
-# _MAIN_RESULT = "main.result"   # the result of the main.do, stored in __results__.json
-_MAIN_RUN_AT = "main.run_at"     # the time at with main.do was run
-_MAIN_RUN_TIME = "main.run_time"  # the duration of the main.do run
+_MAIN_BASE = "dat.base"         # the base spec to expand
+_MAIN_PATH = "dat.path"         # the template for the dat's path
+_MAIN_PATH_OVERWRITE = "dat.path_overwrite"  # overwrite the path
+_MAIN_DO = "dat.do"             # the main fn to execute
+_MAIN_ARGS = "dat.args"         # prefix args for the main.do method
+_MAIN_KWARGS = "dat.kwargs"     # default kwargs for the main.do method
+# _MAIN_RESULT = "dat.result"   # the result of the main.do, stored in __results__.json
+_MAIN_RUN_AT = "dat.run_at"     # the time at with main.do was run
+_MAIN_RUN_TIME = "dat.run_time"  # the duration of the main.do run
 
 Spec = Dict[str, Any]
 
@@ -72,8 +72,8 @@ class DoManager(object):
 
     SPEC EXPANSION
     - Spec expansion is the process of recursively loading and merging a spec dict:
-    - If a spec has a "main.base" key, then it is loaded and merged with the spec.
-        - This process is repeated until no more "main.base" keys are found.
+    - If a spec has a "dat.base" key, then it is loaded and merged with the spec.
+        - This process is repeated until no more "dat.base" keys are found.
 
     """
     do_folder: str                                     # last added loadables folder
@@ -515,6 +515,7 @@ def do_argv(argv):
         result = do(*args, **kwargs)
     if result is not None:
         print(result)
+    return result
 
 
 def _parse_argv(argv):
@@ -568,7 +569,7 @@ def _get_flag(arg):
 if __name__ == '__main__':
     # do_argv([None, "dt.list"])
     # do_argv([None, "cmdln_example", "--show-spec"])
-    # do_argv([None, "my_letters", "--set", "main.title", "Re-configured letterator",
+    # do_argv([None, "my_letters", "--set", "dat.title", "Re-configured letterator",
     # "--json", "rules", '[[2, "my_letters.triple_it"]]'])
-    # do_argv([None, "my_letters", "--sets", "main.title=QuickChart,start=100,end=110"])
+    # do_argv([None, "my_letters", "--sets", "dat.title=QuickChart,start=100,end=110"])
     do_argv(sys.argv)

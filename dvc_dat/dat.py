@@ -9,9 +9,9 @@ import yaml
 SPEC_JSON = "_spec_.json"
 SPEC_YAML = "_spec_.yaml"
 RESULT_JSON = "_results_.json"
-MAIN_CLASS = "main.class"
-MAIN_KIND = "main.kind"
-MAIN_PATH_OVERWRITE = "main.path_overwrite"
+MAIN_CLASS = "dat.class"
+MAIN_KIND = "dat.kind"
+MAIN_PATH_OVERWRITE = "dat.path_overwrite"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
 _NO_ARG = "$$NO_ARG$$"
 
@@ -436,7 +436,7 @@ class DatContainer(Dat, Generic[T]):
 
     The spec structure is assumed to be:
     {
-        "main": {
+        "dat": {
             "class": "DatContainer"
         }
     }

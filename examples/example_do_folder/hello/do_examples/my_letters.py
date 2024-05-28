@@ -1,5 +1,5 @@
 main = {
-  "main": {"base": "letterator"},
+  "dat": {"base": "letterator"},
   "start": 97,
   "rules": [
     (7, "my_letters.jackpot"),

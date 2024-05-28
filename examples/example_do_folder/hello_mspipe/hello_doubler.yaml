@@ -1,5 +1,5 @@
 ---
-main:
+dat:
   __doc__: |
     Each toplevel multi-stage pipeline will have a configuration file like this one.
     

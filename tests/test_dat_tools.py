@@ -25,7 +25,7 @@ def run_capture(line: str) -> str:
 @pytest.fixture
 def spec1():
     return {
-        "main": {"my_key1": "my_val1", "my_key2": "my_val2"}
+        "dat": {"my_key1": "my_val1", "my_key2": "my_val2"}
     }
 
 
@@ -36,7 +36,7 @@ def dat1(spec1):
 
 @pytest.fixture
 def spec2():
-    return {"main": {"my_key1": "my_val1", "my_key2": "my_val2"}, "other": "key_value"}
+    return {"dat": {"my_key1": "my_val1", "my_key2": "my_val2"}, "other": "key_value"}
 
 
 @pytest.fixture

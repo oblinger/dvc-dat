@@ -26,7 +26,7 @@ def do():
 @pytest.fixture
 def spec1():
     return {
-        "main": {"path": "test_dats/{YY}-{MM} Dats{unique}",
+        "dat": {"path": "test_dats/{YY}-{MM} Dats{unique}",
                  "my_key1": "my_val1", "my_key2": "my_val2"}
     }
 
@@ -38,19 +38,19 @@ def dat1(spec1):
 
 @pytest.fixture
 def spec2():
-    return {"main": {"path": "test_dats/{YY}-{MM} Dats{unique}",
+    return {"dat": {"path": "test_dats/{YY}-{MM} Dats{unique}",
                      "my_key1": "my_val111", "my_key2": "my_val222"},
             "other": "key_value"}
 
 
 @pytest.fixture
 def dat_container_spec():
-    return {"main": {"class": "DatContainer"}}
+    return {"dat": {"class": "DatContainer"}}
 
 
 @pytest.fixture
 def game_spec():
-    return {"main": {"class": "Game"}, "game": {"views": {"view_1": "vid_1.mp4"}}}
+    return {"dat": {"class": "Game"}, "game": {"views": {"view_1": "vid_1.mp4"}}}
 
 
 @pytest.fixture
@@ -98,7 +98,7 @@ def temp_root_with_runset(
     game_1_path = Path(mock_dat_root.name, "gamesets/bb/baller10/1")
 
     run_spec = {
-        "main": {"class": "MCProcRun"},
+        "dat": {"class": "MCProcRun"},
         "run": {
             "input_game": str(game_1_path),
             "mcproc_output": "my_file.pickle",
@@ -127,10 +127,10 @@ class TestDatAccessors:
         dat = Dat.create(spec=spec1, path=my_name, overwrite=True)
         assert dat.get_spec() == spec1
         assert dat.get_results() == {}
-        Dat.set(dat.get_results(), "main.my_key1", "my_val1")
+        Dat.set(dat.get_results(), "dat.my_key1", "my_val1")
         dat.save()
         dat2 = Dat.load(dat.get_path_name())  # Reloads the dat
-        assert Dat.get(dat2.get_results(), "main.my_key1") == "my_val1"
+        assert Dat.get(dat2.get_results(), "dat.my_key1") == "my_val1"
         assert dat.delete()
 
 
@@ -147,16 +147,16 @@ class TestCreateSaveAndLoad:
         assert Dat.create(path=TMP_PATH, spec=spec1, overwrite=True)
 
     def test_get(self, spec1):
-        assert Dat.get(spec1, ["main", "my_key1"]) == "my_val1"
-        assert Dat.get(spec1, "main.my_key1") == "my_val1"
-        assert Dat.get(spec1, ["main"]) == spec1["main"]
-        assert Dat.get(spec1, "main") == spec1["main"]
+        assert Dat.get(spec1, ["dat", "my_key1"]) == "my_val1"
+        assert Dat.get(spec1, "dat.my_key1") == "my_val1"
+        assert Dat.get(spec1, ["dat"]) == spec1["dat"]
+        assert Dat.get(spec1, "dat") == spec1["dat"]
 
     def test_set(self, spec1):
-        Dat.set(spec1, ["main", "foo"], "bar")
-        assert Dat.get(spec1, ["main", "foo"]) == "bar"
-        Dat.set(spec1, "main.foo", "baz")
-        assert Dat.get(spec1, ["main", "foo"]) == "baz"
+        Dat.set(spec1, ["dat", "foo"], "bar")
+        assert Dat.get(spec1, ["dat", "foo"]) == "bar"
+        Dat.set(spec1, "dat.foo", "baz")
+        assert Dat.get(spec1, ["dat", "foo"]) == "baz"
 
         Dat.set(spec1, ["key1"], "value1")
         assert Dat.get(spec1, ["key1"]) == "value1"
@@ -169,19 +169,19 @@ class TestCreateSaveAndLoad:
 
     def test_persistable_get_set(self, spec1):
         dat = Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
-        assert Dat.get(dat, ["main", "my_key1"]) == "my_val1"
-        assert Dat.get(dat, ["main"]) == spec1["main"]
+        assert Dat.get(dat, ["dat", "my_key1"]) == "my_val1"
+        assert Dat.get(dat, ["dat"]) == spec1["dat"]
 
     def test_gets(self, spec1):
         dat = Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
-        assert Dat.gets(dat, "main.my_key1", "main") == [
+        assert Dat.gets(dat, "dat.my_key1", "dat") == [
             "my_val1",
-            spec1["main"],
+            spec1["dat"],
         ]
 
     def test_sets(self, spec1):
-        Dat.sets(spec1, "main.foo = bar", "bip.bop.boop=3.14", "bip.zip=7")
-        assert Dat.gets(spec1, "main.foo", "bip.bop.boop", "bip.zip") == [
+        Dat.sets(spec1, "dat.foo = bar", "bip.bop.boop=3.14", "bip.zip=7")
+        assert Dat.gets(spec1, "dat.foo", "bip.bop.boop", "bip.zip") == [
             "bar",
             3.14,
             7,
@@ -234,26 +234,26 @@ class TestDatCopyMoveDelete:
 class TestDatContainers:
     def test_create(self):
         # os.system(f"rm -r '{TMP_PATH}'")
-        container = Dat.create(path=TMP_PATH, spec={"main": {"class": "DatContainer"}},
+        container = Dat.create(path=TMP_PATH, spec={"dat": {"class": "DatContainer"}},
                                overwrite=True)
         assert isinstance(container, DatContainer)
         assert container.get_dat_paths() == []
         assert container.get_dats() == []
 
     def test_save_empty_container(self):
-        container = Dat.create(path=TMP_PATH, spec={"main": {"class": "DatContainer"}},
+        container = Dat.create(path=TMP_PATH, spec={"dat": {"class": "DatContainer"}},
                                overwrite=True)
         container.save()
         assert Dat.get(container._spec, MAIN_CLASS) == "DatContainer"
 
     def test_composite_dat_container(self):
-        container = Dat.create(path=TMP_PATH, spec={"main": {"class": "DatContainer"}},
+        container = Dat.create(path=TMP_PATH, spec={"dat": {"class": "DatContainer"}},
                                overwrite=True)
         container.save()
         for i in range(10):
             name = f"sub_{i}"
             spec = {}
-            Dat.set(spec, "main.my_nifty_name", name)
+            Dat.set(spec, "dat.my_nifty_name", name)
             sub = Dat.create(path=os.path.join(container.get_path(), name), spec=spec)
             sub.save()
 
@@ -268,7 +268,7 @@ class TestDatContainers:
         sub_dats = reload.get_dats()
         assert isinstance(sub_dats, list)
         assert isinstance(sub_dats[3], Dat)
-        assert Dat.get(sub_dats[8], "main.my_nifty_name") == "sub_8"
+        assert Dat.get(sub_dats[8], "dat.my_nifty_name") == "sub_8"
 
         os.system(f"rm -r '{TMP_PATH}'")
 

@@ -14,14 +14,14 @@ The real multi-stage pipe might can be patterned from this example with
 # and constructs its output folders by overwriting "mspipe" in the CWD
 # (specific multistage pipes will usually over-ride this to direct output elsewhere).
 main = {
-    "main": {                         # Section controls execution of the whole pipeline
+    "dat": {                         # Section controls execution of the whole pipeline
         "kind": "Mspipe",             # "subtype" common to all multi-stage runs
         "class": "DatContainer",      # The python class for a multi-stage runs
         "path": "runs/mspipe/{YY}-{MM}{unique}",  # Template for Dat's location
         "do": "hello_mspipe.mspipe_build_and_run",   # Creates and runs the pipeline
     },
     "common": {
-        "main": {
+        "dat": {
             "kind": "Mcproc",         # Default "subtype" for all mcproc runs
             "base": "hello_std_args",  # Default parameters for an mcproc run
             "do": "hello_mspipe.fake_mcproc_runner",  # Runs one mcproc stage
@@ -57,7 +57,7 @@ def mspipe_run(dc: DatContainer):
         stage_dat = Dat.load(dat_name)
         print(f"Running {dat_name}")
         do(stage_dat)
-    Dat.set(dc.get_results(), "main.version", DAT_VERSION)
+    Dat.set(dc.get_results(), "dat.version", DAT_VERSION)
     return f"Ran {len(dc.get_spec()['stages'])} stages in {dc.get_path_name()}"
 
 

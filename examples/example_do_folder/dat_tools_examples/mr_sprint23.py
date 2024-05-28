@@ -1,5 +1,5 @@
 main = {
-    "main": {"do": "dt.dat_report"},
+    "dat": {"do": "dt.dat_report"},
     "dat_report": {
         "title": "S23",
         "source": ["runs/example/hello10", "runs/example/hello5"],
@@ -8,7 +8,7 @@ main = {
 }
 
 add_col = {
-    "main": {"base": "mr_sprint23"},
+    "dat": {"base": "mr_sprint23"},
     "dat_report": {
         "title": "S23b", "show": False, "verbose": False,
         "formatted_columns":

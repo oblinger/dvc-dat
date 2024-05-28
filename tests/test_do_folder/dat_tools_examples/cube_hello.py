@@ -34,7 +34,7 @@ descriptions = {
 Build an excel showing cube_hello metrics over the Hello10_runs.
 """
 main = {
-    "main": {
+    "dat": {
         "do": "dt.dat_report",
         "path": "dat_report",
         "path_overwrite": True
@@ -52,7 +52,7 @@ def is_prime(dat: Dat):
 
 def data(dat: Dat):
     """Returns the data from the run."""
-    return "-".join(map(str, Dat.get(dat.get_spec(), "main.data")))
+    return "-".join(map(str, Dat.get(dat.get_spec(), "dat.data")))
 
 
 def color_p(_dat: Dat):

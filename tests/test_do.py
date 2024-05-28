@@ -86,14 +86,14 @@ class TestCommandLine:
                           "   q  rrr  S  t  uuu  v  jackpot   XXX  y")
 
     def test_tweaking_command_from_cmdline(self):
-        line = """./do my_letters --set main.title "Re-configured letterator" """ + \
+        line = """./do my_letters --set dat.title "Re-configured letterator" """ + \
                 """--json rules '[[2, "my_letters.triple_it"]]'"""
         expect = """Re-configured letterator\na  bbb  c  ddd  e  fff  g  hhh  i""" + \
                  """  jjj  k  lll  m  nnn  o  ppp  q  rrr  s  ttt  u  vvv  w  xxx  y"""
         assert run_capture(line) == expect
 
     def test_setting_multiple_params_at_once(self):
-        line = """./do my_letters --sets main.title=Quickie,start=100,end=110"""
+        line = """./do my_letters --sets dat.title=Quickie,start=100,end=110"""
         expect = """Quickie\n""" + \
                  """D  e  fff  g  h  JACKPOT JACKPOT JACKPOT   j  k  lll  m"""
         assert run_capture(line) == expect
@@ -145,7 +145,7 @@ class TestTemplatedDatCreationAndDeletion:
 
     def test_creation_and_deletion_with_spec(self):
         from dvc_dat import do
-        spec1 = {"main": {"path": "test_dats/{YY}-{MM} Dats{unique}"}}
+        spec1 = {"dat": {"path": "test_dats/{YY}-{MM} Dats{unique}"}}
         assert (dat := do.dat_from_template(spec1)), "Couldn't create Persistable"
         assert dat.get_path_name().startswith("test_dats/"), "Wrong path"
         assert dat.delete(), "Couldn't delete Persistable"
@@ -153,24 +153,24 @@ class TestTemplatedDatCreationAndDeletion:
 
 class TestDatCallArgs:
     def test_call_args(self, empty_do_mgr):
-        def foo(dat, *args, **_kwargs):
+        def foo(_dat, *args, **_kwargs):
             return list(args)
         do_ = empty_do_mgr
         do_.mount(at="foo", value=foo)
-        do_.mount(at="bar", value={"main": {"do": "foo"}})
+        do_.mount(at="bar", value={"dat": {"do": "foo"}})
         assert do_("bar", 1, 2, 3) == [1, 2, 3]
-        do_.mount(at="baz", value={"main": {"do": "foo", "args": [4, 5, 6]}})
+        do_.mount(at="baz", value={"dat": {"do": "foo", "args": [4, 5, 6]}})
         assert do_("baz") == [4, 5, 6]
         assert do_("baz", 1, 2, 3) == [4, 5, 6, 1, 2, 3]
 
     def test_call_kwargs(self, empty_do_mgr):
-        def foo(dat, *_args, **kwargs):
+        def foo(_dat, *_args, **kwargs):
             return dict(kwargs)
         do_ = empty_do_mgr
         do_.mount(at="foo", value=foo)
-        do_.mount(at="bar", value={"main": {"do": "foo"}})
+        do_.mount(at="bar", value={"dat": {"do": "foo"}})
         assert do_("bar", a=1, b=2, c=3) == {"a": 1, "b": 2, "c": 3}
-        do_.mount(at="baz", value={"main": {"do": "foo", "kwargs": {"c": 33, "d": 44}}})
+        do_.mount(at="baz", value={"dat": {"do": "foo", "kwargs": {"c": 33, "d": 44}}})
         assert do_("baz") == {"c": 33, "d": 44}
         assert do_("baz", a=1, b=2, c=3) == {"a": 1, "b": 2, "c": 3, "d": 44}
 

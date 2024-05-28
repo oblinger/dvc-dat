@@ -36,12 +36,12 @@ def build_hello_runs(num):
     c = DatContainer(path=path, spec={})
     c.save()
     for i in range(10):
-        run = Dat.create(path=os.path.join(c.get_path(), f"{i}"), spec={"main": {}})
+        run = Dat.create(path=os.path.join(c.get_path(), f"{i}"), spec={"dat": {}})
         start = random.randint(0, 10)
         range_ = random.randint(0, 10)
         count = 10   # random.choice(20)
         data = [random.randint(0, range_) + start for _ in range(count)]
-        run.get_spec()["main"].update(dict(start=start, range=range_,
+        run.get_spec()["dat"].update(dict(start=start, range=range_,
                                            count=count, data=data))
         run.save()
 
