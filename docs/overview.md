@@ -48,8 +48,11 @@ Getters and setters for nested dictionaries.
 
 Examples:
 x = {}
-Dat.set(x, "a.b.c", 1)  # x = {'a': {'b': {'c': 1}}}
-Dat.get(x, "a.b.c")     # returns 1
+Dat.set(x, "a.b.c", 1)  # x = {'a': {'b': {'c': lambda x: 20}}}
+Dat.get(x, "a.b.c")()     # returns 20
+
+
+
 
 
 #### Managing Dat data folders
@@ -69,15 +72,15 @@ Dat.get(x, "a.b.c")     # returns 1
 | .copy(NAME) -> Dat              | Copy the Dat to a new location.                   |
 | .move(NAME) -> Dat              | Move the Dat to a new location.                   |
 | ------------------------------- | ------------------------------------------------- |
-| DatContainer Methods            | Description                                      |
-| ------------------------------- |--------------------------------------------------|
-| .get_dat_paths() -> [str]       | Get the paths of all sub-Dats in the container.  |
-| .get_dats() -> [Dat]            | Loads and returns all the Dats in the container. |
+| DatContainer Methods            | Description                                       |
+| .get_dat_paths() -> [str]       | Get the paths of all sub-Dats in the container.   |
+| .get_dats() -> [Dat]            | Loads and returns all the Dats in the container.  |
 
 Note: NAME can be a full path, a path relative to the repo root or CWD.
 
-
 Dat Containers are Dats that recursively contain other Dats.
+
+
 
 
 #### Loading objects from source-code
@@ -102,6 +105,9 @@ source code objects and functions.
 | .dat_from_template(path=,spec=)  | Expands spec and uses it to call Dat.creates  |
 
 NAME is a dotted.name.string that refers to a python object or function.
+
+
+
 
 #### DAT_TOOLS - Data Frame manipulation
 
