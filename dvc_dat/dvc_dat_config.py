@@ -3,19 +3,19 @@ import os
 import weakref
 from typing import Dict, Any, Union, List
 
-_DAT_FILE = ".datconfig"
+_DAT_FILE = ".datconfig.json"
 _DAT_FOLDER = "dat_data_folder"
 _DAT_FOLDERS = "dat_folders"
 _DAT_MOUNT_COMMANDS = "mount_commands"
 
 
 class DatConfig(object):
-    """Configuration info for the 'dat' module loaded from the .datconfig file.
+    """Configuration info for the 'dat' module loaded from the .datconfig.json.json file.
 
-    .datconfig
-        The do module search CWD and all its parent folders for the '.datconfig' file.
+    .datconfig.json.json
+        The do module search CWD and all its parent folders for the '.datconfig.json.json' file.
         If it is found, it expects a JSON object with a 'do_folder' key that indicates
-        the path (relative to the .datconfig file itself) of the "do folder"
+        the path (relative to the .datconfig.json.json file itself) of the "do folder"
     """
     config: Dict[str, Any]
     dat_folder: str
@@ -30,7 +30,7 @@ class DatConfig(object):
                     with open(config, 'r') as f:
                         self.config = json.load(f)
                 except json.JSONDecodeError as e:
-                    raise Exception(f"Error loading .datconfig: {e}")
+                    raise Exception(f"Error loading .datconfig.json.json: {e}")
                 break
             if self.folder == '/':
                 self.folder = os.getcwd()

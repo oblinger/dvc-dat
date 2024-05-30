@@ -63,7 +63,7 @@ class DoManager(object):
 
     DO_FOLDER
     - Like GIT the 'do' module searches CWD and all its parent folders for the
-      '.datconfig' file. If it is found, it expects it to contain a JSON object.
+      '.datconfig.json.json' file. If it is found, it expects it to contain a JSON object.
     - If it contains the 'do_folder' key, its value specifies the relative path from
       the datconfig file to the "do folder" where the loadable python objects are found.
     - Otherwise, the do folder is assumed to be a folder named 'do' in the CWD.
