@@ -7,6 +7,7 @@ _DAT_FILE = ".datconfig.json"
 _DAT_FOLDER = "dat_data_folder"
 _DAT_FOLDERS = "dat_folders"
 _DAT_MOUNT_COMMANDS = "mount_commands"
+_DEFAULT_DAT_FOLDER = "dat_data"
 
 
 class DatConfig(object):
@@ -17,7 +18,7 @@ class DatConfig(object):
         If it is found, it expects a JSON object with a 'do_folder' key that indicates
         the path (relative to the .datconfig.json.json file itself) of the "do folder"
     """
-    config: Dict[str, Any]
+    config: Dict[str, Any] = {}
     dat_folder: str
     dat_data_folders: List[str]   # Note: also includes the dat_folder
     dat_cache: Dict[str, Any] = weakref.WeakValueDictionary()  # Used in Dat.load
@@ -37,7 +38,10 @@ class DatConfig(object):
                 break
             self.folder = os.path.dirname(self.folder)
 
-        self.dat_folder = self._lookup_path(self.folder, _DAT_FOLDER, "dat_data")
+        self.dat_folder = self._lookup_path(self.folder, _DAT_FOLDER, None)
+        if not self.dat_folder:
+            print(f"Warning: No {_DAT_FILE} found or no \"{_DAT_FOLDER}\" specified.")
+            self.dat_folder = os.path.join(self.folder, _DEFAULT_DAT_FOLDER)
         dirs = self.config.get(_DAT_FOLDERS)
         dirs = ([self.dat_folder] + dirs) if dirs else [self.dat_folder]
         self.dat_data_folders = [os.path.join(self.folder, f) for f in dirs]
