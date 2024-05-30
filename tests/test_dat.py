@@ -10,7 +10,7 @@ from dvc_dat import dat_config
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat.dat import MAIN_CLASS, Dat, DatContainer
+from dvc_dat.dat import _DAT_CLASS, Dat, DatContainer
 
 
 TMP_PATH = "/tmp/job_test"
@@ -213,6 +213,8 @@ class TestDatLoadingAndSaving:
 
 class TestDatCopyMoveDelete:
     def test_copy_exists_and_delete(self):
+        if Dat.exists("Datasets/a_copy"):
+            Dat.load("Datasets/a_copy").delete()
         dat = Dat.create(spec={"zap": 77})
         assert isinstance(dat2 := dat.copy("Datasets/a_copy"), Dat)
         assert Dat.get(dat2, "zap") == 77
@@ -222,6 +224,8 @@ class TestDatCopyMoveDelete:
         assert Dat.exists("Datasets/a_copy") is False
 
     def test_move(self):
+        if Dat.exists("Datasets/moved"):
+            Dat.load("Datasets/moved").delete()
         dat = Dat.create(spec={"zap": 88})
         original_name = dat.get_path_name()
         assert isinstance(dat2 := dat.move("Datasets/moved"), Dat)
@@ -244,7 +248,7 @@ class TestDatContainers:
         container = Dat.create(path=TMP_PATH, spec={"dat": {"class": "DatContainer"}},
                                overwrite=True)
         container.save()
-        assert Dat.get(container._spec, MAIN_CLASS) == "DatContainer"
+        assert Dat.get(container._spec, _DAT_CLASS) == "DatContainer"
 
     def test_composite_dat_container(self):
         container = Dat.create(path=TMP_PATH, spec={"dat": {"class": "DatContainer"}},
@@ -259,7 +263,7 @@ class TestDatContainers:
 
         reload: DatContainer[Dat] = DatContainer.load(TMP_PATH)
         assert isinstance(reload, DatContainer)
-        assert Dat.get(reload.get_spec(), MAIN_CLASS) == "DatContainer"
+        assert Dat.get(reload.get_spec(), _DAT_CLASS) == "DatContainer"
 
         paths = reload.get_dat_paths()
         assert isinstance(paths, list)

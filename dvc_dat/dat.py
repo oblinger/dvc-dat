@@ -6,12 +6,12 @@ from enum import Enum, auto
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 import yaml
 
-SPEC_JSON = "_spec_.json"
-SPEC_YAML = "_spec_.yaml"
-RESULT_JSON = "_results_.json"
-MAIN_CLASS = "dat.class"
-MAIN_KIND = "dat.kind"
-MAIN_PATH_OVERWRITE = "dat.path_overwrite"
+_SPEC_JSON = "_spec_.json"
+_SPEC_YAML = "_spec_.yaml"
+_RESULT_JSON = "_results_.json"
+_DAT_CLASS = "dat.class"
+_DAT_KIND = "dat.kind"
+_DAT_PATH_OVERWRITE = "dat.path_overwrite"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
 _NO_ARG = "$$NO_ARG$$"
 
@@ -193,7 +193,7 @@ class Dat(object):
             txt = json.dumps(spec, indent=2)
         except Exception as e:
             raise Exception(f"Non-JSON data in Dat.spec: {e}\nSPEC={spec}")
-        with open(os.path.join(path, SPEC_JSON), "w") as out:
+        with open(os.path.join(path, _SPEC_JSON), "w") as out:
             out.write(txt)
             out.write("\n")
         return Dat._make_dat_instance(path, spec)
@@ -216,6 +216,7 @@ class Dat(object):
             load or its name to be searched for
         :param cwd: used instead of current working dir for dat search
         """
+        from . import dat_config
         if os.path.isabs(name_or_path):
             path = name_or_path
         elif os.path.exists(path := os.path.join(cwd or os.getcwd(), name_or_path)):
@@ -224,12 +225,14 @@ class Dat(object):
             pass
         else:
             raise Exception(f"LOAD_DAT: Could not find {name_or_path!r}")
+        if path in dat_config.dat_cache:
+            return dat_config.dat_cache[path]
         try:
-            if os.path.exists(fpath := os.path.join(path, SPEC_JSON)):
+            if os.path.exists(fpath := os.path.join(path, _SPEC_JSON)):
                 with open(fpath) as f:
                     spec = json.load(f)
             else:
-                with open(os.path.join(path, SPEC_YAML)) as f:
+                with open(os.path.join(path, _SPEC_YAML)) as f:
                     spec = yaml.safe_load(f)
         except Exception as e:
             if not os.path.exists(path):
@@ -238,7 +241,7 @@ class Dat(object):
                 raise Exception(f"LOAD_DAT: Error loading {path!r}s spec file: {e}")
         dat = Dat._make_dat_instance(path, spec)
         try:
-            with open(os.path.join(path, RESULT_JSON)) as f:
+            with open(os.path.join(path, _RESULT_JSON)) as f:
                 dat._result = json.load(f)
         except FileNotFoundError:
             pass
@@ -247,8 +250,9 @@ class Dat(object):
     @staticmethod
     def exists(path: str) -> bool:
         """Checks if a given Dat exists (by looking for its _spec_ file)."""
-        return os.path.exists(Dat._resolve_path(os.path.join(path, SPEC_JSON))) or \
-            os.path.exists(Dat._resolve_path(os.path.join(path, SPEC_YAML)))
+        path = Dat._resolve_path(path)
+        return os.path.exists(os.path.join(path, _SPEC_JSON)) or \
+            os.path.exists(os.path.join(path, _SPEC_YAML))
 
     def __init__(self,
                  *,
@@ -263,7 +267,7 @@ class Dat(object):
             raise Exception("Use Dat.create() to create a new Dat instances.")
 
     def __repr__(self):
-        kind = Dat.get(self._spec, MAIN_KIND, self.__class__.__name__)
+        kind = Dat.get(self._spec, _DAT_KIND, self.__class__.__name__)
         return f"<{kind}: {self.get_path_name()}>"
 
     def __str__(self):
@@ -294,7 +298,7 @@ class Dat(object):
         to in the backing store.
         """
         if True or self._result:
-            with open(os.path.join(self._path, RESULT_JSON), "w") as out:
+            with open(os.path.join(self._path, _RESULT_JSON), "w") as out:
                 txt = json.dumps(self._result, indent=2)
                 out.write(txt)
 
@@ -302,6 +306,8 @@ class Dat(object):
         """Deletes the folder and its contents from the filesystem.
         This deletion will also be reflected as a deletion pushed to git.
         Still, the backing store will retain all previous versions of this Dat."""
+        from . import dat_config
+        dat_config.dat_cache.pop(self._path, None)      # Remove from cache
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
@@ -311,7 +317,6 @@ class Dat(object):
                 return False
         return True
 
-    # NOT TESTED
     def copy(self, new_path: str) -> "Dat":
         """Copies this Dat to a new location."""
         new_path_ = Dat._resolve_path(new_path)
@@ -323,6 +328,8 @@ class Dat(object):
 
     def move(self, new_path: str) -> "Dat":
         """Moves this Dat to a new location."""
+        from . import dat_config
+        del dat_config.dat_cache[self._path]      # Remove from cache
         new_path_ = Dat._resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
@@ -378,13 +385,15 @@ class Dat(object):
 
     @staticmethod
     def _make_dat_instance(path: str, spec: Dict) -> "Dat":
-
-        klass_name = Dat.get(spec, MAIN_CLASS, "Dat")
+        from . import dat_config
+        klass_name = Dat.get(spec, _DAT_CLASS, "Dat")
         klass = Dat._find_subclass_by_name(Dat, klass_name)
         if not klass:
             raise Exception(f"Class {klass_name} is not a subclass of Dat")
 
         dat = klass(path=path, spec=spec, _no_backing=True)
+
+        dat_config.dat_cache[path] = dat
         return dat
 
     @staticmethod
@@ -406,8 +415,25 @@ class Dat(object):
             return path
 
     @staticmethod
+    def _path2name2(path):
+        from . import dat_config
+        for p in dat_config.dat_data_folders:
+            try:
+                match = 1 + len(os.path.commonpath([p, path]))
+                if match > 2:
+                    return path[match:]
+            except ValueError:
+                pass
+        return path
+
+    @staticmethod
     def _resolve_path(name: str) -> str:
         from . import dat_config
+        for folder in dat_config.dat_data_folders:
+            path = os.path.join(folder, name)
+            if os.path.exists(os.path.join(path, _SPEC_JSON)) or \
+                    os.path.exists(os.path.join(path, _SPEC_YAML)):
+                return path
         return os.path.join(dat_config.dat_folder, name)
 
 
@@ -450,7 +476,7 @@ class DatContainer(Dat, Generic[T]):
     def get_dat_paths(self) -> List[str]:
         """Lazy loaded list of full paths for the contained Dat."""
         if self._dat_paths is DataState.NOT_LOADED:
-            self._dat_paths = DatContainer._find_dat_under(self._path)
+            self._dat_paths = DatContainer._find_dats_under(self._path)
         return self._dat_paths
 
     def get_dats(self) -> List[T]:
@@ -466,16 +492,14 @@ class DatContainer(Dat, Generic[T]):
         return self._dats  # type: ignore
 
     @staticmethod
-    def _find_dat_under(root_path):
+    def _find_dats_under(root_path):
         results = []
         for root, dirs, files in os.walk(root_path):
             for name in files:
-                if name == SPEC_JSON or name == SPEC_YAML:
+                if name == _SPEC_JSON or name == _SPEC_YAML:
                     folder = os.path.dirname(os.path.join(root, name))
                     results.append(folder)
         results.sort()
         assert os.path.abspath(results[0]) == os.path.abspath(root_path)
         del results[0]
         return results
-
-

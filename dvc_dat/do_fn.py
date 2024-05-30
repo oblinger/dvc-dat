@@ -30,15 +30,15 @@ _DO_NULL = tuple(["-no-value-"])
 _MAIN = "main"                   # default module var to use when none specified
 
 # Dat Template Parameters
-_MAIN_BASE = "dat.base"         # the base spec to expand
-_MAIN_PATH = "dat.path"         # the template for the dat's path
-_MAIN_PATH_OVERWRITE = "dat.path_overwrite"  # overwrite the path
-_MAIN_DO = "dat.do"             # the main fn to execute
-_MAIN_ARGS = "dat.args"         # prefix args for the main.do method
-_MAIN_KWARGS = "dat.kwargs"     # default kwargs for the main.do method
+_DAT_BASE = "dat.base"         # the base spec to expand
+_DAT_PATH = "dat.path"         # the template for the dat's path
+_DAT_PATH_OVERWRITE = "dat.path_overwrite"  # overwrite the path
+_DAT_DO = "dat.do"             # the main fn to execute
+_DAT_ARGS = "dat.args"         # prefix args for the main.do method
+_DAT_KWARGS = "dat.kwargs"     # default kwargs for the main.do method
 # _MAIN_RESULT = "dat.result"   # the result of the main.do, stored in __results__.json
-_MAIN_RUN_AT = "dat.run_at"     # the time at with main.do was run
-_MAIN_RUN_TIME = "dat.run_time"  # the duration of the main.do run
+_DAT_RUN_AT = "dat.run_at"     # the time at with main.do was run
+_DAT_RUN_TIME = "dat.run_time"  # the duration of the main.do run
 
 Spec = Dict[str, Any]
 
@@ -266,7 +266,7 @@ class DoManager(object):
         if isinstance(spec, str):
             spec = self.load(spec)
             spec = copy.deepcopy(spec)
-        if base := Dat.get(spec, _MAIN_BASE, None):
+        if base := Dat.get(spec, _DAT_BASE, None):
             sub_spec = self.expand_spec(base)
             return self.merge_configs(sub_spec, spec)
         else:
@@ -282,9 +282,9 @@ class DoManager(object):
         spec, count = copy.deepcopy(spec), 1
         # Dat.set(spec, _MAIN_ARGS, args or [])
         # Dat.set(spec, _MAIN_KWARGS, kwargs or {})
-        path = path or Dat.get(spec, _MAIN_PATH, None)
-        overwrite = Dat.get(spec, _MAIN_PATH_OVERWRITE, False) and \
-            path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
+        path = path or Dat.get(spec, _DAT_PATH, None)
+        overwrite = Dat.get(spec, _DAT_PATH_OVERWRITE, False) and \
+                    path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
         spec = self.expand_spec(spec)
         path = Dat._expand_dat_path(path, overwrite=overwrite)  # noqa
         return Dat.create(path=path, spec=spec, overwrite=overwrite)
@@ -292,32 +292,32 @@ class DoManager(object):
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
         """Runs the main.do method of an instantiated object."""   # noqa
         obj = dat.get_spec()
-        if main_args := Dat.get(obj, _MAIN_ARGS, None):
+        if main_args := Dat.get(obj, _DAT_ARGS, None):
             args = main_args + list(args)
-        if main_kwargs := Dat.get(obj, _MAIN_KWARGS, None):
+        if main_kwargs := Dat.get(obj, _DAT_KWARGS, None):
             main_kwargs = dict(main_kwargs)
             main_kwargs.update(kwargs)
             kwargs = main_kwargs
-        fn_spec = Dat.get(obj, _MAIN_DO)
+        fn_spec = Dat.get(obj, _DAT_DO)
         if isinstance(fn_spec, str):
             fn_spec = self.load(fn_spec)
         if not callable(fn_spec):
-            raise Exception(F"'{_MAIN_DO}' in {dat!r} of type {type(fn_spec)} "
+            raise Exception(F"'{_DAT_DO}' in {dat!r} of type {type(fn_spec)} "
                             + "is not callable")
         run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         before = time.time()
         result = fn_spec(dat, *args, **kwargs)
         time_ms = (time.time() - before) * 1000
         if args:
-            Dat.set(dat.get_results(), _MAIN_ARGS, args)
+            Dat.set(dat.get_results(), _DAT_ARGS, args)
         if kwargs:
-            Dat.set(dat.get_results(), _MAIN_KWARGS, kwargs)
+            Dat.set(dat.get_results(), _DAT_KWARGS, kwargs)
         exec_time = (time.strftime("%H:%M:%S", time.gmtime(time_ms // 1000)) +
                      ".{:03d}".format(int(time_ms % 1000)))
-        Dat.set(dat.get_results(), _MAIN_RUN_TIME, exec_time)
-        Dat.set(dat.get_results(), _MAIN_RUN_AT, run_at)
-        Dat.set(dat.get_results(), _MAIN_ARGS, args)
-        Dat.set(dat.get_results(), _MAIN_KWARGS, kwargs)
+        Dat.set(dat.get_results(), _DAT_RUN_TIME, exec_time)
+        Dat.set(dat.get_results(), _DAT_RUN_AT, run_at)
+        Dat.set(dat.get_results(), _DAT_ARGS, args)
+        Dat.set(dat.get_results(), _DAT_KWARGS, kwargs)
         dat.save()
         return result
 
@@ -501,8 +501,8 @@ def do_argv(argv):
         print(F"  do({', '.join(args + kwargs)})")
         return
     elif spec:
-        args_ = Dat.get(spec, _MAIN_ARGS, [])
-        kwargs_ = Dat.get(spec, _MAIN_KWARGS, {})
+        args_ = Dat.get(spec, _DAT_ARGS, [])
+        kwargs_ = Dat.get(spec, _DAT_KWARGS, {})
         kwargs_.update(kwargs)
         result = do(spec, *args_ + args[1:], **kwargs_)
     elif not callable(cmd):

@@ -1,15 +1,16 @@
 
-from .dvc_dat_config import DatConfig
+from .dvc_dat_config import DatConfig, _DAT_MOUNT_COMMANDS
 from .do_fn import DoManager, do_argv
 
-DAT_VERSION = "1.0.00 (2024-05-25)"
+DAT_VERSION = "1.0.01 (2024-05-30)"
 dat_config = DatConfig()
 do = DoManager()  # not available during load of do_fn
 
 from .dat import Dat, DatContainer
 from . import dat_tools
 
-do.mount_all(dat_config.config.get("mount_commands", []), relative_to=dat_config.folder)
+cmds = dat_config.config.get(_DAT_MOUNT_COMMANDS, [])
+do.mount_all(cmds, relative_to=dat_config.folder)
 do.mount(module=dat_tools, at="dat_tools")
 do.mount(module=dat_tools, at="dt")
 do.mount(value=dat_tools.cmd_list, at="dt.list")
