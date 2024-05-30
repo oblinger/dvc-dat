@@ -260,7 +260,7 @@ class DoManager(object):
         else:
             return base
 
-    def expand_spec(self, spec: Union[Spec | str]) -> Spec:
+    def expand_spec(self, spec: Union[Spec, str]) -> Spec:
         """Expands a spec by recursively loading and expanding its 'main.base' spec,
         and then merging its keys as an override to the expanded base."""
         if isinstance(spec, str):
