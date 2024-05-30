@@ -2,7 +2,7 @@
 from .dvc_dat_config import DatConfig, _DAT_MOUNT_COMMANDS
 from .do_fn import DoManager, do_argv
 
-DAT_VERSION = "1.0.01 (2024-05-30)"
+DAT_VERSION = "1.0.02 (2024-05-30)"
 dat_config = DatConfig()
 do = DoManager()  # not available during load of do_fn
 
