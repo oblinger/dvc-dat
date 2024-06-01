@@ -23,6 +23,8 @@ class DatConfig(object):
     dat_data_folders: List[str]   # Note: also includes the dat_folder
     dat_cache: Dict[str, Any] = weakref.WeakValueDictionary()  # Used in Dat.load
 
+    DAT_ADDS_LIST = ".dat_adds.txt"  # List of Dat names to be updated in DVC
+
     def __init__(self, folder=None):
         self.folder = folder or os.getcwd()
         while True:

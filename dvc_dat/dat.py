@@ -227,18 +227,22 @@ class Dat(object):
             raise Exception(f"LOAD_DAT: Could not find {name_or_path!r}")
         if path in dat_config.dat_cache:
             return dat_config.dat_cache[path]
+        path = os.path.abspath(path)
         try:
+            spec = ()
             if os.path.exists(fpath := os.path.join(path, _SPEC_JSON)):
                 with open(fpath) as f:
                     spec = json.load(f)
-            else:
-                with open(os.path.join(path, _SPEC_YAML)) as f:
+            elif os.path.exists(fpath := os.path.join(path, _SPEC_YAML)):
+                with open(fpath) as f:
                     spec = yaml.safe_load(f)
         except Exception as e:
             if not os.path.exists(path):
-                raise Exception(F"LOAD_DAT: Folder missing {path!r}.")
+                raise Exception(F"LOAD_DAT: Folder not found {path!r}.")
             else:
-                raise Exception(f"LOAD_DAT: Error loading {path!r}s spec file: {e}")
+                raise Exception(f"LOAD_DAT: Error in spec file for {path!r}: {e}")
+        if spec == ():
+            raise Exception(F"LOAD_DAT: Spec file missing for {path!r}.")
         dat = Dat._make_dat_instance(path, spec)
         try:
             with open(os.path.join(path, _RESULT_JSON)) as f:
