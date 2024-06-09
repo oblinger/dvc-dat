@@ -1,6 +1,7 @@
 {
     "dat_data_folder": "example_dat_data_folder",
     "mount_commands": [
+        {"add_do_folder": "../standard_do_scripts"},
         {"add_do_folder": "example_do_folder"},
         {"at": "foo", "file": "example_do_folder/some_python_file.py"},
         {"at": "bar", "file": "example_do_folder/some_other_python_file.py"},

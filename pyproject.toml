@@ -13,6 +13,9 @@ keywords = ["dvc"]
 readme = "README.md"
 dynamic = ["version"]
 
+[project.scripts]
+dat = "dvc_dat.__main__:main"
+
 [tool.setuptools]
 packages = ["dvc_dat"]
 
