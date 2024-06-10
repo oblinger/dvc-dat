@@ -1,18 +1,14 @@
-#!/usr/bin/env python3
 import os
-import sys
-root = os.path.dirname(os.path.dirname(__file__))
-sys.path += [f"{root}/src", f"{root}/external"]
 
 from dvc_dat import dat_config, Dat
 
 DEBUG = True
 
 
-def main():
+def main(*add_paths):
     adds_file = os.path.join(dat_config.dat_folder, dat_config.DAT_ADDS_LIST)
     paths = []
-    for arg in sys.argv[1:]:
+    for arg in add_paths:
         arg = os.path.join(os.getcwd(), arg)
         p = Dat.load(arg).get_path_name()
         paths.append(p)
@@ -22,7 +18,3 @@ def main():
     if DEBUG:
         print(f"\nDAT ADDS:   ({adds_file})")
         os.system(f"cat '{adds_file}'")
-
-
-if __name__ == "__main__":
-    main()

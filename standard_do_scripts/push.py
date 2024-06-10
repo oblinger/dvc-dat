@@ -1,8 +1,4 @@
-#!/usr/bin/env python3
 import os
-import sys
-root = os.path.dirname(os.path.dirname(__file__))
-sys.path += [f"{root}/src", f"{root}/external"]
 
 from dvc_dat import dat_config, Dat
 
@@ -10,7 +6,6 @@ DEBUG = 'prompt'  # False, True, 'prompt', or 'show'
 
 
 def main():
-    # print(f" $ dat-push {' '.join(sys.argv[1:])}")
     try:
         with open(os.path.join(dat_config.dat_folder, dat_config.DAT_ADDS_LIST), 'r') as f:
             paths = f.read().splitlines()
@@ -70,7 +65,3 @@ def run(cmd: str):
     if DEBUG != 'show':
         os.system(cmd)
     return 0
-
-
-if __name__ == "__main__":
-    main()

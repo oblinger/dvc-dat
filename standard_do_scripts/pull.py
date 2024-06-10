@@ -1,10 +1,7 @@
-#!/usr/bin/env python3
 import os
-import sys
-root = os.path.dirname(os.path.dirname(__file__))
-sys.path += [f"{root}/src", f"{root}/external"]
 
 from dvc_dat import dat_config, Dat
+
 
 DEBUG = 'prompt'  # False, True, 'prompt'
 
@@ -25,7 +22,3 @@ def run(cmd: str):
         print(f" $ {cmd}")
     os.system(cmd)
     return 0
-
-
-if __name__ == "__main__":
-    main()
