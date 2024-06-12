@@ -3,16 +3,19 @@ import os
 from dvc_dat import dat_config, Dat
 
 
-DEBUG = 'prompt'  # False, True, 'prompt'
+DEBUG = True   # False, True, 'prompt'
 
 
 def main():
     print()
     os.chdir(dat_config.dat_folder)
     run(f"cd '{dat_config.dat_folder}'")
-    run(f"git pull")
-    run(f"dvc pull")
+    status = run(f"git pull")
+    status = status or run(f"dvc pull")
+    if status != 0:
+        print("\n\nWARNING:\nWARNING:  Local Dat files out of date.\nWARNING:\n")
     print()
+    return status
 
 
 def run(cmd: str):
@@ -20,5 +23,4 @@ def run(cmd: str):
         input(f" $ {cmd}   press [ENTER]")
     elif DEBUG:
         print(f" $ {cmd}")
-    os.system(cmd)
-    return 0
+    return os.system(cmd)
