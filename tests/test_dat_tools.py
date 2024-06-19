@@ -213,7 +213,7 @@ class TestCommands:
 class TestCleanup:
     def test_cleanup(self):
         os.system("rm *.xlsx")  # remove all excel files
-        os.system("rm -r test_dat_data_folder/anonymous")  # remove all anon dats
+        os.system("rm -r test_sync_folder/anonymous")  # remove all anon dats
         Dat.load("simple_report").delete()
         Dat.load("dat_report").delete()
 

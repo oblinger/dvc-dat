@@ -177,4 +177,4 @@ class TestDatCallArgs:
 
 class TestCleanup:
     def test_cleanup(self):
-        os.system("rm -r test_dat_data_folder/anonymous")  # remove all anon dats
+        os.system("rm -r test_sync_folder/anonymous")  # remove all anon dats

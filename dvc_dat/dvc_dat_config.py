@@ -4,7 +4,7 @@ import weakref
 from typing import Dict, Any, Union, List
 
 _DAT_FILE = ".datconfig.json"
-_DAT_FOLDER = "dat_data_folder"
+_DAT_FOLDER = "sync_folder"
 _DAT_FOLDERS = "dat_folders"
 _DAT_MOUNT_COMMANDS = "mount_commands"
 _DEFAULT_DAT_FOLDER = "dat_data"
@@ -20,7 +20,7 @@ class DatConfig(object):
     """
     config: Dict[str, Any] = {}
     dat_folder: str
-    dat_data_folders: List[str]   # Note: also includes the dat_folder
+    sync_folders: List[str]   # Note: also includes the dat_folder
     dat_cache: Dict[str, Any] = weakref.WeakValueDictionary()  # Used in Dat.load
 
     DAT_ADDS_LIST = ".dat_adds.txt"  # List of Dat names to be updated in DVC
@@ -46,9 +46,9 @@ class DatConfig(object):
             self.dat_folder = os.path.join(self.folder, _DEFAULT_DAT_FOLDER)
         dirs = self.config.get(_DAT_FOLDERS)
         dirs = ([self.dat_folder] + dirs) if dirs else [self.dat_folder]
-        self.dat_data_folders = [os.path.join(self.folder, f) for f in dirs]
+        self.sync_folders = [os.path.join(self.folder, f) for f in dirs]
         assert self.dat_folder
-        assert len(self.dat_data_folders) > 0
+        assert len(self.sync_folders) > 0
         x = 1
 
     def _lookup_path(self, folder_path: str, key, default=None) -> Union[str, None]:

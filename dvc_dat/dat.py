@@ -421,7 +421,7 @@ class Dat(object):
     @staticmethod
     def _path2name2(path):
         from . import dat_config
-        for p in dat_config.dat_data_folders:
+        for p in dat_config.sync_folders:
             try:
                 match = 1 + len(os.path.commonpath([p, path]))
                 if match > 2:
@@ -433,7 +433,7 @@ class Dat(object):
     @staticmethod
     def _resolve_path(name: str) -> str:
         from . import dat_config
-        for folder in dat_config.dat_data_folders:
+        for folder in dat_config.sync_folders:
             path = os.path.join(folder, name)
             if os.path.exists(os.path.join(path, _SPEC_JSON)) or \
                     os.path.exists(os.path.join(path, _SPEC_YAML)):
@@ -490,7 +490,7 @@ class DatContainer(Dat, Generic[T]):
         """
         if self._dats is DataState.NOT_LOADED:
             # these will load as the Dat class as defined in each spec's
-            # main.class, but we're loading them dynamically from Dat directly,
+            # main  .class, but we're loading them dynamically from Dat directly,
             # so we'll ignore the type and assume they will all be List[T]
             self._dats = [Dat.load(p) for p in self.get_dat_paths()]  # type: ignore
         return self._dats  # type: ignore
