@@ -375,7 +375,7 @@ class Dat(object):
                 "unique": "" if count == 1 else f"_{count}",
                 "cwd": os.getcwd(),  # Current working directory
                 **(variables or {})}
-            expanded_path = os.path.join(dat_config.dat_folder,
+            expanded_path = os.path.join(dat_config.sync_folder,
                                          path_spec.format_map(format_vars))
             if not os.path.exists(expanded_path):
                 return expanded_path
@@ -413,7 +413,7 @@ class Dat(object):
     def _path2name(path):
         from . import dat_config
         try:
-            match = 1 + len(os.path.commonpath([dat_config.dat_folder, path]))
+            match = 1 + len(os.path.commonpath([dat_config.sync_folder, path]))
             return path[match:] if match > 2 else path
         except ValueError:
             return path
@@ -438,7 +438,7 @@ class Dat(object):
             if os.path.exists(os.path.join(path, _SPEC_JSON)) or \
                     os.path.exists(os.path.join(path, _SPEC_YAML)):
                 return path
-        return os.path.join(dat_config.dat_folder, name)
+        return os.path.join(dat_config.sync_folder, name)
 
 
 class DatContainer(Dat, Generic[T]):

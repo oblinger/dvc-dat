@@ -19,7 +19,7 @@ class DatConfig(object):
         the path (relative to the .datconfig.json.json file itself) of the "do folder"
     """
     config: Dict[str, Any] = {}
-    dat_folder: str
+    sync_folder: str
     sync_folders: List[str]   # Note: also includes the dat_folder
     dat_cache: Dict[str, Any] = weakref.WeakValueDictionary()  # Used in Dat.load
 
@@ -40,16 +40,15 @@ class DatConfig(object):
                 break
             self.folder = os.path.dirname(self.folder)
 
-        self.dat_folder = self._lookup_path(self.folder, _DAT_FOLDER, None)
-        if not self.dat_folder:
+        self.sync_folder = self._lookup_path(self.folder, _DAT_FOLDER, None)
+        if not self.sync_folder:
             print(f"Warning: No {_DAT_FILE} found or no \"{_DAT_FOLDER}\" specified.")
-            self.dat_folder = os.path.join(self.folder, _DEFAULT_DAT_FOLDER)
+            self.sync_folder = os.path.join(self.folder, _DEFAULT_DAT_FOLDER)
         dirs = self.config.get(_DAT_FOLDERS)
-        dirs = ([self.dat_folder] + dirs) if dirs else [self.dat_folder]
+        dirs = ([self.sync_folder] + dirs) if dirs else [self.sync_folder]
         self.sync_folders = [os.path.join(self.folder, f) for f in dirs]
-        assert self.dat_folder
+        assert self.sync_folder
         assert len(self.sync_folders) > 0
-        x = 1
 
     def _lookup_path(self, folder_path: str, key, default=None) -> Union[str, None]:
         suffix = self.config[key] if key in self.config else default

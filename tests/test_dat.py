@@ -117,7 +117,7 @@ def temp_root_with_runset(
 class TestDatAccessors:
     def test_path_accessors(self, spec1):
         dat = Dat.create(spec=spec1, path="any/path/goes/here/my_dat", overwrite=True)
-        assert dat.get_path() == f"{dat_config.dat_folder}/any/path/goes/here/my_dat"
+        assert dat.get_path() == f"{dat_config.sync_folder}/any/path/goes/here/my_dat"
         assert dat.get_path_name() == "any/path/goes/here/my_dat"
         assert dat.get_path_tail() == "my_dat"
         assert dat.delete()

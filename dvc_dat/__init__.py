@@ -1,5 +1,5 @@
-__version__ = "1.0.04"
-DAT_VERSION = f"{__version__} (2024-05-30)"
+__version__ = "1.00.05"
+DAT_VERSION = f"{__version__} (2024-06-20)"
 
 from .dvc_dat_config import DatConfig, _DAT_MOUNT_COMMANDS
 from .do_fn import DoManager, do_argv

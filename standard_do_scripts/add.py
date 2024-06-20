@@ -6,7 +6,7 @@ DEBUG = True
 
 
 def main(*add_paths):
-    adds_file = os.path.join(dat_config.dat_folder, dat_config.DAT_ADDS_LIST)
+    adds_file = os.path.join(dat_config.sync_folder, dat_config.DAT_ADDS_LIST)
     paths = []
     for arg in add_paths:
         arg = os.path.join(os.getcwd(), arg)

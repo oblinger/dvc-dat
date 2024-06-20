@@ -137,15 +137,15 @@ class DoManager(object):
           parsed contents are returned.  (PART-NAME is ignored)
         """
         parts = dotted_name.split(".")
-        prefix = parts[0]
+        file_base = parts[0]
         if self.registered_values and _DO_NULL != \
                 (value := self.registered_values.get(dotted_name, _DO_NULL)):
             return copy.deepcopy(value) if isinstance(value, dict) else value
-        obj = self.get_base(prefix, default=_DO_NULL if default == _DO_NULL else None)
+        obj = self.get_base(file_base, default=_DO_NULL if default == _DO_NULL else None)
         try:
             if obj == _DO_ERROR_FLAG:
                 raise Exception(
-                    F"DO: Module {prefix!r} is defined multiple times.")
+                    F"DO: Info file {file_base!r} is defined multiple times.")
             elif isinstance(obj, ModuleType):
                 if len(parts) < 2:
                     result = getattr(obj, _MAIN) if hasattr(obj, _MAIN) else None
@@ -166,9 +166,9 @@ class DoManager(object):
                 if default is not _DO_NULL:
                     return default
                 elif obj is None:
-                    raise Exception(F"DO: Module {prefix!r} not found")
+                    raise Exception(F"DO: Module {file_base!r} not found")
                 else:
-                    name = dotted_name[len(prefix)+1:] or _MAIN
+                    name = dotted_name[len(file_base)+1:] or _MAIN
                     o = obj.__file__ if isinstance(obj, ModuleType) else obj
                     raise Exception(F"do: value {name!r} is missing from {o!r}")
             if kind and not isinstance(result, kind):
@@ -179,16 +179,21 @@ class DoManager(object):
             raise e from Exception(F"WHILE loading {dotted_name!r}")
 
     def mount(self, *,
-              at: str,
+              folder: str = None,
               file: str = None,
               module: Union[ModuleType, str, None] = None,
               value: Any = None,
               files_shallowly: str = None,
+              at: str = "",
               ):
         """Mounts a value at a given location."""
-        if 1 != sum(bool(x) for x in (file, module, value, files_shallowly)):
-            raise Exception("MOUNT: Exactly one of 'file', 'module', 'value', or " +
+        if 1 != sum(bool(x) for x in (folder, file, module, value, files_shallowly)):
+            raise Exception("MOUNT: Exactly one of 'folder', 'file', 'module', or " +
+                            "'value', or " +
                             "'files_shallowly' must be specified.")
+        elif folder:
+            for base, path in _build_loadables_index2(folder, at).items():
+                self._reg_module(base, path)
         elif file:
             self.base_locations[at] = file
         elif module:
@@ -399,26 +404,31 @@ def _build_loadables_index(do_folder: str) -> Dict[str, Any]:
             result[base] = _DO_ERROR_FLAG
         else:
             result[base] = str(path)
+            # print(f"OLD Mounted file '{path}' at {base!r}")
     return result
 
 
-class _DoNode(object):
-    class Kind(Enum):
-        VALUE = 1
-        LIVE_VALUE = 2
-
-    def __init__(self):
-        self.source = None
-        self.value = None
-        self.children = {}
-
-    @staticmethod
-    def mount(root: '_DoNode', path: List[str], _kind, _value: Any):
-        node = root
-        for part in path:
-            if part not in node.children:
-                node = node.children[part] = _DoNode()
-            root = root.children[part]
+def _build_loadables_index2(folder: str, at: str) -> Dict[str, Any]:
+    global _DO_EXTENSIONS
+    folder = os.path.abspath(folder)
+    results = {}
+    if not folder or not os.path.exists(folder):
+        raise Exception(F"DAT: Could not mount folder {folder!r}.")
+    for path in Path(folder).rglob('*'):
+        base, ext = os.path.splitext(path)
+        loc = os.path.relpath(base, folder)
+        loc = os.path.join(at, loc) if at else loc
+        if not path.is_file() or ext not in _DO_EXTENSIONS or \
+                os.path.basename(base) == '__init__':
+            continue
+        elif loc in results:
+            print("WARNING: loadable at" +
+                  F"{results[loc]} conflicts with {path}")
+            results[loc] = _DO_ERROR_FLAG
+        else:
+            results[loc] = str(path)
+            # print(f"Mounted file '{path}' at {loc!r}")
+    return results
 
 
 USAGE = """

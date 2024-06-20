@@ -31,7 +31,7 @@ def build_hello_dats():
 
 
 def build_hello_runs(num):
-    path = f"{dat_config.dat_folder}/runs/example/hello{num}"
+    path = f"{dat_config.sync_folder}/runs/example/hello{num}"
     os.system(f"rm -r {path}")
     c = DatContainer(path=path, spec={})
     c.save()

@@ -8,8 +8,8 @@ DEBUG = True   # False, True, 'prompt'
 
 def main():
     print()
-    os.chdir(dat_config.dat_folder)
-    run(f"cd '{dat_config.dat_folder}'")
+    os.chdir(dat_config.sync_folder)
+    run(f"cd '{dat_config.sync_folder}'")
     status = run(f"git pull")
     status = status or run(f"dvc pull")
     if status != 0:
