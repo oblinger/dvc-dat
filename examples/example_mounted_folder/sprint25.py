@@ -3,7 +3,7 @@ from dvc_dat import do, Dat
 
 main = {
     "dat": {
-        "base": "hello_doubler",
+        "base": "hello_mspipe/hello_doubler",
         "path": "sprint25",       # Use fixed folder during debugging
         "path_overwrite": True,
         "do": "sprint25.run_it"},

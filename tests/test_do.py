@@ -36,8 +36,10 @@ class TestLoad:
     def test_load_with_default(self):
         assert do.load("not_there", default="hello") == "hello"
         assert do.load("not_there", default=None) is None
-        huh = do.load("hello_world", default="hello")
-        assert isinstance(huh, Callable)
+        assert isinstance(do.load("hello_world", default="hello"), Callable)
+
+    def test_load_subfolder_value(self):
+        assert isinstance(do.load("script/hello_world", default="hello"), Callable)
 
     def test_multiple_values_in_one_loadable(self):
         assert isinstance(do.load("hello_again"), Callable)
@@ -50,11 +52,6 @@ class TestLoad:
         assert do("hello_again.salutation",
                   name="hello", emphasis=True, lucky_number=7) == \
                (7, "hello, My lucky number is 7")
-
-    def test_do_within_deep_sub_folders(self, capsys):
-        do("deep_hello")
-        captured = capsys.readouterr()
-        assert captured.out == "hello echoing out from deep in the filesystem!\n"
 
     def test_do_on_a_configuration_file(self, capsys):
         do("hello_config", "Martin")

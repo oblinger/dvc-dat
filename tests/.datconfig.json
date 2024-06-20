@@ -1,7 +1,7 @@
 {
     "sync_folder": "test_sync_folder",
     "mount_commands": [
-        {"add_do_folder": "test_do_folder"},
+        {"folder": "test_mounted_folder/dat_tools_examples"},
         {"folder": "test_mounted_folder/script"},
         {"folder": "test_mounted_folder"}
     ]

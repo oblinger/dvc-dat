@@ -1,11 +1,12 @@
 {
     "sync_folder": "example_sync_folder",
     "mount_commands": [
-        {"add_do_folder": "../standard_do_scripts"},
-        {"add_do_folder": "example_do_folder"},
-        {"at": "foo", "file": "example_do_folder/some_python_file.py"},
-        {"at": "bar", "file": "example_do_folder/some_other_python_file.py"},
-        {"at": "baz", "file": "example_do_folder/hello/do_examples/my_yaml_data.yaml"},
+        {"at":  "", "folder":  "../standard_do_scripts"},
+        {"at":  "", "folder":  "example_mounted_folder"},
+        {"at":  "", "folder":  "example_mounted_folder/script"},
+        {"at": "foo", "file": "example_mounted_folder/some_python_file.py"},
+        {"at": "bar", "file": "example_mounted_folder/some_other_python_file.py"},
+        {"at": "baz", "file": "example_mounted_folder/script/my_yaml_data.yaml"},
         {"at": "the_dat_module", "module": "dvc_dat"},
         {"at": "foo.bar.baz", "value": [11, 22, 33]}
     ]

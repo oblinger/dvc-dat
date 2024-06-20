@@ -10,7 +10,7 @@ _SPEC_JSON = "_spec_.json"
 _SPEC_YAML = "_spec_.yaml"
 _RESULT_JSON = "_results_.json"
 _DAT_CLASS = "dat.class"
-_DAT_KIND = "dat.kind"
+_DAT_BASE = "dat.kind"
 _DAT_PATH_OVERWRITE = "dat.path_overwrite"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
 _NO_ARG = "$$NO_ARG$$"
@@ -271,8 +271,9 @@ class Dat(object):
             raise Exception("Use Dat.create() to create a new Dat instances.")
 
     def __repr__(self):
-        kind = Dat.get(self._spec, _DAT_KIND, self.__class__.__name__)
-        return f"<{kind}: {self.get_path_name()}>"
+        base = Dat.get(self._spec, _DAT_BASE, self.__class__.__name__)
+        base = base.split("/")[-1]
+        return f"<{base}: {self.get_path_name()}>"
 
     def __str__(self):
         return self.__repr__()

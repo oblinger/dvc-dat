@@ -122,5 +122,46 @@ NAME is a dotted.name.string that refers to a python object or function.
 | Cube(points=, dats=, point_fns=)                 | Creates a Data Cube from Dats   |
 
 
-    
+#### .datconfig - Configuration of dvc-dat
+
+Like git, dvc-dat walks up the path from the current working directory looking for 
+the '.datconfig.json' file, and uses that file to control behavior. 
+Here is an example:
+
+ # .datconfig.json
+```json
+{
+  "sync_folder": "local/sync",
+  "mount_commands": [
+    {
+      "at": "",
+      "folder": "other/dat/data"
+    },
+    {
+      "at": "",
+      "folder": "myscript_folder"
+    },
+    {
+      "at": "",
+      "value": {
+        "main": "main.py"
+      }
+    },
+    {
+      "at": "sub/folder",
+      "file": "myscripts/a_python.py"
+    }
+  ]
+}
+```
+
+- The "sync_folder" indicates where the DVC sync folder is located, this should be a git-tracked folder where the 
+  .dvc control files are stored.
+- The "folder" mount command indicates other root folders where Dat objects may be stored.
+  These folders are scanned before the sync folder to find local copies of Dats.
+- Both the sync folder and these mounted folders are used when looking for do values and functions.
+- The "value" mount command allows you to mount a python object directly into the do space.
+- The "file" mount command allows you to mount a python module directly into the do space.
+  (See the examples section for details.)
+
 
