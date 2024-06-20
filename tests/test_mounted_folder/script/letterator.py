@@ -1,7 +1,7 @@
 from dvc_dat import do   # noqa
 
 """Silly configurable tool for applying rules to a sequence of letters."""
-main = {
+__main__ = {
     "dat": {
       "do": "letterator.run",      # example of a complex tool config
       "title": "The Letterator"

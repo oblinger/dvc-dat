@@ -5,7 +5,7 @@ from dvc_dat import dat_config, Dat
 DEBUG = True
 
 
-def main(*add_paths):
+def __main__(*add_paths):
     adds_file = os.path.join(dat_config.sync_folder, dat_config.DAT_ADDS_LIST)
     paths = []
     for arg in add_paths:

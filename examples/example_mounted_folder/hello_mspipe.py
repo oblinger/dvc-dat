@@ -13,7 +13,7 @@ The real multi-stage pipe might can be patterned from this example with
 # It specifies that all stages will use "fake_mcproc_pass" by default,
 # and constructs its output folders by overwriting "mspipe" in the CWD
 # (specific multistage pipes will usually over-ride this to direct output elsewhere).
-main = {
+__main__ = {
     "dat": {                         # Section controls execution of the whole pipeline
         "kind": "Mspipe",             # "subtype" common to all multi-stage runs
         "class": "DatContainer",      # The python class for a multi-stage runs

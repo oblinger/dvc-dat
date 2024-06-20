@@ -27,18 +27,18 @@ from dvc_dat.dat import Dat
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
 _DO_ERROR_FLAG = tuple("multiple loadable modules have this same name")
 _DO_NULL = tuple(["-no-value-"])
-_MAIN = "main"                   # default module var to use when none specified
+_MAIN = "__main__"             # default module var to use when none specified
 
 # Dat Template Parameters
 _DAT_BASE = "dat.base"         # the base spec to expand
 _DAT_PATH = "dat.path"         # the template for the dat's path
 _DAT_PATH_OVERWRITE = "dat.path_overwrite"  # overwrite the path
-_DAT_DO = "dat.do"             # the main fn to execute
-_DAT_ARGS = "dat.args"         # prefix args for the main.do method
-_DAT_KWARGS = "dat.kwargs"     # default kwargs for the main.do method
-# _MAIN_RESULT = "dat.result"   # the result of the main.do, stored in __results__.json
-_DAT_RUN_AT = "dat.run_at"     # the time at with main.do was run
-_DAT_RUN_TIME = "dat.run_time"  # the duration of the main.do run
+_DAT_DO = "dat.do"             # the fn to execute
+_DAT_ARGS = "dat.args"         # prefix args for the dat.do method
+_DAT_KWARGS = "dat.kwargs"     # default kwargs for the dat.do method
+# _MAIN_RESULT = "dat.result"   # the result of the dat.do, stored in __results__.json
+_DAT_RUN_AT = "dat.run_at"     # the time at with dat.do was run
+_DAT_RUN_TIME = "dat.run_time" # the duration of the dat.do run
 
 Spec = Dict[str, Any]
 
@@ -96,7 +96,7 @@ class DoManager(object):
 
         If "do_spec" is a:
         - STRING: then 'do.load' is used to get the value to use in its place
-        - DICT: then its 'main.do' sub-key specifies the function to execute
+        - DICT: then its 'dat.do' sub-key specifies the function to execute
           If it is a string then, get_loadable is used to get fn to execute
           Otherwise it is directly called.
         - CALLABLE: then it is directly called with the specified args and kwargs
@@ -266,7 +266,7 @@ class DoManager(object):
             return base
 
     def expand_spec(self, spec: Union[Spec, str]) -> Spec:
-        """Expands a spec by recursively loading and expanding its 'main.base' spec,
+        """Expands a spec by recursively loading and expanding its 'dat.base' spec,
         and then merging its keys as an override to the expanded base."""
         if isinstance(spec, str):
             spec = self.load(spec)
@@ -295,14 +295,14 @@ class DoManager(object):
         return Dat.create(path=path, spec=spec, overwrite=overwrite)
 
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
-        """Runs the main.do method of an instantiated object."""   # noqa
+        """Runs the dat.do method of an instantiated object."""   # noqa
         obj = dat.get_spec()
-        if main_args := Dat.get(obj, _DAT_ARGS, None):
-            args = main_args + list(args)
-        if main_kwargs := Dat.get(obj, _DAT_KWARGS, None):
-            main_kwargs = dict(main_kwargs)
-            main_kwargs.update(kwargs)
-            kwargs = main_kwargs
+        if dat_args := Dat.get(obj, _DAT_ARGS, None):
+            args = dat_args + list(args)
+        if dat_kwargs := Dat.get(obj, _DAT_KWARGS, None):
+            dat_kwargs = dict(dat_kwargs)
+            dat_kwargs.update(kwargs)
+            kwargs = dat_kwargs
         fn_spec = Dat.get(obj, _DAT_DO)
         if isinstance(fn_spec, str):
             fn_spec = self.load(fn_spec)

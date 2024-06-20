@@ -135,7 +135,7 @@ class TestRegisteringStuff:
         path = os.path.join(os.path.dirname(__file__),
                             "test_mounted_folder/script/hello_world.py")
         do_.mount(at="xxx", module=path)
-        assert do_("xxx.main") == "hello world!"
+        assert do_("xxx.__main__") == "hello world!"
         do_.mount(at="yyy", module="dvc_dat")  # The already loaded 'dvc_dat' module
         from dvc_dat import dat_config
         assert do_.load("yyy.dat_config") == dat_config

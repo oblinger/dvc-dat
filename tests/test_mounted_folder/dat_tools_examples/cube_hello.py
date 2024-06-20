@@ -9,7 +9,7 @@ ground truth sequence of marbles. These metrics specify how accurately the syste
 predicted the ground truth marbles.
 
 rpt .............. Generates an Excel w/ all metrics run over all games from Hello10.
-cube_hello ....... This is the 'main' cube metric, it's an alias for the F1 score.
+cube_hello ....... This is the '__main__' cube metric, it's an alias for the F1 score.
 cube_hello.p ..... Marble prediction precision.
 cube_hello.r ..... Marble prediction recall.
 
@@ -22,7 +22,7 @@ from dvc_dat import Dat
 metrics = ["cube_hello", "cube_hello.p", "cube_hello.r", "rpt", "CreateHello10"]
 
 descriptions = {
-    "cube_hello": "This is the 'main' cube metric, it's an alias for the F1 score.",
+    "cube_hello": "This is the '__main__' cube metric, it's an alias for the F1 score.",
     "cube_hello.p": "Marble prediction precision.",
     "cube_hello.r": "Marble prediction recall.",
     "rpt": "Generates an excel w/ all metrics run over all games from Hello10.",
@@ -33,7 +33,7 @@ descriptions = {
 """
 Build an excel showing cube_hello metrics over the Hello10_runs.
 """
-main = {
+__main__ = {
     "dat": {
         "do": "dt.dat_report",
         "path": "dat_report",

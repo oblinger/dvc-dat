@@ -88,21 +88,21 @@ Dat Containers are Dats that recursively contain other Dats.
 A DoManager (usually accessed via the 'do' singleton) is used to load python 
 source code objects and functions.
 
-| Method                           | Description                                   |
-|----------------------------------|-----------------------------------------------|
-| DoManager()                      | Creates a new do namespace.                   |
-| .load(NAME, default=) -> Any     | Loads Python source-code obj by dotted.name   |
-| do(NAME, *args, **kwargs) -> Any | Loads the named Python fn and calls it.       |
-| do(DAT, *args, **kwargs) -> Any  | Invokes fn at 'main.do' within the Dat's spec |
-| .mount(module=, at=)             | Registers a python module by name             |
-| .mount(file=, at=)               | Registers a .json, .yaml, or .py file         |
-| .mount(value=, at=)              | Registers structured value in do space        |
-| .mount(files_shallowly=, at=)    | Registers ALL .json, .yaml, or .py shallowly  | 
-| .add_do_folder(PATH) -> None     | Set the folder to load python objects from.   |
-| .get_base(BASE) -> Any           | Get the base object based on it name.         |
-| .merge_configs(BASE, override)   | Merge a config with an override.              |
-| .expand_spec(SPEC) -> SPEC       | Recursively merges spec with base spec.       |
-| .dat_from_template(path=,spec=)  | Expands spec and uses it to call Dat.creates  |
+| Method                           | Description                                  |
+|----------------------------------|----------------------------------------------|
+| DoManager()                      | Creates a new do namespace.                  |
+| .load(NAME, default=) -> Any     | Loads Python source-code obj by dotted.name  |
+| do(NAME, *args, **kwargs) -> Any | Loads the named Python fn and calls it.      |
+| do(DAT, *args, **kwargs) -> Any  | Invokes fn at 'dat.do' within the Dat's spec |
+| .mount(module=, at=)             | Registers a python module by name            |
+| .mount(file=, at=)               | Registers a .json, .yaml, or .py file        |
+| .mount(value=, at=)              | Registers structured value in do space       |
+| .mount(files_shallowly=, at=)    | Registers ALL .json, .yaml, or .py shallowly | 
+| .add_do_folder(PATH) -> None     | Set the folder to load python objects from.  |
+| .get_base(BASE) -> Any           | Get the base object based on it name.        |
+| .merge_configs(BASE, override)   | Merge a config with an override.             |
+| .expand_spec(SPEC) -> SPEC       | Recursively merges spec with base spec.      |
+| .dat_from_template(path=,spec=)  | Expands spec and uses it to call Dat.creates |
 
 NAME is a dotted.name.string that refers to a python object or function.
 
@@ -133,24 +133,10 @@ Here is an example:
 {
   "sync_folder": "local/sync",
   "mount_commands": [
-    {
-      "at": "",
-      "folder": "other/dat/data"
-    },
-    {
-      "at": "",
-      "folder": "myscript_folder"
-    },
-    {
-      "at": "",
-      "value": {
-        "main": "main.py"
-      }
-    },
-    {
-      "at": "sub/folder",
-      "file": "myscripts/a_python.py"
-    }
+    {"at": "",     "folder": "other/dat/data"},
+    {"at": "",     "folder": "myscript_folder"},
+    {"at": "",     "value": {"a_key": "main.py"}},
+    {"at": "sub/folder",  "file": "myscripts/a_python.py"}
   ]
 }
 ```

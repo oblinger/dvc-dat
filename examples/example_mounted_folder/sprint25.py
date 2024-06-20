@@ -1,7 +1,7 @@
 import os
 from dvc_dat import do, Dat
 
-main = {
+__main__ = {
     "dat": {
         "base": "hello_mspipe/hello_doubler",
         "path": "sprint25",       # Use fixed folder during debugging

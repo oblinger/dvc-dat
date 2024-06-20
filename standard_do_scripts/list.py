@@ -1,7 +1,7 @@
 from dvc_dat import do
 
 
-def main(prefix: str = ""):
+def __main__(prefix: str = ""):
     """Lists all do names with a given prefix."""
     print(f"\nBase names matching: '{prefix}*'")
     for k, v in do.base_locations.items():

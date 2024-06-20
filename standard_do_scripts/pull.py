@@ -6,7 +6,7 @@ from dvc_dat import dat_config, Dat
 DEBUG = True   # False, True, 'prompt'
 
 
-def main():
+def __main__():
     print()
     os.chdir(dat_config.sync_folder)
     run(f"cd '{dat_config.sync_folder}'")

@@ -1,4 +1,4 @@
-def main():
+def __main__():
     print("   Hello World again!")
 
 

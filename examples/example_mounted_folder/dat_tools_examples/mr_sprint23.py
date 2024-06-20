@@ -1,4 +1,4 @@
-main = {
+__main__ = {
     "dat": {"do": "dt.dat_report"},
     "dat_report": {
         "title": "S23",

@@ -1,4 +1,4 @@
-main = {
+__main__ = {
   "dat": {"base": "letterator"},
   "start": 97,
   "rules": [
