@@ -5,7 +5,7 @@ from dvc_dat import dat_config, Dat
 DEBUG = 'prompt'  # False, True, 'prompt', or 'show'
 
 
-def main():
+def __main__():
     try:
         with open(os.path.join(dat_config.sync_folder, dat_config.DAT_ADDS_LIST), 'r') as f:
             paths = f.read().splitlines()
