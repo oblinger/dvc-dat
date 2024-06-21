@@ -3,7 +3,10 @@ import os
 import weakref
 from typing import Dict, Any, Union, List
 
-_DAT_FILE = ".datconfig.json"
+import yaml
+
+_DAT_CONFIG_JSON = ".datconfig.json"
+_DAT_CONFIG_YAML = ".datconfig.yaml"
 _DAT_FOLDER = "sync_folder"
 _DAT_FOLDERS = "dat_folders"
 _DAT_MOUNT_COMMANDS = "mount_commands"
@@ -28,12 +31,19 @@ class DatConfig(object):
     def __init__(self, folder=None):
         self.folder = folder or os.getcwd()
         while True:
-            if os.path.exists(config := os.path.join(self.folder, _DAT_FILE)):
+            if os.path.exists(config := os.path.join(self.folder, _DAT_CONFIG_JSON)):
                 try:
                     with open(config, 'r') as f:
                         self.config = json.load(f)
                 except json.JSONDecodeError as e:
-                    raise Exception(f"Error loading .datconfig.json.json: {e}")
+                    raise Exception(f"Error loading {_DAT_CONFIG_JSON}: {e}")
+                break
+            if os.path.exists(config := os.path.join(self.folder, _DAT_CONFIG_YAML)):
+                try:
+                    with open(config, 'r') as f:
+                        self.config = yaml.safe_load(f)
+                except yaml.YAMLError as e:
+                    raise Exception(f"Error loading {_DAT_CONFIG_YAML}: {e}")
                 break
             if self.folder == '/':
                 self.folder = os.getcwd()
@@ -42,7 +52,7 @@ class DatConfig(object):
 
         self.sync_folder = self._lookup_path(self.folder, _DAT_FOLDER, None)
         if not self.sync_folder:
-            print(f"Warning: No {_DAT_FILE} found or no \"{_DAT_FOLDER}\" specified.")
+            print(f"Warning: No {_DAT_CONFIG_JSON} found or no \"{_DAT_FOLDER}\" specified.")
             self.sync_folder = os.path.join(self.folder, _DEFAULT_DAT_FOLDER)
         dirs = self.config.get(_DAT_FOLDERS)
         dirs = ([self.sync_folder] + dirs) if dirs else [self.sync_folder]

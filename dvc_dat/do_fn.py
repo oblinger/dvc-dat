@@ -185,6 +185,7 @@ class DoManager(object):
               value: Any = None,
               files_shallowly: str = None,
               at: str = "",
+              relative_to: str = "."
               ):
         """Mounts a value at a given location."""
         if 1 != sum(bool(x) for x in (folder, file, module, value, files_shallowly)):
@@ -192,6 +193,7 @@ class DoManager(object):
                             "'value', or " +
                             "'files_shallowly' must be specified.")
         elif folder:
+            folder = os.path.join(relative_to, folder)
             for base, path in _build_loadables_index2(folder, at).items():
                 self._reg_module(base, path)
         elif file:
@@ -216,7 +218,7 @@ class DoManager(object):
             if do_folder := cmd.get("add_do_folder"):
                 self.add_do_folder(os.path.join(relative_to, do_folder))
             else:
-                self.mount(**cmd)
+                self.mount(relative_to=relative_to, **cmd)
 
     def add_do_folder(self, do_folder):
         """Sets the folder where the loadable python objects are found, and clears all

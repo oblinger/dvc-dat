@@ -12,7 +12,10 @@ def main():
         print(f"# Dat Data Folder  : {dat_config.sync_folder}")
         print(f"# .datconfig folder: {dat_config.folder}")
         print(f"# .datconfig.json contents:")
-        os.system(f"cat '{dat_config.folder}/.datconfig.json'")
+        config = os.path.join(dat_config.folder, ".datconfig.json")
+        if not os.path.exists(config):
+            config = os.path.join(dat_config.folder, ".datconfig.yaml")
+        os.system(f"cat '{config}'")
         print()
     else:
         return do_argv(argv)
