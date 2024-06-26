@@ -224,7 +224,7 @@ class Dat(object):
         elif os.path.exists(path := Dat._resolve_path(name_or_path)):
             pass
         else:
-            raise Exception(f"LOAD_DAT: Could not find {name_or_path!r}")
+            raise KeyError(f"LOAD_DAT: Could not find {name_or_path!r}")
         if path in dat_config.dat_cache:
             return dat_config.dat_cache[path]
         path = os.path.abspath(path)
@@ -238,11 +238,11 @@ class Dat(object):
                     spec = yaml.safe_load(f)
         except Exception as e:
             if not os.path.exists(path):
-                raise Exception(F"LOAD_DAT: Folder not found {path!r}.")
+                raise KeyError(F"LOAD_DAT: Folder not found {path!r}.")
             else:
-                raise Exception(f"LOAD_DAT: Error in spec file for {path!r}: {e}")
+                raise KeyError(f"LOAD_DAT: Error in spec file for {path!r}: {e}")
         if spec == ():
-            raise Exception(F"LOAD_DAT: Spec file missing for {path!r}.")
+            raise KeyError(F"LOAD_DAT: Spec file missing for {path!r}.")
         dat = Dat._make_dat_instance(path, spec)
         try:
             with open(os.path.join(path, _RESULT_JSON)) as f:

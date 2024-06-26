@@ -35,7 +35,7 @@ def __main__():
         t = dat_config.DAT_ADDS_LIST
         print(f"Aborted.  Please correct errors above (or edit {t!r}).\n")
         return
-    msg = input("\nEnter commit message, or [RETURN] to abort: ")
+    msg = "."  # input("\nEnter commit message [press RETURN for default msg]: ")
     print()
     if not msg:
         print("Aborted.\n")

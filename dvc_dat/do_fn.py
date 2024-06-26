@@ -115,7 +115,7 @@ class DoManager(object):
                 dat = self.dat_from_template(spec=obj)
                 return self._run_dat(dat, *args, **kwargs)
         except Exception as e:
-            raise Exception(F"In {do_spec!r}, {e}")
+            raise Exception(F"In {do_spec!r}") from e
 
     def load(self,
              dotted_name: str,
@@ -305,7 +305,9 @@ class DoManager(object):
             dat_kwargs = dict(dat_kwargs)
             dat_kwargs.update(kwargs)
             kwargs = dat_kwargs
-        fn_spec = Dat.get(obj, _DAT_DO)
+        fn_spec = Dat.get(obj, _DAT_DO, None)
+        if fn_spec is None:
+            return obj
         if isinstance(fn_spec, str):
             fn_spec = self.load(fn_spec)
         if not callable(fn_spec):
