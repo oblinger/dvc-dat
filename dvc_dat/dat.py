@@ -190,10 +190,10 @@ class Dat(object):
         if not os.path.exists(path):
             os.makedirs(path)
         try:
-            txt = json.dumps(spec, indent=2)
+            txt = yaml.safe_dump(spec, indent=2)
         except Exception as e:
             raise Exception(f"Non-JSON data in Dat.spec: {e}\nSPEC={spec}")
-        with open(os.path.join(path, _SPEC_JSON), "w") as out:
+        with open(os.path.join(path, _SPEC_YAML), "w") as out:
             out.write(txt)
             out.write("\n")
         return Dat._make_dat_instance(path, spec)
