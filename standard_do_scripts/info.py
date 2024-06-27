@@ -24,7 +24,7 @@ def __main__(name: str = None):
         print(f" |  class: {Dat.get(dat, 'dat.class', '')}")
         print(f" |  do:    {Dat.get(dat, 'dat.do', '')}")
         print(f" |  ver:   {Dat.get(dat, 'dat.version', '')}")
-        print(f" |  docs:  {Dat.get(dat, 'dat.docs', '')}")
+        print(f" |  docs:  {Dat.get(dat, 'dat.docs', '').strip()}")
     if do_value:
         print(f" +----- DO VALUE FOR: {name!r}")
         for line in json.dumps(do_value, indent=4).splitlines():
