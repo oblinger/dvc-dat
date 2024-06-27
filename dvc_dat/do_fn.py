@@ -141,7 +141,12 @@ class DoManager(object):
         if self.registered_values and _DO_NULL != \
                 (value := self.registered_values.get(dotted_name, _DO_NULL)):
             return copy.deepcopy(value) if isinstance(value, dict) else value
-        obj = self.get_base(file_base, default=_DO_NULL if default == _DO_NULL else None)
+        obj = self.get_base(file_base, default=None)
+        if obj is None:
+            if default is _DO_NULL:
+                raise KeyError(F"do.load: The base for {dotted_name!r} was not found.")
+            else:
+                obj = default
         try:
             if obj == _DO_ERROR_FLAG:
                 raise KeyError(
@@ -246,7 +251,7 @@ class DoManager(object):
                                                             base])
             result = self.base_objects[base]
         elif default is _DO_NULL:
-            raise Exception(f"The do base file {base + '...'!r} is not defined.")
+            raise KeyError(f"The do base file {base + '...'!r} is not defined.")
         else:
             result = default
         if isinstance(result, dict):
