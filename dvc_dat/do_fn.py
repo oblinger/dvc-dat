@@ -144,7 +144,7 @@ class DoManager(object):
         obj = self.get_base(file_base, default=_DO_NULL if default == _DO_NULL else None)
         try:
             if obj == _DO_ERROR_FLAG:
-                raise Exception(
+                raise KeyError(
                     F"DO: Info file {file_base!r} is defined multiple times.")
             elif isinstance(obj, ModuleType):
                 if len(parts) < 2:
@@ -160,23 +160,23 @@ class DoManager(object):
             elif obj is None:
                 return default
             else:
-                raise Exception(F"DO: Illegal value {obj!r} for {dotted_name}")
+                raise KeyError(F"DO: Illegal value {obj!r} for {dotted_name}")
 
             if result is None:
                 if default is not _DO_NULL:
                     return default
                 elif obj is None:
-                    raise Exception(F"DO: Module {file_base!r} not found")
+                    raise KeyError(F"DO: Module {file_base!r} not found")
                 else:
                     name = dotted_name[len(file_base)+1:] or _MAIN
                     o = obj.__file__ if isinstance(obj, ModuleType) else obj
-                    raise Exception(F"do: value {name!r} is missing from {o!r}")
+                    raise KeyError(F"do: value {name!r} is missing from {o!r}")
             if kind and not isinstance(result, kind):
-                raise Exception(F"DO: Expected {dotted_name!r} of type {kind} " +
-                                F"but found {result!r}")
+                raise KeyError(F"DO: Expected {dotted_name!r} of type {kind} " +
+                               F"but found {result!r}")
             return copy.deepcopy(result) if isinstance(result, dict) else result
         except Exception as e:
-            raise e from Exception(F"WHILE loading {dotted_name!r}")
+            raise e from KeyError(F"WHILE loading {dotted_name!r}")
 
     def mount(self, *,
               folder: str = None,
