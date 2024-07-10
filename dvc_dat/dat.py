@@ -269,7 +269,6 @@ class Dat(object):
             self._path, self._spec = path, spec
         else:
             raise Exception("Use Dat.create() to create a new Dat instances.")
-
     def __repr__(self):
         base = Dat.get(self._spec, _DAT_BASE, self.__class__.__name__)
         base = base.split("/")[-1]
