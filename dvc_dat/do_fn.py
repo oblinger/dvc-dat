@@ -146,7 +146,8 @@ class DoManager(object):
             if default is _DO_NULL:
                 raise KeyError(F"do.load: The base for {dotted_name!r} was not found.")
             else:
-                obj = default
+                obj = default      # Remove ???????????????
+                return default
         try:
             if obj == _DO_ERROR_FLAG:
                 raise KeyError(
