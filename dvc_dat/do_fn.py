@@ -36,7 +36,6 @@ _DAT_PATH_OVERWRITE = "dat.path_overwrite"  # overwrite the path
 _DAT_DO = "dat.do"             # the fn to execute
 _DAT_ARGS = "dat.args"         # prefix args for the dat.do method
 _DAT_KWARGS = "dat.kwargs"     # default kwargs for the dat.do method
-# _MAIN_RESULT = "dat.result"   # the result of the dat.do, stored in __results__.json
 _DAT_RUN_AT = "dat.run_at"     # the time at with dat.do was run
 _DAT_RUN_TIME = "dat.run_time" # the duration of the dat.do run
 
@@ -84,7 +83,7 @@ class DoManager(object):
 
     def __init__(self):
         self.base_objects = {}
-        self.base_locations = {}
+        self.base_locations = {}  # all paths must be absolute & module names qualified
         self.registered_values = None
 
     def __call__(self, do_spec: Union[Spec, Dat, str], *args, **kwargs) -> Any:
@@ -193,7 +192,26 @@ class DoManager(object):
               at: str = "",
               relative_to: str = "."
               ):
-        """Mounts a value at a given location."""
+        """Mounts some data within the namespace at a given location.
+        Exactly one of 'folder', 'file', 'module', or 'value' must be specified.
+
+        Parameters
+        ----------
+        at: str
+            The dotted namespace location where data should be mounted.  (required)
+        relative_to: str
+            The folder to use as the base for relative paths.  (optional)
+        folder: str
+            The folder to mount.  (optional)
+        file: str
+            The file to mount.  (optional)
+        module: Union[ModuleType, str, None]
+            The module to mount.  (optional)
+        value: Any
+            A constant value to mount.  (optional)
+        files_shallowly: str
+            A folder to mount shallowly.  (optional)
+        """
         if 1 != sum(bool(x) for x in (folder, file, module, value, files_shallowly)):
             raise Exception("MOUNT: Exactly one of 'folder', 'file', 'module', or " +
                             "'value', or " +
@@ -203,7 +221,7 @@ class DoManager(object):
             for base, path in _build_loadables_index2(folder, at).items():
                 self._reg_module(base, path)
         elif file:
-            self.base_locations[at] = file
+            self.base_locations[at] = os.path.join(relative_to, file)
         elif module:
             self._reg_module(at, module)
         elif value:
@@ -292,6 +310,7 @@ class DoManager(object):
             path: str = None
     ) -> Dat:
         """Creates a mew Dat object from a template spec."""
+        from . import dats
         spec, count = copy.deepcopy(spec), 1
         # Dat.set(spec, _MAIN_ARGS, args or [])
         # Dat.set(spec, _MAIN_KWARGS, kwargs or {})
@@ -299,7 +318,7 @@ class DoManager(object):
         overwrite = Dat.get(spec, _DAT_PATH_OVERWRITE, False) and \
                     path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
         spec = self.expand_spec(spec)
-        path = Dat._expand_dat_path(path, overwrite=overwrite)  # noqa
+        path = dats.expand_dat_path(path, overwrite=overwrite)  # noqa
         return Dat.create(path=path, spec=spec, overwrite=overwrite)
 
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:

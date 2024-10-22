@@ -2,7 +2,7 @@ import os   # noqa
 import random
 from typing import List
 
-from dvc_dat import dat_config, DatContainer, Dat
+from dvc_dat import dats, DatContainer, Dat
 
 
 class Annotation:
@@ -31,7 +31,7 @@ def build_hello_dats():
 
 
 def build_hello_runs(num):
-    path = f"{dat_config.sync_folder}/runs/example/hello{num}"
+    path = f"{dats.sync_folder}/runs/example/hello{num}"
     os.system(f"rm -r {path}")
     c = DatContainer(path=path, spec={})
     c.save()

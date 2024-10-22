@@ -1,0 +1,37 @@
+Metadata-Version: 2.1
+Name: dvc_dat
+Version: 1.0.5
+Keywords: dvc
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: pandas
+Requires-Dist: pyyaml
+
+# dat
+Data and code encapsulation for ML experimentation and productization
+
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+```bash
+cd tests; ./do hello_world
+```
+
+## Testing
+
+```bash
+python -m pytest
+```
+
+## Development
+
+```bash
+python -m black src
+```

@@ -137,8 +137,8 @@ class TestRegisteringStuff:
         do_.mount(at="xxx", module=path)
         assert do_("xxx.__main__") == "hello world!"
         do_.mount(at="yyy", module="dvc_dat")  # The already loaded 'dvc_dat' module
-        from dvc_dat import dat_config
-        assert do_.load("yyy.dat_config") == dat_config
+        from dvc_dat import dats
+        assert do_.load("yyy.dats") == dats
 
 
 class TestTemplatedDatCreationAndDeletion:
