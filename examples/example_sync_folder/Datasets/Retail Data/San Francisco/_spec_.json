@@ -1,0 +1,7 @@
+{
+  "dat": {
+    "base": "Game",
+    "points": "points.json",
+    "class": "Dat"
+  }
+}

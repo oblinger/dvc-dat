@@ -1,0 +1,5 @@
+{
+  "dat": {
+    "path": "test_dats/{YY}-{MM} Dats{unique}"
+  }
+}

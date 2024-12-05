@@ -1,0 +1,11 @@
+datasets:
+- regression_games # Any game referenced by any regression test MUST be listed here
+- baller10  # Default dataset use by all basketball metrics
+- volley10
+- arron4    # Examples of higher resolution games
+metrics:
+- team_highlight.money  # Jason agreed money metric for team highlights 
+- team_highlight.precision # Just the precision portion of this metric
+- player_highlight.money # Jason agreed, include player ID
+- basket_stats.money # Jason agree, metric for points, player, make-miss stats
+- p_metric # used in 2022

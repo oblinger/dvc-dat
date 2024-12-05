@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dvc_dat"
+dependencies = [
+    "pandas",
+    "pyyaml",
+]
+requires-python = ">= 3.8"
+keywords = ["dvc"]
+readme = "README.md"
+dynamic = ["version"]
+
+[project.scripts]
+dat = "dvc_dat.__main__:main"
+
+[tool.setuptools]
+packages = ["dvc_dat"]
+
+[tool.setuptools.dynamic]
+version = {attr = "dvc_dat.__init__.__version__"}

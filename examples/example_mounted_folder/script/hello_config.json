@@ -1,0 +1,8 @@
+{
+    "dat": {
+        "do": "configurable_salutation"
+    },
+    "name": "Hello",
+    "lucky_number": 7,
+    "emphasis": false
+}

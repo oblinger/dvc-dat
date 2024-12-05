@@ -1,0 +1,9 @@
+{
+    "sync_folder": "test_sync_folder",
+    "mount_commands": [
+        {"folder": "../standard_do_scripts"},
+        {"folder": "test_mounted_folder/dat_tools_examples"},
+        {"folder": "test_mounted_folder/script"},
+        {"folder": "test_mounted_folder"}
+    ]
+}
