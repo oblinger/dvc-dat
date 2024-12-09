@@ -345,12 +345,12 @@ class DatContainer(Dat, Generic[T]):
 
 
 class Dats(object):
-    """Configuration info for the 'dat' module loaded from the .datconfig.json.json file.
+    """Configuration info for the 'dat' module loaded from the .datconfig.json file.
 
-    .datconfig.json.json
-        The do module search CWD and all its parent folders for the '.datconfig.json.json' file.
+    .datconfig.json
+        The do module search CWD and all its parent folders for the '.datconfig.json' file.
         If it is found, it expects a JSON object with a 'do_folder' key that indicates
-        the path (relative to the .datconfig.json.json file itself) of the "do folder"
+        the path (relative to the .datconfig.json file itself) of the "do folder"
     """
     config: Dict[str, Any] = {}
     sync_folder: str
