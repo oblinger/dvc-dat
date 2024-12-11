@@ -343,7 +343,6 @@ class DatContainer(Dat, Generic[T]):
         return results
 
 
-
 class Dats(object):
     """Configuration info for the 'dat' module loaded from the .datconfig.json file.
 
