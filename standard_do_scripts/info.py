@@ -7,11 +7,11 @@ def __main__(name: str = None):
     dat, do_value = None, None
     try:
         dat = Dat.load(name)
-    except KeyError as e:
+    except KeyError:
         pass
     try:
         do_value = do.load(name)
-    except KeyError as e:
+    except KeyError:
         pass
     print()
     if not dat and not do_value:

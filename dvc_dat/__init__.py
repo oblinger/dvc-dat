@@ -1,11 +1,11 @@
 __version__ = "1.00.05"
 DAT_VERSION = f"{__version__} (2024-06-20)"
 
-from .dat import Dats, _DAT_MOUNT_COMMANDS
+from .dat import dat_manager, Dats, _DAT_MOUNT_COMMANDS
 from .do_fn import DoManager, do_argv
 
-dats = Dats()
-do = DoManager()  # not available during load of do_fn
+dats = dat_manager
+do = dats.do = DoManager()  # not available during load of do_fn
 
 from .dat import Dat, DatContainer
 from . import dat_tools
@@ -19,7 +19,7 @@ do.mount(value=dat_tools.cmd_list, at="dat_tools.list")
 
 __all__ = [
     "DAT_VERSION",
-    "dats",
+    "dat_manager",
     "Dat",
     "DatContainer",
     "Dats",

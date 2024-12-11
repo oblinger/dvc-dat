@@ -2,9 +2,11 @@ import json
 import os
 import shutil
 import weakref
+from abc import abstractmethod
 from datetime import datetime
 from enum import Enum, auto
-from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
+from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union, Callable, \
+    Iterable
 import yaml
 # from .dvc_dat_config import SPEC_JSON, SPEC_YAML
 
@@ -174,20 +176,17 @@ class Dat(object):
                spec: Spec = None,
                overwrite=()
                ) -> "Dat":
-        from . import dats
-        return dats.create(path=path, spec=spec, overwrite=overwrite)
+        return dat_manager.create(path=path, spec=spec, overwrite=overwrite)
 
     @classmethod
     def load(cls: Type[T], name_or_path: str, *,
              cwd: Optional[str] = None) -> T:
-        from . import dats
-        return dats.load(name_or_path, cwd=cwd)
+        return dat_manager.load(name_or_path, cwd=cwd)
 
     @staticmethod
     def exists(path: str) -> bool:
         """Checks if a given Dat exists (by looking for its _spec_ file)."""
-        from . import dats
-        return dats.exists(path)
+        return dat_manager.exists(path)
 
     def __init__(self,
                  *,
@@ -200,6 +199,7 @@ class Dat(object):
             self._path, self._spec = path, spec
         else:
             raise Exception("Use Dat.create() to create a new Dat instances.")
+
     def __repr__(self):
         base = Dat.get(self._spec, _DAT_BASE, self.__class__.__name__)
         base = base.split("/")[-1]
@@ -222,8 +222,7 @@ class Dat(object):
 
     def get_path_name(self) -> str:
         """Returns the name (relative path) of this Dat."""
-        from . import dats
-        return dats.get_path_name(self._path)
+        return dat_manager.get_path_name(self._path)
 
     def get_path_tail(self) -> str:
         """Returns the shortname (last part of the path) of this Dat."""
@@ -242,8 +241,7 @@ class Dat(object):
         """Deletes the folder and its contents from the filesystem.
         This deletion will also be reflected as a deletion pushed to git.
         Still, the backing store will retain all previous versions of this Dat."""
-        from . import dats
-        dats.dat_cache.pop(self._path, None)      # Remove from cache
+        dat_manager.dat_cache.pop(self._path, None)      # Remove from cache
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
@@ -255,8 +253,7 @@ class Dat(object):
 
     def copy(self, new_path: str) -> "Dat":
         """Copies this Dat to a new location."""
-        from . import dats
-        new_path_ = dats._resolve_path(new_path)
+        new_path_ = dat_manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
         shutil.copytree(self._path, new_path_)
@@ -265,9 +262,8 @@ class Dat(object):
 
     def move(self, new_path: str) -> "Dat":
         """Moves this Dat to a new location."""
-        from . import dats
-        del dats.dat_cache[self._path]      # Remove from cache
-        new_path_ = dats._resolve_path(new_path)
+        del dat_manager.dat_cache[self._path]      # Remove from cache
+        new_path_ = dat_manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
         shutil.move(self._path, new_path_)
@@ -343,15 +339,54 @@ class DatContainer(Dat, Generic[T]):
         return results
 
 
+DatMethod = Callable[[Dat, ...], Any]    # A Callable that serves as a method on a Dat
+
+
+class DatMethodManager(object):
+    """Manages a namespace of DatMethods that are  indexed by String"""
+
+    @abstractmethod
+    def __call__(self, name: str, *args, **kwargs) -> Any: ...
+
+    @abstractmethod
+    def mount(self, **kwargs): ...
+
+    @abstractmethod
+    def load(self, name: str) -> DatMethod: ...
+
+    @abstractmethod
+    def keys(self) -> Iterable[str]: ...
+
+
+class SimpleDatMethodManager(DatMethodManager):
+    def __init__(self):
+        self._dat_methods: Dict[str, DatMethod] = {}
+
+    def __call__(self, name, *args, **kwargs):
+        return self._dat_methods[name](*args, **kwargs)
+
+    def load(self, name: str) -> DatMethod:
+        return self._dat_methods.get(name)
+
+    def mount(self, value: DatMethod, at: str):
+        self._dat_methods[at] = value
+
+    def keys(self):
+        return self._dat_methods.keys()
+
+
 class Dats(object):
-    """Configuration info for the 'dat' module loaded from the .datconfig.json file.
+    """Singleton class that manages the configuration and loading of Dats.
+
+    Configuration info for the 'dat' module loaded from the .datconfig.json file.
 
     .datconfig.json
-        The do module search CWD and all its parent folders for the '.datconfig.json' file.
+        The do module searches CWD and all parent dirs for the '.datconfig.json' file.
         If it is found, it expects a JSON object with a 'do_folder' key that indicates
         the path (relative to the .datconfig.json file itself) of the "do folder"
     """
     config: Dict[str, Any] = {}
+    do: DatMethodManager = SimpleDatMethodManager()
     sync_folder: str
     sync_folders: List[str]   # Note: also includes the dat_folder
     dat_cache: Dict[str, Any] = weakref.WeakValueDictionary()  # Used in Dat.load
@@ -382,7 +417,8 @@ class Dats(object):
 
         self.sync_folder = self._lookup_path(self.folder, _DAT_FOLDER, None)
         if not self.sync_folder:
-            print(f"Warning: No {_DAT_CONFIG_JSON} found or no \"{_DAT_FOLDER}\" specified.")
+            s = f"No {_DAT_CONFIG_JSON} found or no \"{_DAT_FOLDER}\" specified."
+            print(f"Warning: {s}")
             self.sync_folder = os.path.join(self.folder, _DEFAULT_DAT_FOLDER)
         dirs = self.config.get(_DAT_FOLDERS)
         dirs = ([self.sync_folder] + dirs) if dirs else [self.sync_folder]
@@ -426,7 +462,7 @@ class Dats(object):
             {unique} -- a counter or UUID that makes the entire path unique.
         """
         spec: Dict = spec or {}
-        path: str = self._resolve_path(
+        path: str = self.resolve_path(
             self.expand_dat_path(path, overwrite=overwrite))
         if not os.path.exists(path):
             os.makedirs(path)
@@ -460,7 +496,7 @@ class Dats(object):
             path = name_or_path
         elif os.path.exists(path := os.path.join(cwd or os.getcwd(), name_or_path)):
             pass
-        elif os.path.exists(path := self._resolve_path(name_or_path)):
+        elif os.path.exists(path := self.resolve_path(name_or_path)):
             pass
         else:
             raise KeyError(f"LOAD_DAT: Could not find {name_or_path!r}")
@@ -490,16 +526,12 @@ class Dats(object):
             pass
         return dat
 
-    def exists(self, path: str) -> bool:
+    @staticmethod
+    def exists(path: str) -> bool:
         """Checks if a given Dat exists (by looking for its _spec_ file)."""
-        from . import dats
-        path = dats._resolve_path(path)
+        path = dat_manager.resolve_path(path)
         return os.path.exists(os.path.join(path, SPEC_JSON)) or \
             os.path.exists(os.path.join(path, SPEC_YAML))
-
-    def get_path(self, path_spec) -> str:
-        """Returns the absolute path of this Dat."""
-        return self._path
 
     def get_path_name(self, path):
         try:
@@ -508,30 +540,15 @@ class Dats(object):
         except ValueError:
             return path
 
-    def get_path_tail(self, path) -> str:
+    @staticmethod
+    def get_path_tail(path) -> str:
         """Returns the shortname (last part of the path) of this Dat."""
         return path.split("/")[-1]
 
     def expand_dat_path(self, path_spec: Union[str, None], *,
                         variables: Dict[str, Any] = None,
                         overwrite: bool = False) -> str:
-        """
-        Expands a path spec into a full path.
-
-        See __init__ for expansion rules.
-
-        Args:
-            path_spec (str): The path specification string with placeholders.
-            variables (Dict[str, Any]): Additional variables provided by the user.
-            overwrite (bool): If True, the path will be overwritten if it exists.
-
-        Returns:
-            str: The fully expanded path.
-
-        Examples:
-            _expand_path_spec("/data/{YYYY}/{MM}/{DD}/file_{unique}.txt", {})
-            -> "/data/2024/05/03/file_123e4567-e89b-12d3-a456-426614174000.txt"
-        """
+        """(See Dat.create for path expansion rules.)"""  # noqa
         if not path_spec:
             path_spec = _DEFAULT_PATH_TEMPLATE
         now, count = datetime.now(), 1
@@ -556,7 +573,7 @@ class Dats(object):
             else:
                 count += 1
 
-    def _resolve_path(self, name: str) -> str:
+    def resolve_path(self, name: str) -> str:
         for folder in self.sync_folders:
             path = os.path.join(folder, name)
             if os.path.exists(os.path.join(path, SPEC_JSON)) or \
@@ -584,3 +601,5 @@ class Dats(object):
                 return result
         return None
 
+
+dat_manager = Dats()

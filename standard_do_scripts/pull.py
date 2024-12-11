@@ -1,6 +1,6 @@
 import os
 
-from dvc_dat import dats, Dat
+from dvc_dat import dat_manager
 
 
 DEBUG = True   # False, True, 'prompt'
@@ -8,8 +8,8 @@ DEBUG = True   # False, True, 'prompt'
 
 def __main__():
     print()
-    os.chdir(dats.sync_folder)
-    run(f"cd '{dats.sync_folder}'")
+    os.chdir(dat_manager.sync_folder)
+    run(f"cd '{dat_manager.sync_folder}'")
     status = run(f"git pull")
     status = status or run(f"dvc pull")
     if status != 0:

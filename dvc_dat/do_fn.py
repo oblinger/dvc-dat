@@ -12,16 +12,15 @@ import copy
 import json
 import time
 from datetime import datetime
-from enum import Enum
 from importlib import import_module
 
 import yaml
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import Type, Union, Any, Dict, Callable, List
+from typing import Type, Union, Any, Dict, Callable, List, Iterable
 
-from dvc_dat.dat import Dat
+from dvc_dat.dat import Dat, DatMethodManager
 
 # The loadable "do" fns, scripts, configs, and methods are in the do_folder
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
@@ -37,12 +36,12 @@ _DAT_DO = "dat.do"             # the fn to execute
 _DAT_ARGS = "dat.args"         # prefix args for the dat.do method
 _DAT_KWARGS = "dat.kwargs"     # default kwargs for the dat.do method
 _DAT_RUN_AT = "dat.run_at"     # the time at with dat.do was run
-_DAT_RUN_TIME = "dat.run_time" # the duration of the dat.do run
+_DAT_RUN_TIME = "dat.run_time"  # the duration of the dat.do run
 
 Spec = Dict[str, Any]
 
 
-class DoManager(object):
+class DoManager(DatMethodManager):
     """'Do' maps dotted strings to python objects dynamically loaded from .py files.
 
     API:
@@ -116,6 +115,10 @@ class DoManager(object):
         except Exception as e:
             raise Exception(F"In {do_spec!r}") from e
 
+    def keys(self) -> Iterable[str]:
+        """Returns the list of all defined names."""
+        return self.base_locations.keys()
+
     def load(self,
              dotted_name: str,
              *,
@@ -145,7 +148,7 @@ class DoManager(object):
             if default is _DO_NULL:
                 raise KeyError(F"do.load: The base for {dotted_name!r} was not found.")
             else:
-                obj = default      # Remove ???????????????
+                obj = default      # Noqa    # Remove ???????????????
                 return default
         try:
             if obj == _DO_ERROR_FLAG:
@@ -310,15 +313,15 @@ class DoManager(object):
             path: str = None
     ) -> Dat:
         """Creates a mew Dat object from a template spec."""
-        from . import dats
+        from . import dat_manager
         spec, count = copy.deepcopy(spec), 1
         # Dat.set(spec, _MAIN_ARGS, args or [])
         # Dat.set(spec, _MAIN_KWARGS, kwargs or {})
         path = path or Dat.get(spec, _DAT_PATH, None)
         overwrite = Dat.get(spec, _DAT_PATH_OVERWRITE, False) and \
-                    path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
+            path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
         spec = self.expand_spec(spec)
-        path = dats.expand_dat_path(path, overwrite=overwrite)  # noqa
+        path = dat_manager.expand_dat_path(path, overwrite=overwrite)  # noqa
         return Dat.create(path=path, spec=spec, overwrite=overwrite)
 
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
