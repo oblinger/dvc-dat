@@ -1,12 +1,12 @@
 import os
 
-from dvc_dat import dat_manager, Dat
+from dvc_dat import Dat
 
 DEBUG = True
 
 
 def __main__(*add_paths):
-    adds_file = os.path.join(dat_manager.sync_folder, dat_manager.DAT_ADDS_LIST)
+    adds_file = os.path.join(Dat.manager.sync_folder, Dat.manager.DAT_ADDS_LIST)
     paths = []
     for arg in add_paths:
         arg = os.path.join(os.getcwd(), arg)

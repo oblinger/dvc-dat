@@ -91,6 +91,7 @@ class Dat(object):
       - If lazy loading is beneficial
 
     """   # noqa
+    manager: 'DatManager' = None    # The singleton manager for all Dats, set at end of file
     _path: str      # The immutable absolute path of this Dat
     _spec: Spec     # The immutable spec of this Dat
     _result: Spec   # The mutable state or result of this Dat
@@ -176,17 +177,17 @@ class Dat(object):
                spec: Spec = None,
                overwrite=()
                ) -> "Dat":
-        return dat_manager.create(path=path, spec=spec, overwrite=overwrite)
+        return Dat.manager.create(path=path, spec=spec, overwrite=overwrite)
 
     @classmethod
     def load(cls: Type[T], name_or_path: str, *,
              cwd: Optional[str] = None) -> T:
-        return dat_manager.load(name_or_path, cwd=cwd)
+        return Dat.manager.load(name_or_path, cwd=cwd)
 
     @staticmethod
     def exists(path: str) -> bool:
         """Checks if a given Dat exists (by looking for its _spec_ file)."""
-        return dat_manager.exists(path)
+        return Dat.manager.exists(path)
 
     def __init__(self,
                  *,
@@ -222,7 +223,7 @@ class Dat(object):
 
     def get_path_name(self) -> str:
         """Returns the name (relative path) of this Dat."""
-        return dat_manager.get_path_name(self._path)
+        return Dat.manager.get_path_name(self._path)
 
     def get_path_tail(self) -> str:
         """Returns the shortname (last part of the path) of this Dat."""
@@ -241,7 +242,7 @@ class Dat(object):
         """Deletes the folder and its contents from the filesystem.
         This deletion will also be reflected as a deletion pushed to git.
         Still, the backing store will retain all previous versions of this Dat."""
-        dat_manager.dat_cache.pop(self._path, None)      # Remove from cache
+        Dat.manager.dat_cache.pop(self._path, None)      # Remove from cache
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
@@ -253,7 +254,7 @@ class Dat(object):
 
     def copy(self, new_path: str) -> "Dat":
         """Copies this Dat to a new location."""
-        new_path_ = dat_manager.resolve_path(new_path)
+        new_path_ = Dat.manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
         shutil.copytree(self._path, new_path_)
@@ -262,8 +263,8 @@ class Dat(object):
 
     def move(self, new_path: str) -> "Dat":
         """Moves this Dat to a new location."""
-        del dat_manager.dat_cache[self._path]      # Remove from cache
-        new_path_ = dat_manager.resolve_path(new_path)
+        del Dat.manager.dat_cache[self._path]      # Remove from cache
+        new_path_ = Dat.manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
         shutil.move(self._path, new_path_)
@@ -342,7 +343,7 @@ class DatContainer(Dat, Generic[T]):
 DatMethod = Callable[[Dat, ...], Any]    # A Callable that serves as a method on a Dat
 
 
-class DatMethodManager(object):
+class MethodManager(object):
     """Manages a namespace of DatMethods that are  indexed by String"""
 
     @abstractmethod
@@ -358,7 +359,7 @@ class DatMethodManager(object):
     def keys(self) -> Iterable[str]: ...
 
 
-class SimpleDatMethodManager(DatMethodManager):
+class SimpleMethodManager(MethodManager):
     def __init__(self):
         self._dat_methods: Dict[str, DatMethod] = {}
 
@@ -375,7 +376,7 @@ class SimpleDatMethodManager(DatMethodManager):
         return self._dat_methods.keys()
 
 
-class Dats(object):
+class DatManager(object):
     """Singleton class that manages the configuration and loading of Dats.
 
     Configuration info for the 'dat' module loaded from the .datconfig.json file.
@@ -386,7 +387,7 @@ class Dats(object):
         the path (relative to the .datconfig.json file itself) of the "do folder"
     """
     config: Dict[str, Any] = {}
-    do: DatMethodManager = SimpleDatMethodManager()
+    do: MethodManager = SimpleMethodManager()
     sync_folder: str
     sync_folders: List[str]   # Note: also includes the dat_folder
     dat_cache: Dict[str, Any] = weakref.WeakValueDictionary()  # Used in Dat.load
@@ -529,7 +530,7 @@ class Dats(object):
     @staticmethod
     def exists(path: str) -> bool:
         """Checks if a given Dat exists (by looking for its _spec_ file)."""
-        path = dat_manager.resolve_path(path)
+        path = Dat.manager.resolve_path(path)
         return os.path.exists(os.path.join(path, SPEC_JSON)) or \
             os.path.exists(os.path.join(path, SPEC_YAML))
 
@@ -602,4 +603,4 @@ class Dats(object):
         return None
 
 
-dat_manager = Dats()
+Dat.manager = DatManager()

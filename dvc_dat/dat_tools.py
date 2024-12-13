@@ -2,7 +2,7 @@ import os
 from typing import Union, Iterable, Dict, List, Any, Callable, Tuple
 
 from pandas import DataFrame, ExcelWriter, Series
-from dvc_dat import Dat, DatContainer, dat_manager    # , do
+from dvc_dat import Dat, DatContainer
 
 """
 Helper functions for creating data frames and manipulating data frames.
@@ -38,9 +38,8 @@ SHOW = "show"
 def cmd_list(prefix: str = ""):
     """Lists all do names with a given prefix."""
     print(f"\nBase names matching: '{prefix}*'")
-    from . import dat_manager
-    for k in dat_manager.do.keys():   # do.base_locations.items():
-        v = dat_manager.do.load(k)
+    for k in Dat.manager.do.keys():   # do.base_locations.items():
+        v = Dat.manager.do.load(k)
         if prefix not in k:
             continue
         # elif isinstance(v, str) and v[0] != '-' and do.do_folder:
@@ -225,7 +224,7 @@ class Cube(object):
         self.points: Points = list(points) if points else []
         self.point_fns: List[Callable[[Dat], Any]] = []
         for fn_spec in point_fns or []:
-            fn = dat_manager.do.load(fn_spec) if isinstance(fn_spec, str) else fn_spec
+            fn = Dat.manager.do.load(fn_spec) if isinstance(fn_spec, str) else fn_spec
             self.point_fns.append(fn)
         if dats:
             self._add_dats(dats, 1, {})

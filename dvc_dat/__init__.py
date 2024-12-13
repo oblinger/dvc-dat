@@ -2,22 +2,21 @@ __version__ = "1.00.05"
 DAT_VERSION = f"{__version__} (2024-06-20)"
 
 import __main__ as main
-from .dat import dat_manager, Dats, _DAT_MOUNT_COMMANDS
+from .dat import DatManager, _DAT_MOUNT_COMMANDS
 from .do_fn import DoManager, do_argv
 from .dat import Dat, DatContainer
 from . import dat_tools
 
 
 if not hasattr(main, "NO_DAT_DVC_INIT"):
-    not here
-    dats = dat_manager
-    do = dats.do = DoManager()  # not available during load of do_fn
+    dats = Dat.manager
+    do = Dat.manager.do = DoManager()  # not available during load of do_fn
 
     from .dat import Dat, DatContainer
     from . import dat_tools
 
-    cmds = dats.config.get(_DAT_MOUNT_COMMANDS, [])
-    do.mount_all(cmds, relative_to=dats.folder)
+    cmds = Dat.manager.config.get(_DAT_MOUNT_COMMANDS, [])
+    do.mount_all(cmds, relative_to=Dat.manager.folder)
     do.mount(module=dat_tools, at="dat_tools")
     do.mount(module=dat_tools, at="dt")
     do.mount(value=dat_tools.cmd_list, at="dt.list")
@@ -26,10 +25,9 @@ if not hasattr(main, "NO_DAT_DVC_INIT"):
 
 __all__ = [
     "DAT_VERSION",
-    "dat_manager",
     "Dat",
     "DatContainer",
-    "Dats",
+    "DatManager",
     "DoManager",
     "do",
     "do_argv",

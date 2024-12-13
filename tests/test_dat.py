@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Dict
 import pytest
 
-from dvc_dat import dat_manager
-
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from dvc_dat.dat import _DAT_CLASS, Dat, DatContainer  # noqa
@@ -120,7 +118,7 @@ def temp_root_with_runset(
 class TestDatAccessors:
     def test_path_accessors(self, spec1):
         dat = Dat.create(spec=spec1, path="any/path/goes/here/my_dat", overwrite=True)
-        assert dat.get_path() == f"{dat_manager.sync_folder}/any/path/goes/here/my_dat"
+        assert dat.get_path() == f"{Dat.manager.sync_folder}/any/path/goes/here/my_dat"
         assert dat.get_path_name() == "any/path/goes/here/my_dat"
         assert dat.get_path_tail() == "my_dat"
         assert dat.delete()

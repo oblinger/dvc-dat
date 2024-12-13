@@ -20,7 +20,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Type, Union, Any, Dict, Callable, List, Iterable
 
-from dvc_dat.dat import Dat, DatMethodManager
+from dvc_dat.dat import Dat, MethodManager
 
 # The loadable "do" fns, scripts, configs, and methods are in the do_folder
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
@@ -41,7 +41,7 @@ _DAT_RUN_TIME = "dat.run_time"  # the duration of the dat.do run
 Spec = Dict[str, Any]
 
 
-class DoManager(DatMethodManager):
+class DoManager(MethodManager):
     """'Do' maps dotted strings to python objects dynamically loaded from .py files.
 
     API:
@@ -313,7 +313,6 @@ class DoManager(DatMethodManager):
             path: str = None
     ) -> Dat:
         """Creates a mew Dat object from a template spec."""
-        from . import dat_manager
         spec, count = copy.deepcopy(spec), 1
         # Dat.set(spec, _MAIN_ARGS, args or [])
         # Dat.set(spec, _MAIN_KWARGS, kwargs or {})
@@ -321,7 +320,7 @@ class DoManager(DatMethodManager):
         overwrite = Dat.get(spec, _DAT_PATH_OVERWRITE, False) and \
             path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
         spec = self.expand_spec(spec)
-        path = dat_manager.expand_dat_path(path, overwrite=overwrite)  # noqa
+        path = Dat.manager.expand_dat_path(path, overwrite=overwrite)  # noqa
         return Dat.create(path=path, spec=spec, overwrite=overwrite)
 
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
