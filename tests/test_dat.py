@@ -6,11 +6,9 @@ from pathlib import Path
 from typing import Dict
 import pytest
 
-from dvc_dat import dat_config
-
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat.dat import _DAT_CLASS, Dat, DatContainer
+from dvc_dat.dat import _DAT_CLASS, Dat, DatContainer  # noqa
 
 
 TMP_PATH = "/tmp/job_test"
@@ -26,8 +24,9 @@ def do():
 @pytest.fixture
 def spec1():
     return {
-        "dat": {"path": "test_dats/{YY}-{MM} Dats{unique}",
-                 "my_key1": "my_val1", "my_key2": "my_val2"}
+        "dat": {
+            "path": "test_dats/{YY}-{MM} Dats{unique}",
+            "my_key1": "my_val1", "my_key2": "my_val2"}
     }
 
 
@@ -38,9 +37,11 @@ def dat1(spec1):
 
 @pytest.fixture
 def spec2():
-    return {"dat": {"path": "test_dats/{YY}-{MM} Dats{unique}",
-                     "my_key1": "my_val111", "my_key2": "my_val222"},
-            "other": "key_value"}
+    return {
+        "dat": {
+            "path": "test_dats/{YY}-{MM} Dats{unique}",
+            "my_key1": "my_val111", "my_key2": "my_val222"},
+        "other": "key_value"}
 
 
 @pytest.fixture
@@ -117,7 +118,7 @@ def temp_root_with_runset(
 class TestDatAccessors:
     def test_path_accessors(self, spec1):
         dat = Dat.create(spec=spec1, path="any/path/goes/here/my_dat", overwrite=True)
-        assert dat.get_path() == f"{dat_config.sync_folder}/any/path/goes/here/my_dat"
+        assert dat.get_path() == f"{Dat.manager.sync_folder}/any/path/goes/here/my_dat"
         assert dat.get_path_name() == "any/path/goes/here/my_dat"
         assert dat.get_path_tail() == "my_dat"
         assert dat.delete()

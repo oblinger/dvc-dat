@@ -47,7 +47,10 @@ __main__ = {
 
 def is_prime(dat: Dat):
     """Returns True if the run number is prime"""
-    return int(dat.get_path_tail()) in [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+    try:
+        return int(dat.get_path_tail()) in [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+    except ValueError:
+        return False
 
 
 def data(dat: Dat):

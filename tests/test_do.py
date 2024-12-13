@@ -23,7 +23,7 @@ def run_capture(line: str) -> str:
 def run_capture_tail(line: str) -> str:
     """Run a command and return the last line of the output.
        (test using this will not fail if prints are added to the code)"""
-    result = subprocess.run(line, shell=True, stdout=subprocess.PIPE,
+    _result = subprocess.run(line, shell=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True)
     return run_capture(line).strip().split("\n")[-1]
 
@@ -137,8 +137,8 @@ class TestRegisteringStuff:
         do_.mount(at="xxx", module=path)
         assert do_("xxx.__main__") == "hello world!"
         do_.mount(at="yyy", module="dvc_dat")  # The already loaded 'dvc_dat' module
-        from dvc_dat import dat_config
-        assert do_.load("yyy.dat_config") == dat_config
+        from dvc_dat import Dat
+        assert do_.load("yyy.dats") == Dat.manager
 
 
 class TestTemplatedDatCreationAndDeletion:

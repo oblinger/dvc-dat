@@ -3,6 +3,7 @@
     "mount_commands": [
         {"at":  "", "folder":  "../standard_do_scripts"},
         {"at":  "", "folder":  "example_mounted_folder"},
+        {"at": "",  "folder": "example_mounted_folder/dat_tools_examples"},
         {"at":  "", "folder":  "example_mounted_folder/script"},
         {"at": "foo", "file": "example_mounted_folder/some_python_file.py"},
         {"at": "bar", "file": "example_mounted_folder/some_other_python_file.py"},
