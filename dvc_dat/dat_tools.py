@@ -1,6 +1,8 @@
 import os
 from typing import Union, Iterable, Dict, List, Any, Callable, Tuple
 
+import numpy as np
+import pandas as pd
 from pandas import DataFrame, ExcelWriter, Series
 from dvc_dat import Dat, DatContainer
 
@@ -58,46 +60,128 @@ def from_dat(source: Union[Dat, str, Iterable],
 
 
 def to_excel(df: DataFrame, *,
-             title: str = None,
-             folder: str = None,
-             docs: List[str] = None,
-             sheets: List[str] = None,
+             average: bool = False,
              columns: List[str] = None,
-             transform: Callable[[DataFrame], DataFrame] = None,
+             docs: List[str] = None,
+             folder: str = None,
              formatted_columns: List[str] = None,
-             verbose: bool = True,
-             show: bool = False):
+             median: bool = False,
+             prepend: bool = False,
+             quantiles: int = None,
+             sheets: List[str] = None,
+             show: bool = False,
+             std: bool = False,
+             transform: Callable[[DataFrame], DataFrame] = None,
+             title: str = None,
+             transpose: bool = False,
+             verbose: bool = True) -> str:
     """
     Splits a pandas DataFrame into multiple DataFrames based on the values of their
     columns.  The first set of columns split the DataFrame into slices, called
     sections which separate it into different Excel files.  Then a second set of
     columns are used to slice into separate sheets within each Excel file.
+
+
+    Parameters
+    ----------
+    df: DataFrame
+        The input data.
+    average: bool
+        If True, a row of averages is added to the report.
+    columns: List[str]
+        Trims report down to only list the specified columns.
+    docs: List[str]
+        The columns to join together to split the report into separate Excel files.
+    folder: str
+        The folder where the report is saved.
+    formatted_columns: List[str]
+        A list of formatted columns to add to the report.
+    median: bool
+        If True, a row of medians is added to the report
+    prepend: bool
+        If True, the average, median, etc. are prepended to the report.
+    quantiles: int
+        If not None, number of quantiles to show
+    sheets: List[str]
+        The columns to join together to split the report into separate sheets.
+    show: bool
+        If True, the report is displayed within an Excel viewer.
+    std: bool
+        If True, a row of standard deviations is added to the report.
+    title: str
+        The title (filename base) for the report.
+    transform: Callable[[DataFrame], DataFrame]
+        A function that transforms the report's DataFrame before it is printed.
+    transpose: bool
+        If True, the report is transposed so columns headers are on the left.
+    verbose: bool,
+        If True, the report is printed to the console.  (default True???)
     """
     df = df.copy()
     if transform:
         df = transform(df)
     if formatted_columns:
         _add_formatted_columns(df, formatted_columns)
+
+    summary_rows = {}
+    if average:
+        numeric_columns = df.select_dtypes(include='number')
+        averages = numeric_columns.mean().round(2)
+        summary_rows['Average'] = averages
+    if median:
+        numeric_columns = df.select_dtypes(include='number')
+        median_values = numeric_columns.median()
+        summary_rows['Median'] = median_values
+    if std:
+        numeric_columns = df.select_dtypes(include='number')
+        std_values = numeric_columns.std()
+        summary_rows['Std'] = std_values
+    if quantiles:
+        numeric_columns = df.select_dtypes(include='number')
+        quantile_divisions = np.linspace(0, 1, quantiles + 1)
+        quantile_values = numeric_columns.quantile(quantile_divisions)
+        summary_rows.update(quantile_values.to_dict(orient='index'))
+
+    # Convert summary rows to DataFrame
+    summary_df = pd.DataFrame(summary_rows).transpose()
+
+    # Ensure the summary DataFrame contains only numeric columns
+    # numeric_columns = df.select_dtypes(include='number').columns
+    # summary_df = summary_df[numeric_columns].transpose()
+
+    # Handle reorder based on the original numeric columns, without the non-numeric cols
+    # No need to use intersection anymore, since we're only dealing with numeric columns
+    # summary_df = summary_df[numeric_columns].transpose()
+
+    # Prepend or append the summary rows to the DataFrame
+    empty_df = pd.DataFrame(columns=df.columns)
+    ordering = [empty_df, summary_df, df] if prepend else [df, summary_df]
+    df = pd.concat(ordering, ignore_index=False)
+
+    if transpose:
+        df = df.T
     folder = folder or os.getcwd()
     if not docs:       # saves as a single Excel file
         path = os.path.join(folder, f'{title or "output"}.xlsx')
-        _create_sheets(path, df, "", sheets, columns, verbose, show)
+        _create_sheets(path, df, "", sheets, columns,
+                       verbose, show, transpose)
         return path
     else:   # Splits the dataframe into multiple Excel files
         section_values: Tuple
         for section_values, section_df in df.groupby(docs):
             section_path = (title + " " if title else "") + '-'.join(section_values)
             section_path = os.path.join(folder, section_path + ".xlsx")
-            _create_sheets(section_path, section_df, "", sheets, columns, verbose, show)
+            _create_sheets(section_path, section_df, "", sheets,
+                           columns, verbose, show, transpose)
         return folder
 
 
-def _create_sheets(path, df, sheet_prefix, sheets, columns, verbose, show):
+def _create_sheets(path, df, sheet_prefix, sheets, columns, verbose, show, index):
     if os.path.exists(path):
         os.remove(path)
     with ExcelWriter(path, engine='xlsxwriter') as writer:
         if not sheets:
-            df.to_excel(writer, sheet_name=sheet_prefix or "Sheet1", index=False)
+            df.to_excel(writer, sheet_name=sheet_prefix or "Sheet1", index=index)
         else:
             for sheet_values, sheet_df in df.groupby(sheets):
                 sheet_values = [sheet_values] if isinstance(sheet_values,
@@ -107,7 +191,7 @@ def _create_sheets(path, df, sheet_prefix, sheets, columns, verbose, show):
                 if columns:
                     sheet_df = sheet_df[[col for col in columns
                                          if col in sheet_df.columns]]
-                sheet_df.to_excel(writer, sheet_name=sheet_title, index=False)
+                sheet_df.to_excel(writer, sheet_name=sheet_title, index=index)
     if verbose:
         print(f"# Dataframe written to {path}")
     if show:
@@ -145,31 +229,8 @@ def dat_report(
         verbose: bool = True,
         show: bool = None) -> DataFrame:
     """A dat script that runs the specified metrics over the specified "Dats".
-
-    Parameters
-    ----------
-    spec: Dat
-        Default parameters for the report are in the 'dat_report' section.
-    title: str
-        The title (filename base) for the report.
-    folder: str
-        The folder where the report is saved.
-    source: Union[Dat, str, Iterable]
-        The source of 'Dats' to be analyzed, uses the 'spec' dat if not provided.
-    metrics: List
-        A list of fns to apply to each Dat (See Cube point_fns for details).
-    docs: List[str]
-        The columns to join together to split the report into separate Excel files.
-    sheets: List[str]
-        The columns to join together to split the report into separate sheets.
-    columns: List[str]
-        Trims report down to only list the specified columns.
-    formatted_columns: List[str]
-        A list of formatted columns to add to the report.
-    verbose: bool,
-        If True, the report is printed to the console.  (default True???)
-    show: bool
-        If True, the report is displayed in a window.
+    The results are saved to an Excel file.  The metrics are defined in the spec
+    (see to_excel for more details).
     """
     d: dict = spec.get_spec() if isinstance(spec, Dat) else spec
     mm = d.get("dat_report") or {}
@@ -303,6 +364,10 @@ class Cube(object):
         for point in self.points:
             point_keys.update(point.keys())
         for point in self.points:
+            new_point = {}
             for k, v in point[_INDICIES].items():
-                point[rename_index(k)] = v
+                new_point[rename_index(k)] = v
+            new_point.update(point)     # Adds the point's data after indices
+            point.clear()
+            point.update(new_point)
             del point[_INDICIES]
