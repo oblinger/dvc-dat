@@ -20,15 +20,15 @@ def __main__():
         if not os.path.exists(os.path.join(Dat.manager.sync_folder, p)):
             print(f"   {p}   ERROR: Folder does not exist.")
             errors = True
-        elif not Dat.exists(p):
+        elif not Dat.manager.exists(p):
             print(f"   {p}   ERROR: Missing '_spec_.json' file.")
             errors = True
         else:
             print(f"   {p}")
         try:
-            Dat.load(p)
+            Dat.manager.load(p)
         except Exception as e:
-            print(f"      ERROR: Could not Dat.load(...): {e}")
+            print(f"      ERROR: Could not Dat.manager.load(...): {e}")
             errors = True
     print("-------------------------------")
     if errors:

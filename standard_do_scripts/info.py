@@ -6,7 +6,7 @@ from dvc_dat import Dat, do
 def __main__(name: str = None):
     dat, do_value = None, None
     try:
-        dat = Dat.load(name)
+        dat = Dat.manager.load(name)
     except KeyError:
         pass
     try:

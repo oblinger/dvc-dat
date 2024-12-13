@@ -321,7 +321,7 @@ class DoManager(MethodManager):
             path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
         spec = self.expand_spec(spec)
         path = Dat.manager.expand_dat_path(path, overwrite=overwrite)  # noqa
-        return Dat.create(path=path, spec=spec, overwrite=overwrite)
+        return Dat.manager.create(path=path, spec=spec, overwrite=overwrite)
 
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
         """Runs the dat.do method of an instantiated object."""   # noqa

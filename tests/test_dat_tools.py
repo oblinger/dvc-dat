@@ -31,7 +31,7 @@ def spec1():
 
 @pytest.fixture
 def dat1(spec1):
-    return Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
+    return Dat.manager.create(spec=spec1, path=TMP_PATH, overwrite=True)
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def spec2():
 
 @pytest.fixture
 def dat2(spec2):
-    return Dat.create(spec=spec2, path=TMP_PATH2, overwrite=True)
+    return Dat.manager.create(spec=spec2, path=TMP_PATH2, overwrite=True)
 
 
 def always_17(_dat: Dat):
@@ -214,8 +214,8 @@ class TestCleanup:
     def test_cleanup(self):
         os.system("rm *.xlsx")  # remove all excel files
         os.system("rm -r test_sync_folder/anonymous")  # remove all anon dats
-        Dat.load("simple_report").delete()
-        Dat.load("dat_report").delete()
+        Dat.manager.load("simple_report").delete()
+        Dat.manager.load("dat_report").delete()
 
 #
 

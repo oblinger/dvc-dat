@@ -10,7 +10,7 @@ def __main__(*add_paths):
     paths = []
     for arg in add_paths:
         arg = os.path.join(os.getcwd(), arg)
-        p = Dat.load(arg).get_path_name()
+        p = Dat.manager.load(arg).get_path_name()
         paths.append(p)
     with open(adds_file, 'a') as f:
         lines = '\n'.join(paths)

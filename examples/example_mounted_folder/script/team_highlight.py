@@ -10,7 +10,7 @@ from dvc_dat import do, Dat
 
 
 def reg_quick_test():
-    run_result = Dat.load("reg1_latest")   # Reg1 pickle for a special 5-min snipit
+    run_result = Dat.manager.load("reg1_latest")   # Reg1 pickle for a special 5-min snipit
     assert do("team_highlight_money", run_result) > .65
 
 

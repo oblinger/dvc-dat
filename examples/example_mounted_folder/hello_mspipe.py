@@ -46,7 +46,7 @@ def mspipe_build(dc: DatContainer):
     for stage_name, stage_template in Dat.get(dc, "stages").items():
         sub_path: str = os.path.join(path, stage_name)
         sub_spec = do.merge_configs(stage_template, common_template)
-        Dat.create(path=sub_path, spec=sub_spec)
+        Dat.manager.create(path=sub_path, spec=sub_spec)
     return dc
 
 
@@ -54,7 +54,7 @@ def mspipe_run(dc: DatContainer):
     """Sequentially runs each stage in the pipeline."""
     for stage_name, stage_spec in dc.get_spec()["stages"].items():
         dat_name = f"{dc.get_path_name()}/{stage_name}"
-        stage_dat = Dat.load(dat_name)
+        stage_dat = Dat.manager.load(dat_name)
         print(f"Running {dat_name}")
         do(stage_dat)
     Dat.set(dc.get_results(), "dat.version", DAT_VERSION)

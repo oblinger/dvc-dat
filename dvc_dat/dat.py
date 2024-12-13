@@ -60,7 +60,7 @@ class Dat(object):
     loc == path or name
 
     Persistable API
-      Dat.create(path=, spec=) ... Constructor
+      Dat.manager.create(path=, spec=) ... Constructor
       .load(path) ................ Universal loader for all Persistables
       .get_spec() ................ Is the 'spec' dict for this dat
       .get_path() ................ Returns dat's path (its absolute path)
@@ -169,26 +169,6 @@ class Dat(object):
                     value = suffix
             Dat.set(source, keys, value)
 
-    # DEPRECATED METHODS
-
-    @classmethod
-    def create(cls, *,
-               path: str = None,
-               spec: Spec = None,
-               overwrite=()
-               ) -> "Dat":
-        return Dat.manager.create(path=path, spec=spec, overwrite=overwrite)
-
-    @classmethod
-    def load(cls: Type[T], name_or_path: str, *,
-             cwd: Optional[str] = None) -> T:
-        return Dat.manager.load(name_or_path, cwd=cwd)
-
-    @staticmethod
-    def exists(path: str) -> bool:
-        """Checks if a given Dat exists (by looking for its _spec_ file)."""
-        return Dat.manager.exists(path)
-
     def __init__(self,
                  *,
                  path: str = None,
@@ -199,7 +179,7 @@ class Dat(object):
         if _no_backing:
             self._path, self._spec = path, spec
         else:
-            raise Exception("Use Dat.create() to create a new Dat instances.")
+            raise Exception("Use Dat.manager.create() to create a new Dat instances.")
 
     def __repr__(self):
         base = Dat.get(self._spec, _DAT_BASE, self.__class__.__name__)
@@ -258,7 +238,7 @@ class Dat(object):
         if os.path.exists(new_path_):
             raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
         shutil.copytree(self._path, new_path_)
-        result = Dat.load(new_path_)
+        result = Dat.manager.load(new_path_)
         return result
 
     def move(self, new_path: str) -> "Dat":
@@ -268,7 +248,7 @@ class Dat(object):
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
         shutil.move(self._path, new_path_)
-        result = Dat.load(new_path_)
+        result = Dat.manager.load(new_path_)
         return result
 
 
@@ -323,7 +303,7 @@ class DatContainer(Dat, Generic[T]):
             # these will load as the Dat class as defined in each spec's
             # main  .class, but we're loading them dynamically from Dat directly,
             # so we'll ignore the type and assume they will all be List[T]
-            self._dats = [Dat.load(p) for p in self.get_dat_paths()]  # type: ignore
+            self._dats = [Dat.manager.load(p) for p in self.get_dat_paths()]  # type: ignore
         return self._dats  # type: ignore
 
     @staticmethod
@@ -390,7 +370,7 @@ class DatManager(object):
     do: MethodManager = SimpleMethodManager()
     sync_folder: str
     sync_folders: List[str]   # Note: also includes the dat_folder
-    dat_cache: Dict[str, Any] = weakref.WeakValueDictionary()  # Used in Dat.load
+    dat_cache: Dict[str, Any] = weakref.WeakValueDictionary()  # Used in Dat.manager.load
 
     DAT_ADDS_LIST = ".dat_adds.txt"  # List of Dat names to be updated in DVC
 
@@ -549,7 +529,7 @@ class DatManager(object):
     def expand_dat_path(self, path_spec: Union[str, None], *,
                         variables: Dict[str, Any] = None,
                         overwrite: bool = False) -> str:
-        """(See Dat.create for path expansion rules.)"""  # noqa
+        """(See Dat.manager.create for path expansion rules.)"""  # noqa
         if not path_spec:
             path_spec = _DEFAULT_PATH_TEMPLATE
         now, count = datetime.now(), 1

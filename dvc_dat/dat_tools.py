@@ -273,7 +273,7 @@ class Cube(object):
                 point[_INDICIES] = sub_indicies
             self.points += points
         elif isinstance(source, str):
-            self._add_dats(Dat.load(source), this_index, indicies)
+            self._add_dats(Dat.manager.load(source), this_index, indicies)
         elif isinstance(source, List):
             for element in source:
                 self._add_dats(element, len(indicies) + 1, indicies)
