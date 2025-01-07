@@ -43,7 +43,7 @@ class DataState(Enum):
 # A Value is possibly recursive dict of parameters within the Dat's spec.
 # Often it is a dict of dict, but single level is ok as long as keys are
 # strings.  The spec is stored in the _spec_ file in the Persistable's folder.
-Value = Union[str, int, float, bool, None, 'Spec']
+Value = Union[str, int, float, bool, None, "Spec"]
 
 Spec = Dict[str, Value]
 
@@ -52,7 +52,7 @@ T = TypeVar("T", bound="Dat")
 
 class Dat(object):
     """
-    A Dat is a data container (filesystem folder plus JSON metadata) that is saved 
+    A Dat is a data container (filesystem folder plus JSON metadata) that is saved
     from one Python environment and can be instantiated into others.
 
     Each Dat:
@@ -99,16 +99,19 @@ class Dat(object):
       - If the data should be a candidate for caching
       - If lazy loading is beneficial
 
-    """   # noqa
-    manager: 'DatManager' = None    # The singleton manager for all Dats, set at end of file
-    _path: str      # The immutable absolute path of this Dat
-    _spec: Spec     # The immutable spec of this Dat
-    _result: Spec   # The mutable state or result of this Dat
+    """  # noqa
+
+    manager: "DatManager" = (
+        None  # The singleton manager for all Dats, set at end of file
+    )
+    _path: str  # The immutable absolute path of this Dat
+    _spec: Spec  # The immutable spec of this Dat
+    _result: Spec  # The mutable state or result of this Dat
 
     @staticmethod
-    def get(source: Union["Dat", dict],
-            keys: Union[str, List[str]],
-            default_value=_NO_ARG) -> Any:
+    def get(
+        source: Union["Dat", dict], keys: Union[str, List[str]], default_value=_NO_ARG
+    ) -> Any:
         """Utility method to get value from a recursive dict tree or return None."""
         d = source._spec if isinstance(source, Dat) else source
         if isinstance(keys, str):
@@ -178,11 +181,9 @@ class Dat(object):
                     value = suffix
             Dat.set(source, keys, value)
 
-    def __init__(self,
-                 *,
-                 path: str = None,
-                 spec: Dict = None,
-                 _no_backing: bool = False):
+    def __init__(
+        self, *, path: str = None, spec: Dict = None, _no_backing: bool = False
+    ):
         super().__init__()
         self._result = {}
         if _no_backing:
@@ -231,7 +232,7 @@ class Dat(object):
         """Deletes the folder and its contents from the filesystem.
         This deletion will also be reflected as a deletion pushed to git.
         Still, the backing store will retain all previous versions of this Dat."""
-        Dat.manager.dat_cache.pop(self._path, None)      # Remove from cache
+        Dat.manager.dat_cache.pop(self._path, None)  # Remove from cache
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
@@ -252,7 +253,7 @@ class Dat(object):
 
     def move(self, new_path: str) -> "Dat":
         """Moves this Dat to a new location."""
-        del Dat.manager.dat_cache[self._path]      # Remove from cache
+        del Dat.manager.dat_cache[self._path]  # Remove from cache
         new_path_ = Dat.manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
@@ -376,11 +377,14 @@ class DatManager(object):
         If it is found, it expects a JSON object with a 'do_folder' key that indicates
         the path (relative to the .datconfig.json file itself) of the "do folder"
     """
+
     config: Dict[str, Any] = {}
     do: MethodManager = SimpleMethodManager()
     sync_folder: str
-    sync_folders: List[str]   # Note: also includes the dat_folder
-    dat_cache: Dict[str, Any] = weakref.WeakValueDictionary()  # Used in Dat.manager.load
+    sync_folders: List[str]  # Note: also includes the dat_folder
+    dat_cache: Dict[str, Any] = (
+        weakref.WeakValueDictionary()
+    )  # Used in Dat.manager.load
 
     DAT_ADDS_LIST = ".dat_adds.txt"  # List of Dat names to be updated in DVC
 
@@ -389,26 +393,26 @@ class DatManager(object):
         while True:
             if os.path.exists(config := os.path.join(self.folder, _DAT_CONFIG_JSON)):
                 try:
-                    with open(config, 'r') as f:
+                    with open(config, "r") as f:
                         self.config = json.load(f)
                 except json.JSONDecodeError as e:
                     raise Exception(f"Error loading {_DAT_CONFIG_JSON}: {e}")
                 break
             if os.path.exists(config := os.path.join(self.folder, _DAT_CONFIG_YAML)):
                 try:
-                    with open(config, 'r') as f:
+                    with open(config, "r") as f:
                         self.config = yaml.safe_load(f)
                 except yaml.YAMLError as e:
                     raise Exception(f"Error loading {_DAT_CONFIG_YAML}: {e}")
                 break
-            if self.folder == '/':
+            if self.folder == "/":
                 self.folder = os.getcwd()
                 break
             self.folder = os.path.dirname(self.folder)
 
         self.sync_folder = self._lookup_path(self.folder, _DAT_FOLDER, None)
         if not self.sync_folder:
-            s = f"No {_DAT_CONFIG_JSON} found or no \"{_DAT_FOLDER}\" specified."
+            s = f'No {_DAT_CONFIG_JSON} found or no "{_DAT_FOLDER}" specified.'
             print(f"Warning: {s}")
             self.sync_folder = os.path.join(self.folder, _DEFAULT_DAT_FOLDER)
         dirs = self.config.get(_DAT_FOLDERS)
@@ -426,11 +430,7 @@ class DatManager(object):
             path = None  # os.path.join(os.getcwd(), default)
         return path
 
-    def create(self, *,
-               path: str = None,
-               spec: Spec = None,
-               overwrite=()
-               ) -> "Dat":
+    def create(self, *, path: str = None, spec: Spec = None, overwrite=()) -> "Dat":
         """Creates a new Dat with the specified spec dict and backing folder at 'path'.
 
         Args:
@@ -453,8 +453,7 @@ class DatManager(object):
             {unique} -- a counter or UUID that makes the entire path unique.
         """
         spec: Dict = spec or {}
-        path: str = self.resolve_path(
-            self.expand_dat_path(path, overwrite=overwrite))
+        path: str = self.resolve_path(self.expand_dat_path(path, overwrite=overwrite))
         if not os.path.exists(path):
             os.makedirs(path)
         try:
@@ -509,11 +508,11 @@ class DatManager(object):
                     spec = yaml.safe_load(f)
         except Exception as e:
             if not os.path.exists(path):
-                raise KeyError(F"LOAD_DAT: Folder not found {path!r}.")
+                raise KeyError(f"LOAD_DAT: Folder not found {path!r}.")
             else:
                 raise KeyError(f"LOAD_DAT: Error in spec file for {path!r}: {e}")
         if spec == ():
-            raise KeyError(F"LOAD_DAT: Spec file missing for {path!r}.")
+            raise KeyError(f"LOAD_DAT: Spec file missing for {path!r}.")
         dat = self._make_dat_instance(path, spec)
         try:
             with open(os.path.join(path, _RESULT_JSON)) as f:
@@ -526,8 +525,9 @@ class DatManager(object):
     def exists(path: str) -> bool:
         """Checks if a given Dat exists (by looking for its _spec_ file)."""
         path = Dat.manager.resolve_path(path)
-        return os.path.exists(os.path.join(path, SPEC_JSON)) or \
-            os.path.exists(os.path.join(path, SPEC_YAML))
+        return os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
+            os.path.join(path, SPEC_YAML)
+        )
 
     def get_path_name(self, path):
         try:
@@ -541,24 +541,33 @@ class DatManager(object):
         """Returns the shortname (last part of the path) of this Dat."""
         return path.split("/")[-1]
 
-    def expand_dat_path(self, path_spec: Union[str, None], *,
-                        variables: Dict[str, Any] = None,
-                        overwrite: bool = False) -> str:
+    def expand_dat_path(
+        self,
+        path_spec: Union[str, None],
+        *,
+        variables: Dict[str, Any] = None,
+        overwrite: bool = False,
+    ) -> str:
         """(See Dat.manager.create for path expansion rules.)"""  # noqa
         if not path_spec:
             path_spec = _DEFAULT_PATH_TEMPLATE
         now, count = datetime.now(), 1
         while True:
             format_vars = {
-                "YYYY": now.strftime("%Y"), "YY": now.strftime("%Y")[2:],
-                "MM": now.strftime("%m"), "DD": now.strftime("%d"),
-                "HH": now.strftime("%H"), "mm": now.strftime("%M"),
+                "YYYY": now.strftime("%Y"),
+                "YY": now.strftime("%Y")[2:],
+                "MM": now.strftime("%m"),
+                "DD": now.strftime("%d"),
+                "HH": now.strftime("%H"),
+                "mm": now.strftime("%M"),
                 "SS": now.strftime("%S"),
                 "unique": "" if count == 1 else f"_{count}",
                 "cwd": os.getcwd(),  # Current working directory
-                **(variables or {})}
-            expanded_path = os.path.join(self.sync_folder,
-                                         path_spec.format_map(format_vars))
+                **(variables or {}),
+            }
+            expanded_path = os.path.join(
+                self.sync_folder, path_spec.format_map(format_vars)
+            )
             if not os.path.exists(expanded_path):
                 return expanded_path
             elif overwrite:
@@ -572,13 +581,15 @@ class DatManager(object):
     def resolve_path(self, name: str) -> str:
         for folder in self.sync_folders:
             path = os.path.join(folder, name)
-            if os.path.exists(os.path.join(path, SPEC_JSON)) or \
-                    os.path.exists(os.path.join(path, SPEC_YAML)):
+            if os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
+                os.path.join(path, SPEC_YAML)
+            ):
                 return path
         return os.path.join(self.sync_folder, name)
 
     def _make_dat_instance(self, path: str, spec: Dict) -> "Dat":
         from . import Dat
+
         klass_name = Dat.get(spec, _DAT_CLASS, "Dat")
         klass = self._find_subclass_by_name(Dat, klass_name)
         if not klass:
