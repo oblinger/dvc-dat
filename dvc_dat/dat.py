@@ -5,10 +5,19 @@ import weakref
 from abc import abstractmethod
 from datetime import datetime
 from enum import Enum, auto
-from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union, Callable, \
-    Iterable
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    Optional,
+    Protocol,
+    TypeVar,
+    Union,
+)
+
 import yaml
-# from .dvc_dat_config import SPEC_JSON, SPEC_YAML
 
 _RESULT_JSON = "_results_.json"
 _DAT_BASE = "dat.base"
@@ -320,7 +329,8 @@ class DatContainer(Dat, Generic[T]):
         return results
 
 
-DatMethod = Callable[[Dat, ...], Any]    # A Callable that serves as a method on a Dat
+class DatMethod(Protocol):
+    def __call__(self, dat: Dat, *args: Any, **kwds: Any) -> Any: ...
 
 
 class MethodManager(object):
@@ -456,8 +466,13 @@ class DatManager(object):
             out.write("\n")
         return self._make_dat_instance(path, spec)
 
-    def load(self, name_or_path: str, *,
-             cwd: Optional[str] = None) -> T:
+    # FIXME: type this return value somehow
+    def load(
+        self,
+        name_or_path: str,
+        *,
+        cwd: Optional[str] = None,
+    ) -> T:
         """Loads (Instantiates) this Dat from disk.
 
         Dat-loading is generally lazy, so its attributes are loaded and
