@@ -13,6 +13,7 @@ from typing import (
     List,
     Optional,
     Protocol,
+    Type,
     TypeVar,
     Union,
 )
@@ -117,14 +118,6 @@ class Dat(object):
         else:
             raise Exception("Use Dat.manager.create() to create a new Dat instances.")
 
-    def __repr__(self):
-        base = Dat.get(self._spec, _DAT_BASE, self.__class__.__name__)
-        base = base.split("/")[-1]
-        return f"<{base}: {self.get_path_name()}>"
-
-    def __str__(self):
-        return self.__repr__()
-
     def get_spec(self) -> Spec:
         """Returns the spec of this Dat."""
         return self._spec
@@ -144,6 +137,28 @@ class Dat(object):
     def get_path_tail(self) -> str:
         """Returns the shortname (last part of the path) of this Dat."""
         return self._path.split("/")[-1]
+
+    @classmethod
+    def load(
+        cls: Type[T],
+        name_or_path: str,
+        cwd: Optional[str] = None,
+    ) -> T:
+        return cls._manager.load(name_or_path, cwd=cwd)
+
+    @classmethod
+    def create(
+        cls: Type[T],
+        path: Optional[str] = None,
+        spec: Optional[Spec] = None,
+        overwrite: bool = False,
+    ) -> T:
+        # FIXME: typing
+        return cls._manager.create(
+            path=path,
+            spec=spec,
+            overwrite=overwrite,
+        )
 
     def save(self) -> None:
         """Flags a Dat to have a version of its folder's contents saved
@@ -186,6 +201,14 @@ class Dat(object):
         shutil.move(self._path, new_path_)
         result = Dat._manager.load(new_path_)
         return result
+
+    def __repr__(self):
+        base = Dat.get(self._spec, _DAT_BASE, self.__class__.__name__)
+        base = base.split("/")[-1]
+        return f"<{base}: {self.get_path_name()}>"
+
+    def __str__(self):
+        return self.__repr__()
 
     # for backward-compatibility
     @staticmethod
@@ -396,7 +419,13 @@ class DatManager(object):
             path = None  # os.path.join(os.getcwd(), default)
         return path
 
-    def create(self, *, path: str = None, spec: Spec = None, overwrite=()) -> "Dat":
+    def create(
+        self,
+        *,
+        path: Optional[str] = None,
+        spec: Optional[Spec] = None,
+        overwrite: bool = False,
+    ) -> "Dat":
         """Creates a new Dat with the specified spec dict and backing folder at 'path'.
 
         Args:
@@ -418,8 +447,8 @@ class DatManager(object):
             {cwd}    -- the current working directory
             {unique} -- a counter or UUID that makes the entire path unique.
         """
-        spec: Dict = spec or {}
-        path: str = self.resolve_path(self.expand_dat_path(path, overwrite=overwrite))
+        spec = spec or {}
+        path = self.resolve_path(self.expand_dat_path(path, overwrite=overwrite))
         if not os.path.exists(path):
             os.makedirs(path)
         try:
