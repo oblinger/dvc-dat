@@ -101,7 +101,7 @@ class Dat(object):
 
     """  # noqa
 
-    manager: "DatManager" = (
+    _manager: "DatManager" = (
         None  # The singleton manager for all Dats, set at end of file
     )
     _path: str  # The immutable absolute path of this Dat
@@ -213,7 +213,7 @@ class Dat(object):
 
     def get_path_name(self) -> str:
         """Returns the name (relative path) of this Dat."""
-        return Dat.manager.get_path_name(self._path)
+        return Dat._manager.get_path_name(self._path)
 
     def get_path_tail(self) -> str:
         """Returns the shortname (last part of the path) of this Dat."""
@@ -232,7 +232,7 @@ class Dat(object):
         """Deletes the folder and its contents from the filesystem.
         This deletion will also be reflected as a deletion pushed to git.
         Still, the backing store will retain all previous versions of this Dat."""
-        Dat.manager.dat_cache.pop(self._path, None)  # Remove from cache
+        Dat._manager.dat_cache.pop(self._path, None)  # Remove from cache
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
@@ -244,21 +244,21 @@ class Dat(object):
 
     def copy(self, new_path: str) -> "Dat":
         """Copies this Dat to a new location."""
-        new_path_ = Dat.manager.resolve_path(new_path)
+        new_path_ = Dat._manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
         shutil.copytree(self._path, new_path_)
-        result = Dat.manager.load(new_path_)
+        result = Dat._manager.load(new_path_)
         return result
 
     def move(self, new_path: str) -> "Dat":
         """Moves this Dat to a new location."""
-        del Dat.manager.dat_cache[self._path]  # Remove from cache
-        new_path_ = Dat.manager.resolve_path(new_path)
+        del Dat._manager.dat_cache[self._path]  # Remove from cache
+        new_path_ = Dat._manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
         shutil.move(self._path, new_path_)
-        result = Dat.manager.load(new_path_)
+        result = Dat._manager.load(new_path_)
         return result
 
 
@@ -313,7 +313,7 @@ class DatContainer(Dat, Generic[T]):
             # these will load as the Dat class as defined in each spec's
             # main  .class, but we're loading them dynamically from Dat directly,
             # so we'll ignore the type and assume they will all be List[T]
-            self._dats = [Dat.manager.load(p) for p in self.get_dat_paths()]  # type: ignore
+            self._dats = [Dat._manager.load(p) for p in self.get_dat_paths()]  # type: ignore
         return self._dats  # type: ignore
 
     @staticmethod
@@ -382,9 +382,9 @@ class DatManager(object):
     do: MethodManager = SimpleMethodManager()
     sync_folder: str
     sync_folders: List[str]  # Note: also includes the dat_folder
-    dat_cache: Dict[str, Any] = (
+    dat_cache: weakref.WeakValueDictionary[str, Any] = (
         weakref.WeakValueDictionary()
-    )  # Used in Dat.manager.load
+    )
 
     DAT_ADDS_LIST = ".dat_adds.txt"  # List of Dat names to be updated in DVC
 
@@ -465,7 +465,6 @@ class DatManager(object):
             out.write("\n")
         return self._make_dat_instance(path, spec)
 
-    # FIXME: type this return value somehow
     def load(
         self,
         name_or_path: str,
@@ -495,9 +494,12 @@ class DatManager(object):
             pass
         else:
             raise KeyError(f"LOAD_DAT: Could not find {name_or_path!r}")
+
         if path in self.dat_cache:
             return self.dat_cache[path]
+
         path = os.path.abspath(path)
+
         try:
             spec = ()
             if os.path.exists(fpath := os.path.join(path, SPEC_JSON)):
@@ -511,20 +513,24 @@ class DatManager(object):
                 raise KeyError(f"LOAD_DAT: Folder not found {path!r}.")
             else:
                 raise KeyError(f"LOAD_DAT: Error in spec file for {path!r}: {e}")
+
         if spec == ():
             raise KeyError(f"LOAD_DAT: Spec file missing for {path!r}.")
+
         dat = self._make_dat_instance(path, spec)
+
         try:
             with open(os.path.join(path, _RESULT_JSON)) as f:
                 dat._result = json.load(f)
         except FileNotFoundError:
             pass
+
         return dat
 
     @staticmethod
     def exists(path: str) -> bool:
         """Checks if a given Dat exists (by looking for its _spec_ file)."""
-        path = Dat.manager.resolve_path(path)
+        path = Dat._manager.resolve_path(path)
         return os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
             os.path.join(path, SPEC_YAML)
         )
@@ -609,4 +615,4 @@ class DatManager(object):
         return None
 
 
-Dat.manager = DatManager()
+Dat._manager = DatManager()
