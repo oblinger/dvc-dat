@@ -108,83 +108,9 @@ class Dat(object):
     _spec: Spec  # The immutable spec of this Dat
     _result: Spec  # The mutable state or result of this Dat
 
-    @staticmethod
-    def get(
-        source: Union["Dat", dict], keys: Union[str, List[str]], default_value=_NO_ARG
-    ) -> Any:
-        """Utility method to get value from a recursive dict tree or return None."""
-        d = source._spec if isinstance(source, Dat) else source
-        if isinstance(keys, str):
-            keys = keys.split(".")
-        for k in keys:
-            if d is None:
-                result = None
-                break
-            elif not isinstance(d, dict):
-                raise ValueError(f"GET: Expected dict value for {k!r} not {d!r}")
-            else:
-                d = d.get(k)
-        else:
-            result = d
-        if result is not None:
-            return result
-        elif default_value is _NO_ARG:
-            raise KeyError(f"GET: Key {keys} not found in {source!r}")
-        else:
-            return default_value
-
-    @staticmethod
-    def set(source: Spec, keys, value) -> None:
-        """Utility method into a recursive dict tree."""
-        assert source is not None, "set method requires a non None dict"
-        assert len(keys) > 0, "set method requires at least one key"
-        if isinstance(keys, str):
-            keys = keys.split(".")
-        for k in keys[:-1]:
-            if not isinstance(source, dict):
-                raise Exception(f"Expected dict value for {k!r} not {source!r}")
-            sub = source.get(k)
-            if sub is None:
-                sub = source[k] = {}
-            source = sub
-        source[keys[-1]] = value
-
-    @staticmethod
-    def gets(source: Union["Dat", Spec], *dotted_keys) -> List[Any]:
-        assert source is not None, "gets method requires a non None dict"
-        source_ = source._spec if isinstance(source, Dat) else source
-        results = []
-        for dotted_key in dotted_keys:
-            keys = dotted_key.split(".")
-            results.append(Dat.get(source_, keys))
-        return results
-
-    @staticmethod
-    def sets(source: dict, *assignments) -> None:
-        """Utility method that applies multiple dotted assignments into a
-        recursive dict tree.
-
-        Each assignment is of the form:   key.sub_key...=value
-        - spaces are trimmed from ends and around '='
-        - values are parsed as an int, as a float, else as a string.
-        """
-        assert source is not None, "set method requires a non None dict"
-        for assignment in assignments:
-            prefix, suffix = assignment.split("=")
-            keys, suffix = prefix.strip().split("."), suffix.strip()
-            try:
-                value = int(suffix)
-            except ValueError:
-                try:
-                    value = float(suffix)
-                except ValueError:
-                    value = suffix
-            Dat.set(source, keys, value)
-
     def __init__(
         self, *, path: str = None, spec: Dict = None, _no_backing: bool = False
     ):
-        super().__init__()
         self._result = {}
         if _no_backing:
             self._path, self._spec = path, spec
@@ -260,6 +186,48 @@ class Dat(object):
         shutil.move(self._path, new_path_)
         result = Dat._manager.load(new_path_)
         return result
+
+    # for backward-compatibility
+    @staticmethod
+    def get(
+        source: Union["Dat", dict], keys: Union[str, List[str]], default_value=_NO_ARG
+    ) -> Any:
+        """Utility method to get value from a recursive dict tree or return None."""
+        return dotted_get(
+            source=source,
+            keys=keys,
+            default_value=default_value,
+        )
+
+    @staticmethod
+    def set(source: Spec, keys, value) -> None:
+        """Utility method into a recursive dict tree."""
+        dotted_set(
+            source=source,
+            keys=keys,
+            value=value,
+        )
+
+    @staticmethod
+    def gets(source: Union["Dat", Spec], *dotted_keys) -> List[Any]:
+        return dotted_gets(
+            source,
+            *dotted_keys,
+        )
+
+    @staticmethod
+    def sets(source: dict, *assignments) -> None:
+        """Utility method that applies multiple dotted assignments into a
+        recursive dict tree.
+
+        Each assignment is of the form:   key.sub_key...=value
+        - spaces are trimmed from ends and around '='
+        - values are parsed as an int, as a float, else as a string.
+        """
+        dotted_sets(
+            source,
+            *assignments,
+        )
 
 
 class DatContainer(Dat, Generic[T]):
@@ -382,9 +350,7 @@ class DatManager(object):
     do: MethodManager = SimpleMethodManager()
     sync_folder: str
     sync_folders: List[str]  # Note: also includes the dat_folder
-    dat_cache: weakref.WeakValueDictionary[str, Any] = (
-        weakref.WeakValueDictionary()
-    )
+    dat_cache: weakref.WeakValueDictionary[str, Any] = weakref.WeakValueDictionary()
 
     DAT_ADDS_LIST = ".dat_adds.txt"  # List of Dat names to be updated in DVC
 
@@ -613,6 +579,81 @@ class DatManager(object):
             if result := self._find_subclass_by_name(sub, name):
                 return result
         return None
+
+
+def dotted_get(
+    source: Union[Dat, dict],
+    keys: Union[str, List[str]],
+    default_value=_NO_ARG,
+):
+    """Utility method to get value from a recursive dict tree or return None."""
+    d = source._spec if isinstance(source, Dat) else source
+    if isinstance(keys, str):
+        keys = keys.split(".")
+    for k in keys:
+        if d is None:
+            result = None
+            break
+        elif not isinstance(d, dict):
+            raise ValueError(f"GET: Expected dict value for {k!r} not {d!r}")
+        else:
+            d = d.get(k)
+    else:
+        result = d
+    if result is not None:
+        return result
+    elif default_value is _NO_ARG:
+        raise KeyError(f"GET: Key {keys} not found in {source!r}")
+    else:
+        return default_value
+
+
+def dotted_gets(source: Union[Dat, Spec], *dotted_keys):
+    assert source is not None, "gets method requires a non None dict"
+    source_ = source._spec if isinstance(source, Dat) else source
+    results = []
+    for dotted_key in dotted_keys:
+        keys = dotted_key.split(".")
+        results.append(dotted_get(source_, keys))
+    return results
+
+
+def dotted_set(source: Spec, keys, value):
+    """Utility method into a recursive dict tree."""
+    assert source is not None, "set method requires a non None dict"
+    assert len(keys) > 0, "set method requires at least one key"
+    if isinstance(keys, str):
+        keys = keys.split(".")
+    for k in keys[:-1]:
+        if not isinstance(source, dict):
+            raise Exception(f"Expected dict value for {k!r} not {source!r}")
+        sub = source.get(k)
+        if sub is None:
+            sub = source[k] = {}
+        source = sub
+    source[keys[-1]] = value
+
+
+def dotted_sets(source: dict, *assignments):
+    """Utility method that applies multiple dotted assignments into a
+    recursive dict tree.
+
+    Each assignment is of the form:   key.sub_key...=value
+    - spaces are trimmed from ends and around '='
+    - values are parsed as an int, as a float, else as a string.
+    """
+    assert source is not None, "set method requires a non None dict"
+    for assignment in assignments:
+        prefix, suffix = assignment.split("=")
+        keys, suffix = prefix.strip().split("."), suffix.strip()
+        try:
+            value = int(suffix)
+        except ValueError:
+            try:
+                value = float(suffix)
+            except ValueError:
+                value = suffix
+        dotted_set(source, keys, value)
 
 
 Dat._manager = DatManager()
