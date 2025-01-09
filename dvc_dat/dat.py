@@ -167,7 +167,7 @@ class DatManager:
         dat_class: Type[T],
         *,
         path: Optional[Union[str, Path]] = None,
-        spec: Optional[Spec] = None,
+        spec: Optional["DatSpec"] = None,
         overwrite: bool = False,
     ) -> T:
         """Creates a new Dat with the specified spec dict and backing folder at 'path'.
@@ -191,8 +191,9 @@ class DatManager:
             {cwd}    -- the current working directory
             {unique} -- a counter or UUID that makes the entire path unique.
         """
-        spec = spec or {}
+        spec = spec or DatSpec(dat=DatSpecCore(kind="Dat"))
         path = str(path)
+
         path = self.resolve_path(self.expand_dat_path(path, overwrite=overwrite))
         if not os.path.exists(path):
             os.makedirs(path)
@@ -203,7 +204,10 @@ class DatManager:
         with open(os.path.join(path, SPEC_YAML), "w") as out:
             out.write(txt)
             out.write("\n")
-        return dat_class(path)
+        return dat_class(
+            path=path,
+            spec=spec,
+        )
 
     def load(
         self,
@@ -379,6 +383,9 @@ class DatSpec(BaseModel):
 
     def to_yaml(self, path: Union[Path, str]):
         path = Path(path)
+        if path.suffix != ".yaml" or path.suffix != ".yml":
+            path = path / SPEC_YAML
+
         with path.open("w") as f:
             yaml.dump(self.model_dump(mode="json"), f, sort_keys=False)
 
@@ -488,7 +495,7 @@ class Dat(Generic[DatSpecType]):
     def create(
         cls: Type[T],
         path: Optional[Union[str, Path]] = None,
-        spec: Optional[Spec] = None,
+        spec: Optional[DatSpecType] = None,
         overwrite: bool = False,
     ) -> T:
         return cls._manager.create(
