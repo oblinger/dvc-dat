@@ -91,6 +91,7 @@ class SimpleMethodManager(MethodManager):
         return self._dat_methods.keys()
 
 
+# TODO: use Path for everything instead of os.path
 class DatManager:
     """Singleton class that manages the configuration and loading of Dats.
 
@@ -146,8 +147,14 @@ class DatManager:
         assert self.sync_folder
         assert len(self.sync_folders) > 0
 
-    def _lookup_path(self, folder_path: str, key, default=None) -> Union[str, None]:
+    def _lookup_path(
+        self,
+        folder_path: Union[str, Path],
+        key,
+        default=None,
+    ) -> Union[str, None]:
         suffix = self.config[key] if key in self.config else default
+        folder_path = str(folder_path)
         if suffix:
             path = os.path.join(folder_path, suffix)
             os.makedirs(path, exist_ok=True)
@@ -159,7 +166,7 @@ class DatManager:
         self,
         dat_class: Type[T],
         *,
-        path: Optional[str] = None,
+        path: Optional[Union[str, Path]] = None,
         spec: Optional[Spec] = None,
         overwrite: bool = False,
     ) -> T:
@@ -185,6 +192,7 @@ class DatManager:
             {unique} -- a counter or UUID that makes the entire path unique.
         """
         spec = spec or {}
+        path = str(path)
         path = self.resolve_path(self.expand_dat_path(path, overwrite=overwrite))
         if not os.path.exists(path):
             os.makedirs(path)
@@ -200,7 +208,7 @@ class DatManager:
     def load(
         self,
         dat_class: Type[T],
-        name_or_path: str,
+        name_or_path: Union[str, Path],
         *,
         cwd: Optional[str] = None,
     ) -> T:
@@ -219,6 +227,7 @@ class DatManager:
             load or its name to be searched for
         :param cwd: used instead of current working dir for dat search
         """
+        name_or_path = str(name_or_path)
         if os.path.isabs(name_or_path):
             path = name_or_path
         elif os.path.exists(path := os.path.join(cwd or os.getcwd(), name_or_path)):
@@ -275,14 +284,16 @@ class DatManager:
 
         return dat
 
-    def exists(self, path: str) -> bool:
+    def exists(self, path: Union[str, Path]) -> bool:
         """Checks if a given Dat exists (by looking for its _spec_ file)."""
+        path = str(path)
         path = self.resolve_path(path)
         return os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
             os.path.join(path, SPEC_YAML)
         )
 
-    def get_path_name(self, path):
+    def get_path_name(self, path: Union[str, Path]):
+        path = str(path)
         try:
             match = 1 + len(os.path.commonpath([self.sync_folder, path]))
             return path[match:] if match > 2 else path
@@ -290,13 +301,14 @@ class DatManager:
             return path
 
     @staticmethod
-    def get_path_tail(path) -> str:
+    def get_path_tail(path: Union[str, Path]) -> str:
         """Returns the shortname (last part of the path) of this Dat."""
+        path = str(path)
         return path.split("/")[-1]
 
     def expand_dat_path(
         self,
-        path_spec: Union[str, None],
+        path_spec: Union[str, Path, None],
         *,
         variables: Optional[Dict[str, Any]] = None,
         overwrite: bool = False,
@@ -304,6 +316,7 @@ class DatManager:
         """(See Dat.manager.create for path expansion rules.)"""  # noqa
         if not path_spec:
             path_spec = _DEFAULT_PATH_TEMPLATE
+        path_spec = str(path_spec)
         now, count = datetime.now(), 1
         while True:
             format_vars = {
@@ -331,7 +344,8 @@ class DatManager:
             else:
                 count += 1
 
-    def resolve_path(self, name: str) -> str:
+    def resolve_path(self, name: Union[str, Path]) -> str:
+        name = str(name)
         for folder in self.sync_folders:
             path = os.path.join(folder, name)
             if os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
@@ -430,10 +444,11 @@ class Dat(Generic[DatSpecType]):
 
     def __init__(
         self,
-        path: str,
+        path: Union[str, Path],
         spec: DatSpecType,
         result: Optional[Spec] = None,
     ) -> None:
+        path = str(path)
         path = os.path.abspath(path)
 
         self._path = path
@@ -463,15 +478,16 @@ class Dat(Generic[DatSpecType]):
     @classmethod
     def load(
         cls: Type[T],
-        name_or_path: str,
+        name_or_path: Union[str, Path],
         cwd: Optional[str] = None,
     ) -> T:
+        name_or_path = str(name_or_path)
         return cls._manager.load(cls, name_or_path, cwd=cwd)
 
     @classmethod
     def create(
         cls: Type[T],
-        path: Optional[str] = None,
+        path: Optional[Union[str, Path]] = None,
         spec: Optional[Spec] = None,
         overwrite: bool = False,
     ) -> T:
@@ -505,7 +521,7 @@ class Dat(Generic[DatSpecType]):
                 return False
         return True
 
-    def copy(self: T, new_path: str) -> T:
+    def copy(self: T, new_path: Union[str, Path]) -> T:
         """Copies this Dat to a new location."""
         new_path_ = Dat._manager.resolve_path(new_path)
         if os.path.exists(new_path_):
@@ -514,7 +530,7 @@ class Dat(Generic[DatSpecType]):
         result = Dat._manager.load(type(self), new_path_)
         return result
 
-    def move(self: T, new_path: str) -> T:
+    def move(self: T, new_path: Union[str, Path]) -> T:
         """Moves this Dat to a new location."""
         del Dat._manager.dat_cache[self._path]  # Remove from cache
         new_path_ = Dat._manager.resolve_path(new_path)
@@ -642,7 +658,8 @@ class DatContainer(Dat, Generic[T]):
         return self._dats  # type: ignore
 
     @staticmethod
-    def _find_dats_under(root_path):
+    def _find_dats_under(root_path: Union[str, Path]):
+        root_path = str(root_path)
         results = []
         for root, dirs, files in os.walk(root_path):
             for name in files:
