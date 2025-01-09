@@ -5,20 +5,12 @@ import weakref
 from abc import abstractmethod
 from datetime import datetime
 from enum import Enum, auto
-from typing import (
-    Any,
-    Dict,
-    Generic,
-    Iterable,
-    List,
-    Optional,
-    Protocol,
-    Type,
-    TypeVar,
-    Union,
-)
+from pathlib import Path
+from typing import Any, Dict, Generic, Iterable, List, Optional, Protocol, Type, Union
 
 import yaml
+from pydantic import BaseModel, ConfigDict
+from typing_extensions import TypeVar
 
 _RESULT_JSON = "_results_.json"
 _DAT_BASE = "dat.base"
@@ -47,8 +39,14 @@ class DataState(Enum):
 Value = Union[str, int, float, bool, None, "Spec"]
 
 Spec = Dict[str, Value]
+DatSpecType = TypeVar(
+    "DatSpecType",
+    bound="DatSpec",
+    default="DatSpec",
+    covariant=True,
+)
 
-T = TypeVar("T", bound="Dat")
+T = TypeVar("T", bound="Dat", covariant=True)
 
 
 class DatMethod(Protocol):
@@ -108,7 +106,7 @@ class DatManager:
     do: MethodManager = SimpleMethodManager()
     sync_folder: str
     sync_folders: List[str]  # Note: also includes the dat_folder
-    dat_cache: weakref.WeakValueDictionary[str, Any] = weakref.WeakValueDictionary()
+    dat_cache: weakref.WeakValueDictionary[str, "Dat"] = weakref.WeakValueDictionary()
 
     DAT_ADDS_LIST = ".dat_adds.txt"  # List of Dat names to be updated in DVC
 
@@ -230,13 +228,50 @@ class DatManager:
         else:
             raise KeyError(f"LOAD_DAT: Could not find {name_or_path!r}")
 
-        # TODO: update the cached entry if the previous entry was instantiated as a
-        # generic "Dat", and a new more-specific class can be loaded
-        if path in self.dat_cache:
-            return self.dat_cache[path]
+        spec_type = dat_class._SPEC_TYPE
+
+        if (cached_dat := self.dat_cache.get(path)) and isinstance(
+            cached_dat, dat_class
+        ):
+            return cached_dat
+
+        try:
+            if os.path.exists(spec_path := os.path.join(path, SPEC_YAML)):
+                spec = spec_type.from_yaml(spec_path)
+            elif os.path.exists(spec_path := os.path.join(path, SPEC_JSON)):
+                spec = spec_type.from_json(spec_path)
+            else:
+                raise FileNotFoundError(
+                    f"Didn't find a _spec_.yaml/_spec_.json file under path <{path}>."
+                )
+        except Exception as e:
+            raise EnvironmentError("Error during spec loading.") from e
+
+        kind = spec.dat.kind
+        dat_class_name = dat_class.__name__
+
+        # a generic "Dat" class will be able to load any Dat because we can guarantee
+        # compatibility, otherwise, the subclass must match dat.kind exactly
+        if dat_class_name != "Dat" and kind != dat_class_name:
+            raise ValueError(
+                f"Spec 'dat.kind' <{kind}> doesn't match <{dat_class_name}>. "
+                "Update the spec accordingly and instantiate with the correct class "
+                "(or the generic Dat)."
+            )
+
+        try:
+            with open(os.path.join(path, _RESULT_JSON)) as f:
+                result = json.load(f)
+        except FileNotFoundError:
+            result = {}
 
         path = os.path.abspath(path)
-        dat = dat_class(path)
+        dat = dat_class(
+            path=path,
+            spec=spec,
+            result=result,
+        )
+        self.dat_cache[path] = dat
 
         return dat
 
@@ -306,7 +341,35 @@ class DatManager:
         return os.path.join(self.sync_folder, name)
 
 
-class Dat:
+class DatSpecCore(BaseModel):
+    kind: str
+    base: Optional[Any] = None  # TODO: define expected type
+
+
+class DatSpec(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    dat: DatSpecCore
+
+    @classmethod
+    def from_json(cls, path: Union[Path, str]):
+        path = Path(path)
+        with path.open("r") as f:
+            return cls(**json.load(f))
+
+    @classmethod
+    def from_yaml(cls, path: Union[Path, str]):
+        path = Path(path)
+        with path.open("r") as f:
+            return cls(**yaml.safe_load(f))
+
+    def to_yaml(self, path: Union[Path, str]):
+        path = Path(path)
+        with path.open("w") as f:
+            yaml.dump(self.model_dump(mode="json"), f, sort_keys=False)
+
+
+class Dat(Generic[DatSpecType]):
     """
     A Dat is a data container (filesystem folder plus JSON metadata) that is saved
     from one Python environment and can be instantiated into others.
@@ -357,56 +420,29 @@ class Dat:
 
     """  # noqa
 
-    _manager: "DatManager" = DatManager()  # The singleton manager for all Dats
+    _SPEC_TYPE: Type[DatSpec] = DatSpec
+
+    _manager: DatManager = DatManager()  # The singleton manager for all Dats
+
     _path: str  # The immutable absolute path of this Dat
-    _spec: Spec  # The immutable spec of this Dat
+    _spec: DatSpecType  # The immutable spec of this Dat
     _result: Spec  # The mutable state or result of this Dat
 
     def __init__(
         self,
         path: str,
+        spec: DatSpecType,
+        result: Optional[Spec] = None,
     ) -> None:
         path = os.path.abspath(path)
 
-        self._result = {}
         self._path = path
-
-        # TODO: add per-subclass spec validation
-        try:
-            if os.path.exists(spec_path := os.path.join(self._path, SPEC_YAML)):
-                with open(spec_path, "r") as f:
-                    self._spec = yaml.safe_load(f)
-            elif os.path.exists(spec_path := os.path.join(self._path, SPEC_JSON)):
-                with open(spec_path, "r") as f:
-                    self._spec = json.load(f)
-            else:
-                raise FileNotFoundError(
-                    f"Didn't find a _spec_.yaml/_spec_.json file under path <{path}>."
-                )
-        except Exception as e:
-            raise EnvironmentError("Error during spec loading.") from e
-
-        kind = dotted_get(self._spec, "dat.kind", None)
-        own_class_name = self.__class__.__name__
-
-        # a generic "Dat" class will be able to load any Dat because we can guarantee
-        # compatibility, otherwise, the subclass must match dat.kind exactly
-        if own_class_name != "Dat" and kind != own_class_name:
-            raise ValueError(
-                f"Spec 'dat.kind' <{kind}> doesn't match <{own_class_name}>. "
-                "Update the spec accordingly and instantiate with the correct class "
-                "(or the generic Dat)."
-            )
-
-        try:
-            with open(os.path.join(path, _RESULT_JSON)) as f:
-                self._result = json.load(f)
-        except FileNotFoundError:
-            self._result = {}
+        self._spec = spec
+        self._result = result or {}
 
     def get_spec(self) -> Spec:
         """Returns the spec of this Dat."""
-        return self._spec
+        return self._spec.model_dump()
 
     def get_results(self) -> Spec:
         """Returns the spec of this Dat."""
@@ -489,7 +525,7 @@ class Dat:
         return result
 
     def __repr__(self):
-        base = Dat.get(self._spec, _DAT_BASE, self.__class__.__name__)
+        base = Dat.get(self._spec.model_dump(), _DAT_BASE, self.__class__.__name__)
         base = base.split("/")[-1]
         return f"<{base}: {self.get_path_name()}>"
 
