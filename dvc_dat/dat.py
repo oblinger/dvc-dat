@@ -232,14 +232,19 @@ class DatManager:
         :param cwd: used instead of current working dir for dat search
         """
         name_or_path = str(name_or_path)
+        cwd = cwd or os.getcwd()
+
         if os.path.isabs(name_or_path):
             path = name_or_path
-        elif os.path.exists(path := os.path.join(cwd or os.getcwd(), name_or_path)):
+        elif os.path.exists(path := os.path.join(cwd, name_or_path)):
             pass
         elif os.path.exists(path := self.resolve_path(name_or_path)):
             pass
         else:
-            raise KeyError(f"LOAD_DAT: Could not find {name_or_path!r}")
+            raise KeyError(
+                f"LOAD_DAT: Could not find <{name_or_path!r}> as absolute, "
+                f"under cwd {cwd}, or in {self.sync_folders}"
+            )
 
         spec_type = dat_class._SPEC_TYPE
 
