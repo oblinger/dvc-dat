@@ -12,10 +12,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypeVar
 
-_RESULT_JSON = "_results_.json"
 _DAT_BASE = "dat.base"
-_DAT_CLASS = "dat.class"
-_DAT_PATH_OVERWRITE = "dat.path_overwrite"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
 _NO_ARG = "$$NO_ARG$$"
 
@@ -25,20 +22,19 @@ _DAT_CONFIG_JSON = ".datconfig.json"
 _DAT_CONFIG_YAML = ".datconfig.yaml"
 _DAT_FOLDER = "sync_folder"
 _DAT_FOLDERS = "dat_folders"
-_DAT_MOUNT_COMMANDS = "mount_commands"
-_DEFAULT_DAT_FOLDER = "dat_data"
+_DEFAULT_DAT_FOLDER = "data"
 
 
 class DataState(Enum):
     NOT_LOADED = auto()
 
 
-# A Value is possibly recursive dict of parameters within the Dat's spec.
+# A SpecValue is possibly recursive dict of parameters within the Dat's spec.
 # Often it is a dict of dict, but single level is ok as long as keys are
-# strings.  The spec is stored in the _spec_ file in the Persistable's folder.
-Value = Union[str, int, float, bool, None, "Spec"]
+# strings.  The spec is stored in the _spec_ file.
+SpecValue = Union[str, int, float, bool, None, "SpecDict"]
+SpecDict = Dict[str, SpecValue]
 
-Spec = Dict[str, Value]
 DatSpecType = TypeVar(
     "DatSpecType",
     bound="DatSpec",
@@ -277,11 +273,9 @@ class DatManager:
                 "(or the generic Dat)."
             )
 
-        try:
-            with open(os.path.join(path, _RESULT_JSON)) as f:
-                result = json.load(f)
-        except FileNotFoundError:
-            result = {}
+        # currently results are not implemented, but keeping it here to allow their
+        # implementation later
+        result = {}
 
         path = os.path.abspath(path)
         dat = dat_class(
@@ -452,13 +446,13 @@ class Dat(Generic[DatSpecType]):
 
     _path: str  # The immutable absolute path of this Dat
     _spec: DatSpecType  # The immutable spec of this Dat
-    _result: Spec  # The mutable state or result of this Dat
+    _result: SpecDict  # The mutable state or result of this Dat
 
     def __init__(
         self,
         path: Union[str, Path],
         spec: DatSpecType,
-        result: Optional[Spec] = None,
+        result: Optional[SpecDict] = None,
     ) -> None:
         path = str(path)
         path = os.path.abspath(path)
@@ -467,11 +461,11 @@ class Dat(Generic[DatSpecType]):
         self._spec = spec
         self._result = result or {}
 
-    def get_spec(self) -> Spec:
+    def get_spec(self) -> SpecDict:
         """Returns the spec of this Dat."""
         return self._spec.model_dump()
 
-    def get_results(self) -> Spec:
+    def get_results(self) -> SpecDict:
         """Returns the spec of this Dat."""
         return self._result
 
@@ -514,10 +508,7 @@ class Dat(Generic[DatSpecType]):
         """Flags a Dat to have a version of its folder's contents saved
         to in the backing store.
         """
-        if True or self._result:
-            with open(os.path.join(self._path, _RESULT_JSON), "w") as out:
-                txt = json.dumps(self._result, indent=2)
-                out.write(txt)
+        raise NotImplementedError
 
     def delete(self, *, must_exist=True) -> bool:
         """Deletes the folder and its contents from the filesystem.
@@ -576,7 +567,7 @@ class Dat(Generic[DatSpecType]):
 
     @staticmethod
     def set(
-        source: Spec,
+        source: SpecDict,
         keys,
         value,
     ) -> None:
@@ -589,7 +580,7 @@ class Dat(Generic[DatSpecType]):
 
     @staticmethod
     def gets(
-        source: Union["Dat", Spec],
+        source: Union["Dat", SpecDict],
         *dotted_keys,
     ) -> List[Any]:
         return dotted_gets(
@@ -711,7 +702,7 @@ def dotted_get(
         return default_value
 
 
-def dotted_gets(source: Union[Dat, Spec], *dotted_keys):
+def dotted_gets(source: Union[Dat, SpecDict], *dotted_keys):
     assert source is not None, "gets method requires a non None dict"
     source_ = source._spec if isinstance(source, Dat) else source
     results = []
@@ -721,7 +712,7 @@ def dotted_gets(source: Union[Dat, Spec], *dotted_keys):
     return results
 
 
-def dotted_set(source: Spec, keys, value):
+def dotted_set(source: SpecDict, keys, value):
     """Utility method into a recursive dict tree."""
     assert source is not None, "set method requires a non None dict"
     assert len(keys) > 0, "set method requires at least one key"
