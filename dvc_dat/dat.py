@@ -14,7 +14,7 @@ from typing_extensions import TypeVar
 
 _DAT_BASE = "dat.base"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
-_NO_ARG = "$$NO_ARG$$"
+_NO_ARG = object()
 
 SPEC_JSON = "_spec_.json"
 SPEC_YAML = "_spec_.yaml"
@@ -41,8 +41,8 @@ DatSpecType = TypeVar(
     default="DatSpec",
     covariant=True,
 )
-
-T = TypeVar("T", bound="Dat", covariant=True)
+DatType = TypeVar("DatType", bound="Dat", covariant=True)
+DatMethodType = TypeVar("DatMethodType", bound="DatMethod")
 
 
 class DatMethod(Protocol):
@@ -56,10 +56,15 @@ class MethodManager:
     def __call__(self, name: str, *args, **kwargs) -> Any: ...
 
     @abstractmethod
-    def mount(self, **kwargs): ...
+    def mount(self, *args, **kwargs) -> None: ...
 
     @abstractmethod
-    def load(self, name: str, *, default=_NO_ARG) -> DatMethod: ...
+    def load(
+        self,
+        name: str,
+        *,
+        default: Optional[DatMethodType] = None,
+    ) -> Union[DatMethodType, DatMethod]: ...
 
     @abstractmethod
     def keys(self) -> Iterable[str]: ...
@@ -72,10 +77,15 @@ class SimpleMethodManager(MethodManager):
     def __call__(self, name, *args, **kwargs):
         return self._dat_methods[name](*args, **kwargs)
 
-    def load(self, name: str, *, default=_NO_ARG) -> DatMethod:
+    def load(
+        self,
+        name: str,
+        *,
+        default: Optional[DatMethodType] = None,
+    ) -> Union[DatMethodType, DatMethod]:
         if name in self._dat_methods:
             return self._dat_methods[name]
-        elif default is not _NO_ARG:
+        elif default is not None:
             return default
         else:
             raise KeyError(f"Do method {name!r} not found.")
@@ -104,8 +114,6 @@ class DatManager:
     sync_folder: str
     sync_folders: List[str]  # Note: also includes the dat_folder
     dat_cache: weakref.WeakValueDictionary[str, "Dat"] = weakref.WeakValueDictionary()
-
-    DAT_ADDS_LIST = ".dat_adds.txt"  # List of Dat names to be updated in DVC
 
     def __init__(self, folder=None):
         self.folder = folder or os.getcwd()
@@ -160,12 +168,12 @@ class DatManager:
 
     def create(
         self,
-        dat_class: Type[T],
+        dat_class: Type[DatType],
         *,
         path: Optional[Union[str, Path]] = None,
         spec: Optional["DatSpec"] = None,
         overwrite: bool = False,
-    ) -> T:
+    ) -> DatType:
         """Creates a new Dat with the specified spec dict and backing folder at 'path'.
 
         Args:
@@ -207,11 +215,11 @@ class DatManager:
 
     def load(
         self,
-        dat_class: Type[T],
+        dat_class: Type[DatType],
         name_or_path: Union[str, Path],
         *,
         cwd: Optional[str] = None,
-    ) -> T:
+    ) -> DatType:
         """Loads (Instantiates) this Dat from disk.
 
         Dat-loading is generally lazy, so its attributes are loaded and
@@ -483,20 +491,20 @@ class Dat(Generic[DatSpecType]):
 
     @classmethod
     def load(
-        cls: Type[T],
+        cls: Type[DatType],
         name_or_path: Union[str, Path],
         cwd: Optional[str] = None,
-    ) -> T:
+    ) -> DatType:
         name_or_path = str(name_or_path)
         return cls._manager.load(cls, name_or_path, cwd=cwd)
 
     @classmethod
     def create(
-        cls: Type[T],
+        cls: Type[DatType],
         path: Optional[Union[str, Path]] = None,
         spec: Optional[DatSpecType] = None,
         overwrite: bool = False,
-    ) -> T:
+    ) -> DatType:
         return cls._manager.create(
             cls,
             path=path,
@@ -524,7 +532,7 @@ class Dat(Generic[DatSpecType]):
                 return False
         return True
 
-    def copy(self: T, new_path: Union[str, Path]) -> T:
+    def copy(self: DatType, new_path: Union[str, Path]) -> DatType:
         """Copies this Dat to a new location."""
         new_path_ = Dat._manager.resolve_path(new_path)
         if os.path.exists(new_path_):
@@ -533,7 +541,7 @@ class Dat(Generic[DatSpecType]):
         result = Dat._manager.load(type(self), new_path_)
         return result
 
-    def move(self: T, new_path: Union[str, Path]) -> T:
+    def move(self: DatType, new_path: Union[str, Path]) -> DatType:
         """Moves this Dat to a new location."""
         del Dat._manager.dat_cache[self._path]  # Remove from cache
         new_path_ = Dat._manager.resolve_path(new_path)
@@ -606,7 +614,8 @@ class Dat(Generic[DatSpecType]):
         )
 
 
-class DatContainer(Dat, Generic[T]):
+# TODO: change this. Not super happy with how this turned out.
+class DatContainer(Dat, Generic[DatType]):
     """Container of multiple Dats.
 
     This Dat looks for other Dats recursively under its path, and exposes them via
@@ -640,7 +649,7 @@ class DatContainer(Dat, Generic[T]):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._dat_paths: Union[DataState, List[str]] = DataState.NOT_LOADED
-        self._dats: Union[DataState, List[T]] = DataState.NOT_LOADED
+        self._dats: Union[DataState, List[DatType]] = DataState.NOT_LOADED
 
     def get_dat_paths(self) -> List[str]:
         """Lazy loaded list of full paths for the contained Dat."""
@@ -648,7 +657,7 @@ class DatContainer(Dat, Generic[T]):
             self._dat_paths = DatContainer._find_dats_under(self._path)
         return self._dat_paths
 
-    def get_dats(self) -> List[T]:
+    def get_dats(self) -> List[DatType]:
         """List of contained Dat objects.
 
         WARNING: ALL Dats remain in memory until this container is released.
@@ -704,7 +713,7 @@ def dotted_get(
 
 def dotted_gets(source: Union[Dat, SpecDict], *dotted_keys):
     assert source is not None, "gets method requires a non None dict"
-    source_ = source._spec if isinstance(source, Dat) else source
+    source_ = source.get_spec() if isinstance(source, Dat) else source
     results = []
     for dotted_key in dotted_keys:
         keys = dotted_key.split(".")
