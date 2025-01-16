@@ -35,13 +35,13 @@ class DataState(Enum):
 SpecValue = Union[str, int, float, bool, None, "SpecDict"]
 SpecDict = Dict[str, SpecValue]
 
-DatSpecType = TypeVar(
-    "DatSpecType",
+DatSpecType_co = TypeVar(
+    "DatSpecType_co",
     bound="DatSpec",
     default="DatSpec",
     covariant=True,
 )
-DatType = TypeVar("DatType", bound="Dat", covariant=True)
+DatType = TypeVar("DatType", bound="Dat")
 DatMethodType = TypeVar("DatMethodType", bound="DatMethod")
 
 
@@ -397,7 +397,7 @@ class DatSpec(BaseModel):
             yaml.dump(self.model_dump(mode="json"), f, sort_keys=False)
 
 
-class Dat(Generic[DatSpecType]):
+class Dat(Generic[DatSpecType_co]):
     """
     A Dat is a data container (filesystem folder plus JSON metadata) that is saved
     from one Python environment and can be instantiated into others.
@@ -453,13 +453,13 @@ class Dat(Generic[DatSpecType]):
     _manager: DatManager = DatManager()  # The singleton manager for all Dats
 
     _path: str  # The immutable absolute path of this Dat
-    _spec: DatSpecType  # The immutable spec of this Dat
+    _spec: DatSpecType_co  # The immutable spec of this Dat
     _result: SpecDict  # The mutable state or result of this Dat
 
     def __init__(
         self,
         path: Union[str, Path],
-        spec: DatSpecType,
+        spec: DatSpecType_co,
         result: Optional[SpecDict] = None,
     ) -> None:
         path = str(path)
@@ -502,7 +502,7 @@ class Dat(Generic[DatSpecType]):
     def create(
         cls: Type[DatType],
         path: Optional[Union[str, Path]] = None,
-        spec: Optional[DatSpecType] = None,
+        spec: Optional[DatSpecType_co] = None,
         overwrite: bool = False,
     ) -> DatType:
         return cls._manager.create(
