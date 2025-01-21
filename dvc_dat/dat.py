@@ -46,6 +46,8 @@ DatMethodType = TypeVar("DatMethodType", bound="DatMethod")
 
 
 class DatMethod(Protocol):
+    """Method that acts on a Dat to produce a result."""
+
     def __call__(self, dat: "Dat", *args: Any, **kwds: Any) -> Any: ...
 
 
@@ -71,6 +73,8 @@ class MethodManager:
 
 
 class SimpleMethodManager(MethodManager):
+    """Manager for cached access to DatMethods."""
+
     def __init__(self):
         self._dat_methods: Dict[str, DatMethod] = {}
 
@@ -367,28 +371,35 @@ class DatManager:
 
 
 class DatSpecCore(BaseModel):
+    """Part of the spec that defines which Dat class should load it."""
+
     kind: str
     base: Optional[Any] = None  # TODO: define expected type
 
 
 class DatSpec(BaseModel):
+    """Base Spec for all Dats."""
+
     model_config = ConfigDict(extra="allow")
 
     dat: DatSpecCore
 
     @classmethod
     def from_json(cls, path: Union[Path, str]):
+        """Load a DatSpec from a json file in `path`."""
         path = Path(path)
         with path.open("r") as f:
             return cls(**json.load(f))
 
     @classmethod
     def from_yaml(cls, path: Union[Path, str]):
+        """Load a DatSpec from a yaml file in `path`."""
         path = Path(path)
         with path.open("r") as f:
             return cls(**yaml.safe_load(f))
 
     def to_yaml(self, path: Union[Path, str]):
+        """Serialize this Spec to a yaml file in `path`."""
         path = Path(path)
         if path.suffix != ".yaml" or path.suffix != ".yml":
             path = path / SPEC_YAML
@@ -415,27 +426,8 @@ class Dat(Generic[DatSpecType_co]):
 
     loc == path or name
 
-    Persistable API
-      Dat.manager.create(path=, spec=) ... Constructor
-      .load(path) ................ Universal loader for all Persistables
-      .get_spec() ................ Is the 'spec' dict for this dat
-      .get_path() ................ Returns dat's path (its absolute path)
-      .get_path_name() ........... Returns dat's name (its path relative to dat_folder)
-      .get_path_tail() ........... Returns dat's shortname (last part of its path)
-      .delete() .................. Deletes the dat from the filesystem
-      .copy() .................... Copies the dat to a new location
-      .move() .................... Moves the dat to a new location
-      .save([path]) .............. Saves persistable to disk (optionally sets its path)
-
-    Static Utility Methods
-      .get(Dat|dict, [key1, key2, ...])
-      .get(Dat|dict, "dotted.key.path")
-      .set(dict, [key1, key2, ...], value)
-      .set(dict, "dotted.key.path", value)
-
     Notes
     -----
-
     Information access guideline for Dat subclasses:
     - Anything that is instantaneously accessible, and that doesn't require parameters
       from the user to obtain information, should be implemented as a property
@@ -446,7 +438,7 @@ class Dat(Generic[DatSpecType_co]):
       - If the data should be a candidate for caching
       - If lazy loading is beneficial
 
-    """  # noqa
+    """
 
     _SPEC_TYPE: Type[DatSpec] = DatSpec
 
@@ -495,6 +487,25 @@ class Dat(Generic[DatSpecType_co]):
         name_or_path: Union[str, Path],
         cwd: Optional[str] = None,
     ) -> DatType:
+        """Load data from `name_or_path` and create a Dat.
+
+        When you load a Dat, the class that you use to call .load from must match the
+        spec's dat.kind parameter. The only exception is if you're using the base Dat
+        class directly to load it, in which case you can load any dat, with very
+        weak guarantees as to its structure.
+
+        Parameters
+        ----------
+        name_or_path : Union[str, Path]
+            Standard dat name, or path where the dat will be loaded from.
+        cwd : Optional[str]
+            Assume this as the cwd, if provided.
+
+        Returns
+        -------
+            The instantiated Dat.
+
+        """
         name_or_path = str(name_or_path)
         return cls._manager.load(cls, name_or_path, cwd=cwd)
 
@@ -505,6 +516,7 @@ class Dat(Generic[DatSpecType_co]):
         spec: Optional[DatSpecType_co] = None,
         overwrite: bool = False,
     ) -> DatType:
+        """Create a Dat given `path` and `spec`."""
         return cls._manager.create(
             cls,
             path=path,
