@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 import weakref
@@ -23,6 +24,8 @@ _DAT_CONFIG_YAML = ".datconfig.yaml"
 _DAT_FOLDER = "sync_folder"
 _DAT_FOLDERS = "dat_folders"
 _DEFAULT_DAT_FOLDER = "data"
+
+logger = logging.getLogger(__name__)
 
 
 class DataState(Enum):
@@ -175,7 +178,7 @@ class DatManager:
         dat_class: Type[DatType],
         *,
         path: Optional[Union[str, Path]] = None,
-        spec: Optional["DatSpec"] = None,
+        spec: Union["DatSpec", Dict, None] = None,
         overwrite: bool = False,
     ) -> DatType:
         """Creates a new Dat with the specified spec dict and backing folder at 'path'.
@@ -199,23 +202,28 @@ class DatManager:
             {cwd}    -- the current working directory
             {unique} -- a counter or UUID that makes the entire path unique.
         """
-        spec = spec or DatSpec(dat=DatSpecCore(kind="Dat"))
+        if spec is None:
+            logger.info("No spec provided. Creating default DatSpec.")
+            spec = DatSpec(dat=DatSpecCore(kind="Dat"))
+        elif isinstance(spec, dict):
+            spec = dat_class._SPEC_TYPE(**spec)
+
+        if not isinstance(spec, dat_class._SPEC_TYPE):
+            raise ValueError(
+                f"Spec given {spec} doesn't match expected spec type {dat_class._SPEC_TYPE}"
+            )
         path = str(path)
 
         path = self.resolve_path(self.expand_dat_path(path, overwrite=overwrite))
         if not os.path.exists(path):
             os.makedirs(path)
         try:
-            txt = yaml.safe_dump(spec, indent=2)
+            spec.to_yaml(path)
         except Exception as e:
-            raise Exception(f"Non-JSON data in Dat.spec: {e}\nSPEC={spec}")
-        with open(os.path.join(path, SPEC_YAML), "w") as out:
-            out.write(txt)
-            out.write("\n")
-        return dat_class(
-            path=path,
-            spec=spec,
-        )
+            raise EnvironmentError(
+                f"Couldn't write spec {spec} to path {path}. Error: {e}"
+            )
+        return self.load(dat_class, name_or_path=path)
 
     def load(
         self,
