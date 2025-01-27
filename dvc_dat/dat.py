@@ -231,6 +231,7 @@ class DatManager:
         name_or_path: Union[str, Path],
         *,
         cwd: Optional[str] = None,
+        cache_after_load: bool = True,
     ) -> DatType:
         """Loads (Instantiates) this Dat from disk.
 
@@ -303,7 +304,9 @@ class DatManager:
             spec=spec,
             result=result,
         )
-        self.dat_cache[path] = dat
+
+        if cache_after_load:
+            self.dat_cache[path] = dat
 
         return dat
 
@@ -494,6 +497,7 @@ class Dat(Generic[DatSpecType_co]):
         cls: Type[DatType],
         name_or_path: Union[str, Path],
         cwd: Optional[str] = None,
+        cache_after_load: bool = True,
     ) -> DatType:
         """Load data from `name_or_path` and create a Dat.
 
@@ -508,6 +512,8 @@ class Dat(Generic[DatSpecType_co]):
             Standard dat name, or path where the dat will be loaded from.
         cwd : Optional[str]
             Assume this as the cwd, if provided.
+        cache_after_load : bool
+            If True, the Dat will be stored in cache after it's loaded.
 
         Returns
         -------
@@ -515,7 +521,12 @@ class Dat(Generic[DatSpecType_co]):
 
         """
         name_or_path = str(name_or_path)
-        return cls._manager.load(cls, name_or_path, cwd=cwd)
+        return cls._manager.load(
+            cls,
+            name_or_path,
+            cwd=cwd,
+            cache_after_load=cache_after_load,
+        )
 
     @classmethod
     def create(
@@ -531,6 +542,23 @@ class Dat(Generic[DatSpecType_co]):
             spec=spec,
             overwrite=overwrite,
         )
+
+    @classmethod
+    def is_valid(
+        cls: Type[DatType],
+        path: Union[str, Path],
+        cwd: Optional[str] = None,
+    ) -> bool:
+        """Return True if `path` can be loaded. False otherwise."""
+        try:
+            _ = cls.load(
+                path,
+                cwd=cwd,
+                cache_after_load=False,
+            )
+            return True
+        except Exception:
+            return False
 
     def save(self) -> None:
         """Flags a Dat to have a version of its folder's contents saved
