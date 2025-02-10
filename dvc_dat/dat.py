@@ -412,7 +412,7 @@ class DatSpec(BaseModel):
     def to_yaml(self, path: Union[Path, str]):
         """Serialize this Spec to a yaml file in `path`."""
         path = Path(path)
-        if path.suffix != ".yaml" or path.suffix != ".yml":
+        if path.suffix != ".yaml" and path.suffix != ".yml":
             path = path / SPEC_YAML
 
         with path.open("w") as f:
