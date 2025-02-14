@@ -532,7 +532,7 @@ class Dat(Generic[DatSpecType_co]):
     def create(
         cls: Type[DatType],
         path: Optional[Union[str, Path]] = None,
-        spec: Optional[DatSpecType_co] = None,
+        spec: Union[DatSpecType_co, Dict, None] = None,
         overwrite: bool = False,
     ) -> DatType:
         """Create a Dat given `path` and `spec`."""
