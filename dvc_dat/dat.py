@@ -203,13 +203,8 @@ class DatManager:
         name_or_path = str(name_or_path)
         cwd = cwd or os.getcwd()
 
-        if os.path.isabs(name_or_path):
-            path = name_or_path
-        elif os.path.exists(path := os.path.join(cwd, name_or_path)):
-            pass
-        elif os.path.exists(path := self.resolve_path(name_or_path)):
-            pass
-        else:
+        path = self.resolve_path(name_or_path)
+        if not os.path.exists(path):
             raise KeyError(
                 f"LOAD_DAT: Could not find <{name_or_path!r}> as absolute, "
                 f"under cwd {cwd}, or in {self.sync_folders}"
@@ -324,6 +319,15 @@ class DatManager:
 
     def resolve_path(self, name: Union[str, Path]) -> str:
         name = str(name)
+
+        path = name
+        if os.path.isabs(path):
+            return path
+
+        path = os.path.join(self.config.cwd, name)
+        if os.path.exists(path):
+            return path
+
         for folder in self.sync_folders:
             path = os.path.join(folder, name)
             if os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
