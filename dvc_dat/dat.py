@@ -13,17 +13,14 @@ import yaml
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypeVar
 
+from settings import DataConfig
+
 _DAT_BASE = "dat.base"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
 _NO_ARG = object()
 
 SPEC_JSON = "_spec_.json"
 SPEC_YAML = "_spec_.yaml"
-_DAT_CONFIG_JSON = ".datconfig.json"
-_DAT_CONFIG_YAML = ".datconfig.yaml"
-_DAT_FOLDER = "sync_folder"
-_DAT_FOLDERS = "dat_folders"
-_DEFAULT_DAT_FOLDER = "data"
 
 logger = logging.getLogger(__name__)
 
@@ -108,70 +105,25 @@ class SimpleMethodManager(MethodManager):
 class DatManager:
     """Singleton class that manages the configuration and loading of Dats.
 
-    Configuration info for the 'dat' module loaded from the .datconfig.json file.
-
-    .datconfig.json
-        The do module searches CWD and all parent dirs for the '.datconfig.json' file.
-        If it is found, it expects a JSON object with a 'do_folder' key that indicates
-        the path (relative to the .datconfig.json file itself) of the "do folder"
+    Configuration info for the 'dat' module loaded from a DataConfig.
     """
 
-    config: Dict[str, Any] = {}
+    config: DataConfig
+    main_sync_folder: str
+    sync_folders: List[str]  # NOTE: includes the main_sync_folder
     do: MethodManager = SimpleMethodManager()
-    sync_folder: str
-    sync_folders: List[str]  # Note: also includes the dat_folder
     dat_cache: weakref.WeakValueDictionary[str, "Dat"] = weakref.WeakValueDictionary()
 
-    def __init__(self, folder=None):
-        self.folder = folder or os.getcwd()
-        while True:
-            if os.path.exists(config := os.path.join(self.folder, _DAT_CONFIG_JSON)):
-                try:
-                    with open(config, "r") as f:
-                        self.config = json.load(f)
-                except json.JSONDecodeError as e:
-                    raise Exception(f"Error loading {_DAT_CONFIG_JSON}: {e}")
-                break
-            if os.path.exists(config := os.path.join(self.folder, _DAT_CONFIG_YAML)):
-                try:
-                    with open(config, "r") as f:
-                        self.config = yaml.safe_load(f)
-                except yaml.YAMLError as e:
-                    raise Exception(f"Error loading {_DAT_CONFIG_YAML}: {e}")
-                break
-            if self.folder == "/":
-                self.folder = os.getcwd()
-                break
-            self.folder = os.path.dirname(self.folder)
+    def __init__(self, config: Optional[DataConfig] = None):
+        if config is None:
+            config = DataConfig.new()
 
-        sync_folder = self._lookup_path(self.folder, _DAT_FOLDER, None)
-        if not sync_folder:
-            s = f'No {_DAT_CONFIG_JSON} found or no "{_DAT_FOLDER}" specified.'
-            print(f"Warning: {s}")
-            self.sync_folder = os.path.join(self.folder, _DEFAULT_DAT_FOLDER)
-        else:
-            self.sync_folder = sync_folder
+        self.config = config
 
-        dirs = self.config.get(_DAT_FOLDERS)
-        dirs = ([self.sync_folder] + dirs) if dirs else [self.sync_folder]
-        self.sync_folders = [os.path.join(self.folder, f) for f in dirs]
-        assert self.sync_folder
-        assert len(self.sync_folders) > 0
+        self.main_sync_folder = self.config.local_prefix
+        self.sync_folders = [self.main_sync_folder, *self.config.extra_local_prefixes]
 
-    def _lookup_path(
-        self,
-        folder_path: Union[str, Path],
-        key,
-        default=None,
-    ) -> Union[str, None]:
-        suffix = self.config[key] if key in self.config else default
-        folder_path = str(folder_path)
-        if suffix:
-            path = os.path.join(folder_path, suffix)
-            os.makedirs(path, exist_ok=True)
-        else:
-            path = None  # os.path.join(os.getcwd(), default)
-        return path
+        assert self.main_sync_folder, "Sync folder not defined."
 
     def create(
         self,
@@ -321,7 +273,7 @@ class DatManager:
     def get_path_name(self, path: Union[str, Path]):
         path = str(path)
         try:
-            match = 1 + len(os.path.commonpath([self.sync_folder, path]))
+            match = 1 + len(os.path.commonpath([self.main_sync_folder, path]))
             return path[match:] if match > 2 else path
         except ValueError:
             return path
@@ -358,7 +310,7 @@ class DatManager:
                 **(variables or {}),
             }
             expanded_path = os.path.join(
-                self.sync_folder, path_spec.format_map(format_vars)
+                self.main_sync_folder, path_spec.format_map(format_vars)
             )
             if not os.path.exists(expanded_path):
                 return expanded_path
@@ -378,7 +330,7 @@ class DatManager:
                 os.path.join(path, SPEC_YAML)
             ):
                 return path
-        return os.path.join(self.sync_folder, name)
+        return os.path.join(self.main_sync_folder, name)
 
 
 class DatSpecCore(BaseModel):
