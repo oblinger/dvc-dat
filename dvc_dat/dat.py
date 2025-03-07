@@ -457,7 +457,7 @@ class Dat(Generic[DatSpecType_co]):
     _manager: DatManager = DatManager()  # The singleton manager for all Dats
 
     _path: str  # The immutable absolute path of this Dat
-    _spec: DatSpecType_co  # The immutable spec of this Dat
+    spec: DatSpecType_co  # The immutable spec of this Dat
     _result: SpecDict  # The mutable state or result of this Dat
 
     def __init__(
@@ -470,12 +470,12 @@ class Dat(Generic[DatSpecType_co]):
         path = os.path.abspath(path)
 
         self._path = path
-        self._spec = spec
+        self.spec = spec
         self._result = result or {}
 
     def get_spec(self) -> SpecDict:
         """Returns the spec of this Dat."""
-        return self._spec.model_dump()
+        return self.spec.model_dump()
 
     def get_results(self) -> SpecDict:
         """Returns the spec of this Dat."""
@@ -563,10 +563,10 @@ class Dat(Generic[DatSpecType_co]):
 
     def run(self):
         # TODO: wrap this by using Do and Dat managers
-        if not self._spec.dat.do:
+        if not self.spec.dat.do:
             raise ValueError("Dat can't be run because it needs dat.do defined.")
         try:
-            fn_mod_str, fn_str = self._spec.dat.do.rsplit(".", maxsplit=1)
+            fn_mod_str, fn_str = self.spec.dat.do.rsplit(".", maxsplit=1)
         except Exception:
             raise ValueError("dat.do must be specified as: my_module.my_fn")
 
@@ -617,7 +617,7 @@ class Dat(Generic[DatSpecType_co]):
         return result
 
     def __repr__(self):
-        base = Dat.get(self._spec.model_dump(), _DAT_BASE, self.__class__.__name__)
+        base = Dat.get(self.spec.model_dump(), _DAT_BASE, self.__class__.__name__)
         base = base.split("/")[-1]
         return f"<{base}: {self.get_path_name()}>"
 
@@ -755,7 +755,7 @@ def dotted_get(
     default_value: Any = _NO_ARG,
 ):
     """Utility method to get value from a recursive dict tree or return None."""
-    d = source._spec if isinstance(source, Dat) else source
+    d = source.spec if isinstance(source, Dat) else source
     if isinstance(keys, str):
         keys = keys.split(".")
     for k in keys:
