@@ -1,19 +1,33 @@
+import importlib
 import json
 import logging
 import os
 import shutil
 import weakref
 from abc import abstractmethod
+from copy import deepcopy
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Dict, Generic, Iterable, List, Optional, Protocol, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    Optional,
+    Protocol,
+    Type,
+    Union,
+)
 
 import yaml
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypeVar
 
 from settings import DataConfig
+from utils.handy_fns import merge_dicts
 
 _DAT_BASE = "dat.base"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
@@ -129,7 +143,7 @@ class DatManager:
         self,
         dat_class: Type[DatType],
         *,
-        path: Optional[Union[str, Path]] = None,
+        path: Union[str, Path, None] = None,
         spec: Union["DatSpec", Dict, None] = None,
         overwrite: bool = False,
     ) -> DatType:
@@ -158,13 +172,25 @@ class DatManager:
             logger.info("No spec provided. Creating default DatSpec.")
             spec = DatSpec(dat=DatSpecCore(kind="Dat"))
         elif isinstance(spec, dict):
+            spec = deepcopy(spec)
+
+            templated_name = spec.get("dat", {}).get("name")
+            if templated_name is not None:
+                spec["dat"].pop("name")
+                if path is None:
+                    path = templated_name
+
             spec = dat_class._SPEC_TYPE(**spec)
 
         if not isinstance(spec, dat_class._SPEC_TYPE):
             raise ValueError(
                 f"Spec given {spec} doesn't match expected spec type {dat_class._SPEC_TYPE}"
             )
-        path = str(path)
+
+        if path is None:
+            path = _DEFAULT_PATH_TEMPLATE
+        else:
+            path = str(path)
 
         path = self.resolve_path(self.expand_dat_path(path, overwrite=overwrite))
         if not os.path.exists(path):
@@ -229,6 +255,25 @@ class DatManager:
         except Exception as e:
             raise EnvironmentError("Error during spec loading.") from e
 
+        # merge spec with base
+        if spec.dat.base:
+            base_dat = self.load(
+                dat_class=dat_class,
+                name_or_path=spec.dat.base,
+                cwd=cwd,
+                cache_after_load=cache_after_load,
+            )
+            spec_dict = spec.model_dump()
+            if dotted_get(spec_dict, "dat.do", None) is None:
+                # remove the "do" field if not specified to allow merging with base
+                spec_dict["dat"].pop("do", None)
+            spec = spec_type(
+                **merge_dicts(
+                    base_dat.get_spec(),
+                    spec_dict,
+                )
+            )
+
         kind = spec.dat.kind
         dat_class_name = dat_class.__name__
 
@@ -286,13 +331,12 @@ class DatManager:
         variables: Optional[Dict[str, Any]] = None,
         overwrite: bool = False,
     ) -> str:
-        """(See Dat.manager.create for path expansion rules.)"""  # noqa
-        if not path_spec:
-            path_spec = _DEFAULT_PATH_TEMPLATE
+        """(See Dat.manager.create for path expansion rules.)"""
         path_spec = str(path_spec)
         now, count = datetime.now(), 1
         while True:
             format_vars = {
+                "now": now.strftime("%y-%m-%d_%H-%M-%S"),
                 "YYYY": now.strftime("%Y"),
                 "YY": now.strftime("%Y")[2:],
                 "MM": now.strftime("%m"),
@@ -341,7 +385,8 @@ class DatSpecCore(BaseModel):
     """Part of the spec that defines which Dat class should load it."""
 
     kind: str
-    base: Optional[Any] = None  # TODO: define expected type
+    base: Optional[str] = None
+    do: Optional[str] = None
 
 
 class DatSpec(BaseModel):
@@ -515,6 +560,22 @@ class Dat(Generic[DatSpecType_co]):
             return True
         except Exception:
             return False
+
+    def run(self):
+        # TODO: wrap this by using Do and Dat managers
+        if not self._spec.dat.do:
+            raise ValueError("Dat can't be run because it needs dat.do defined.")
+        try:
+            fn_mod_str, fn_str = self._spec.dat.do.rsplit(".", maxsplit=1)
+        except Exception:
+            raise ValueError("dat.do must be specified as: my_module.my_fn")
+
+        module = importlib.import_module(fn_mod_str)
+        try:
+            fn: Callable = getattr(module, fn_str)
+        except Exception:
+            raise AttributeError(f"Function {fn_str} not found in module {module}.")
+        fn(self)
 
     def save(self) -> None:
         """Flags a Dat to have a version of its folder's contents saved
