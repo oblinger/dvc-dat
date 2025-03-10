@@ -561,7 +561,7 @@ class Dat(Generic[DatSpecType_co]):
         except Exception:
             return False
 
-    def run(self):
+    def run(self) -> Any:
         # TODO: wrap this by using Do and Dat managers
         if not self.spec.dat.do:
             raise ValueError("Dat can't be run because it needs dat.do defined.")
@@ -575,7 +575,7 @@ class Dat(Generic[DatSpecType_co]):
             fn: Callable = getattr(module, fn_str)
         except Exception:
             raise AttributeError(f"Function {fn_str} not found in module {module}.")
-        fn(self)
+        return fn(self)
 
     def save(self) -> None:
         """Flags a Dat to have a version of its folder's contents saved
