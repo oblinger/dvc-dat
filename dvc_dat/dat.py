@@ -22,6 +22,7 @@ from typing import (
     Union,
 )
 
+from utils.data.data_manager import DataManager
 import yaml
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypeVar
@@ -210,6 +211,7 @@ class DatManager:
         *,
         cwd: Optional[str] = None,
         cache_after_load: bool = True,
+        pull_if_missing: bool = False,
     ) -> DatType:
         """Loads (Instantiates) this Dat from disk.
 
@@ -230,6 +232,15 @@ class DatManager:
         cwd = cwd or os.getcwd()
 
         path = self.resolve_path(name_or_path)
+        if not os.path.exists(path) and pull_if_missing:
+            logger.info("Didn't find locally. Pulling %s", name_or_path)
+            data_mgr = DataManager()
+            try:
+                data_mgr.pull(name_or_path, gather=True)
+                path = self.resolve_path(name_or_path)
+            except Exception:
+                logger.warning("Couldn't pull %s", name_or_path)
+
         if not os.path.exists(path):
             raise KeyError(
                 f"LOAD_DAT: Could not find <{name_or_path!r}> as absolute, "
@@ -499,6 +510,7 @@ class Dat(Generic[DatSpecType_co]):
         name_or_path: Union[str, Path],
         cwd: Optional[str] = None,
         cache_after_load: bool = True,
+        pull_if_missing: bool = False,
     ) -> DatType:
         """Load data from `name_or_path` and create a Dat.
 
@@ -527,6 +539,7 @@ class Dat(Generic[DatSpecType_co]):
             name_or_path,
             cwd=cwd,
             cache_after_load=cache_after_load,
+            pull_if_missing=pull_if_missing,
         )
 
     @classmethod
