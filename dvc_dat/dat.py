@@ -609,7 +609,7 @@ class Dat(Generic[DatSpecType_co]):
         with Path(self.get_path(), RESULT_YAML).open("w") as f:
             yaml.safe_dump(result, f, sort_keys=False)
 
-        return fn(self)
+        return success
 
     def save(self) -> None:
         """Flags a Dat to have a version of its folder's contents saved
