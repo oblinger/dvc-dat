@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import shutil
+import time
 import weakref
 from abc import abstractmethod
 from copy import deepcopy
@@ -36,6 +37,7 @@ _NO_ARG = object()
 
 SPEC_JSON = "_spec_.json"
 SPEC_YAML = "_spec_.yaml"
+RESULT_YAML = "_result_.yaml"
 
 logger = logging.getLogger(__name__)
 
@@ -583,11 +585,30 @@ class Dat(Generic[DatSpecType_co]):
         except Exception:
             raise ValueError("dat.do must be specified as: my_module.my_fn")
 
+        result: Dict[str, Any] = {
+            "start_time": str(datetime.now()),
+        }
+
         module = importlib.import_module(fn_mod_str)
         try:
             fn: Callable = getattr(module, fn_str)
         except Exception:
             raise AttributeError(f"Function {fn_str} not found in module {module}.")
+
+        t0 = time.time()
+        try:
+            success = bool(fn(self))
+        except Exception:
+            logger.exception("Dat .run() call failed.")
+            success = False
+
+        result["success"] = success
+        result["execution_time"] = time.time() - t0
+        result["end_time"] = str(datetime.now())
+
+        with Path(self.get_path(), RESULT_YAML).open("w") as f:
+            yaml.safe_dump(result, f, sort_keys=False)
+
         return fn(self)
 
     def save(self) -> None:
