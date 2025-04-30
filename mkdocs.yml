@@ -1,0 +1,8 @@
+site_name: ML-DAT
+theme: material
+
+nav:
+  - Home: index.md
+  - About: about.md
+  - Overview: overview.md
+

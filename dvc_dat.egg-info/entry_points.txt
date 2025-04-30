@@ -1,0 +1,2 @@
+[console_scripts]
+dat = dvc_dat.__main__:main

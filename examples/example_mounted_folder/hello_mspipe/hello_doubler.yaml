@@ -1,0 +1,53 @@
+---
+dat:
+  __doc__: |
+    Each toplevel multi-stage pipeline will have a configuration file like this one.
+    
+    This (inane) multi-state pipeline has three stages:
+    - the preprocessing stage creates two outputs: gallery.txt and results.txt file
+    - the doubler stage doubles the results.txt file from the gallery for no good reason
+    - the final stage combines the gallery.txt and the doubler results doubled again
+    
+    This multi-stage pipe is designed as a regression suite where we 
+    keep each run in a separate dated folder under the "doubler" subfolder
+    so when we have auto caching these runs will be cached into dated sub-folder
+    so we can run reports that graph performance over weeks and months.
+
+  base: hello_mspipe
+  kind: doubler    # We call this (inane) multi-stage pipeline a "doubler"
+  path: "runs/doubler/{YYYY}-{MM}{unique}"  # where result runs are stored
+
+common:
+  debug_level: 3    # The only new config parameter common to all stages
+
+stages:
+
+  preprocessing:
+    kind: gallery_stage
+    debug_level: 1
+    outputs:
+      gallery.txt:
+        - ">>This is not really a gallery."
+        - ">>It's just a file called gallery!"
+      results.txt:
+        - ">>Stage 1: Results.txt line1"
+        - ">>Stage 1: Results.txt line2"
+
+  doubler:
+    kind: doubler_stage
+    outputs:
+      double_trouble.txt:
+        - ">>If results are good, then more results are better!"
+        #  Notice fixed relative paths allow stages to grab data from prior stages
+        - "<<../preprocessing/results.txt"      # 1st copy
+        - "<<../preprocessing/results.txt"      # 2nd copy
+
+  final_stage:
+    kind: final_stage
+    outputs:
+      final_results.txt:
+        - ">>The Final results are in!  Gallery first:"
+        - "<<../preprocessing/gallery.txt"
+        - ">>And now the results.  Doubled once more, just to be sure!"
+        - "<<../doubler/double_trouble.txt"
+        - "<<../doubler/double_trouble.txt"

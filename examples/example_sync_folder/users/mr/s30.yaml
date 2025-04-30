@@ -1,0 +1,9 @@
+dat:
+  base: RunSet
+  docs: >
+    Test run of 3 different color metrics over the color5 dataset.
+  path: mr/S30ColorsMetricTest
+  path_overwrite: True
+  input: gameset/colors/color5
+  do: mr/s30_code.train_and_test
+
