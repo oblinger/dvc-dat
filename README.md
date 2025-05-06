@@ -1,4 +1,4 @@
-# dat
+# DVC-DAT
 Data and code encapsulation for ML experimentation and productization.
 - This package is designed to operate seemlessly with DVC and ML-FLOW based objects.
 - It provides a dotted tree-style namespace for dynamically loaded Python code and Data.
