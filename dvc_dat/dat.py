@@ -299,9 +299,11 @@ class DatManager:
                 "(or the generic Dat)."
             )
 
-        # currently results are not implemented, but keeping it here to allow their
-        # implementation later
-        result = {}
+        if os.path.exists(result_path := os.path.join(path, RESULT_YAML)):
+            with open(result_path, "r") as f:
+                result = yaml.safe_load(f)
+        else:
+            result = {}
 
         path = os.path.abspath(path)
         dat = dat_class(
