@@ -19,16 +19,17 @@ from typing import (
     List,
     Optional,
     Protocol,
+    Tuple,
     Type,
     Union,
 )
 
-from utils.data.data_manager import DataManager
 import yaml
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypeVar
 
 from settings import DataConfig
+from utils.data.data_manager import DataManager
 from utils.handy_fns import merge_dicts
 
 _DAT_BASE = "dat.base"
@@ -578,7 +579,7 @@ class Dat(Generic[DatSpecType_co]):
         except Exception:
             return False
 
-    def run(self) -> Any:
+    def run(self) -> Tuple[bool, Dict[str, Any]]:
         # TODO: wrap this by using Do and Dat managers
         if not self.spec.dat.do:
             raise ValueError("Dat can't be run because it needs dat.do defined.")
@@ -599,19 +600,21 @@ class Dat(Generic[DatSpecType_co]):
 
         t0 = time.time()
         try:
-            success = bool(fn(self))
+            success, metadata = fn(self)
         except Exception:
             logger.exception("Dat .run() call failed.")
             success = False
+            metadata = {}
 
         result["success"] = success
         result["execution_time"] = time.time() - t0
         result["end_time"] = str(datetime.now())
+        result["run_metadata"] = metadata
 
         with Path(self.get_path(), RESULT_YAML).open("w") as f:
             yaml.safe_dump(result, f, sort_keys=False)
 
-        return success
+        return success, metadata
 
     def save(self) -> None:
         """Flags a Dat to have a version of its folder's contents saved
