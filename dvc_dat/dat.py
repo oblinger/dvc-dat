@@ -501,6 +501,11 @@ class Dat(Generic[DatSpecType_co]):
         """Returns the absolute path of this Dat."""
         return self._path
 
+    # backward-compatibility
+    @property
+    def path(self) -> Path:
+        return Path(self.get_path())
+
     def get_path_name(self) -> str:
         """Returns the name (relative path) of this Dat."""
         return Dat._manager.get_path_name(self._path)
