@@ -30,7 +30,7 @@ from typing_extensions import TypeVar
 
 from settings import DataConfig
 from utils.data.data_manager import DataManager
-from utils.handy_fns import merge_dicts
+from utils.handy_fns import merge_dicts, load_dict
 
 _DAT_BASE = "dat.base"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
@@ -46,6 +46,8 @@ logger = logging.getLogger(__name__)
 class DataState(Enum):
     NOT_LOADED = auto()
 
+
+PathLike = Union[str, Path]
 
 # A SpecValue is possibly recursive dict of parameters within the Dat's spec.
 # Often it is a dict of dict, but single level is ok as long as keys are
@@ -866,3 +868,83 @@ def dotted_sets(source: dict, *assignments):
             except ValueError:
                 value = suffix
         dotted_set(source, keys, value)
+
+
+def _dynamic_load_dat_class(dat_kind: str, data_config: DataConfig) -> Type[Dat]:
+    """Load a Dat class dynamically from the mappings defined in data_config.
+
+    Parameters
+    ----------
+    dat_kind : str
+        Name of the Dat class.
+    data_config : DataConfig
+        DataConfig containing .dat["mappings"]. Where the mappings map the name of the
+        Dat class to the module where it can be loaded from.
+
+    Returns
+    -------
+    Type[Dat]
+        The dynamically loaded Dat class.
+
+    """
+    dat_mappings: Dict[str, str] = data_config.dat.get("mappings", {})
+    module_str = dat_mappings.get(dat_kind)
+    if module_str is None:
+        raise AttributeError(
+            f"No mapping entry found for dat of kind {dat_kind} in DataConfig."
+        )
+
+    module = importlib.import_module(module_str)
+    try:
+        dat_class = getattr(module, dat_kind)
+    except Exception:
+        raise AttributeError(f"Dat class {dat_kind} not found in module {module}.")
+
+    if not issubclass(dat_class, Dat):
+        raise ValueError(f"Class {dat_class} is not a subclass of Dat.")
+    return dat_class
+
+
+def load_and_run(
+    path: PathLike,
+    name: Union[Path, str, None] = None,
+    **kwargs,
+) -> Tuple[bool, Dict[str, Any]]:
+    """Execute an existing dat or create one from a template.
+
+    If `path` is a template, any additional kwargs will be passed to the template, and
+    the template will be used as its spec.
+
+    Parameters
+    ----------
+    path : PathLike
+        Path to the runset or template of the dat to execute.
+    name : Union[Path, str]
+        If `path` is a template, this can be used to override the resulting name.
+
+    Returns
+    -------
+    Tuple[bool, Dict[str, Any]]:
+        Tuple of (success, metadata), where success shows whether the run executed
+        successfully, and metadata contains its execution metadata.
+
+    """
+    data_config = DataConfig.new()
+
+    template = load_dict(path)
+    if template is not None:
+        logger.info("Creating dat from template %s", path)
+        template.update(kwargs)
+        dat_kind = template.get("dat", {}).get("kind")
+        if dat_kind is None:
+            raise AttributeError("No entry for dat.kind found in template.")
+
+        dat = _dynamic_load_dat_class(dat_kind, data_config).create(
+            path=name,
+            spec=template,
+        )
+    else:
+        logger.info("Loading runset in %s", path)
+        generic_dat = Dat.load(path)
+        dat = _dynamic_load_dat_class(generic_dat.spec.dat.kind, data_config).load(path)
+    return dat.run()
