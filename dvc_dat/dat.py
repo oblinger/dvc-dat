@@ -28,9 +28,9 @@ import yaml
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypeVar
 
+import utils.handy_fns as handy
 from settings import DataConfig
 from utils.data.data_manager import DataManager
-from utils.handy_fns import merge_dicts, load_dict
 
 _DAT_BASE = "dat.base"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
@@ -284,7 +284,7 @@ class DatManager:
                 # remove the "do" field if not specified to allow merging with base
                 spec_dict["dat"].pop("do", None)
             spec = spec_type(
-                **merge_dicts(
+                **handy.merge_dicts(
                     base_dat.get_spec(),
                     spec_dict,
                 )
@@ -590,20 +590,15 @@ class Dat(Generic[DatSpecType_co]):
         # TODO: wrap this by using Do and Dat managers
         if not self.spec.dat.do:
             raise ValueError("Dat can't be run because it needs dat.do defined.")
+
         try:
-            fn_mod_str, fn_str = self.spec.dat.do.rsplit(".", maxsplit=1)
+            fn = handy.dynamic_load_fn(self.spec.dat.do)
         except Exception:
-            raise ValueError("dat.do must be specified as: my_module.my_fn")
+            raise ValueError("Couldn't find dat.do function. It must be specified as: my_module.my_fn")
 
         result: Dict[str, Any] = {
             "start_time": str(datetime.now()),
         }
-
-        module = importlib.import_module(fn_mod_str)
-        try:
-            fn: Callable = getattr(module, fn_str)
-        except Exception:
-            raise AttributeError(f"Function {fn_str} not found in module {module}.")
 
         t0 = time.time()
         try:
@@ -931,7 +926,7 @@ def load_and_run(
     """
     data_config = DataConfig.new()
 
-    template = load_dict(path)
+    template = handy.load_dict(path)
     if template is not None:
         logger.info("Creating dat from template %s", path)
         template.update(kwargs)
