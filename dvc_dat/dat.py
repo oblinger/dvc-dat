@@ -900,6 +900,50 @@ def _dynamic_load_dat_class(dat_kind: str, data_config: DataConfig) -> Type[Dat]
     return dat_class
 
 
+def load(
+    path: PathLike,
+    name: Union[Path, str, None] = None,
+    **kwargs,
+) -> Dat:
+    """Load an existing dat or create one from a template.
+
+    If `path` is a template, any additional kwargs will be passed to the template, and
+    the template will be used as its spec.
+
+    Parameters
+    ----------
+    path : PathLike
+        Path to the runset or template of the dat to execute.
+    name : Union[Path, str]
+        If `path` is a template, this can be used to override the resulting name.
+
+    Returns
+    -------
+    Dat:
+        The instantiated (and optionally created) Dat.
+
+    """
+    data_config = DataConfig.new()
+
+    template = handy.load_dict(path)
+    if template is not None:
+        logger.info("Creating dat from template %s", path)
+        template.update(kwargs)
+        dat_kind = template.get("dat", {}).get("kind")
+        if dat_kind is None:
+            raise AttributeError("No entry for dat.kind found in template.")
+
+        dat = _dynamic_load_dat_class(dat_kind, data_config).create(
+            path=name,
+            spec=template,
+        )
+    else:
+        logger.info("Loading runset in %s", path)
+        generic_dat = Dat.load(path)
+        dat = _dynamic_load_dat_class(generic_dat.spec.dat.kind, data_config).load(path)
+    return dat
+
+
 def load_and_run(
     path: PathLike,
     name: Union[Path, str, None] = None,
@@ -924,22 +968,9 @@ def load_and_run(
         successfully, and metadata contains its execution metadata.
 
     """
-    data_config = DataConfig.new()
-
-    template = handy.load_dict(path)
-    if template is not None:
-        logger.info("Creating dat from template %s", path)
-        template.update(kwargs)
-        dat_kind = template.get("dat", {}).get("kind")
-        if dat_kind is None:
-            raise AttributeError("No entry for dat.kind found in template.")
-
-        dat = _dynamic_load_dat_class(dat_kind, data_config).create(
-            path=name,
-            spec=template,
-        )
-    else:
-        logger.info("Loading runset in %s", path)
-        generic_dat = Dat.load(path)
-        dat = _dynamic_load_dat_class(generic_dat.spec.dat.kind, data_config).load(path)
+    dat = load(
+        path=path,
+        name=name,
+        **kwargs
+    )
     return dat.run()
