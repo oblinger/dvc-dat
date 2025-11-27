@@ -335,7 +335,7 @@ class MethodManager(object):
     def mount(self, **kwargs): ...
 
     @abstractmethod
-    def load(self, name: str) -> DatMethod: ...
+    def load(self, name: str, *, default=_NO_ARG) -> DatMethod: ...
 
     @abstractmethod
     def keys(self) -> Iterable[str]: ...
@@ -348,8 +348,13 @@ class SimpleMethodManager(MethodManager):
     def __call__(self, name, *args, **kwargs):
         return self._dat_methods[name](*args, **kwargs)
 
-    def load(self, name: str) -> DatMethod:
-        return self._dat_methods.get(name)
+    def load(self, name: str, *, default=_NO_ARG) -> DatMethod:
+        if name in self._dat_methods:
+            return self._dat_methods.get(name)
+        elif default is not _NO_ARG:
+            return default
+        else:
+            raise KeyError(f"Do method {name!r} not found.")
 
     def mount(self, value: DatMethod, at: str):
         self._dat_methods[at] = value
