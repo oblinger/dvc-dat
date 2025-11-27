@@ -9,3 +9,6 @@ examples/example_sync_folder/sprint25
 site/sitemap.xml
 site/sitemap.xml.gz
 /tests/test_sync_folder/test_dats
+
+# builds
+*.egg-info/
