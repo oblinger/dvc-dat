@@ -29,7 +29,6 @@ from typing_extensions import TypeVar
 
 from dvc_dat import utils
 from dvc_dat.config import DataConfig
-from utils.data.data_manager import DataManager
 
 _DAT_BASE = "dat.base"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
