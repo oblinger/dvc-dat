@@ -27,8 +27,8 @@ import yaml
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypeVar
 
-import utils.handy_fns as handy
-from settings import DataConfig
+from dvc_dat import utils
+from dvc_dat.config import DataConfig
 from utils.data.data_manager import DataManager
 
 _DAT_BASE = "dat.base"
@@ -238,13 +238,16 @@ class DatManager:
 
         path = self.resolve_path(name_or_path)
         if not os.path.exists(path) and pull_if_missing:
-            logger.info("Didn't find locally. Pulling %s", name_or_path)
-            data_mgr = DataManager()
-            try:
-                data_mgr.pull(name_or_path, gather=True)
-                path = self.resolve_path(name_or_path)
-            except Exception:
-                logger.warning("Couldn't pull %s", name_or_path)
+            raise NotImplementedError("Data pulling not implemented.")
+
+            # FIXME: add this if we want to implement data pulling
+            # logger.info("Didn't find locally. Pulling %s", name_or_path)
+            # data_mgr = DataManager()
+            # try:
+            #     data_mgr.pull(name_or_path, gather=True)
+            #     path = self.resolve_path(name_or_path)
+            # except Exception:
+            #     logger.warning("Couldn't pull %s", name_or_path)
 
         if not os.path.exists(path):
             raise KeyError(
@@ -284,7 +287,7 @@ class DatManager:
                 # remove the "do" field if not specified to allow merging with base
                 spec_dict["dat"].pop("do", None)
             spec = spec_type(
-                **handy.merge_dicts(
+                **utils.merge_dicts(
                     base_dat.get_spec(),
                     spec_dict,
                 )
@@ -592,7 +595,7 @@ class Dat(Generic[DatSpecType_co]):
             raise ValueError("Dat can't be run because it needs dat.do defined.")
 
         try:
-            fn = handy.dynamic_load_fn(self.spec.dat.do)
+            fn = utils.dynamic_load_fn(self.spec.dat.do)
         except Exception:
             raise ValueError(
                 "Couldn't find dat.do function. It must be specified as: my_module.my_fn"
@@ -896,7 +899,7 @@ def create_from_template(
     if data_config is None:
         data_config = DataConfig.new()
 
-    template = handy.load_dict(path)
+    template = utils.load_dict(path)
     if template is None:
         raise FileNotFoundError("Couldn't find template under %s", path)
 
