@@ -1,4 +1,5 @@
-__version__ = "1.00.05"
+__version__ = "1.1.0"
+DAT_VERSION = "1.1.0 (2025-11-28)"
 
 from .dat import Dat, DatContainer, DatManager
 from .config import DataConfig
@@ -8,6 +9,7 @@ __all__ = [
     "DatContainer",
     "DatManager",
     "DataConfig",
+    "DAT_VERSION",
 ]
 
 # Optional: expose do_fn exports if available
