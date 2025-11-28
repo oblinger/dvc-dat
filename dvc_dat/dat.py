@@ -160,29 +160,14 @@ class DatManager:
 
         # Initialize do manager based on config
         if config.mount_commands is not None:
-            # Only import do_fn if mount_commands is configured
-            from .do_fn import DoManager
-            self.do = DoManager()
-
-            if config.mount_commands:
-                self.do.mount_all(config.mount_commands, relative_to=config.cwd)
-
-            # Mount dat_tools if available
-            try:
-                from . import dat_tools
-                self.do.mount(module=dat_tools, at="dat_tools")
-                self.do.mount(module=dat_tools, at="dt")
-                self.do.mount(value=dat_tools.cmd_list, at="dt.list")
-                self.do.mount(value=dat_tools.cmd_list, at="dat_tools.list")
-            except ImportError:
-                pass  # dat_tools not available
+            from .do_fn import create_do_manager
+            self.do = create_do_manager(config)
         else:
-            # Use simple fallback - no do_fn.py needed
             self.do = SimpleMethodManager()
 
     def create(
         self,
-        dat_class: Type[DatType] = None,
+        dat_class: Type[DatType],
         *,
         path: Union[str, Path, None] = None,
         spec: Union["DatSpec", Dict, None] = None,
@@ -191,6 +176,7 @@ class DatManager:
         """Creates a new Dat with the specified spec dict and backing folder at 'path'.
 
         Args:
+            dat_class: The Dat class to instantiate.
             path (str): The path to the folder where the Dat is stored.
             spec (Dict): The spec dict that describes the Dat.
             overwrite (bool): If True, the path will be overwritten if it exists.
@@ -209,9 +195,6 @@ class DatManager:
             {cwd}    -- the current working directory
             {unique} -- a counter or UUID that makes the entire path unique.
         """
-        if dat_class is None:
-            dat_class = Dat
-
         if spec is None:
             logger.info("No spec provided. Creating default DatSpec.")
             spec = DatSpec(dat=DatSpecCore(kind="Dat"))
@@ -256,8 +239,8 @@ class DatManager:
 
     def load(
         self,
-        dat_class_or_path: Union[Type[DatType], str, Path],
-        name_or_path: Union[str, Path] = None,
+        dat_class: Type[DatType],
+        name_or_path: Union[str, Path],
         *,
         cwd: Optional[str] = None,
         cache_after_load: bool = True,
@@ -274,20 +257,11 @@ class DatManager:
         (3) as a named dat under the DAT_ROOT folder
         (4) as a named dat on S3 (LATER)
 
-        :param dat_class_or_path: Either a Dat class or the path/name (for backward compat)
+        :param dat_class: The Dat class to instantiate.
         :param name_or_path: Either the fullpath to the folder of the Dat to
             load or its name to be searched for
         :param cwd: used instead of current working dir for dat search
         """
-        # Handle backward compatibility: load("path") vs load(DatClass, "path")
-        if isinstance(dat_class_or_path, (str, Path)):
-            # Old API: load("path") - use Dat as default class
-            name_or_path = dat_class_or_path
-            dat_class = Dat
-        else:
-            # New API: load(DatClass, "path")
-            dat_class = dat_class_or_path
-
         name_or_path = str(name_or_path)
         cwd = cwd or os.getcwd()
 

@@ -607,6 +607,47 @@ def _get_flag(arg):
         return None
 
 
+def create_do_manager(config: "DataConfig") -> DoManager:
+    """Factory function to create a configured DoManager.
+
+    Called from DatManager when mount_commands is present in config.
+    """
+    do_mgr = DoManager()
+
+    if config.mount_commands:
+        do_mgr.mount_all(config.mount_commands, relative_to=config.cwd)
+
+    # Mount dat_tools if available
+    try:
+        from . import dat_tools
+        do_mgr.mount(module=dat_tools, at="dat_tools")
+        do_mgr.mount(module=dat_tools, at="dt")
+        do_mgr.mount(value=dat_tools.cmd_list, at="dt.list")
+        do_mgr.mount(value=dat_tools.cmd_list, at="dat_tools.list")
+    except ImportError:
+        pass
+
+    return do_mgr
+
+
+class DoProxy:
+    """Proxy object that delegates to Dat.manager.do.
+
+    Allows: from dvc_dat import do; do("some_command")
+    """
+    def __getattr__(self, name):
+        from .dat import Dat
+        return getattr(Dat.manager.do, name)
+
+    def __call__(self, *args, **kwargs):
+        from .dat import Dat
+        return Dat.manager.do(*args, **kwargs)
+
+
+# Module-level instance for convenience import
+do = DoProxy()
+
+
 if __name__ == '__main__':
     # do_argv([None, "dt.list"])
     # do_argv([None, "cmdln_example", "--show-spec"])
