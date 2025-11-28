@@ -1,8 +1,7 @@
 __version__ = "1.1.0"
 DAT_VERSION = "1.1.0 (2025-11-28)"
 
-from .dat import Dat, DatContainer, DatManager
-from .config import DataConfig
+from .dat import Dat, DatContainer, DatManager, DataConfig
 
 __all__ = [
     "Dat",

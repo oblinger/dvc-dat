@@ -18,7 +18,7 @@ class TestDataConfig:
 
     def test_dataconfig_creation(self):
         """Test that DataConfig can be created."""
-        from dvc_dat.config import DataConfig
+        from dvc_dat.dat import DataConfig
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config = DataConfig.new(cwd=tmpdir)
@@ -27,7 +27,7 @@ class TestDataConfig:
 
     def test_datmanager_creation(self):
         """Test that DatManager can be created with DataConfig."""
-        from dvc_dat.config import DataConfig
+        from dvc_dat.dat import DataConfig
         from dvc_dat.dat import DatManager
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -38,7 +38,7 @@ class TestDataConfig:
 
     def test_dat_create_and_load(self):
         """Test creating and loading a Dat."""
-        from dvc_dat.config import DataConfig
+        from dvc_dat.dat import DataConfig
         from dvc_dat.dat import Dat, DatManager
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -76,7 +76,7 @@ class TestDataConfigFileDiscovery:
 
     def test_config_file_discovery(self):
         """Test that DataConfig finds .dataconfig.yaml in parent directories."""
-        from dvc_dat.config import DataConfig, DATA_CONFIG_FILE
+        from dvc_dat.dat import DataConfig, DATA_CONFIG_FILE
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a .dataconfig.yaml in the temp directory
@@ -105,7 +105,7 @@ default_remote: s3
 
     def test_tests_folder_config(self):
         """Test that the tests/.dataconfig.yaml is set up correctly."""
-        from dvc_dat.config import DataConfig, DATA_CONFIG_FILE
+        from dvc_dat.dat import DataConfig, DATA_CONFIG_FILE
 
         tests_dir = Path(__file__).parent
         config_file = tests_dir / DATA_CONFIG_FILE

@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # Initialize Dat manager with test config BEFORE any test imports
 tests_dir = Path(__file__).parent
 
-from dvc_dat.config import DataConfig
+from dvc_dat.dat import DataConfig
 
 # Load config from tests directory (where .dataconfig.yaml is located)
 os.chdir(tests_dir)  # Temporarily change to tests dir for config discovery
