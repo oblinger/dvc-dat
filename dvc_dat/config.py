@@ -175,6 +175,8 @@ class DataConfig(BaseModel):
         # local prefix is relative to CWD or absolute
         if not os.path.isabs(self.local_prefix):
             self.local_prefix = os.path.join(self.cwd, self.local_prefix)
+        # Normalize the path to resolve any .. components
+        self.local_prefix = os.path.normpath(self.local_prefix)
         if not self.local_prefix.endswith("/"):
             self.local_prefix += "/"
         return self
