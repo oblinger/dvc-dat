@@ -41,6 +41,15 @@ RESULT_YAML = "_result_.yaml"
 logger = logging.getLogger(__name__)
 
 
+class classproperty:
+    """Decorator for class-level properties (like @property but for the class itself)."""
+    def __init__(self, func):
+        self.func = func
+
+    def __get__(self, obj, objtype=None):
+        return self.func(objtype)
+
+
 class DataState(Enum):
     NOT_LOADED = auto()
 
@@ -131,6 +140,11 @@ class DatManager:
     sync_folders: List[str]  # NOTE: includes the main_sync_folder
     do: MethodManager = SimpleMethodManager()
     dat_cache: weakref.WeakValueDictionary[str, "Dat"] = weakref.WeakValueDictionary()
+
+    @property
+    def sync_folder(self) -> str:
+        """Backward compatibility: alias for main_sync_folder."""
+        return self.main_sync_folder
 
     def __init__(self, config: Optional[DataConfig] = None):
         if config is None:
@@ -476,6 +490,11 @@ class Dat(Generic[DatSpecType_co]):
 
     _manager: DatManager = DatManager()  # The singleton manager for all Dats
 
+    # Backward compatibility: expose _manager as manager
+    @classproperty
+    def manager(cls) -> DatManager:
+        return cls._manager
+
     _path: str  # The immutable absolute path of this Dat
     spec: DatSpecType_co  # The immutable spec of this Dat
     _result: SpecDict  # The mutable state or result of this Dat
@@ -776,7 +795,7 @@ class DatContainer(Dat, Generic[DatType]):
             # these will load as the Dat class as defined in each spec's
             # main  .class, but we're loading them dynamically from Dat directly,
             # so we'll ignore the type and assume they will all be List[T]
-            self._dats = [Dat._manager.load(p) for p in self.get_dat_paths()]  # type: ignore
+            self._dats = [Dat.load(p) for p in self.get_dat_paths()]  # type: ignore
         return self._dats  # type: ignore
 
     @staticmethod
@@ -800,7 +819,7 @@ def dotted_get(
     default_value: Any = _NO_ARG,
 ):
     """Utility method to get value from a recursive dict tree or return None."""
-    d = source.spec if isinstance(source, Dat) else source
+    d = source.get_spec() if isinstance(source, Dat) else source
     if isinstance(keys, str):
         keys = keys.split(".")
     for k in keys:

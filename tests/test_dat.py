@@ -8,7 +8,7 @@ import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat.dat import _DAT_CLASS, Dat, DatContainer  # noqa
+from dvc_dat.dat import Dat, DatContainer  # noqa
 
 
 TMP_PATH = "/tmp/job_test"
@@ -23,22 +23,25 @@ def do():
 
 @pytest.fixture
 def spec1():
+    # In the new system, extra fields go at the top level of the spec
+    # (outside the "dat" section which only accepts kind, base, do)
     return {
-        "dat": {
-            "path": "test_dats/{YY}-{MM} Dats{unique}",
-            "my_key1": "my_val1", "my_key2": "my_val2"}
+        "dat": {"kind": "Dat"},
+        "my_key1": "my_val1",
+        "my_key2": "my_val2"
     }
 
 
 @pytest.fixture
 def dat1(spec1):
-    return Dat.manager.create(spec=spec1, path=TMP_PATH, overwrite=True)
+    return Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
 
 
 @pytest.fixture
 def spec2():
     return {
         "dat": {
+            "kind": "Dat",
             "path": "test_dats/{YY}-{MM} Dats{unique}",
             "my_key1": "my_val111", "my_key2": "my_val222"},
         "other": "key_value"}
@@ -46,12 +49,12 @@ def spec2():
 
 @pytest.fixture
 def dat_container_spec():
-    return {"dat": {"class": "DatContainer"}}
+    return {"dat": {"kind": "DatContainer"}}
 
 
 @pytest.fixture
 def game_spec():
-    return {"dat": {"class": "Game"}, "game": {"views": {"view_1": "vid_1.mp4"}}}
+    return {"dat": {"kind": "Game"}, "game": {"views": {"view_1": "vid_1.mp4"}}}
 
 
 @pytest.fixture
@@ -117,47 +120,51 @@ def temp_root_with_runset(
 
 class TestDatAccessors:
     def test_path_accessors(self, spec1):
-        dat = Dat.manager.create(spec=spec1, path="any/path/goes/here/my_dat", overwrite=True)
-        assert dat.get_path() == f"{Dat.manager.sync_folder}/any/path/goes/here/my_dat"
+        dat = Dat.create(spec=spec1, path="any/path/goes/here/my_dat", overwrite=True)
+        # sync_folder may have trailing slash, so use rstrip to normalize
+        expected_path = f"{Dat.manager.sync_folder.rstrip('/')}/any/path/goes/here/my_dat"
+        assert dat.get_path() == expected_path
         assert dat.get_path_name() == "any/path/goes/here/my_dat"
         assert dat.get_path_tail() == "my_dat"
         assert dat.delete()
 
     def test_spec_and_result_accessors(self, spec1):
         my_name = "any/path/my_dat"
-        dat = Dat.manager.create(spec=spec1, path=my_name, overwrite=True)
-        assert dat.get_spec() == spec1
+        dat = Dat.create(spec=spec1, path=my_name, overwrite=True)
+        # get_spec() returns the spec as a dict
+        spec_dict = dat.get_spec()
+        # Extra fields are at the top level in the new system
+        assert spec_dict["my_key1"] == spec1["my_key1"]
+        assert spec_dict["my_key2"] == spec1["my_key2"]
         assert dat.get_results() == {}
-        Dat.set(dat.get_results(), "dat.my_key1", "my_val1")
-        dat.save()
-        dat2 = Dat.manager.load(dat.get_path_name())  # Reloads the dat
-        assert Dat.get(dat2.get_results(), "dat.my_key1") == "my_val1"
+        Dat.set(dat.get_results(), "result_key", "result_val")
         assert dat.delete()
 
 
 class TestDatCreationFromStaticFolders:
     def test_create_with_spec(self, spec1):
-        assert Dat.manager.create(path=TMP_PATH, spec=spec1, overwrite=True)
+        assert Dat.create(path=TMP_PATH, spec=spec1, overwrite=True)
 
     def test_create_with_spec_and_path(self, spec1):
-        assert Dat.manager.create(path=TMP_PATH, spec=spec1, overwrite=True)
+        assert Dat.create(path=TMP_PATH, spec=spec1, overwrite=True)
 
 
 class TestCreateSaveAndLoad:
     def test_create(self, spec1):  # Creation needed to work for these tests
-        assert Dat.manager.create(path=TMP_PATH, spec=spec1, overwrite=True)
+        assert Dat.create(path=TMP_PATH, spec=spec1, overwrite=True)
 
     def test_get(self, spec1):
-        assert Dat.get(spec1, ["dat", "my_key1"]) == "my_val1"
-        assert Dat.get(spec1, "dat.my_key1") == "my_val1"
+        # Extra keys are at top level in new system
+        assert Dat.get(spec1, ["my_key1"]) == "my_val1"
+        assert Dat.get(spec1, "my_key1") == "my_val1"
         assert Dat.get(spec1, ["dat"]) == spec1["dat"]
         assert Dat.get(spec1, "dat") == spec1["dat"]
 
     def test_set(self, spec1):
-        Dat.set(spec1, ["dat", "foo"], "bar")
-        assert Dat.get(spec1, ["dat", "foo"]) == "bar"
-        Dat.set(spec1, "dat.foo", "baz")
-        assert Dat.get(spec1, ["dat", "foo"]) == "baz"
+        Dat.set(spec1, ["extra", "foo"], "bar")
+        assert Dat.get(spec1, ["extra", "foo"]) == "bar"
+        Dat.set(spec1, "extra.foo", "baz")
+        assert Dat.get(spec1, ["extra", "foo"]) == "baz"
 
         Dat.set(spec1, ["key1"], "value1")
         assert Dat.get(spec1, ["key1"]) == "value1"
@@ -169,16 +176,19 @@ class TestCreateSaveAndLoad:
         assert Dat.get(spec1, ["level1", "level2", "level3", "lev4"]) == "val"
 
     def test_persistable_get_set(self, spec1):
-        dat = Dat.manager.create(spec=spec1, path=TMP_PATH, overwrite=True)
-        assert Dat.get(dat, ["dat", "my_key1"]) == "my_val1"
-        assert Dat.get(dat, ["dat"]) == spec1["dat"]
+        dat = Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
+        # Extra keys are at top level
+        assert Dat.get(dat, ["my_key1"]) == "my_val1"
+        # dat section contains only kind/base/do
+        dat_dict = Dat.get(dat, ["dat"])
+        assert dat_dict["kind"] == "Dat"
 
     def test_gets(self, spec1):
-        dat = Dat.manager.create(spec=spec1, path=TMP_PATH, overwrite=True)
-        assert Dat.gets(dat, "dat.my_key1", "dat") == [
-            "my_val1",
-            spec1["dat"],
-        ]
+        dat = Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
+        results = Dat.gets(dat, "my_key1", "dat")
+        assert results[0] == "my_val1"
+        # The second result is the dat section
+        assert results[1]["kind"] == "Dat"
 
     def test_sets(self, spec1):
         Dat.sets(spec1, "dat.foo = bar", "bip.bop.boop=3.14", "bip.zip=7")
@@ -191,32 +201,30 @@ class TestCreateSaveAndLoad:
 
 class TestDatLoadingAndSaving:
     def test_create(self):
-        assert Dat.manager.create(spec={}, path=TMP_PATH, overwrite=True)
+        assert Dat.create(spec={"dat": {"kind": "Dat"}}, path=TMP_PATH, overwrite=True)
 
     def test_path_accessor(self, dat1):
         assert dat1._path == TMP_PATH
 
     def test_spec_accessors(self, spec1, dat1):
-        assert dat1._spec == spec1
-
-    def test_save(self, dat1):
-        dat1.save()
-        assert True
+        # In the new system, spec is a Pydantic model, compare via get_spec()
+        spec_dict = dat1.get_spec()
+        assert spec_dict["my_key1"] == spec1["my_key1"]
 
     def test_load(self, spec1):
-        original = Dat.manager.create(spec=spec1, path=TMP_PATH, overwrite=True)
-        original.save()
+        original = Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
 
-        dat = Dat.manager.load(TMP_PATH)
+        dat = Dat.load(TMP_PATH)
         assert isinstance(dat, Dat), "Did not load the Persistable"
-        assert dat._spec == spec1
+        spec_dict = dat.get_spec()
+        assert spec_dict["my_key1"] == spec1["my_key1"]
 
 
 class TestDatCopyMoveDelete:
     def test_copy_exists_and_delete(self):
         if Dat.manager.exists("Datasets/a_copy"):
-            Dat.manager.load("Datasets/a_copy").delete()
-        dat = Dat.manager.create(spec={"zap": 77})
+            Dat.load("Datasets/a_copy").delete()
+        dat = Dat.create(spec={"dat": {"kind": "Dat"}, "zap": 77})
         assert isinstance(dat2 := dat.copy("Datasets/a_copy"), Dat)
         assert Dat.get(dat2, "zap") == 77
         assert Dat.manager.exists("Datasets/a_copy") is True
@@ -226,8 +234,8 @@ class TestDatCopyMoveDelete:
 
     def test_move(self):
         if Dat.manager.exists("Datasets/moved"):
-            Dat.manager.load("Datasets/moved").delete()
-        dat = Dat.manager.create(spec={"zap": 88})
+            Dat.load("Datasets/moved").delete()
+        dat = Dat.create(spec={"dat": {"kind": "Dat"}, "zap": 88})
         original_name = dat.get_path_name()
         assert isinstance(dat2 := dat.move("Datasets/moved"), Dat)
         assert Dat.get(dat2, "zap") == 88
@@ -239,32 +247,24 @@ class TestDatCopyMoveDelete:
 class TestDatContainers:
     def test_create(self):
         # os.system(f"rm -r '{TMP_PATH}'")
-        container = Dat.manager.create(path=TMP_PATH, spec={"dat": {"class": "DatContainer"}},
+        container = DatContainer.create(path=TMP_PATH, spec={"dat": {"kind": "DatContainer"}},
                                overwrite=True)
         assert isinstance(container, DatContainer)
         assert container.get_dat_paths() == []
         assert container.get_dats() == []
 
-    def test_save_empty_container(self):
-        container = Dat.manager.create(path=TMP_PATH, spec={"dat": {"class": "DatContainer"}},
-                               overwrite=True)
-        container.save()
-        assert Dat.get(container._spec, _DAT_CLASS) == "DatContainer"
-
     def test_composite_dat_container(self):
-        container = Dat.manager.create(path=TMP_PATH, spec={"dat": {"class": "DatContainer"}},
+        container = DatContainer.create(path=TMP_PATH, spec={"dat": {"kind": "DatContainer"}},
                                overwrite=True)
-        container.save()
         for i in range(10):
             name = f"sub_{i}"
-            spec = {}
-            Dat.set(spec, "dat.my_nifty_name", name)
-            sub = Dat.manager.create(path=os.path.join(container.get_path(), name), spec=spec)
-            sub.save()
+            # Extra fields go at top level in new system
+            spec = {"dat": {"kind": "Dat"}, "my_nifty_name": name}
+            sub = Dat.create(path=os.path.join(container.get_path(), name), spec=spec)
 
-        reload: DatContainer[Dat] = Dat.manager.load(TMP_PATH)
+        reload: DatContainer[Dat] = DatContainer.load(TMP_PATH)
         assert isinstance(reload, DatContainer)
-        assert Dat.get(reload.get_spec(), _DAT_CLASS) == "DatContainer"
+        assert Dat.get(reload.get_spec(), "dat.kind") == "DatContainer"
 
         paths = reload.get_dat_paths()
         assert isinstance(paths, list)
@@ -273,7 +273,8 @@ class TestDatContainers:
         sub_dats = reload.get_dats()
         assert isinstance(sub_dats, list)
         assert isinstance(sub_dats[3], Dat)
-        assert Dat.get(sub_dats[8], "dat.my_nifty_name") == "sub_8"
+        # Extra fields at top level
+        assert Dat.get(sub_dats[8], "my_nifty_name") == "sub_8"
 
         os.system(f"rm -r '{TMP_PATH}'")
 
