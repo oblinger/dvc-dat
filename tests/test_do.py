@@ -6,7 +6,10 @@ import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import do, DoManager
+from dvc_dat import Dat, DoManager
+
+# Get the do manager from the Dat singleton
+do = Dat.manager.do
 
 
 @pytest.fixture

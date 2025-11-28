@@ -26,9 +26,9 @@ def __main__():
         else:
             print(f"   {p}")
         try:
-            Dat.manager.load(p)
+            Dat.load(p)
         except Exception as e:
-            print(f"      ERROR: Could not Dat.manager.load(...): {e}")
+            print(f"      ERROR: Could not Dat.load(...): {e}")
             errors = True
     print("-------------------------------")
     if errors:

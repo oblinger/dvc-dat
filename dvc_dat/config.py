@@ -39,6 +39,10 @@ class DataConfig(BaseModel):
     extra_local_prefixes: List[str] = Field(default_factory=list)
     dat: Dict[str, Any] = Field(default_factory=dict)
 
+    # Mount commands for the "do" system. If None, do_fn.py is not loaded (standalone mode).
+    # If present (even empty list), DoManager is used and mounts are processed.
+    mount_commands: Optional[List[Dict[str, Any]]] = None
+
     @classmethod
     def new(
         cls,

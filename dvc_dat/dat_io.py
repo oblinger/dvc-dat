@@ -13,7 +13,7 @@ class DatIO:
     @staticmethod
     def load(name: str) -> Dat:
         """Load a Dat object from the cache or create a new one"""
-        return Dat.manager.load(name)
+        return Dat.load(name)
 
     @staticmethod
     def save(dat: Dat):

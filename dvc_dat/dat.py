@@ -154,12 +154,35 @@ class DatManager:
 
         self.main_sync_folder = self.config.local_prefix
         self.sync_folders = [self.main_sync_folder, *self.config.extra_local_prefixes]
+        self.dat_cache = weakref.WeakValueDictionary()
 
         assert self.main_sync_folder, "Sync folder not defined."
 
+        # Initialize do manager based on config
+        if config.mount_commands is not None:
+            # Only import do_fn if mount_commands is configured
+            from .do_fn import DoManager
+            self.do = DoManager()
+
+            if config.mount_commands:
+                self.do.mount_all(config.mount_commands, relative_to=config.cwd)
+
+            # Mount dat_tools if available
+            try:
+                from . import dat_tools
+                self.do.mount(module=dat_tools, at="dat_tools")
+                self.do.mount(module=dat_tools, at="dt")
+                self.do.mount(value=dat_tools.cmd_list, at="dt.list")
+                self.do.mount(value=dat_tools.cmd_list, at="dat_tools.list")
+            except ImportError:
+                pass  # dat_tools not available
+        else:
+            # Use simple fallback - no do_fn.py needed
+            self.do = SimpleMethodManager()
+
     def create(
         self,
-        dat_class: Type[DatType],
+        dat_class: Type[DatType] = None,
         *,
         path: Union[str, Path, None] = None,
         spec: Union["DatSpec", Dict, None] = None,
@@ -186,11 +209,20 @@ class DatManager:
             {cwd}    -- the current working directory
             {unique} -- a counter or UUID that makes the entire path unique.
         """
+        if dat_class is None:
+            dat_class = Dat
+
         if spec is None:
             logger.info("No spec provided. Creating default DatSpec.")
             spec = DatSpec(dat=DatSpecCore(kind="Dat"))
         elif isinstance(spec, dict):
             spec = deepcopy(spec)
+
+            # Ensure 'dat' field exists with at least 'kind'
+            if "dat" not in spec:
+                spec["dat"] = {}
+            if "kind" not in spec["dat"]:
+                spec["dat"]["kind"] = dat_class.__name__
 
             templated_name = spec.get("dat", {}).get("name")
             if templated_name is not None:
@@ -224,8 +256,8 @@ class DatManager:
 
     def load(
         self,
-        dat_class: Type[DatType],
-        name_or_path: Union[str, Path],
+        dat_class_or_path: Union[Type[DatType], str, Path],
+        name_or_path: Union[str, Path] = None,
         *,
         cwd: Optional[str] = None,
         cache_after_load: bool = True,
@@ -242,10 +274,20 @@ class DatManager:
         (3) as a named dat under the DAT_ROOT folder
         (4) as a named dat on S3 (LATER)
 
+        :param dat_class_or_path: Either a Dat class or the path/name (for backward compat)
         :param name_or_path: Either the fullpath to the folder of the Dat to
             load or its name to be searched for
         :param cwd: used instead of current working dir for dat search
         """
+        # Handle backward compatibility: load("path") vs load(DatClass, "path")
+        if isinstance(dat_class_or_path, (str, Path)):
+            # Old API: load("path") - use Dat as default class
+            name_or_path = dat_class_or_path
+            dat_class = Dat
+        else:
+            # New API: load(DatClass, "path")
+            dat_class = dat_class_or_path
+
         name_or_path = str(name_or_path)
         cwd = cwd or os.getcwd()
 
@@ -366,6 +408,8 @@ class DatManager:
         overwrite: bool = False,
     ) -> str:
         """(See Dat.manager.create for path expansion rules.)"""
+        if path_spec is None:
+            path_spec = _DEFAULT_PATH_TEMPLATE
         path_spec = str(path_spec)
         now, count = datetime.now(), 1
         while True:
@@ -418,7 +462,7 @@ class DatManager:
 class DatSpecCore(BaseModel):
     """Part of the spec that defines which Dat class should load it."""
 
-    kind: str
+    kind: str = "Dat"  # Default to base Dat class for backward compatibility
     base: Optional[str] = None
     do: Optional[str] = None
 
@@ -488,11 +532,13 @@ class Dat(Generic[DatSpecType_co]):
 
     _SPEC_TYPE: Type[DatSpec] = DatSpec
 
-    _manager: DatManager = DatManager()  # The singleton manager for all Dats
+    _manager: Optional[DatManager] = None  # Lazily initialized singleton manager
 
     # Backward compatibility: expose _manager as manager
     @classproperty
     def manager(cls) -> DatManager:
+        if cls._manager is None:
+            cls._manager = DatManager()
         return cls._manager
 
     _path: str  # The immutable absolute path of this Dat
@@ -531,7 +577,7 @@ class Dat(Generic[DatSpecType_co]):
 
     def get_path_name(self) -> str:
         """Returns the name (relative path) of this Dat."""
-        return Dat._manager.get_path_name(self._path)
+        return Dat.manager.get_path_name(self._path)
 
     def get_path_tail(self) -> str:
         """Returns the shortname (last part of the path) of this Dat."""
@@ -567,7 +613,7 @@ class Dat(Generic[DatSpecType_co]):
 
         """
         name_or_path = str(name_or_path)
-        return cls._manager.load(
+        return cls.manager.load(
             cls,
             name_or_path,
             cwd=cwd,
@@ -583,7 +629,7 @@ class Dat(Generic[DatSpecType_co]):
         overwrite: bool = False,
     ) -> DatType:
         """Create a Dat given `path` and `spec`."""
-        return cls._manager.create(
+        return cls.manager.create(
             cls,
             path=path,
             spec=spec,
@@ -651,7 +697,7 @@ class Dat(Generic[DatSpecType_co]):
         """Deletes the folder and its contents from the filesystem.
         This deletion will also be reflected as a deletion pushed to git.
         Still, the backing store will retain all previous versions of this Dat."""
-        Dat._manager.dat_cache.pop(self._path, None)  # Remove from cache
+        Dat.manager.dat_cache.pop(self._path, None)  # Remove from cache
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
@@ -663,21 +709,21 @@ class Dat(Generic[DatSpecType_co]):
 
     def copy(self: DatType, new_path: Union[str, Path]) -> DatType:
         """Copies this Dat to a new location."""
-        new_path_ = Dat._manager.resolve_path(new_path)
+        new_path_ = Dat.manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
         shutil.copytree(self._path, new_path_)
-        result = Dat._manager.load(type(self), new_path_)
+        result = Dat.manager.load(type(self), new_path_)
         return result
 
     def move(self: DatType, new_path: Union[str, Path]) -> DatType:
         """Moves this Dat to a new location."""
-        del Dat._manager.dat_cache[self._path]  # Remove from cache
-        new_path_ = Dat._manager.resolve_path(new_path)
+        del Dat.manager.dat_cache[self._path]  # Remove from cache
+        new_path_ = Dat.manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
         shutil.move(self._path, new_path_)
-        result = Dat._manager.load(type(self), new_path_)
+        result = Dat.manager.load(type(self), new_path_)
         return result
 
     def __repr__(self):

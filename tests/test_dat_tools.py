@@ -6,10 +6,11 @@ import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import do
 from dvc_dat import Dat
 from dvc_dat.dat_tools import to_excel, Cube, from_dat
-# do.register_module("test_dat_tools", "tests.test_dat_tools")
+
+# Get the do manager from the Dat singleton
+do = Dat.manager.do
 do.mount(at="test_dat_tools", module="tests.test_dat_tools")
 
 TMP_PATH = "/tmp/job_test"
@@ -31,7 +32,7 @@ def spec1():
 
 @pytest.fixture
 def dat1(spec1):
-    return Dat.manager.create(spec=spec1, path=TMP_PATH, overwrite=True)
+    return Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
 
 
 @pytest.fixture
@@ -41,7 +42,7 @@ def spec2():
 
 @pytest.fixture
 def dat2(spec2):
-    return Dat.manager.create(spec=spec2, path=TMP_PATH2, overwrite=True)
+    return Dat.create(spec=spec2, path=TMP_PATH2, overwrite=True)
 
 
 def always_17(_dat: Dat):
@@ -214,8 +215,8 @@ class TestCleanup:
     def test_cleanup(self):
         os.system("rm *.xlsx")  # remove all excel files
         os.system("rm -r test_sync_folder/anonymous")  # remove all anon dats
-        Dat.manager.load("simple_report").delete()
-        Dat.manager.load("dat_report").delete()
+        Dat.load("simple_report").delete()
+        Dat.load("dat_report").delete()
 
 #
 
