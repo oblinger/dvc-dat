@@ -1,5 +1,5 @@
 {
   "dat": {
-    "class": "DatContainer"
+    "kind": "DatContainer"
   }
 }

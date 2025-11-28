@@ -18,16 +18,16 @@ def empty_do_mgr():
 
 
 def run_capture(line: str) -> str:
+    # Run from the tests directory since ./do is located there
+    tests_dir = os.path.dirname(os.path.abspath(__file__))
     result = subprocess.run(line, shell=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True)
+                            stderr=subprocess.PIPE, text=True, cwd=tests_dir)
     return result.stdout.strip()
 
 
 def run_capture_tail(line: str) -> str:
     """Run a command and return the last line of the output.
        (test using this will not fail if prints are added to the code)"""
-    _result = subprocess.run(line, shell=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True)
     return run_capture(line).strip().split("\n")[-1]
 
 
@@ -141,7 +141,7 @@ class TestRegisteringStuff:
         assert do_("xxx.__main__") == "hello world!"
         do_.mount(at="yyy", module="dvc_dat")  # The already loaded 'dvc_dat' module
         from dvc_dat import Dat
-        assert do_.load("yyy.dats") == Dat.manager
+        assert do_.load("yyy.Dat") == Dat
 
 
 class TestTemplatedDatCreationAndDeletion:

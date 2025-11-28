@@ -302,7 +302,11 @@ class DoManager(MethodManager):
             spec = copy.deepcopy(spec)
         if base := Dat.get(spec, _DAT_BASE, None):
             sub_spec = self.expand_spec(base)
-            return self.merge_configs(sub_spec, spec)
+            result = self.merge_configs(sub_spec, spec)
+            # Clear the base field after expansion to prevent double-expansion
+            if "dat" in result and "base" in result["dat"]:
+                result["dat"]["base"] = None
+            return result
         else:
             return spec
 

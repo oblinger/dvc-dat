@@ -18,8 +18,10 @@ TMP_PATH2 = "/tmp/job_test2"
 
 
 def run_capture(line: str) -> str:
+    # Run from the tests directory since ./do is located there
+    tests_dir = os.path.dirname(os.path.abspath(__file__))
     result = subprocess.run(line, shell=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True)
+                            stderr=subprocess.PIPE, text=True, cwd=tests_dir)
     return result.stdout.strip()
 
 

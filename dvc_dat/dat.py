@@ -303,31 +303,19 @@ class DatManager:
         except Exception as e:
             raise EnvironmentError("Error during spec loading.") from e
 
-        # merge spec with base
-        if spec.dat.base:
-            base_dat = self.load(
-                dat_class=dat_class,
-                name_or_path=spec.dat.base,
-                cwd=cwd,
-                cache_after_load=cache_after_load,
-            )
-            spec_dict = spec.model_dump()
-            if dotted_get(spec_dict, "dat.do", None) is None:
-                # remove the "do" field if not specified to allow merging with base
-                spec_dict["dat"].pop("do", None)
-            spec = spec_type(
-                **utils.merge_dicts(
-                    base_dat.get_spec(),
-                    spec_dict,
-                )
-            )
+        # Note: Base expansion is handled by do_fn.expand_spec() for do-system specs.
+        # We don't expand bases here since dat.base can reference do-system configs,
+        # not just disk dats.
 
         kind = spec.dat.kind
         dat_class_name = dat_class.__name__
 
-        # a generic "Dat" class will be able to load any Dat because we can guarantee
-        # compatibility, otherwise, the subclass must match dat.kind exactly
-        if dat_class_name != "Dat" and kind != dat_class_name:
+        # If using generic Dat class, look up the correct subclass based on kind
+        if dat_class_name == "Dat" and kind != "Dat":
+            actual_class = self._find_subclass_by_name(dat_class, kind)
+            if actual_class:
+                dat_class = actual_class
+        elif dat_class_name != "Dat" and kind != dat_class_name:
             raise ValueError(
                 f"Spec 'dat.kind' <{kind}> doesn't match <{dat_class_name}>. "
                 "Update the spec accordingly and instantiate with the correct class "
@@ -373,6 +361,15 @@ class DatManager:
         """Returns the shortname (last part of the path) of this Dat."""
         path = str(path)
         return path.split("/")[-1]
+
+    def _find_subclass_by_name(self, klass: Type, name: str) -> Optional[Type]:
+        """Recursively find a subclass by name."""
+        if klass.__name__ == name:
+            return klass
+        for sub in klass.__subclasses__():
+            if result := self._find_subclass_by_name(sub, name):
+                return result
+        return None
 
     def expand_dat_path(
         self,
@@ -436,9 +433,13 @@ class DatManager:
 class DatSpecCore(BaseModel):
     """Part of the spec that defines which Dat class should load it."""
 
-    kind: str = "Dat"  # Default to base Dat class for backward compatibility
+    model_config = ConfigDict(extra="allow")
+
+    kind: str = "Dat"
     base: Optional[str] = None
     do: Optional[str] = None
+    args: Optional[List[Any]] = None
+    kwargs: Optional[Dict[str, Any]] = None
 
 
 class DatSpec(BaseModel):
@@ -662,10 +663,10 @@ class Dat(Generic[DatSpecType_co]):
         return success, metadata
 
     def save(self) -> None:
-        """Flags a Dat to have a version of its folder's contents saved
-        to in the backing store.
-        """
-        raise NotImplementedError
+        """Saves the Dat's results to the result file in its folder."""
+        if self._result:
+            with Path(self.get_path(), RESULT_YAML).open("w") as out:
+                yaml.safe_dump(self._result, out, sort_keys=False)
 
     def delete(self, *, must_exist=True) -> bool:
         """Deletes the folder and its contents from the filesystem.
