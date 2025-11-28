@@ -1,5 +1,5 @@
 import os
-from dvc_dat import Dat, do, DatContainer, DAT_VERSION
+from dvc_dat import Dat, do, DatContainer, __version__
 
 """
 HELLO-MSPIPE - Hello-world example of a configurable multi-stage mcproc pipeline.
@@ -15,8 +15,7 @@ The real multi-stage pipe might can be patterned from this example with
 # (specific multistage pipes will usually over-ride this to direct output elsewhere).
 __main__ = {
     "dat": {                         # Section controls execution of the whole pipeline
-        "kind": "Mspipe",             # "subtype" common to all multi-stage runs
-        "class": "DatContainer",      # The python class for a multi-stage runs
+        "kind": "DatContainer",       # The python class for a multi-stage runs
         "path": "runs/mspipe/{YY}-{MM}{unique}",  # Template for Dat's location
         "do": "hello_mspipe.mspipe_build_and_run",   # Creates and runs the pipeline
     },
@@ -57,7 +56,7 @@ def mspipe_run(dc: DatContainer):
         stage_dat = Dat.load(dat_name)
         print(f"Running {dat_name}")
         do(stage_dat)
-    Dat.set(dc.get_results(), "dat.version", DAT_VERSION)
+    Dat.set(dc.get_results(), "dat.version", __version__)
     return f"Ran {len(dc.get_spec()['stages'])} stages in {dc.get_path_name()}"
 
 
