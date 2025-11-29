@@ -18,7 +18,7 @@ import yaml
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import Type, Union, Any, Dict, Callable, List, Iterable
+from typing import Type, Union, Any, Dict, Callable, List, Iterable, Tuple
 
 from dvc_dat.dat import Dat, MethodManager, _DEFAULT_PATH_TEMPLATE
 
@@ -110,7 +110,9 @@ class DoManager(MethodManager):
                 result = obj(*args, **kwargs)
                 return result
             else:
-                dat = self.dat_from_template(spec=obj)
+                dat, skip_execution = self.dat_from_template(spec=obj)
+                if skip_execution:
+                    return dat.get_spec()  # Return existing spec without re-running
                 return self._run_dat(dat, *args, **kwargs)
         except Exception as e:
             raise Exception(F"In {do_spec!r}") from e
@@ -324,14 +326,18 @@ class DoManager(MethodManager):
             spec: Spec,
             *,
             path: str = None
-    ) -> Dat:
+    ) -> Tuple[Dat, bool]:
         """Creates a new Dat object from a template spec.
 
         The dat.target_exists parameter controls behavior when the target path exists:
             - "error" (default): raise an exception
-            - "use": return the existing Dat without re-running
+            - "use": return existing Dat with skip_execution=True
             - "overwrite": delete existing folder and recreate
             - "increment": auto-increment path to make it unique
+
+        Returns:
+            Tuple of (dat, skip_execution). If skip_execution is True,
+            the caller should use the existing Dat without re-running.
         """
         spec = copy.deepcopy(spec)
         path = path or Dat.get(spec, _DAT_PATH, None)
@@ -342,21 +348,17 @@ class DoManager(MethodManager):
             target_exists = "error"
 
         spec = self.expand_spec(spec)
-        path = Dat.manager.expand_dat_path(path, target_exists=target_exists)  # noqa
+        path, skip_execution = Dat.manager.prepare_dat_path(path, target_exists=target_exists)
 
-        # Handle "use" - return existing Dat if it exists
-        if path is None:
-            # expand_dat_path returns None for "use" when target exists
-            resolved_path = Dat.manager.resolve_path(
-                Dat.get(spec, _DAT_PATH, None) or _DEFAULT_PATH_TEMPLATE
-            )
-            return Dat.load(resolved_path)
+        if skip_execution:
+            return Dat.load(path), True
 
-        return Dat.create(path=path, spec=spec)
+        return Dat.create(path=path, spec=spec), False
 
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
         """Runs the dat.do method of an instantiated object."""   # noqa
         obj = dat.get_spec()
+
         if dat_args := Dat.get(obj, _DAT_ARGS, None):
             args = dat_args + list(args)
         if dat_kwargs := Dat.get(obj, _DAT_KWARGS, None):

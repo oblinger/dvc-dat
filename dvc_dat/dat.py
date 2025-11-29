@@ -404,11 +404,11 @@ class DatManager:
         else:
             path = str(path)
 
-        expanded_path = self.expand_dat_path(path, target_exists=target_exists)
+        expanded_path, skip_execution = self.prepare_dat_path(path, target_exists=target_exists)
 
         # Handle "use" - return existing Dat if it exists
-        if expanded_path is None:
-            return self.load(dat_class, name_or_path=self.resolve_path(path))
+        if skip_execution:
+            return self.load(dat_class, name_or_path=expanded_path)
 
         path = self.resolve_path(expanded_path)
         if not os.path.exists(path):
@@ -556,26 +556,30 @@ class DatManager:
                 return result
         return None
 
-    def expand_dat_path(
+    def prepare_dat_path(
         self,
         path_spec: Union[str, Path, None],
         *,
         variables: Optional[Dict[str, Any]] = None,
         target_exists: str = "error",
-    ) -> Optional[str]:
-        """Expand a path template and handle existing targets.
+    ) -> Tuple[str, bool]:
+        """Prepare a dat path, expanding templates and handling existing targets.
+
+        This method does more than just expand - it may create/delete folders
+        depending on the target_exists setting.
 
         Args:
             path_spec: Path template with optional variables like {YYYY}, {unique}, etc.
             variables: Additional variables for path expansion.
             target_exists: Behavior when target exists:
                 - "error" (default): raise an exception
-                - "use": return None (caller should load existing Dat)
+                - "use": return (path, True) to signal skip execution
                 - "overwrite": delete existing folder and return path
                 - "increment": auto-increment path to make it unique
 
         Returns:
-            Expanded path string, or None if target_exists="use" and path exists.
+            Tuple of (path, skip_execution). If skip_execution is True,
+            the caller should use the existing Dat without re-running.
         """
         if path_spec is None:
             path_spec = _DEFAULT_PATH_TEMPLATE
@@ -599,12 +603,12 @@ class DatManager:
                 self.main_sync_folder, path_spec.format_map(format_vars)
             )
             if not os.path.exists(expanded_path):
-                return expanded_path
+                return expanded_path, False
             elif target_exists == "use":
-                return None  # Signal to caller to use existing Dat
+                return expanded_path, True  # Signal to caller to use existing Dat
             elif target_exists == "overwrite":
                 shutil.rmtree(expanded_path)
-                return expanded_path
+                return expanded_path, False
             elif target_exists == "increment" or "{unique}" in path_spec:
                 count += 1
             else:  # "error" or unknown

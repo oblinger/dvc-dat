@@ -169,13 +169,15 @@ class TestRegisteringStuff:
 class TestTemplatedDatCreationAndDeletion:
     def test_empty_creation_and_deletion(self):
         from dvc_dat import do
-        assert (dat := do.dat_from_template({})), "Couldn't create Persistable"
+        dat, _ = do.dat_from_template({})
+        assert dat, "Couldn't create Persistable"
         assert dat.delete(), "Couldn't delete Persistable"
 
     def test_creation_and_deletion_with_spec(self):
         from dvc_dat import do
         spec1 = {"dat": {"path": "test_dats/{YY}-{MM} Dats{unique}"}}
-        assert (dat := do.dat_from_template(spec1)), "Couldn't create Persistable"
+        dat, _ = do.dat_from_template(spec1)
+        assert dat, "Couldn't create Persistable"
         assert dat.get_path_name().startswith("test_dats/"), "Wrong path"
         assert dat.delete(), "Couldn't delete Persistable"
 
