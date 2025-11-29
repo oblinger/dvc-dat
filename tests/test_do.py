@@ -76,6 +76,28 @@ class TestLoad:
                              'p_metric']}
         assert do.load("supported") == value
 
+    def test_yaml_string_spec_parsing(self):
+        """Test that YAML string specs (prefixed with 'yaml') are parsed correctly."""
+        yaml_spec = """yaml
+dat:
+  do: hello_world
+foo: bar
+nested:
+  key: value
+"""
+        do.mount(at="yaml_test", value=yaml_spec)
+        loaded = do.load("yaml_test")
+        assert isinstance(loaded, dict), "YAML string should be parsed to dict"
+        assert loaded["foo"] == "bar"
+        assert loaded["nested"]["key"] == "value"
+        assert loaded["dat"]["do"] == "hello_world"
+
+    def test_yaml_string_spec_from_file(self, capsys):
+        """Test YAML string spec loaded from a .py file works correctly."""
+        do("hello_yaml_config")
+        output = capsys.readouterr().out
+        assert "YAML GREETER" in output or "888" in output
+
 
 class TestCommandLine:
     def test_usage_message(self):

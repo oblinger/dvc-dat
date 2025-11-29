@@ -20,7 +20,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Type, Union, Any, Dict, Callable, List, Iterable
 
-from dvc_dat.dat import Dat, MethodManager
+from dvc_dat.dat import Dat, MethodManager, _DEFAULT_PATH_TEMPLATE
 
 # The loadable "do" fns, scripts, configs, and methods are in the do_folder
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
@@ -31,7 +31,7 @@ _MAIN = "__main__"             # default module var to use when none specified
 # Dat Template Parameters
 _DAT_BASE = "dat.base"         # the base spec to expand
 _DAT_PATH = "dat.path"         # the template for the dat's path
-_DAT_PATH_OVERWRITE = "dat.path_overwrite"  # overwrite the path
+_DAT_TARGET_EXISTS = "dat.target_exists"  # behavior when target exists: error|use|overwrite|increment
 _DAT_DO = "dat.do"             # the fn to execute
 _DAT_ARGS = "dat.args"         # prefix args for the dat.do method
 _DAT_KWARGS = "dat.kwargs"     # default kwargs for the dat.do method
@@ -138,10 +138,18 @@ class DoManager(MethodManager):
         - If FILENAME.json or FILENAME.yaml is found, then it is loaded, and its
           parsed contents are returned.  (PART-NAME is ignored)
         """
+        def _parse_yaml_prefix(result):
+            """Parse YAML string specs (e.g., 'yaml\\ndat:\\n  kind: Dat\\n...')"""
+            if isinstance(result, str) and result.lstrip().lower().startswith("yaml"):
+                yaml_content = result.lstrip()[4:].lstrip()
+                return yaml.safe_load(yaml_content)
+            return result
+
         parts = dotted_name.split(".")
         file_base = parts[0]
         if self.registered_values and _DO_NULL != \
                 (value := self.registered_values.get(dotted_name, _DO_NULL)):
+            value = _parse_yaml_prefix(value)
             return copy.deepcopy(value) if isinstance(value, dict) else value
         obj = self.get_base(file_base, default=None)
         if obj is None:
@@ -182,6 +190,7 @@ class DoManager(MethodManager):
             if kind and not isinstance(result, kind):
                 raise KeyError(F"DO: Expected {dotted_name!r} of type {kind} " +
                                F"but found {result!r}")
+            result = _parse_yaml_prefix(result)
             return copy.deepcopy(result) if isinstance(result, dict) else result
         except Exception as e:
             raise e from KeyError(F"WHILE loading {dotted_name!r}")
@@ -316,16 +325,34 @@ class DoManager(MethodManager):
             *,
             path: str = None
     ) -> Dat:
-        """Creates a mew Dat object from a template spec."""
-        spec, count = copy.deepcopy(spec), 1
-        # Dat.set(spec, _MAIN_ARGS, args or [])
-        # Dat.set(spec, _MAIN_KWARGS, kwargs or {})
+        """Creates a new Dat object from a template spec.
+
+        The dat.target_exists parameter controls behavior when the target path exists:
+            - "error" (default): raise an exception
+            - "use": return the existing Dat without re-running
+            - "overwrite": delete existing folder and recreate
+            - "increment": auto-increment path to make it unique
+        """
+        spec = copy.deepcopy(spec)
         path = path or Dat.get(spec, _DAT_PATH, None)
-        overwrite = Dat.get(spec, _DAT_PATH_OVERWRITE, False) and \
-            path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
+        target_exists = Dat.get(spec, _DAT_TARGET_EXISTS, "error")
+
+        # For safety, disallow overwriting cwd
+        if target_exists == "overwrite" and path and path.lower() == "{cwd}":
+            target_exists = "error"
+
         spec = self.expand_spec(spec)
-        path = Dat.manager.expand_dat_path(path, overwrite=overwrite)  # noqa
-        return Dat.create(path=path, spec=spec, overwrite=overwrite)
+        path = Dat.manager.expand_dat_path(path, target_exists=target_exists)  # noqa
+
+        # Handle "use" - return existing Dat if it exists
+        if path is None:
+            # expand_dat_path returns None for "use" when target exists
+            resolved_path = Dat.manager.resolve_path(
+                Dat.get(spec, _DAT_PATH, None) or _DEFAULT_PATH_TEMPLATE
+            )
+            return Dat.load(resolved_path)
+
+        return Dat.create(path=path, spec=spec)
 
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
         """Runs the dat.do method of an instantiated object."""   # noqa

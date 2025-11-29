@@ -5,7 +5,7 @@ __main__ = {
     "dat": {
         "base": "hello_mspipe/hello_doubler",
         "path": "sprint25",       # Use fixed folder during debugging
-        "path_overwrite": True,
+        "target_exists": "overwrite",
         "do": "sprint25.run_it"},
     "common": {
         "debug": 11}}

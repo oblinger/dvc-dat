@@ -350,7 +350,6 @@ class DatManager:
         *,
         path: Union[str, Path, None] = None,
         spec: Union["DatSpec", Dict, None] = None,
-        overwrite: bool = False,
     ) -> DatType:
         """Creates a new Dat with the specified spec dict and backing folder at 'path'.
 
@@ -358,17 +357,14 @@ class DatManager:
             dat_class: The Dat class to instantiate.
             path (str): The path to the folder where the Dat is stored.
             spec (Dict): The spec dict that describes the Dat.
-            overwrite (bool): If True, the path will be overwritten if it exists.
-
-        exists_action: "error" | "overwrite" | "use"
 
         PATH EXPANSION RULES:
         - Path is relative to the Dat.path_root() folder.
         - Time and other variables below are used to expand the path.
         - If the path is None, the _DEFAULT_PATH_TEMPLATE is used
         - If '{unique}' is in the path is assigned a number to make the path unique.
-        - Otherwise an error is generated on path collision, or
-          If 'overwrite' is True, the old folder contents are erased instead.
+        - Otherwise an error is generated on path collision.
+        - Use dat.target_exists in spec to control behavior when target exists.
         - Variables used for path expansion:
             {YYYY} {YY} {MM} {DD} {HH} {mm} {SS}   -- based on time now or vars['time']
             {cwd}    -- the current working directory
@@ -377,7 +373,7 @@ class DatManager:
         if spec is None:
             logger.info("No spec provided. Creating default DatSpec.")
             spec = DatSpec(dat=DatSpecCore(kind="Dat"))
-        elif isinstance(spec, dict):
+        if isinstance(spec, dict):
             spec = deepcopy(spec)
 
             # Ensure 'dat' field exists with at least 'kind'
@@ -392,7 +388,11 @@ class DatManager:
                 if path is None:
                     path = templated_name
 
+            # Extract target_exists before converting to DatSpec
+            target_exists = spec.get("dat", {}).get("target_exists", "error")
             spec = dat_class._SPEC_TYPE(**spec)
+        else:
+            target_exists = "error"
 
         if not isinstance(spec, dat_class._SPEC_TYPE):
             raise ValueError(
@@ -404,7 +404,13 @@ class DatManager:
         else:
             path = str(path)
 
-        path = self.resolve_path(self.expand_dat_path(path, overwrite=overwrite))
+        expanded_path = self.expand_dat_path(path, target_exists=target_exists)
+
+        # Handle "use" - return existing Dat if it exists
+        if expanded_path is None:
+            return self.load(dat_class, name_or_path=self.resolve_path(path))
+
+        path = self.resolve_path(expanded_path)
         if not os.path.exists(path):
             os.makedirs(path)
         try:
@@ -555,9 +561,22 @@ class DatManager:
         path_spec: Union[str, Path, None],
         *,
         variables: Optional[Dict[str, Any]] = None,
-        overwrite: bool = False,
-    ) -> str:
-        """(See Dat.manager.create for path expansion rules.)"""
+        target_exists: str = "error",
+    ) -> Optional[str]:
+        """Expand a path template and handle existing targets.
+
+        Args:
+            path_spec: Path template with optional variables like {YYYY}, {unique}, etc.
+            variables: Additional variables for path expansion.
+            target_exists: Behavior when target exists:
+                - "error" (default): raise an exception
+                - "use": return None (caller should load existing Dat)
+                - "overwrite": delete existing folder and return path
+                - "increment": auto-increment path to make it unique
+
+        Returns:
+            Expanded path string, or None if target_exists="use" and path exists.
+        """
         if path_spec is None:
             path_spec = _DEFAULT_PATH_TEMPLATE
         path_spec = str(path_spec)
@@ -581,13 +600,15 @@ class DatManager:
             )
             if not os.path.exists(expanded_path):
                 return expanded_path
-            elif overwrite:
+            elif target_exists == "use":
+                return None  # Signal to caller to use existing Dat
+            elif target_exists == "overwrite":
                 shutil.rmtree(expanded_path)
                 return expanded_path
-            elif "{unique}" not in path_spec:
-                raise Exception(f"DAT: Create failed, dir {expanded_path!r} exists")
-            else:
+            elif target_exists == "increment" or "{unique}" in path_spec:
                 count += 1
+            else:  # "error" or unknown
+                raise Exception(f"DAT: Create failed, dir {expanded_path!r} exists")
 
     def resolve_path(self, name: Union[str, Path]) -> str:
         name = str(name)
@@ -780,14 +801,19 @@ class Dat(Generic[DatSpecType_co]):
         cls: Type[DatType],
         path: Optional[Union[str, Path]] = None,
         spec: Union[DatSpecType_co, Dict, None] = None,
-        overwrite: bool = False,
     ) -> DatType:
-        """Create a Dat given `path` and `spec`."""
+        """Create a Dat given `path` and `spec`.
+
+        Use dat.target_exists in spec to control behavior when target path exists:
+            - "error" (default): raise an exception
+            - "use": return existing Dat without re-creating
+            - "overwrite": delete existing folder and recreate
+            - "increment": auto-increment path to make it unique
+        """
         return cls.manager.create(
             cls,
             path=path,
             spec=spec,
-            overwrite=overwrite,
         )
 
     @classmethod

@@ -28,23 +28,23 @@ def run_capture(line: str) -> str:
 @pytest.fixture
 def spec1():
     return {
-        "dat": {"my_key1": "my_val1", "my_key2": "my_val2"}
+        "dat": {"my_key1": "my_val1", "my_key2": "my_val2", "target_exists": "overwrite"}
     }
 
 
 @pytest.fixture
 def dat1(spec1):
-    return Dat.create(spec=spec1, path=TMP_PATH, overwrite=True)
+    return Dat.create(spec=spec1, path=TMP_PATH)
 
 
 @pytest.fixture
 def spec2():
-    return {"dat": {"my_key1": "my_val1", "my_key2": "my_val2"}, "other": "key_value"}
+    return {"dat": {"my_key1": "my_val1", "my_key2": "my_val2", "target_exists": "overwrite"}, "other": "key_value"}
 
 
 @pytest.fixture
 def dat2(spec2):
-    return Dat.create(spec=spec2, path=TMP_PATH2, overwrite=True)
+    return Dat.create(spec=spec2, path=TMP_PATH2)
 
 
 def always_17(_dat: Dat):

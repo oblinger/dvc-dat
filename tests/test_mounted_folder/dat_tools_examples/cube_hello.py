@@ -37,7 +37,7 @@ __main__ = {
     "dat": {
         "do": "dt.dat_report",
         "path": "dat_report",
-        "path_overwrite": True
+        "target_exists": "overwrite"
     },
     "source": ["runs.example.hello10", "runs.example.hello5"],
     "metrics": ["cube_hello.is_prime", "cube_hello.data", "cube_hello.color_p"],
