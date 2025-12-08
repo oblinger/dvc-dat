@@ -300,10 +300,15 @@ class SimpleMethodManager(MethodManager):
     ) -> Union[DatMethodType, DatMethod]:
         if name in self._dat_methods:
             return self._dat_methods[name]
-        elif default is not None:
+        # Fall back to dynamic loading for dotted module.fn names
+        if "." in name:
+            try:
+                return dynamic_load_fn(name)
+            except (ValueError, AttributeError):
+                pass
+        if default is not None:
             return default
-        else:
-            raise KeyError(f"Do method {name!r} not found.")
+        raise KeyError(f"Do method {name!r} not found.")
 
     def mount(self, value: DatMethod, at: str):
         self._dat_methods[at] = value
@@ -869,16 +874,13 @@ class Dat(Generic[DatSpecType_co]):
             return False
 
     def run(self) -> Tuple[bool, Dict[str, Any]]:
-        # TODO: wrap this by using Do and Dat managers
         if not self.spec.dat.do:
             raise ValueError("Dat can't be run because it needs dat.do defined.")
 
         try:
-            fn = dynamic_load_fn(self.spec.dat.do)
-        except Exception:
-            raise ValueError(
-                "Couldn't find dat.do function. It must be specified as: my_module.my_fn"
-            )
+            fn = Dat.manager.do.load(self.spec.dat.do)
+        except KeyError as e:
+            raise ValueError(f"Couldn't find dat.do function: {self.spec.dat.do!r}") from e
 
         result: Dict[str, Any] = {
             "start_time": str(datetime.now()),
