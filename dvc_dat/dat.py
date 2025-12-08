@@ -318,9 +318,25 @@ class SimpleMethodManager(MethodManager):
 
 # TODO: use Path for everything instead of os.path
 class DatManager:
-    """Singleton class that manages the configuration and loading of Dats.
+    """Singleton that manages DAT creation, loading, and persistence.
 
-    Configuration info for the 'dat' module loaded from a DataConfig.
+    DatManager coordinates two responsibilities:
+    - **Path resolution**: Finding and creating DAT folders in sync_folders
+    - **Spec resolution**: Delegating to DoManager (self.do) for loading templates
+
+    The `do` property holds a MethodManager (either DoManager or SimpleMethodManager)
+    that handles the do-system namespace. When .dataconfig.yaml has mount_commands,
+    a DoManager is used; otherwise SimpleMethodManager provides basic functionality.
+
+    Configuration is loaded from .dataconfig.yaml (see DataConfig).
+
+    Example:
+        # DatManager is accessed via Dat.manager
+        dat = Dat.manager.create(Dat, path="runs/exp1", spec={"name": "test"})
+        dat = Dat.manager.load(Dat, "runs/exp1")
+
+        # String specs are resolved via the do-system
+        dat = Dat.manager.create(Dat, spec="catalog.template")
     """
 
     config: DataConfig

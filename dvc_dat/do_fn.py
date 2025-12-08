@@ -73,6 +73,14 @@ class DoManager(MethodManager):
     - If a spec has a "dat.base" key, then it is loaded and merged with the spec.
         - This process is repeated until no more "dat.base" keys are found.
 
+    MOUNT TYPES (configured in .dataconfig.yaml mount_commands)
+    - folder: Mount a directory tree; files become dotted paths
+    - module: Mount an already-imported Python module's attributes
+    - file: Mount a single .py/.yaml/.json file
+    - value: Mount a literal dict/value directly
+    - files_shallowly: Mount files in a folder (non-recursive)
+
+    See docs/mount-commands.md for details.
     """
     do_folder: str                                     # last added loadables folder
     base_locations: Dict[str, str]                     # path to module or module itself
