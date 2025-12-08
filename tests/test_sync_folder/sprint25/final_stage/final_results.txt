@@ -1,0 +1,14 @@
+The Final results are in!  Gallery first:
+This is not really a gallery.
+It's just a file called gallery!
+And now the results.  Doubled once more, just to be sure!
+If results are good, then more results are better!
+Stage 1: Results.txt line1
+Stage 1: Results.txt line2
+Stage 1: Results.txt line1
+Stage 1: Results.txt line2
+If results are good, then more results are better!
+Stage 1: Results.txt line1
+Stage 1: Results.txt line2
+Stage 1: Results.txt line1
+Stage 1: Results.txt line2

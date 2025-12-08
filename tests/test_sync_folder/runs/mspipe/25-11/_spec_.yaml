@@ -1,0 +1,13 @@
+dat:
+  kind: DatContainer
+  base: null
+  do: hello_mspipe.mspipe_build_and_run
+  args: null
+  kwargs: null
+  path: runs/mspipe/{YY}-{MM}{unique}
+common:
+  dat:
+    kind: Mcproc
+    base: hello_std_args
+    do: hello_mspipe.fake_mcproc_runner
+stages: {}

@@ -18,7 +18,7 @@ import yaml
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import Type, Union, Any, Dict, Callable, List, Iterable, Tuple
+from typing import Type, Union, Any, Dict, Callable, List, Iterable, Optional, Tuple
 
 from dvc_dat.dat import Dat, MethodManager, _DEFAULT_PATH_TEMPLATE
 
@@ -84,6 +84,7 @@ class DoManager(MethodManager):
         self.base_objects = {}
         self.base_locations = {}  # all paths must be absolute & module names qualified
         self.registered_values = None
+        self.do_folder = None
 
     def __call__(self, do_spec: Union[Spec, Dat, str], *args, **kwargs) -> Any:
         """Loads and executes a 'do-method'.
@@ -121,6 +122,18 @@ class DoManager(MethodManager):
         """Returns the list of all defined names."""
         return self.base_locations.keys()
 
+    def resolve_dat_folder(self, name: str) -> Optional[str]:
+        """Return absolute path to DAT folder if found in mounts, else None.
+
+        Checks base_locations for a matching _spec_ key and returns
+        the parent directory of the spec file.
+        """
+        spec_key = name + "/_spec_"
+        if spec_key in self.base_locations:
+            spec_path = self.base_locations[spec_key]
+            return os.path.dirname(spec_path)
+        return None
+
     def load(self,
              dotted_name: str,
              *,
@@ -155,10 +168,12 @@ class DoManager(MethodManager):
             return copy.deepcopy(value) if isinstance(value, dict) else value
         obj = self.get_base(file_base, default=None)
         if obj is None:
+            # Try resolving via do_folder traversal
+            if self.do_folder and (result := _resolve_in_folder(self.do_folder, parts)):
+                return result
             if default is _DO_NULL:
                 raise KeyError(F"do.load: The base for {dotted_name!r} was not found.")
             else:
-                obj = default      # Noqa    # Remove ???????????????
                 return default
         try:
             if obj == _DO_ERROR_FLAG:
@@ -340,6 +355,8 @@ class DoManager(MethodManager):
             the caller should use the existing Dat without re-running.
         """
         spec = copy.deepcopy(spec)
+        spec = self.expand_spec(spec)  # Resolve base first
+
         path = path or Dat.get(spec, _DAT_PATH, None)
         target_exists = Dat.get(spec, _DAT_TARGET_EXISTS, "error")
 
@@ -347,7 +364,6 @@ class DoManager(MethodManager):
         if target_exists == "overwrite" and path and path.lower() == "{cwd}":
             target_exists = "error"
 
-        spec = self.expand_spec(spec)
         path, skip_execution = Dat.manager.prepare_dat_path(path, target_exists=target_exists)
 
         if skip_execution:
@@ -418,6 +434,33 @@ class DoManager(MethodManager):
         #     self.base_locations[base] = "--registered-value--"
         #     self.base_objects[base] = {}
         # # print(f "Registered {dotted_name} as {value} in {self}")
+
+
+def _resolve_in_folder(folder: str, parts: List[str]) -> Optional[Any]:
+    """Resolve a dotted name by traversing a folder structure.
+
+    For each part, looks for part.yaml, part.json, part.py, or part/ subfolder.
+    Returns the loaded content, or None if not found.
+    """
+    path = folder
+    for i, part in enumerate(parts):
+        # Try file extensions first, then folder
+        for ext in [".yaml", ".json", ".py"]:
+            candidate = os.path.join(path, part + ext)
+            if os.path.isfile(candidate):
+                obj = _load_base_entity(part, candidate)
+                # Dig into remaining parts if any
+                remaining = parts[i+1:]
+                if remaining and isinstance(obj, dict):
+                    return Dat.get(obj, remaining)
+                return obj
+        # Try as subfolder
+        candidate = os.path.join(path, part)
+        if os.path.isdir(candidate):
+            path = candidate
+        else:
+            return None
+    return None  # Ended on a folder with no file
 
 
 def _load_base_entity(base, source_spec: str) -> Union[ModuleType, Spec]:

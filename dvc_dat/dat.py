@@ -277,6 +277,11 @@ class MethodManager:
     @abstractmethod
     def keys(self) -> Iterable[str]: ...
 
+    @abstractmethod
+    def resolve_dat_folder(self, name: str) -> Optional[str]:
+        """Return absolute path to DAT folder if found in mounts, else None."""
+        ...
+
 
 class SimpleMethodManager(MethodManager):
     """Manager for cached access to DatMethods."""
@@ -305,6 +310,10 @@ class SimpleMethodManager(MethodManager):
 
     def keys(self):
         return self._dat_methods.keys()
+
+    def resolve_dat_folder(self, name: str) -> Optional[str]:
+        """SimpleMethodManager has no mount system, always returns None."""
+        return None
 
 
 # TODO: use Path for everything instead of os.path
@@ -349,14 +358,14 @@ class DatManager:
         dat_class: Type[DatType],
         *,
         path: Union[str, Path, None] = None,
-        spec: Union["DatSpec", Dict, None] = None,
+        spec: Union["DatSpec", Dict, str, None] = None,
     ) -> DatType:
         """Creates a new Dat with the specified spec dict and backing folder at 'path'.
 
         Args:
             dat_class: The Dat class to instantiate.
             path (str): The path to the folder where the Dat is stored.
-            spec (Dict): The spec dict that describes the Dat.
+            spec (Dict | str): The spec dict, or a dotted name to load via do-system.
 
         PATH EXPANSION RULES:
         - Path is relative to the Dat.path_root() folder.
@@ -373,6 +382,8 @@ class DatManager:
         if spec is None:
             logger.info("No spec provided. Creating default DatSpec.")
             spec = DatSpec(dat=DatSpecCore(kind="Dat"))
+        if isinstance(spec, str):
+            spec = self.do.load(spec)
         if isinstance(spec, dict):
             spec = deepcopy(spec)
 
@@ -624,6 +635,10 @@ class DatManager:
         path = os.path.join(self.config.cwd, name)
         if os.path.exists(path):
             return path
+
+        # Check mount system via the do manager's interface
+        if (mount_path := self.do.resolve_dat_folder(name)) is not None:
+            return mount_path
 
         for folder in self.sync_folders:
             path = os.path.join(folder, name)

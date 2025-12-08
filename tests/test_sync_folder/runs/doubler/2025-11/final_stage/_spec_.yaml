@@ -1,0 +1,15 @@
+dat:
+  kind: Mcproc
+  base: hello_std_args
+  do: hello_mspipe.fake_mcproc_runner
+  args: null
+  kwargs: null
+kind: final_stage
+outputs:
+  final_results.txt:
+  - '>>The Final results are in!  Gallery first:'
+  - <<../preprocessing/gallery.txt
+  - '>>And now the results.  Doubled once more, just to be sure!'
+  - <<../doubler/double_trouble.txt
+  - <<../doubler/double_trouble.txt
+debug_level: 3

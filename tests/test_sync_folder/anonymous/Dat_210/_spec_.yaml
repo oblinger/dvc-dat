@@ -1,0 +1,12 @@
+dat:
+  kind: Dat
+  base: null
+  do: letterator.run
+  args: null
+  kwargs: null
+  title: Re-configured letterator
+start: 97
+end: 122
+rules:
+- - 2
+  - my_letters.triple_it

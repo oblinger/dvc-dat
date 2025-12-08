@@ -1,0 +1,9 @@
+dat:
+  kind: Dat
+  base: null
+  do: configurable_salutation
+  args: null
+  kwargs: null
+name: YAML Greeter
+lucky_number: 888
+emphasis: true
