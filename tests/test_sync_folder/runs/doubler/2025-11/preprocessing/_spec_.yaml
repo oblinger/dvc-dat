@@ -1,0 +1,15 @@
+dat:
+  kind: Mcproc
+  base: hello_std_args
+  do: hello_mspipe.fake_mcproc_runner
+  args: null
+  kwargs: null
+kind: gallery_stage
+debug_level: 3
+outputs:
+  gallery.txt:
+  - '>>This is not really a gallery.'
+  - '>>It''s just a file called gallery!'
+  results.txt:
+  - '>>Stage 1: Results.txt line1'
+  - '>>Stage 1: Results.txt line2'

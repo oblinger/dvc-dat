@@ -12,23 +12,202 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import (
     Any,
+    Callable,
     Dict,
     Generic,
     Iterable,
     List,
     Optional,
     Protocol,
+    Self,
     Tuple,
     Type,
     Union,
 )
 
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import TypeVar
 
-from dvc_dat import utils
-from dvc_dat.config import DataConfig
+
+# =============================================================================
+# Utility functions (merged from utils.py)
+# =============================================================================
+
+def merge_dicts(
+    *dicts: Dict,
+    inplace: bool = False,
+) -> Dict:
+    """Recursively merge N dicts, with each dict having priority over the previous one."""
+    if len(dicts) == 1:
+        return dicts[0]
+
+    dict_1 = dicts[0]
+    if not inplace:
+        dict_1 = deepcopy(dict_1)
+
+    dict_2 = dicts[1]
+    for k, v in dict_2.items():
+        if isinstance(v, dict):
+            dict_1[k] = merge_dicts(dict_1.get(k, {}), v)
+        else:
+            dict_1[k] = v
+    return merge_dicts(dict_1, *dicts[2:])
+
+
+def dynamic_load_fn(fn_string: str) -> Callable:
+    """Dynamically load the function `fn_string`. It must be specified as 'module.fn'."""
+    try:
+        fn_mod_str, fn_str = fn_string.rsplit(".", maxsplit=1)
+    except Exception:
+        raise ValueError("Function must be specified as: my_module.my_fn")
+    module = importlib.import_module(fn_mod_str)
+    try:
+        fn: Callable = getattr(module, fn_str)
+    except Exception:
+        raise AttributeError(f"Function {fn_str} not found in module {module}.")
+    return fn
+
+
+def load_dict(conf_path: Optional[Union[str, Path]]) -> Optional[Dict[str, Any]]:
+    """Load either a json or yaml file into a dict."""
+    if conf_path is None:
+        return None
+
+    conf = None
+    conf_path = Path(conf_path)
+    if not conf_path.exists():
+        return conf
+    try:
+        with conf_path.open("r") as f:
+            if ".json" in conf_path.suffixes:
+                conf = json.load(f)
+            if ".yaml" in conf_path.suffixes or ".yml" in conf_path.suffixes:
+                conf = yaml.safe_load(f)
+    except Exception:
+        return None
+    return conf
+
+
+# =============================================================================
+# Configuration (merged from config.py)
+# =============================================================================
+
+DATA_CONFIG_FILE = ".dataconfig.yaml"
+DATA_CONFIG_OVERRIDE_FILE = ".dataconfig.override.yaml"
+
+
+class DataConfig(BaseModel):
+    """Container for data-related configuration.
+
+    Attributes
+    ----------
+    cwd : Cwd used for operations that involve the local filesystem.
+    default_remote : Default protocol that will be used for remote operations.
+    remote_prefix : Prefix that will be added to remote URIs when object paths are relative.
+    local_prefix : Prefix that will be added to local URIs when object paths are relative.
+    """
+
+    cwd: str
+
+    default_remote: str = "gs"
+    remote_prefix: str = "sv-ai-data/"
+    local_prefix: str = "data/"
+    extra_local_prefixes: List[str] = Field(default_factory=list)
+    dat: Dict[str, Any] = Field(default_factory=dict)
+
+    # Mount commands for the "do" system. If None, do_fn.py is not loaded (standalone mode).
+    mount_commands: Optional[List[Dict[str, Any]]] = None
+
+    @classmethod
+    def new(
+        cls,
+        cwd: Optional[Union[str, Path]] = None,
+        config_name: str = DATA_CONFIG_FILE,
+        config_override_name: str = DATA_CONFIG_OVERRIDE_FILE,
+        override_values: Optional[Dict[str, Any]] = None,
+        verbose: bool = False,
+    ) -> "DataConfig":
+        """Create a DataConfig by searching for config files up the directory tree."""
+        if cwd:
+            cwd = str(cwd)
+        if override_values is None:
+            override_values = {}
+
+        config_path = cls._find_file_up(Path.cwd(), config_name)
+        config_override_path = cls._find_file_up(Path.cwd(), config_override_name)
+
+        config_values = {}
+        if config_path:
+            with config_path.open("r") as f:
+                config_values = yaml.safe_load(f)
+            if verbose:
+                logger.debug("%s found and loaded.", config_path)
+
+        config_override_values = {}
+        if config_override_path:
+            with config_override_path.open("r") as f:
+                config_override_values = yaml.safe_load(f)
+
+        if not cwd:
+            if config_path:
+                cwd = str(config_path.parent)
+            else:
+                cwd = str(Path.cwd())
+
+        environ_values = dict(os.environ)
+
+        final_values: Dict[str, Any] = merge_dicts(
+            config_values,
+            config_override_values,
+            override_values,
+            environ_values,
+            {"cwd": cwd},
+        )
+
+        return cls(**final_values)
+
+    @staticmethod
+    def _find_file_up(
+        path: Union[str, Path],
+        file_name: str,
+    ) -> Optional[Path]:
+        """Look for a file with name `file_name` in the CWD and its parents."""
+        path = Path(path)
+        path = path.absolute()
+
+        file: Optional[Path] = None
+        prev_path: Optional[Path] = None
+
+        while prev_path != path:
+            file = next(path.glob(file_name), None)
+            if file:
+                break
+            prev_path = path
+            path = path.parent
+        return file
+
+    @model_validator(mode="after")
+    def resolve_paths(self) -> Self:
+        """Make every path used in the config absolute to avoid ambiguity."""
+        self.cwd = os.path.realpath(self.cwd)
+
+        if not os.path.isabs(self.remote_prefix):
+            self.remote_prefix = os.path.join("/", self.remote_prefix)
+        if not self.remote_prefix.endswith("/"):
+            self.remote_prefix += "/"
+
+        if not os.path.isabs(self.local_prefix):
+            self.local_prefix = os.path.join(self.cwd, self.local_prefix)
+        self.local_prefix = os.path.normpath(self.local_prefix)
+        if not self.local_prefix.endswith("/"):
+            self.local_prefix += "/"
+        return self
+
+
+# =============================================================================
+# Dat module constants and types
+# =============================================================================
 
 _DAT_BASE = "dat.base"
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
@@ -39,6 +218,15 @@ SPEC_YAML = "_spec_.yaml"
 RESULT_YAML = "_result_.yaml"
 
 logger = logging.getLogger(__name__)
+
+
+class classproperty:
+    """Decorator for class-level properties (like @property but for the class itself)."""
+    def __init__(self, func):
+        self.func = func
+
+    def __get__(self, obj, objtype=None):
+        return self.func(objtype)
 
 
 class DataState(Enum):
@@ -89,6 +277,11 @@ class MethodManager:
     @abstractmethod
     def keys(self) -> Iterable[str]: ...
 
+    @abstractmethod
+    def resolve_dat_folder(self, name: str) -> Optional[str]:
+        """Return absolute path to DAT folder if found in mounts, else None."""
+        ...
+
 
 class SimpleMethodManager(MethodManager):
     """Manager for cached access to DatMethods."""
@@ -107,10 +300,15 @@ class SimpleMethodManager(MethodManager):
     ) -> Union[DatMethodType, DatMethod]:
         if name in self._dat_methods:
             return self._dat_methods[name]
-        elif default is not None:
+        # Fall back to dynamic loading for dotted module.fn names
+        if "." in name:
+            try:
+                return dynamic_load_fn(name)
+            except (ValueError, AttributeError):
+                pass
+        if default is not None:
             return default
-        else:
-            raise KeyError(f"Do method {name!r} not found.")
+        raise KeyError(f"Do method {name!r} not found.")
 
     def mount(self, value: DatMethod, at: str):
         self._dat_methods[at] = value
@@ -118,12 +316,32 @@ class SimpleMethodManager(MethodManager):
     def keys(self):
         return self._dat_methods.keys()
 
+    def resolve_dat_folder(self, name: str) -> Optional[str]:
+        """SimpleMethodManager has no mount system, always returns None."""
+        return None
+
 
 # TODO: use Path for everything instead of os.path
 class DatManager:
-    """Singleton class that manages the configuration and loading of Dats.
+    """Singleton that manages DAT creation, loading, and persistence.
 
-    Configuration info for the 'dat' module loaded from a DataConfig.
+    DatManager coordinates two responsibilities:
+    - **Path resolution**: Finding and creating DAT folders in sync_folders
+    - **Spec resolution**: Delegating to DoManager (self.do) for loading templates
+
+    The `do` property holds a MethodManager (either DoManager or SimpleMethodManager)
+    that handles the do-system namespace. When .dataconfig.yaml has mount_commands,
+    a DoManager is used; otherwise SimpleMethodManager provides basic functionality.
+
+    Configuration is loaded from .dataconfig.yaml (see DataConfig).
+
+    Example:
+        # DatManager is accessed via Dat.manager
+        dat = Dat.manager.create(Dat, path="runs/exp1", spec={"name": "test"})
+        dat = Dat.manager.load(Dat, "runs/exp1")
+
+        # String specs are resolved via the do-system
+        dat = Dat.manager.create(Dat, spec="catalog.template")
     """
 
     config: DataConfig
@@ -131,6 +349,11 @@ class DatManager:
     sync_folders: List[str]  # NOTE: includes the main_sync_folder
     do: MethodManager = SimpleMethodManager()
     dat_cache: weakref.WeakValueDictionary[str, "Dat"] = weakref.WeakValueDictionary()
+
+    @property
+    def sync_folder(self) -> str:
+        """Backward compatibility: alias for main_sync_folder."""
+        return self.main_sync_folder
 
     def __init__(self, config: Optional[DataConfig] = None):
         if config is None:
@@ -140,33 +363,38 @@ class DatManager:
 
         self.main_sync_folder = self.config.local_prefix
         self.sync_folders = [self.main_sync_folder, *self.config.extra_local_prefixes]
+        self.dat_cache = weakref.WeakValueDictionary()
 
         assert self.main_sync_folder, "Sync folder not defined."
+
+        # Initialize do manager based on config
+        if config.mount_commands is not None:
+            from .do_fn import create_do_manager
+            self.do = create_do_manager(config)
+        else:
+            self.do = SimpleMethodManager()
 
     def create(
         self,
         dat_class: Type[DatType],
         *,
         path: Union[str, Path, None] = None,
-        spec: Union["DatSpec", Dict, None] = None,
-        overwrite: bool = False,
+        spec: Union["DatSpec", Dict, str, None] = None,
     ) -> DatType:
         """Creates a new Dat with the specified spec dict and backing folder at 'path'.
 
         Args:
+            dat_class: The Dat class to instantiate.
             path (str): The path to the folder where the Dat is stored.
-            spec (Dict): The spec dict that describes the Dat.
-            overwrite (bool): If True, the path will be overwritten if it exists.
-
-        exists_action: "error" | "overwrite" | "use"
+            spec (Dict | str): The spec dict, or a dotted name to load via do-system.
 
         PATH EXPANSION RULES:
         - Path is relative to the Dat.path_root() folder.
         - Time and other variables below are used to expand the path.
         - If the path is None, the _DEFAULT_PATH_TEMPLATE is used
         - If '{unique}' is in the path is assigned a number to make the path unique.
-        - Otherwise an error is generated on path collision, or
-          If 'overwrite' is True, the old folder contents are erased instead.
+        - Otherwise an error is generated on path collision.
+        - Use dat.target_exists in spec to control behavior when target exists.
         - Variables used for path expansion:
             {YYYY} {YY} {MM} {DD} {HH} {mm} {SS}   -- based on time now or vars['time']
             {cwd}    -- the current working directory
@@ -175,8 +403,16 @@ class DatManager:
         if spec is None:
             logger.info("No spec provided. Creating default DatSpec.")
             spec = DatSpec(dat=DatSpecCore(kind="Dat"))
-        elif isinstance(spec, dict):
+        if isinstance(spec, str):
+            spec = self.do.load(spec)
+        if isinstance(spec, dict):
             spec = deepcopy(spec)
+
+            # Ensure 'dat' field exists with at least 'kind'
+            if "dat" not in spec:
+                spec["dat"] = {}
+            if "kind" not in spec["dat"]:
+                spec["dat"]["kind"] = dat_class.__name__
 
             templated_name = spec.get("dat", {}).get("name")
             if templated_name is not None:
@@ -184,7 +420,11 @@ class DatManager:
                 if path is None:
                     path = templated_name
 
+            # Extract target_exists before converting to DatSpec
+            target_exists = spec.get("dat", {}).get("target_exists", "error")
             spec = dat_class._SPEC_TYPE(**spec)
+        else:
+            target_exists = "error"
 
         if not isinstance(spec, dat_class._SPEC_TYPE):
             raise ValueError(
@@ -196,7 +436,13 @@ class DatManager:
         else:
             path = str(path)
 
-        path = self.resolve_path(self.expand_dat_path(path, overwrite=overwrite))
+        expanded_path, skip_execution = self.prepare_dat_path(path, target_exists=target_exists)
+
+        # Handle "use" - return existing Dat if it exists
+        if skip_execution:
+            return self.load(dat_class, name_or_path=expanded_path)
+
+        path = self.resolve_path(expanded_path)
         if not os.path.exists(path):
             os.makedirs(path)
         try:
@@ -228,6 +474,7 @@ class DatManager:
         (3) as a named dat under the DAT_ROOT folder
         (4) as a named dat on S3 (LATER)
 
+        :param dat_class: The Dat class to instantiate.
         :param name_or_path: Either the fullpath to the folder of the Dat to
             load or its name to be searched for
         :param cwd: used instead of current working dir for dat search
@@ -273,31 +520,19 @@ class DatManager:
         except Exception as e:
             raise EnvironmentError("Error during spec loading.") from e
 
-        # merge spec with base
-        if spec.dat.base:
-            base_dat = self.load(
-                dat_class=dat_class,
-                name_or_path=spec.dat.base,
-                cwd=cwd,
-                cache_after_load=cache_after_load,
-            )
-            spec_dict = spec.model_dump()
-            if dotted_get(spec_dict, "dat.do", None) is None:
-                # remove the "do" field if not specified to allow merging with base
-                spec_dict["dat"].pop("do", None)
-            spec = spec_type(
-                **utils.merge_dicts(
-                    base_dat.get_spec(),
-                    spec_dict,
-                )
-            )
+        # Note: Base expansion is handled by do_fn.expand_spec() for do-system specs.
+        # We don't expand bases here since dat.base can reference do-system configs,
+        # not just disk dats.
 
         kind = spec.dat.kind
         dat_class_name = dat_class.__name__
 
-        # a generic "Dat" class will be able to load any Dat because we can guarantee
-        # compatibility, otherwise, the subclass must match dat.kind exactly
-        if dat_class_name != "Dat" and kind != dat_class_name:
+        # If using generic Dat class, look up the correct subclass based on kind
+        if dat_class_name == "Dat" and kind != "Dat":
+            actual_class = self._find_subclass_by_name(dat_class, kind)
+            if actual_class:
+                dat_class = actual_class
+        elif dat_class_name != "Dat" and kind != dat_class_name:
             raise ValueError(
                 f"Spec 'dat.kind' <{kind}> doesn't match <{dat_class_name}>. "
                 "Update the spec accordingly and instantiate with the correct class "
@@ -344,14 +579,42 @@ class DatManager:
         path = str(path)
         return path.split("/")[-1]
 
-    def expand_dat_path(
+    def _find_subclass_by_name(self, klass: Type, name: str) -> Optional[Type]:
+        """Recursively find a subclass by name."""
+        if klass.__name__ == name:
+            return klass
+        for sub in klass.__subclasses__():
+            if result := self._find_subclass_by_name(sub, name):
+                return result
+        return None
+
+    def prepare_dat_path(
         self,
         path_spec: Union[str, Path, None],
         *,
         variables: Optional[Dict[str, Any]] = None,
-        overwrite: bool = False,
-    ) -> str:
-        """(See Dat.manager.create for path expansion rules.)"""
+        target_exists: str = "error",
+    ) -> Tuple[str, bool]:
+        """Prepare a dat path, expanding templates and handling existing targets.
+
+        This method does more than just expand - it may create/delete folders
+        depending on the target_exists setting.
+
+        Args:
+            path_spec: Path template with optional variables like {YYYY}, {unique}, etc.
+            variables: Additional variables for path expansion.
+            target_exists: Behavior when target exists:
+                - "error" (default): raise an exception
+                - "use": return (path, True) to signal skip execution
+                - "overwrite": delete existing folder and return path
+                - "increment": auto-increment path to make it unique
+
+        Returns:
+            Tuple of (path, skip_execution). If skip_execution is True,
+            the caller should use the existing Dat without re-running.
+        """
+        if path_spec is None:
+            path_spec = _DEFAULT_PATH_TEMPLATE
         path_spec = str(path_spec)
         now, count = datetime.now(), 1
         while True:
@@ -372,14 +635,16 @@ class DatManager:
                 self.main_sync_folder, path_spec.format_map(format_vars)
             )
             if not os.path.exists(expanded_path):
-                return expanded_path
-            elif overwrite:
+                return expanded_path, False
+            elif target_exists == "use":
+                return expanded_path, True  # Signal to caller to use existing Dat
+            elif target_exists == "overwrite":
                 shutil.rmtree(expanded_path)
-                return expanded_path
-            elif "{unique}" not in path_spec:
-                raise Exception(f"DAT: Create failed, dir {expanded_path!r} exists")
-            else:
+                return expanded_path, False
+            elif target_exists == "increment" or "{unique}" in path_spec:
                 count += 1
+            else:  # "error" or unknown
+                raise Exception(f"DAT: Create failed, dir {expanded_path!r} exists")
 
     def resolve_path(self, name: Union[str, Path]) -> str:
         name = str(name)
@@ -391,6 +656,10 @@ class DatManager:
         path = os.path.join(self.config.cwd, name)
         if os.path.exists(path):
             return path
+
+        # Check mount system via the do manager's interface
+        if (mount_path := self.do.resolve_dat_folder(name)) is not None:
+            return mount_path
 
         for folder in self.sync_folders:
             path = os.path.join(folder, name)
@@ -404,9 +673,13 @@ class DatManager:
 class DatSpecCore(BaseModel):
     """Part of the spec that defines which Dat class should load it."""
 
-    kind: str
+    model_config = ConfigDict(extra="allow")
+
+    kind: str = "Dat"
     base: Optional[str] = None
     do: Optional[str] = None
+    args: Optional[List[Any]] = None
+    kwargs: Optional[Dict[str, Any]] = None
 
 
 class DatSpec(BaseModel):
@@ -474,7 +747,14 @@ class Dat(Generic[DatSpecType_co]):
 
     _SPEC_TYPE: Type[DatSpec] = DatSpec
 
-    _manager: DatManager = DatManager()  # The singleton manager for all Dats
+    _manager: Optional[DatManager] = None  # Lazily initialized singleton manager
+
+    # Backward compatibility: expose _manager as manager
+    @classproperty
+    def manager(cls) -> DatManager:
+        if cls._manager is None:
+            cls._manager = DatManager()
+        return cls._manager
 
     _path: str  # The immutable absolute path of this Dat
     spec: DatSpecType_co  # The immutable spec of this Dat
@@ -512,7 +792,7 @@ class Dat(Generic[DatSpecType_co]):
 
     def get_path_name(self) -> str:
         """Returns the name (relative path) of this Dat."""
-        return Dat._manager.get_path_name(self._path)
+        return Dat.manager.get_path_name(self._path)
 
     def get_path_tail(self) -> str:
         """Returns the shortname (last part of the path) of this Dat."""
@@ -548,7 +828,7 @@ class Dat(Generic[DatSpecType_co]):
 
         """
         name_or_path = str(name_or_path)
-        return cls._manager.load(
+        return cls.manager.load(
             cls,
             name_or_path,
             cwd=cwd,
@@ -561,14 +841,19 @@ class Dat(Generic[DatSpecType_co]):
         cls: Type[DatType],
         path: Optional[Union[str, Path]] = None,
         spec: Union[DatSpecType_co, Dict, None] = None,
-        overwrite: bool = False,
     ) -> DatType:
-        """Create a Dat given `path` and `spec`."""
-        return cls._manager.create(
+        """Create a Dat given `path` and `spec`.
+
+        Use dat.target_exists in spec to control behavior when target path exists:
+            - "error" (default): raise an exception
+            - "use": return existing Dat without re-creating
+            - "overwrite": delete existing folder and recreate
+            - "increment": auto-increment path to make it unique
+        """
+        return cls.manager.create(
             cls,
             path=path,
             spec=spec,
-            overwrite=overwrite,
         )
 
     @classmethod
@@ -589,16 +874,13 @@ class Dat(Generic[DatSpecType_co]):
             return False
 
     def run(self) -> Tuple[bool, Dict[str, Any]]:
-        # TODO: wrap this by using Do and Dat managers
         if not self.spec.dat.do:
             raise ValueError("Dat can't be run because it needs dat.do defined.")
 
         try:
-            fn = utils.dynamic_load_fn(self.spec.dat.do)
-        except Exception:
-            raise ValueError(
-                "Couldn't find dat.do function. It must be specified as: my_module.my_fn"
-            )
+            fn = Dat.manager.do.load(self.spec.dat.do)
+        except KeyError as e:
+            raise ValueError(f"Couldn't find dat.do function: {self.spec.dat.do!r}") from e
 
         result: Dict[str, Any] = {
             "start_time": str(datetime.now()),
@@ -623,16 +905,16 @@ class Dat(Generic[DatSpecType_co]):
         return success, metadata
 
     def save(self) -> None:
-        """Flags a Dat to have a version of its folder's contents saved
-        to in the backing store.
-        """
-        raise NotImplementedError
+        """Saves the Dat's results to the result file in its folder."""
+        if self._result:
+            with Path(self.get_path(), RESULT_YAML).open("w") as out:
+                yaml.safe_dump(self._result, out, sort_keys=False)
 
     def delete(self, *, must_exist=True) -> bool:
         """Deletes the folder and its contents from the filesystem.
         This deletion will also be reflected as a deletion pushed to git.
         Still, the backing store will retain all previous versions of this Dat."""
-        Dat._manager.dat_cache.pop(self._path, None)  # Remove from cache
+        Dat.manager.dat_cache.pop(self._path, None)  # Remove from cache
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
@@ -644,21 +926,21 @@ class Dat(Generic[DatSpecType_co]):
 
     def copy(self: DatType, new_path: Union[str, Path]) -> DatType:
         """Copies this Dat to a new location."""
-        new_path_ = Dat._manager.resolve_path(new_path)
+        new_path_ = Dat.manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
         shutil.copytree(self._path, new_path_)
-        result = Dat._manager.load(type(self), new_path_)
+        result = Dat.manager.load(type(self), new_path_)
         return result
 
     def move(self: DatType, new_path: Union[str, Path]) -> DatType:
         """Moves this Dat to a new location."""
-        del Dat._manager.dat_cache[self._path]  # Remove from cache
-        new_path_ = Dat._manager.resolve_path(new_path)
+        del Dat.manager.dat_cache[self._path]  # Remove from cache
+        new_path_ = Dat.manager.resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
         shutil.move(self._path, new_path_)
-        result = Dat._manager.load(type(self), new_path_)
+        result = Dat.manager.load(type(self), new_path_)
         return result
 
     def __repr__(self):
@@ -776,7 +1058,7 @@ class DatContainer(Dat, Generic[DatType]):
             # these will load as the Dat class as defined in each spec's
             # main  .class, but we're loading them dynamically from Dat directly,
             # so we'll ignore the type and assume they will all be List[T]
-            self._dats = [Dat._manager.load(p) for p in self.get_dat_paths()]  # type: ignore
+            self._dats = [Dat.load(p) for p in self.get_dat_paths()]  # type: ignore
         return self._dats  # type: ignore
 
     @staticmethod
@@ -800,7 +1082,7 @@ def dotted_get(
     default_value: Any = _NO_ARG,
 ):
     """Utility method to get value from a recursive dict tree or return None."""
-    d = source.spec if isinstance(source, Dat) else source
+    d = source.get_spec() if isinstance(source, Dat) else source
     if isinstance(keys, str):
         keys = keys.split(".")
     for k in keys:
@@ -898,7 +1180,7 @@ def create_from_template(
     if data_config is None:
         data_config = DataConfig.new()
 
-    template = utils.load_dict(path)
+    template = load_dict(path)
     if template is None:
         raise FileNotFoundError("Couldn't find template under %s", path)
 

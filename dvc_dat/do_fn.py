@@ -18,9 +18,9 @@ import yaml
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import Type, Union, Any, Dict, Callable, List, Iterable
+from typing import Type, Union, Any, Dict, Callable, List, Iterable, Optional, Tuple
 
-from dvc_dat.dat import Dat, MethodManager
+from dvc_dat.dat import Dat, MethodManager, _DEFAULT_PATH_TEMPLATE
 
 # The loadable "do" fns, scripts, configs, and methods are in the do_folder
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
@@ -31,7 +31,7 @@ _MAIN = "__main__"             # default module var to use when none specified
 # Dat Template Parameters
 _DAT_BASE = "dat.base"         # the base spec to expand
 _DAT_PATH = "dat.path"         # the template for the dat's path
-_DAT_PATH_OVERWRITE = "dat.path_overwrite"  # overwrite the path
+_DAT_TARGET_EXISTS = "dat.target_exists"  # behavior when target exists: error|use|overwrite|increment
 _DAT_DO = "dat.do"             # the fn to execute
 _DAT_ARGS = "dat.args"         # prefix args for the dat.do method
 _DAT_KWARGS = "dat.kwargs"     # default kwargs for the dat.do method
@@ -73,6 +73,14 @@ class DoManager(MethodManager):
     - If a spec has a "dat.base" key, then it is loaded and merged with the spec.
         - This process is repeated until no more "dat.base" keys are found.
 
+    MOUNT TYPES (configured in .dataconfig.yaml mount_commands)
+    - folder: Mount a directory tree; files become dotted paths
+    - module: Mount an already-imported Python module's attributes
+    - file: Mount a single .py/.yaml/.json file
+    - value: Mount a literal dict/value directly
+    - files_shallowly: Mount files in a folder (non-recursive)
+
+    See docs/mount-commands.md for details.
     """
     do_folder: str                                     # last added loadables folder
     base_locations: Dict[str, str]                     # path to module or module itself
@@ -84,6 +92,7 @@ class DoManager(MethodManager):
         self.base_objects = {}
         self.base_locations = {}  # all paths must be absolute & module names qualified
         self.registered_values = None
+        self.do_folder = None
 
     def __call__(self, do_spec: Union[Spec, Dat, str], *args, **kwargs) -> Any:
         """Loads and executes a 'do-method'.
@@ -110,7 +119,9 @@ class DoManager(MethodManager):
                 result = obj(*args, **kwargs)
                 return result
             else:
-                dat = self.dat_from_template(spec=obj)
+                dat, skip_execution = self.dat_from_template(spec=obj)
+                if skip_execution:
+                    return dat.get_spec()  # Return existing spec without re-running
                 return self._run_dat(dat, *args, **kwargs)
         except Exception as e:
             raise Exception(F"In {do_spec!r}") from e
@@ -118,6 +129,18 @@ class DoManager(MethodManager):
     def keys(self) -> Iterable[str]:
         """Returns the list of all defined names."""
         return self.base_locations.keys()
+
+    def resolve_dat_folder(self, name: str) -> Optional[str]:
+        """Return absolute path to DAT folder if found in mounts, else None.
+
+        Checks base_locations for a matching _spec_ key and returns
+        the parent directory of the spec file.
+        """
+        spec_key = name + "/_spec_"
+        if spec_key in self.base_locations:
+            spec_path = self.base_locations[spec_key]
+            return os.path.dirname(spec_path)
+        return None
 
     def load(self,
              dotted_name: str,
@@ -138,17 +161,27 @@ class DoManager(MethodManager):
         - If FILENAME.json or FILENAME.yaml is found, then it is loaded, and its
           parsed contents are returned.  (PART-NAME is ignored)
         """
+        def _parse_yaml_prefix(result):
+            """Parse YAML string specs (e.g., 'yaml\\ndat:\\n  kind: Dat\\n...')"""
+            if isinstance(result, str) and result.lstrip().lower().startswith("yaml"):
+                yaml_content = result.lstrip()[4:].lstrip()
+                return yaml.safe_load(yaml_content)
+            return result
+
         parts = dotted_name.split(".")
         file_base = parts[0]
         if self.registered_values and _DO_NULL != \
                 (value := self.registered_values.get(dotted_name, _DO_NULL)):
+            value = _parse_yaml_prefix(value)
             return copy.deepcopy(value) if isinstance(value, dict) else value
         obj = self.get_base(file_base, default=None)
         if obj is None:
+            # Try resolving via do_folder traversal
+            if self.do_folder and (result := _resolve_in_folder(self.do_folder, parts)):
+                return result
             if default is _DO_NULL:
                 raise KeyError(F"do.load: The base for {dotted_name!r} was not found.")
             else:
-                obj = default      # Noqa    # Remove ???????????????
                 return default
         try:
             if obj == _DO_ERROR_FLAG:
@@ -182,6 +215,7 @@ class DoManager(MethodManager):
             if kind and not isinstance(result, kind):
                 raise KeyError(F"DO: Expected {dotted_name!r} of type {kind} " +
                                F"but found {result!r}")
+            result = _parse_yaml_prefix(result)
             return copy.deepcopy(result) if isinstance(result, dict) else result
         except Exception as e:
             raise e from KeyError(F"WHILE loading {dotted_name!r}")
@@ -302,7 +336,11 @@ class DoManager(MethodManager):
             spec = copy.deepcopy(spec)
         if base := Dat.get(spec, _DAT_BASE, None):
             sub_spec = self.expand_spec(base)
-            return self.merge_configs(sub_spec, spec)
+            result = self.merge_configs(sub_spec, spec)
+            # Clear the base field after expansion to prevent double-expansion
+            if "dat" in result and "base" in result["dat"]:
+                result["dat"]["base"] = None
+            return result
         else:
             return spec
 
@@ -311,21 +349,40 @@ class DoManager(MethodManager):
             spec: Spec,
             *,
             path: str = None
-    ) -> Dat:
-        """Creates a mew Dat object from a template spec."""
-        spec, count = copy.deepcopy(spec), 1
-        # Dat.set(spec, _MAIN_ARGS, args or [])
-        # Dat.set(spec, _MAIN_KWARGS, kwargs or {})
+    ) -> Tuple[Dat, bool]:
+        """Creates a new Dat object from a template spec.
+
+        The dat.target_exists parameter controls behavior when the target path exists:
+            - "error" (default): raise an exception
+            - "use": return existing Dat with skip_execution=True
+            - "overwrite": delete existing folder and recreate
+            - "increment": auto-increment path to make it unique
+
+        Returns:
+            Tuple of (dat, skip_execution). If skip_execution is True,
+            the caller should use the existing Dat without re-running.
+        """
+        spec = copy.deepcopy(spec)
+        spec = self.expand_spec(spec)  # Resolve base first
+
         path = path or Dat.get(spec, _DAT_PATH, None)
-        overwrite = Dat.get(spec, _DAT_PATH_OVERWRITE, False) and \
-            path.lower() != "{cwd}"  # for safety, we disallow overwriting cwd
-        spec = self.expand_spec(spec)
-        path = Dat.manager.expand_dat_path(path, overwrite=overwrite)  # noqa
-        return Dat.manager.create(path=path, spec=spec, overwrite=overwrite)
+        target_exists = Dat.get(spec, _DAT_TARGET_EXISTS, "error")
+
+        # For safety, disallow overwriting cwd
+        if target_exists == "overwrite" and path and path.lower() == "{cwd}":
+            target_exists = "error"
+
+        path, skip_execution = Dat.manager.prepare_dat_path(path, target_exists=target_exists)
+
+        if skip_execution:
+            return Dat.load(path), True
+
+        return Dat.create(path=path, spec=spec), False
 
     def _run_dat(self, dat: Dat, *args, **kwargs) -> Any:
         """Runs the dat.do method of an instantiated object."""   # noqa
         obj = dat.get_spec()
+
         if dat_args := Dat.get(obj, _DAT_ARGS, None):
             args = dat_args + list(args)
         if dat_kwargs := Dat.get(obj, _DAT_KWARGS, None):
@@ -385,6 +442,33 @@ class DoManager(MethodManager):
         #     self.base_locations[base] = "--registered-value--"
         #     self.base_objects[base] = {}
         # # print(f "Registered {dotted_name} as {value} in {self}")
+
+
+def _resolve_in_folder(folder: str, parts: List[str]) -> Optional[Any]:
+    """Resolve a dotted name by traversing a folder structure.
+
+    For each part, looks for part.yaml, part.json, part.py, or part/ subfolder.
+    Returns the loaded content, or None if not found.
+    """
+    path = folder
+    for i, part in enumerate(parts):
+        # Try file extensions first, then folder
+        for ext in [".yaml", ".json", ".py"]:
+            candidate = os.path.join(path, part + ext)
+            if os.path.isfile(candidate):
+                obj = _load_base_entity(part, candidate)
+                # Dig into remaining parts if any
+                remaining = parts[i+1:]
+                if remaining and isinstance(obj, dict):
+                    return Dat.get(obj, remaining)
+                return obj
+        # Try as subfolder
+        candidate = os.path.join(path, part)
+        if os.path.isdir(candidate):
+            path = candidate
+        else:
+            return None
+    return None  # Ended on a folder with no file
 
 
 def _load_base_entity(base, source_spec: str) -> Union[ModuleType, Spec]:
@@ -605,6 +689,47 @@ def _get_flag(arg):
         return arg[1]
     else:
         return None
+
+
+def create_do_manager(config: "DataConfig") -> DoManager:
+    """Factory function to create a configured DoManager.
+
+    Called from DatManager when mount_commands is present in config.
+    """
+    do_mgr = DoManager()
+
+    if config.mount_commands:
+        do_mgr.mount_all(config.mount_commands, relative_to=config.cwd)
+
+    # Mount dat_tools if available
+    try:
+        from . import dat_tools
+        do_mgr.mount(module=dat_tools, at="dat_tools")
+        do_mgr.mount(module=dat_tools, at="dt")
+        do_mgr.mount(value=dat_tools.cmd_list, at="dt.list")
+        do_mgr.mount(value=dat_tools.cmd_list, at="dat_tools.list")
+    except ImportError:
+        pass
+
+    return do_mgr
+
+
+class DoProxy:
+    """Proxy object that delegates to Dat.manager.do.
+
+    Allows: from dvc_dat import do; do("some_command")
+    """
+    def __getattr__(self, name):
+        from .dat import Dat
+        return getattr(Dat.manager.do, name)
+
+    def __call__(self, *args, **kwargs):
+        from .dat import Dat
+        return Dat.manager.do(*args, **kwargs)
+
+
+# Module-level instance for convenience import
+do = DoProxy()
 
 
 if __name__ == '__main__':
