@@ -11,9 +11,14 @@ __all__ = [
     "DAT_VERSION",
 ]
 
-# Optional: expose do_fn exports if available
-try:
-    from .do_fn import DoManager, do_argv, do
-    __all__.extend(["DoManager", "do_argv", "do"])
-except ImportError:
-    pass  # do_fn not available in this environment
+# do_fn is part of this package and imports cleanly (stdlib + yaml + .dat, and
+# .dat is already loaded above). It was guarded by `except ImportError: pass`,
+# which could only ever have hidden a real bug inside do_fn -- handing callers a
+# package silently missing `do`.
+#
+# Importing it here does not ACTIVATE the do-system: DatManager.do defaults to
+# SimpleMethodManager, and dat.py imports do_fn lazily, only when mount_commands
+# is configured. dat.py itself remains importable with no do_fn at all.
+from .do_fn import DoManager, do_argv, do
+
+__all__ += ["DoManager", "do_argv", "do"]
