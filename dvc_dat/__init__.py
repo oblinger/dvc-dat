@@ -1,5 +1,5 @@
-__version__ = "1.1.0"
-DAT_VERSION = "1.1.0 (2025-11-28)"
+__version__ = "1.2.0"
+DAT_VERSION = "1.2.0 (2026-08-27)"
 
 from .dat import Dat, DatContainer, DatManager, DataConfig
 
