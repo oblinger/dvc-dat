@@ -1,9 +1,0 @@
-dat:
-  kind: Dat
-  base: null
-  do: configurable_salutation
-  args: null
-  kwargs: null
-name: Hello
-lucky_number: 777
-emphasis: false

@@ -16,3 +16,4 @@ site/sitemap.xml.gz
 
 # builds
 *.egg-info/
+/tests/test_sync_folder/(*
