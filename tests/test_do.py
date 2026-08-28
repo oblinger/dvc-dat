@@ -6,7 +6,10 @@ import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import do, DoManager
+from dvc_dat import Dat, DoManager
+
+# Get the do manager from the Dat singleton
+do = Dat.manager.do
 
 
 @pytest.fixture
@@ -15,16 +18,16 @@ def empty_do_mgr():
 
 
 def run_capture(line: str) -> str:
+    # Run from the tests directory since ./do is located there
+    tests_dir = os.path.dirname(os.path.abspath(__file__))
     result = subprocess.run(line, shell=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True)
+                            stderr=subprocess.PIPE, text=True, cwd=tests_dir)
     return result.stdout.strip()
 
 
 def run_capture_tail(line: str) -> str:
     """Run a command and return the last line of the output.
        (test using this will not fail if prints are added to the code)"""
-    _result = subprocess.run(line, shell=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True)
     return run_capture(line).strip().split("\n")[-1]
 
 
@@ -72,6 +75,28 @@ class TestLoad:
                              'player_highlight.money', 'basket_stats.money',
                              'p_metric']}
         assert do.load("supported") == value
+
+    def test_yaml_string_spec_parsing(self):
+        """Test that YAML string specs (prefixed with 'yaml') are parsed correctly."""
+        yaml_spec = """yaml
+dat:
+  do: hello_world
+foo: bar
+nested:
+  key: value
+"""
+        do.mount(at="yaml_test", value=yaml_spec)
+        loaded = do.load("yaml_test")
+        assert isinstance(loaded, dict), "YAML string should be parsed to dict"
+        assert loaded["foo"] == "bar"
+        assert loaded["nested"]["key"] == "value"
+        assert loaded["dat"]["do"] == "hello_world"
+
+    def test_yaml_string_spec_from_file(self, capsys):
+        """Test YAML string spec loaded from a .py file works correctly."""
+        do("hello_yaml_config")
+        output = capsys.readouterr().out
+        assert "YAML GREETER" in output or "888" in output
 
 
 class TestCommandLine:
@@ -138,19 +163,21 @@ class TestRegisteringStuff:
         assert do_("xxx.__main__") == "hello world!"
         do_.mount(at="yyy", module="dvc_dat")  # The already loaded 'dvc_dat' module
         from dvc_dat import Dat
-        assert do_.load("yyy.dats") == Dat.manager
+        assert do_.load("yyy.Dat") == Dat
 
 
 class TestTemplatedDatCreationAndDeletion:
     def test_empty_creation_and_deletion(self):
         from dvc_dat import do
-        assert (dat := do.dat_from_template({})), "Couldn't create Persistable"
+        dat, _ = do.dat_from_template({})
+        assert dat, "Couldn't create Persistable"
         assert dat.delete(), "Couldn't delete Persistable"
 
     def test_creation_and_deletion_with_spec(self):
         from dvc_dat import do
         spec1 = {"dat": {"path": "test_dats/{YY}-{MM} Dats{unique}"}}
-        assert (dat := do.dat_from_template(spec1)), "Couldn't create Persistable"
+        dat, _ = do.dat_from_template(spec1)
+        assert dat, "Couldn't create Persistable"
         assert dat.get_path_name().startswith("test_dats/"), "Wrong path"
         assert dat.delete(), "Couldn't delete Persistable"
 

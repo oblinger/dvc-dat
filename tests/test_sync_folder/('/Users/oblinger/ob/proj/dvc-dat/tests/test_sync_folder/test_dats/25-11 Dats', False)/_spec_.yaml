@@ -1,0 +1,7 @@
+dat:
+  kind: Dat
+  base: null
+  do: null
+  args: null
+  kwargs: null
+  path: test_dats/{YY}-{MM} Dats{unique}

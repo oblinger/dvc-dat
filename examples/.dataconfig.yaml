@@ -1,0 +1,31 @@
+# DVC-Dat Examples Configuration
+# Points to test folders for shared example data
+
+# Local folder where example Dats are stored
+local_prefix: ../tests/test_sync_folder/
+
+# Remote storage prefix
+remote_prefix: example-data/
+
+# Default remote protocol
+default_remote: gs
+
+# Additional local folders to search for Dats
+extra_local_prefixes: []
+
+# Dat class mappings
+dat:
+  mappings: {}
+
+# Mount commands for the "do" system
+mount_commands:
+  - folder: ../standard_do_scripts
+  - folder: ../tests/test_mounted_folder/dat_tools_examples
+  - folder: ../tests/test_mounted_folder/script
+  - folder: ../tests/test_mounted_folder
+  - at: foo
+    file: ../tests/test_mounted_folder/some_python_file.py
+  - at: the_dat_module
+    module: dvc_dat
+  - at: foo.bar.baz
+    value: [11, 22, 33]

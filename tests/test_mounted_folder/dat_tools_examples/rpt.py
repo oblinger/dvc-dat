@@ -15,7 +15,7 @@ simple = {
     "dat": {
         "do": "dt.dat_report",
         "path": "simple_report",
-        "path_overwrite": True
+        "target_exists": "overwrite"
     },
     "dat_report": {
         "title": "Retail Data Matrix",
@@ -31,7 +31,7 @@ __main__ = {
     "dat": {
         "do": "dt.dat_report",
         "path": "dat_report",
-        "path_overwrite": True
+        "target_exists": "overwrite"
     },
     "dat_report": {
         "title": "RPT",
@@ -55,7 +55,7 @@ my_test = {
     "dat": {
         "do": "rpt.my_test_code",
         "path": "dat_report",
-        "path_overwrite": True
+        "target_exists": "overwrite"
     },
     "dat_report": {
         "title": "My Test",

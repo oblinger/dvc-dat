@@ -1,18 +1,16 @@
-# MK-DAT
+# DVC-DAT API Reference
 
-DVC-DAT - Thin python wrapper for DVC-based ML-datasets and workflows
-- Python bindings for pulling/pushing data folders directly from DVC.
-- Git-like work flow for staging then pushing updates to the DVC data-repo.
-- Folder declaratively configured via json/yaml to dynamically launched python actions
-  (supports ML-Flow experiment and model building workflows)
-- Pandas DataFrames and Excel reporting over metrics applied to trees of data folders
+Data artifact management with metadata and provenance tracking.
 
+## Quick Links
 
+- **[Core Concepts](concepts.md)** - Understanding the two namespaces (do-system vs DAT paths)
+- **[Spec Format](spec-format.md)** - `_spec_.yaml` file format reference
+- **[Mount Commands](mount-commands.md)** - Configuring the do-system namespace
 
-## OVERVIEW
+## Overview
 
-ML-DAT provides a simple way to manage data for machine learning projects.
-It has one key class and four key functions:
+dvc_dat has one key class and several key functions:
 
 1. **Dat** -- A named, DVC-version, folder with associated metadata and 
     python action bindings.
@@ -122,32 +120,23 @@ NAME is a dotted.name.string that refers to a python object or function.
 | Cube(points=, dats=, point_fns=)                 | Creates a Data Cube from Dats   |
 
 
-#### .datconfig - Configuration of dvc-dat
+#### .dataconfig.yaml - Configuration
 
-Like git, dvc-dat walks up the path from the current working directory looking for 
-the '.datconfig.json' file, and uses that file to control behavior. 
-Here is an example:
+Like git, dvc-dat walks up the path from the current working directory looking for
+`.dataconfig.yaml` and uses it to control behavior.
 
- # .datconfig.json
-```json
-{
-  "sync_folder": "local/sync",
-  "mount_commands": [
-    {"at": "",     "folder": "other/dat/data"},
-    {"at": "",     "folder": "myscript_folder"},
-    {"at": "",     "value": {"a_key": "main.py"}},
-    {"at": "sub/folder",  "file": "myscripts/a_python.py"}
-  ]
-}
+```yaml
+# .dataconfig.yaml
+sync_folder: data
+mount_commands:
+  - at: catalog
+    folder: src/catalog
+  - at: fixtures
+    module: tests.fixtures
+  - at: constants
+    value: {debug: false}
 ```
 
-- The "sync_folder" indicates where the DVC sync folder is located, this should be a git-tracked folder where the 
-  .dvc control files are stored.
-- The "folder" mount command indicates other root folders where Dat objects may be stored.
-  These folders are scanned before the sync folder to find local copies of Dats.
-- Both the sync folder and these mounted folders are used when looking for do values and functions.
-- The "value" mount command allows you to mount a python object directly into the do space.
-- The "file" mount command allows you to mount a python module directly into the do space.
-  (See the examples section for details.)
+See **[Mount Commands](mount-commands.md)** for all mount types and options.
 
 

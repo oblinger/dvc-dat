@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "dvc_dat"
 dependencies = [
     "pandas",
+    "pydantic>=2.10.6",
     "pyyaml",
 ]
 requires-python = ">= 3.8"
@@ -21,3 +22,11 @@ packages = ["dvc_dat"]
 
 [tool.setuptools.dynamic]
 version = {attr = "dvc_dat.__init__.__version__"}
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+    "nbconvert>=7.16.6",
+    "pytest>=8.3.5",
+    "xlsxwriter>=3.2.9",
+]

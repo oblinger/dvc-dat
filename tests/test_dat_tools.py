@@ -6,10 +6,11 @@ import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import do
 from dvc_dat import Dat
 from dvc_dat.dat_tools import to_excel, Cube, from_dat
-# do.register_module("test_dat_tools", "tests.test_dat_tools")
+
+# Get the do manager from the Dat singleton
+do = Dat.manager.do
 do.mount(at="test_dat_tools", module="tests.test_dat_tools")
 
 TMP_PATH = "/tmp/job_test"
@@ -17,31 +18,33 @@ TMP_PATH2 = "/tmp/job_test2"
 
 
 def run_capture(line: str) -> str:
+    # Run from the tests directory since ./do is located there
+    tests_dir = os.path.dirname(os.path.abspath(__file__))
     result = subprocess.run(line, shell=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True)
+                            stderr=subprocess.PIPE, text=True, cwd=tests_dir)
     return result.stdout.strip()
 
 
 @pytest.fixture
 def spec1():
     return {
-        "dat": {"my_key1": "my_val1", "my_key2": "my_val2"}
+        "dat": {"my_key1": "my_val1", "my_key2": "my_val2", "target_exists": "overwrite"}
     }
 
 
 @pytest.fixture
 def dat1(spec1):
-    return Dat.manager.create(spec=spec1, path=TMP_PATH, overwrite=True)
+    return Dat.create(spec=spec1, path=TMP_PATH)
 
 
 @pytest.fixture
 def spec2():
-    return {"dat": {"my_key1": "my_val1", "my_key2": "my_val2"}, "other": "key_value"}
+    return {"dat": {"my_key1": "my_val1", "my_key2": "my_val2", "target_exists": "overwrite"}, "other": "key_value"}
 
 
 @pytest.fixture
 def dat2(spec2):
-    return Dat.manager.create(spec=spec2, path=TMP_PATH2, overwrite=True)
+    return Dat.create(spec=spec2, path=TMP_PATH2)
 
 
 def always_17(_dat: Dat):
@@ -214,8 +217,8 @@ class TestCleanup:
     def test_cleanup(self):
         os.system("rm *.xlsx")  # remove all excel files
         os.system("rm -r test_sync_folder/anonymous")  # remove all anon dats
-        Dat.manager.load("simple_report").delete()
-        Dat.manager.load("dat_report").delete()
+        Dat.load("simple_report").delete()
+        Dat.load("dat_report").delete()
 
 #
 

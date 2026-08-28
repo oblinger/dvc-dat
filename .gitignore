@@ -3,9 +3,13 @@ __pycache__
 .ipynb_checkpoints
 .virtual_documents
 .idea
+/data/
 examples/example_sync_folder/anonymous
 examples/example_sync_folder/runs
 examples/example_sync_folder/sprint25
 site/sitemap.xml
 site/sitemap.xml.gz
 /tests/test_sync_folder/test_dats
+
+# builds
+*.egg-info/

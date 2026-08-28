@@ -41,14 +41,10 @@ def cmd_list(prefix: str = ""):
     """Lists all do names with a given prefix."""
     print(f"\nBase names matching: '{prefix}*'")
     for k in Dat.manager.do.keys():   # do.base_locations.items():
-        v = Dat.manager.do.load(k)
         if prefix not in k:
             continue
-        # elif isinstance(v, str) and v[0] != '-' and do.do_folder:
-        #     size = len(os.path.commonpath([v, do.do_folder]))
-        #     print(f"  {k:25} -->  .../{v[size+1:]}")   # noqa
-        else:
-            print(f"  {k:25} -->  {v}")  # noqa
+        v = Dat.manager.do.load(k, default="<module>")
+        print(f"  {k:25} -->  {v}")  # noqa
 
 
 def from_dat(source: Union[Dat, str, Iterable],
@@ -334,7 +330,7 @@ class Cube(object):
                 point[_INDICIES] = sub_indicies
             self.points += points
         elif isinstance(source, str):
-            self._add_dats(Dat.manager.load(source), this_index, indicies)
+            self._add_dats(Dat.load(source), this_index, indicies)
         elif isinstance(source, List):
             for element in source:
                 self._add_dats(element, len(indicies) + 1, indicies)
