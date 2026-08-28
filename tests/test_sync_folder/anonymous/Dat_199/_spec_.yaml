@@ -1,6 +1,0 @@
-dat:
-  kind: Dat
-  base: null
-  do: foo
-  args: null
-  kwargs: null
