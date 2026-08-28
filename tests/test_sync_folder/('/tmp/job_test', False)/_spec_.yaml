@@ -1,9 +1,0 @@
-dat:
-  kind: Dat
-  base: null
-  do: null
-  args: null
-  kwargs: null
-  my_key1: my_val1
-  my_key2: my_val2
-  target_exists: overwrite
