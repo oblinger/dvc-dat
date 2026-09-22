@@ -627,9 +627,18 @@ def _cmd_info(argv: List[str]) -> int:
 
 
 def _configured() -> DataConfig:
-    """The config in force, reading the nearest `.dataconfig.yaml` if none is."""
+    """The config in force, reading the nearest `.dataconfig.yaml` if none is.
+
+    The config's folder is the project's import root: it goes first on
+    `sys.path` before anything is resolved, so a project's own modules load
+    from any working directory, installed or not.  The API path never touches
+    `sys.path` -- there the program that imported `dvc_dat` owns it.
+    """
     if do.config is None:
-        do.configure()
+        config = DataConfig.new()
+        if config.cwd not in sys.path:
+            sys.path.insert(0, config.cwd)
+        do.configure(config)
     return do.config
 
 

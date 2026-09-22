@@ -9,6 +9,7 @@ Every user-visible change to `dvc_dat`, newest first.
 ## 2.0.0 — 2026-09-21
 
 - `do` configures itself on first use: `import dvc_dat` still reads no
+- The `dat` CLI puts the config's folder first on `sys.path`, so a project's own modules resolve from any directory, installed or not.
   filesystem, but the first `do(...)`, `do.load(...)`, `Dat.load`,
   `Dat.create` or `Dat.manager` access discovers the nearest
   `.dataconfig.yaml` and applies its `mount_commands`. `do.configure(source)`

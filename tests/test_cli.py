@@ -264,3 +264,33 @@ class TestXBootstrap:
         nested = make_project(tmp_path, python="/no/such/python")
         code, _, err = run_x("greet", cwd=nested)
         assert code == 1 and "/no/such/python" in err
+
+
+class TestImportRoot:
+    """The config folder is the project's import root (T010)."""
+
+    @staticmethod
+    def _project(root: Path) -> Path:
+        (root / ".dataconfig.yaml").write_text("local_prefix: data/\n")
+        (root / "mypkg").mkdir()
+        (root / "mypkg" / "__init__.py").write_text("")
+        (root / "mypkg" / "job.py").write_text("def run():\n    return 42\n")
+        notes = root / "notes"
+        notes.mkdir()
+        return notes
+
+    def test_a_projects_own_module_resolves_from_a_subfolder(self, tmp_path):
+        notes = self._project(tmp_path)
+        code, out, err = dat("mypkg.job.run", cwd=notes)
+        assert (code, out) == (0, "42"), err
+
+    def test_a_projects_own_module_resolves_from_the_root(self, tmp_path):
+        self._project(tmp_path)
+        code, out, err = dat("mypkg.job.run", cwd=tmp_path)
+        assert (code, out) == (0, "42"), err
+
+    def test_x_from_a_subfolder(self, tmp_path):
+        notes = self._project(tmp_path)
+        code, out, err = run_x("mypkg.job.run", cwd=notes,
+                               env=_env(DAT_PYTHON=sys.executable))
+        assert (code, out) == (0, "42"), err

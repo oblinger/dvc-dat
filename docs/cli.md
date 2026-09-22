@@ -5,6 +5,12 @@
 anything that needs the namespace; `dat --version` and `dat --help` need no
 config at all.
 
+The config's folder is the project's import root: `dat` puts it first on
+`sys.path` before resolving anything, so `mypkg.job.run` means the same
+thing from every directory under the project, whether or not `mypkg` is
+installed. (The API path never touches `sys.path`; the program that
+imported `dvc_dat` owns it.)
+
 ```
 dat do TARGET [ARG ...] [KEY=VALUE ...]   run TARGET
 dat TARGET [ARG ...] [KEY=VALUE ...]      the same, shorthand
