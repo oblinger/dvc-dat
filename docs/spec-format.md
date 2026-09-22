@@ -1,6 +1,8 @@
 # Spec File Format
 
-Every DAT folder contains a `_spec_.yaml` (or `_spec_.json`) file that describes its contents and configuration.
+Every dat folder holds a `_spec_.yaml` (a `_spec_.json` is read too). The spec
+is the dat's complete, argumentless recipe: everything needed to run it is in
+the file, and nothing is supplied at the call site.
 
 ## Minimal Spec
 
@@ -9,94 +11,122 @@ dat:
   kind: Dat
 ```
 
-The only required field is `dat.kind`, which specifies the Python class.
+`dat.kind` names the Python class. It defaults to the class that created the
+dat, so the minimal spec a template has to write is `{}`.
 
-## Complete dat.* Fields
+## The `dat` section
 
 ```yaml
 dat:
-  kind: Dat                              # Required: class name
-  base: "catalog.base_template"          # Inherit from another spec
-  name: "runs/{YYYY}-{MM}/{unique}"      # Path template (if no path provided)
-  do: "scripts.run_experiment"           # Function to execute
-  args: [1, 2, 3]                        # Positional args for do function
-  kwargs: {verbose: true}                # Keyword args for do function
-  target_exists: error                   # Collision behavior (see below)
+  kind: Dat
+  base: catalog.base_template
+  name: "runs/{YYYY}-{MM}/exp{unique}"
+  do: scripts.run_experiment
+  args: [1, 2, 3]
+  kwargs: {verbose: true}
+  target_exists: error
 ```
-
-### Field Descriptions
 
 | Field | Description |
 |-------|-------------|
-| `kind` | Python class name. Usually `Dat` or a subclass. |
-| `base` | Dotted name of a spec to inherit from. Recursively expanded. |
-| `name` | Path template used when `Dat.create()` has no `path` argument. |
-| `do` | Dotted name of a function to execute when the DAT runs. |
-| `args` | List of positional arguments passed to the `do` function. |
-| `kwargs` | Dict of keyword arguments passed to the `do` function. |
-| `target_exists` | What to do if the path already exists. |
+| `kind` | Python class name. `Dat` or a subclass. |
+| `base` | A spec to inherit from — a dotted name, a spec, or a **list** of either. Resolved before the spec is written, so it never appears in a stored spec. |
+| `name` | The path template for the dat's folder. Used when `Dat.create()` is given no `path`. |
+| `do` | Dotted name of the function to run. |
+| `args` | Positional arguments for it, after the dat itself. |
+| `kwargs` | Keyword arguments for it. |
+| `target_exists` | What to do when the folder is already there. |
 
-### target_exists Options
+`kind`, `name`, `do` and `target_exists` are strings. A value that arrives as
+something else is an error — which is how an unquoted `{…}` reference in YAML
+is caught (see **References** below).
+
+### `target_exists`
 
 | Value | Behavior |
 |-------|----------|
-| `error` | Raise an exception (default) |
-| `use` | Return the existing DAT without recreating |
-| `overwrite` | Delete existing folder and recreate |
-| `increment` | Auto-increment path to make it unique |
+| `error` | Raise (default) |
+| `use` | Return the dat that is already there, without running it |
+| `overwrite` | Delete the folder and recreate it |
+| `increment` | Count up (`_2`, `_3`, …) until the path is free |
 
-## Custom Fields
+A template with `{unique}` in its `dat.name` increments whether or not
+`increment` is set. `overwrite` is refused on `{cwd}`.
 
-Any keys outside `dat:` are preserved as custom data:
+## Running a dat
+
+The function `dat.do` names is called as:
+
+```python
+fn(dat, *spec.dat.args, **spec.dat.kwargs)
+```
+
+Its return value is the value of the `do(...)` call. A spec with no `dat.do`
+creates the dat and returns it.
+
+`do(template, *args, **kwargs)` **forks**: keyword arguments update
+`dat.kwargs` key by key and positional arguments replace `dat.args`, the
+updated spec is written as the new dat's `_spec_.yaml`, and the new dat then
+runs with no call-site arguments. So the arguments of every run are on disk, in
+the spec of the dat that run produced.
+
+## Custom fields
+
+Any key outside `dat:` is the dat's own data and is kept as written:
 
 ```yaml
 dat:
   kind: Dat
-name: "My Experiment"
-description: "Testing the baseline model"
+title: My Experiment
 parameters:
   learning_rate: 0.01
   epochs: 100
-  batch_size: 32
 ```
-
-Access custom fields via `dat.get_spec()`:
 
 ```python
-dat = Dat.load("runs/my_experiment")
-print(dat.get_spec()["parameters"]["learning_rate"])  # 0.01
+dat = load("runs/my_experiment")
+dat.get_spec()["parameters"]["learning_rate"]   # 0.01
 ```
 
-## Path Template Variables
+## References: the `{}` grammar
 
-When `dat.name` or `Dat.create(path=...)` contains template variables:
+Any string value may carry `{…}` references. `get_spec()` returns the spec with
+every one of them resolved (computed once per instance); `get_spec(raw=True)`
+returns the file as written.
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `{YYYY}` | 4-digit year | 2025 |
-| `{YY}` | 2-digit year | 25 |
-| `{MM}` | Month (01-12) | 01 |
-| `{DD}` | Day (01-31) | 15 |
-| `{HH}` | Hour (00-23) | 14 |
-| `{mm}` | Minute (00-59) | 30 |
-| `{SS}` | Second (00-59) | 45 |
-| `{now}` | Timestamp `yy-mm-dd_HH-MM-SS` | 25-01-15_14-30-45 |
-| `{cwd}` | Current working directory, full path | /home/me/myproject |
-| `{unique}` | Empty on first use, then `_2`, `_3`, ... | ``, _2, _3 |
+| Reference | Resolves to |
+|-----------|-------------|
+| `{YYYY}` `{YY}` | 4- and 2-digit year |
+| `{MM}` `{DD}` | month, day |
+| `{HH}` `{mm}` `{SS}` | hour, minute, second |
+| `{now}` | timestamp `yy-mm-dd_HH-MM-SS` |
+| `{cwd}` | the working directory, full path |
+| `{unique}` | empty, then `_2`, `_3`, … |
+| `{a.b.c}` | whatever `do.load("a.b.c")` returns |
+| `{{` `}}` | a literal `{` and `}` |
 
-**Example:**
+An undotted name that is neither a built-in nor a key of the `vars` dict passed
+to `expand()` is a `KeyError`. A string that is *exactly* one reference yields
+the referenced object itself, so a spec value can be a function or a dict, not
+only text.
+
+**YAML quoting.** A value that *begins* with `{` must be quoted:
+
 ```yaml
 dat:
-  kind: Dat
-  name: "runs/{YYYY}-{MM}-{DD}/exp_{unique}"
+  name: "{svp.RUN_DIR}/exp"
 ```
-Creates paths like `runs/2025-01-15/exp`, `runs/2025-01-15/exp_2`, `runs/2025-01-15/exp_3`, etc.
 
-## Spec Expansion (dat.base)
+Unquoted, YAML reads `{svp.RUN_DIR}` as a flow mapping and the spec arrives
+with a dict where a string belongs; `validate_spec` rejects it and says so.
 
-When a spec has `dat.base`, the referenced spec is loaded and merged:
+`expand(text, vars=None)` and `expand_spec(spec, vars=None)` are public — use
+them instead of writing a parser.
 
-**Base spec** (`catalog/base.yaml`):
+## Inheritance: `dat.base`
+
+**Base** (`catalog/base.yaml`):
+
 ```yaml
 dat:
   kind: Dat
@@ -105,42 +135,64 @@ defaults:
   epochs: 100
 ```
 
-**Child spec** (`catalog/experiment.yaml`):
+**Child** (`catalog/experiment.yaml`):
+
 ```yaml
 dat:
   kind: Dat
   base: catalog.base
 defaults:
-  epochs: 200  # Override
-custom_param: true  # Add new field
+  epochs: 200
+custom_param: true
 ```
 
-**Expanded result:**
+**Stored spec:**
+
 ```yaml
 dat:
   kind: Dat
-  base: null  # Cleared after expansion
 defaults:
-  optimizer: adam  # From base
-  epochs: 200      # Overridden
-custom_param: true # Added
+  optimizer: adam
+  epochs: 200
+custom_param: true
 ```
 
-Expansion is recursive: if the base also has a `dat.base`, it's expanded first.
+`dat.base` is gone from the result — the stored spec stands on its own.
+Resolution is recursive, and an override wins even when its value is `0`, `""`
+or `false`.
 
-## Result File
-
-After execution, DATs may have a `_result_.yaml` file containing output:
+A list inherits from several specs at once, merged left to right:
 
 ```yaml
-status: completed
-output:
-  accuracy: 0.95
-  loss: 0.05
-completed_at: "2025-01-15T14:30:45"
+dat:
+  base: [catalog.base, catalog.gpu, catalog.nightly]
 ```
+
+`catalog.nightly` wins where they disagree.
+
+## Validation
+
+`Dat.validate_spec(cls, spec) -> spec` runs on both `create` and `load`, on the
+class `dat.kind` names. The default checks that the spec is a mapping, that
+`dat` is a mapping, and that the string-typed `dat.*` fields are strings. A
+subclass overrides it to add its own checks — with a schema library, with a
+hand-written check, or with none at all.
+
+## Result file
+
+`_result_.yaml` holds only what running the dat produced: whatever the function
+put in `dat.get_results()`, plus the two facts the runner knows.
+
+```yaml
+dat:
+  run_at: "2026-09-21 16:20:19"
+  run_time: "00:00:00.011"
+accuracy: 0.95
+```
+
+Arguments are **not** recorded here. They are in the spec.
 
 ## See Also
 
-- [Core Concepts](concepts.md) - How DATs fit into the system
-- [Mount Commands](mount-commands.md) - Configuring template locations
+- [Core Concepts](concepts.md) — how dats fit together
+- [Mount Commands](mount-commands.md) — where templates live

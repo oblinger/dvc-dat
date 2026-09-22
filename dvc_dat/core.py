@@ -515,7 +515,7 @@ class Dat:
     mutable `_result_.yaml`.
 
     Subclasses override `validate_spec` to check or coerce a spec on create and load
-    (a pydantic model inside it is the subclass's choice and dependency).
+    (a schema library inside it is the subclass's choice and dependency).
     """
 
     _manager: Optional[DatManager] = None

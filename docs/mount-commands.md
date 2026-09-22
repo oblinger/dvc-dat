@@ -1,6 +1,16 @@
 # Mount Commands
 
-Mount commands in `.dataconfig.yaml` define the do-system namespace—what dotted names like `catalog.experiment` resolve to.
+`mount_commands` in `.dataconfig.yaml` build the do-system namespace: what a
+dotted name like `catalog.experiment` resolves to. `do.configure(...)` applies
+them — onto the `do` object the process already holds, so a `from dvc_dat import
+do` that ran earlier sees them.
+
+A dotted name that matches no mount is still resolved: `do.load` imports the
+longest importable prefix of the name and `getattr`s the rest, so
+`os.path.join` and `mypkg.models.Trainer` work with nothing mounted at all.
+Mounting is for the names that are *not* importable — YAML and JSON templates,
+files outside the import path, literal values — and for giving an importable
+thing a shorter name.
 
 ## Configuration Location
 
@@ -14,18 +24,21 @@ mount_commands:
     module: tests.fixtures
 ```
 
+Paths are relative to the folder holding the config file.
+
 ## Mount Types
 
 ### folder
 
-Mount a directory tree. Files become accessible by dotted path.
+Mount a directory tree. Files become dotted paths.
 
 ```yaml
 - at: catalog
   folder: src/catalog
 ```
 
-Given this structure:
+Given:
+
 ```
 src/catalog/
   experiment.yaml
@@ -34,16 +47,18 @@ src/catalog/
 ```
 
 You get:
+
 - `catalog.experiment` → loads `experiment.yaml`
 - `catalog.models.baseline` → loads `models/baseline.yaml`
 
 **Supported files:** `.yaml`, `.json`, `.py`
 
-**Use for:** Template directories, configuration trees, organized specs.
+**Use for:** template directories, configuration trees, organized specs.
 
 ### module
 
-Mount an already-imported Python module. Module attributes become accessible.
+Mount a Python module — by import name, by file path, or the module object
+itself. Its attributes become names.
 
 ```yaml
 - at: fixtures
@@ -51,6 +66,7 @@ Mount an already-imported Python module. Module attributes become accessible.
 ```
 
 Given:
+
 ```python
 # tests/fixtures/__init__.py
 simple = {"name": "simple", "value": 42}
@@ -58,19 +74,19 @@ complex_data = {"items": [1, 2, 3]}
 ```
 
 You get:
+
 - `fixtures.simple` → `{"name": "simple", "value": 42}`
 - `fixtures.complex_data` → `{"items": [1, 2, 3]}`
 
-**Important:** The module must be imported before use. Typically done in your package's `__init__.py`:
-```python
-from tests import fixtures  # noqa: F401
-```
+A module mounted with no attribute named resolves to its `__main__`.
 
-**Use for:** Test fixtures, Python-defined configurations, dynamic data.
+**Use for:** a short name over a long import path; modules loaded from a file
+path rather than the import system.
 
 ### file
 
-Mount a single file at a name. `at:` is required — without it the entry is registered under the empty name and cannot be reached.
+Mount a single file at a name. `at:` is required — without it the entry is
+registered under the empty name and cannot be reached.
 
 ```yaml
 - at: helper
@@ -79,14 +95,13 @@ Mount a single file at a name. `at:` is required — without it the entry is reg
 
 - `helper` → loads `scripts/helper.py`
 
-For YAML/JSON files, the content is loaded as a dict.
-For Python files, the module is loaded.
+YAML and JSON files load as data; Python files load as a module.
 
-**Use for:** Standalone scripts, individual config files.
+**Use for:** standalone scripts, individual config files.
 
 ### value
 
-Mount a literal value directly.
+Mount a literal value.
 
 ```yaml
 - at: constants
@@ -96,54 +111,58 @@ Mount a literal value directly.
 ```
 
 You get:
+
 - `constants.pi` → `3.14159`
 - `constants.e` → `2.71828`
 
-**Use for:** Simple constants, inline configuration.
+A string value that begins with `yaml` is parsed as YAML, which is how a spec
+can be written inline in a `.py` file:
 
-### files_shallowly
+```python
+__main__ = """yaml
+dat:
+  do: configurable_salutation
+name: YAML Greeter
+"""
+```
 
-Mount all files in a folder (non-recursive).
+**Use for:** constants, inline specs.
+
+### add_do_folder
 
 ```yaml
-- files_shallowly: scripts/
+- add_do_folder: scripts
 ```
 
-Given:
-```
-scripts/
-  process.py
-  analyze.py
-  utils/        # Ignored (subfolder)
-    helper.py
-```
+Mounts every loadable under `scripts/` by **file name**, ignoring its
+subdirectory, and makes that folder the fallback the resolver walks when a name
+matches nothing else. Two files with the same base name in different
+subfolders collide, and loading either one is an error.
 
-You get:
-- `process` → loads `scripts/process.py`
-- `analyze` → loads `scripts/analyze.py`
-
-**Use for:** Flat directories of scripts.
+**Use for:** a flat command folder where the file name is the command name.
 
 ## The `at:` Prefix
 
-Most mount types support `at:` to add a namespace prefix:
+`at:` is the namespace prefix a mount lands under.
 
 ```yaml
 - at: myprefix
   folder: some/path
 ```
 
-Without `at:`, names are mounted at the root namespace.
+Without `at:`, a `folder:` mount lands at the root namespace — its files are
+reachable by their own relative paths.
 
 ## Choosing a Mount Type
 
 | Your Need | Mount Type |
 |-----------|------------|
 | Directory of YAML/JSON templates | `folder` |
-| Python module with test fixtures | `module` |
+| A short name for a Python module | `module` |
 | Single standalone script | `file` |
-| Inline constants | `value` |
-| Flat folder of scripts (no subfolders) | `files_shallowly` |
+| Inline constants or an inline spec | `value` |
+| A flat folder of commands | `add_do_folder` |
+| An importable object | *nothing — `do.load` imports it* |
 
 ## Complete Example
 
@@ -168,12 +187,15 @@ mount_commands:
   - at: config
     value:
       debug: false
-      version: "1.0.0"
+      version: "2.0.0"
 ```
 
 Usage:
+
 ```python
 from dvc_dat import do
+
+do.configure()
 
 # Load a template
 spec = do.load("catalog.experiment")
@@ -181,7 +203,7 @@ spec = do.load("catalog.experiment")
 # Get a fixture
 fixture = do.load("fixtures.simple")
 
-# Run a script
+# Fork a script's spec and run it
 do("scripts.process", input="data.csv")
 
 # Access a constant
@@ -190,5 +212,5 @@ version = do.load("config.version")
 
 ## See Also
 
-- [Core Concepts](concepts.md) - How mount commands fit in
-- [Spec Format](spec-format.md) - What templates contain
+- [Core Concepts](concepts.md) — how mount commands fit in
+- [Spec Format](spec-format.md) — what templates contain

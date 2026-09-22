@@ -1,132 +1,158 @@
 # DVC-DAT API Reference
 
-Data artifact management with metadata and provenance tracking.
+A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
+itself. `do` is the one namespace and the one runner.
 
 ## Quick Links
 
-- **[Core Concepts](concepts.md)** - Understanding the two namespaces (do-system vs DAT paths)
-- **[Spec Format](spec-format.md)** - `_spec_.yaml` file format reference
-- **[Mount Commands](mount-commands.md)** - Configuring the do-system namespace
+- **[Core Concepts](concepts.md)** — the fork rule, the two kinds of name
+- **[Spec Format](spec-format.md)** — `_spec_.yaml` / `_result_.yaml` reference
+- **[Mount Commands](mount-commands.md)** — configuring the do-system
 
-## Overview
+## What the package exports
 
-dvc_dat has one key class and several key functions:
+```python
+from dvc_dat import (
+    Dat, DatContainer, DatManager, DataConfig,
+    Do, do, do_argv, load, expand, expand_spec,
+)
+```
 
-1. **Dat** -- A named, DVC-version, folder with associated metadata and 
-    python action bindings.
+| Name | What it is |
+|------|------------|
+| `Dat` | A dat folder: its spec, its results, its path |
+| `DatContainer` | A dat whose folder holds other dats |
+| `DatManager` | Creates, finds and loads dats; reached as `Dat.manager` |
+| `DataConfig` | The `.dataconfig.yaml` values |
+| `Do` | The do class — one instance, `do` |
+| `do` | The singleton: namespace, runner, configuration |
+| `do_argv` | The `dat` command line |
+| `load` | `Dat.load` — open a dat by path or name |
+| `expand` / `expand_spec` | The `{}` grammar |
 
-2. **do** -- Loads source-code structures and function into a space of 
-   dotted.name.strings for easy reference within text configuration files.
+## Running and loading — `do`
 
-3. **from_dat** -- builds a pandas DataFrame by applying a set of 
-   metrics (python code-bindings) over a set of Dats.
+```python
+do(TARGET, *args, **kwargs)
+```
 
-4. **to_excel** -- slices and formats a pandas DataFrame into a collection 
-   of Execl documents and sheets for presentation.
-   
-5. **dat_report** -- wraps these functions into configurable report 
-   generator.
+| `TARGET` | What happens |
+|----------|--------------|
+| a **callable** | called as `TARGET(*args, **kwargs)` |
+| a **spec** (dict) | forked with the arguments, created, run |
+| a **Dat**, no arguments | re-run in place |
+| a **Dat**, with arguments | forked into a new dat; the original is untouched |
+| a **string** | `do.load`-ed first, then one of the above |
 
+The run itself is `fn(dat, *spec.dat.args, **spec.dat.kwargs)`, where `fn` is
+what `dat.do` names. `dat.run_at` and `dat.run_time` land in the results.
 
-### API OVERVIEW
+| Method | Description |
+|--------|-------------|
+| `do.load(NAME, default=, kind=)` | The object a dotted name names |
+| `do.name_of(OBJ) -> str` | The name `load` takes back to `OBJ` |
+| `do.configure(SOURCE) -> DataConfig` | Read a config, build the manager, mount |
+| `do.config` | The `DataConfig` in force, or `None` |
+| `do.mount(at=, folder=/file=/module=/value=)` | Add one name to the namespace |
+| `do.mount_all(COMMANDS, relative_to=)` | Apply a config's mount table |
+| `do.add_do_folder(PATH)` | Mount a folder by file name |
+| `do.get_base(BASE)` | The object mounted at a base name |
+| `do.keys()` | Every mounted base name |
+| `do.resolve_base(SPEC)` | Merge a spec over its `dat.base` chain |
+| `do.fork_spec(SPEC, ARGS, KWARGS)` | The fork rule, as a function |
+| `do.dat_from_template(SPEC, path=)` | `(dat, skip_execution)` |
 
-#### Manipulating dict trees
+`do.load` checks mounts first, then imports the longest importable prefix of
+the name and `getattr`s the rest. With nothing found it raises what Python
+raises — `ImportError`, `AttributeError` or `KeyError` — unless `default=` is
+given.
 
-Getters and setters for nested dictionaries.
+## Dat folders
 
-| Method                                            | Description                 |
-|---------------------------------------------------|-----------------------------|
-| Dat.get(Dat/dict, [key1,...], [default]) -> value | Get from tree of dict       |
-| Dat.get(Dat/dict, "dotted.key.name", [default])   | Get using dotted.names      |
-| Dat.set(dict, [key1, key2, ...], value)           | Sets into a tree of dict    |
-| Dat.set(dict, "dotted.key.path", value)           | Set using dotted names      |
-| Dat.gets(Dat/dict, NAMES) -> VALUES               | Get multiple values at once |
-| Dat.sets(dict, ASSIGNMENTS)                       | Set multiple values at once |
+| Method | Description |
+|--------|-------------|
+| `Dat.create(path=, spec=) -> Dat` | Create a dat from a path template and spec |
+| `Dat.load(NAME) -> Dat` | Load a dat by name or path |
+| `Dat.validate_spec(SPEC) -> SPEC` | Classmethod hook, run on create and load |
+| `Dat.manager.exists(NAME) -> bool` | True iff the named dat exists |
+| `.get_spec() -> dict` | The spec with every `{}` reference resolved |
+| `.get_spec(raw=True) -> dict` | The spec as the file was written |
+| `.spec` | `get_spec()` |
+| `.get_results() -> dict` | The mutable results tree |
+| `.get_path() -> str` | The dat's absolute path |
+| `.get_path_name() -> str` | Its name, relative to the sync folder |
+| `.get_path_tail() -> str` | The last path segment |
+| `.save()` | Write the results to `_result_.yaml` |
+| `.delete()` | Remove the folder |
+| `.copy(NAME)` / `.move(NAME)` | Copy or move the dat |
 
+`DatContainer` adds `.get_dat_paths() -> [str]` and `.get_dats() -> [Dat]`.
 
-Examples:
+NAME is an absolute path, a path under the config folder, a mounted dat name,
+or a path under one of the sync folders.
+
+## Dict trees
+
+| Method | Description |
+|--------|-------------|
+| `Dat.get(Dat/dict, "a.b.c", [default])` | Get by dotted name or key list |
+| `Dat.set(dict, "a.b.c", value)` | Set, creating levels as needed |
+| `Dat.gets(Dat/dict, *NAMES) -> [value]` | Several at once |
+| `Dat.sets(dict, *"a.b=value")` | Several assignments at once |
+
+```python
 x = {}
-Dat.set(x, "a.b.c", 1)  # x = {'a': {'b': {'c': lambda x: 20}}}
-Dat.get(x, "a.b.c")()     # returns 20
+Dat.set(x, "a.b.c", 1)
+Dat.get(x, "a.b.c")      # 1
+```
 
+## References
 
+| Function | Description |
+|----------|-------------|
+| `expand(TEXT, vars=None)` | Resolve the `{}` references in one string |
+| `expand_spec(SPEC, vars=None)` | Resolve them throughout a spec tree |
 
+See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
 
+## dat_tools — DataFrames and Excel
 
-#### Managing Dat data folders
+| Function | Description |
+|----------|-------------|
+| `dt.from_dat([Dat, ...], [point_fn, ...]) -> DF` | Apply point_fns to dats |
+| `dt.to_excel(DF, ...)` | Write a DataFrame to Excel |
+| `dt.dat_report(spec, ...) -> DF` | Build an Excel report from dats |
+| `Cube(points=, dats=, point_fns=)` | A data cube over dats |
+| `dt.list([prefix])` | List the do names with a prefix |
 
-| Method                          | Description                                       |
-|---------------------------------|---------------------------------------------------|
-| Dat.create(path=, spec=) -> Dat | Create a new Dat from path template and spec.     |
-| Dat.load(NAME) -> Dat           | Load a Dat by name                                |
-| Dat.manager.exists(NAME) -> bool| Returns True iff named Dat exists                 |
-| .get_spec() -> Spec             | Returns the spec Dict tree for this Dat.          |
-| .get_results() -> Spec          | Returns the results Dict tree for this Dat.       |
-| .get_path() -> Path             | Get the path of the Dat.                          |
-| .get_path_name() -> str         | Get the name of the Dat (relative to repo)        |
-| .get_path_tail() -> str         | Get last part of path (used as its short name)    |
-| .save() -> None                 | Saves Dat's results to the filesystem.            |
-| .delete() -> None               | Delete the Dat from the filesystem.               |
-| .copy(NAME) -> Dat              | Copy the Dat to a new location.                   |
-| .move(NAME) -> Dat              | Move the Dat to a new location.                   |
-| ------------------------------- | ------------------------------------------------- |
-| DatContainer Methods            | Description                                       |
-| .get_dat_paths() -> [str]       | Get the paths of all sub-Dats in the container.   |
-| .get_dats() -> [Dat]            | Loads and returns all the Dats in the container.  |
+`to_excel` needs the `excel` extra: `pip install dvc_dat[excel]`.
 
-Note: NAME can be a full path, a path relative to the repo root or CWD.
+## Command line
 
-Dat Containers are Dats that recursively contain other Dats.
+```
+dat --info
+dat CMD_NAME FIXED_ARGS ... --keyword VALUE ...
+dat CMD_NAME --set DOTTED.KEY VALUE
+dat CMD_NAME --sets "DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2"
+dat CMD_NAME --json DOTTED.KEY '<json>'
+dat CMD_NAME --usage
+dat CMD_NAME --print
+```
 
+`dat` configures itself from the nearest `.dataconfig.yaml`. A command that is
+a template spec is forked: the fixed arguments become its `dat.args`, the
+keyword arguments update its `dat.kwargs`, and `--set` / `--sets` / `--json`
+update any spec key. `--info` prints the version, the sync folder and the
+config that is in force.
 
+## `.dataconfig.yaml`
 
-
-#### Loading objects from source-code
-
-A DoManager (usually accessed via the 'do' singleton) is used to load python 
-source code objects and functions.
-
-| Method                           | Description                                  |
-|----------------------------------|----------------------------------------------|
-| DoManager()                      | Creates a new do namespace.                  |
-| .load(NAME, default=) -> Any     | Loads Python source-code obj by dotted.name  |
-| do(NAME, *args, **kwargs) -> Any | Loads the named Python fn and calls it.      |
-| do(DAT, *args, **kwargs) -> Any  | Invokes fn at 'dat.do' within the Dat's spec |
-| .mount(module=, at=)             | Registers a python module by name            |
-| .mount(file=, at=)               | Registers a .json, .yaml, or .py file        |
-| .mount(value=, at=)              | Registers structured value in do space       |
-| .add_do_folder(PATH) -> None     | Set the folder to load python objects from.  |
-| .get_base(BASE) -> Any           | Get the base object based on it name.        |
-| .merge_configs(BASE, override)   | Merge a config with an override.             |
-| .expand_spec(SPEC) -> SPEC       | Recursively merges spec with base spec.      |
-| .dat_from_template(path=,spec=)  | Expands spec and uses it to call Dat.creates |
-
-NAME is a dotted.name.string that refers to a python object or function.
-
-
-
-
-#### DAT_TOOLS - Data Frame manipulation
-
-| Dat Tools Functions                              | Description                     |
-|--------------------------------------------------|---------------------------------|
-| list([prefix])                                   | Lists defined do cmds w/ prefix |
-| dt.from_dat([Dat, ...], [point_fn, ...]) -> DF   | Applies point_fns to dats       |
-| dt.to_excel(DF, PATH) -> None                    | Save a DF to an excel file      |
-| dt.dat_report(spec, title=, folder=, source=,    | Build Excel report from Dats    |
-| ....  metrics=, docs=, sheets=, columns=         |                                 |
-| ....  formatted_columns=, verbose=, show=) -> DF |                                 |
-| Cube(points=, dats=, point_fns=)                 | Creates a Data Cube from Dats   |
-
-
-#### .dataconfig.yaml - Configuration
-
-Like git, dvc-dat walks up the path from the current working directory looking for
-`.dataconfig.yaml` and uses it to control behavior.
+Like git, dvc-dat walks up from the working directory looking for
+`.dataconfig.yaml`.
 
 ```yaml
-# .dataconfig.yaml
 local_prefix: data
+extra_local_prefixes: []
 mount_commands:
   - at: catalog
     folder: src/catalog
@@ -136,6 +162,5 @@ mount_commands:
     value: {debug: false}
 ```
 
-See **[Mount Commands](mount-commands.md)** for all mount types and options.
-
-
+Those are the only keys; anything else is an error that names the file and the
+key. See **[Mount Commands](mount-commands.md)** for the mount types.

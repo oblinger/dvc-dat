@@ -1,27 +1,35 @@
 # DVC-DAT
 
-Data artifact management with metadata and provenance tracking for ML experimentation.
+Data artifact management with metadata and provenance for ML experimentation.
 
 ## Overview
 
-dvc_dat provides two integrated systems:
-
-- **Do-System**: A namespace for loading Python objects by dotted name (e.g., `catalog.experiment`). Configure via `.dataconfig.yaml` mount commands.
-
-- **DAT Storage**: Persistent data folders where each folder contains a `_spec_.yaml` file with metadata. Load and create DATs by path (e.g., `runs/experiment1`).
+A **dat** is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
+itself; `_result_.yaml` holds only what running it produced. `do` is the one
+namespace and the one runner.
 
 ```python
-from dvc_dat import Dat, do
+from dvc_dat import Dat, do, load
 
-# Load a template from the do-system
+# Importing dvc_dat reads no files; configuring is explicit.
+do.configure()
+
+# A dotted name resolves through the mount table, then by import.
 template = do.load("catalog.experiment")
 
-# Create a DAT with that template
-dat = Dat.create(spec="catalog.experiment", path="runs/exp1")
+# Arguments fork a spec: they are written into the new dat's
+# _spec_.yaml, and the run reads them back from there.
+result = do("catalog.experiment", epochs=200)
 
-# Load an existing DAT
-dat = Dat.load("runs/exp1")
+# Create and open dats directly.
+dat = Dat.create(spec="catalog.experiment", path="runs/exp1")
+dat = load("runs/exp1")
 ```
+
+Arguments never ride beside a spec at the call site. `do(dat)` re-runs a dat on
+disk exactly as it is; `do(dat, x=1)` forks a new dat and leaves the original
+untouched. Nothing about the arguments is recorded in `_result_.yaml` — the
+spec is the record.
 
 See the [full documentation](docs/index.md) for details.
 
@@ -31,28 +39,25 @@ See the [full documentation](docs/index.md) for details.
 pip install -e .
 ```
 
+Excel reports need the optional extra: `pip install -e ".[excel]"`.
+
 ## Usage
 
 ```bash
 cd tests; ./do hello_world
+dat --info
 ```
 
 ## Testing
 
 ```bash
-python -m pytest
-```
-
-## Development
-
-```bash
-python -m black src
+uv run python -m pytest
 ```
 
 ## Example Usage
 
-A couple of included Python notebooks provide a quick overview of the capabilities provided by the DVC-DAT module:
+A couple of included Python notebooks give a quick overview of what the
+DVC-DAT module provides:
 
-- [Usage of dynamic function loading](https://github.com/oblinger/dvc-dat/blob/main/examples/do_examples.ipynb)
-- [Usage of dynamic object loading](https://github.com/oblinger/dvc-dat/blob/main/examples/dat_examples.ipynb)
-
+- [Dynamic function loading](https://github.com/oblinger/dvc-dat/blob/main/examples/do_examples.ipynb)
+- [Dynamic object loading](https://github.com/oblinger/dvc-dat/blob/main/examples/dat_examples.ipynb)
