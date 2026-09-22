@@ -7,10 +7,10 @@
 # ($DAT_RUN, else the config's `run:` key, else `.venv/bin/python -m dvc_dat`
 # beside the config, else `python3 -m dvc_dat`), and execs it with the
 # arguments appended and the working directory unchanged.  The child sees
-# DAT_CONFIG (the config file, so the library reads that one) and DAT_CLI=1
-# (so a program's own main knows it was launched by `dat`).  With an
-# environment active, the console script of the same name shadows this copy
-# and does the same thing.
+# DAT_CLI_CONFIG, the config file: a program's own main tests it to know it
+# was launched by `dat`, and `dat.cli_main()` reads the config from it.  With
+# an environment active, the console script of the same name shadows this
+# copy and does the same thing.
 # Exit 3 when no .dataconfig.yaml is above the working directory.
 
 # -- the nearest .dataconfig.yaml, git style ---------------------------------
@@ -23,10 +23,9 @@ while [ ! -f "$dir/.dataconfig.yaml" ]; do
     dir=$(dirname "$dir")
 done
 
-# -- tell the child which config, and that it was launched by `dat` ---------
-DAT_CONFIG=$dir/.dataconfig.yaml
-DAT_CLI=1
-export DAT_CONFIG DAT_CLI
+# -- tell the child it was launched by `dat`, and with which config ---------
+DAT_CLI_CONFIG=$dir/.dataconfig.yaml
+export DAT_CLI_CONFIG
 
 # -- the config's `run:` key: one top-level line, no YAML parser needed -------
 cfg_run=$(sed -n 's/^run:[[:space:]]*//p' "$dir/.dataconfig.yaml" | head -n 1 |

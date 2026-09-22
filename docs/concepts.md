@@ -166,7 +166,7 @@ own modules resolve from any working directory, installed or not.
 The file is found by walking up from the working directory, or from the path
 given to `do.configure(...)` / `DataConfig.new(cwd=...)`. A
 `.dataconfig.override.yaml` beside it wins over it, and a `DAT_<KEY>`
-environment variable (`DAT_FOLDERS`, `DAT_RUN`) wins over both; `DAT_CONFIG` names the file outright, which is how the `bin/dat` bootstrap hands its child the config it found.
+environment variable (`DAT_FOLDERS`, `DAT_RUN`) wins over both. The `bin/dat` bootstrap hands its child the config it found as `DAT_CLI_CONFIG`, which `cli_main()` alone reads.
 
 See [Mounts](mount-commands.md) for what a program can mount.
 

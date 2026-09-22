@@ -522,17 +522,27 @@ EXAMPLES
 _KWARG = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=")
 
 
+ENV_CLI_CONFIG = "DAT_CLI_CONFIG"     # set by the bootstrap, read here and nowhere else
+
+
 def cli_main(argv: Optional[List[str]] = None, *,
              config: Union[None, str, Path, DataConfig] = None) -> int:
     """The `dat` command line, for a program's own main.
 
     A program that mounts names -- or simply wants `dat` to run inside its own
-    imports -- ends its main with `sys.exit(dat.cli_main())` and names that main
-    in `.dataconfig.yaml`'s `run:`; the bootstrap copy of `bin/dat` then hands
-    every shell command line to it.  `argv` defaults to `sys.argv`; `config`, if
-    given, is installed first (a folder, a config file or a `DataConfig`) instead
-    of the nearest `.dataconfig.yaml`.  The return value is the exit status.
+    imports -- names its main in `.dataconfig.yaml`'s `run:` and, when
+    `DAT_CLI_CONFIG` is set, ends with `sys.exit(dat.cli_main())`.  The bootstrap
+    copy of `bin/dat` sets that one variable -- the config file it found -- for
+    the program it launches, so the main knows it was launched by `dat` and the
+    config is read once; nothing else reads the variable.  `argv` defaults to
+    `sys.argv`; `config` (a folder, a config file or a `DataConfig`) is installed
+    instead, for a program running the command line on a config it chose.  The
+    return value is the exit status.
     """
+    if config is None:
+        config = os.environ.get(ENV_CLI_CONFIG) or None
+        if config and not Path(config).is_file():
+            raise ValueError(f"{ENV_CLI_CONFIG}={config}: no such config file")
     if config is not None:
         do.configure(config)
     return do_argv(list(sys.argv if argv is None else argv))

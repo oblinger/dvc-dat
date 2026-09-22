@@ -17,7 +17,7 @@ Every user-visible change to `dvc_dat`, newest first.
   the first is where new dats are created, all are searched by name; replaces
   `local_prefix` + `extra_local_prefixes`) and `run` (the command a copy of
   `bin/dat` execs; replaces `python:`). `DAT_FOLDERS` and `DAT_RUN` in the
-  environment override them; `DAT_CONFIG` names the file outright. `Dat.manager.dat_folder` /
+  environment override them. `Dat.manager.dat_folder` /
   `.dat_folders` replace `sync_folder` / `sync_folders`.
 - **A spec on disk is a record.** `Dat.create` expands every `{}` once, with
   the same `now` and `unique` the folder got, and writes the result: `dat.name`
@@ -32,8 +32,8 @@ Every user-visible change to `dvc_dat`, newest first.
   it is an unknown-key error. The namespace is whatever the running program
   imported: `do.mount(...)` calls live in your own code, and for the shell
   `run:` names your program's main, which ends with `sys.exit(dat.cli_main())`
-  when `DAT_CLI` is set (`cli_main(argv=None, *, config=None)` is new and
-  exported; the bootstrap sets `DAT_CLI=1` and `DAT_CONFIG` for the program
+  when `DAT_CLI_CONFIG` is set (`cli_main(argv=None, *, config=None)` is new and
+  exported; the bootstrap sets `DAT_CLI_CONFIG` -- the config file it found -- for the program
   it launches). `do.mount_all` is removed. With no mounts a
   dotted name is a Python name and nothing else; an empty `.dataconfig.yaml`
   is a complete config.

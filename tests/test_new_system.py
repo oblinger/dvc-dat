@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import Dat, DataConfig, DatManager  # noqa: E402
+from dvc_dat import Dat, DataConfig, DatManager, cli_main, do  # noqa: E402
 from dvc_dat.core import DATA_CONFIG_FILE  # noqa: E402
 
 
@@ -118,21 +118,28 @@ if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 
 
-class TestDatConfigVariable:
-    def test_dat_config_names_the_file(self, tmp_path, monkeypatch):
-        """`DAT_CONFIG` (set by the bootstrap) is read instead of walking up."""
+class TestDatCliConfigVariable:
+    def test_cli_main_reads_the_file_it_names(self, tmp_path, monkeypatch, capsys):
+        """`DAT_CLI_CONFIG` (set by the bootstrap) is read by `cli_main`, not by
+        discovery: `DataConfig.new()` still walks up from the working directory."""
         project = tmp_path / "proj"
         project.mkdir()
         (project / DATA_CONFIG_FILE).write_text("dat_folders: pinned/\n")
         elsewhere = tmp_path / "elsewhere"
         elsewhere.mkdir()
+        (elsewhere / DATA_CONFIG_FILE).write_text("dat_folders: here/\n")
         monkeypatch.chdir(elsewhere)
-        monkeypatch.setenv("DAT_CONFIG", str(project / DATA_CONFIG_FILE))
-        config = DataConfig.new()
-        assert config.cwd == os.path.realpath(project)
-        assert config.dat_folders[0].endswith("/pinned/")
+        monkeypatch.setenv("DAT_CLI_CONFIG", str(project / DATA_CONFIG_FILE))
+        before = do.config
+        try:
+            assert DataConfig.new().dat_folders[0].endswith("/here/")
+            assert cli_main(["dat", "info"]) == 0
+            assert "/pinned/" in capsys.readouterr().out
+            assert do.config.cwd == os.path.realpath(project)
+        finally:
+            do.configure(before)
 
-    def test_a_missing_dat_config_file_is_an_error(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("DAT_CONFIG", str(tmp_path / "nope.yaml"))
-        with pytest.raises(ValueError, match="DAT_CONFIG"):
-            DataConfig.new()
+    def test_a_missing_file_is_an_error(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DAT_CLI_CONFIG", str(tmp_path / "nope.yaml"))
+        with pytest.raises(ValueError, match="DAT_CLI_CONFIG"):
+            cli_main(["dat", "info"])

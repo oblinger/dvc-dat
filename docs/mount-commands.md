@@ -30,7 +30,7 @@ dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
 dat.do.mount(module="tests.fixtures", at="fixtures")
 
 if __name__ == "__main__":
-    if os.environ.get("DAT_CLI"):      # launched by the dat bootstrap
+    if os.environ.get("DAT_CLI_CONFIG"):   # launched by the dat bootstrap
         sys.exit(dat.cli_main())
 ```
 
@@ -196,7 +196,7 @@ dat.do.mount(folder=str(SRC / "scripts"), at="scripts")
 dat.do.mount(value={"debug": False, "version": "2.0.0"}, at="config")
 
 if __name__ == "__main__":
-    if os.environ.get("DAT_CLI"):      # launched by the dat bootstrap
+    if os.environ.get("DAT_CLI_CONFIG"):   # launched by the dat bootstrap
         sys.exit(dat.cli_main())
 ```
 
