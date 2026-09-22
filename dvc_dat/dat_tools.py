@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, ExcelWriter, Series
 from dvc_dat import Dat, DatContainer
+from dvc_dat.do import do
 
 """
 Helper functions for creating data frames and manipulating data frames.
@@ -40,10 +41,10 @@ SHOW = "show"
 def cmd_list(prefix: str = ""):
     """Lists all do names with a given prefix."""
     print(f"\nBase names matching: '{prefix}*'")
-    for k in Dat.manager.do.keys():   # do.base_locations.items():
+    for k in do.keys():
         if prefix not in k:
             continue
-        v = Dat.manager.do.load(k, default="<module>")
+        v = do.load(k, default="<module>")
         print(f"  {k:25} -->  {v}")  # noqa
 
 
@@ -281,7 +282,7 @@ class Cube(object):
         self.points: Points = list(points) if points else []
         self.point_fns: List[Callable[[Dat], Any]] = []
         for fn_spec in point_fns or []:
-            fn = Dat.manager.do.load(fn_spec) if isinstance(fn_spec, str) else fn_spec
+            fn = do.load(fn_spec) if isinstance(fn_spec, str) else fn_spec
             self.point_fns.append(fn)
         if dats:
             self._add_dats(dats, 1, {})

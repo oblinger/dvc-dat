@@ -1,24 +1,34 @@
-__version__ = "1.2.0"
-DAT_VERSION = "1.1.0 (2025-11-28)"
+"""dvc_dat 2.0 — dats are folders whose `_spec_.yaml` is a complete, argumentless recipe.
 
-from .dat import Dat, DatContainer, DatManager, DataConfig
+    from dvc_dat import Dat, do, load, expand
+
+    do("catalog.experiment", epochs=10)   # forks a new spec, creates a dat, runs it
+    load("runs/2026-09/exp")              # opens a dat on disk
+"""
+
+__version__ = "2.0.0"
+
+from .core import (
+    DataConfig,
+    Dat,
+    DatContainer,
+    DatManager,
+    expand,
+    expand_spec,
+)
+from .do import Do, do, do_argv
+
+load = Dat.load   # open a dat by path or name
 
 __all__ = [
     "Dat",
     "DatContainer",
     "DatManager",
     "DataConfig",
-    "DAT_VERSION",
+    "Do",
+    "do",
+    "do_argv",
+    "load",
+    "expand",
+    "expand_spec",
 ]
-
-# do_fn is part of this package and imports cleanly (stdlib + yaml + .dat, and
-# .dat is already loaded above). It was guarded by `except ImportError: pass`,
-# which could only ever have hidden a real bug inside do_fn -- handing callers a
-# package silently missing `do`.
-#
-# Importing it here does not ACTIVATE the do-system: DatManager.do defaults to
-# SimpleMethodManager, and dat.py imports do_fn lazily, only when mount_commands
-# is configured. dat.py itself remains importable with no do_fn at all.
-from .do_fn import DoManager, do_argv, do
-
-__all__ += ["DoManager", "do_argv", "do"]
