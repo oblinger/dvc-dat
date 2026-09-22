@@ -53,6 +53,21 @@ arguments goes into `_result_.yaml`, and no dat on disk is ever rewritten by a
 run. Re-running an existing dat is `do(dat)` with no arguments; handing that
 same dat arguments forks a new one and leaves the original byte-identical.
 
+**A created dat's spec never changes.** There is no method that rewrites
+`_spec_.yaml`. To try a variation, make a new dat from an edited copy of the
+spec. `merge_dicts` is the same zipper merge `dat.base` uses:
+
+```python
+from dvc_dat import Dat, do, merge_dicts
+
+spec = merge_dicts(d.get_spec(), {"run_template": {"lr": 0.01}})
+Dat.create(spec=spec)
+```
+
+Edit the dict *before* instantiating whenever you can: `do.load` a template,
+change it, then `Dat.create` it. There is no `fork` method; a consumer that
+wants one defines it over `merge_dicts`.
+
 For in-place iteration — profiling, report tuning, a `dev` dat you squash every
 run — give the spec a fixed `dat.name` and `target_exists: overwrite`. The
 running code then has to cope with output files that already exist.

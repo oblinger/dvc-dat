@@ -169,9 +169,14 @@ subfolders collide, and loading either one is an error.
 | A flat folder of commands | `add_do_folder` |
 | An importable object | *nothing — `do.load` imports it* |
 
-A mounted name shadows the static resolution, so an alias that collides with
-an installed package wins — which is the one way a mount can make a Python
-name mean something else.
+A mounted name never shadows an importable one. `mount` raises `ValueError`
+when a top-level name it would add is a module or package Python can import
+from somewhere else: `at`'s first part, or, with no `at`, each top-level file
+or folder of the mounted folder. So `do.mount(folder=…, at="json")` is
+refused, and so is a root-level folder mount holding a `helpers.py` while an
+installed `helpers` exists. Mounting a module at its own name, or a package's
+own folder at its name, is not a clash. Choose another `at`, and the mounted
+object and the installed one each keep a name of their own.
 
 ## Complete example
 
