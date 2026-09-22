@@ -1,24 +1,14 @@
 import os
 import sys
-import json
-import tempfile
-from pathlib import Path
-from typing import Dict
 import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat.dat import Dat, DatContainer  # noqa
+from dvc_dat import Dat, DatContainer  # noqa
 
 
 TMP_PATH = "/tmp/job_test"
 TMP_PATH2 = "/tmp/job_test2"
-
-
-@pytest.fixture
-def do():
-    from dvc_dat import do
-    return do
 
 
 @pytest.fixture
@@ -42,77 +32,9 @@ def spec2():
     return {
         "dat": {
             "kind": "Dat",
-            "path": "test_dats/{YY}-{MM} Dats{unique}",
+            "name": "test_dats/{YY}-{MM} Dats{unique}",
             "my_key1": "my_val111", "my_key2": "my_val222"},
         "other": "key_value"}
-
-
-@pytest.fixture
-def dat_container_spec():
-    return {"dat": {"kind": "DatContainer"}}
-
-
-@pytest.fixture
-def game_spec():
-    return {"dat": {"kind": "Game"}, "game": {"views": {"view_1": "vid_1.mp4"}}}
-
-
-@pytest.fixture
-def mock_dat_root(monkeypatch: pytest.MonkeyPatch) -> tempfile.TemporaryDirectory:
-    import dvc_dat.dat as dat
-    temp_dir = tempfile.TemporaryDirectory()
-    monkeypatch.setattr(dat, "DAT_ROOT", temp_dir.name)
-    return temp_dir
-
-
-@pytest.fixture
-def temp_root_with_gameset(
-    mock_dat_root: tempfile.TemporaryDirectory,
-        dat_container_spec,
-        game_spec: Dict) -> tempfile.TemporaryDirectory:
-    gameset_path = Path(mock_dat_root.name, "gamesets/bb/baller10")
-    gameset_path.mkdir(parents=True, exist_ok=True)
-
-    with (gameset_path / "_spec_.yaml").open("w") as f:
-        json.dump(dat_container_spec, f)
-
-    game_1_path = gameset_path / "1"
-    game_1_path.mkdir(exist_ok=True, parents=True)
-
-    with (game_1_path / "_spec_.yaml").open("w") as f:
-        json.dump(game_spec, f)
-
-    return mock_dat_root
-
-
-@pytest.fixture
-def temp_root_with_runset(
-        temp_root_with_gameset: tempfile.TemporaryDirectory,
-        dat_container_spec) -> tempfile.TemporaryDirectory:
-    mock_dat_root = temp_root_with_gameset
-    runset_path = Path(mock_dat_root.name, "runsets/bb/baller10")
-    runset_path.mkdir(parents=True, exist_ok=True)
-
-    with (runset_path / "_spec_.yaml").open("w") as f:
-        json.dump(dat_container_spec, f)
-
-    run_1_path = runset_path / "1"
-    run_1_path.mkdir(exist_ok=True, parents=True)
-
-    game_1_path = Path(mock_dat_root.name, "gamesets/bb/baller10/1")
-
-    run_spec = {
-        "dat": {"class": "MCProcRun"},
-        "run": {
-            "input_game": str(game_1_path),
-            "mcproc_output": "my_file.pickle",
-        },
-    }
-
-    with (run_1_path / "_spec_.yaml").open("w") as f:
-        json.dump(run_spec, f)
-
-    return mock_dat_root
 
 
 # Tests

@@ -6,15 +6,13 @@ import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import Dat, DoManager
-
-# Get the do manager from the Dat singleton
-do = Dat.manager.do
+from dvc_dat import Do, do
 
 
 @pytest.fixture
-def empty_do_mgr():
-    return DoManager()
+def empty_do():
+    """A do namespace with nothing mounted (it still shares `Dat.manager`)."""
+    return Do()
 
 
 def run_capture(line: str) -> str:
@@ -129,8 +127,8 @@ class TestCommandLine:
 
 class TestRegisteringStuff:
 
-    def test_registering_simple_values(self, empty_do_mgr):
-        do_ = empty_do_mgr
+    def test_registering_simple_values(self, empty_do):
+        do_ = empty_do
         do_.mount(at="foo", value="bar")
         assert do_.load("foo") == "bar"
 
@@ -140,23 +138,23 @@ class TestRegisteringStuff:
         do_.mount(at="three.levels.deep", value=333.333)
         assert do_.load("three.levels.deep") == 333.333
 
-    def test_loading_missing_values(self, empty_do_mgr):
-        do_ = empty_do_mgr
+    def test_loading_missing_values(self, empty_do):
+        do_ = empty_do
         assert do_.load("this.is.not_there", default="hello") == "hello"
         assert do_.load("not_there", default=None) is None
 
-    def test_registering_simple_functions(self, empty_do_mgr):
-        do_ = empty_do_mgr
+    def test_registering_simple_functions(self, empty_do):
+        do_ = empty_do
         do_.mount(at="foo", value=lambda: "bar")
         assert do_("foo") == "bar"
 
-    def test_registering_do_fns(self, empty_do_mgr):
-        do_ = empty_do_mgr
+    def test_registering_do_fns(self, empty_do):
+        do_ = empty_do
         do_.mount(at="foo.bar", value=lambda: "baz")
         assert do_("foo.bar") == "baz"
 
-    def test_registering_modules_paths(self, empty_do_mgr):
-        do_ = empty_do_mgr
+    def test_registering_modules_paths(self, empty_do):
+        do_ = empty_do
         path = os.path.join(os.path.dirname(__file__),
                             "test_mounted_folder/script/hello_world.py")
         do_.mount(at="xxx", module=path)
@@ -175,7 +173,7 @@ class TestTemplatedDatCreationAndDeletion:
 
     def test_creation_and_deletion_with_spec(self):
         from dvc_dat import do
-        spec1 = {"dat": {"path": "test_dats/{YY}-{MM} Dats{unique}"}}
+        spec1 = {"dat": {"name": "test_dats/{YY}-{MM} Dats{unique}"}}
         dat, _ = do.dat_from_template(spec1)
         assert dat, "Couldn't create Persistable"
         assert dat.get_path_name().startswith("test_dats/"), "Wrong path"
@@ -183,21 +181,23 @@ class TestTemplatedDatCreationAndDeletion:
 
 
 class TestDatCallArgs:
-    def test_call_args(self, empty_do_mgr):
+    """Arguments fork a new spec; they are never appended at the call site (2.0)."""
+
+    def test_call_args(self, empty_do):
         def foo(_dat, *args, **_kwargs):
             return list(args)
-        do_ = empty_do_mgr
+        do_ = empty_do
         do_.mount(at="foo", value=foo)
         do_.mount(at="bar", value={"dat": {"do": "foo"}})
         assert do_("bar", 1, 2, 3) == [1, 2, 3]
         do_.mount(at="baz", value={"dat": {"do": "foo", "args": [4, 5, 6]}})
         assert do_("baz") == [4, 5, 6]
-        assert do_("baz", 1, 2, 3) == [4, 5, 6, 1, 2, 3]
+        assert do_("baz", 1, 2, 3) == [1, 2, 3]   # 1.x appended: [4, 5, 6, 1, 2, 3]
 
-    def test_call_kwargs(self, empty_do_mgr):
+    def test_call_kwargs(self, empty_do):
         def foo(_dat, *_args, **kwargs):
             return dict(kwargs)
-        do_ = empty_do_mgr
+        do_ = empty_do
         do_.mount(at="foo", value=foo)
         do_.mount(at="bar", value={"dat": {"do": "foo"}})
         assert do_("bar", a=1, b=2, c=3) == {"a": 1, "b": 2, "c": 3}

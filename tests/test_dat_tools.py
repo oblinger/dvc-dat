@@ -6,11 +6,9 @@ import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import Dat
+from dvc_dat import Dat, do
 from dvc_dat.dat_tools import to_excel, Cube, from_dat
 
-# Get the do manager from the Dat singleton
-do = Dat.manager.do
 do.mount(at="test_dat_tools", module="tests.test_dat_tools")
 
 TMP_PATH = "/tmp/job_test"
