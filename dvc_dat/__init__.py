@@ -6,7 +6,7 @@
     load("runs/2026-09/exp")              # opens a dat on disk
 """
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 from .core import (
     DataConfig,
