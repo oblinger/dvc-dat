@@ -69,8 +69,9 @@ resolve importable names, with `do.config is None` and no `Dat.manager` built.
 The **first** call that needs a config — a `do(...)`, a `do.load(...)`, a
 `Dat.load` / `Dat.create`, any touch of `Dat.manager` — reads the nearest
 `.dataconfig.yaml` walking up from the working directory, builds `Dat.manager`
-from it, and applies its `mount_commands` onto that same `do` object. Nothing
-in an ordinary program calls `configure`:
+from it, puts the config's folder first on `sys.path`, and imports the
+config's `main` module if it names one. Nothing in an ordinary program calls
+`configure`:
 
 ```python
 from dvc_dat import do
@@ -153,30 +154,30 @@ local_prefix: data
 # further folders searched when loading by name
 extra_local_prefixes: []
 
-# the do-system namespace
-mount_commands:
-  - at: catalog
-    folder: src/catalog
-  - at: fixtures
-    module: tests.fixtures
+# imported when the config installs; do.mount(...) calls live there
+main: mypkg.datconf
 
-# the interpreter the X bootstrap runs (see cli.md)
+# the interpreter the bootstrap copy of `dat` runs (see cli.md)
 python: .venv
 ```
 
-Those five keys are the whole file. An unrecognized key is an error naming the
-file, the key and the known keys — a typo is never silently ignored.
+Those four keys are the whole file, and an empty file is a complete config.
+An unrecognized key is an error naming the file, the key and the known keys —
+a typo is never silently ignored. The config's folder is the project's import
+root: it goes first on `sys.path` when the config installs, so `main` and
+every other module of the project resolve from any working directory,
+installed or not.
 
 The file is found by walking up from the working directory, or from the path
 given to `do.configure(...)` / `DataConfig.new(cwd=...)`. A
 `.dataconfig.override.yaml` beside it wins over it, and a `DAT_<KEY>`
 environment variable (`DAT_LOCAL_PREFIX`) wins over both.
 
-See [Mount Commands](mount-commands.md) for the mount types.
+See [Mounts](mount-commands.md) for what `main` can mount.
 
 ## See Also
 
 - [Spec Format](spec-format.md) — `_spec_.yaml` and `_result_.yaml` reference
-- [Mount Commands](mount-commands.md) — configuring the do-system
-- [Command Line](cli.md) — the `dat` verbs and the `X` bootstrap
+- [Mounts](mount-commands.md) — names that are not imports
+- [Command Line](cli.md) — the `dat` verbs and the bootstrap copy
 - [Overview](overview.md) — API reference

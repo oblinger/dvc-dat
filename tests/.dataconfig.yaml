@@ -7,9 +7,5 @@ local_prefix: test_sync_folder/
 # Additional local folders to search for Dats
 extra_local_prefixes: []
 
-# Mount commands for the "do" system
-mount_commands:
-  - folder: ../standard_do_scripts
-  - folder: test_mounted_folder/dat_tools_examples
-  - folder: test_mounted_folder/script
-  - folder: test_mounted_folder
+# Imported when the config installs; the test mounts live there
+main: mounts

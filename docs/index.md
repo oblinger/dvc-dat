@@ -32,8 +32,8 @@ result = do("catalog.experiment", epochs=200)
 - **[Concepts](concepts.md)** — the fork rule, the two kinds of name, explicit
   configuration, `dat.base`, the `{}` grammar, validation
 - **[Spec Format](spec-format.md)** — `_spec_.yaml` / `_result_.yaml` reference
-- **[Mount Commands](mount-commands.md)** — configuring the do-system namespace
-- **[Command Line](cli.md)** — the `dat` verbs, the `X` bootstrap, exit codes
+- **[Mounts](mount-commands.md)** — giving a name to something that is not an import
+- **[Command Line](cli.md)** — the `dat` verbs, the bootstrap copy, exit codes
 
 ## API Reference
 

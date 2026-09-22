@@ -53,8 +53,7 @@ what `dat.do` names. `dat.run_at` and `dat.run_time` land in the results.
 | `do.name_of(OBJ) -> str` | The name `load` takes back to `OBJ` |
 | `do.configure(SOURCE) -> DataConfig` | Install a chosen config; first use does this for you |
 | `do.config` | The `DataConfig` in force, or `None` |
-| `do.mount(at=, folder=/file=/module=/value=)` | Add one name to the namespace |
-| `do.mount_all(COMMANDS, relative_to=)` | Apply a config's mount table |
+| `do.mount(at=, folder=/file=/module=/value=)` | Add one name to the namespace; called from the config's `main` |
 | `do.add_do_folder(PATH)` | Mount a folder by file name |
 | `do.get_base(BASE)` | The object mounted at a base name |
 | `do.keys()` | Every mounted base name |
@@ -149,27 +148,23 @@ the `KEY=VALUE` pairs update its `dat.kwargs`, and `--set` / `--sets` /
 `--json` update any spec key. Every argument value is a YAML scalar. The
 exit code is `0` ran, `1` failed, `2` the target does not load.
 
-`bin/X` runs a target from any directory without activating an
-environment. See **[Command Line](cli.md)** for every verb, flag and exit
-code, the `X` bootstrap and the `python:` config key.
+A copy of `bin/dat` on your `PATH` is the same command from any directory
+without activating an environment. See **[Command Line](cli.md)** for every
+verb, flag and exit code, the bootstrap and the `python:` config key.
 
 ## `.dataconfig.yaml`
 
 Like git, dvc-dat walks up from the working directory looking for
-`.dataconfig.yaml`.
+`.dataconfig.yaml`. An empty file is a complete config.
 
 ```yaml
 local_prefix: data
 extra_local_prefixes: []
 python: .venv
-mount_commands:
-  - at: catalog
-    folder: src/catalog
-  - at: fixtures
-    module: tests.fixtures
-  - at: constants
-    value: {debug: false}
+main: mypkg.datconf
 ```
 
 Those are the only keys; anything else is an error that names the file and the
-key. See **[Mount Commands](mount-commands.md)** for the mount types.
+key. The config's folder is the import root, and `main` is a module imported
+when the config installs — any `do.mount(...)` calls live there. See
+**[Mounts](mount-commands.md)**.

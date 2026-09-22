@@ -282,11 +282,12 @@ class Do:
     # -- mounting ------------------------------------------------------------
 
     def configure(self, source: Union[None, str, Path, DataConfig] = None) -> DataConfig:
-        """Install a config: build `Dat.manager` from it and apply its mount table.
+        """Install a config: build `Dat.manager`, then import its `main` module.
 
         `source` is a `DataConfig`, a folder to search up from, a config file, or
-        None for discovery from the working directory.  Mounts land on this same
-        object, so names loaded before `configure` keep resolving.
+        None for discovery from the working directory.  The config folder goes
+        first on `sys.path`; `main` is imported after that, so the `do.mount()`
+        calls it makes land on the singleton `do` before any name is resolved.
         """
         if isinstance(source, DataConfig):
             config = source
@@ -299,14 +300,17 @@ class Do:
             else:
                 config = DataConfig.new(cwd=source)
         Dat._manager = DatManager(config)
-        if config.mount_commands:
-            self.mount_all(config.mount_commands, relative_to=config.cwd)
         from . import dat_tools
         self.mount(module=dat_tools, at="dat_tools")
         self.mount(module=dat_tools, at="dt")
         self.mount(value=dat_tools.cmd_list, at="dt.list")
         self.mount(value=dat_tools.cmd_list, at="dat_tools.list")
         self.config = config
+        root = str(config.cwd)          # the config folder is the import root
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        if config.main:
+            import_module(config.main)  # its `do.mount(...)` calls land here
         return config
 
     def mount(self, *,
@@ -330,14 +334,6 @@ class Do:
             self._reg_module(at, module, allow_redefine=True)
         else:
             self._reg_value(at, value)
-
-    def mount_all(self, mount_commands: List[Dict[str, Any]], relative_to: str):
-        """Apply a list of mount commands (see docs/mount-commands.md)."""
-        for cmd in mount_commands:
-            if do_folder := cmd.get("add_do_folder"):
-                self.add_do_folder(os.path.join(relative_to, do_folder))
-            else:
-                self.mount(relative_to=relative_to, **cmd)
 
     def add_do_folder(self, do_folder):
         """Mount a folder of loadables by file name, and forget cached values."""
@@ -627,18 +623,9 @@ def _cmd_info(argv: List[str]) -> int:
 
 
 def _configured() -> DataConfig:
-    """The config in force, reading the nearest `.dataconfig.yaml` if none is.
-
-    The config's folder is the project's import root: it goes first on
-    `sys.path` before anything is resolved, so a project's own modules load
-    from any working directory, installed or not.  The API path never touches
-    `sys.path` -- there the program that imported `dvc_dat` owns it.
-    """
+    """The config in force, reading the nearest `.dataconfig.yaml` if none is."""
     if do.config is None:
-        config = DataConfig.new()
-        if config.cwd not in sys.path:
-            sys.path.insert(0, config.cwd)
-        do.configure(config)
+        do.configure()
     return do.config
 
 

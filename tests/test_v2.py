@@ -279,15 +279,19 @@ class TestExplicitConfigure:
         (tmp_path / "mounted").mkdir()
         (tmp_path / "mounted" / "v2_greeter.py").write_text(
             "def __main__():\n    return 'hi'\n")
+        (tmp_path / "explicit_main.py").write_text(
+            "from pathlib import Path\nfrom dvc_dat import do\n"
+            "do.mount(folder=str(Path(__file__).parent / 'mounted'))\n")
         (tmp_path / DATA_CONFIG_FILE).write_text(
-            "local_prefix: sync/\nmount_commands:\n  - folder: mounted\n")
+            "local_prefix: sync/\nmain: explicit_main\n")
 
-        probe = Do()                      # stands in for an early `from dvc_dat import do`
-        assert probe.load("v2_greeter", default=None) is None
+        assert do.load("v2_greeter", default=None) is None
 
+        probe = Do()
         config = probe.configure(tmp_path)
         assert isinstance(config, DataConfig)
-        assert probe("v2_greeter") == "hi"          # same object, now mounted
+        assert "explicit_main" in sys.modules       # main imported ...
+        assert do("v2_greeter") == "hi"             # ... and its mounts are on `do`
         assert probe.config.cwd == os.path.realpath(tmp_path)
         assert Dat.manager.sync_folder == os.path.join(os.path.realpath(tmp_path), "sync/")
 
@@ -315,27 +319,34 @@ class TestCleanup:
         assert not (sync / V2).exists()
 
 
-def test_first_use_installs_the_config_and_its_mounts(tmp_path, monkeypatch,
-                                                      restore_manager):
-    """T010 Q1: nobody calls `configure()` -- the first use discovers one."""
+def test_first_use_installs_the_config_and_imports_its_main(tmp_path):
+    """T010 Q1 + Q2: nobody calls `configure()`; the first use discovers a
+    config from cwd and imports its `main`, whose mounts land on `do`."""
     pkg = tmp_path / "lazypkg"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("")
     (pkg / "job.py").write_text("def run(dat):\n    return 'ran'\n")
+    (tmp_path / "lazy_main.py").write_text(
+        "from dvc_dat import do\nimport lazypkg.job\n"
+        "do.mount(module=lazypkg.job, at='lazy')\n")
     (tmp_path / DATA_CONFIG_FILE).write_text(
-        "local_prefix: warehouse\n"
-        "mount_commands:\n"
-        "  - {module: lazypkg.job, at: lazy}\n")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.syspath_prepend(str(tmp_path))
+        "local_prefix: warehouse\nmain: lazy_main\n")
+    (tmp_path / "notes").mkdir()                # a subfolder: cwd is not the root
 
-    fresh = Do()
-    assert fresh.config is None, "constructing a Do must read no filesystem"
-
-    fn = fresh.load("lazy.run")                 # the mount, with no configure()
-    assert callable(fn) and fn(None) == "ran"
-    assert fresh.config is not None             # ... it installed one on the way
-    assert fresh.load("lazypkg.job.run") is fn  # the static floor still resolves
-
-    Dat._manager = None
-    assert Dat.manager.sync_folder.rstrip("/").endswith("warehouse")
+    probe = (
+        "import sys\n"
+        "from dvc_dat import do, Dat\n"
+        "assert do.config is None and Dat._manager is None\n"
+        "fn = do.load('lazy.run')\n"            # the alias, with no configure()
+        "assert fn(None) == 'ran'\n"
+        "assert do.config is not None\n"
+        "assert do.load('lazypkg.job.run') is fn\n"   # the static floor agrees
+        "assert 'lazy_main' in sys.modules\n"
+        "print(Dat.manager.sync_folder)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], cwd=tmp_path / "notes",
+        capture_output=True, text=True,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().rstrip("/").endswith("warehouse")

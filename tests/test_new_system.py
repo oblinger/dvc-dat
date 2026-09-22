@@ -56,13 +56,13 @@ class TestDataConfig:
 
     def test_datmanager_creation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = DataConfig(cwd=tmpdir, mount_commands=None)
+            config = DataConfig(cwd=tmpdir)
             manager = DatManager(config=config)
             assert manager.main_sync_folder == config.local_prefix
 
     def test_dat_create_and_load(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = DataConfig(cwd=tmpdir, mount_commands=None)
+            config = DataConfig(cwd=tmpdir)
             original_manager = Dat._manager
             Dat._manager = DatManager(config=config)
             try:

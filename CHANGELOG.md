@@ -9,11 +9,19 @@ Every user-visible change to `dvc_dat`, newest first.
 ## 2.0.0 — 2026-09-21
 
 - `do` configures itself on first use: `import dvc_dat` still reads no
-- The `dat` CLI puts the config's folder first on `sys.path`, so a project's own modules resolve from any directory, installed or not.
   filesystem, but the first `do(...)`, `do.load(...)`, `Dat.load`,
   `Dat.create` or `Dat.manager` access discovers the nearest
-  `.dataconfig.yaml` and applies its `mount_commands`. `do.configure(source)`
-  remains, for a config chosen by hand.
+  `.dataconfig.yaml` and installs it. `do.configure(source)` remains, for a
+  config chosen by hand.
+- **`mount_commands` is gone from `.dataconfig.yaml`**; a file that still has
+  it is an unknown-key error. The config names a module instead — `main:
+  mypkg.datconf` — imported when the config installs, and any `do.mount(...)`
+  calls live there, in code. `do.mount_all` is removed with it. With no
+  `main`, a dotted name is a Python name and nothing else; an empty
+  `.dataconfig.yaml` is a complete config.
+- The config's folder is the project's import root: it goes first on
+  `sys.path` when the config installs, so `main` and every other module of
+  the project resolve from any working directory, installed or not.
 
 A dat's spec is now a complete, argumentless recipe for itself, and `do` is the
 one runner and the one namespace. Breaking on every count below.
@@ -85,18 +93,20 @@ one runner and the one namespace. Breaking on every count below.
   `dat do info`.
 - New reference page: `docs/cli.md`.
 
-### `bin/X` — the bootstrap
+### `bin/dat` — the bootstrap
 
-- A POSIX `sh` script, checked in and copied wherever it is useful, that runs
-  a dat from any directory with no environment activated: it walks up to the
-  nearest `.dataconfig.yaml` (exit `3` with a message if there is none),
-  picks an interpreter — `$DAT_PYTHON`, the config's `python:` key,
+- A POSIX `sh` script, checked in and copied wherever it is useful, that is
+  the `dat` command from any directory with no environment activated: it
+  walks up to the nearest `.dataconfig.yaml` (exit `3` with a message if there
+  is none), picks an interpreter — `$DAT_PYTHON`, the config's `python:` key,
   `.venv/bin/python` beside the config, then `python3` on `PATH` — and
-  `exec`s `<python> -m dvc_dat do "$@"` with the working directory unchanged.
+  `exec`s `<python> -m dvc_dat "$@"` with the working directory unchanged.
+  With an environment active the console script of the same name shadows the
+  copy and does the same thing.
 - `.dataconfig.yaml` takes a **`python:`** key for that interpreter: a path to
   one, or a folder holding `bin/python`; a relative path resolves against the
   config's folder. `DataConfig.python` carries it, absolute. The library never
-  reads it — only `X` does.
+  reads it — only the bootstrap does.
 
 ### Spec fields
 
@@ -149,7 +159,10 @@ submodule) and `dvc_dat/do_fn.py` → `dvc_dat/do.py`.
 | args/kwargs read from `_result_.yaml` | read from the forked `_spec_.yaml` |
 | pydantic spec models | `Dat.validate_spec` override |
 | config `remote_prefix` / `default_remote` / `dat:` | delete them |
-| implicit config on import | `do.configure()` where you want it read |
+| implicit config on import | first use reads it; `do.configure()` for a chosen one |
+| config `mount_commands:` | `main: mypkg.datconf`, and `do.mount(...)` calls in that module |
+| `do.mount_all(cmds, relative_to)` | the `do.mount(...)` calls themselves |
+| `bin/X TARGET` | `bin/dat TARGET` — the same word as the console script |
 
 Consumers pin the tag: `dvc_dat @ git+https://github.com/oblinger/dvc-dat@v2.0.0`.
 

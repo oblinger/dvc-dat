@@ -48,9 +48,9 @@ dat list
 dat info
 ```
 
-`dat` configures itself from the nearest `.dataconfig.yaml`; `bin/X`
-runs a target from any directory with no environment activated. See
-[the CLI reference](docs/cli.md).
+`dat` configures itself from the nearest `.dataconfig.yaml`. A copy of
+`bin/dat` on your `PATH` is the same command from any directory with no
+environment activated. See [the CLI reference](docs/cli.md).
 
 ## Testing
 

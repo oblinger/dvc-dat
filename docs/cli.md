@@ -5,11 +5,10 @@
 anything that needs the namespace; `dat --version` and `dat --help` need no
 config at all.
 
-The config's folder is the project's import root: `dat` puts it first on
-`sys.path` before resolving anything, so `mypkg.job.run` means the same
+The config's folder is the project's import root: it goes first on
+`sys.path` when the config installs, so `mypkg.job.run` means the same
 thing from every directory under the project, whether or not `mypkg` is
-installed. (The API path never touches `sys.path`; the program that
-imported `dvc_dat` owns it.)
+installed.
 
 ```
 dat do TARGET [ARG ...] [KEY=VALUE ...]   run TARGET
@@ -95,16 +94,18 @@ dat my_letters --json rules '[[2, "my_letters.triple_it"]]'
 | `0` | Ran. |
 | `1` | The run raised, or the command line was malformed. |
 | `2` | `TARGET` does not load. |
-| `3` | (`X` only) no `.dataconfig.yaml` above the working directory. |
+| `3` | (the bootstrap copy only) no `.dataconfig.yaml` above the working directory. |
 
 A failed run prints one line on stderr and no traceback. Set `DAT_DEBUG=1` to
 get the traceback instead.
 
-## `X` — running a dat without activating an environment
+## `bin/dat` — the same command without activating an environment
 
-`bin/X` is a POSIX `sh` script, checked into the repo and copied wherever it is
-useful. `X TARGET ...` is `dat do TARGET ...`, from any directory, with no
-environment activated and nothing assumed about the project's layout:
+`bin/dat` is a POSIX `sh` script, checked into the repo and copied wherever it
+is useful — `~/bin`, a project's root. It is `dat` from any directory, with no
+environment activated and nothing assumed about the project's layout; with an
+environment active, the console script of the same name shadows it and does
+the same thing:
 
 1. Walk up from the working directory to the nearest `.dataconfig.yaml` (it
    stops at `/`; with none found it prints a message and exits `3`).
@@ -113,7 +114,7 @@ environment activated and nothing assumed about the project's layout:
    - the config's `python:` key,
    - `.venv/bin/python` beside the config,
    - `python3` on `PATH`.
-3. `exec <python> -m dvc_dat do "$@"`, with the working directory unchanged.
+3. `exec <python> -m dvc_dat "$@"`, with the working directory unchanged.
 
 A value that names a folder means the venv holding it, so `python: myenv` and
 `python: myenv/bin/python` are the same interpreter. A relative value resolves
@@ -121,10 +122,10 @@ against the config's folder.
 
 ```bash
 # once
-cp .../dvc-dat/bin/X ~/bin/X
+cp .../dvc-dat/bin/dat ~/bin/dat
 
 # then, from anywhere in the project
-cd any/deep/subfolder && X train epochs=200
+cd any/deep/subfolder && dat train epochs=200
 ```
 
 ## `python:` in `.dataconfig.yaml`
@@ -132,11 +133,11 @@ cd any/deep/subfolder && X train epochs=200
 ```yaml
 local_prefix: data
 
-# the interpreter X runs: a path, or a folder holding bin/python
+# the interpreter the bootstrap runs: a path, or a folder with bin/python
 python: .venv
 ```
 
-`python` is the interpreter `X` runs: a path to one, or a folder holding
+`python` is the interpreter the bootstrap runs: a path to one, or a folder holding
 `bin/python`. A relative path resolves against the config's folder. The library
 itself never reads the key — it is there so that one file describes the whole
 project. `DataConfig.python` carries it, absolute.

@@ -1,4 +1,4 @@
-"""The `dat` command line and the `bin/X` bootstrap, exercised as processes.
+"""The `dat` command line and the `bin/dat` bootstrap, exercised as processes.
 
 Every case runs a real subprocess: the exit code is half of the contract.
 """
@@ -12,7 +12,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 TESTS = REPO / "tests"
-X = REPO / "bin" / "X"
+BOOT = REPO / "bin" / "dat"
 
 
 def _env(**extra: str) -> dict:
@@ -30,9 +30,9 @@ def dat(*args: str, cwd=TESTS, env=None):
     return done.returncode, done.stdout.strip(), done.stderr.strip()
 
 
-def run_x(*args: str, cwd, env=None):
-    """Run `bin/X`; returns (exit code, stdout, stderr)."""
-    done = subprocess.run([str(X), *args], cwd=str(cwd),
+def run_boot(*args: str, cwd, env=None):
+    """Run the `bin/dat` bootstrap; returns (exit code, stdout, stderr)."""
+    done = subprocess.run([str(BOOT), *args], cwd=str(cwd),
                           capture_output=True, text=True, env=env or _env())
     return done.returncode, done.stdout.strip(), done.stderr.strip()
 
@@ -49,11 +49,16 @@ def no_config_dir(tmp_path: Path) -> Path:
 
 
 def make_project(root: Path, python: str = None) -> Path:
-    """A minimal dat project: a config, one mounted script, a nested folder."""
-    config = ["local_prefix: data/", "mount_commands:", "  - folder: scripts"]
+    """A minimal dat project: a config, a main that mounts one script folder."""
+    config = ["local_prefix: data/", "main: project_main"]
     if python is not None:
         config.append(f"python: {python}")
     (root / ".dataconfig.yaml").write_text("\n".join(config) + "\n")
+    (root / "project_main.py").write_text(
+        "from pathlib import Path\n"
+        "from dvc_dat import do\n"
+        "do.mount(folder=str(Path(__file__).parent / 'scripts'))\n"
+    )
     (root / "scripts").mkdir()
     (root / "scripts" / "greet.py").write_text(
         "def __main__(who='world', *, loud=False):\n"
@@ -220,49 +225,55 @@ class TestArguments:
         assert code == 0 and "SYNOPSIS" in out
 
 
-class TestXBootstrap:
-    def test_no_args_prints_usage(self, tmp_path):
-        code, out, _ = run_x(cwd=tmp_path)
-        assert code == 0 and out.startswith("usage: X TARGET")
+class TestBootstrap:
+    def test_no_args_prints_the_same_usage(self, tmp_path):
+        nested = make_project(tmp_path, python=sys.executable)
+        code, out, _ = run_boot(cwd=nested)
+        assert code == 0 and "SYNOPSIS" in out
+
+    def test_verbs_pass_through(self, tmp_path):
+        nested = make_project(tmp_path, python=sys.executable)
+        code, out, _ = run_boot("list", "greet", cwd=nested)
+        assert code == 0 and "greet" in out
 
     def test_no_config_above_exits_3(self, no_config_dir):
-        code, out, err = run_x("greet", cwd=no_config_dir)
+        code, out, err = run_boot("greet", cwd=no_config_dir)
         assert code == 3 and out == ""
         assert ".dataconfig.yaml" in err
 
     def test_end_to_end_from_a_nested_folder(self, tmp_path):
         nested = make_project(tmp_path, python=sys.executable)
-        code, out, err = run_x("greet", "dan", "loud=true", cwd=nested)
+        code, out, err = run_boot("greet", "dan", "loud=true", cwd=nested)
         assert (code, out, err) == (0, "HELLO DAN", "")
 
     def test_python_key_may_be_a_folder(self, tmp_path):
         make_wrapper(tmp_path / "myenv", "FOLDER-FORM")
         nested = make_project(tmp_path, python=str(tmp_path / "myenv"))
-        code, out, _ = run_x("greet", cwd=nested)
+        code, out, _ = run_boot("greet", cwd=nested)
         assert code == 0 and out.splitlines() == ["FOLDER-FORM", "hello world"]
 
     def test_python_key_is_relative_to_the_config(self, tmp_path):
         make_wrapper(tmp_path / "myenv", "RELATIVE-FORM")
         nested = make_project(tmp_path, python="myenv")
-        code, out, _ = run_x("greet", cwd=nested)
+        code, out, _ = run_boot("greet", cwd=nested)
         assert code == 0 and out.splitlines() == ["RELATIVE-FORM", "hello world"]
 
     def test_venv_beside_the_config_is_the_default(self, tmp_path):
         make_wrapper(tmp_path / ".venv", "DOT-VENV")
         nested = make_project(tmp_path)
-        code, out, _ = run_x("greet", cwd=nested)
+        code, out, _ = run_boot("greet", cwd=nested)
         assert code == 0 and out.splitlines() == ["DOT-VENV", "hello world"]
 
     def test_dat_python_overrides_the_config(self, tmp_path):
         make_wrapper(tmp_path / "override", "ENV-FORM")
         nested = make_project(tmp_path, python=sys.executable)
         env = _env(DAT_PYTHON=str(tmp_path / "override" / "bin" / "python"))
-        code, out, _ = run_x("greet", cwd=nested, env=env)
+        code, out, _ = run_boot("greet", cwd=nested, env=env)
         assert code == 0 and out.splitlines() == ["ENV-FORM", "hello world"]
 
     def test_a_missing_interpreter_fails_visibly(self, tmp_path):
         nested = make_project(tmp_path, python="/no/such/python")
-        code, _, err = run_x("greet", cwd=nested)
+        code, _, err = run_boot("greet", cwd=nested)
         assert code == 1 and "/no/such/python" in err
 
 
@@ -291,6 +302,6 @@ class TestImportRoot:
 
     def test_x_from_a_subfolder(self, tmp_path):
         notes = self._project(tmp_path)
-        code, out, err = run_x("mypkg.job.run", cwd=notes,
+        code, out, err = run_boot("mypkg.job.run", cwd=notes,
                                env=_env(DAT_PYTHON=sys.executable))
         assert (code, out) == (0, "42"), err

@@ -61,16 +61,17 @@ class DataConfig:
     cwd : folder the config was found in (or given); relative paths resolve against it.
     local_prefix : the sync folder — where relative dat paths are created and searched.
     extra_local_prefixes : further folders searched when loading a dat by name.
-    mount_commands : the do-system's mount table, applied by `do.configure()`.
-    python : the interpreter the `bin/X` bootstrap runs -- a path to one, or a
+    main : a module imported when the config installs, with the config folder
+        first on `sys.path`.  Mounts and any other registration live there.
+    python : the interpreter the `bin/dat` bootstrap runs -- a path to one, or a
         folder holding `bin/python`; relative to `cwd`.  Nothing in the library
-        reads it; `X` does.
+        reads it; the bootstrap does.
     """
 
     cwd: str
     local_prefix: str = "data/"
     extra_local_prefixes: List[str] = field(default_factory=list)
-    mount_commands: Optional[List[Dict[str, Any]]] = None
+    main: Optional[str] = None
     python: Optional[str] = None
 
     @classmethod
