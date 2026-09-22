@@ -498,6 +498,9 @@ EXIT STATUS
     1   the run failed, or the command line was malformed
     2   TARGET does not load
 
+    A failure prints one line on stderr and no traceback; set DAT_DEBUG=1
+    for the traceback.
+
 EXAMPLES
     dat do hello_world
     dat hello_again.salutation Maxim emphasis=true lucky_number=7
