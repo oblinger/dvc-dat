@@ -42,9 +42,11 @@ Excel reports need the optional extra: `pip install -e ".[excel]"`.
 ## Usage
 
 ```bash
-dat hello_world
-dat hello_again.salutation Maxim lucky_number=7
-dat list
+# do("catalog.experiment", epochs=200)
+dat catalog.experiment epochs=200
+# print that do(...) call instead of making it
+dat catalog.experiment epochs=200 --dry-run
+dat list catalog
 dat info
 ```
 
@@ -58,10 +60,9 @@ environment activated. See [the CLI reference](docs/cli.md).
 uv run python -m pytest
 ```
 
-## Example Usage
+## Example
 
-A couple of included Python notebooks give a quick overview of what the
-DVC-DAT module provides:
-
-- [Dynamic function loading](https://github.com/oblinger/dvc-dat/blob/main/examples/do_examples.ipynb)
-- [Dynamic object loading](https://github.com/oblinger/dvc-dat/blob/main/examples/dat_examples.ipynb)
+[`examples/walkthrough.ipynb`](https://github.com/oblinger/dvc-dat/blob/main/examples/walkthrough.ipynb)
+builds a small project in a temp folder and runs it end to end: a mounted
+folder of YAML templates, a `dat.base` chain, `do()` and a keyword fork,
+loading a dat, the `merge_dicts` recipe, and the command-line main.

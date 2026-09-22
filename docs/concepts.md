@@ -60,7 +60,10 @@ spec. `merge_dicts` is the same zipper merge `dat.base` uses:
 ```python
 from dvc_dat import Dat, do, merge_dicts
 
-spec = merge_dicts(d.get_spec(), {"run_template": {"lr": 0.01}})
+# d's dat.name is the folder it landed in; increment lands beside it
+spec = merge_dicts(d.get_spec(),
+                   {"dat": {"target_exists": "increment"},
+                    "run_template": {"lr": 0.01}})
 Dat.create(spec=spec)
 ```
 

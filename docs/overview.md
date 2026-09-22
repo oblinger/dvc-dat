@@ -14,7 +14,8 @@ itself. `do` is the one namespace and the one runner.
 ```python
 from dvc_dat import (
     Dat, DatContainer, DatManager, DataConfig,
-    Do, do, do_argv, load, expand, expand_spec,
+    Do, do, do_argv, cli_main, load,
+    expand, expand_spec, merge_dicts,
 )
 ```
 
@@ -27,8 +28,10 @@ from dvc_dat import (
 | `Do` | The do class — one instance, `do` |
 | `do` | The singleton: namespace, runner, configuration |
 | `do_argv` | The `dat` command line; returns the exit code |
+| `cli_main` | The `dat` command line for a program's own main |
 | `load` | `Dat.load` — open a dat by path or name |
 | `expand` / `expand_spec` | The `{}` grammar |
+| `merge_dicts` | The zipper merge `dat.base` uses |
 
 ## Running and loading — `do`
 

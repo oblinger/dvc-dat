@@ -41,7 +41,6 @@ result = do("catalog.experiment", epochs=200)
 
 ## Examples
 
-- **[Jupyter Notebooks](../examples/)** — interactive examples
-  - `do_examples.ipynb` — the do-system
-  - `dat_examples.ipynb` — creating and loading dats
-  - `dat_tools_examples.ipynb` — DataFrames and Excel reports
+- **[`examples/walkthrough.ipynb`](../examples/walkthrough.ipynb)** — one
+  project, end to end: mounts, `dat.base`, `do()` and a fork, `load`,
+  `merge_dicts`, the command-line main
