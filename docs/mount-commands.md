@@ -11,7 +11,7 @@ Mounts are made in code, by `do.mount(...)`, from the module that
 
 ```yaml
 # .dataconfig.yaml
-local_prefix: data
+dat_folders: data
 main: mypkg.datconf
 ```
 
@@ -168,7 +168,7 @@ name mean something else.
 
 ```yaml
 # .dataconfig.yaml
-local_prefix: data
+dat_folders: data
 main: myproject.datconf
 ```
 

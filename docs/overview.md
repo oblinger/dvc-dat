@@ -74,12 +74,11 @@ given.
 | `Dat.load(NAME) -> Dat` | Load a dat by name or path |
 | `Dat.validate_spec(SPEC) -> SPEC` | Classmethod hook, run on create and load |
 | `Dat.manager.exists(NAME) -> bool` | True iff the named dat exists |
-| `.get_spec() -> dict` | The spec with every `{}` reference resolved |
-| `.get_spec(raw=True) -> dict` | The spec as the file was written |
+| `.get_spec() -> dict` | The spec — every `{}` was expanded once, at create |
 | `.spec` | `get_spec()` |
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |
-| `.get_path_name() -> str` | Its name, relative to the sync folder |
+| `.get_path_name() -> str` | Its name, relative to the dat folder |
 | `.get_path_tail() -> str` | The last path segment |
 | `.save()` | Write the results to `_result_.yaml` |
 | `.delete()` | Remove the folder |
@@ -88,7 +87,7 @@ given.
 `DatContainer` adds `.get_dat_paths() -> [str]` and `.get_dats() -> [Dat]`.
 
 NAME is an absolute path, a path under the config folder, a mounted dat name,
-or a path under one of the sync folders.
+or a path under one of the dat folders.
 
 ## Dict trees
 
@@ -129,28 +128,27 @@ See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
 ## Command line
 
 ```
-dat do TARGET [ARG ...] [KEY=VALUE ...]
 dat TARGET [ARG ...] [KEY=VALUE ...]
 dat list [PREFIX]
 dat info
 dat version
 
-dat do TARGET --set DOTTED.KEY VALUE
-dat do TARGET --sets DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2
-dat do TARGET --json DOTTED.KEY '<json>'
-dat do TARGET --dry-run
-dat do TARGET --usage
+dat TARGET --set DOTTED.KEY=VALUE [--set ...]
+dat TARGET --json DOTTED.KEY '<json>'
+dat TARGET --dry-run
+dat TARGET --usage
 ```
 
 `dat` configures itself from the nearest `.dataconfig.yaml`. A target that
 is a template spec is forked: the fixed arguments become its `dat.args`,
-the `KEY=VALUE` pairs update its `dat.kwargs`, and `--set` / `--sets` /
-`--json` update any spec key. Every argument value is a YAML scalar. The
-exit code is `0` ran, `1` failed, `2` the target does not load.
+the `KEY=VALUE` pairs update its `dat.kwargs`, and `--set` / `--json` update
+any spec key. Every argument value is a YAML scalar. `list`, `info` and
+`version` are reserved words. The exit code is `0` ran, `1` failed, `2` the
+target does not load.
 
 A copy of `bin/dat` on your `PATH` is the same command from any directory
 without activating an environment. See **[Command Line](cli.md)** for every
-verb, flag and exit code, the bootstrap and the `python:` config key.
+reserved word, flag and exit code, the bootstrap and the `run:` config key.
 
 ## `.dataconfig.yaml`
 
@@ -158,10 +156,9 @@ Like git, dvc-dat walks up from the working directory looking for
 `.dataconfig.yaml`. An empty file is a complete config.
 
 ```yaml
-local_prefix: data
-extra_local_prefixes: []
-python: .venv
-main: mypkg.datconf
+dat_folders: data            # or a list: the first is written, all are read
+main: mypkg.datconf          # imported when the config installs
+run: uv run dat              # what a copy of bin/dat execs
 ```
 
 Those are the only keys; anything else is an error that names the file and the

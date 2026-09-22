@@ -90,9 +90,15 @@ dat.get_spec()["parameters"]["learning_rate"]   # 0.01
 
 ## References: the `{}` grammar
 
-Any string value may carry `{…}` references. `get_spec()` returns the spec with
-every one of them resolved (computed once per instance); `get_spec(raw=True)`
-returns the file as written.
+Any string value in a **template** may carry `{…}` references. They are
+expanded **once, when the dat is created** — with the same `now` and `unique`
+the folder got — and the expanded spec is what `_spec_.yaml` holds. A spec on
+disk is a record, never a template: `get_spec()` is the file, `dat.name` is
+the folder the dat actually landed in, and `{now}` is the moment it was made.
+A reference inside a longer string must resolve to a string or a number; a
+reference that is the whole value may be any data YAML can hold, and is
+inlined. A reference to anything else — a function, a class — is a
+`TypeError` at create, and no folder is made.
 
 | Reference | Resolves to |
 |-----------|-------------|

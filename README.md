@@ -42,7 +42,7 @@ Excel reports need the optional extra: `pip install -e ".[excel]"`.
 ## Usage
 
 ```bash
-dat do hello_world
+dat hello_world
 dat hello_again.salutation Maxim lucky_number=7
 dat list
 dat info

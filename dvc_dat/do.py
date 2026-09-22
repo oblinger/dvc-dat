@@ -570,6 +570,8 @@ def _cmd_do(argv: List[str]) -> int:
         shown = ([repr(target)] + [repr(a) for a in fixed]
                  + [f"{k}={v!r}" for k, v in kwargs.items()])
         print(f"do({', '.join(shown)})")
+        if overrides:
+            print(f"  with the spec updated by --set/--json: {overrides!r}")
         return 0
     try:
         if isinstance(cmd, dict):

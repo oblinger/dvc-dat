@@ -11,27 +11,26 @@ thing from every directory under the project, whether or not `mypkg` is
 installed.
 
 ```
-dat do TARGET [ARG ...] [KEY=VALUE ...]   run TARGET
-dat TARGET [ARG ...] [KEY=VALUE ...]      the same, shorthand
+dat TARGET [ARG ...] [KEY=VALUE ...]      run TARGET
 dat list [PREFIX]                         the mounted names
 dat info                                  version, folder, config
 dat version                               the version
 dat --help                                the usage message
 ```
 
-## Verbs
+## Reserved words
 
 | Command | Does |
 |---------|------|
-| `dat do TARGET [ARG ...] [KEY=VALUE ...]` | `do(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
-| `dat TARGET ...` | The same, for any `TARGET` that is not one of the verbs below. |
+| `dat TARGET [ARG ...] [KEY=VALUE ...]` | `do(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
 | `dat list [PREFIX]` | Every mounted name whose name contains `PREFIX`, with what it loads to. |
-| `dat info` | The version, the sync folder, the config folder and the `.dataconfig.yaml` in force. `dat --info` is the same command. |
+| `dat info` | The version, the dat folder, the config folder and the `.dataconfig.yaml` in force. `dat --info` is the same command. |
 | `dat version` | The version. `dat --version` is the same command. |
 | `dat` · `dat --help` · `dat -h` | The usage message. |
 
-A verb name is only a verb in the first position: `dat do list` runs a target
-named `list`, and `dat do info NAME` runs one named `info`.
+`list`, `info` and `version` are reserved words in the first position and
+nowhere else; anything else in the first position is a `TARGET`. A target
+that happens to be named `list` cannot be run from the shell — rename it.
 
 ## Arguments
 
@@ -45,17 +44,17 @@ Every fixed argument and every `KEY=VALUE` value is read as a **YAML scalar**:
 
 ```bash
 # do("train", 7, True)
-dat do train 7 true
+dat train 7 true
 
 # do("train", epochs=7, lr=0.01)
-dat do train epochs=7 lr=0.01
+dat train epochs=7 lr=0.01
 
 # do("train", tags=["a", "b"], name="7")
-dat do train tags=[a,b] name='"7"'
+dat train tags=[a,b] name='"7"'
 
 # a bare word stays a string; an empty value is None
-dat do train note=hello
-dat do train note=
+dat train note=hello
+dat train note=
 ```
 
 A word is a keyword argument when it starts with `NAME=` (a Python identifier
@@ -63,7 +62,7 @@ followed by `=`); anything else is a fixed argument. `--` ends the options, so
 every word after it is a fixed argument even when it looks like one of them:
 
 ```bash
-dat do echo -- --not-an-option
+dat echo -- --not-an-option
 ```
 
 The `TARGET` itself is never parsed as YAML.
@@ -72,18 +71,17 @@ The `TARGET` itself is never parsed as YAML.
 
 | Option | Does |
 |--------|------|
-| `--set DOTTED.KEY VALUE` | Set one spec key of a template before it forks. The value is a string. |
-| `--sets DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2,...` | Set several at once. |
+| `--set DOTTED.KEY=VALUE` | Set one spec key of a template before it forks; repeatable. The value is a YAML scalar. |
 | `--json DOTTED.KEY '<json>'` | Set one spec key to a parsed JSON value. |
-| `--dry-run` | Print the `do(...)` call this line would make, without making it. |
+| `--dry-run` | Print the `do(...)` call this line would make, and any `--set` / `--json` updates, without making it. |
 | `--usage` | Print `TARGET`'s own usage — a `<base>.usage` value, else the spec's `usage` key — else the general usage. |
 
-`--set` / `--sets` / `--json` update a **template spec**; using them on a target
-that is a plain function is an error.
+`--set` / `--json` update a **template spec**; using them on a target that is
+a plain function is an error.
 
 ```bash
-dat my_letters --set dat.title "Re-configured letterator"
-dat my_letters --sets dat.title=Quickie,start=100,end=110
+dat my_letters --set "dat.title=Re-configured letterator"
+dat my_letters --set dat.title=Quickie --set start=100 --set end=110
 dat my_letters --json rules '[[2, "my_letters.triple_it"]]'
 ```
 
@@ -109,16 +107,16 @@ the same thing:
 
 1. Walk up from the working directory to the nearest `.dataconfig.yaml` (it
    stops at `/`; with none found it prints a message and exits `3`).
-2. Pick the interpreter — the first of:
-   - `$DAT_PYTHON`,
-   - the config's `python:` key,
-   - `.venv/bin/python` beside the config,
-   - `python3` on `PATH`.
-3. `exec <python> -m dvc_dat "$@"`, with the working directory unchanged.
+2. Pick the command — the first of:
+   - `$DAT_RUN`,
+   - the config's `run:` key,
+   - `.venv/bin/python -m dvc_dat`, when `.venv` sits beside the config,
+   - `python3 -m dvc_dat`.
+3. `exec` that command with the arguments appended, working directory
+   unchanged.
 
-A value that names a folder means the venv holding it, so `python: myenv` and
-`python: myenv/bin/python` are the same interpreter. A relative value resolves
-against the config's folder.
+A relative path in the command's first word is relative to the config's
+folder.
 
 ```bash
 # once
@@ -128,16 +126,16 @@ cp .../dvc-dat/bin/dat ~/bin/dat
 cd any/deep/subfolder && dat train epochs=200
 ```
 
-## `python:` in `.dataconfig.yaml`
+## `run:` in `.dataconfig.yaml`
 
 ```yaml
-local_prefix: data
+dat_folders: data
 
-# the interpreter the bootstrap runs: a path, or a folder with bin/python
-python: .venv
+# the command a copy of bin/dat hands its arguments to
+run: uv run dat
 ```
 
-`python` is the interpreter the bootstrap runs: a path to one, or a folder holding
-`bin/python`. A relative path resolves against the config's folder. The library
-itself never reads the key — it is there so that one file describes the whole
-project. `DataConfig.python` carries it, absolute.
+`run` is any command that ends up in `dat`: `uv run dat`, `conda run -n ml
+dat`, `.venv/bin/python -m dvc_dat`. The library itself never reads the key —
+it is there so that one file describes the whole project. `DataConfig.run`
+carries it, with a relative first word made absolute.

@@ -13,6 +13,21 @@ Every user-visible change to `dvc_dat`, newest first.
   `Dat.create` or `Dat.manager` access discovers the nearest
   `.dataconfig.yaml` and installs it. `do.configure(source)` remains, for a
   config chosen by hand.
+- **`.dataconfig.yaml` has three keys** — `dat_folders` (a folder, or a list:
+  the first is where new dats are created, all are searched by name; replaces
+  `local_prefix` + `extra_local_prefixes`), `main`, and `run` (the command a
+  copy of `bin/dat` execs; replaces `python:`). `DAT_FOLDERS`, `DAT_MAIN` and
+  `DAT_RUN` in the environment override them. `Dat.manager.dat_folder` /
+  `.dat_folders` replace `sync_folder` / `sync_folders`.
+- **A spec on disk is a record.** `Dat.create` expands every `{}` once, with
+  the same `now` and `unique` the folder got, and writes the result: `dat.name`
+  is the folder the dat landed in, `{now}` is the moment it was made. Nothing
+  is expanded on read; `get_spec(raw=)` is gone. A reference inside a longer
+  string must be a string or a number; a whole-value reference is inlined as
+  data, and a reference to a function or class is a `TypeError` at create.
+  A fork from a `Dat` lands beside it (`target_exists: increment`), and
+  `increment` on a name with no `{unique}` counts up `_2`, `_3` instead of
+  looping.
 - **`mount_commands` is gone from `.dataconfig.yaml`**; a file that still has
   it is an unknown-key error. The config names a module instead — `main:
   mypkg.datconf` — imported when the config installs, and any `do.mount(...)`
@@ -66,20 +81,20 @@ one runner and the one namespace. Breaking on every count below.
   unique`) or a key of `vars`; a dotted `{a.b}` resolves through `do.load` at
   run time; `{{` is a literal brace; a string that is exactly one reference
   yields the referenced object.
-- `Dat.get_spec()` returns the spec with every reference resolved, computed
-  once per instance. `Dat.get_spec(raw=True)` is the file as written.
+- References are expanded once, at create (see above); `Dat.get_spec()` is
+  the file.
 - A spec value beginning with `{` must be quoted in YAML or it arrives as a
   dict; `validate_spec` names that case.
 
 ### The `dat` command line
 
-- One grammar, with verbs: `dat do TARGET [ARG ...] [KEY=VALUE ...]`, plus
-  `dat list [PREFIX]`, `dat info`, `dat version` and `dat --help`. `dat TARGET
-  ...` is still the shorthand for `dat do TARGET ...`.
+- One grammar: `dat TARGET [ARG ...] [KEY=VALUE ...]`, plus the reserved
+  words `dat list [PREFIX]`, `dat info`, `dat version` and `dat --help`.
+  There is no `do` verb.
 - **Keyword arguments are `KEY=VALUE`**, not `--keyword value`. The 1.x
   `--keyword value` / `--flag` forms are gone; the only flags left are
-  `--set`, `--sets`, `--json`, `--dry-run`, `--usage`, `--help`, `--version`
-  and `--info`.
+  `--set DOTTED.KEY=VALUE` (repeatable; `--sets` is gone), `--json`,
+  `--dry-run`, `--usage`, `--help`, `--version` and `--info`.
 - Every fixed argument and every `KEY=VALUE` value is read as a **YAML
   scalar**: `7` is an int, `true` a bool, `[1,2]` a list, `"x"` a string, and
   a bare word stays a string. `--` ends the options.
@@ -88,9 +103,9 @@ one runner and the one namespace. Breaking on every count below.
   stderr and no traceback; `DAT_DEBUG=1` gives the traceback. `do_argv`
   returns the exit code, and `dat --version` / `dat --help` work with no
   config in reach.
-- `dat list` and `dat info` are verbs now, so they no longer resolve through
-  the namespace; a target of either name still runs as `dat do list` /
-  `dat do info`.
+- `dat list`, `dat info` and `dat version` are reserved words, so they no
+  longer resolve through the namespace; a target with one of those names is
+  not reachable from the shell.
 - New reference page: `docs/cli.md`.
 
 ### `bin/dat` — the bootstrap
@@ -98,15 +113,15 @@ one runner and the one namespace. Breaking on every count below.
 - A POSIX `sh` script, checked in and copied wherever it is useful, that is
   the `dat` command from any directory with no environment activated: it
   walks up to the nearest `.dataconfig.yaml` (exit `3` with a message if there
-  is none), picks an interpreter — `$DAT_PYTHON`, the config's `python:` key,
-  `.venv/bin/python` beside the config, then `python3` on `PATH` — and
-  `exec`s `<python> -m dvc_dat "$@"` with the working directory unchanged.
-  With an environment active the console script of the same name shadows the
-  copy and does the same thing.
-- `.dataconfig.yaml` takes a **`python:`** key for that interpreter: a path to
-  one, or a folder holding `bin/python`; a relative path resolves against the
-  config's folder. `DataConfig.python` carries it, absolute. The library never
-  reads it — only the bootstrap does.
+  is none), picks a command — `$DAT_RUN`, the config's `run:` key,
+  `.venv/bin/python -m dvc_dat` beside the config, then `python3 -m dvc_dat`
+  — and `exec`s it with the arguments appended and the working directory
+  unchanged. With an environment active the console script of the same name
+  shadows the copy and does the same thing.
+- `.dataconfig.yaml` takes a **`run:`** key for that command (`uv run dat`,
+  `conda run -n ml dat`); a relative path in its first word resolves against
+  the config's folder. `DataConfig.run` carries it. The library never reads
+  it — only the bootstrap does.
 
 ### Spec fields
 
@@ -159,6 +174,12 @@ submodule) and `dvc_dat/do_fn.py` → `dvc_dat/do.py`.
 | args/kwargs read from `_result_.yaml` | read from the forked `_spec_.yaml` |
 | pydantic spec models | `Dat.validate_spec` override |
 | config `remote_prefix` / `default_remote` / `dat:` | delete them |
+| config `local_prefix` + `extra_local_prefixes` | `dat_folders: [first, ...]` |
+| config `python:` | `run: .venv/bin/python -m dvc_dat` (or `uv run dat`) |
+| `dat do TARGET` | `dat TARGET` |
+| `--set KEY VALUE` · `--sets a=1,b=2` | `--set KEY=VALUE`, repeated |
+| `get_spec(raw=True)` | `get_spec()` — the file holds the expanded values |
+| `Dat.manager.sync_folder` | `Dat.manager.dat_folder` |
 | implicit config on import | first use reads it; `do.configure()` for a chosen one |
 | config `mount_commands:` | `main: mypkg.datconf`, and `do.mount(...)` calls in that module |
 | `do.mount_all(cmds, relative_to)` | the `do.mount(...)` calls themselves |

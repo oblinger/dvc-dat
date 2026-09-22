@@ -29,7 +29,8 @@ object has a name whether or not it was mounted, and `do.name_of(obj)` gives the
 name that loads back to it.
 
 **Slash paths** (`runs/experiment1`) name dat folders. They are relative to
-`local_prefix` (default `data/`) or absolute. `load(name)` opens one.
+the dat folder (`dat_folders`, default `data/`) or absolute. `load(name)`
+opens one.
 
 ## Arguments fork a spec; they never ride beside it
 
@@ -148,20 +149,18 @@ The library itself validates with no schema library at all.
 ## Configuration: `.dataconfig.yaml`
 
 ```yaml
-# where dats are stored
-local_prefix: data
-
-# further folders searched when loading by name
-extra_local_prefixes: []
+# where dats live: one folder, or a list -- the first is where new dats
+# are created, all are searched when a dat is loaded by name
+dat_folders: data
 
 # imported when the config installs; do.mount(...) calls live there
 main: mypkg.datconf
 
-# the interpreter the bootstrap copy of `dat` runs (see cli.md)
-python: .venv
+# the command a copy of bin/dat hands its arguments to (see cli.md)
+run: uv run dat
 ```
 
-Those four keys are the whole file, and an empty file is a complete config.
+Those three keys are the whole file, and an empty file is a complete config.
 An unrecognized key is an error naming the file, the key and the known keys —
 a typo is never silently ignored. The config's folder is the project's import
 root: it goes first on `sys.path` when the config installs, so `main` and
@@ -171,7 +170,7 @@ installed or not.
 The file is found by walking up from the working directory, or from the path
 given to `do.configure(...)` / `DataConfig.new(cwd=...)`. A
 `.dataconfig.override.yaml` beside it wins over it, and a `DAT_<KEY>`
-environment variable (`DAT_LOCAL_PREFIX`) wins over both.
+environment variable (`DAT_FOLDERS`, `DAT_MAIN`, `DAT_RUN`) wins over both.
 
 See [Mounts](mount-commands.md) for what `main` can mount.
 
