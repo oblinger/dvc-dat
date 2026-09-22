@@ -340,12 +340,12 @@ class Do:
             index = _build_loadables_index(folder, at)
             tops = {_top_name(loc) for loc in index}
             for top in sorted(tops):
-                _refuse_import_clash(top, "folder", folder, own=os.path.abspath(folder))
+                _refuse_import_clash(top, "folder", folder, own=folder)
             for base, path in index.items():
                 self._reg_module(base, path, allow_redefine=True)
         elif file is not None:
             path = os.path.join(relative_to, file)
-            _refuse_import_clash(_top_name(at), "file", path, own=os.path.abspath(path))
+            _refuse_import_clash(_top_name(at), "file", path, own=path)
             self._base_locations[at] = path
         elif module is not None:
             if isinstance(module, ModuleType):
@@ -358,8 +358,7 @@ class Do:
             if own and os.path.basename(own) == "__init__.py":
                 own = os.path.dirname(own)          # a package: its folder is its own
             source = module.__name__ if isinstance(module, ModuleType) else module
-            _refuse_import_clash(_top_name(at), "module", source,
-                                 own=os.path.abspath(own) if own else None)
+            _refuse_import_clash(_top_name(at), "module", source, own=own)
             self._reg_module(at, module, allow_redefine=True)
         else:
             _refuse_import_clash(_top_name(at), "value", repr(value)[:60])
@@ -403,7 +402,12 @@ def _top_name(name: str) -> str:
 
 
 def _refuse_import_clash(top: str, kind: str, source: str, *, own: Optional[str] = None):
-    """Raise if `top` is importable from outside `own` (the mounted file or folder)."""
+    """Raise if `top` is importable from outside `own` (the mounted file or folder).
+
+    Both sides are compared as real paths, component by component: a symlinked
+    mount of the importable source is its own, and `/x/configs2` is not inside
+    `/x/configs`.
+    """
     if not top:
         return
     try:
@@ -419,10 +423,18 @@ def _refuse_import_clash(top: str, kind: str, source: str, *, own: Optional[str]
     places += list(spec.submodule_search_locations or [])
     if not places:  # a built-in module
         places = [spec.origin or "built-in"]
-    if own and all(os.path.abspath(p).startswith(own) for p in places):
-        return
+    if own:
+        own = os.path.realpath(own)
+        if all(_within(os.path.realpath(p), own) for p in places):
+            return
     raise ValueError(f"mount: {top!r} is an importable module ({places[0]}); "
                      f"mount the {kind} {source!r} at another name")
+
+
+def _within(path: str, folder: str) -> bool:
+    """True if `path` is `folder` or lies inside it."""
+    return path == folder or path.startswith(folder.rstrip(os.sep) + os.sep)
+
 
 def _parse_yaml_prefix(result: Any) -> Any:
     """A string beginning `yaml` is a YAML spec; parse it."""
