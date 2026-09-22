@@ -16,6 +16,7 @@ import copy
 import importlib.util
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -460,130 +461,234 @@ do = Do()
 
 USAGE = """
 SYNOPSIS
-    dat CMD_NAME FIXED_ARGS ... KEYWORD_ARG ...
-    dat KEY_WORD_ARGS  ...  CMD_NAME FIXED_ARGS ...
-
-    dat --usage
-    dat CMD_NAME --set DOTTED.KEY VALUE
-    dat CMD_NAME --sets "DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2"
-    dat CMD_NAME --json DOTTED.KEY '<json>'
+    dat do TARGET [ARG ...] [KEY=VALUE ...]     run TARGET
+    dat TARGET [ARG ...] [KEY=VALUE ...]        shorthand for `dat do TARGET`
+    dat list [PREFIX]                           the mounted names
+    dat info                                    version, sync folder, config
+    dat version                                 the version
+    dat --help                                  this message
 
 DESCRIPTION
-    Runs the do command named by CMD_NAME, configured from the nearest
-    .dataconfig.yaml.  A command that is a template spec is forked: fixed
-    args become its dat.args, keyword args update its dat.kwargs, and
-    --set/--sets/--json update any spec key; the forked spec creates a dat
-    and runs it.
+    `dat` configures itself from the nearest .dataconfig.yaml before it runs
+    anything that needs the namespace.
 
-    --usage     Prints the command-specific usage info if it exists,
-                else this message
+    `dat do TARGET ...` calls do(TARGET, *ARGS, **KWARGS).  A TARGET that is a
+    template spec is forked: the fixed ARGs become its dat.args and the
+    KEY=VALUE pairs update its dat.kwargs, key by key; the forked spec creates
+    a dat, and that dat runs.  A TARGET that is a callable is simply called.
+    The return value prints on stdout when it is not None.
 
-    --print     Prints the python do call with args, but does not call it.
+    Every ARG and every KEY=VALUE value is read as a YAML scalar: 7 is an int,
+    true is a bool, [1,2] is a list, "x" is a string, and a bare word stays a
+    string.  A KEY=VALUE pair is recognised by a leading NAME= ; use -- to end
+    the options and pass anything after it as a fixed argument.
 
-    --set DOTTED.NAME VALUE
-    --sets DOTTED.NAME1=VALUE1,DOTTED.NAME2=VALUE2,...
-    --json DOTTED.NAME '<json value>'
-                Update the indicated spec keys before running
+OPTIONS
+    --set DOTTED.KEY VALUE
+    --sets DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2,...
+    --json DOTTED.KEY '<json value>'
+                Update those spec keys of a template before it forks
 
-NOTES
-    Per standard UNIX 'getopt' parameter parsing two dashes ("--")
-    can be used to terminate keyword arguments and cause all remaining
-    arguments to be treated as fixed parameters even when those parameters
-    begin with "-" in a way that could be confused as additional keywords
+    --print     Print the python do() call instead of making it
+    --usage     Print TARGET's own usage (a <base>.usage value, or the spec's
+                usage key), else this message
 
-    Unlike most UNIX parameters each single dash ("-") keywords cannot
-    be concatenated.  So "dat -a -b foo" cannot be shorted to "dat -ab foo"
-
-    All keyword arguments can be either flags or keywords with arguments,
-    thus "--" must be added in some cases to avoid treating a fixed arg
-    as the value associated with a keyword flag.
+EXIT STATUS
+    0   ran
+    1   the run failed, or the command line was malformed
+    2   TARGET does not load
 
 EXAMPLES
-
-    dat --show balls,hoops viz
+    dat do hello_world
+    dat hello_again.salutation Maxim emphasis=true lucky_number=7
+    dat my_letters --sets dat.title=Quickie,start=100,end=110
+    dat list hello
 """
 
+_KWARG = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=")
 
-def do_argv(argv):
-    """Run a do command from the command line (the `dat` entry point)."""
-    if do.config is None:
-        do.configure()
-    overrides, args, kwargs = _parse_argv(argv[1:])
+
+def do_argv(argv: List[str]) -> int:
+    """Run one `dat` command line (argv[0] is the program); returns the exit code."""
+    args = list(argv[1:])
+    if not args or args[0] in ("-h", "--help"):
+        print(USAGE)
+        return 0
+    verb, rest = args[0], args[1:]
+    if verb in ("version", "--version"):
+        from . import __version__
+        print(__version__)
+        return 0
+    elif verb in ("info", "--info"):
+        return _cmd_info(rest)
+    elif verb == "list":
+        return _cmd_list(rest)
+    return _cmd_do(rest if verb == "do" else args)
+
+
+def _cmd_do(argv: List[str]) -> int:
+    """`dat do TARGET ...` -- the default verb."""
+    try:
+        overrides, args, kwargs, flags = _parse_argv(argv)
+    except ValueError as e:
+        return _fail(str(e))
     if not args:
-        print(USAGE if "usage" in kwargs or not kwargs
-              else "Error: No do-command specified.")
-        return
-    cmd = do.load(args[0])
-    if "usage" in kwargs:
-        usage = do.load(args[0].split(".")[0] + ".usage", default=None)
-        if usage is None:
-            usage = (cmd.get("usage") if isinstance(cmd, dict) else None) or USAGE
-        print(usage)
-        return
-    elif "print" in kwargs:
-        del kwargs["print"]
-        shown = [repr(a) for a in args] + [f"{k}={v!r}" for k, v in kwargs.items()]
-        print(f"  do({', '.join(shown)})")
-        return
-    elif isinstance(cmd, dict):
-        spec = merge_dicts(do.resolve_base(cmd), overrides)
-        result = do(spec, *args[1:], **kwargs)
-    elif not callable(cmd):
-        print(cmd)
-        return
-    elif overrides:
-        print("Error: Cannot specify --set or --sets on a do w/o a config")
-        return
-    else:
-        result = do(args[0], *args[1:], **kwargs)
+        if "usage" in flags:
+            print(USAGE)
+            return 0
+        return _fail("no TARGET given; `dat --help` for usage")
+    target, fixed = args[0], [_scalar(a) for a in args[1:]]
+    _configured()
+    try:
+        cmd = do.load(target)
+    except (ImportError, AttributeError, KeyError) as e:
+        return _fail(f"cannot load {target!r}: {_message(e)}", code=2)
+    if "usage" in flags:
+        usage = do.load(target.split(".")[0] + ".usage", default=None)
+        if usage is None and isinstance(cmd, dict):
+            usage = cmd.get("usage")
+        print(usage or USAGE)
+        return 0
+    elif "print" in flags:
+        shown = ([repr(target)] + [repr(a) for a in fixed]
+                 + [f"{k}={v!r}" for k, v in kwargs.items()])
+        print(f"do({', '.join(shown)})")
+        return 0
+    try:
+        if isinstance(cmd, dict):
+            spec = merge_dicts(do.resolve_base(cmd), overrides)
+            result = do(spec, *fixed, **kwargs)
+        elif overrides:
+            return _fail(f"--set/--sets/--json need a template spec; "
+                         f"{target!r} is {type(cmd).__name__}")
+        elif not callable(cmd):
+            print(cmd)
+            return 0
+        else:
+            result = do(target, *fixed, **kwargs)
+    except Exception as e:
+        if os.environ.get("DAT_DEBUG"):
+            raise
+        return _fail(_message(e))
     if result is not None:
         print(result)
-    return result
+    return 0
 
 
-def _parse_argv(argv):
-    overrides, args, kwargs, i, argv = {}, [], {}, 0, argv + ["--end-of-args"]
-    while i < len(argv) - 1:
+def _cmd_list(argv: List[str]) -> int:
+    """`dat list [PREFIX]` -- the mounted names."""
+    if len(argv) > 1:
+        return _fail("list takes at most one PREFIX")
+    _configured()
+    from .dat_tools import cmd_list
+    cmd_list(argv[0] if argv else "")
+    return 0
+
+
+def _cmd_info(argv: List[str]) -> int:
+    """`dat info` -- the version, the sync folder and the config in force."""
+    if argv:
+        return _fail("info takes no arguments")
+    from . import __version__
+    config = _configured()
+    print("\n# -- Dat Configuration Info -- ")
+    print(f"# Dat version       : {__version__}")
+    print(f"# Dat Data Folder   : {Dat.manager.sync_folder}")
+    print(f"# .dataconfig folder: {config.cwd}")
+    config_file = os.path.join(config.cwd, ".dataconfig.yaml")
+    if os.path.exists(config_file):
+        print(f"# .dataconfig.yaml  : {config_file}")
+        with open(config_file) as f:
+            print(f.read())
+    else:
+        print("# (no .dataconfig.yaml found)")
+    print()
+    return 0
+
+
+def _configured() -> DataConfig:
+    """The config in force, reading the nearest `.dataconfig.yaml` if none is."""
+    if do.config is None:
+        do.configure()
+    return do.config
+
+
+def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
+    """Split `dat do` arguments into spec overrides, positionals, kwargs and flags.
+
+    Positionals come back as written (the first is the target name); every
+    KEY=VALUE value is a YAML scalar.  A malformed line raises `ValueError`.
+    """
+    overrides: Spec = {}
+    args: List[str] = []
+    kwargs: Dict[str, Any] = {}
+    flags: set = set()
+    i = 0
+    while i < len(argv):
         arg = argv[i]
-        flag = _get_flag(arg)
         if arg == "--":
-            args += argv[i + 1:-1]
+            args += argv[i + 1:]
             break
-        elif arg == "--json":
-            try:
-                Dat.set(overrides, argv[i + 1], json.loads(argv[i + 2]))
-            except json.decoder.JSONDecodeError:
-                print(f"Illegal JSON: {argv[i + 2]}")
-            i += 2
-        elif arg == '--set':
-            Dat.set(overrides, argv[i + 1], argv[i + 2])
+        elif arg in ("--json", "--set"):
+            key, value = _operands(argv, i, 2)
+            if arg == "--json":
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"--json {key}: illegal JSON: {e}")
+            Dat.set(overrides, key, value)
             i += 2
         elif arg == "--sets":
-            Dat.sets(overrides, *argv[i + 1].split(","))
+            (pairs,) = _operands(argv, i, 1)
+            Dat.sets(overrides, *pairs.split(","))
             i += 1
-        elif not flag:
-            args.append(arg)
-        elif _get_flag(argv[i + 1]):
-            kwargs[flag] = True
+        elif arg in ("--print", "--usage"):
+            flags.add(arg[2:])
+        elif (match := _KWARG.match(arg)):
+            kwargs[match.group(1)] = _scalar(arg[match.end():])
+        elif arg.startswith("-") and arg != "-":
+            raise ValueError(f"unknown option {arg!r}; "
+                             f"keyword arguments are written KEY=VALUE")
         else:
-            kwargs[flag] = argv[i + 1]
-            i += 1
+            args.append(arg)
         i += 1
-    return overrides, args, kwargs
+    return overrides, args, kwargs, flags
 
 
-def _get_flag(arg):
-    if not all(c.isalnum() or c == '-' for c in arg):
-        return None
-    elif arg == "--":
-        return arg
-    elif arg.startswith("--"):
-        return arg[2:].replace("-", "_")
-    elif arg.startswith("-") and len(arg) == 2:
-        return arg[1]
-    else:
-        return None
+def _operands(argv: List[str], i: int, count: int) -> List[str]:
+    """The `count` words after the option at `argv[i]`."""
+    operands = argv[i + 1:i + 1 + count]
+    if len(operands) < count:
+        raise ValueError(f"{argv[i]} needs {count} value(s)")
+    return operands
+
+
+def _scalar(text: str) -> Any:
+    """One command-line word as a YAML scalar; a bare word stays a string."""
+    try:
+        return yaml.safe_load(text)
+    except yaml.YAMLError:
+        return text
+
+
+def _message(error: BaseException) -> str:
+    """One line naming an exception and the exceptions it was raised from."""
+    parts: List[str] = []
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        text = str(error) or type(error).__name__
+        if text not in parts:
+            parts.append(text)
+        error = error.__cause__
+    return ": ".join(parts)
+
+
+def _fail(text: str, code: int = 1) -> int:
+    """Print a one-line error on stderr and return the exit code."""
+    print(f"dat: {text}", file=sys.stderr)
+    return code
 
 
 if __name__ == '__main__':
-    do_argv(sys.argv)
+    sys.exit(do_argv(sys.argv))

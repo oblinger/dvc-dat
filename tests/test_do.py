@@ -98,13 +98,19 @@ nested:
 
 
 class TestCommandLine:
+    """The `./do` shim onto `do_argv`; `test_cli.py` covers every `dat` verb."""
+
     def test_usage_message(self):
         lines = run_capture("./do --usage")
         assert 30 < len(lines.split("\n"))
 
     def test_commandline_fixed_and_key_args(self):
-        result = run_capture_tail("./do hello_again.salutation Maxim --emphasis")
+        result = run_capture_tail("./do hello_again.salutation Maxim emphasis=true")
         assert result == "(999, 'Maxim, My lucky number is 999')"
+
+    def test_keyword_values_are_yaml_scalars(self):
+        result = run_capture_tail("./do hello_again.salutation Maxim lucky_number=7")
+        assert result == "(7, 'Maxim, My lucky number is 7')"
 
     def test_run_configuration_from_cmdline(self):
         result = run_capture_tail("./do my_letters")

@@ -3,7 +3,4 @@ import os.path
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from dvc_dat import do_argv
-do_argv(sys.argv)
-
-# from dvc_dat import do
-# do("mr_sprint23.add_col")
+sys.exit(do_argv(sys.argv))
