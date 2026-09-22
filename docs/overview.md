@@ -163,4 +163,4 @@ run: .venv/bin/python -m mypkg.main   # what a copy of bin/dat execs
 Those are the only keys; anything else is an error that names the file and the
 key. The config's folder is the import root. The namespace is whatever the
 running program imported; `run:` names your program's main, which mounts what
-it mounts and ends with `sys.exit(dat.cli())`. See **[Mounts](mount-commands.md)**.
+it mounts and ends with `sys.exit(dat.cli_main())`. See **[Mounts](mount-commands.md)**.

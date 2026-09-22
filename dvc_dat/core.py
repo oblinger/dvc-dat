@@ -62,7 +62,7 @@ class DataConfig:
     dat_folders : where dats live -- one folder, or a list.  The first is where new
         dats are created; all are searched, in order, when a dat is loaded by name.
     run : the command a copy of `bin/dat` hands its arguments to -- your own
-        program's main, which imports what it needs and calls `cli()`; default
+        program's main, which imports what it needs and calls `cli_main()`; default
         `.venv/bin/python -m dvc_dat` beside the config.  A relative path in its
         first word is relative to `cwd`.  Nothing in the library reads it.
     """

@@ -522,15 +522,19 @@ EXAMPLES
 _KWARG = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=")
 
 
-def cli(argv: Optional[List[str]] = None) -> int:
+def cli_main(argv: Optional[List[str]] = None, *,
+             config: Union[None, str, Path, DataConfig] = None) -> int:
     """The `dat` command line, for a program's own main.
 
     A program that mounts names -- or simply wants `dat` to run inside its own
-    imports -- ends its main with `sys.exit(dat.cli())` and names that main in
-    `.dataconfig.yaml`'s `run:`; the bootstrap copy of `bin/dat` then hands every
-    shell command line to it.  `argv` defaults to `sys.argv`; the return value is
-    the exit status.
+    imports -- ends its main with `sys.exit(dat.cli_main())` and names that main
+    in `.dataconfig.yaml`'s `run:`; the bootstrap copy of `bin/dat` then hands
+    every shell command line to it.  `argv` defaults to `sys.argv`; `config`, if
+    given, is installed first (a folder, a config file or a `DataConfig`) instead
+    of the nearest `.dataconfig.yaml`.  The return value is the exit status.
     """
+    if config is not None:
+        do.configure(config)
     return do_argv(list(sys.argv if argv is None else argv))
 
 

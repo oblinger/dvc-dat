@@ -25,7 +25,7 @@ def _env(**extra: str) -> dict:
 
 def dat(*args: str, cwd=TESTS, env=None):
     """Run one `dat` command line inside the test namespace -- `tests/mounts.py`
-    run as a main, the way a project's own main runs `dat.cli()`; returns
+    run as a main, the way a project's own main runs `dat.cli_main()`; returns
     (exit code, stdout, stderr)."""
     done = subprocess.run([sys.executable, "-m", "mounts", *args], cwd=str(cwd),
                           capture_output=True, text=True, env=env or _env())
@@ -52,7 +52,7 @@ def no_config_dir(tmp_path: Path) -> Path:
 
 def make_project(root: Path, python: str = None) -> Path:
     """A minimal dat project: a config, and a main that mounts one script folder
-    and hands the command line to `dat.cli()`.  `python` names the interpreter
+    and hands the command line to `dat.cli_main()`.  `python` names the interpreter
     the config's `run:` uses; None leaves `run:` out."""
     config = ["dat_folders: data/"]
     if python is not None:
@@ -64,7 +64,7 @@ def make_project(root: Path, python: str = None) -> Path:
         "import dvc_dat as dat\n"
         "dat.do.mount(folder=str(Path(__file__).parent / 'scripts'))\n"
         "if __name__ == '__main__':\n"
-        "    sys.exit(dat.cli())\n"
+        "    sys.exit(dat.cli_main())\n"
     )
     (root / "scripts").mkdir()
     (root / "scripts" / "greet.py").write_text(

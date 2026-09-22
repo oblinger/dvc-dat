@@ -153,7 +153,7 @@ The library itself validates with no schema library at all.
 dat_folders: data
 
 # the command a copy of bin/dat hands its arguments to (see cli.md):
-# your program's main, which imports what it mounts and calls dat.cli()
+# your program's main, which imports what it mounts and calls dat.cli_main()
 run: .venv/bin/python -m mypkg.main
 ```
 

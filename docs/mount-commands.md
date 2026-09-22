@@ -8,7 +8,7 @@ literal value — and for giving an importable thing a shorter name.
 
 Mounts are made in code, by `do.mount(...)`, by your own program — the
 namespace is whatever the running program imported. For the shell, your
-program's main does the mounting and hands the command line to `dat.cli()`,
+program's main does the mounting and hands the command line to `dat.cli_main()`,
 and `.dataconfig.yaml` names that main as `run:`:
 
 ```yaml
@@ -29,7 +29,7 @@ dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
 dat.do.mount(module="tests.fixtures", at="fixtures")
 
 if __name__ == "__main__":
-    sys.exit(dat.cli())
+    sys.exit(dat.cli_main())
 ```
 
 The mounts land on the one `do` object the process holds, so a
@@ -193,7 +193,7 @@ dat.do.mount(folder=str(SRC / "scripts"), at="scripts")
 dat.do.mount(value={"debug": False, "version": "2.0.0"}, at="config")
 
 if __name__ == "__main__":
-    sys.exit(dat.cli())
+    sys.exit(dat.cli_main())
 ```
 
 Usage, from a program that has imported `myproject.main`:

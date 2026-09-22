@@ -31,8 +31,8 @@ Every user-visible change to `dvc_dat`, newest first.
 - **`mount_commands` is gone from `.dataconfig.yaml`**; a file that still has
   it is an unknown-key error. The namespace is whatever the running program
   imported: `do.mount(...)` calls live in your own code, and for the shell
-  `run:` names your program's main, which ends with `sys.exit(dat.cli())`
-  (`cli` is new and exported). `do.mount_all` is removed. With no mounts a
+  `run:` names your program's main, which ends with `sys.exit(dat.cli_main())`
+  (`cli_main` is new and exported). `do.mount_all` is removed. With no mounts a
   dotted name is a Python name and nothing else; an empty `.dataconfig.yaml`
   is a complete config.
 - The config's folder is the project's import root: it goes first on
