@@ -17,6 +17,8 @@ CreateHello10 .... Creates the fake dataset of 10 runs in /tmp/hello10.
 
 """
 
+import os
+
 from dvc_dat import Dat
 
 metrics = ["cube_hello", "cube_hello.p", "cube_hello.r", "rpt", "CreateHello10"]
@@ -47,7 +49,7 @@ __main__ = {
 
 def is_prime(dat: Dat):
     """Returns True if the run number is prime"""
-    return int(dat.get_path_tail()) in [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+    return int(os.path.basename(dat.get_path())) in [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
 
 
 def data(dat: Dat):

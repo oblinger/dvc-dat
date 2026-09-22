@@ -17,7 +17,7 @@ dynamic = ["version"]
 excel = ["xlsxwriter"]
 
 [project.scripts]
-dat = "dvc_dat.__main__:main"
+dat = "dvc_dat.do:cli_main"
 
 [tool.setuptools]
 packages = ["dvc_dat"]

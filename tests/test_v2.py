@@ -12,7 +12,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from dvc_dat import Dat, DataConfig, Do, do, expand, expand_spec, load  # noqa: E402
+from dvc_dat import Dat, DataConfig, Do, do, expand, expand_spec  # noqa: E402
 from dvc_dat.core import DATA_CONFIG_FILE, SPEC_YAML, RESULT_YAML  # noqa: E402
 
 V2 = "v2tests"
@@ -84,10 +84,10 @@ class TestForkRule:
             "dat": {"do": "v2_echo", "name": f"{V2}/forkable{{unique}}"}})
         for stale in (f"{V2}/forkable", f"{V2}/forkable_2"):
             if Dat.manager.exists(stale):
-                load(stale).delete()
+                Dat.load(stale).delete()
 
         assert do("v2_forkable", 1) == {"args": [1], "kwargs": {}}
-        dat = load(f"{V2}/forkable")
+        dat = Dat.load(f"{V2}/forkable")
         spec_file = Path(dat.get_path(), SPEC_YAML)
         before = spec_file.read_bytes()
 
@@ -99,7 +99,7 @@ class TestForkRule:
         # Arguments: a new dat, and the original spec is untouched.
         assert do(dat, 9) == {"args": [9], "kwargs": {}}
         assert spec_file.read_bytes() == before
-        forked = load(f"{V2}/forkable_2")
+        forked = Dat.load(f"{V2}/forkable_2")
         assert forked.get_path() != dat.get_path()
         assert stored(forked)["dat"]["args"] == [9]
 
@@ -109,12 +109,12 @@ class TestForkRule:
             "dat": {"do": "v2_echo", "name": name, "target_exists": "overwrite"}})
 
         do("v2_dev")
-        first = load(name).get_path()
+        first = Dat.load(name).get_path()
         marker = Path(first, "left_over.txt")
         marker.write_text("from the previous run")
 
         do("v2_dev")
-        assert load(name).get_path() == first
+        assert Dat.load(name).get_path() == first
         assert not marker.exists()   # the folder is squashed, not merged
 
     def test_target_exists_use_returns_the_existing_dat_without_running(self):
@@ -122,7 +122,7 @@ class TestForkRule:
         do.mount(at="v2_use", value={
             "dat": {"do": "v2_echo", "name": name, "target_exists": "use"}})
         if Dat.manager.exists(name):
-            load(name).delete()
+            Dat.load(name).delete()
 
         assert do("v2_use", 1) == {"args": [1], "kwargs": {}}
         again = do("v2_use", 2)
@@ -135,7 +135,7 @@ class TestBaseList:
         do.mount(at="v2_base_a", value={"dat": {}, "x": 1, "shared": "from_a"})
         do.mount(at="v2_base_b", value={"dat": {}, "y": 2, "shared": "from_b"})
 
-        spec = do.resolve_base({"dat": {"base": ["v2_base_a", "v2_base_b"]}, "z": 3})
+        spec = do._resolve_base({"dat": {"base": ["v2_base_a", "v2_base_b"]}, "z": 3})
         assert (spec["x"], spec["y"], spec["z"]) == (1, 2, 3)
         assert spec["shared"] == "from_b"      # the later entry wins
         assert "base" not in spec["dat"]
@@ -153,7 +153,7 @@ class TestBaseList:
 
     def test_a_falsy_override_still_overrides(self):
         do.mount(at="v2_base_truthy", value={"dat": {}, "flag": True, "count": 7})
-        spec = do.resolve_base({"dat": {"base": "v2_base_truthy"}, "flag": False, "count": 0})
+        spec = do._resolve_base({"dat": {"base": "v2_base_truthy"}, "flag": False, "count": 0})
         assert spec["flag"] is False and spec["count"] == 0
 
 
@@ -209,7 +209,6 @@ class TestGetSpec:
         assert stored(dat)["sep"] == os.sep
         assert isinstance(stored(dat)["cfg"], dict)    # a whole-value reference: data, inlined
         assert dat.get_spec()["dat"]["name"] == f"{V2}/expanded"   # the name is the folder
-        assert dat.spec is dat.get_spec()
 
     def test_a_reference_to_a_non_data_object_is_refused_at_create(self):
         with pytest.raises(TypeError):
@@ -220,10 +219,10 @@ class TestGetSpec:
     def test_a_fork_from_a_dat_lands_beside_it(self):
         template = {"dat": {"do": "v2_echo", "name": f"{V2}/parent{{unique}}"}}
         do(template, 1)
-        parent = load(f"{V2}/parent")
+        parent = Dat.load(f"{V2}/parent")
         assert parent.get_spec()["dat"]["name"] == f"{V2}/parent"
         do(parent, 2)
-        child = load(f"{V2}/parent_2")
+        child = Dat.load(f"{V2}/parent_2")
         assert child.get_spec()["dat"]["args"] == [2]
         assert child.get_spec()["dat"]["target_exists"] == "increment"
 
@@ -254,7 +253,7 @@ class TestValidateSpec:
         broken = yaml.safe_load(spec_file.read_text())
         del broken["required"]
         spec_file.write_text(yaml.safe_dump(broken, sort_keys=False))
-        Dat.manager.dat_cache.pop(good.get_path(), None)
+        Dat.manager._dat_cache.pop(good.get_path(), None)
 
         with pytest.raises(ValueError, match="required"):
             Strict.load(name)

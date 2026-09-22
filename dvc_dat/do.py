@@ -3,13 +3,14 @@
     do(target, *args, **kwargs)   # run: a dat, a template spec, or a plain callable
     do.load("pkg.mod.fn")         # the object a dotted name imports to
     do.name_of(obj)               # the dotted name that loads back to obj
-    do.configure(...)             # apply a .dataconfig.yaml's mount table
+    do.mount(folder=..., at=...)  # add names to the namespace, in code
+    do.configure(...)             # install a .dataconfig.yaml (dat folders)
 
-`do` is a singleton: importing `dvc_dat` gives the static resolver (a dotted name
-means exactly what `import` means in this environment, `getattr` below that);
-`do.configure()` mounts a config's namespace onto the same object, so a name
-imported early keeps working.  Importing never reads the filesystem; the `dat`
-command-line tool configures itself.
+`do` is a singleton.  A dotted name is a mounted name, else exactly what
+`import` means in this environment, `getattr` below that.  Mounts are
+`do.mount(...)` calls in the program; `.dataconfig.yaml` holds none.
+Importing never reads the filesystem; the first use configures from the
+nearest `.dataconfig.yaml`.
 """
 
 import copy
@@ -43,17 +44,15 @@ Spec = Dict[str, Any]
 class Do:
     """The do namespace and runner.  See the module docstring; one instance, `do`."""
 
-    do_folder: Optional[str]
-    base_locations: Dict[str, str]
-    base_objects: Dict[str, Any]
-    registered_values: Optional[Dict[str, Any]]
+    _base_locations: Dict[str, str]
+    _base_objects: Dict[str, Any]
+    _registered_values: Optional[Dict[str, Any]]
     config: Optional[DataConfig]
 
     def __init__(self):
-        self.base_objects = {}
-        self.base_locations = {}
-        self.registered_values = None
-        self.do_folder = None
+        self._base_objects = {}
+        self._base_locations = {}
+        self._registered_values = None
         self.config = None
         self._configuring = False
 
@@ -61,8 +60,9 @@ class Do:
         """Install a config the first time one is needed.
 
         Import reads no filesystem; the first `load`, call or `Dat.manager` access
-        discovers `.dataconfig.yaml` from the working directory and applies its mount
-        table.  `configure(...)` stays for a config chosen by hand.
+        discovers `.dataconfig.yaml` from the working directory and installs it
+        (its dat folders; mounts are `do.mount(...)` calls, never config).
+        `configure(...)` stays for a config chosen by hand.
         """
         if self.config is None and not self._configuring:
             self._configuring = True
@@ -101,8 +101,8 @@ class Do:
                 return obj(*args, **kwargs)
             if not isinstance(obj, dict):
                 raise TypeError(f"do: cannot run {obj!r}; expected a callable, a spec or a Dat")
-            spec = self.fork_spec(obj, args, kwargs)
-            dat, skip_execution = self.dat_from_template(spec)
+            spec = self._fork_spec(obj, args, kwargs)
+            dat, skip_execution = self._dat_from_template(spec)
             if skip_execution:
                 return dat
             return self._run_dat(dat)
@@ -110,7 +110,7 @@ class Do:
             raise Exception(f"In {target!r}") from e
 
     @staticmethod
-    def fork_spec(spec: Spec, args: Iterable[Any] = (),
+    def _fork_spec(spec: Spec, args: Iterable[Any] = (),
                   kwargs: Optional[Dict[str, Any]] = None) -> Spec:
         """A copy of `spec` with `args` as `dat.args` and `kwargs` merged into `dat.kwargs`."""
         spec = copy.deepcopy(spec)
@@ -146,24 +146,24 @@ class Do:
         dat.save()
         return result
 
-    def dat_from_template(self, spec: Spec, *, path: Optional[str] = None) -> Tuple[Dat, bool]:
+    def _dat_from_template(self, spec: Spec, *, path: Optional[str] = None) -> Tuple[Dat, bool]:
         """Create the dat a template spec describes (see `DatManager.create`).
 
         Returns `(dat, skip_execution)`; `skip_execution` is True when
         `dat.target_exists: use` found the dat already there.
         """
-        spec = self.resolve_base(copy.deepcopy(spec))
+        spec = self._resolve_base(copy.deepcopy(spec))
         path = path or Dat.get(spec, DAT_NAME, None)
         target_exists = Dat.get(spec, DAT_TARGET_EXISTS, "error")
         if target_exists == "use":
-            expanded, exists = Dat.manager.prepare_dat_path(path, target_exists="use")
+            expanded, exists = Dat.manager._prepare_dat_path(path, target_exists="use")
             if exists:
                 return Dat.load(expanded), True
         return Dat.create(path=path, spec=spec), False
 
     # -- specs ---------------------------------------------------------------
 
-    def resolve_base(self, spec: Union[Spec, str]) -> Spec:
+    def _resolve_base(self, spec: Union[Spec, str]) -> Spec:
         """Merge a spec over its `dat.base` (a name, a spec, or a list of them, later
         entries winning), recursively; `dat.base` is dropped from the result so the
         stored spec is complete on its own."""
@@ -175,7 +175,7 @@ class Do:
         bases = base if isinstance(base, list) else [base]
         merged: Spec = {}
         for entry in bases:
-            merged = merge_dicts(merged, self.resolve_base(entry))
+            merged = merge_dicts(merged, self._resolve_base(entry))
         result = merge_dicts(merged, spec)
         result["dat"].pop("base", None)
         return result
@@ -186,7 +186,7 @@ class Do:
              kind: Optional[Type] = None) -> Any:
         """The object `dotted_name` names.
 
-        Mounted names are checked first (values, modules, files, do-folders); otherwise
+        Mounted names are checked first (values, modules, files, folders); otherwise
         the longest importable prefix is imported and the rest is `getattr`.  With
         nothing found the import's own `ImportError` / `AttributeError` propagates
         unless `default` is given.  A `.py`/`.yaml`/`.json` mount's contents are
@@ -210,23 +210,21 @@ class Do:
     def _load_mounted(self, dotted_name: str) -> Any:
         parts = dotted_name.split(".")
         file_base = parts[0]
-        if self.registered_values and _DO_NULL != \
-                (value := self.registered_values.get(dotted_name, _DO_NULL)):
+        if self._registered_values and _DO_NULL != \
+                (value := self._registered_values.get(dotted_name, _DO_NULL)):
             value = _parse_yaml_prefix(value)
             return copy.deepcopy(value) if isinstance(value, dict) else value
-        obj = self.get_base(file_base, default=None)
+        obj = self._get_base(file_base, default=None)
         if obj is None:
             # A folder mount indexes its files by path under `at`: `catalog/models/baseline`
             # answers to `catalog.models.baseline`, so try the longest such prefix.
             for cut in range(len(parts), 1, -1):
                 key = "/".join(parts[:cut])
-                if key in self.base_locations:
-                    obj = self.get_base(key)
+                if key in self._base_locations:
+                    obj = self._get_base(key)
                     file_base, parts = key, [key] + parts[cut:]
                     break
         if obj is None:
-            if self.do_folder and (result := _resolve_in_folder(self.do_folder, parts)) is not None:
-                return result
             return _DO_NULL
         if obj == _DO_ERROR_FLAG:
             raise KeyError(f"do.load: {file_base!r} is mounted more than once")
@@ -281,13 +279,13 @@ class Do:
 
     def keys(self) -> Iterable[str]:
         """Every mounted base name."""
-        return self.base_locations.keys()
+        return self._base_locations.keys()
 
-    def resolve_dat_folder(self, name: str) -> Optional[str]:
+    def _resolve_dat_folder(self, name: str) -> Optional[str]:
         """The folder of a dat mounted as `<name>/_spec_`, else None."""
         spec_key = name + "/_spec_"
-        if spec_key in self.base_locations:
-            return os.path.dirname(self.base_locations[spec_key])
+        if spec_key in self._base_locations:
+            return os.path.dirname(self._base_locations[spec_key])
         return None
 
     # -- mounting ------------------------------------------------------------
@@ -311,10 +309,8 @@ class Do:
                 config = DataConfig.new(cwd=source)
         Dat._manager = DatManager(config)
         from . import dat_tools
-        self.mount(module=dat_tools, at="dat_tools")
         self.mount(module=dat_tools, at="dt")
         self.mount(value=dat_tools.cmd_list, at="dt.list")
-        self.mount(value=dat_tools.cmd_list, at="dat_tools.list")
         self.config = config
         root = str(config.cwd)          # the config folder is the import root
         if root not in sys.path:
@@ -341,7 +337,7 @@ class Do:
             raise ValueError("mount: exactly one of 'folder', 'file', 'module' or 'value'")
         elif folder is not None:
             folder = os.path.join(relative_to, folder)
-            index = _build_loadables_index2(folder, at)
+            index = _build_loadables_index(folder, at)
             tops = {_top_name(loc) for loc in index}
             for top in sorted(tops):
                 _refuse_import_clash(top, "folder", folder, own=os.path.abspath(folder))
@@ -350,7 +346,7 @@ class Do:
         elif file is not None:
             path = os.path.join(relative_to, file)
             _refuse_import_clash(_top_name(at), "file", path, own=os.path.abspath(path))
-            self.base_locations[at] = path
+            self._base_locations[at] = path
         elif module is not None:
             if isinstance(module, ModuleType):
                 own = getattr(module, "__file__", None)
@@ -369,20 +365,13 @@ class Do:
             _refuse_import_clash(_top_name(at), "value", repr(value)[:60])
             self._reg_value(at, value)
 
-    def add_do_folder(self, do_folder):
-        """Mount a folder of loadables by file name, and forget cached values."""
-        self.do_folder = do_folder
-        for base, path in _build_loadables_index(do_folder).items():
-            self._reg_module(base, path, allow_redefine=True)
-        self.registered_values = None
-
-    def get_base(self, base: str, default: Any = _DO_NULL) -> Any:
+    def _get_base(self, base: str, default: Any = _DO_NULL) -> Any:
         """The module or object mounted at base name `base`."""
-        if base in self.base_objects:
-            result = self.base_objects[base]
-        elif base in self.base_locations:
-            self.base_objects[base] = _load_base_entity(base, self.base_locations[base])
-            result = self.base_objects[base]
+        if base in self._base_objects:
+            result = self._base_objects[base]
+        elif base in self._base_locations:
+            self._base_objects[base] = _load_base_entity(base, self._base_locations[base])
+            result = self._base_objects[base]
         elif default is _DO_NULL:
             raise KeyError(f"do: base {base + '...'!r} is not mounted")
         else:
@@ -392,21 +381,20 @@ class Do:
         return result
 
     def _reg_module(self, at: str, module_spec: Union[str, ModuleType], *, allow_redefine=False):
-        if (not allow_redefine and at in self.base_locations
-                and self.base_locations[at] != module_spec):
+        if (not allow_redefine and at in self._base_locations
+                and self._base_locations[at] != module_spec):
             raise Exception(f"Base {at!r} is already defined")
         if isinstance(module_spec, ModuleType):
-            self.base_locations[at] = "--directly-assigned--"
-            self.base_objects[at] = module_spec
+            self._base_locations[at] = "--directly-assigned--"
+            self._base_objects[at] = module_spec
         else:
-            self.base_locations[at] = module_spec
-            self.base_objects.pop(at, None)
+            self._base_locations[at] = module_spec
+            self._base_objects.pop(at, None)
 
     def _reg_value(self, dotted_name: str, value: Any):
-        if self.registered_values is None:
-            self.registered_values = {}
-        self.registered_values[dotted_name] = value
-
+        if self._registered_values is None:
+            self._registered_values = {}
+        self._registered_values[dotted_name] = value
 
 
 def _top_name(name: str) -> str:
@@ -443,26 +431,6 @@ def _parse_yaml_prefix(result: Any) -> Any:
     return result
 
 
-def _resolve_in_folder(folder: str, parts: List[str]) -> Optional[Any]:
-    """Resolve a dotted name by walking a folder: part.yaml / part.json / part.py / part/."""
-    path = folder
-    for i, part in enumerate(parts):
-        for ext in [".yaml", ".json", ".py"]:
-            candidate = os.path.join(path, part + ext)
-            if os.path.isfile(candidate):
-                obj = _load_base_entity(part, candidate)
-                remaining = parts[i + 1:]
-                if remaining and isinstance(obj, dict):
-                    return Dat.get(obj, remaining, None)
-                return obj
-        candidate = os.path.join(path, part)
-        if os.path.isdir(candidate):
-            path = candidate
-        else:
-            return None
-    return None
-
-
 def _load_base_entity(base, source_spec: str) -> Union[ModuleType, Spec]:
     ext = os.path.splitext(source_spec)[1]
     if ext == ".py" or "/" not in source_spec:
@@ -491,23 +459,7 @@ def _load_module(base, module_spec: str) -> ModuleType:
     return module
 
 
-def _build_loadables_index(do_folder: str) -> Dict[str, Any]:
-    result = {}
-    if not do_folder or not os.path.exists(do_folder):
-        return result
-    for path in Path(do_folder).rglob('*'):
-        base, ext = os.path.splitext(os.path.basename(path))
-        if not path.is_file() or ext not in _DO_EXTENSIONS or base == '__init__':
-            continue
-        elif base in result:
-            print(f"WARNING: loadable at {result[base]} conflicts with {path}")
-            result[base] = _DO_ERROR_FLAG
-        else:
-            result[base] = str(path)
-    return result
-
-
-def _build_loadables_index2(folder: str, at: str) -> Dict[str, Any]:
+def _build_loadables_index(folder: str, at: str) -> Dict[str, Any]:
     folder = os.path.abspath(folder)
     results = {}
     if not folder or not os.path.exists(folder):
@@ -608,10 +560,10 @@ def cli_main(argv: Optional[List[str]] = None, *,
             raise ValueError(f"{ENV_CLI_CONFIG}={config}: no such config file")
     if config is not None:
         do.configure(config)
-    return do_argv(list(sys.argv if argv is None else argv))
+    return _do_argv(list(sys.argv if argv is None else argv))
 
 
-def do_argv(argv: List[str]) -> int:
+def _do_argv(argv: List[str]) -> int:
     """Run one `dat` command line (argv[0] is the program); returns the exit code."""
     args = list(argv[1:])
     if not args or args[0] in ("-h", "--help"):
@@ -661,7 +613,7 @@ def _cmd_do(argv: List[str]) -> int:
         return 0
     try:
         if isinstance(cmd, dict):
-            spec = merge_dicts(do.resolve_base(cmd), overrides)
+            spec = merge_dicts(do._resolve_base(cmd), overrides)
             result = do(spec, *fixed, **kwargs)
         elif overrides:
             return _fail(f"--set/--json need a template spec; "
@@ -795,7 +747,3 @@ def _fail(text: str, code: int = 1) -> int:
     """Print a one-line error on stderr and return the exit code."""
     print(f"dat: {text}", file=sys.stderr)
     return code
-
-
-if __name__ == '__main__':
-    sys.exit(do_argv(sys.argv))

@@ -327,7 +327,7 @@ class Cube(object):
                 points.append(the_point)
             for point in points:
                 sub_indicies = dict(indicies)
-                sub_indicies[this_index] = source.get_path_tail()
+                sub_indicies[this_index] = os.path.basename(source.get_path())
                 point[_INDICIES] = sub_indicies
             self.points += points
         elif isinstance(source, str):
