@@ -6,6 +6,14 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create/load/run`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## Unreleased
+
+- `DataConfig.new(cwd=...)` searches for `.dataconfig.yaml` from `cwd`, not
+  from the process's working directory.
+- Only `DAT_<KEY>` environment variables override config keys
+  (`DAT_LOCAL_PREFIX` → `local_prefix`); previously any variable that happened
+  to share a key's name did.
+
 ## 1.2.0 — 2026-09-21
 
 - Import on Python < 3.11 fixed: `Self` now comes from `typing_extensions` (was `typing`, so the package failed to import on 3.10 despite `requires-python >= 3.8`).

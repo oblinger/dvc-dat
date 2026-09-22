@@ -122,6 +122,11 @@ mount_commands:                # Do-system namespace
 
 See [Mount Commands](mount-commands.md) for all mount types.
 
+The file is found by walking up from the current directory (or from `cwd` when
+`DataConfig.new(cwd=...)` is given one); `.dataconfig.override.yaml` beside it
+wins over it. An environment variable `DAT_<KEY>` (`DAT_LOCAL_PREFIX`,
+`DAT_DEFAULT_REMOTE`, ...) overrides the key of the same name in both files.
+
 ## See Also
 
 - [Spec Format](spec-format.md) - `_spec_.yaml` reference

@@ -94,6 +94,7 @@ def load_dict(conf_path: Optional[Union[str, Path]]) -> Optional[Dict[str, Any]]
 
 DATA_CONFIG_FILE = ".dataconfig.yaml"
 DATA_CONFIG_OVERRIDE_FILE = ".dataconfig.override.yaml"
+ENV_PREFIX = "DAT_"
 
 
 class DataConfig(BaseModel):
@@ -133,8 +134,9 @@ class DataConfig(BaseModel):
         if override_values is None:
             override_values = {}
 
-        config_path = cls._find_file_up(Path.cwd(), config_name)
-        config_override_path = cls._find_file_up(Path.cwd(), config_override_name)
+        search_root = Path(cwd) if cwd else Path.cwd()
+        config_path = cls._find_file_up(search_root, config_name)
+        config_override_path = cls._find_file_up(search_root, config_override_name)
 
         config_values = {}
         if config_path:
@@ -154,7 +156,13 @@ class DataConfig(BaseModel):
             else:
                 cwd = str(Path.cwd())
 
-        environ_values = dict(os.environ)
+        # Only DAT_<FIELD> variables reach the config (DAT_LOCAL_PREFIX -> local_prefix);
+        # a bare os.environ merge let any variable sharing a field's name override it.
+        environ_values = {
+            key[len(ENV_PREFIX):].lower(): value
+            for key, value in os.environ.items()
+            if key.startswith(ENV_PREFIX) and key[len(ENV_PREFIX):].lower() in cls.model_fields
+        }
 
         final_values: Dict[str, Any] = merge_dicts(
             config_values,

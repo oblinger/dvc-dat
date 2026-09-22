@@ -25,6 +25,33 @@ class TestDataConfig:
             assert config.cwd == os.path.realpath(tmpdir)
             assert config.local_prefix.endswith("/")
 
+    def test_new_searches_from_cwd_argument(self, monkeypatch):
+        """`new(cwd=X)` finds the config above X, not above the process cwd."""
+        from dvc_dat.dat import DataConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = os.path.realpath(tmpdir)
+            with open(os.path.join(root, ".dataconfig.yaml"), "w") as f:
+                f.write("local_prefix: from_arg/\n")
+            nested = os.path.join(root, "a", "b")
+            os.makedirs(nested)
+            with tempfile.TemporaryDirectory() as elsewhere:
+                monkeypatch.chdir(elsewhere)
+                config = DataConfig.new(cwd=nested)
+            assert config.cwd == nested
+            assert config.local_prefix == os.path.join(nested, "from_arg/")
+
+    def test_only_dat_prefixed_environment_keys_override(self, monkeypatch):
+        """`DAT_LOCAL_PREFIX` overrides `local_prefix`; a bare `local_prefix` variable does not."""
+        from dvc_dat.dat import DataConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monkeypatch.setenv("local_prefix", "bare/")
+            monkeypatch.setenv("DAT_UNKNOWN", "ignored")
+            assert DataConfig.new(cwd=tmpdir).local_prefix.endswith("/data/")
+            monkeypatch.setenv("DAT_LOCAL_PREFIX", "prefixed/")
+            assert DataConfig.new(cwd=tmpdir).local_prefix.endswith("/prefixed/")
+
     def test_datmanager_creation(self):
         """Test that DatManager can be created with DataConfig."""
         from dvc_dat.dat import DataConfig
