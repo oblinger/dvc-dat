@@ -13,11 +13,11 @@ Every user-visible change to `dvc_dat`, newest first.
   `Dat.create` or `Dat.manager` access discovers the nearest
   `.dataconfig.yaml` and installs it. `do.configure(source)` remains, for a
   config chosen by hand.
-- **`.dataconfig.yaml` has three keys** — `dat_folders` (a folder, or a list:
+- **`.dataconfig.yaml` has two keys** — `dat_folders` (a folder, or a list:
   the first is where new dats are created, all are searched by name; replaces
-  `local_prefix` + `extra_local_prefixes`), `main`, and `run` (the command a
-  copy of `bin/dat` execs; replaces `python:`). `DAT_FOLDERS`, `DAT_MAIN` and
-  `DAT_RUN` in the environment override them. `Dat.manager.dat_folder` /
+  `local_prefix` + `extra_local_prefixes`) and `run` (the command a copy of
+  `bin/dat` execs; replaces `python:`). `DAT_FOLDERS` and `DAT_RUN` in the
+  environment override them. `Dat.manager.dat_folder` /
   `.dat_folders` replace `sync_folder` / `sync_folders`.
 - **A spec on disk is a record.** `Dat.create` expands every `{}` once, with
   the same `now` and `unique` the folder got, and writes the result: `dat.name`
@@ -29,14 +29,15 @@ Every user-visible change to `dvc_dat`, newest first.
   `increment` on a name with no `{unique}` counts up `_2`, `_3` instead of
   looping.
 - **`mount_commands` is gone from `.dataconfig.yaml`**; a file that still has
-  it is an unknown-key error. The config names a module instead — `main:
-  mypkg.datconf` — imported when the config installs, and any `do.mount(...)`
-  calls live there, in code. `do.mount_all` is removed with it. With no
-  `main`, a dotted name is a Python name and nothing else; an empty
-  `.dataconfig.yaml` is a complete config.
+  it is an unknown-key error. The namespace is whatever the running program
+  imported: `do.mount(...)` calls live in your own code, and for the shell
+  `run:` names your program's main, which ends with `sys.exit(dat.cli())`
+  (`cli` is new and exported). `do.mount_all` is removed. With no mounts a
+  dotted name is a Python name and nothing else; an empty `.dataconfig.yaml`
+  is a complete config.
 - The config's folder is the project's import root: it goes first on
-  `sys.path` when the config installs, so `main` and every other module of
-  the project resolve from any working directory, installed or not.
+  `sys.path` when the config installs, so the project's own modules resolve
+  from any working directory, installed or not.
 
 A dat's spec is now a complete, argumentless recipe for itself, and `do` is the
 one runner and the one namespace. Breaking on every count below.
@@ -181,7 +182,7 @@ submodule) and `dvc_dat/do_fn.py` → `dvc_dat/do.py`.
 | `get_spec(raw=True)` | `get_spec()` — the file holds the expanded values |
 | `Dat.manager.sync_folder` | `Dat.manager.dat_folder` |
 | implicit config on import | first use reads it; `do.configure()` for a chosen one |
-| config `mount_commands:` | `main: mypkg.datconf`, and `do.mount(...)` calls in that module |
+| config `mount_commands:` | `do.mount(...)` calls in your program; `run: python -m mypkg.main` for the shell |
 | `do.mount_all(cmds, relative_to)` | the `do.mount(...)` calls themselves |
 | `bin/X TARGET` | `bin/dat TARGET` — the same word as the console script |
 

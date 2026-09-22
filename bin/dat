@@ -58,4 +58,8 @@ case $1 in
         } ;;
 esac
 
+# The config folder is the import root, for `-m mypkg.main` from anywhere.
+PYTHONPATH=$dir${PYTHONPATH:+:$PYTHONPATH}
+export PYTHONPATH
+
 exec "$@"

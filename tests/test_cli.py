@@ -17,15 +17,17 @@ BOOT = REPO / "bin" / "dat"
 
 def _env(**extra: str) -> dict:
     env = dict(os.environ)
-    env["PYTHONPATH"] = str(REPO)
+    env["PYTHONPATH"] = f"{REPO}:{TESTS}"
     env.pop("DAT_RUN", None)
     env.update(extra)
     return env
 
 
 def dat(*args: str, cwd=TESTS, env=None):
-    """Run one `dat` command line; returns (exit code, stdout, stderr)."""
-    done = subprocess.run([sys.executable, "-m", "dvc_dat", *args], cwd=str(cwd),
+    """Run one `dat` command line inside the test namespace -- `tests/mounts.py`
+    run as a main, the way a project's own main runs `dat.cli()`; returns
+    (exit code, stdout, stderr)."""
+    done = subprocess.run([sys.executable, "-m", "mounts", *args], cwd=str(cwd),
                           capture_output=True, text=True, env=env or _env())
     return done.returncode, done.stdout.strip(), done.stderr.strip()
 
@@ -48,16 +50,21 @@ def no_config_dir(tmp_path: Path) -> Path:
     return folder
 
 
-def make_project(root: Path, run: str = None) -> Path:
-    """A minimal dat project: a config, a main that mounts one script folder."""
-    config = ["dat_folders: data/", "main: project_main"]
-    if run is not None:
-        config.append(f"run: {run}")
+def make_project(root: Path, python: str = None) -> Path:
+    """A minimal dat project: a config, and a main that mounts one script folder
+    and hands the command line to `dat.cli()`.  `python` names the interpreter
+    the config's `run:` uses; None leaves `run:` out."""
+    config = ["dat_folders: data/"]
+    if python is not None:
+        config.append(f"run: {python} -m project_main")
     (root / ".dataconfig.yaml").write_text("\n".join(config) + "\n")
     (root / "project_main.py").write_text(
+        "import sys\n"
         "from pathlib import Path\n"
-        "from dvc_dat import do\n"
-        "do.mount(folder=str(Path(__file__).parent / 'scripts'))\n"
+        "import dvc_dat as dat\n"
+        "dat.do.mount(folder=str(Path(__file__).parent / 'scripts'))\n"
+        "if __name__ == '__main__':\n"
+        "    sys.exit(dat.cli())\n"
     )
     (root / "scripts").mkdir()
     (root / "scripts" / "greet.py").write_text(
@@ -228,12 +235,12 @@ class TestArguments:
 
 class TestBootstrap:
     def test_no_args_prints_the_same_usage(self, tmp_path):
-        nested = make_project(tmp_path, run=f"{sys.executable} -m dvc_dat")
+        nested = make_project(tmp_path, python=sys.executable)
         code, out, _ = run_boot(cwd=nested)
         assert code == 0 and "SYNOPSIS" in out
 
     def test_verbs_pass_through(self, tmp_path):
-        nested = make_project(tmp_path, run=f"{sys.executable} -m dvc_dat")
+        nested = make_project(tmp_path, python=sys.executable)
         code, out, _ = run_boot("list", "greet", cwd=nested)
         assert code == 0 and "greet" in out
 
@@ -243,37 +250,41 @@ class TestBootstrap:
         assert ".dataconfig.yaml" in err
 
     def test_end_to_end_from_a_nested_folder(self, tmp_path):
-        nested = make_project(tmp_path, run=f"{sys.executable} -m dvc_dat")
+        nested = make_project(tmp_path, python=sys.executable)
         code, out, err = run_boot("greet", "dan", "loud=true", cwd=nested)
         assert (code, out, err) == (0, "HELLO DAN", "")
 
     def test_run_key_is_a_command(self, tmp_path):
         make_wrapper(tmp_path / "myenv", "COMMAND-FORM")
-        nested = make_project(tmp_path, run=f"{tmp_path}/myenv/bin/python -m dvc_dat")
+        nested = make_project(tmp_path, python=f"{tmp_path}/myenv/bin/python")
         code, out, _ = run_boot("greet", cwd=nested)
         assert code == 0 and out.splitlines() == ["COMMAND-FORM", "hello world"]
 
     def test_run_key_is_relative_to_the_config(self, tmp_path):
         make_wrapper(tmp_path / "myenv", "RELATIVE-FORM")
-        nested = make_project(tmp_path, run="myenv/bin/python -m dvc_dat")
+        nested = make_project(tmp_path, python="myenv/bin/python")
         code, out, _ = run_boot("greet", cwd=nested)
         assert code == 0 and out.splitlines() == ["RELATIVE-FORM", "hello world"]
 
     def test_venv_beside_the_config_is_the_default(self, tmp_path):
+        """No `run:` -> `.venv/bin/python -m dvc_dat`: the library's own main, so
+        the namespace is Python's and nothing of the project's is mounted."""
         make_wrapper(tmp_path / ".venv", "DOT-VENV")
         nested = make_project(tmp_path)
-        code, out, _ = run_boot("greet", cwd=nested)
-        assert code == 0 and out.splitlines() == ["DOT-VENV", "hello world"]
+        code, out, _ = run_boot("os.sep", cwd=nested)
+        assert code == 0 and out.splitlines() == ["DOT-VENV", os.sep]
+        code, _, err = run_boot("greet", cwd=nested)
+        assert code == 2 and "cannot load 'greet'" in err
 
     def test_dat_run_overrides_the_config(self, tmp_path):
         make_wrapper(tmp_path / "override", "ENV-FORM")
-        nested = make_project(tmp_path, run=f"{sys.executable} -m dvc_dat")
-        env = _env(DAT_RUN=f"{tmp_path}/override/bin/python -m dvc_dat")
+        nested = make_project(tmp_path, python=sys.executable)
+        env = _env(DAT_RUN=f"{tmp_path}/override/bin/python -m project_main")
         code, out, _ = run_boot("greet", cwd=nested, env=env)
         assert code == 0 and out.splitlines() == ["ENV-FORM", "hello world"]
 
     def test_a_missing_command_fails_visibly(self, tmp_path):
-        nested = make_project(tmp_path, run="/no/such/python -m dvc_dat")
+        nested = make_project(tmp_path, python="/no/such/python")
         code, _, err = run_boot("greet", cwd=nested)
         assert code == 1 and "/no/such/python" in err
 

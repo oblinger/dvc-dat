@@ -16,7 +16,7 @@ from .core import (
     expand,
     expand_spec,
 )
-from .do import Do, do, do_argv
+from .do import Do, cli, do, do_argv
 
 load = Dat.load   # open a dat by path or name
 
@@ -26,6 +26,7 @@ __all__ = [
     "DatManager",
     "DataConfig",
     "Do",
+    "cli",
     "do",
     "do_argv",
     "load",

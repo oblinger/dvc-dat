@@ -70,9 +70,8 @@ resolve importable names, with `do.config is None` and no `Dat.manager` built.
 The **first** call that needs a config — a `do(...)`, a `do.load(...)`, a
 `Dat.load` / `Dat.create`, any touch of `Dat.manager` — reads the nearest
 `.dataconfig.yaml` walking up from the working directory, builds `Dat.manager`
-from it, puts the config's folder first on `sys.path`, and imports the
-config's `main` module if it names one. Nothing in an ordinary program calls
-`configure`:
+from it, and puts the config's folder first on `sys.path`. Nothing in an
+ordinary program calls `configure`:
 
 ```python
 from dvc_dat import do
@@ -153,26 +152,23 @@ The library itself validates with no schema library at all.
 # are created, all are searched when a dat is loaded by name
 dat_folders: data
 
-# imported when the config installs; do.mount(...) calls live there
-main: mypkg.datconf
-
-# the command a copy of bin/dat hands its arguments to (see cli.md)
-run: uv run dat
+# the command a copy of bin/dat hands its arguments to (see cli.md):
+# your program's main, which imports what it mounts and calls dat.cli()
+run: .venv/bin/python -m mypkg.main
 ```
 
-Those three keys are the whole file, and an empty file is a complete config.
+Those two keys are the whole file, and an empty file is a complete config.
 An unrecognized key is an error naming the file, the key and the known keys —
 a typo is never silently ignored. The config's folder is the project's import
-root: it goes first on `sys.path` when the config installs, so `main` and
-every other module of the project resolve from any working directory,
-installed or not.
+root: it goes first on `sys.path` when the config installs, so the project's
+own modules resolve from any working directory, installed or not.
 
 The file is found by walking up from the working directory, or from the path
 given to `do.configure(...)` / `DataConfig.new(cwd=...)`. A
 `.dataconfig.override.yaml` beside it wins over it, and a `DAT_<KEY>`
-environment variable (`DAT_FOLDERS`, `DAT_MAIN`, `DAT_RUN`) wins over both.
+environment variable (`DAT_FOLDERS`, `DAT_RUN`) wins over both.
 
-See [Mounts](mount-commands.md) for what `main` can mount.
+See [Mounts](mount-commands.md) for what a program can mount.
 
 ## See Also
 

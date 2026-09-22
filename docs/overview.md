@@ -53,7 +53,7 @@ what `dat.do` names. `dat.run_at` and `dat.run_time` land in the results.
 | `do.name_of(OBJ) -> str` | The name `load` takes back to `OBJ` |
 | `do.configure(SOURCE) -> DataConfig` | Install a chosen config; first use does this for you |
 | `do.config` | The `DataConfig` in force, or `None` |
-| `do.mount(at=, folder=/file=/module=/value=)` | Add one name to the namespace; called from the config's `main` |
+| `do.mount(at=, folder=/file=/module=/value=)` | Add one name to the namespace; your program calls it |
 | `do.add_do_folder(PATH)` | Mount a folder by file name |
 | `do.get_base(BASE)` | The object mounted at a base name |
 | `do.keys()` | Every mounted base name |
@@ -157,11 +157,10 @@ Like git, dvc-dat walks up from the working directory looking for
 
 ```yaml
 dat_folders: data            # or a list: the first is written, all are read
-main: mypkg.datconf          # imported when the config installs
-run: uv run dat              # what a copy of bin/dat execs
+run: .venv/bin/python -m mypkg.main   # what a copy of bin/dat execs
 ```
 
 Those are the only keys; anything else is an error that names the file and the
-key. The config's folder is the import root, and `main` is a module imported
-when the config installs — any `do.mount(...)` calls live there. See
-**[Mounts](mount-commands.md)**.
+key. The config's folder is the import root. The namespace is whatever the
+running program imported; `run:` names your program's main, which mounts what
+it mounts and ends with `sys.exit(dat.cli())`. See **[Mounts](mount-commands.md)**.

@@ -61,16 +61,14 @@ class DataConfig:
     cwd : folder the config was found in (or given); relative paths resolve against it.
     dat_folders : where dats live -- one folder, or a list.  The first is where new
         dats are created; all are searched, in order, when a dat is loaded by name.
-    main : a module imported when the config installs, with the config folder
-        first on `sys.path`.  Mounts and any other registration live there.
-    run : the command a copy of `bin/dat` hands its arguments to; default
+    run : the command a copy of `bin/dat` hands its arguments to -- your own
+        program's main, which imports what it needs and calls `cli()`; default
         `.venv/bin/python -m dvc_dat` beside the config.  A relative path in its
         first word is relative to `cwd`.  Nothing in the library reads it.
     """
 
     cwd: str
     dat_folders: Union[str, List[str]] = "data/"
-    main: Optional[str] = None
     run: Optional[str] = None
 
     @classmethod
@@ -79,7 +77,7 @@ class DataConfig:
 
     @classmethod
     def env_names(cls) -> Dict[str, str]:
-        """Environment variable -> field: `DAT_FOLDERS`, `DAT_MAIN`, `DAT_RUN`, `DAT_CWD`."""
+        """Environment variable -> field: `DAT_FOLDERS`, `DAT_RUN`, `DAT_CWD`."""
         prefix = ENV_PREFIX.lower()
         return {ENV_PREFIX + (n[len(prefix):] if n.startswith(prefix) else n).upper(): n
                 for n in cls.field_names()}
@@ -115,7 +113,7 @@ class DataConfig:
             cwd = str(config_path.parent) if config_path else str(Path.cwd())
 
         # Only DAT_<FIELD> variables reach the config; a field's own `dat_` prefix
-        # folds into the DAT_ (DAT_FOLDERS -> dat_folders, DAT_MAIN -> main).
+        # folds into the DAT_ (DAT_FOLDERS -> dat_folders, DAT_RUN -> run).
         environ_values = {
             name: os.environ[env] for env, name in cls.env_names().items() if env in os.environ
         }

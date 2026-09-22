@@ -1,4 +1,4 @@
-"""The example namespace: imported by `.dataconfig.yaml`'s `main:` key."""
+"""The example namespace: each notebook imports it after `do.configure()`."""
 from pathlib import Path
 
 import dvc_dat

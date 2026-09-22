@@ -284,12 +284,11 @@ class Do:
     # -- mounting ------------------------------------------------------------
 
     def configure(self, source: Union[None, str, Path, DataConfig] = None) -> DataConfig:
-        """Install a config: build `Dat.manager`, then import its `main` module.
+        """Install a config: build `Dat.manager`, put the config folder on `sys.path`.
 
         `source` is a `DataConfig`, a folder to search up from, a config file, or
-        None for discovery from the working directory.  The config folder goes
-        first on `sys.path`; `main` is imported after that, so the `do.mount()`
-        calls it makes land on the singleton `do` before any name is resolved.
+        None for discovery from the working directory.  The namespace is whatever
+        the running program has imported; nothing here imports on its behalf.
         """
         if isinstance(source, DataConfig):
             config = source
@@ -311,8 +310,6 @@ class Do:
         root = str(config.cwd)          # the config folder is the import root
         if root not in sys.path:
             sys.path.insert(0, root)
-        if config.main:
-            import_module(config.main)  # its `do.mount(...)` calls land here
         return config
 
     def mount(self, *,
@@ -523,6 +520,18 @@ EXAMPLES
 """
 
 _KWARG = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=")
+
+
+def cli(argv: Optional[List[str]] = None) -> int:
+    """The `dat` command line, for a program's own main.
+
+    A program that mounts names -- or simply wants `dat` to run inside its own
+    imports -- ends its main with `sys.exit(dat.cli())` and names that main in
+    `.dataconfig.yaml`'s `run:`; the bootstrap copy of `bin/dat` then hands every
+    shell command line to it.  `argv` defaults to `sys.argv`; the return value is
+    the exit status.
+    """
+    return do_argv(list(sys.argv if argv is None else argv))
 
 
 def do_argv(argv: List[str]) -> int:

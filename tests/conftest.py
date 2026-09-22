@@ -13,3 +13,4 @@ sys.path.insert(0, str(tests_dir.parent))
 from dvc_dat import do  # noqa: E402
 
 do.configure(tests_dir)
+import mounts  # noqa: E402,F401  -- the test namespace; a program imports its own

@@ -136,6 +136,10 @@ run: uv run dat
 ```
 
 `run` is any command that ends up in `dat`: `uv run dat`, `conda run -n ml
-dat`, `.venv/bin/python -m dvc_dat`. The library itself never reads the key —
-it is there so that one file describes the whole project. `DataConfig.run`
-carries it, with a relative first word made absolute.
+dat`, `.venv/bin/python -m dvc_dat`. A project that mounts names points it at
+its **own main** — `run: .venv/bin/python -m mypkg.main` — a module that
+imports what it needs, makes its `do.mount(...)` calls and ends with
+`sys.exit(dat.cli())`, so the shell runs inside the program's own namespace.
+The library itself never reads the key — it is there so that one file
+describes the whole project. `DataConfig.run` carries it, with a relative
+first word made absolute.

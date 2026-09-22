@@ -3,6 +3,3 @@
 
 # Where test dats live (relative to this file's directory)
 dat_folders: test_sync_folder/
-
-# Imported when the config installs; the test mounts live there
-main: mounts

@@ -6,31 +6,38 @@ work with nothing mounted at all. A **mount** is for the names that are *not*
 imports — a folder of YAML templates, a file outside the import path, a
 literal value — and for giving an importable thing a shorter name.
 
-Mounts are made in code, by `do.mount(...)`, from the module that
-`.dataconfig.yaml` names as `main`:
+Mounts are made in code, by `do.mount(...)`, by your own program — the
+namespace is whatever the running program imported. For the shell, your
+program's main does the mounting and hands the command line to `dat.cli()`,
+and `.dataconfig.yaml` names that main as `run:`:
 
 ```yaml
 # .dataconfig.yaml
 dat_folders: data
-main: mypkg.datconf
+run: .venv/bin/python -m mypkg.main
 ```
 
 ```python
-# mypkg/datconf.py -- imported when the config installs
+# mypkg/main.py
+import sys
 from pathlib import Path
-from dvc_dat import do
+import dvc_dat as dat
 
 ROOT = Path(__file__).parent.parent
 
-do.mount(folder=str(ROOT / "catalog"), at="catalog")
-do.mount(module="tests.fixtures", at="fixtures")
+dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
+dat.do.mount(module="tests.fixtures", at="fixtures")
+
+if __name__ == "__main__":
+    sys.exit(dat.cli())
 ```
 
-The config's folder goes first on `sys.path` before `main` is imported, so
-`main` resolves from any working directory, installed or not. The mounts land
-on the one `do` object the process holds, so a `from dvc_dat import do` that
-ran earlier sees them. Any program that imports `mypkg.datconf` itself gets
-the same namespace; the CLI and the first-use configure import it for you.
+The mounts land on the one `do` object the process holds, so a
+`from dvc_dat import do` that ran earlier sees them. A notebook gets the same
+namespace by importing `mypkg.main`; the config's folder is first on
+`sys.path`, so that import works from any directory. With no `run:` the
+bootstrap runs the library's own main, and a dotted name is a Python name and
+nothing else.
 
 ## Mount forms
 
@@ -169,28 +176,32 @@ name mean something else.
 ```yaml
 # .dataconfig.yaml
 dat_folders: data
-main: myproject.datconf
+run: .venv/bin/python -m myproject.main
 ```
 
 ```python
-# src/myproject/datconf.py
+# src/myproject/main.py
+import sys
 from pathlib import Path
-from dvc_dat import do
+import dvc_dat as dat
 
 SRC = Path(__file__).parent.parent
 
-do.mount(folder=str(SRC / "myproject" / "catalog"), at="catalog")
-do.mount(module="tests.fixtures", at="fixtures")
-do.mount(folder=str(SRC / "scripts"), at="scripts")
-do.mount(value={"debug": False, "version": "2.0.0"}, at="config")
+dat.do.mount(folder=str(SRC / "myproject" / "catalog"), at="catalog")
+dat.do.mount(module="tests.fixtures", at="fixtures")
+dat.do.mount(folder=str(SRC / "scripts"), at="scripts")
+dat.do.mount(value={"debug": False, "version": "2.0.0"}, at="config")
+
+if __name__ == "__main__":
+    sys.exit(dat.cli())
 ```
 
-Usage:
+Usage, from a program that has imported `myproject.main`:
 
 ```python
 from dvc_dat import do
 
-# Load a template; the config installs itself and imports datconf
+# Load a template; the config installs itself on first use
 spec = do.load("catalog.experiment")
 
 # Get a fixture
@@ -205,5 +216,5 @@ version = do.load("config.version")
 
 ## See Also
 
-- [Core Concepts](concepts.md) — how `main` and the import root fit in
+- [Core Concepts](concepts.md) — how `run:` and the import root fit in
 - [Spec Format](spec-format.md) — what templates contain
