@@ -62,12 +62,16 @@ class DataConfig:
     local_prefix : the sync folder — where relative dat paths are created and searched.
     extra_local_prefixes : further folders searched when loading a dat by name.
     mount_commands : the do-system's mount table, applied by `do.configure()`.
+    python : the interpreter the `bin/X` bootstrap runs -- a path to one, or a
+        folder holding `bin/python`; relative to `cwd`.  Nothing in the library
+        reads it; `X` does.
     """
 
     cwd: str
     local_prefix: str = "data/"
     extra_local_prefixes: List[str] = field(default_factory=list)
     mount_commands: Optional[List[Dict[str, Any]]] = None
+    python: Optional[str] = None
 
     @classmethod
     def field_names(cls) -> List[str]:
@@ -155,6 +159,8 @@ class DataConfig:
         self.local_prefix = os.path.normpath(self.local_prefix)
         if not self.local_prefix.endswith("/"):
             self.local_prefix += "/"
+        if self.python and not os.path.isabs(self.python):
+            self.python = os.path.normpath(os.path.join(self.cwd, self.python))
 
 
 # =============================================================================
