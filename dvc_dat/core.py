@@ -474,6 +474,8 @@ class DatManager:
         if path_spec is None:
             path_spec = _DEFAULT_PATH_TEMPLATE
         path_spec = str(path_spec)
+        if target_exists == "increment" and "{unique}" not in path_spec:
+            path_spec += "{unique}"      # a plain name counts up as `_2`, `_3`, ...
         now, count = datetime.now(), 1
         while True:
             names = {**_builtins(now),

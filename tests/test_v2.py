@@ -350,3 +350,14 @@ def test_first_use_installs_the_config_and_imports_its_main(tmp_path):
         env={**os.environ, "PYTHONPATH": str(REPO_ROOT)})
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip().rstrip("/").endswith("warehouse")
+
+
+def test_increment_on_a_plain_name_counts_up(tmp_path, restore_manager):
+    """`target_exists: increment` on a name with no `{unique}` appends `_2`, `_3`
+    instead of spinning forever (found 2026-09-22)."""
+    from dvc_dat.core import DatManager, DataConfig
+    Dat._manager = DatManager(DataConfig(cwd=str(tmp_path), local_prefix="data/"))
+    spec = {"dat": {"kind": "Dat", "name": "plain", "target_exists": "increment"}}
+    assert Dat.create(spec=spec).get_path_name() == "plain"
+    assert Dat.create(spec=spec).get_path_name() == "plain_2"
+    assert Dat.create(spec=spec).get_path_name() == "plain_3"
