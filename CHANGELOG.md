@@ -6,6 +6,19 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.1.0 — 2026-09-22
+
+- **`do.mount` refuses a name that is also importable.** When a top-level
+  name a mount would add (`at`'s first part, or each top-level entry of a
+  folder mounted with no `at`) is a module or package Python can import from
+  elsewhere, `mount` raises `ValueError` naming it. In 2.0 the mount silently
+  shadowed the installed module inside `do.load`. A module mounted at its own
+  name, or a package's own folder, is not a clash. A program that relied on
+  shadowing must pick another `at`.
+- A created dat's spec never changes, and there is no `fork` method: the
+  recipe is `Dat.create(spec=merge_dicts(d.get_spec(), overrides))`,
+  documented in `docs/concepts.md`.
+
 ## 2.0.2 — 2026-09-22
 
 - `merge_dicts(*dicts)` is exported: the zipper merge `dat.base` uses, for a

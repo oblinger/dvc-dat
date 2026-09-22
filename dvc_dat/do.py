@@ -329,18 +329,44 @@ class Do:
               at: str = "",
               relative_to: str = "."):
         """Mount data in the namespace at `at`: a `folder` of loadables, a single
-        `file`, a `module` (object, import name or path), or a literal `value`."""
+        `file`, a `module` (object, import name or path), or a literal `value`.
+
+        A mounted name never shadows an importable one: `mount` raises `ValueError`
+        when a top-level name it would add -- `at`'s first part, or with no `at`
+        each top-level file or folder of a mounted folder -- is a module or
+        package Python can import from somewhere else.  Mounting a module at its
+        own name, or a folder that is itself the importable source, is not a clash.
+        """
         if 1 != sum(x is not None for x in (folder, file, module, value)):
             raise ValueError("mount: exactly one of 'folder', 'file', 'module' or 'value'")
         elif folder is not None:
             folder = os.path.join(relative_to, folder)
-            for base, path in _build_loadables_index2(folder, at).items():
+            index = _build_loadables_index2(folder, at)
+            tops = {_top_name(loc) for loc in index}
+            for top in sorted(tops):
+                _refuse_import_clash(top, "folder", folder, own=os.path.abspath(folder))
+            for base, path in index.items():
                 self._reg_module(base, path, allow_redefine=True)
         elif file is not None:
-            self.base_locations[at] = os.path.join(relative_to, file)
+            path = os.path.join(relative_to, file)
+            _refuse_import_clash(_top_name(at), "file", path, own=os.path.abspath(path))
+            self.base_locations[at] = path
         elif module is not None:
+            if isinstance(module, ModuleType):
+                own = getattr(module, "__file__", None)
+            elif "/" in module:
+                own = module
+            else:
+                found = importlib.util.find_spec(module)
+                own = found.origin if found else None
+            if own and os.path.basename(own) == "__init__.py":
+                own = os.path.dirname(own)          # a package: its folder is its own
+            source = module.__name__ if isinstance(module, ModuleType) else module
+            _refuse_import_clash(_top_name(at), "module", source,
+                                 own=os.path.abspath(own) if own else None)
             self._reg_module(at, module, allow_redefine=True)
         else:
+            _refuse_import_clash(_top_name(at), "value", repr(value)[:60])
             self._reg_value(at, value)
 
     def add_do_folder(self, do_folder):
@@ -381,6 +407,34 @@ class Do:
             self.registered_values = {}
         self.registered_values[dotted_name] = value
 
+
+
+def _top_name(name: str) -> str:
+    """The first part of a mounted name: `configs` for `configs/bb/base` or `configs.bb`."""
+    return re.split(r"[./]", name, maxsplit=1)[0]
+
+
+def _refuse_import_clash(top: str, kind: str, source: str, *, own: Optional[str] = None):
+    """Raise if `top` is importable from outside `own` (the mounted file or folder)."""
+    if not top:
+        return
+    try:
+        spec = importlib.util.find_spec(top)
+    except (ImportError, ValueError):
+        spec = None
+        if top in sys.modules:
+            raise ValueError(f"mount: {top!r} is already an imported module; "
+                             f"mount the {kind} {source!r} at another name")
+    if spec is None:
+        return
+    places = [spec.origin] if spec.origin and spec.origin not in ("built-in", "frozen") else []
+    places += list(spec.submodule_search_locations or [])
+    if not places:  # a built-in module
+        places = [spec.origin or "built-in"]
+    if own and all(os.path.abspath(p).startswith(own) for p in places):
+        return
+    raise ValueError(f"mount: {top!r} is an importable module ({places[0]}); "
+                     f"mount the {kind} {source!r} at another name")
 
 def _parse_yaml_prefix(result: Any) -> Any:
     """A string beginning `yaml` is a YAML spec; parse it."""

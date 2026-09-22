@@ -189,3 +189,55 @@ def test_merge_dicts_is_the_base_zipper():
     over = {"a": {"x": 9}, "l": [3]}
     assert merge_dicts(base, over) == {"a": {"x": 9, "y": 2}, "l": [3]}
     assert base == {"a": {"x": 1, "y": 2}, "l": [1, 2]}      # inputs untouched
+
+
+class TestMountRefusesImportClash:
+    """A mounted name is never also an importable one (Dan, 2026-09-22, F012 Q2)."""
+
+    @pytest.fixture
+    def importable(self, tmp_path, monkeypatch):
+        site = tmp_path / "site"
+        (site / "configs").mkdir(parents=True)
+        (site / "configs" / "__init__.py").write_text("X = 'installed'\n")
+        (site / "helpers.py").write_text("WHO = 'installed'\n")
+        monkeypatch.syspath_prepend(str(site))
+        mounted = tmp_path / "mounted"
+        mounted.mkdir()
+        (mounted / "helpers.py").write_text("WHO = 'mounted'\n")
+        (mounted / "base.yaml").write_text("a: 1\n")
+        return site, mounted
+
+    def test_a_root_folder_mount_may_not_shadow_a_module(self, importable):
+        _, mounted = importable
+        with pytest.raises(ValueError, match="'helpers' is an importable module"):
+            Do().mount(folder=str(mounted))
+
+    def test_at_may_not_be_an_importable_package(self, importable):
+        _, mounted = importable
+        with pytest.raises(ValueError, match="'configs' is an importable module"):
+            Do().mount(folder=str(mounted), at="configs")
+
+    def test_a_clear_name_mounts(self, importable):
+        _, mounted = importable
+        probe = Do()
+        probe.mount(folder=str(mounted), at="templates")
+        assert probe.load("templates.helpers.WHO") == "mounted"
+        assert probe.load("helpers.WHO") == "installed"
+
+    def test_values_and_files_are_checked_too(self, importable):
+        _, mounted = importable
+        with pytest.raises(ValueError, match="'json' is an importable module"):
+            Do().mount(value={"a": 1}, at="json.settings")
+        with pytest.raises(ValueError, match="'helpers'"):
+            Do().mount(file=str(mounted / "base.yaml"), at="helpers")
+
+    def test_a_module_at_its_own_name_is_not_a_clash(self, importable):
+        probe = Do()
+        probe.mount(module="helpers", at="helpers")
+        probe.mount(module="configs", at="configs")
+        assert probe.load("configs.X") == "installed"
+
+    def test_a_package_folder_at_its_own_name_is_not_a_clash(self, importable):
+        site, _ = importable
+        probe = Do()
+        probe.mount(folder=str(site / "configs"), at="configs")
