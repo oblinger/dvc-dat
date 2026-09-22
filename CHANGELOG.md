@@ -8,6 +8,8 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- Import on Python < 3.11 fixed: `Self` now comes from `typing_extensions` (was `typing`, so the package failed to import on 3.10 despite `requires-python >= 3.8`).
+
 - Docs describe the code: `.dataconfig.yaml` key is `local_prefix` (the
   documented `sync_folder` was silently ignored); `file:` mounts need `at:`;
   `{cwd}` is the full path, `{unique}` is empty then `_2`, `_3`; `{now}`

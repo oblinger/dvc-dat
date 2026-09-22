@@ -19,7 +19,6 @@ from typing import (
     List,
     Optional,
     Protocol,
-    Self,
     Tuple,
     Type,
     Union,
@@ -27,7 +26,7 @@ from typing import (
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing_extensions import TypeVar
+from typing_extensions import Self, TypeVar
 
 
 # =============================================================================
