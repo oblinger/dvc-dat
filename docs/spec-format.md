@@ -84,7 +84,7 @@ parameters:
 ```
 
 ```python
-dat = load("runs/my_experiment")
+dat = Dat.load("runs/my_experiment")
 dat.get_spec()["parameters"]["learning_rate"]   # 0.01
 ```
 

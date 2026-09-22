@@ -6,7 +6,7 @@ itself. `_result_.yaml` holds only what running it produced.
 `dvc_dat` has one namespace and one runner, both reached through `do`:
 
 ```python
-from dvc_dat import Dat, do, load
+from dvc_dat import Dat, do
 
 # a dotted name -> a Python object; the first call finds and
 # applies the nearest .dataconfig.yaml
@@ -16,20 +16,21 @@ template = do.load("catalog.experiment")
 result = do("catalog.experiment", epochs=200)
 
 # a path -> the dat on disk
-dat = load("runs/2026-09/exp")
+dat = Dat.load("runs/2026-09/exp")
 ```
 
 ## Two kinds of name
 
 **Dotted names** (`catalog.experiment`, `os.path.join`) name source code:
 templates, functions, constants. `do.load` resolves them — first against the
-mount table from `.dataconfig.yaml`, then by import: the longest importable
+names the program mounted with `do.mount(...)` (in code; `.dataconfig.yaml`
+holds no mounts), then by import: the longest importable
 prefix of the name is imported and the rest is `getattr`-ed. So any importable
 object has a name whether or not it was mounted, and `do.name_of(obj)` gives the
 name that loads back to it.
 
 **Slash paths** (`runs/experiment1`) name dat folders. They are relative to
-the dat folder (`dat_folders`, default `data/`) or absolute. `load(name)`
+the dat folder (`dat_folders`, default `data/`) or absolute. `Dat.load(name)`
 opens one.
 
 ## Arguments fork a spec; they never ride beside it
@@ -122,8 +123,9 @@ never appears in a stored spec: what is on disk is the whole recipe.
 
 ## References: the `{}` grammar
 
-Any string in a spec may carry `{…}` references, resolved when the spec is read
-back through `get_spec()` (and when a path template is expanded).
+Any string in a spec may carry `{…}` references. `Dat.create` expands them
+once, with the same `now` and `unique` the folder got, and writes the result:
+`get_spec()` returns the stored values, and nothing is expanded on read.
 
 ```python
 from dvc_dat import expand, expand_spec
@@ -137,7 +139,7 @@ expand("{svp.CONFIG}")
 
 - an **undotted** name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`)
   or a key of the `vars` dict you pass; anything else is a `KeyError`
-- a **dotted** name resolves through `do.load` at run time
+- a **dotted** name resolves through `do.load`, at create
 - `{{` and `}}` are the literal braces
 - a string that is *exactly* one reference returns the referenced **object**;
   otherwise references are substituted as text

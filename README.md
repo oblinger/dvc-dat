@@ -9,10 +9,10 @@ itself; `_result_.yaml` holds only what running it produced. `do` is the one
 namespace and the one runner.
 
 ```python
-from dvc_dat import Dat, do, load
+from dvc_dat import Dat, do
 
 # Importing reads no files; the first use finds .dataconfig.yaml.
-# A dotted name resolves through the mount table, then by import.
+# A dotted name resolves through do.mount names, then by import.
 template = do.load("catalog.experiment")
 
 # Arguments fork a spec: they are written into the new dat's
@@ -21,7 +21,7 @@ result = do("catalog.experiment", epochs=200)
 
 # Create and open dats directly.
 dat = Dat.create(spec="catalog.experiment", path="runs/exp1")
-dat = load("runs/exp1")
+dat = Dat.load("runs/exp1")
 ```
 
 Arguments never ride beside a spec at the call site. `do(dat)` re-runs a dat on
@@ -51,8 +51,10 @@ dat info
 ```
 
 `dat` configures itself from the nearest `.dataconfig.yaml`. A copy of
-`bin/dat` on your `PATH` is the same command from any directory with no
-environment activated. See [the CLI reference](docs/cli.md).
+`bin/dat` on your `PATH` runs your project's `run:` main from any directory
+with no environment activated. The environment's `dat` console script does
+not read `run:`: it runs the library's own command line, with no project
+mounts. See [the CLI reference](docs/cli.md).
 
 ## Testing
 
