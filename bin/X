@@ -1,0 +1,60 @@
+#!/bin/sh
+# X -- run a dat from any directory, without activating an environment.
+#
+#   X TARGET [ARG ...] [KEY=VALUE ...]      ==  dat do TARGET ...
+#
+# Walks up from $PWD to the nearest .dataconfig.yaml, picks an interpreter
+# ($DAT_PYTHON, else the config's `python:` key, else .venv beside the config,
+# else python3 on PATH), and execs it with the working directory unchanged.
+# Exit 3 when no .dataconfig.yaml is above the working directory.
+
+if [ $# -eq 0 ]; then
+    echo "usage: X TARGET [ARG ...] [KEY=VALUE ...]   (runs: dat do TARGET ...)"
+    exit 0
+fi
+
+# -- the nearest .dataconfig.yaml, git style ---------------------------------
+dir=$PWD
+while [ ! -f "$dir/.dataconfig.yaml" ]; do
+    [ "$dir" = "/" ] && {
+        echo "X: no .dataconfig.yaml in $PWD or any parent" >&2
+        exit 3
+    }
+    dir=$(dirname "$dir")
+done
+
+# -- the config's `python:` key: one top-level line, no YAML parser needed ----
+cfg_python=$(sed -n 's/^python:[[:space:]]*//p' "$dir/.dataconfig.yaml" | head -n 1 |
+    sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")
+
+# -- pick the interpreter -----------------------------------------------------
+if [ -n "$DAT_PYTHON" ]; then
+    python=$DAT_PYTHON
+elif [ -n "$cfg_python" ]; then
+    case $cfg_python in
+        /*) python=$cfg_python ;;         # absolute, as written
+        *) python=$dir/$cfg_python ;;     # relative to the config folder
+    esac
+elif [ -x "$dir/.venv/bin/python" ]; then
+    python=$dir/.venv/bin/python
+else
+    python=python3
+fi
+
+# A folder means the venv holding it.
+[ -d "$python" ] && python=$python/bin/python
+
+case $python in
+    */*)
+        [ -x "$python" ] || {
+            echo "X: $python is not an executable interpreter" >&2
+            exit 1
+        } ;;
+    *)
+        command -v "$python" >/dev/null 2>&1 || {
+            echo "X: $python is not on PATH" >&2
+            exit 1
+        } ;;
+esac
+
+exec "$python" -m dvc_dat do "$@"
