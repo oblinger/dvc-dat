@@ -1,4 +1,5 @@
 """Configuration: DataConfig discovery, precedence, and the DatManager built from it."""
+import importlib
 import os
 import sys
 import tempfile
@@ -205,7 +206,12 @@ class TestMountRefusesImportClash:
         mounted.mkdir()
         (mounted / "helpers.py").write_text("WHO = 'mounted'\n")
         (mounted / "base.yaml").write_text("a: 1\n")
-        return site, mounted
+        forget = ("configs", "configs2", "helpers")   # each test has its own site
+        for name in forget:
+            sys.modules.pop(name, None)
+        yield site, mounted
+        for name in forget:
+            sys.modules.pop(name, None)
 
     def test_a_root_folder_mount_may_not_shadow_a_module(self, importable):
         _, mounted = importable
@@ -241,3 +247,22 @@ class TestMountRefusesImportClash:
         site, _ = importable
         probe = Do()
         probe.mount(folder=str(site / "configs"), at="configs")
+
+    def test_a_symlinked_package_folder_at_its_own_name_is_not_a_clash(
+            self, importable, tmp_path):
+        site, _ = importable
+        (site / "configs" / "base.yaml").write_text("a: 1\n")
+        link = tmp_path / "link"
+        link.symlink_to(site / "configs")
+        probe = Do()
+        probe.mount(folder=str(link), at="configs")
+        assert probe.load("configs.base") == {"a": 1}
+
+    def test_a_sibling_sharing_a_string_prefix_is_a_clash(self, importable):
+        site, _ = importable
+        (site / "configs2").mkdir()
+        (site / "configs2" / "__init__.py").write_text("")
+        (site / "configs" / "base.yaml").write_text("a: 1\n")
+        importlib.invalidate_caches()
+        with pytest.raises(ValueError, match="'configs2' is an importable module"):
+            Do().mount(folder=str(site / "configs"), at="configs2")

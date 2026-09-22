@@ -84,7 +84,7 @@ parameters:
 ```
 
 ```python
-dat = load("runs/my_experiment")
+dat = Dat.load("runs/my_experiment")
 dat.get_spec()["parameters"]["learning_rate"]   # 0.01
 ```
 
@@ -184,6 +184,19 @@ for a spec hydrated by hand:
 from dvc_dat import Dat, do, merge_dicts
 
 spec = merge_dicts(do.load("configs.bb.base"), {"gameset": "G7"})
+Dat.create(spec=spec)
+```
+
+A created dat's spec carries the folder it landed in as `dat.name`, so a
+variation of an existing dat `d` asks to land beside it — without
+`increment` the create raises `FileExistsError`:
+
+```python
+from dvc_dat import Dat, merge_dicts
+
+spec = merge_dicts(d.get_spec(),
+                   {"dat": {"target_exists": "increment"},
+                    "gameset": "G7"})
 Dat.create(spec=spec)
 ```
 

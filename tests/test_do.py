@@ -98,7 +98,7 @@ nested:
 
 
 class TestCommandLine:
-    """The `./do` shim onto `do_argv`; `test_cli.py` covers every `dat` verb."""
+    """The `./do` shim onto `cli_main`; `test_cli.py` covers every `dat` verb."""
 
     def test_usage_message(self):
         lines = run_capture("./do --usage")
@@ -173,14 +173,14 @@ class TestRegisteringStuff:
 class TestTemplatedDatCreationAndDeletion:
     def test_empty_creation_and_deletion(self):
         from dvc_dat import do
-        dat, _ = do.dat_from_template({})
+        dat, _ = do._dat_from_template({})
         assert dat, "Couldn't create Persistable"
         assert dat.delete(), "Couldn't delete Persistable"
 
     def test_creation_and_deletion_with_spec(self):
         from dvc_dat import do
         spec1 = {"dat": {"name": "test_dats/{YY}-{MM} Dats{unique}"}}
-        dat, _ = do.dat_from_template(spec1)
+        dat, _ = do._dat_from_template(spec1)
         assert dat, "Couldn't create Persistable"
         assert dat.get_path_name().startswith("test_dats/"), "Wrong path"
         assert dat.delete(), "Couldn't delete Persistable"

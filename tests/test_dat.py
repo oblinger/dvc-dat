@@ -47,7 +47,6 @@ class TestDatAccessors:
         expected_path = f"{Dat.manager.dat_folder.rstrip('/')}/any/path/goes/here/my_dat"
         assert dat.get_path() == expected_path
         assert dat.get_path_name() == "any/path/goes/here/my_dat"
-        assert dat.get_path_tail() == "my_dat"
         assert dat.delete()
 
     def test_spec_and_result_accessors(self, spec1):
@@ -105,20 +104,9 @@ class TestCreateSaveAndLoad:
         dat_dict = Dat.get(dat, ["dat"])
         assert dat_dict["kind"] == "Dat"
 
-    def test_gets(self, spec1):
-        dat = Dat.create(spec=spec1, path=TMP_PATH)
-        results = Dat.gets(dat, "my_key1", "dat")
-        assert results[0] == "my_val1"
-        # The second result is the dat section
-        assert results[1]["kind"] == "Dat"
-
-    def test_sets(self, spec1):
-        Dat.sets(spec1, "dat.foo = bar", "bip.bop.boop=3.14", "bip.zip=7")
-        assert Dat.gets(spec1, "dat.foo", "bip.bop.boop", "bip.zip") == [
-            "bar",
-            3.14,
-            7,
-        ]
+    def test_set_creates_levels(self, spec1):
+        Dat.set(spec1, "bip.bop.boop", 3.14)
+        assert Dat.get(spec1, "bip.bop.boop") == 3.14
 
 
 class TestDatLoadingAndSaving:

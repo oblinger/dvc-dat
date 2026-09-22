@@ -14,7 +14,8 @@ itself. `do` is the one namespace and the one runner.
 ```python
 from dvc_dat import (
     Dat, DatContainer, DatManager, DataConfig,
-    Do, do, do_argv, load, expand, expand_spec,
+    Do, do, cli_main,
+    expand, expand_spec, merge_dicts,
 )
 ```
 
@@ -26,9 +27,9 @@ from dvc_dat import (
 | `DataConfig` | The `.dataconfig.yaml` values |
 | `Do` | The do class — one instance, `do` |
 | `do` | The singleton: namespace, runner, configuration |
-| `do_argv` | The `dat` command line; returns the exit code |
-| `load` | `Dat.load` — open a dat by path or name |
+| `cli_main` | The `dat` command line for a program's own main |
 | `expand` / `expand_spec` | The `{}` grammar |
+| `merge_dicts` | The zipper merge `dat.base` uses |
 
 ## Running and loading — `do`
 
@@ -54,12 +55,7 @@ what `dat.do` names. `dat.run_at` and `dat.run_time` land in the results.
 | `do.configure(SOURCE) -> DataConfig` | Install a chosen config; first use does this for you |
 | `do.config` | The `DataConfig` in force, or `None` |
 | `do.mount(at=, folder=/file=/module=/value=)` | Add one name to the namespace; your program calls it |
-| `do.add_do_folder(PATH)` | Mount a folder by file name |
-| `do.get_base(BASE)` | The object mounted at a base name |
 | `do.keys()` | Every mounted base name |
-| `do.resolve_base(SPEC)` | Merge a spec over its `dat.base` chain |
-| `do.fork_spec(SPEC, ARGS, KWARGS)` | The fork rule, as a function |
-| `do.dat_from_template(SPEC, path=)` | `(dat, skip_execution)` |
 
 `do.load` checks mounts first, then imports the longest importable prefix of
 the name and `getattr`s the rest. With nothing found it raises what Python
@@ -75,11 +71,9 @@ given.
 | `Dat.validate_spec(SPEC) -> SPEC` | Classmethod hook, run on create and load |
 | `Dat.manager.exists(NAME) -> bool` | True iff the named dat exists |
 | `.get_spec() -> dict` | The spec — every `{}` was expanded once, at create |
-| `.spec` | `get_spec()` |
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |
 | `.get_path_name() -> str` | Its name, relative to the dat folder |
-| `.get_path_tail() -> str` | The last path segment |
 | `.save()` | Write the results to `_result_.yaml` |
 | `.delete()` | Remove the folder |
 | `.copy(NAME)` / `.move(NAME)` | Copy or move the dat |
@@ -95,8 +89,6 @@ or a path under one of the dat folders.
 |--------|-------------|
 | `Dat.get(Dat/dict, "a.b.c", [default])` | Get by dotted name or key list |
 | `Dat.set(dict, "a.b.c", value)` | Set, creating levels as needed |
-| `Dat.gets(Dat/dict, *NAMES) -> [value]` | Several at once |
-| `Dat.sets(dict, *"a.b=value")` | Several assignments at once |
 
 ```python
 x = {}
@@ -114,6 +106,8 @@ Dat.get(x, "a.b.c")      # 1
 See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
 
 ## dat_tools — DataFrames and Excel
+
+`dvc_dat.dat_tools` is mounted as `dt`, and `dt.list` is `dat list`.
 
 | Function | Description |
 |----------|-------------|
@@ -146,8 +140,9 @@ any spec key. Every argument value is a YAML scalar. `list`, `info` and
 `version` are reserved words. The exit code is `0` ran, `1` failed, `2` the
 target does not load.
 
-A copy of `bin/dat` on your `PATH` is the same command from any directory
-without activating an environment. See **[Command Line](cli.md)** for every
+A copy of `bin/dat` on your `PATH` runs your project's `run:` main from any
+directory. The environment's `dat` console script does not read `run:`: it
+runs the library's own command line, with no project mounts. See **[Command Line](cli.md)** for every
 reserved word, flag and exit code, the bootstrap and the `run:` config key.
 
 ## `.dataconfig.yaml`

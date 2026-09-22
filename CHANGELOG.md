@@ -6,6 +6,76 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 3.0.0 — 2026-09-22
+
+Breaking: public names removed or made private. Nothing is kept as an alias.
+
+- **Removed** `Do.add_do_folder` and the do-folder fallback in `do.load`. A
+  dotted name is a mounted name, else a plain Python import.
+- **Removed** from `dvc_dat`'s exports: `do_argv` (now the private
+  `dvc_dat.do._do_argv`) and the `load` alias of `Dat.load`.
+- **Removed** `Dat.spec` (use `get_spec()`), `Dat.gets` / `Dat.sets` and the
+  module functions `dotted_gets` / `dotted_sets`, and `Dat.get_path_tail` /
+  `DatManager.get_path_tail`.
+- **Made private** (leading underscore): `Do.fork_spec`,
+  `Do.dat_from_template`, `Do.resolve_base`, `Do.get_base`,
+  `Do.resolve_dat_folder`, the `Do` attributes `base_locations`,
+  `base_objects` and `registered_values` (`do.config` stays public);
+  `DatManager.prepare_dat_path`, `resolve_path`, `get_path_name` and
+  `dat_cache` (`Dat.get_path_name()` stays public); `core.dotted_get` /
+  `dotted_set`; `DataConfig.field_names` / `env_names`; `DataState`.
+- **Built-in mounts** are `dt` (`dvc_dat.dat_tools`) and `dt.list`; the
+  `dat_tools` and `dat_tools.list` mounts are gone, so `dat list` shows `dt`
+  alone.
+- The `dat` console script is `dvc_dat.do:cli_main`; `dvc_dat.__main__.main`
+  is gone and `python -m dvc_dat` calls `cli_main()` directly. The docs now
+  say plainly that the console script runs the library's own command line
+  with no project mounts and never reads `run:`; only a copy of `bin/dat`
+  execs `run:`.
+- **Fix:** the mount clash check compares real paths, component by
+  component. A package folder mounted at its own name through a symlink is
+  no longer refused, and a sibling sharing a string prefix (`/x/configs2`
+  beside a mounted `/x/configs`) no longer slips past.
+- **Fix:** the documented variation recipe. A created dat's spec carries the
+  folder it landed in as `dat.name`, so the 2.1 recipe raised
+  `FileExistsError`; it is now
+  `Dat.create(spec=merge_dicts(d.get_spec(), {"dat": {"target_exists": "increment"}, ...}))`,
+  and a test runs the recipe from `docs/concepts.md` and
+  `docs/spec-format.md` verbatim.
+- **Examples:** one notebook, `examples/walkthrough.ipynb`, replaces the
+  three 1.x notebooks; `standard_do_scripts/` and the 1.x example fixtures
+  are gone; `tests/test_examples.py` runs the notebook.
+
+### Migrating from 2.x
+
+| 2.x | 3.0 |
+|-----|-----|
+| `do.add_do_folder(path)` | `do.mount(folder=path, at=...)` |
+| `from dvc_dat import do_argv; do_argv(argv)` | `cli_main(argv)` |
+| `from dvc_dat import load; load(name)` | `Dat.load(name)` |
+| `dat.spec` | `dat.get_spec()` |
+| `Dat.gets(src, "a.b", "c")` | `[Dat.get(src, "a.b"), Dat.get(src, "c")]` |
+| `Dat.sets(src, "a.b=1")` | `Dat.set(src, "a.b", 1)` |
+| `dotted_gets` / `dotted_sets` | `Dat.get` / `Dat.set`, one key each |
+| `dat.get_path_tail()` | `os.path.basename(dat.get_path())` |
+| `Dat.manager.get_path_tail(p)` | `os.path.basename(p)` |
+| `do.resolve_base(spec)` | `Dat.create(spec=spec)` merges `dat.base` |
+| `do.fork_spec` / `do.dat_from_template` | `do(template, *args, **kwargs)` |
+| `do.get_base(name)` | `do.load(name)` |
+| `do.resolve_dat_folder(name)` | `Dat.load(name).get_path()` |
+| `do.base_locations` | `do.keys()` for the names |
+| `do.base_objects` / `do.registered_values` | `do.load(name)` |
+| `Dat.manager.prepare_dat_path` | `Dat.create(path=..., spec=...)` |
+| `Dat.manager.resolve_path(name)` | `Dat.load(name).get_path()` |
+| `Dat.manager.get_path_name(p)` | `Dat.load(p).get_path_name()` |
+| `Dat.manager.dat_cache` | none: the cache is internal |
+| `core.dotted_get` / `dotted_set` | `Dat.get` / `Dat.set` |
+| `DataConfig.field_names()` | `[f.name for f in dataclasses.fields(DataConfig)]` |
+| `DataConfig.env_names()` | `DAT_FOLDERS`, `DAT_RUN`, `DAT_CWD` |
+| `DataState` | none: internal to `DatContainer` |
+| `do.load("dat_tools.X")` / `dat_tools.list` | `dt.X` / `dt.list` |
+| `dvc_dat.__main__:main` | `dvc_dat.do:cli_main` |
+
 ## 2.1.0 — 2026-09-22
 
 - **`do.mount` refuses a name that is also importable.** When a top-level
@@ -17,7 +87,8 @@ Every user-visible change to `dvc_dat`, newest first.
   shadowing must pick another `at`.
 - A created dat's spec never changes, and there is no `fork` method: the
   recipe is `Dat.create(spec=merge_dicts(d.get_spec(), overrides))`,
-  documented in `docs/concepts.md`.
+  documented in `docs/concepts.md` (the overrides must carry
+  `{"dat": {"target_exists": "increment"}}`; see 3.0.0).
 
 ## 2.0.2 — 2026-09-22
 

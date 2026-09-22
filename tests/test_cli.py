@@ -125,6 +125,14 @@ class TestVerbs:
         code, out, _ = dat("list")
         assert code == 0 and "hello_world" in out and "my_letters" in out
 
+    def test_list_shows_the_one_builtin_mount(self):
+        code, out, _ = dat("list", "d")
+        names = [line.split()[0] for line in out.splitlines()[1:]]
+        assert code == 0 and "dt" in names and "dat_tools" not in names
+
+    def test_dt_list_is_the_list_command(self):
+        assert dat("dt.list", "letter")[1] == dat("list", "letter")[1]
+
     def test_list_with_prefix(self):
         code, out, _ = dat("list", "letter")
         assert code == 0 and "letterator" in out and "hello_world" not in out

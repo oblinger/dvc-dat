@@ -145,19 +145,6 @@ name: YAML Greeter
 
 **Use for:** constants, inline specs.
 
-### add_do_folder
-
-```python
-do.add_do_folder(str(ROOT / "scripts"))
-```
-
-Mounts every loadable under `scripts/` by **file name**, ignoring its
-subdirectory, and makes that folder the fallback the resolver walks when a
-name matches nothing else. Two files with the same base name in different
-subfolders collide, and loading either one is an error.
-
-**Use for:** a flat command folder where the file name is the command name.
-
 ## Choosing a form
 
 | Your need | Form |
@@ -166,7 +153,6 @@ subfolders collide, and loading either one is an error.
 | A short name for a Python module | `module` |
 | Single standalone script | `file` |
 | Inline constants or an inline spec | `value` |
-| A flat folder of commands | `add_do_folder` |
 | An importable object | *nothing — `do.load` imports it* |
 
 A mounted name never shadows an importable one. `mount` raises `ValueError`
@@ -175,7 +161,9 @@ from somewhere else: `at`'s first part, or, with no `at`, each top-level file
 or folder of the mounted folder. So `do.mount(folder=…, at="json")` is
 refused, and so is a root-level folder mount holding a `helpers.py` while an
 installed `helpers` exists. Mounting a module at its own name, or a package's
-own folder at its name, is not a clash. Choose another `at`, and the mounted
+own folder at its name, is not a clash — paths are compared as real paths,
+component by component, so the package's folder reached through a symlink
+is still its own, and `configs2/` is not inside `configs/`. Choose another `at`, and the mounted
 object and the installed one each keep a name of their own.
 
 ## Complete example

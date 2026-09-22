@@ -1,5 +1,0 @@
-# DVC-Dat Examples Configuration
-# Points to test folders for shared example data
-
-# Where the example dats live
-dat_folders: ../tests/test_sync_folder/

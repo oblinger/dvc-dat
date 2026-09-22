@@ -1,9 +1,15 @@
 # Command Line
 
-`dat` is the console script. It configures itself from the nearest
+`dat` is the command line. It configures itself from the nearest
 `.dataconfig.yaml` — walking up from the working directory — before it runs
 anything that needs the namespace; `dat --version` and `dat --help` need no
 config at all.
+
+It comes two ways, and they are not the same. A copy of `bin/dat` (below)
+execs the config's `run:` — your program's main, with its mounts. The `dat`
+console script an environment installs is `dvc_dat.do:cli_main`: the
+library's own command line, with no project mounts, and it never reads
+`run:`.
 
 The config's folder is the project's import root: it goes first on
 `sys.path` when the config installs, so `mypkg.job.run` means the same
@@ -23,7 +29,7 @@ dat --help                                the usage message
 | Command | Does |
 |---------|------|
 | `dat TARGET [ARG ...] [KEY=VALUE ...]` | `do(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
-| `dat list [PREFIX]` | Every mounted name whose name contains `PREFIX`, with what it loads to. |
+| `dat list [PREFIX]` | Every mounted name whose name contains `PREFIX`, with what it loads to. The library mounts `dt` (`dvc_dat.dat_tools`) itself; `dat dt.list` is the same command. |
 | `dat info` | The version, the dat folder, the config folder and the `.dataconfig.yaml` in force. `dat --info` is the same command. |
 | `dat version` | The version. `dat --version` is the same command. |
 | `dat` · `dat --help` · `dat -h` | The usage message. |
@@ -34,8 +40,8 @@ that happens to be named `list` cannot be run from the shell — rename it.
 
 ## Arguments
 
-`TARGET` is a dotted name resolved by `do.load` — the mount table first, then
-the longest importable prefix. What happens next is the library's rule, not the
+`TARGET` is a dotted name resolved by `do.load` — the running program's
+`do.mount(...)` names first, then the longest importable prefix. What happens next is the library's rule, not the
 CLI's: a **callable** is called, a **template spec** is forked — the fixed
 arguments become the new spec's `dat.args`, the `KEY=VALUE` pairs update its
 `dat.kwargs` key by key — and the forked spec creates a dat, which runs.
@@ -97,13 +103,14 @@ dat my_letters --json rules '[[2, "my_letters.triple_it"]]'
 A failed run prints one line on stderr and no traceback. Set `DAT_DEBUG=1` to
 get the traceback instead.
 
-## `bin/dat` — the same command without activating an environment
+## `bin/dat` — your project's `dat` from any directory
 
 `bin/dat` is a POSIX `sh` script, checked into the repo and copied wherever it
 is useful — `~/bin`, a project's root. It is `dat` from any directory, with no
-environment activated and nothing assumed about the project's layout; with an
-environment active, the console script of the same name shadows it and does
-the same thing:
+environment activated and nothing assumed about the project's layout. With an
+environment active, the console script of the same name comes first on
+`PATH`; it runs the library's own command line with no project mounts and
+never reads `run:`, so call the copy by its path to get your main:
 
 1. Walk up from the working directory to the nearest `.dataconfig.yaml` (it
    stops at `/`; with none found it prints a message and exits `3`).
@@ -138,8 +145,9 @@ dat_folders: data
 run: uv run dat
 ```
 
-`run` is any command that ends up in `dat`: `uv run dat`, `conda run -n ml
-dat`, `.venv/bin/python -m dvc_dat`. A project that mounts names points it at
+`run` is any command that ends up in `cli_main()`. For a project with no
+mounts, the library's own command line will do: `uv run dat`, `conda run -n
+ml dat`, `.venv/bin/python -m dvc_dat`. A project that mounts names points it at
 its **own main** — `run: .venv/bin/python -m mypkg.main` — a module that
 imports what it needs, makes its `do.mount(...)` calls and, when
 `DAT_CLI_CONFIG` is set, ends with `sys.exit(dat.cli_main())`, so the shell

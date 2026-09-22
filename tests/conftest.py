@@ -1,8 +1,8 @@
 """Pytest configuration for dvc_dat tests.
 
 Configures the do-system (and with it `Dat.manager`) from `tests/.dataconfig.yaml`
-before any test imports.  `import dvc_dat` itself reads no config -- configuring is
-always explicit.
+before any test imports.  `import dvc_dat` itself reads no config; the first use
+would configure from the working directory, so the tests pin theirs here.
 """
 import sys
 from pathlib import Path

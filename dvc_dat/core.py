@@ -54,7 +54,9 @@ ENV_PREFIX = "DAT_"
 
 @dataclass
 class DataConfig:
-    """Where dats are stored, and what the do-system mounts.
+    """Where dats are stored, and the command `bin/dat` runs.
+
+    A config holds no mounts: those are `do.mount(...)` calls in the program.
 
     Attributes
     ----------
@@ -72,15 +74,15 @@ class DataConfig:
     run: Optional[str] = None
 
     @classmethod
-    def field_names(cls) -> List[str]:
+    def _field_names(cls) -> List[str]:
         return [f.name for f in fields(cls)]
 
     @classmethod
-    def env_names(cls) -> Dict[str, str]:
+    def _env_names(cls) -> Dict[str, str]:
         """Environment variable -> field: `DAT_FOLDERS`, `DAT_RUN`, `DAT_CWD`."""
         prefix = ENV_PREFIX.lower()
         return {ENV_PREFIX + (n[len(prefix):] if n.startswith(prefix) else n).upper(): n
-                for n in cls.field_names()}
+                for n in cls._field_names()}
 
     @classmethod
     def new(
@@ -115,7 +117,7 @@ class DataConfig:
         # Only DAT_<FIELD> variables reach the config; a field's own `dat_` prefix
         # folds into the DAT_ (DAT_FOLDERS -> dat_folders, DAT_RUN -> run).
         environ_values = {
-            name: os.environ[env] for env, name in cls.env_names().items() if env in os.environ
+            name: os.environ[env] for env, name in cls._env_names().items() if env in os.environ
         }
 
         final_values: Dict[str, Any] = merge_dicts(
@@ -133,10 +135,10 @@ class DataConfig:
             raise ValueError(
                 f"{path}: expected a mapping of config keys, "
                 f"got {type(values).__name__}")
-        unknown = sorted(set(values) - set(cls.field_names()))
+        unknown = sorted(set(values) - set(cls._field_names()))
         if unknown:
             raise ValueError(
-                f"{path}: unknown config key(s) {unknown}; known keys are {cls.field_names()}"
+                f"{path}: unknown config key(s) {unknown}; known keys are {cls._field_names()}"
             )
         if verbose:
             logger.debug("%s found and loaded.", path)
@@ -220,7 +222,7 @@ class classproperty:
         return self.func(objtype)
 
 
-class DataState(Enum):
+class _DataState(Enum):
     NOT_LOADED = auto()
 
 
@@ -327,7 +329,7 @@ class DatManager:
 
     config: DataConfig
     dat_folders: List[str]
-    dat_cache: "weakref.WeakValueDictionary[str, Dat]"
+    _dat_cache: "weakref.WeakValueDictionary[str, Dat]"
 
     @property
     def dat_folder(self) -> str:
@@ -339,7 +341,7 @@ class DatManager:
             config = DataConfig.new()
         self.config = config
         self.dat_folders = list(config.dat_folders)
-        self.dat_cache = weakref.WeakValueDictionary()
+        self._dat_cache = weakref.WeakValueDictionary()
 
     def create(
         self,
@@ -365,7 +367,7 @@ class DatManager:
             spec = do.load(spec)
         if not isinstance(spec, dict):
             raise TypeError(f"Dat.create: spec must be a dict or a dotted name, not {spec!r}")
-        spec = do.resolve_base(deepcopy(spec))
+        spec = do._resolve_base(deepcopy(spec))
         spec.setdefault("dat", {})
         spec["dat"].setdefault("kind", dat_class.__name__)
         spec = dat_class.validate_spec(spec)
@@ -381,10 +383,10 @@ class DatManager:
         if skip_execution:
             return self.load(dat_class, name_or_path=expanded_path)
 
-        path = self.resolve_path(expanded_path)
+        path = self._resolve_path(expanded_path)
         spec = expand_spec(spec, names)
         if path.startswith(self.dat_folder):
-            Dat.set(spec, DAT_NAME, self.get_path_name(path))
+            Dat.set(spec, DAT_NAME, self._get_path_name(path))
         os.makedirs(path, exist_ok=True)
         logger.info("Creating Dat %s under path: <%s>", dat_class, path)
         try:
@@ -413,14 +415,14 @@ class DatManager:
         """
         name_or_path = str(name_or_path)
         cwd = cwd or os.getcwd()
-        path = self.resolve_path(name_or_path)
+        path = self._resolve_path(name_or_path)
         if not os.path.exists(path):
             raise KeyError(
                 f"LOAD_DAT: Could not find <{name_or_path!r}> as absolute, "
                 f"under cwd {cwd}, or in {self.dat_folders}"
             )
         path = os.path.abspath(path)
-        if (cached := self.dat_cache.get(path)) and isinstance(cached, dat_class):
+        if (cached := self._dat_cache.get(path)) and isinstance(cached, dat_class):
             return cached
 
         if os.path.exists(spec_path := os.path.join(path, SPEC_YAML)):
@@ -456,27 +458,23 @@ class DatManager:
 
         dat = dat_class(path=path, spec=spec, result=result)
         if cache_after_load:
-            self.dat_cache[path] = dat
+            self._dat_cache[path] = dat
         return dat
 
     def exists(self, path: Union[str, Path]) -> bool:
         """True if a dat's `_spec_` file is at `path` (resolved like `load`)."""
-        path = self.resolve_path(str(path))
+        path = self._resolve_path(str(path))
         return os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
             os.path.join(path, SPEC_YAML)
         )
 
-    def get_path_name(self, path: Union[str, Path]) -> str:
+    def _get_path_name(self, path: Union[str, Path]) -> str:
         path = str(path)
         try:
             match = 1 + len(os.path.commonpath([self.dat_folder, path]))
             return path[match:] if match > 2 else path
         except ValueError:
             return path
-
-    @staticmethod
-    def get_path_tail(path: Union[str, Path]) -> str:
-        return str(path).split("/")[-1]
 
     def _find_subclass_by_name(self, klass: Type, name: str) -> Optional[Type]:
         if klass.__name__ == name:
@@ -486,7 +484,7 @@ class DatManager:
                 return result
         return None
 
-    def prepare_dat_path(
+    def _prepare_dat_path(
         self,
         path_spec: Union[str, Path, None],
         *,
@@ -509,7 +507,7 @@ class DatManager:
         variables: Optional[Dict[str, Any]] = None,
         target_exists: str = "error",
     ) -> Tuple[str, bool, Dict[str, Any]]:
-        """`prepare_dat_path`, also returning the names the path expanded with, so the
+        """`_prepare_dat_path`, also returning the names the path expanded with, so the
         spec can be expanded with the very same `now` and `unique`."""
         if path_spec is None:
             path_spec = _DEFAULT_PATH_TEMPLATE
@@ -539,7 +537,7 @@ class DatManager:
             else:
                 raise FileExistsError(f"DAT: Create failed, dir {expanded_path!r} exists")
 
-    def resolve_path(self, name: Union[str, Path]) -> str:
+    def _resolve_path(self, name: Union[str, Path]) -> str:
         from .do import do
 
         name = str(name)
@@ -548,7 +546,7 @@ class DatManager:
         path = os.path.join(self.config.cwd, name)
         if os.path.exists(path):
             return path
-        if (mount_path := do.resolve_dat_folder(name)) is not None:
+        if (mount_path := do._resolve_dat_folder(name)) is not None:
             return mount_path
         for folder in self.dat_folders:
             path = os.path.join(folder, name)
@@ -568,8 +566,8 @@ class Dat:
 
     The spec is the complete recipe: `dat.do` names the function, `dat.args` and
     `dat.kwargs` its arguments, `dat.name` the path template, `dat.base` what it
-    inherits from.  `get_spec()` returns it with every `{}` reference expanded (once,
-    lazily); every `{}` in it was expanded once, at create.  `get_results()` is the
+    inherited from.  Every `{}` reference in it was expanded once, when the dat was
+    created, and `get_spec()` returns it as written.  `get_results()` is the
     mutable `_result_.yaml`.
 
     Subclasses override `validate_spec` to check or coerce a spec on create and load
@@ -627,10 +625,6 @@ class Dat:
         """The spec as written -- every `{}` was expanded once, when the dat was created."""
         return self._spec
 
-    @property
-    def spec(self) -> SpecDict:
-        return self.get_spec()
-
     def get_results(self) -> SpecDict:
         """The mutable results of this Dat (persisted by `save()`)."""
         return self._result
@@ -640,10 +634,7 @@ class Dat:
 
     def get_path_name(self) -> str:
         """The name (path relative to the sync folder) of this Dat."""
-        return Dat.manager.get_path_name(self._path)
-
-    def get_path_tail(self) -> str:
-        return self._path.split("/")[-1]
+        return Dat.manager._get_path_name(self._path)
 
     @classmethod
     def load(
@@ -672,7 +663,7 @@ class Dat:
 
     def delete(self, *, must_exist=True) -> bool:
         """Delete the folder and its contents."""
-        Dat.manager.dat_cache.pop(self._path, None)
+        Dat.manager._dat_cache.pop(self._path, None)
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
@@ -682,15 +673,15 @@ class Dat:
         return True
 
     def copy(self: DatType, new_path: Union[str, Path]) -> DatType:
-        new_path_ = Dat.manager.resolve_path(new_path)
+        new_path_ = Dat.manager._resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
         shutil.copytree(self._path, new_path_)
         return Dat.manager.load(type(self), new_path_)
 
     def move(self: DatType, new_path: Union[str, Path]) -> DatType:
-        Dat.manager.dat_cache.pop(self._path, None)
-        new_path_ = Dat.manager.resolve_path(new_path)
+        Dat.manager._dat_cache.pop(self._path, None)
+        new_path_ = Dat.manager._resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
         shutil.move(self._path, new_path_)
@@ -707,21 +698,12 @@ class Dat:
     def get(source: Union["Dat", dict], keys: Union[str, List[str]],
             default_value: Any = _NO_ARG) -> Any:
         """Get a value from a dotted key path in a dict tree (or a Dat's spec)."""
-        return dotted_get(source=source, keys=keys, default_value=default_value)
+        return _dotted_get(source=source, keys=keys, default_value=default_value)
 
     @staticmethod
     def set(source: SpecDict, keys, value) -> None:
         """Set a value at a dotted key path in a dict tree, creating levels as needed."""
-        dotted_set(source=source, keys=keys, value=value)
-
-    @staticmethod
-    def gets(source: Union["Dat", SpecDict], *dotted_keys) -> List[Any]:
-        return dotted_gets(source, *dotted_keys)
-
-    @staticmethod
-    def sets(source: dict, *assignments) -> None:
-        """Apply `key.sub=value` assignments to a dict tree (values parsed as int, float, str)."""
-        dotted_sets(source, *assignments)
+        _dotted_set(source=source, keys=keys, value=value)
 
 
 class DatContainer(Dat, Generic[DatType]):
@@ -729,18 +711,18 @@ class DatContainer(Dat, Generic[DatType]):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._dat_paths: Union[DataState, List[str]] = DataState.NOT_LOADED
-        self._dats: Union[DataState, List[DatType]] = DataState.NOT_LOADED
+        self._dat_paths: Union[_DataState, List[str]] = _DataState.NOT_LOADED
+        self._dats: Union[_DataState, List[DatType]] = _DataState.NOT_LOADED
 
     def get_dat_paths(self) -> List[str]:
         """Lazy loaded list of full paths for the contained Dats."""
-        if self._dat_paths is DataState.NOT_LOADED:
+        if self._dat_paths is _DataState.NOT_LOADED:
             self._dat_paths = DatContainer._find_dats_under(self._path)
         return self._dat_paths
 
     def get_dats(self) -> List[DatType]:
         """The contained Dats (all stay in memory until this container is released)."""
-        if self._dats is DataState.NOT_LOADED:
+        if self._dats is _DataState.NOT_LOADED:
             self._dats = [Dat.load(p) for p in self.get_dat_paths()]  # type: ignore
         return self._dats  # type: ignore
 
@@ -762,7 +744,7 @@ class DatContainer(Dat, Generic[DatType]):
 # Dotted-key helpers
 # =============================================================================
 
-def dotted_get(source: Union[Dat, dict], keys: Union[str, List[str]], default_value: Any = _NO_ARG):
+def _dotted_get(source: Union[Dat, dict], keys: Union[str, List[str]], default_value: Any = _NO_ARG):
     d = source.get_spec() if isinstance(source, Dat) else source
     if isinstance(keys, str):
         keys = keys.split(".")
@@ -784,13 +766,7 @@ def dotted_get(source: Union[Dat, dict], keys: Union[str, List[str]], default_va
         return default_value
 
 
-def dotted_gets(source: Union[Dat, SpecDict], *dotted_keys):
-    assert source is not None, "gets method requires a non None dict"
-    source_ = source.get_spec() if isinstance(source, Dat) else source
-    return [dotted_get(source_, dotted_key.split(".")) for dotted_key in dotted_keys]
-
-
-def dotted_set(source: SpecDict, keys, value):
+def _dotted_set(source: SpecDict, keys, value):
     assert source is not None, "set method requires a non None dict"
     assert len(keys) > 0, "set method requires at least one key"
     if isinstance(keys, str):
@@ -804,17 +780,3 @@ def dotted_set(source: SpecDict, keys, value):
         source = sub
     source[keys[-1]] = value
 
-
-def dotted_sets(source: dict, *assignments):
-    assert source is not None, "set method requires a non None dict"
-    for assignment in assignments:
-        prefix, suffix = assignment.split("=")
-        keys, suffix = prefix.strip().split("."), suffix.strip()
-        try:
-            value = int(suffix)
-        except ValueError:
-            try:
-                value = float(suffix)
-            except ValueError:
-                value = suffix
-        dotted_set(source, keys, value)
