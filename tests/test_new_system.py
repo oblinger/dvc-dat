@@ -181,3 +181,11 @@ class TestFolderMountPaths:
         probe.mount(folder=str(catalog), at="catalog")
         with pytest.raises(KeyError, match="'nope' is missing from"):
             probe.load("catalog.models.baseline.nope")
+
+
+def test_merge_dicts_is_the_base_zipper():
+    from dvc_dat import merge_dicts
+    base = {"a": {"x": 1, "y": 2}, "l": [1, 2]}
+    over = {"a": {"x": 9}, "l": [3]}
+    assert merge_dicts(base, over) == {"a": {"x": 9, "y": 2}, "l": [3]}
+    assert base == {"a": {"x": 1, "y": 2}, "l": [1, 2]}      # inputs untouched

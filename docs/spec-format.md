@@ -176,6 +176,17 @@ dat:
 
 `catalog.nightly` wins where they disagree.
 
+Nested mappings merge key by key; any other value, a list included, is
+replaced whole by the later spec. The same merge is `merge_dicts(*dicts)`,
+for a spec hydrated by hand:
+
+```python
+from dvc_dat import Dat, do, merge_dicts
+
+spec = merge_dicts(do.load("configs.bb.base"), {"gameset": "G7"})
+Dat.create(spec=spec)
+```
+
 ## Validation
 
 `Dat.validate_spec(cls, spec) -> spec` runs on both `create` and `load`, on the

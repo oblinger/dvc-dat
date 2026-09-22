@@ -6,6 +6,12 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.0.2 — 2026-09-22
+
+- `merge_dicts(*dicts)` is exported: the zipper merge `dat.base` uses, for a
+  caller hydrating a spec by hand (`do.load` it, merge, `Dat.create`). Nested
+  mappings merge key by key, later dicts win, and a list is replaced whole.
+
 ## 2.0.1 — 2026-09-22
 
 - A folder mount answers to the dotted paths `docs/mount-commands.md` § folder
