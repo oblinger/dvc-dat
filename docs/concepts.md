@@ -1,129 +1,178 @@
 # Core Concepts
 
-dvc_dat provides two integrated systems for managing data and code:
+A **dat** is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
+itself. `_result_.yaml` holds only what running it produced.
 
-1. **Do-System** - A namespace for loading Python objects by dotted name
-2. **DAT Storage** - Persistent data folders with `_spec_.yaml` metadata
+`dvc_dat` has one namespace and one runner, both reached through `do`:
 
-## Two Namespaces
+```python
+from dvc_dat import Dat, do, load
 
-### Dotted Names (Do-System)
+# a dotted name -> a Python object; the first call finds and
+# applies the nearest .dataconfig.yaml
+template = do.load("catalog.experiment")
 
-Used for referencing source code: templates, functions, configurations.
+# fork the template, run the fork
+result = do("catalog.experiment", epochs=200)
+
+# a path -> the dat on disk
+dat = load("runs/2026-09/exp")
+```
+
+## Two kinds of name
+
+**Dotted names** (`catalog.experiment`, `os.path.join`) name source code:
+templates, functions, constants. `do.load` resolves them — first against the
+mount table from `.dataconfig.yaml`, then by import: the longest importable
+prefix of the name is imported and the rest is `getattr`-ed. So any importable
+object has a name whether or not it was mounted, and `do.name_of(obj)` gives the
+name that loads back to it.
+
+**Slash paths** (`runs/experiment1`) name dat folders. They are relative to
+the dat folder (`dat_folders`, default `data/`) or absolute. `load(name)`
+opens one.
+
+## Arguments fork a spec; they never ride beside it
+
+`do(template, *args, **kwargs)` does not pass the arguments to a function. It
+writes them into a *new* spec — keyword arguments update `dat.kwargs` key by
+key, positional arguments replace `dat.args` — creates the dat that spec
+describes, and then runs that dat with no call-site arguments at all:
+
+```python
+do("catalog.experiment", 3, epochs=200)
+
+# the new dat's _spec_.yaml carries
+#   dat: {args: [3], kwargs: {epochs: 200}}
+# and the run is
+#   experiment(dat, 3, epochs=200)
+```
+
+The consequence is the point: **the spec is the record.** Nothing about the
+arguments goes into `_result_.yaml`, and no dat on disk is ever rewritten by a
+run. Re-running an existing dat is `do(dat)` with no arguments; handing that
+same dat arguments forks a new one and leaves the original byte-identical.
+
+For in-place iteration — profiling, report tuning, a `dev` dat you squash every
+run — give the spec a fixed `dat.name` and `target_exists: overwrite`. The
+running code then has to cope with output files that already exist.
+
+## Nothing is found by the shape of its path
+
+A dat's location carries no meaning the library relies on. Metadata lives in the
+spec and in the results, and a consumer finds dats by querying their contents,
+never by parsing a path.
+
+## `do` is a singleton, and it configures itself on first use
+
+`import dvc_dat` touches no filesystem: it hands you a `do` that can already
+resolve importable names, with `do.config is None` and no `Dat.manager` built.
+The **first** call that needs a config — a `do(...)`, a `do.load(...)`, a
+`Dat.load` / `Dat.create`, any touch of `Dat.manager` — reads the nearest
+`.dataconfig.yaml` walking up from the working directory, builds `Dat.manager`
+from it, and puts the config's folder first on `sys.path`. Nothing in an
+ordinary program calls `configure`:
 
 ```python
 from dvc_dat import do
 
-# Load a template spec
-spec = do.load("catalog.experiment")
-
-# Execute a function
-result = do("scripts.process_data", input_file="data.csv")
+# finds .dataconfig.yaml on the way
+do("mypkg.train.baseline", lr=0.5)
 ```
 
-- Names like `catalog.experiment` or `fixtures.simple`
-- Resolved through mount commands in `.dataconfig.yaml`
-- Points to Python modules, YAML/JSON files, or folders
-
-### Slash Paths (DAT Storage)
-
-Used for data storage locations in the filesystem.
+`do.configure(source)` stays for the cases where the default is wrong — a
+config somewhere other than above the working directory, or one you built in
+code:
 
 ```python
-from dvc_dat import Dat
-
-# Load a persisted DAT
-dat = Dat.load("runs/2025-01/experiment1")
-
-# Create a new DAT
-dat = Dat.create(path="runs/2025-01/experiment2", spec={"name": "exp2"})
+# a folder, a config file, or a DataConfig
+do.configure(project_root)
 ```
 
-- Paths like `runs/experiment1` or `upstream/kegg/compounds`
-- Relative to `local_prefix` (from `.dataconfig.yaml`, default `data/`) or absolute
-- Each DAT is a folder containing `_spec_.yaml`
+Mounts land on the same object either way, so a name imported before the
+config was installed keeps resolving. The `dat` command-line tool needs no
+special handling (see [Command Line](cli.md)); a long-lived service that
+starts in one directory and works in another should call `do.configure()`
+explicitly rather than depend on where the process happened to launch.
 
-## The Two Managers
+## Templates: `dat.base`
 
-### DoManager
+`dat.base` names a spec to inherit from — or a **list** of them, merged left to
+right with later entries winning, so a dat can inherit from a DAG of specs.
+Resolution is recursive and happens before the spec is written, so `dat.base`
+never appears in a stored spec: what is on disk is the whole recipe.
 
-Manages the do-system namespace. Configured via `mount_commands` in `.dataconfig.yaml`.
+## References: the `{}` grammar
 
-**Responsibilities:**
-- Load Python objects by dotted name
-- Mount folders, modules, and files into the namespace
-- Expand specs (resolve `dat.base` inheritance)
+Any string in a spec may carry `{…}` references, resolved when the spec is read
+back through `get_spec()` (and when a path template is expanded).
 
-### DatManager
+```python
+from dvc_dat import expand, expand_spec
 
-Manages DAT creation, loading, and persistence.
+# 'runs/2026-09/exp'
+expand("runs/{YYYY}-{MM}/exp")
 
-**Responsibilities:**
-- Create DAT folders with `_spec_.yaml`
-- Load DATs from filesystem paths
-- Resolve path templates (`{YYYY}`, `{unique}`, etc.)
-- Coordinate with DoManager for spec resolution
-
-**Relationship:** DatManager uses DoManager internally. When you call `Dat.create(spec="catalog.template")`, DatManager asks DoManager to load and expand the spec.
-
-## Lifecycle: Template to Persisted DAT
-
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Source Code    │     │    DoManager    │     │   DatManager    │
-│  (templates)    │────▶│  (namespace)    │────▶│  (persistence)  │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-       │                        │                       │
-  catalog/                 do.load()              Dat.create()
-  experiment.yaml          loads spec            writes folder
+# the object do.load('svp.CONFIG') returns
+expand("{svp.CONFIG}")
 ```
 
-**Step by step:**
+- an **undotted** name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`)
+  or a key of the `vars` dict you pass; anything else is a `KeyError`
+- a **dotted** name resolves through `do.load` at run time
+- `{{` and `}}` are the literal braces
+- a string that is *exactly* one reference returns the referenced **object**;
+  otherwise references are substituted as text
 
-1. **Define a template** in your source tree:
-   ```yaml
-   # src/catalog/experiment.yaml
-   dat:
-     kind: Dat
-     name: "runs/{YYYY}-{MM}/exp{unique}"
-   experiment_type: baseline
-   ```
+In YAML, a value that *begins* with `{` must be quoted — `name: "{svp.CONFIG}"`
+— or YAML reads it as a flow mapping and the spec arrives with a dict where a
+string belongs. `validate_spec` names that case.
 
-2. **Mount it** via `.dataconfig.yaml`:
-   ```yaml
-   mount_commands:
-     - at: catalog
-       folder: src/catalog
-   ```
+## Validation
 
-3. **Create a DAT** from the template:
-   ```python
-   dat = Dat.create(spec="catalog.experiment")
-   # Creates: data/runs/2025-01/exp/_spec_.yaml  (then exp_2, exp_3, ...)
-   # `dat.base` is NOT expanded here; `do(dat)` and `do.expand_spec()` expand it
-   ```
+`Dat.validate_spec(cls, spec) -> spec` is a classmethod hook called by both
+`create` and `load`, on the class the spec names. The default checks the shape
+every dat relies on. A subclass overrides it to check its own:
 
-4. **Load it later**:
-   ```python
-   dat = Dat.load("runs/2025-01/exp")
-   print(dat.get_spec()["experiment_type"])  # "baseline"
-   ```
+```python
+class Experiment(Dat):
+    @classmethod
+    def validate_spec(cls, spec):
+        spec = super().validate_spec(spec)
+        Model(**spec)   # your schema library, your dependency
+        return spec
+```
 
-## Configuration: .dataconfig.yaml
+The library itself validates with no schema library at all.
+
+## Configuration: `.dataconfig.yaml`
 
 ```yaml
-local_prefix: data             # Where DATs are stored
-mount_commands:                # Do-system namespace
-  - at: catalog
-    folder: src/catalog
-  - at: fixtures
-    module: tests.fixtures
+# where dats live: one folder, or a list -- the first is where new dats
+# are created, all are searched when a dat is loaded by name
+dat_folders: data
+
+# the command a copy of bin/dat hands its arguments to (see cli.md):
+# your program's main, which imports what it mounts and calls dat.cli_main()
+run: .venv/bin/python -m mypkg.main
 ```
 
-See [Mount Commands](mount-commands.md) for all mount types.
+Those two keys are the whole file, and an empty file is a complete config.
+An unrecognized key is an error naming the file, the key and the known keys —
+a typo is never silently ignored. The config's folder is the project's import
+root: it goes first on `sys.path` when the config installs, so the project's
+own modules resolve from any working directory, installed or not.
+
+The file is found by walking up from the working directory, or from the path
+given to `do.configure(...)` / `DataConfig.new(cwd=...)`. A
+`.dataconfig.override.yaml` beside it wins over it, and a `DAT_<KEY>`
+environment variable (`DAT_FOLDERS`, `DAT_RUN`) wins over both. The `bin/dat` bootstrap hands its child the config it found as `DAT_CLI_CONFIG`, which `cli_main()` alone reads.
+
+See [Mounts](mount-commands.md) for what a program can mount.
 
 ## See Also
 
-- [Spec Format](spec-format.md) - `_spec_.yaml` reference
-- [Mount Commands](mount-commands.md) - Configuring the do-system
-- [Overview](overview.md) - API reference
+- [Spec Format](spec-format.md) — `_spec_.yaml` and `_result_.yaml` reference
+- [Mounts](mount-commands.md) — names that are not imports
+- [Command Line](cli.md) — the `dat` verbs and the bootstrap copy
+- [Overview](overview.md) — API reference

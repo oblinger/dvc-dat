@@ -2,7 +2,7 @@
 import os.path
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from dvc_dat import do_argv
-do_argv(sys.argv)
-
-# do_argv([None, "list"])
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mounts  # noqa: E402,F401  -- the test namespace
+from dvc_dat import cli_main  # noqa: E402
+sys.exit(cli_main())

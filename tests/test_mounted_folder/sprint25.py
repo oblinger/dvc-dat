@@ -4,7 +4,7 @@ from dvc_dat import do, Dat
 __main__ = {
     "dat": {
         "base": "hello_mspipe/hello_doubler",
-        "path": "sprint25",       # Use fixed folder during debugging
+        "name": "sprint25",       # Use fixed folder during debugging
         "target_exists": "overwrite",
         "do": "sprint25.run_it"},
     "common": {

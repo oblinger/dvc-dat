@@ -36,7 +36,7 @@ Build an excel showing cube_hello metrics over the Hello10_runs.
 __main__ = {
     "dat": {
         "do": "dt.dat_report",
-        "path": "dat_report",
+        "name": "dat_report",
         "target_exists": "overwrite"
     },
     "source": ["runs.example.hello10", "runs.example.hello5"],

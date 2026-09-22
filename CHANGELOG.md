@@ -4,7 +4,191 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Versioning
 
-[Semver](https://semver.org): a change to the public contract (`Dat.create/load/run`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
+[Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
+
+## 2.0.0 — 2026-09-21
+
+- `do` configures itself on first use: `import dvc_dat` still reads no
+  filesystem, but the first `do(...)`, `do.load(...)`, `Dat.load`,
+  `Dat.create` or `Dat.manager` access discovers the nearest
+  `.dataconfig.yaml` and installs it. `do.configure(source)` remains, for a
+  config chosen by hand.
+- **`.dataconfig.yaml` has two keys** — `dat_folders` (a folder, or a list:
+  the first is where new dats are created, all are searched by name; replaces
+  `local_prefix` + `extra_local_prefixes`) and `run` (the command a copy of
+  `bin/dat` execs; replaces `python:`). `DAT_FOLDERS` and `DAT_RUN` in the
+  environment override them. `Dat.manager.dat_folder` /
+  `.dat_folders` replace `sync_folder` / `sync_folders`.
+- **A spec on disk is a record.** `Dat.create` expands every `{}` once, with
+  the same `now` and `unique` the folder got, and writes the result: `dat.name`
+  is the folder the dat landed in, `{now}` is the moment it was made. Nothing
+  is expanded on read; `get_spec(raw=)` is gone. A reference inside a longer
+  string must be a string or a number; a whole-value reference is inlined as
+  data, and a reference to a function or class is a `TypeError` at create.
+  A fork from a `Dat` lands beside it (`target_exists: increment`), and
+  `increment` on a name with no `{unique}` counts up `_2`, `_3` instead of
+  looping.
+- **`mount_commands` is gone from `.dataconfig.yaml`**; a file that still has
+  it is an unknown-key error. The namespace is whatever the running program
+  imported: `do.mount(...)` calls live in your own code, and for the shell
+  `run:` names your program's main, which ends with `sys.exit(dat.cli_main())`
+  when `DAT_CLI_CONFIG` is set (`cli_main(argv=None, *, config=None)` is new and
+  exported; the bootstrap sets `DAT_CLI_CONFIG` -- the config file it found -- for the program
+  it launches). `do.mount_all` is removed. With no mounts a
+  dotted name is a Python name and nothing else; an empty `.dataconfig.yaml`
+  is a complete config.
+- The config's folder is the project's import root: it goes first on
+  `sys.path` when the config installs, so the project's own modules resolve
+  from any working directory, installed or not.
+
+A dat's spec is now a complete, argumentless recipe for itself, and `do` is the
+one runner and the one namespace. Breaking on every count below.
+
+### The fork rule
+
+- `do(template, *args, **kwargs)` no longer passes the arguments to the
+  function. It updates the template's `dat` section — kwargs into `dat.kwargs`
+  key by key, positional args **replacing** `dat.args` — writes that as the new
+  dat's `_spec_.yaml`, and runs the new dat with no call-site arguments.
+  1.x appended positional args and let keywords win over the spec's.
+- `do(existing_dat)` re-runs a dat on disk as it is. `do(existing_dat, x=1)`
+  forks a new dat from its spec and never rewrites the one on disk.
+- Nothing about arguments is written to `_result_.yaml` any more; 1.x recorded
+  `dat.args` and `dat.kwargs` there. The spec is the record.
+- `_result_.yaml` holds what the function put in `dat.get_results()`, plus
+  `dat.run_at` and `dat.run_time`.
+
+### One `do`
+
+- `Do` replaces `DoManager`, `SimpleMethodManager`, `DoProxy` and
+  `create_do_manager`. `dvc_dat.do` is the one instance.
+- `do.load` falls back to **static resolution**: the longest importable prefix
+  of a dotted name is imported and the rest is `getattr`-ed, so an importable
+  object needs no mount. Nothing found raises Python's own `ImportError` /
+  `AttributeError` / `KeyError` unless `default=` is given.
+- `do.name_of(obj)` returns the dotted name `do.load` takes back to it.
+- **`import dvc_dat` no longer reads the filesystem.** `do.configure(source)`
+  is explicit, and mounts onto the same `do` object, so a name imported before
+  it keeps working. The `dat` CLI configures itself.
+- `do.expand_spec` is renamed `do.resolve_base` (it resolves `dat.base`; the
+  name now belongs to the `{}` expander). `do.merge_configs` is gone — the one
+  merge is `merge_dicts`, in which an override of `0`, `""` or `false`
+  overrides.
+- `dat.base` accepts a **list**, merged left to right with later entries
+  winning. `dat.base` is removed from a stored spec rather than set to `null`.
+
+### The `{}` grammar
+
+- `expand(text, vars=None)` and `expand_spec(spec, vars=None)` are public and
+  exported. An undotted `{name}` is a built-in (`YYYY YY MM DD HH mm SS now cwd
+  unique`) or a key of `vars`; a dotted `{a.b}` resolves through `do.load` at
+  run time; `{{` is a literal brace; a string that is exactly one reference
+  yields the referenced object.
+- References are expanded once, at create (see above); `Dat.get_spec()` is
+  the file.
+- A spec value beginning with `{` must be quoted in YAML or it arrives as a
+  dict; `validate_spec` names that case.
+
+### The `dat` command line
+
+- One grammar: `dat TARGET [ARG ...] [KEY=VALUE ...]`, plus the reserved
+  words `dat list [PREFIX]`, `dat info`, `dat version` and `dat --help`.
+  There is no `do` verb.
+- **Keyword arguments are `KEY=VALUE`**, not `--keyword value`. The 1.x
+  `--keyword value` / `--flag` forms are gone; the only flags left are
+  `--set DOTTED.KEY=VALUE` (repeatable; `--sets` is gone), `--json`,
+  `--dry-run`, `--usage`, `--help`, `--version` and `--info`.
+- Every fixed argument and every `KEY=VALUE` value is read as a **YAML
+  scalar**: `7` is an int, `true` a bool, `[1,2]` a list, `"x"` a string, and
+  a bare word stays a string. `--` ends the options.
+- **Exit codes**: `0` ran, `1` the run raised or the command line was
+  malformed, `2` the target does not load. A failure prints one line on
+  stderr and no traceback; `DAT_DEBUG=1` gives the traceback. `do_argv`
+  returns the exit code, and `dat --version` / `dat --help` work with no
+  config in reach.
+- `dat list`, `dat info` and `dat version` are reserved words, so they no
+  longer resolve through the namespace; a target with one of those names is
+  not reachable from the shell.
+- New reference page: `docs/cli.md`.
+
+### `bin/dat` — the bootstrap
+
+- A POSIX `sh` script, checked in and copied wherever it is useful, that is
+  the `dat` command from any directory with no environment activated: it
+  walks up to the nearest `.dataconfig.yaml` (exit `3` with a message if there
+  is none), picks a command — `$DAT_RUN`, the config's `run:` key,
+  `.venv/bin/python -m dvc_dat` beside the config, then `python3 -m dvc_dat`
+  — and `exec`s it with the arguments appended and the working directory
+  unchanged. With an environment active the console script of the same name
+  shadows the copy and does the same thing.
+- `.dataconfig.yaml` takes a **`run:`** key for that command (`uv run dat`,
+  `conda run -n ml dat`); a relative path in its first word resolves against
+  the config's folder. `DataConfig.run` carries it. The library never reads
+  it — only the bootstrap does.
+
+### Spec fields
+
+- `dat.path` is renamed **`dat.name`**, and it stays in the stored spec (1.x
+  popped it).
+- The `dat` section is `kind`, `base`, `name`, `do`, `args`, `kwargs`,
+  `target_exists`.
+
+### Validation without pydantic
+
+- `pydantic` is no longer a dependency. `DataConfig` is a dataclass and
+  `DatSpec` / `DatSpecCore` / `Dat._SPEC_TYPE` are gone, so `dat.spec.dat.kind`
+  no longer works — use `dat.get_spec()["dat"]["kind"]`.
+- `Dat.validate_spec(cls, spec) -> spec` is a classmethod hook called by
+  `create` and `load` on the class `dat.kind` names. A subclass overrides it;
+  a schema library inside it is the consumer's choice and dependency.
+- An unknown key in a `.dataconfig.yaml` now raises, naming the file, the key
+  and the known keys. `remote_prefix`, `default_remote` and `dat:` are no
+  longer config keys.
+
+### Removed
+
+`Dat.run` and its `_result_.yaml` keys (`start_time`, `success`,
+`execution_time`, `end_time`, `run_metadata`) · `Dat.is_valid` · the `Dat.path`
+property · `pull_if_missing` · `create_from_template` · the module-level
+`load`/`_dynamic_load_dat_class` in `dat.py` · `DatMethod` · `MethodManager` ·
+`dynamic_load_fn` · `load_dict` · `DAT_VERSION` · the `files_shallowly` mount.
+
+### Renamed modules
+
+`dvc_dat/dat.py` → `dvc_dat/core.py` (so `dvc_dat.dat` stops meaning a
+submodule) and `dvc_dat/do_fn.py` → `dvc_dat/do.py`.
+
+### Migrating from 1.x
+
+| 1.x | 2.0 |
+|-----|-----|
+| `from dvc_dat.dat import Dat` | `from dvc_dat import Dat` |
+| `Dat.manager.do` | `do` |
+| `DoManager()` | `Do()` |
+| `do.expand_spec(spec)` | `do.resolve_base(spec)` |
+| `do.merge_configs(a, b)` | `merge_dicts(a, b)` |
+| `dat.spec.dat.kind` | `dat.get_spec()["dat"]["kind"]` |
+| `dat.path` (property) | `dat.get_path()` |
+| spec key `dat.path` | spec key `dat.name` |
+| `Dat.run()` | `do(dat)` |
+| `do(dat, *args)` re-runs in place | `do(dat)` re-runs; with args it forks |
+| `dat cmd ARG --keyword value` | `dat cmd ARG keyword=value` |
+| args appended to `dat.args` | args **replace** `dat.args` |
+| args/kwargs read from `_result_.yaml` | read from the forked `_spec_.yaml` |
+| pydantic spec models | `Dat.validate_spec` override |
+| config `remote_prefix` / `default_remote` / `dat:` | delete them |
+| config `local_prefix` + `extra_local_prefixes` | `dat_folders: [first, ...]` |
+| config `python:` | `run: .venv/bin/python -m dvc_dat` (or `uv run dat`) |
+| `dat do TARGET` | `dat TARGET` |
+| `--set KEY VALUE` · `--sets a=1,b=2` | `--set KEY=VALUE`, repeated |
+| `get_spec(raw=True)` | `get_spec()` — the file holds the expanded values |
+| `Dat.manager.sync_folder` | `Dat.manager.dat_folder` |
+| implicit config on import | first use reads it; `do.configure()` for a chosen one |
+| config `mount_commands:` | `do.mount(...)` calls in your program; `run: python -m mypkg.main` for the shell |
+| `do.mount_all(cmds, relative_to)` | the `do.mount(...)` calls themselves |
+| `bin/X TARGET` | `bin/dat TARGET` — the same word as the console script |
+
+Consumers pin the tag: `dvc_dat @ git+https://github.com/oblinger/dvc-dat@v2.0.0`.
 
 ## 1.2.0 — 2026-09-21
 

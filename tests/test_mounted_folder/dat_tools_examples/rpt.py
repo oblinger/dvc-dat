@@ -14,7 +14,7 @@ def load_points_json(dat: Dat):  # noqa
 simple = {
     "dat": {
         "do": "dt.dat_report",
-        "path": "simple_report",
+        "name": "simple_report",
         "target_exists": "overwrite"
     },
     "dat_report": {
@@ -30,7 +30,7 @@ simple = {
 __main__ = {
     "dat": {
         "do": "dt.dat_report",
-        "path": "dat_report",
+        "name": "dat_report",
         "target_exists": "overwrite"
     },
     "dat_report": {
@@ -54,7 +54,7 @@ def my_test_code(dat: Dat):
 my_test = {
     "dat": {
         "do": "rpt.my_test_code",
-        "path": "dat_report",
+        "name": "dat_report",
         "target_exists": "overwrite"
     },
     "dat_report": {

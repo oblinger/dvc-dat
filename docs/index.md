@@ -1,39 +1,47 @@
 # dvc_dat Documentation
 
-**dvc_dat** is a lightweight framework for managing data artifacts with metadata and provenance tracking.
+**dvc_dat** manages data artifacts as folders that describe themselves. A dat
+is a folder whose `_spec_.yaml` is a complete, argumentless recipe for itself;
+`_result_.yaml` holds only what running it produced.
 
 ## Quick Start
 
 ```python
-from dvc_dat import Dat, do
+from dvc_dat import Dat, do, load
 
-# Create a DAT with metadata
+# Importing reads nothing; the first use below finds the nearest
+# .dataconfig.yaml, walking up from the working directory.
+
+# Create a dat with its own metadata
 dat = Dat.create(
     path="experiments/exp1",
-    spec={"name": "experiment 1", "params": {"lr": 0.01}}
+    spec={"dat": {"kind": "Dat"}, "params": {"lr": 0.01}},
 )
 
-# Load it later
-dat = Dat.load("experiments/exp1")
-print(dat.get_spec()["params"]["lr"])  # 0.01
+# Open it later
+dat = load("experiments/exp1")
+print(dat.get_spec()["params"]["lr"])   # 0.01
 
-# Load templates from mounted sources
-template = do.load("catalog.experiment")
+# Fork a template and run the fork: the arguments go into the new
+# dat's spec, and the run reads them back from there.
+result = do("catalog.experiment", epochs=200)
 ```
 
 ## Core Concepts
 
-- **[Concepts](concepts.md)** - The two namespaces (do-system vs DAT paths) and how they work together
-- **[Spec Format](spec-format.md)** - `_spec_.yaml` file format reference
-- **[Mount Commands](mount-commands.md)** - Configuring the do-system namespace
+- **[Concepts](concepts.md)** — the fork rule, the two kinds of name, explicit
+  configuration, `dat.base`, the `{}` grammar, validation
+- **[Spec Format](spec-format.md)** — `_spec_.yaml` / `_result_.yaml` reference
+- **[Mounts](mount-commands.md)** — giving a name to something that is not an import
+- **[Command Line](cli.md)** — the `dat` verbs, the bootstrap copy, exit codes
 
 ## API Reference
 
-- **[Overview](overview.md)** - API tables for Dat, DoManager, and dat_tools
+- **[Overview](overview.md)** — what `dvc_dat` exports, and every method
 
 ## Examples
 
-- **[Jupyter Notebooks](../examples/)** - Interactive examples
-  - `do_examples.ipynb` - Do-system usage
-  - `dat_examples.ipynb` - DAT creation and loading
-  - `dat_tools_examples.ipynb` - Data tools and utilities
+- **[Jupyter Notebooks](../examples/)** — interactive examples
+  - `do_examples.ipynb` — the do-system
+  - `dat_examples.ipynb` — creating and loading dats
+  - `dat_tools_examples.ipynb` — DataFrames and Excel reports

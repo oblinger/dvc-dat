@@ -4,7 +4,7 @@ dat:
   do: hello_mspipe.mspipe_build_and_run
   args: null
   kwargs: null
-  path: runs/doubler/{YYYY}-{MM}{unique}
+  name: runs/doubler/{YYYY}-{MM}{unique}
   __doc__: "Each toplevel multi-stage pipeline will have a configuration file like\
     \ this one.\n\nThis (inane) multi-state pipeline has three stages:\n- the preprocessing\
     \ stage creates two outputs: gallery.txt and results.txt file\n- the doubler stage\

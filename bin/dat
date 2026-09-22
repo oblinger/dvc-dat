@@ -1,0 +1,71 @@
+#!/bin/sh
+# dat -- the dat command from any directory, without activating an environment.
+#
+#   dat TARGET [ARG ...] [KEY=VALUE ...]     dat list | info | version | --help
+#
+# Walks up from $PWD to the nearest .dataconfig.yaml, picks a command
+# ($DAT_RUN, else the config's `run:` key, else `.venv/bin/python -m dvc_dat`
+# beside the config, else `python3 -m dvc_dat`), and execs it with the
+# arguments appended and the working directory unchanged.  The child sees
+# DAT_CLI_CONFIG, the config file: a program's own main tests it to know it
+# was launched by `dat`, and `dat.cli_main()` reads the config from it.  With
+# an environment active, the console script of the same name shadows this
+# copy and does the same thing.
+# Exit 3 when no .dataconfig.yaml is above the working directory.
+
+# -- the nearest .dataconfig.yaml, git style ---------------------------------
+dir=$PWD
+while [ ! -f "$dir/.dataconfig.yaml" ]; do
+    [ "$dir" = "/" ] && {
+        echo "dat: no .dataconfig.yaml in $PWD or any parent" >&2
+        exit 3
+    }
+    dir=$(dirname "$dir")
+done
+
+# -- tell the child it was launched by `dat`, and with which config ---------
+DAT_CLI_CONFIG=$dir/.dataconfig.yaml
+export DAT_CLI_CONFIG
+
+# -- the config's `run:` key: one top-level line, no YAML parser needed -------
+cfg_run=$(sed -n 's/^run:[[:space:]]*//p' "$dir/.dataconfig.yaml" | head -n 1 |
+    sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")
+
+# -- pick the command ---------------------------------------------------------
+if [ -n "$DAT_RUN" ]; then
+    run=$DAT_RUN
+elif [ -n "$cfg_run" ]; then
+    run=$cfg_run
+elif [ -x "$dir/.venv/bin/python" ]; then
+    run="$dir/.venv/bin/python -m dvc_dat"
+else
+    run="python3 -m dvc_dat"
+fi
+
+# The command's words, then the arguments as given.
+eval "set -- $run \"\$@\""
+
+# A relative path in the first word is relative to the config folder.
+case $1 in
+    /*) ;;
+    */*) first=$dir/$1; shift; set -- "$first" "$@" ;;
+esac
+
+case $1 in
+    */*)
+        [ -x "$1" ] || {
+            echo "dat: $1 is not an executable" >&2
+            exit 1
+        } ;;
+    *)
+        command -v "$1" >/dev/null 2>&1 || {
+            echo "dat: $1 is not on PATH" >&2
+            exit 1
+        } ;;
+esac
+
+# The config folder is the import root, for `-m mypkg.main` from anywhere.
+PYTHONPATH=$dir${PYTHONPATH:+:$PYTHONPATH}
+export PYTHONPATH
+
+exec "$@"

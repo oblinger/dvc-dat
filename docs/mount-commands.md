@@ -1,56 +1,91 @@
-# Mount Commands
+# Mounts
 
-Mount commands in `.dataconfig.yaml` define the do-system namespace—what dotted names like `catalog.experiment` resolve to.
+A dotted name is a Python name: `do.load` imports the longest importable
+prefix and `getattr`s the rest, so `os.path.join` and `mypkg.models.Trainer`
+work with nothing mounted at all. A **mount** is for the names that are *not*
+imports — a folder of YAML templates, a file outside the import path, a
+literal value — and for giving an importable thing a shorter name.
 
-## Configuration Location
+Mounts are made in code, by `do.mount(...)`, by your own program — the
+namespace is whatever the running program imported. For the shell, your
+program's main does the mounting and hands the command line to `dat.cli_main()`,
+and `.dataconfig.yaml` names that main as `run:`:
 
 ```yaml
 # .dataconfig.yaml
-local_prefix: data
-mount_commands:
-  - at: catalog
-    folder: src/catalog
-  - at: fixtures
-    module: tests.fixtures
+dat_folders: data
+run: .venv/bin/python -m mypkg.main
 ```
 
-## Mount Types
+```python
+# mypkg/main.py
+import os
+import sys
+from pathlib import Path
+import dvc_dat as dat
+
+ROOT = Path(__file__).parent.parent
+
+dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
+dat.do.mount(module="tests.fixtures", at="fixtures")
+
+if __name__ == "__main__":
+    if os.environ.get("DAT_CLI_CONFIG"):   # launched by the dat bootstrap
+        sys.exit(dat.cli_main())
+```
+
+The mounts land on the one `do` object the process holds, so a
+`from dvc_dat import do` that ran earlier sees them. A notebook gets the same
+namespace by importing `mypkg.main`; the config's folder is first on
+`sys.path`, so that import works from any directory. With no `run:` the
+bootstrap runs the library's own main, and a dotted name is a Python name and
+nothing else.
+
+## Mount forms
+
+`do.mount(*, folder | file | module | value, at="", relative_to=".")` —
+exactly one source. `at` is the name it answers to; omitted, the mount lands
+at the namespace root. A relative `folder` or `file` resolves against
+`relative_to`, which defaults to the working directory — build paths from
+`__file__` instead, as above, so they mean the same thing from anywhere.
 
 ### folder
 
-Mount a directory tree. Files become accessible by dotted path.
+Mount a directory tree. Files become dotted paths.
 
-```yaml
-- at: catalog
-  folder: src/catalog
+```python
+do.mount(folder=str(ROOT / "catalog"), at="catalog")
 ```
 
-Given this structure:
+Given:
+
 ```
-src/catalog/
+catalog/
   experiment.yaml
   models/
     baseline.yaml
 ```
 
 You get:
+
 - `catalog.experiment` → loads `experiment.yaml`
 - `catalog.models.baseline` → loads `models/baseline.yaml`
 
 **Supported files:** `.yaml`, `.json`, `.py`
 
-**Use for:** Template directories, configuration trees, organized specs.
+**Use for:** template directories, configuration trees, organized specs.
 
 ### module
 
-Mount an already-imported Python module. Module attributes become accessible.
+Mount a Python module — by import name, by file path, or the module object
+itself. Its attributes become names.
 
-```yaml
-- at: fixtures
-  module: tests.fixtures
+```python
+do.mount(module="tests.fixtures", at="fixtures")
 ```
 
 Given:
+
 ```python
 # tests/fixtures/__init__.py
 simple = {"name": "simple", "value": 42}
@@ -58,130 +93,125 @@ complex_data = {"items": [1, 2, 3]}
 ```
 
 You get:
+
 - `fixtures.simple` → `{"name": "simple", "value": 42}`
 - `fixtures.complex_data` → `{"items": [1, 2, 3]}`
 
-**Important:** The module must be imported before use. Typically done in your package's `__init__.py`:
-```python
-from tests import fixtures  # noqa: F401
-```
+A module mounted by import name resolves through `sys.modules`, so it is the
+same module object the rest of the program holds: this form is an alias, and
+costs nothing. A module mounted by file path is loaded outside the import
+system and can never be the one your program imported.
 
-**Use for:** Test fixtures, Python-defined configurations, dynamic data.
+**Use for:** a short name over a long import path.
 
 ### file
 
-Mount a single file at a name. `at:` is required — without it the entry is registered under the empty name and cannot be reached.
+Mount a single file at a name. `at` is required — without it the entry is
+registered under the empty name and cannot be reached.
 
-```yaml
-- at: helper
-  file: scripts/helper.py
+```python
+do.mount(file=str(ROOT / "scripts" / "helper.py"), at="helper")
 ```
 
 - `helper` → loads `scripts/helper.py`
 
-For YAML/JSON files, the content is loaded as a dict.
-For Python files, the module is loaded.
+YAML and JSON files load as data; Python files load as a module.
 
-**Use for:** Standalone scripts, individual config files.
+**Use for:** standalone scripts, individual config files.
 
 ### value
 
-Mount a literal value directly.
+Mount a literal value.
 
-```yaml
-- at: constants
-  value:
-    pi: 3.14159
-    e: 2.71828
+```python
+do.mount(value={"pi": 3.14159, "e": 2.71828}, at="constants")
 ```
 
 You get:
+
 - `constants.pi` → `3.14159`
 - `constants.e` → `2.71828`
 
-**Use for:** Simple constants, inline configuration.
+A string value that begins with `yaml` is parsed as YAML, which is how a spec
+can be written inline in a `.py` file:
 
-### files_shallowly
-
-Mount all files in a folder (non-recursive).
-
-```yaml
-- files_shallowly: scripts/
+```python
+__main__ = """yaml
+dat:
+  do: configurable_salutation
+name: YAML Greeter
+"""
 ```
 
-Given:
-```
-scripts/
-  process.py
-  analyze.py
-  utils/        # Ignored (subfolder)
-    helper.py
-```
+**Use for:** constants, inline specs.
 
-You get:
-- `process` → loads `scripts/process.py`
-- `analyze` → loads `scripts/analyze.py`
+### add_do_folder
 
-**Use for:** Flat directories of scripts.
-
-## The `at:` Prefix
-
-Most mount types support `at:` to add a namespace prefix:
-
-```yaml
-- at: myprefix
-  folder: some/path
+```python
+do.add_do_folder(str(ROOT / "scripts"))
 ```
 
-Without `at:`, names are mounted at the root namespace.
+Mounts every loadable under `scripts/` by **file name**, ignoring its
+subdirectory, and makes that folder the fallback the resolver walks when a
+name matches nothing else. Two files with the same base name in different
+subfolders collide, and loading either one is an error.
 
-## Choosing a Mount Type
+**Use for:** a flat command folder where the file name is the command name.
 
-| Your Need | Mount Type |
-|-----------|------------|
+## Choosing a form
+
+| Your need | Form |
+|-----------|------|
 | Directory of YAML/JSON templates | `folder` |
-| Python module with test fixtures | `module` |
+| A short name for a Python module | `module` |
 | Single standalone script | `file` |
-| Inline constants | `value` |
-| Flat folder of scripts (no subfolders) | `files_shallowly` |
+| Inline constants or an inline spec | `value` |
+| A flat folder of commands | `add_do_folder` |
+| An importable object | *nothing — `do.load` imports it* |
 
-## Complete Example
+A mounted name shadows the static resolution, so an alias that collides with
+an installed package wins — which is the one way a mount can make a Python
+name mean something else.
+
+## Complete example
 
 ```yaml
 # .dataconfig.yaml
-local_prefix: data
-
-mount_commands:
-  # Project templates
-  - at: catalog
-    folder: src/myproject/catalog
-
-  # Test fixtures (Python module)
-  - at: fixtures
-    module: tests.fixtures
-
-  # Utility scripts
-  - at: scripts
-    folder: src/scripts
-
-  # Global constants
-  - at: config
-    value:
-      debug: false
-      version: "1.0.0"
+dat_folders: data
+run: .venv/bin/python -m myproject.main
 ```
 
-Usage:
+```python
+# src/myproject/main.py
+import os
+import sys
+from pathlib import Path
+import dvc_dat as dat
+
+SRC = Path(__file__).parent.parent
+
+dat.do.mount(folder=str(SRC / "myproject" / "catalog"), at="catalog")
+dat.do.mount(module="tests.fixtures", at="fixtures")
+dat.do.mount(folder=str(SRC / "scripts"), at="scripts")
+dat.do.mount(value={"debug": False, "version": "2.0.0"}, at="config")
+
+if __name__ == "__main__":
+    if os.environ.get("DAT_CLI_CONFIG"):   # launched by the dat bootstrap
+        sys.exit(dat.cli_main())
+```
+
+Usage, from a program that has imported `myproject.main`:
+
 ```python
 from dvc_dat import do
 
-# Load a template
+# Load a template; the config installs itself on first use
 spec = do.load("catalog.experiment")
 
 # Get a fixture
 fixture = do.load("fixtures.simple")
 
-# Run a script
+# Fork a script's spec and run it
 do("scripts.process", input="data.csv")
 
 # Access a constant
@@ -190,5 +220,5 @@ version = do.load("config.version")
 
 ## See Also
 
-- [Core Concepts](concepts.md) - How mount commands fit in
-- [Spec Format](spec-format.md) - What templates contain
+- [Core Concepts](concepts.md) — how `run:` and the import root fit in
+- [Spec Format](spec-format.md) — what templates contain
