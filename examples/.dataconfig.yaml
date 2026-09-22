@@ -4,18 +4,8 @@
 # Local folder where example Dats are stored
 local_prefix: ../tests/test_sync_folder/
 
-# Remote storage prefix
-remote_prefix: example-data/
-
-# Default remote protocol
-default_remote: gs
-
 # Additional local folders to search for Dats
 extra_local_prefixes: []
-
-# Dat class mappings
-dat:
-  mappings: {}
 
 # Mount commands for the "do" system
 mount_commands:

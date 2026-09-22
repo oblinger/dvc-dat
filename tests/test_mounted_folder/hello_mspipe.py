@@ -1,5 +1,6 @@
 import os
 from dvc_dat import Dat, do, DatContainer, __version__
+from dvc_dat.core import merge_dicts
 
 """
 HELLO-MSPIPE - Hello-world example of a configurable multi-stage mcproc pipeline.
@@ -16,7 +17,7 @@ The real multi-stage pipe might can be patterned from this example with
 __main__ = {
     "dat": {                         # Section controls execution of the whole pipeline
         "kind": "DatContainer",       # The python class for a multi-stage runs
-        "path": "runs/mspipe/{YY}-{MM}{unique}",  # Template for Dat's location
+        "name": "runs/mspipe/{YY}-{MM}{unique}",  # Template for Dat's location
         "do": "hello_mspipe.mspipe_build_and_run",   # Creates and runs the pipeline
     },
     "common": {
@@ -44,7 +45,7 @@ def mspipe_build(dc: DatContainer):
     common_template = Dat.get(dc, "common")
     for stage_name, stage_template in Dat.get(dc, "stages").items():
         sub_path: str = os.path.join(path, stage_name)
-        sub_spec = do.merge_configs(stage_template, common_template)
+        sub_spec = merge_dicts(stage_template, common_template)
         Dat.create(path=sub_path, spec=sub_spec)
     return dc
 

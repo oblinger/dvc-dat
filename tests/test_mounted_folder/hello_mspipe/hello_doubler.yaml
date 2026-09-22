@@ -15,7 +15,7 @@ dat:
 
   base: hello_mspipe
   kind: doubler    # We call this (inane) multi-stage pipeline a "doubler"
-  path: "runs/doubler/{YYYY}-{MM}{unique}"  # where result runs are stored
+  name: "runs/doubler/{YYYY}-{MM}{unique}"  # where result runs are stored
 
 common:
   debug_level: 3    # The only new config parameter common to all stages

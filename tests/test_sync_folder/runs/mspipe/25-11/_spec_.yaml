@@ -4,7 +4,7 @@ dat:
   do: hello_mspipe.mspipe_build_and_run
   args: null
   kwargs: null
-  path: runs/mspipe/{YY}-{MM}{unique}
+  name: runs/mspipe/{YY}-{MM}{unique}
 common:
   dat:
     kind: Mcproc
