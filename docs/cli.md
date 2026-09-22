@@ -75,7 +75,7 @@ The `TARGET` itself is never parsed as YAML.
 | `--set DOTTED.KEY VALUE` | Set one spec key of a template before it forks. The value is a string. |
 | `--sets DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2,...` | Set several at once. |
 | `--json DOTTED.KEY '<json>'` | Set one spec key to a parsed JSON value. |
-| `--print` | Print the `do(...)` call instead of making it. |
+| `--dry-run` | Print the `do(...)` call this line would make, without making it. |
 | `--usage` | Print `TARGET`'s own usage — a `<base>.usage` value, else the spec's `usage` key — else the general usage. |
 
 `--set` / `--sets` / `--json` update a **template spec**; using them on a target

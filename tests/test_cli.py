@@ -187,7 +187,7 @@ class TestArguments:
         assert out.endswith("(7, 'Maxim, My lucky number is 7')")
 
     def test_print_shows_the_call(self):
-        code, out, _ = dat("echo_args", "7", "k=1", "--print")
+        code, out, _ = dat("echo_args", "7", "k=1", "--dry-run")
         assert (code, out) == (0, "do('echo_args', 7, k=1)")
 
     def test_set(self):

@@ -78,7 +78,7 @@ one runner and the one namespace. Breaking on every count below.
   ...` is still the shorthand for `dat do TARGET ...`.
 - **Keyword arguments are `KEY=VALUE`**, not `--keyword value`. The 1.x
   `--keyword value` / `--flag` forms are gone; the only flags left are
-  `--set`, `--sets`, `--json`, `--print`, `--usage`, `--help`, `--version`
+  `--set`, `--sets`, `--json`, `--dry-run`, `--usage`, `--help`, `--version`
   and `--info`.
 - Every fixed argument and every `KEY=VALUE` value is read as a **YAML
   scalar**: `7` is an int, `true` a bool, `[1,2]` a list, `"x"` a string, and

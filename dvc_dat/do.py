@@ -502,7 +502,7 @@ OPTIONS
     --json DOTTED.KEY '<json value>'
                 Update those spec keys of a template before it forks
 
-    --print     Print the python do() call instead of making it
+    --dry-run   Print the python do() call instead of making it
     --usage     Print TARGET's own usage (a <base>.usage value, or the spec's
                 usage key), else this message
 
@@ -565,7 +565,7 @@ def _cmd_do(argv: List[str]) -> int:
             usage = cmd.get("usage")
         print(usage or USAGE)
         return 0
-    elif "print" in flags:
+    elif "dry-run" in flags:
         shown = ([repr(target)] + [repr(a) for a in fixed]
                  + [f"{k}={v!r}" for k, v in kwargs.items()])
         print(f"do({', '.join(shown)})")
@@ -658,7 +658,7 @@ def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
             (pairs,) = _operands(argv, i, 1)
             Dat.sets(overrides, *pairs.split(","))
             i += 1
-        elif arg in ("--print", "--usage"):
+        elif arg in ("--dry-run", "--usage"):
             flags.add(arg[2:])
         elif (match := _KWARG.match(arg)):
             kwargs[match.group(1)] = _scalar(arg[match.end():])

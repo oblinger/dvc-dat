@@ -138,7 +138,7 @@ dat version
 dat do TARGET --set DOTTED.KEY VALUE
 dat do TARGET --sets DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2
 dat do TARGET --json DOTTED.KEY '<json>'
-dat do TARGET --print
+dat do TARGET --dry-run
 dat do TARGET --usage
 ```
 
