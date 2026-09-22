@@ -1,5 +1,6 @@
 """The 2.0 contract: specs that fork, one `do`, one `{}` expander, `validate_spec`."""
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,7 +13,9 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from dvc_dat import Dat, DataConfig, Do, do, expand, expand_spec  # noqa: E402
+from dvc_dat import (  # noqa: E402
+    Dat, DataConfig, Do, do, expand, expand_spec, merge_dicts,
+)
 from dvc_dat.core import DATA_CONFIG_FILE, SPEC_YAML, RESULT_YAML  # noqa: E402
 
 V2 = "v2tests"
@@ -378,3 +381,29 @@ def test_increment_on_a_plain_name_counts_up(tmp_path, restore_manager):
     assert Dat.create(spec=spec).get_path_name() == "plain"
     assert Dat.create(spec=spec).get_path_name() == "plain_2"
     assert Dat.create(spec=spec).get_path_name() == "plain_3"
+
+
+DOCS = REPO_ROOT / "docs"
+
+
+@pytest.mark.parametrize("page", ["concepts.md", "spec-format.md"])
+def test_the_documented_variation_recipe_runs_verbatim(page):
+    """The docs' `merge_dicts(d.get_spec(), ...)` recipe, executed as written."""
+    blocks = re.findall(r"```python\n(.*?)```", (DOCS / page).read_text(), re.S)
+    (recipe,) = [b for b in blocks if "merge_dicts(d.get_spec()" in b]
+    parent_name = f"{V2}/variation_{page.split('.')[0]}"
+    for stale in (parent_name, parent_name + "_2"):
+        if Dat.manager.exists(stale):
+            Dat.load(stale).delete()
+    d = Dat.create(path=parent_name, spec={"gameset": "G1"})
+
+    with pytest.raises(FileExistsError):     # the recipe without increment
+        Dat.create(spec=merge_dicts(d.get_spec(), {"gameset": "G7"}))
+
+    namespace = {"d": d}
+    exec(recipe, namespace)
+    child = Dat.load(parent_name + "_2")
+    assert child.get_spec()["dat"]["name"] == parent_name + "_2"
+    assert stored(d)["dat"]["name"] == parent_name   # the parent is untouched
+    for dat in (child, d):
+        dat.delete()

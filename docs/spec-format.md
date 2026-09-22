@@ -187,6 +187,19 @@ spec = merge_dicts(do.load("configs.bb.base"), {"gameset": "G7"})
 Dat.create(spec=spec)
 ```
 
+A created dat's spec carries the folder it landed in as `dat.name`, so a
+variation of an existing dat `d` asks to land beside it — without
+`increment` the create raises `FileExistsError`:
+
+```python
+from dvc_dat import Dat, merge_dicts
+
+spec = merge_dicts(d.get_spec(),
+                   {"dat": {"target_exists": "increment"},
+                    "gameset": "G7"})
+Dat.create(spec=spec)
+```
+
 ## Validation
 
 `Dat.validate_spec(cls, spec) -> spec` runs on both `create` and `load`, on the

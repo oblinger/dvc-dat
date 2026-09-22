@@ -17,7 +17,8 @@ Every user-visible change to `dvc_dat`, newest first.
   shadowing must pick another `at`.
 - A created dat's spec never changes, and there is no `fork` method: the
   recipe is `Dat.create(spec=merge_dicts(d.get_spec(), overrides))`,
-  documented in `docs/concepts.md`.
+  documented in `docs/concepts.md` (the overrides must carry
+  `{"dat": {"target_exists": "increment"}}`; see 3.0.0).
 
 ## 2.0.2 — 2026-09-22
 
