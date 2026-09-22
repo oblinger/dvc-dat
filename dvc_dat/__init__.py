@@ -6,7 +6,7 @@
     load("runs/2026-09/exp")              # opens a dat on disk
 """
 
-__version__ = "2.0.1"
+__version__ = "2.0.2"
 
 from .core import (
     DataConfig,
@@ -15,6 +15,7 @@ from .core import (
     DatManager,
     expand,
     expand_spec,
+    merge_dicts,
 )
 from .do import Do, cli_main, do, do_argv
 
@@ -32,4 +33,5 @@ __all__ = [
     "load",
     "expand",
     "expand_spec",
+    "merge_dicts",
 ]
