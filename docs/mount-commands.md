@@ -1,9 +1,9 @@
 # Mount Commands
 
 `mount_commands` in `.dataconfig.yaml` build the do-system namespace: what a
-dotted name like `catalog.experiment` resolves to. `do.configure(...)` applies
-them — onto the `do` object the process already holds, so a `from dvc_dat import
-do` that ran earlier sees them.
+dotted name like `catalog.experiment` resolves to. They are applied on first use — or by an
+explicit `do.configure(...)` — onto the `do` object the process already holds,
+so a `from dvc_dat import do` that ran earlier sees them.
 
 A dotted name that matches no mount is still resolved: `do.load` imports the
 longest importable prefix of the name and `getattr`s the rest, so
@@ -195,9 +195,7 @@ Usage:
 ```python
 from dvc_dat import do
 
-do.configure()
-
-# Load a template
+# Load a template; the config installs itself
 spec = do.load("catalog.experiment")
 
 # Get a fixture

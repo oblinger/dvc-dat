@@ -51,7 +51,7 @@ what `dat.do` names. `dat.run_at` and `dat.run_time` land in the results.
 |--------|-------------|
 | `do.load(NAME, default=, kind=)` | The object a dotted name names |
 | `do.name_of(OBJ) -> str` | The name `load` takes back to `OBJ` |
-| `do.configure(SOURCE) -> DataConfig` | Read a config, build the manager, mount |
+| `do.configure(SOURCE) -> DataConfig` | Install a chosen config; first use does this for you |
 | `do.config` | The `DataConfig` in force, or `None` |
 | `do.mount(at=, folder=/file=/module=/value=)` | Add one name to the namespace |
 | `do.mount_all(COMMANDS, relative_to=)` | Apply a config's mount table |

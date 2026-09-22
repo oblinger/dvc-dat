@@ -8,6 +8,12 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## 2.0.0 — 2026-09-21
 
+- `do` configures itself on first use: `import dvc_dat` still reads no
+  filesystem, but the first `do(...)`, `do.load(...)`, `Dat.load`,
+  `Dat.create` or `Dat.manager` access discovers the nearest
+  `.dataconfig.yaml` and applies its `mount_commands`. `do.configure(source)`
+  remains, for a config chosen by hand.
+
 A dat's spec is now a complete, argumentless recipe for itself, and `do` is the
 one runner and the one namespace. Breaking on every count below.
 

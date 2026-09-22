@@ -55,6 +55,21 @@ class Do:
         self.registered_values = None
         self.do_folder = None
         self.config = None
+        self._configuring = False
+
+    def _ensure_configured(self) -> None:
+        """Install a config the first time one is needed.
+
+        Import reads no filesystem; the first `load`, call or `Dat.manager` access
+        discovers `.dataconfig.yaml` from the working directory and applies its mount
+        table.  `configure(...)` stays for a config chosen by hand.
+        """
+        if self.config is None and not self._configuring:
+            self._configuring = True
+            try:
+                self.configure()
+            finally:
+                self._configuring = False
 
     # -- running -------------------------------------------------------------
 
@@ -73,6 +88,7 @@ class Do:
         `dat.run_time` land in the results.  A template with no `dat.do` just
         creates the dat and returns it.
         """
+        self._ensure_configured()
         obj = self.load(target) if isinstance(target, str) else target
         try:
             if isinstance(obj, Dat):
@@ -174,6 +190,7 @@ class Do:
         unless `default` is given.  A `.py`/`.yaml`/`.json` mount's contents are
         returned as loaded; a string starting with `yaml` is parsed as YAML.
         """
+        self._ensure_configured()
         try:
             result = self._load_mounted(dotted_name)
             if result is _DO_NULL:

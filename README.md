@@ -11,9 +11,7 @@ namespace and the one runner.
 ```python
 from dvc_dat import Dat, do, load
 
-# Importing dvc_dat reads no files; configuring is explicit.
-do.configure()
-
+# Importing reads no files; the first use finds .dataconfig.yaml.
 # A dotted name resolves through the mount table, then by import.
 template = do.load("catalog.experiment")
 

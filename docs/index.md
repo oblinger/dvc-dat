@@ -9,8 +9,8 @@ is a folder whose `_spec_.yaml` is a complete, argumentless recipe for itself;
 ```python
 from dvc_dat import Dat, do, load
 
-# Read the nearest .dataconfig.yaml; importing dvc_dat reads nothing.
-do.configure()
+# Importing reads nothing; the first use below finds the nearest
+# .dataconfig.yaml, walking up from the working directory.
 
 # Create a dat with its own metadata
 dat = Dat.create(

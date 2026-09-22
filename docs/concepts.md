@@ -8,10 +8,8 @@ itself. `_result_.yaml` holds only what running it produced.
 ```python
 from dvc_dat import Dat, do, load
 
-# find and apply the nearest .dataconfig.yaml
-do.configure()
-
-# a dotted name -> a Python object
+# a dotted name -> a Python object; the first call finds and
+# applies the nearest .dataconfig.yaml
 template = do.load("catalog.experiment")
 
 # fork the template, run the fork
@@ -64,27 +62,37 @@ A dat's location carries no meaning the library relies on. Metadata lives in the
 spec and in the results, and a consumer finds dats by querying their contents,
 never by parsing a path.
 
-## `do` is a singleton, and configuring it is explicit
+## `do` is a singleton, and it configures itself on first use
 
 `import dvc_dat` touches no filesystem: it hands you a `do` that can already
 resolve importable names, with `do.config is None` and no `Dat.manager` built.
-`do.configure(source)` reads a `.dataconfig.yaml` — the nearest one walking up
-from the working directory, or from a folder or file you name — builds
-`Dat.manager` from it, and applies its `mount_commands` **onto the same `do`
-object**. A name imported before `configure` therefore keeps working:
+The **first** call that needs a config — a `do(...)`, a `do.load(...)`, a
+`Dat.load` / `Dat.create`, any touch of `Dat.manager` — reads the nearest
+`.dataconfig.yaml` walking up from the working directory, builds `Dat.manager`
+from it, and applies its `mount_commands` onto that same `do` object. Nothing
+in an ordinary program calls `configure`:
 
 ```python
-# early, at import time
 from dvc_dat import do
 
-# ... later; the `do` above is now mounted
+# finds .dataconfig.yaml on the way
+do("mypkg.train.baseline", lr=0.5)
+```
+
+`do.configure(source)` stays for the cases where the default is wrong — a
+config somewhere other than above the working directory, or one you built in
+code:
+
+```python
+# a folder, a config file, or a DataConfig
 do.configure(project_root)
 ```
 
-The `dat` command-line tool configures itself (see
-[Command Line](cli.md)). A library that embeds `dvc_dat` should call
-`do.configure()` where it wants the config read, rather than inheriting
-whatever directory the process started in.
+Mounts land on the same object either way, so a name imported before the
+config was installed keeps resolving. The `dat` command-line tool needs no
+special handling (see [Command Line](cli.md)); a long-lived service that
+starts in one directory and works in another should call `do.configure()`
+explicitly rather than depend on where the process happened to launch.
 
 ## Templates: `dat.base`
 

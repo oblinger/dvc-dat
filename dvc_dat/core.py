@@ -538,6 +538,9 @@ class Dat:
     @classproperty
     def manager(cls) -> DatManager:
         if Dat._manager is None:
+            from .do import do
+            do._ensure_configured()          # also builds Dat._manager
+        if Dat._manager is None:
             Dat._manager = DatManager()
         return Dat._manager
 

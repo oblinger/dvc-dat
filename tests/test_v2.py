@@ -313,3 +313,29 @@ class TestCleanup:
         shutil.rmtree(sync / V2, ignore_errors=True)
         shutil.rmtree(sync / "anonymous", ignore_errors=True)
         assert not (sync / V2).exists()
+
+
+def test_first_use_installs_the_config_and_its_mounts(tmp_path, monkeypatch,
+                                                      restore_manager):
+    """T010 Q1: nobody calls `configure()` -- the first use discovers one."""
+    pkg = tmp_path / "lazypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "job.py").write_text("def run(dat):\n    return 'ran'\n")
+    (tmp_path / DATA_CONFIG_FILE).write_text(
+        "local_prefix: warehouse\n"
+        "mount_commands:\n"
+        "  - {module: lazypkg.job, at: lazy}\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    fresh = Do()
+    assert fresh.config is None, "constructing a Do must read no filesystem"
+
+    fn = fresh.load("lazy.run")                 # the mount, with no configure()
+    assert callable(fn) and fn(None) == "ran"
+    assert fresh.config is not None             # ... it installed one on the way
+    assert fresh.load("lazypkg.job.run") is fn  # the static floor still resolves
+
+    Dat._manager = None
+    assert Dat.manager.sync_folder.rstrip("/").endswith("warehouse")
