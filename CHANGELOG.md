@@ -6,6 +6,15 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.0.1 — 2026-09-22
+
+- A folder mount answers to the dotted paths `docs/mount-commands.md` § folder
+  promises: `at` prefixes the folder and a nested file answers to its path
+  (`catalog.models.baseline`). In 2.0.0 the index held both but lookup tried
+  only the first dotted part, so `at=` on a folder mount and every nested file
+  were unreachable. A dat folder inside a mounted folder answers to
+  `<path>._spec_`.
+
 ## 2.0.0 — 2026-09-21
 
 - `do` configures itself on first use: `import dvc_dat` still reads no

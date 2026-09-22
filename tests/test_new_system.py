@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from dvc_dat import Dat, DataConfig, DatManager, cli_main, do  # noqa: E402
 from dvc_dat.core import DATA_CONFIG_FILE  # noqa: E402
+from dvc_dat.do import Do  # noqa: E402
 
 
 class TestDataConfig:
@@ -143,3 +144,40 @@ class TestDatCliConfigVariable:
         monkeypatch.setenv("DAT_CLI_CONFIG", str(tmp_path / "nope.yaml"))
         with pytest.raises(ValueError, match="DAT_CLI_CONFIG"):
             cli_main(["dat", "info"])
+
+
+class TestFolderMountPaths:
+    """A folder mount answers to dotted paths: `at`, then the file's path under the
+    folder, as `docs/mount-commands.md` § folder promises."""
+
+    @pytest.fixture
+    def catalog(self, tmp_path):
+        (tmp_path / "models").mkdir()
+        (tmp_path / "experiment.yaml").write_text("dat:\n  kwargs: {game: G1}\n")
+        (tmp_path / "models" / "baseline.yaml").write_text("lr: 0.1\n")
+        (tmp_path / "models" / "helpers.py").write_text("def double(x):\n    return 2 * x\n")
+        return tmp_path
+
+    def test_at_prefixes_the_folder(self, catalog):
+        probe = Do()
+        probe.mount(folder=str(catalog), at="catalog")
+        assert probe.load("catalog.experiment")["dat"]["kwargs"] == {"game": "G1"}
+        assert probe.load("catalog.experiment.dat.kwargs.game") == "G1"
+
+    def test_nested_files_answer_to_their_path(self, catalog):
+        probe = Do()
+        probe.mount(folder=str(catalog), at="catalog")
+        assert probe.load("catalog.models.baseline") == {"lr": 0.1}
+        assert probe.load("catalog.models.baseline.lr") == 0.1
+        assert probe.load("catalog.models.helpers.double")(4) == 8
+
+    def test_without_at_the_folder_is_the_root(self, catalog):
+        probe = Do()
+        probe.mount(folder=str(catalog))
+        assert probe.load("models.baseline.lr") == 0.1
+
+    def test_a_missing_key_under_a_nested_file_is_named(self, catalog):
+        probe = Do()
+        probe.mount(folder=str(catalog), at="catalog")
+        with pytest.raises(KeyError, match="'nope' is missing from"):
+            probe.load("catalog.models.baseline.nope")

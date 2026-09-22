@@ -216,6 +216,15 @@ class Do:
             return copy.deepcopy(value) if isinstance(value, dict) else value
         obj = self.get_base(file_base, default=None)
         if obj is None:
+            # A folder mount indexes its files by path under `at`: `catalog/models/baseline`
+            # answers to `catalog.models.baseline`, so try the longest such prefix.
+            for cut in range(len(parts), 1, -1):
+                key = "/".join(parts[:cut])
+                if key in self.base_locations:
+                    obj = self.get_base(key)
+                    file_base, parts = key, [key] + parts[cut:]
+                    break
+        if obj is None:
             if self.do_folder and (result := _resolve_in_folder(self.do_folder, parts)) is not None:
                 return result
             return _DO_NULL
