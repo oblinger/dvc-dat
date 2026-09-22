@@ -80,8 +80,9 @@ When `dat.name` or `Dat.create(path=...)` contains template variables:
 | `{HH}` | Hour (00-23) | 14 |
 | `{mm}` | Minute (00-59) | 30 |
 | `{SS}` | Second (00-59) | 45 |
-| `{cwd}` | Current working directory name | myproject |
-| `{unique}` | Auto-incrementing number | 1, 2, 3... |
+| `{now}` | Timestamp `yy-mm-dd_HH-MM-SS` | 25-01-15_14-30-45 |
+| `{cwd}` | Current working directory, full path | /home/me/myproject |
+| `{unique}` | Empty on first use, then `_2`, `_3`, ... | ``, _2, _3 |
 
 **Example:**
 ```yaml
@@ -89,7 +90,7 @@ dat:
   kind: Dat
   name: "runs/{YYYY}-{MM}-{DD}/exp_{unique}"
 ```
-Creates paths like `runs/2025-01-15/exp_1`, `runs/2025-01-15/exp_2`, etc.
+Creates paths like `runs/2025-01-15/exp`, `runs/2025-01-15/exp_2`, `runs/2025-01-15/exp_3`, etc.
 
 ## Spec Expansion (dat.base)
 

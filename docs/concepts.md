@@ -40,7 +40,7 @@ dat = Dat.create(path="runs/2025-01/experiment2", spec={"name": "exp2"})
 ```
 
 - Paths like `runs/experiment1` or `upstream/kegg/compounds`
-- Relative to `sync_folder` (from `.dataconfig.yaml`) or absolute
+- Relative to `local_prefix` (from `.dataconfig.yaml`, default `data/`) or absolute
 - Each DAT is a folder containing `_spec_.yaml`
 
 ## The Two Managers
@@ -75,7 +75,7 @@ Manages DAT creation, loading, and persistence.
 └─────────────────┘     └─────────────────┘     └─────────────────┘
        │                        │                       │
   catalog/                 do.load()              Dat.create()
-  experiment.yaml          expands spec          writes folder
+  experiment.yaml          loads spec            writes folder
 ```
 
 **Step by step:**
@@ -85,7 +85,7 @@ Manages DAT creation, loading, and persistence.
    # src/catalog/experiment.yaml
    dat:
      kind: Dat
-     name: "runs/{YYYY}-{MM}/{unique}"
+     name: "runs/{YYYY}-{MM}/exp{unique}"
    experiment_type: baseline
    ```
 
@@ -99,19 +99,20 @@ Manages DAT creation, loading, and persistence.
 3. **Create a DAT** from the template:
    ```python
    dat = Dat.create(spec="catalog.experiment")
-   # Creates: data/runs/2025-01/Dat_1/_spec_.yaml
+   # Creates: data/runs/2025-01/exp/_spec_.yaml  (then exp_2, exp_3, ...)
+   # `dat.base` is NOT expanded here; `do(dat)` and `do.expand_spec()` expand it
    ```
 
 4. **Load it later**:
    ```python
-   dat = Dat.load("runs/2025-01/Dat_1")
+   dat = Dat.load("runs/2025-01/exp")
    print(dat.get_spec()["experiment_type"])  # "baseline"
    ```
 
 ## Configuration: .dataconfig.yaml
 
 ```yaml
-sync_folder: data              # Where DATs are stored
+local_prefix: data             # Where DATs are stored
 mount_commands:                # Do-system namespace
   - at: catalog
     folder: src/catalog

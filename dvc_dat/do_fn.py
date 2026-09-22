@@ -552,24 +552,21 @@ SYNOPSIS
     do KEY_WORD_ARGS  ...  CMD_NAME FIXED_ARGS ...
 
     do --usage
-    do --get DOTTED.KEY
-    do --set DOTTED.KEY=VALUE
-    do --sets "DOTTED.KEY1=VALUE1, DOTTED.KEY2=VALUE2"
+    do CMD_NAME --set DOTTED.KEY VALUE
+    do CMD_NAME --sets "DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2"
+    do CMD_NAME --json DOTTED.KEY '<json>'
 
 DESCRIPTION
     Executes the do command named by CMD_NAME.
     
-    --usage     Prints the command-specific usage info if it exists
-    
-    --USAGE     Prints this usage message
+    --usage     Prints the command-specific usage info if it exists,
+                else this message
     
     --print     Prints the python do call with args, but does not call it.
     
-    --get DOTTED.NAME
-                Expands the config for a command and returns an arg from it
-    
-    --set DOTTED.NAME=VALUE
+    --set DOTTED.NAME VALUE
     --sets DOTTED.NAME1=VALUE1,DOTTED.NAME2=VALUE2,...
+    --json DOTTED.NAME '<json value>'
                 Expands the config for a command and updates the indicated
                 config parameters before invoking the indicated command
 

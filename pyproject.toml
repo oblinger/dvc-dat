@@ -14,6 +14,9 @@ keywords = ["dvc"]
 readme = "README.md"
 dynamic = ["version"]
 
+[project.optional-dependencies]
+excel = ["xlsxwriter"]
+
 [project.scripts]
 dat = "dvc_dat.__main__:main"
 

@@ -59,7 +59,7 @@ Dat.get(x, "a.b.c")()     # returns 20
 |---------------------------------|---------------------------------------------------|
 | Dat.create(path=, spec=) -> Dat | Create a new Dat from path template and spec.     |
 | Dat.load(NAME) -> Dat           | Load a Dat by name                                |
-| Dat.exists(NAME) -> bool        | Returns True iff named Dat exists                 |
+| Dat.manager.exists(NAME) -> bool| Returns True iff named Dat exists                 |
 | .get_spec() -> Spec             | Returns the spec Dict tree for this Dat.          |
 | .get_results() -> Spec          | Returns the results Dict tree for this Dat.       |
 | .get_path() -> Path             | Get the path of the Dat.                          |
@@ -95,7 +95,6 @@ source code objects and functions.
 | .mount(module=, at=)             | Registers a python module by name            |
 | .mount(file=, at=)               | Registers a .json, .yaml, or .py file        |
 | .mount(value=, at=)              | Registers structured value in do space       |
-| .mount(files_shallowly=, at=)    | Registers ALL .json, .yaml, or .py shallowly | 
 | .add_do_folder(PATH) -> None     | Set the folder to load python objects from.  |
 | .get_base(BASE) -> Any           | Get the base object based on it name.        |
 | .merge_configs(BASE, override)   | Merge a config with an override.             |
@@ -127,7 +126,7 @@ Like git, dvc-dat walks up the path from the current working directory looking f
 
 ```yaml
 # .dataconfig.yaml
-sync_folder: data
+local_prefix: data
 mount_commands:
   - at: catalog
     folder: src/catalog

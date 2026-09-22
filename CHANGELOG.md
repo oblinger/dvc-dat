@@ -8,6 +8,15 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- Docs describe the code: `.dataconfig.yaml` key is `local_prefix` (the
+  documented `sync_folder` was silently ignored); `file:` mounts need `at:`;
+  `{cwd}` is the full path, `{unique}` is empty then `_2`, `_3`; `{now}`
+  documented; `Dat.manager.exists`; `Dat.create` does not expand `dat.base`;
+  the unimplemented `files_shallowly` mount and `--get` / `--USAGE` flags are
+  no longer advertised.
+- `dat --info` works again (it read a `DatManager.folder` that does not exist).
+- `xlsxwriter` is an optional dependency: `pip install dvc_dat[excel]`.
+- Semver rule in `docs/about.md`.
 - CI: GitHub Actions runs `uv run python -m pytest` on push to `main` and on
   every pull request.
 - Package is correct on a machine that is not the author's: the committed

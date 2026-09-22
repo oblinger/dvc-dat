@@ -6,7 +6,7 @@ Mount commands in `.dataconfig.yaml` define the do-system namespace—what dotte
 
 ```yaml
 # .dataconfig.yaml
-sync_folder: data
+local_prefix: data
 mount_commands:
   - at: catalog
     folder: src/catalog
@@ -70,13 +70,13 @@ from tests import fixtures  # noqa: F401
 
 ### file
 
-Mount a single file.
+Mount a single file at a name. `at:` is required — without it the entry is registered under the empty name and cannot be reached.
 
 ```yaml
-- file: scripts/helper.py
+- at: helper
+  file: scripts/helper.py
 ```
 
-The file's basename (without extension) becomes the name:
 - `helper` → loads `scripts/helper.py`
 
 For YAML/JSON files, the content is loaded as a dict.
@@ -149,7 +149,7 @@ Without `at:`, names are mounted at the root namespace.
 
 ```yaml
 # .dataconfig.yaml
-sync_folder: data
+local_prefix: data
 
 mount_commands:
   # Project templates

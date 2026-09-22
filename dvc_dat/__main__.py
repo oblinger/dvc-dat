@@ -10,12 +10,14 @@ def main():
         print("\n# -- Dat Configuration Info -- ")
         print(f"# Dat version      : {DAT_VERSION}")
         print(f"# Dat Data Folder  : {Dat.manager.sync_folder}")
-        print(f"# .datconfig folder: {Dat.manager.folder}")
-        print(f"# .datconfig.json contents:")
-        config = os.path.join(Dat.manager.folder, ".datconfig.json")
-        if not os.path.exists(config):
-            config = os.path.join(Dat.manager.folder, ".datconfig.yaml")
-        os.system(f"cat '{config}'")
+        print(f"# .dataconfig folder: {Dat.manager.config.cwd}")
+        config = os.path.join(Dat.manager.config.cwd, ".dataconfig.yaml")
+        if os.path.exists(config):
+            print(f"# .dataconfig.yaml contents:")
+            with open(config) as f:
+                print(f.read())
+        else:
+            print("# (no .dataconfig.yaml found)")
         print()
     else:
         return do_argv(argv)
