@@ -26,7 +26,7 @@ from dvc_dat import (
 | `DataConfig` | The `.dataconfig.yaml` values |
 | `Do` | The do class — one instance, `do` |
 | `do` | The singleton: namespace, runner, configuration |
-| `do_argv` | The `dat` command line |
+| `do_argv` | The `dat` command line; returns the exit code |
 | `load` | `Dat.load` — open a dat by path or name |
 | `expand` / `expand_spec` | The `{}` grammar |
 
@@ -130,20 +130,28 @@ See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
 ## Command line
 
 ```
-dat --info
-dat CMD_NAME FIXED_ARGS ... --keyword VALUE ...
-dat CMD_NAME --set DOTTED.KEY VALUE
-dat CMD_NAME --sets "DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2"
-dat CMD_NAME --json DOTTED.KEY '<json>'
-dat CMD_NAME --usage
-dat CMD_NAME --print
+dat do TARGET [ARG ...] [KEY=VALUE ...]
+dat TARGET [ARG ...] [KEY=VALUE ...]
+dat list [PREFIX]
+dat info
+dat version
+
+dat do TARGET --set DOTTED.KEY VALUE
+dat do TARGET --sets DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2
+dat do TARGET --json DOTTED.KEY '<json>'
+dat do TARGET --print
+dat do TARGET --usage
 ```
 
-`dat` configures itself from the nearest `.dataconfig.yaml`. A command that is
-a template spec is forked: the fixed arguments become its `dat.args`, the
-keyword arguments update its `dat.kwargs`, and `--set` / `--sets` / `--json`
-update any spec key. `--info` prints the version, the sync folder and the
-config that is in force.
+`dat` configures itself from the nearest `.dataconfig.yaml`. A target that
+is a template spec is forked: the fixed arguments become its `dat.args`,
+the `KEY=VALUE` pairs update its `dat.kwargs`, and `--set` / `--sets` /
+`--json` update any spec key. Every argument value is a YAML scalar. The
+exit code is `0` ran, `1` failed, `2` the target does not load.
+
+`bin/X` runs a target from any directory without activating an
+environment. See **[Command Line](cli.md)** for every verb, flag and exit
+code, the `X` bootstrap and the `python:` config key.
 
 ## `.dataconfig.yaml`
 
@@ -153,6 +161,7 @@ Like git, dvc-dat walks up from the working directory looking for
 ```yaml
 local_prefix: data
 extra_local_prefixes: []
+python: .venv
 mount_commands:
   - at: catalog
     folder: src/catalog

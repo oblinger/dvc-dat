@@ -44,9 +44,15 @@ Excel reports need the optional extra: `pip install -e ".[excel]"`.
 ## Usage
 
 ```bash
-cd tests; ./do hello_world
-dat --info
+dat do hello_world
+dat hello_again.salutation Maxim lucky_number=7
+dat list
+dat info
 ```
+
+`dat` configures itself from the nearest `.dataconfig.yaml`; `bin/X`
+runs a target from any directory with no environment activated. See
+[the CLI reference](docs/cli.md).
 
 ## Testing
 

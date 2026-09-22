@@ -81,9 +81,10 @@ from dvc_dat import do
 do.configure(project_root)
 ```
 
-The `dat` command-line tool configures itself. A library that embeds `dvc_dat`
-should call `do.configure()` where it wants the config read, rather than
-inheriting whatever directory the process started in.
+The `dat` command-line tool configures itself (see
+[Command Line](cli.md)). A library that embeds `dvc_dat` should call
+`do.configure()` where it wants the config read, rather than inheriting
+whatever directory the process started in.
 
 ## Templates: `dat.base`
 
@@ -150,9 +151,12 @@ mount_commands:
     folder: src/catalog
   - at: fixtures
     module: tests.fixtures
+
+# the interpreter the X bootstrap runs (see cli.md)
+python: .venv
 ```
 
-Those four keys are the whole file. An unrecognized key is an error naming the
+Those five keys are the whole file. An unrecognized key is an error naming the
 file, the key and the known keys — a typo is never silently ignored.
 
 The file is found by walking up from the working directory, or from the path
@@ -166,4 +170,5 @@ See [Mount Commands](mount-commands.md) for the mount types.
 
 - [Spec Format](spec-format.md) — `_spec_.yaml` and `_result_.yaml` reference
 - [Mount Commands](mount-commands.md) — configuring the do-system
+- [Command Line](cli.md) — the `dat` verbs and the `X` bootstrap
 - [Overview](overview.md) — API reference

@@ -56,6 +56,41 @@ one runner and the one namespace. Breaking on every count below.
 - A spec value beginning with `{` must be quoted in YAML or it arrives as a
   dict; `validate_spec` names that case.
 
+### The `dat` command line
+
+- One grammar, with verbs: `dat do TARGET [ARG ...] [KEY=VALUE ...]`, plus
+  `dat list [PREFIX]`, `dat info`, `dat version` and `dat --help`. `dat TARGET
+  ...` is still the shorthand for `dat do TARGET ...`.
+- **Keyword arguments are `KEY=VALUE`**, not `--keyword value`. The 1.x
+  `--keyword value` / `--flag` forms are gone; the only flags left are
+  `--set`, `--sets`, `--json`, `--print`, `--usage`, `--help`, `--version`
+  and `--info`.
+- Every fixed argument and every `KEY=VALUE` value is read as a **YAML
+  scalar**: `7` is an int, `true` a bool, `[1,2]` a list, `"x"` a string, and
+  a bare word stays a string. `--` ends the options.
+- **Exit codes**: `0` ran, `1` the run raised or the command line was
+  malformed, `2` the target does not load. A failure prints one line on
+  stderr and no traceback; `DAT_DEBUG=1` gives the traceback. `do_argv`
+  returns the exit code, and `dat --version` / `dat --help` work with no
+  config in reach.
+- `dat list` and `dat info` are verbs now, so they no longer resolve through
+  the namespace; a target of either name still runs as `dat do list` /
+  `dat do info`.
+- New reference page: `docs/cli.md`.
+
+### `bin/X` — the bootstrap
+
+- A POSIX `sh` script, checked in and copied wherever it is useful, that runs
+  a dat from any directory with no environment activated: it walks up to the
+  nearest `.dataconfig.yaml` (exit `3` with a message if there is none),
+  picks an interpreter — `$DAT_PYTHON`, the config's `python:` key,
+  `.venv/bin/python` beside the config, then `python3` on `PATH` — and
+  `exec`s `<python> -m dvc_dat do "$@"` with the working directory unchanged.
+- `.dataconfig.yaml` takes a **`python:`** key for that interpreter: a path to
+  one, or a folder holding `bin/python`; a relative path resolves against the
+  config's folder. `DataConfig.python` carries it, absolute. The library never
+  reads it — only `X` does.
+
 ### Spec fields
 
 - `dat.path` is renamed **`dat.name`**, and it stays in the stored spec (1.x
@@ -102,6 +137,7 @@ submodule) and `dvc_dat/do_fn.py` → `dvc_dat/do.py`.
 | spec key `dat.path` | spec key `dat.name` |
 | `Dat.run()` | `do(dat)` |
 | `do(dat, *args)` re-runs in place | `do(dat)` re-runs; with args it forks |
+| `dat cmd ARG --keyword value` | `dat cmd ARG keyword=value` |
 | args appended to `dat.args` | args **replace** `dat.args` |
 | args/kwargs read from `_result_.yaml` | read from the forked `_spec_.yaml` |
 | pydantic spec models | `Dat.validate_spec` override |
