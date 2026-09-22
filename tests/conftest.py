@@ -4,7 +4,6 @@ Configures the do-system (and with it `Dat.manager`) from `tests/.dataconfig.yam
 before any test imports.  `import dvc_dat` itself reads no config -- configuring is
 always explicit.
 """
-import os
 import sys
 from pathlib import Path
 

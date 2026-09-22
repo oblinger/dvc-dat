@@ -91,7 +91,8 @@ class Do:
             raise Exception(f"In {target!r}") from e
 
     @staticmethod
-    def fork_spec(spec: Spec, args: Iterable[Any] = (), kwargs: Optional[Dict[str, Any]] = None) -> Spec:
+    def fork_spec(spec: Spec, args: Iterable[Any] = (),
+                  kwargs: Optional[Dict[str, Any]] = None) -> Spec:
         """A copy of `spec` with `args` as `dat.args` and `kwargs` merged into `dat.kwargs`."""
         spec = copy.deepcopy(spec)
         args = list(args)
@@ -162,7 +163,8 @@ class Do:
 
     # -- loading -------------------------------------------------------------
 
-    def load(self, dotted_name: str, *, default: Any = _DO_NULL, kind: Optional[Type] = None) -> Any:
+    def load(self, dotted_name: str, *, default: Any = _DO_NULL,
+             kind: Optional[Type] = None) -> Any:
         """The object `dotted_name` names.
 
         Mounted names are checked first (values, modules, files, do-folders); otherwise
@@ -342,7 +344,8 @@ class Do:
         return result
 
     def _reg_module(self, at: str, module_spec: Union[str, ModuleType], *, allow_redefine=False):
-        if not allow_redefine and at in self.base_locations and self.base_locations[at] != module_spec:
+        if (not allow_redefine and at in self.base_locations
+                and self.base_locations[at] != module_spec):
             raise Exception(f"Base {at!r} is already defined")
         if isinstance(module_spec, ModuleType):
             self.base_locations[at] = "--directly-assigned--"

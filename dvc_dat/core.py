@@ -122,7 +122,9 @@ class DataConfig:
         with path.open("r") as f:
             values = yaml.safe_load(f) or {}
         if not isinstance(values, dict):
-            raise ValueError(f"{path}: expected a mapping of config keys, got {type(values).__name__}")
+            raise ValueError(
+                f"{path}: expected a mapping of config keys, "
+                f"got {type(values).__name__}")
         unknown = sorted(set(values) - set(cls.field_names()))
         if unknown:
             raise ValueError(
@@ -172,11 +174,13 @@ DAT_RUN_TIME = "dat.run_time"          # result: how long it took
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
 _NO_ARG = object()
 
+
 class _SpecDumper(yaml.SafeDumper):
     """SafeDumper that also writes tuples (a python spec may hold them) as sequences."""
 
 
-_SpecDumper.add_representer(tuple, lambda dumper, value: dumper.represent_list(list(value)))
+_SpecDumper.add_representer(
+    tuple, lambda dumper, value: dumper.represent_list(list(value)))
 
 
 SPEC_JSON = "_spec_.json"
@@ -391,7 +395,8 @@ class DatManager:
             with open(spec_path) as f:
                 spec = json.load(f)
         else:
-            raise FileNotFoundError(f"Didn't find a {SPEC_YAML}/{SPEC_JSON} file under path <{path}>.")
+            raise FileNotFoundError(
+                f"Didn't find a {SPEC_YAML}/{SPEC_JSON} file under path <{path}>.")
         if not isinstance(spec, dict):
             raise TypeError(f"{spec_path}: a spec is a mapping, got {type(spec).__name__}")
 
@@ -464,10 +469,14 @@ class DatManager:
         path_spec = str(path_spec)
         now, count = datetime.now(), 1
         while True:
-            names = {**_builtins(now), "unique": "" if count == 1 else f"_{count}", **(variables or {})}
+            names = {**_builtins(now),
+                     "unique": "" if count == 1 else f"_{count}",
+                     **(variables or {})}
             expanded = expand(path_spec, names)
             if not isinstance(expanded, str):
-                raise TypeError(f"path template {path_spec!r} expanded to {expanded!r}, not a string")
+                raise TypeError(
+                    f"path template {path_spec!r} expanded to {expanded!r}, "
+                    "not a string")
             expanded_path = os.path.join(self.main_sync_folder, expanded)
             if not os.path.exists(expanded_path):
                 return expanded_path, False
@@ -649,7 +658,8 @@ class Dat:
         return self.__repr__()
 
     @staticmethod
-    def get(source: Union["Dat", dict], keys: Union[str, List[str]], default_value: Any = _NO_ARG) -> Any:
+    def get(source: Union["Dat", dict], keys: Union[str, List[str]],
+            default_value: Any = _NO_ARG) -> Any:
         """Get a value from a dotted key path in a dict tree (or a Dat's spec)."""
         return dotted_get(source=source, keys=keys, default_value=default_value)
 
