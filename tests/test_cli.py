@@ -59,12 +59,15 @@ def make_project(root: Path, python: str = None) -> Path:
         config.append(f"run: {python} -m project_main")
     (root / ".dataconfig.yaml").write_text("\n".join(config) + "\n")
     (root / "project_main.py").write_text(
+        "import os\n"
         "import sys\n"
         "from pathlib import Path\n"
         "import dvc_dat as dat\n"
         "dat.do.mount(folder=str(Path(__file__).parent / 'scripts'))\n"
         "if __name__ == '__main__':\n"
-        "    sys.exit(dat.cli_main())\n"
+        "    if os.environ.get('DAT_CLI'):      # launched by the dat bootstrap\n"
+        "        sys.exit(dat.cli_main())\n"
+        "    print('own main', os.environ.get('DAT_CONFIG'))\n"
     )
     (root / "scripts").mkdir()
     (root / "scripts" / "greet.py").write_text(
@@ -243,6 +246,17 @@ class TestBootstrap:
         nested = make_project(tmp_path, python=sys.executable)
         code, out, _ = run_boot("list", "greet", cwd=nested)
         assert code == 0 and "greet" in out
+
+    def test_the_main_is_its_own_without_the_bootstrap(self, tmp_path):
+        """DAT_CLI tells a main it was launched by `dat`; run directly it does its
+        own thing, and DAT_CONFIG is not set for it."""
+        make_project(tmp_path)
+        env = _env()
+        env.pop("DAT_CLI", None)
+        env.pop("DAT_CONFIG", None)
+        done = subprocess.run([sys.executable, "-m", "project_main"], cwd=str(tmp_path),
+                              capture_output=True, text=True, env=env)
+        assert (done.returncode, done.stdout.strip()) == (0, "own main None")
 
     def test_no_config_above_exits_3(self, no_config_dir):
         code, out, err = run_boot("greet", cwd=no_config_dir)

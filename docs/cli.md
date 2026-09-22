@@ -113,7 +113,9 @@ the same thing:
    - `.venv/bin/python -m dvc_dat`, when `.venv` sits beside the config,
    - `python3 -m dvc_dat`.
 3. `exec` that command with the arguments appended, working directory
-   unchanged.
+   unchanged, and two variables set for it: `DAT_CONFIG`, the config file
+   it found (the library reads that one instead of walking up again), and
+   `DAT_CLI=1`, so a program's own main knows it was launched by `dat`.
 
 A relative path in the command's first word is relative to the config's
 folder.
@@ -138,8 +140,20 @@ run: uv run dat
 `run` is any command that ends up in `dat`: `uv run dat`, `conda run -n ml
 dat`, `.venv/bin/python -m dvc_dat`. A project that mounts names points it at
 its **own main** — `run: .venv/bin/python -m mypkg.main` — a module that
-imports what it needs, makes its `do.mount(...)` calls and ends with
-`sys.exit(dat.cli_main())`, so the shell runs inside the program's own namespace.
+imports what it needs, makes its `do.mount(...)` calls and, when `DAT_CLI`
+is set, ends with `sys.exit(dat.cli_main())`, so the shell runs inside the
+program's own namespace and the same main is free to do anything else when
+run by hand:
+
+```python
+if __name__ == "__main__":
+    if os.environ.get("DAT_CLI"):      # launched by the dat bootstrap
+        sys.exit(dat.cli_main())
+    ...                                # your own main
+```
+
+`cli_main(argv=None, *, config=None)` also takes the config as a parameter,
+for a program that wants to run the command line on a config it chose.
 The library itself never reads the key — it is there so that one file
 describes the whole project. `DataConfig.run` carries it, with a relative
 first word made absolute.

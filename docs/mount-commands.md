@@ -19,6 +19,7 @@ run: .venv/bin/python -m mypkg.main
 
 ```python
 # mypkg/main.py
+import os
 import sys
 from pathlib import Path
 import dvc_dat as dat
@@ -29,7 +30,8 @@ dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
 dat.do.mount(module="tests.fixtures", at="fixtures")
 
 if __name__ == "__main__":
-    sys.exit(dat.cli_main())
+    if os.environ.get("DAT_CLI"):      # launched by the dat bootstrap
+        sys.exit(dat.cli_main())
 ```
 
 The mounts land on the one `do` object the process holds, so a
@@ -181,6 +183,7 @@ run: .venv/bin/python -m myproject.main
 
 ```python
 # src/myproject/main.py
+import os
 import sys
 from pathlib import Path
 import dvc_dat as dat
@@ -193,7 +196,8 @@ dat.do.mount(folder=str(SRC / "scripts"), at="scripts")
 dat.do.mount(value={"debug": False, "version": "2.0.0"}, at="config")
 
 if __name__ == "__main__":
-    sys.exit(dat.cli_main())
+    if os.environ.get("DAT_CLI"):      # launched by the dat bootstrap
+        sys.exit(dat.cli_main())
 ```
 
 Usage, from a program that has imported `myproject.main`:

@@ -50,6 +50,7 @@ def merge_dicts(*dicts: Dict, inplace: bool = False) -> Dict:
 DATA_CONFIG_FILE = ".dataconfig.yaml"
 DATA_CONFIG_OVERRIDE_FILE = ".dataconfig.override.yaml"
 ENV_PREFIX = "DAT_"
+ENV_CONFIG = "DAT_CONFIG"          # the config file to use, set by the bootstrap
 
 
 @dataclass
@@ -95,15 +96,24 @@ class DataConfig:
 
         Precedence, lowest to highest: `config_name`, `config_override_name`,
         `override_values`, then `DAT_<KEY>` environment variables.  Discovery walks up
-        from `cwd` when given, else from the process's working directory.
+        from `cwd` when given, else from the process's working directory -- unless
+        `DAT_CONFIG` names the file, which the `bin/dat` bootstrap sets so the
+        program it launches reads the config it found.
         """
         if cwd:
             cwd = str(cwd)
         if override_values is None:
             override_values = {}
 
-        search_root = Path(cwd) if cwd else Path.cwd()
-        config_path = cls._find_file_up(search_root, config_name)
+        pinned = None if cwd else os.environ.get(ENV_CONFIG)
+        if pinned:
+            config_path: Optional[Path] = Path(pinned)
+            if not config_path.is_file():
+                raise ValueError(f"{ENV_CONFIG}={pinned}: no such config file")
+            search_root = config_path.parent
+        else:
+            search_root = Path(cwd) if cwd else Path.cwd()
+            config_path = cls._find_file_up(search_root, config_name)
         config_override_path = cls._find_file_up(search_root, config_override_name)
 
         config_values = cls._read(config_path, verbose)

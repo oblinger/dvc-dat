@@ -116,3 +116,23 @@ class TestDataConfigFileDiscovery:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestDatConfigVariable:
+    def test_dat_config_names_the_file(self, tmp_path, monkeypatch):
+        """`DAT_CONFIG` (set by the bootstrap) is read instead of walking up."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        (project / DATA_CONFIG_FILE).write_text("dat_folders: pinned/\n")
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+        monkeypatch.setenv("DAT_CONFIG", str(project / DATA_CONFIG_FILE))
+        config = DataConfig.new()
+        assert config.cwd == os.path.realpath(project)
+        assert config.dat_folders[0].endswith("/pinned/")
+
+    def test_a_missing_dat_config_file_is_an_error(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DAT_CONFIG", str(tmp_path / "nope.yaml"))
+        with pytest.raises(ValueError, match="DAT_CONFIG"):
+            DataConfig.new()
