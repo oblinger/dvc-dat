@@ -16,6 +16,7 @@ from dvc_dat import Dat, DataConfig, Do, do, expand, expand_spec, load  # noqa: 
 from dvc_dat.core import DATA_CONFIG_FILE, SPEC_YAML, RESULT_YAML  # noqa: E402
 
 V2 = "v2tests"
+SAMPLE = {"a": 1, "b": [2, 3]}     # a data object a spec may reference whole
 
 
 def echo(_dat, *args, **kwargs):
@@ -176,7 +177,9 @@ class TestExpand:
 
     def test_a_dotted_name_resolves_through_do_load(self):
         assert expand("{os.path.join}") is os.path.join          # whole value: the object
-        assert expand("sep is {os.sep}") == f"sep is {os.sep}"   # embedded: str()
+        assert expand("sep is {os.sep}") == f"sep is {os.sep}"   # embedded: a string
+        with pytest.raises(TypeError):
+            expand("fn is {os.path.join}")                       # embedded: not a scalar
 
     def test_a_whole_value_reference_keeps_the_object(self):
         marker = object()
@@ -194,17 +197,35 @@ class TestExpand:
 
 
 class TestGetSpec:
-    def test_get_spec_expands_and_caches_and_raw_is_the_file(self):
+    def test_create_expands_once_and_the_file_is_the_record(self):
+        """T011 Q7 (B): every `{}` is expanded at create; the file holds the values."""
         dat = Dat.create(path=f"{V2}/expanded", spec={
             "dat": {"kind": "Dat", "target_exists": "overwrite"},
-            "stamp": "{YYYY}", "fn": "{os.path.join}"})
+            "stamp": "{YYYY}", "sep": "{os.sep}", "cfg": "{test_v2.SAMPLE}"})
 
-        assert dat.get_spec(raw=True)["stamp"] == "{YYYY}"
-        assert stored(dat)["stamp"] == "{YYYY}"        # the file keeps the reference
-        assert dat.get_spec()["stamp"] == datetime.now().strftime("%Y")
-        assert dat.get_spec()["fn"] is os.path.join
-        assert dat.get_spec() is dat.get_spec()        # computed once per instance
+        year = datetime.now().strftime("%Y")
+        assert dat.get_spec()["stamp"] == year
+        assert stored(dat)["stamp"] == year            # the file holds the value
+        assert stored(dat)["sep"] == os.sep
+        assert isinstance(stored(dat)["cfg"], dict)    # a whole-value reference: data, inlined
+        assert dat.get_spec()["dat"]["name"] == f"{V2}/expanded"   # the name is the folder
         assert dat.spec is dat.get_spec()
+
+    def test_a_reference_to_a_non_data_object_is_refused_at_create(self):
+        with pytest.raises(TypeError):
+            Dat.create(path=f"{V2}/notdata", spec={
+                "dat": {"kind": "Dat", "target_exists": "overwrite"}, "fn": "{os.path.join}"})
+        assert not Dat.manager.exists(f"{V2}/notdata")
+
+    def test_a_fork_from_a_dat_lands_beside_it(self):
+        template = {"dat": {"do": "v2_echo", "name": f"{V2}/parent{{unique}}"}}
+        do(template, 1)
+        parent = load(f"{V2}/parent")
+        assert parent.get_spec()["dat"]["name"] == f"{V2}/parent"
+        do(parent, 2)
+        child = load(f"{V2}/parent_2")
+        assert child.get_spec()["dat"]["args"] == [2]
+        assert child.get_spec()["dat"]["target_exists"] == "increment"
 
 
 class Strict(Dat):
@@ -283,7 +304,7 @@ class TestExplicitConfigure:
             "from pathlib import Path\nfrom dvc_dat import do\n"
             "do.mount(folder=str(Path(__file__).parent / 'mounted'))\n")
         (tmp_path / DATA_CONFIG_FILE).write_text(
-            "local_prefix: sync/\nmain: explicit_main\n")
+            "dat_folders: sync/\nmain: explicit_main\n")
 
         assert do.load("v2_greeter", default=None) is None
 
@@ -293,13 +314,13 @@ class TestExplicitConfigure:
         assert "explicit_main" in sys.modules       # main imported ...
         assert do("v2_greeter") == "hi"             # ... and its mounts are on `do`
         assert probe.config.cwd == os.path.realpath(tmp_path)
-        assert Dat.manager.sync_folder == os.path.join(os.path.realpath(tmp_path), "sync/")
+        assert Dat.manager.dat_folder == os.path.join(os.path.realpath(tmp_path), "sync/")
 
     def test_configure_accepts_a_config_file(self, tmp_path, restore_manager):
         config_file = tmp_path / DATA_CONFIG_FILE
-        config_file.write_text("local_prefix: elsewhere/\n")
+        config_file.write_text("dat_folders: elsewhere/\n")
         probe = Do()
-        assert probe.configure(config_file).local_prefix.endswith("/elsewhere/")
+        assert probe.configure(config_file).dat_folders[0].endswith("/elsewhere/")
 
     def test_importing_dvc_dat_reads_no_config(self, tmp_path):
         result = subprocess.run(
@@ -330,7 +351,7 @@ def test_first_use_installs_the_config_and_imports_its_main(tmp_path):
         "from dvc_dat import do\nimport lazypkg.job\n"
         "do.mount(module=lazypkg.job, at='lazy')\n")
     (tmp_path / DATA_CONFIG_FILE).write_text(
-        "local_prefix: warehouse\nmain: lazy_main\n")
+        "dat_folders: warehouse\nmain: lazy_main\n")
     (tmp_path / "notes").mkdir()                # a subfolder: cwd is not the root
 
     probe = (
@@ -342,7 +363,7 @@ def test_first_use_installs_the_config_and_imports_its_main(tmp_path):
         "assert do.config is not None\n"
         "assert do.load('lazypkg.job.run') is fn\n"   # the static floor agrees
         "assert 'lazy_main' in sys.modules\n"
-        "print(Dat.manager.sync_folder)\n"
+        "print(Dat.manager.dat_folder)\n"
     )
     result = subprocess.run(
         [sys.executable, "-c", probe], cwd=tmp_path / "notes",
@@ -356,7 +377,7 @@ def test_increment_on_a_plain_name_counts_up(tmp_path, restore_manager):
     """`target_exists: increment` on a name with no `{unique}` appends `_2`, `_3`
     instead of spinning forever (found 2026-09-22)."""
     from dvc_dat.core import DatManager, DataConfig
-    Dat._manager = DatManager(DataConfig(cwd=str(tmp_path), local_prefix="data/"))
+    Dat._manager = DatManager(DataConfig(cwd=str(tmp_path), dat_folders="data/"))
     spec = {"dat": {"kind": "Dat", "name": "plain", "target_exists": "increment"}}
     assert Dat.create(spec=spec).get_path_name() == "plain"
     assert Dat.create(spec=spec).get_path_name() == "plain_2"

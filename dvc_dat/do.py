@@ -94,7 +94,9 @@ class Do:
             if isinstance(obj, Dat):
                 if not args and not kwargs:
                     return self._run_dat(obj)
-                obj = obj.get_spec(raw=True)
+                obj = copy.deepcopy(obj.get_spec())
+                if Dat.get(obj, DAT_TARGET_EXISTS, "error") == "error":
+                    Dat.set(obj, DAT_TARGET_EXISTS, "increment")   # a fork lands beside its parent
             elif callable(obj):
                 return obj(*args, **kwargs)
             if not isinstance(obj, dict):
@@ -474,18 +476,18 @@ do = Do()
 
 USAGE = """
 SYNOPSIS
-    dat do TARGET [ARG ...] [KEY=VALUE ...]     run TARGET
-    dat TARGET [ARG ...] [KEY=VALUE ...]        shorthand for `dat do TARGET`
+    dat TARGET [ARG ...] [KEY=VALUE ...]        run TARGET
     dat list [PREFIX]                           the mounted names
-    dat info                                    version, sync folder, config
+    dat info                                    version, dat folder, config
     dat version                                 the version
     dat --help                                  this message
 
 DESCRIPTION
     `dat` configures itself from the nearest .dataconfig.yaml before it runs
-    anything that needs the namespace.
+    anything that needs the namespace.  `list`, `info` and `version` are
+    reserved words; anything else in first position is a TARGET.
 
-    `dat do TARGET ...` calls do(TARGET, *ARGS, **KWARGS).  A TARGET that is a
+    `dat TARGET ...` calls do(TARGET, *ARGS, **KWARGS).  A TARGET that is a
     template spec is forked: the fixed ARGs become its dat.args and the
     KEY=VALUE pairs update its dat.kwargs, key by key; the forked spec creates
     a dat, and that dat runs.  A TARGET that is a callable is simply called.
@@ -497,8 +499,7 @@ DESCRIPTION
     the options and pass anything after it as a fixed argument.
 
 OPTIONS
-    --set DOTTED.KEY VALUE
-    --sets DOTTED.KEY1=VALUE1,DOTTED.KEY2=VALUE2,...
+    --set DOTTED.KEY=VALUE      (repeatable; VALUE is a YAML scalar)
     --json DOTTED.KEY '<json value>'
                 Update those spec keys of a template before it forks
 
@@ -515,9 +516,9 @@ EXIT STATUS
     for the traceback.
 
 EXAMPLES
-    dat do hello_world
+    dat hello_world
     dat hello_again.salutation Maxim emphasis=true lucky_number=7
-    dat my_letters --sets dat.title=Quickie,start=100,end=110
+    dat my_letters --set dat.title=Quickie --set start=100 --set end=110
     dat list hello
 """
 
@@ -539,11 +540,11 @@ def do_argv(argv: List[str]) -> int:
         return _cmd_info(rest)
     elif verb == "list":
         return _cmd_list(rest)
-    return _cmd_do(rest if verb == "do" else args)
+    return _cmd_do(args)
 
 
 def _cmd_do(argv: List[str]) -> int:
-    """`dat do TARGET ...` -- the default verb."""
+    """`dat TARGET ...` -- everything that is not a reserved word."""
     try:
         overrides, args, kwargs, flags = _parse_argv(argv)
     except ValueError as e:
@@ -575,7 +576,7 @@ def _cmd_do(argv: List[str]) -> int:
             spec = merge_dicts(do.resolve_base(cmd), overrides)
             result = do(spec, *fixed, **kwargs)
         elif overrides:
-            return _fail(f"--set/--sets/--json need a template spec; "
+            return _fail(f"--set/--json need a template spec; "
                          f"{target!r} is {type(cmd).__name__}")
         elif not callable(cmd):
             print(cmd)
@@ -602,14 +603,14 @@ def _cmd_list(argv: List[str]) -> int:
 
 
 def _cmd_info(argv: List[str]) -> int:
-    """`dat info` -- the version, the sync folder and the config in force."""
+    """`dat info` -- the version, the dat folder and the config in force."""
     if argv:
         return _fail("info takes no arguments")
     from . import __version__
     config = _configured()
     print("\n# -- Dat Configuration Info -- ")
     print(f"# Dat version       : {__version__}")
-    print(f"# Dat Data Folder   : {Dat.manager.sync_folder}")
+    print(f"# Dat folder        : {Dat.manager.dat_folder}")
     print(f"# .dataconfig folder: {config.cwd}")
     config_file = os.path.join(config.cwd, ".dataconfig.yaml")
     if os.path.exists(config_file):
@@ -630,7 +631,7 @@ def _configured() -> DataConfig:
 
 
 def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
-    """Split `dat do` arguments into spec overrides, positionals, kwargs and flags.
+    """Split `dat TARGET` arguments into spec overrides, positionals, kwargs and flags.
 
     Positionals come back as written (the first is the target name); every
     KEY=VALUE value is a YAML scalar.  A malformed line raises `ValueError`.
@@ -645,18 +646,20 @@ def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
         if arg == "--":
             args += argv[i + 1:]
             break
-        elif arg in ("--json", "--set"):
+        elif arg == "--json":
             key, value = _operands(argv, i, 2)
-            if arg == "--json":
-                try:
-                    value = json.loads(value)
-                except json.JSONDecodeError as e:
-                    raise ValueError(f"--json {key}: illegal JSON: {e}")
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"--json {key}: illegal JSON: {e}")
             Dat.set(overrides, key, value)
             i += 2
-        elif arg == "--sets":
-            (pairs,) = _operands(argv, i, 1)
-            Dat.sets(overrides, *pairs.split(","))
+        elif arg == "--set":
+            (pair,) = _operands(argv, i, 1)
+            key, eq, value = pair.partition("=")
+            if not eq or not key:
+                raise ValueError(f"--set needs DOTTED.KEY=VALUE, got {pair!r}")
+            Dat.set(overrides, key, _scalar(value))
             i += 1
         elif arg in ("--dry-run", "--usage"):
             flags.add(arg[2:])

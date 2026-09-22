@@ -17,48 +17,48 @@ class TestDataConfig:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = DataConfig.new(cwd=tmpdir)
             assert config.cwd == os.path.realpath(tmpdir)
-            assert config.local_prefix.endswith("/")
+            assert config.dat_folders[0].endswith("/")
 
     def test_new_searches_from_cwd_argument(self, monkeypatch):
         """`new(cwd=X)` finds the config above X, not above the process cwd."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = os.path.realpath(tmpdir)
             with open(os.path.join(root, DATA_CONFIG_FILE), "w") as f:
-                f.write("local_prefix: from_arg/\n")
+                f.write("dat_folders: from_arg/\n")
             nested = os.path.join(root, "a", "b")
             os.makedirs(nested)
             with tempfile.TemporaryDirectory() as elsewhere:
                 monkeypatch.chdir(elsewhere)
                 config = DataConfig.new(cwd=nested)
             assert config.cwd == nested
-            assert config.local_prefix == os.path.join(nested, "from_arg/")
+            assert config.dat_folders == [os.path.join(nested, "from_arg/")]
 
     def test_only_dat_prefixed_environment_keys_override(self, monkeypatch):
-        """`DAT_LOCAL_PREFIX` overrides `local_prefix`; a bare `local_prefix` does not."""
+        """`DAT_FOLDERS` overrides `dat_folders`; a bare `dat_folders` does not."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            monkeypatch.setenv("local_prefix", "bare/")
+            monkeypatch.setenv("dat_folders", "bare/")
             monkeypatch.setenv("DAT_UNKNOWN", "ignored")
-            assert DataConfig.new(cwd=tmpdir).local_prefix.endswith("/data/")
-            monkeypatch.setenv("DAT_LOCAL_PREFIX", "prefixed/")
-            assert DataConfig.new(cwd=tmpdir).local_prefix.endswith("/prefixed/")
+            assert DataConfig.new(cwd=tmpdir).dat_folders[0].endswith("/data/")
+            monkeypatch.setenv("DAT_FOLDERS", "prefixed/")
+            assert DataConfig.new(cwd=tmpdir).dat_folders[0].endswith("/prefixed/")
 
     def test_unknown_config_key_is_an_error(self):
         """2.0: an unrecognized key in a config file is named, not silently ignored."""
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir, DATA_CONFIG_FILE)
-            path.write_text("local_prefix: data/\nremote_prefix: sv-ai-data/\n")
+            path.write_text("dat_folders: data/\nremote_prefix: sv-ai-data/\n")
             with pytest.raises(ValueError) as caught:
                 DataConfig.new(cwd=tmpdir)
             message = str(caught.value)
             assert "remote_prefix" in message
             assert str(path) in message
-            assert "local_prefix" in message   # names the known keys
+            assert "dat_folders" in message   # names the known keys
 
     def test_datmanager_creation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config = DataConfig(cwd=tmpdir)
             manager = DatManager(config=config)
-            assert manager.main_sync_folder == config.local_prefix
+            assert manager.dat_folder == config.dat_folders[0]
 
     def test_dat_create_and_load(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -86,8 +86,7 @@ class TestDataConfigFileDiscovery:
         """A `.dataconfig.yaml` above the working directory is found and used."""
         with tempfile.TemporaryDirectory() as tmpdir:
             Path(tmpdir, DATA_CONFIG_FILE).write_text(
-                "local_prefix: my_custom_data_folder/\n"
-                "extra_local_prefixes: [/tmp/elsewhere]\n"
+                "dat_folders: [my_custom_data_folder/, /tmp/elsewhere]\n"
             )
             subdir = Path(tmpdir) / "some" / "nested" / "path"
             subdir.mkdir(parents=True)
@@ -96,8 +95,8 @@ class TestDataConfigFileDiscovery:
             try:
                 os.chdir(subdir)
                 config = DataConfig.new()
-                assert "my_custom_data_folder" in config.local_prefix
-                assert config.extra_local_prefixes == ["/tmp/elsewhere"]
+                assert "my_custom_data_folder" in config.dat_folders[0]
+                assert config.dat_folders[1] == "/tmp/elsewhere/"
                 assert config.cwd == os.path.realpath(tmpdir)
             finally:
                 os.chdir(original_cwd)
@@ -110,7 +109,7 @@ class TestDataConfigFileDiscovery:
         try:
             os.chdir(tests_dir)
             config = DataConfig.new()
-            assert "test_sync_folder" in config.local_prefix
+            assert "test_sync_folder" in config.dat_folders[0]
         finally:
             os.chdir(original_cwd)
 

@@ -59,24 +59,30 @@ class DataConfig:
     Attributes
     ----------
     cwd : folder the config was found in (or given); relative paths resolve against it.
-    local_prefix : the sync folder — where relative dat paths are created and searched.
-    extra_local_prefixes : further folders searched when loading a dat by name.
+    dat_folders : where dats live -- one folder, or a list.  The first is where new
+        dats are created; all are searched, in order, when a dat is loaded by name.
     main : a module imported when the config installs, with the config folder
         first on `sys.path`.  Mounts and any other registration live there.
-    python : the interpreter the `bin/dat` bootstrap runs -- a path to one, or a
-        folder holding `bin/python`; relative to `cwd`.  Nothing in the library
-        reads it; the bootstrap does.
+    run : the command a copy of `bin/dat` hands its arguments to; default
+        `.venv/bin/python -m dvc_dat` beside the config.  A relative path in its
+        first word is relative to `cwd`.  Nothing in the library reads it.
     """
 
     cwd: str
-    local_prefix: str = "data/"
-    extra_local_prefixes: List[str] = field(default_factory=list)
+    dat_folders: Union[str, List[str]] = "data/"
     main: Optional[str] = None
-    python: Optional[str] = None
+    run: Optional[str] = None
 
     @classmethod
     def field_names(cls) -> List[str]:
         return [f.name for f in fields(cls)]
+
+    @classmethod
+    def env_names(cls) -> Dict[str, str]:
+        """Environment variable -> field: `DAT_FOLDERS`, `DAT_MAIN`, `DAT_RUN`, `DAT_CWD`."""
+        prefix = ENV_PREFIX.lower()
+        return {ENV_PREFIX + (n[len(prefix):] if n.startswith(prefix) else n).upper(): n
+                for n in cls.field_names()}
 
     @classmethod
     def new(
@@ -108,11 +114,10 @@ class DataConfig:
         if not cwd:
             cwd = str(config_path.parent) if config_path else str(Path.cwd())
 
-        # Only DAT_<FIELD> variables reach the config (DAT_LOCAL_PREFIX -> local_prefix).
+        # Only DAT_<FIELD> variables reach the config; a field's own `dat_` prefix
+        # folds into the DAT_ (DAT_FOLDERS -> dat_folders, DAT_MAIN -> main).
         environ_values = {
-            key[len(ENV_PREFIX):].lower(): value
-            for key, value in os.environ.items()
-            if key.startswith(ENV_PREFIX) and key[len(ENV_PREFIX):].lower() in cls.field_names()
+            name: os.environ[env] for env, name in cls.env_names().items() if env in os.environ
         }
 
         final_values: Dict[str, Any] = merge_dicts(
@@ -153,15 +158,23 @@ class DataConfig:
         return None
 
     def __post_init__(self) -> None:
-        """Make every path in the config absolute."""
+        """Make every path in the config absolute; `dat_folders` becomes a list."""
         self.cwd = os.path.realpath(self.cwd)
-        if not os.path.isabs(self.local_prefix):
-            self.local_prefix = os.path.join(self.cwd, self.local_prefix)
-        self.local_prefix = os.path.normpath(self.local_prefix)
-        if not self.local_prefix.endswith("/"):
-            self.local_prefix += "/"
-        if self.python and not os.path.isabs(self.python):
-            self.python = os.path.normpath(os.path.join(self.cwd, self.python))
+        folders = [self.dat_folders] if isinstance(self.dat_folders, str) else list(self.dat_folders)
+        if not folders or not all(isinstance(f, str) and f for f in folders):
+            raise ValueError(f"dat_folders: a folder or a list of folders, got {self.dat_folders!r}")
+        self.dat_folders = [self._folder(f) for f in folders]
+        if self.run:
+            head, _, tail = self.run.strip().partition(" ")
+            if "/" in head and not os.path.isabs(head):
+                head = os.path.normpath(os.path.join(self.cwd, head))
+            self.run = head + (" " + tail if tail else "")
+
+    def _folder(self, folder: str) -> str:
+        if not os.path.isabs(folder):
+            folder = os.path.join(self.cwd, folder)
+        folder = os.path.normpath(folder)
+        return folder if folder.endswith("/") else folder + "/"
 
 
 # =============================================================================
@@ -261,7 +274,8 @@ def expand(text: str, vars: Optional[Dict[str, Any]] = None, *,
     `{name}` with an undotted name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`)
     or a key of `vars`; `{dotted.name}` is resolved through `do.load` (or `resolver`);
     `{{` and `}}` are the literal braces.  A `text` that is exactly one reference returns
-    the referenced object itself, not its string form.
+    the referenced object itself, not its string form; a reference inside a longer
+    string must be a string or a number.
     """
     if not isinstance(text, str):
         return text
@@ -279,7 +293,13 @@ def expand(text: str, vars: Optional[Dict[str, Any]] = None, *,
             return "{"
         if token == "}}":
             return "}"
-        return str(resolve(match.group(1)))
+        value = resolve(match.group(1))
+        if not isinstance(value, (str, int, float)):
+            raise TypeError(
+                f"expand: {{{match.group(1)}}} inside a longer string must be a string "
+                f"or a number, got {type(value).__name__}; a reference that is the whole "
+                "value may be anything")
+        return str(value)
 
     return _REFERENCE.sub(replace, text)
 
@@ -308,22 +328,20 @@ class DatManager:
     """
 
     config: DataConfig
-    main_sync_folder: str
-    sync_folders: List[str]
+    dat_folders: List[str]
     dat_cache: "weakref.WeakValueDictionary[str, Dat]"
 
     @property
-    def sync_folder(self) -> str:
-        return self.main_sync_folder
+    def dat_folder(self) -> str:
+        """Where new dats are created: the first of `dat_folders`."""
+        return self.dat_folders[0]
 
     def __init__(self, config: Optional[DataConfig] = None):
         if config is None:
             config = DataConfig.new()
         self.config = config
-        self.main_sync_folder = config.local_prefix
-        self.sync_folders = [self.main_sync_folder, *config.extra_local_prefixes]
+        self.dat_folders = list(config.dat_folders)
         self.dat_cache = weakref.WeakValueDictionary()
-        assert self.main_sync_folder, "Sync folder not defined."
 
     def create(
         self,
@@ -336,8 +354,10 @@ class DatManager:
 
         `spec` may be a dict or a dotted name loaded through the do-system.  The
         folder is `path` if given, else the spec's `dat.name` template, else
-        `anonymous/Dat{unique}`; templates expand with the `{}` grammar and
-        `dat.target_exists` says what happens when the folder is already there.
+        `anonymous/Dat{unique}`; `dat.target_exists` says what happens when the
+        folder is already there.  Every `{}` in the spec is expanded here, once,
+        with the same values the folder got, and the expanded spec is what is
+        written: a spec on disk is a record, never a template.
         """
         from .do import do
 
@@ -359,15 +379,25 @@ class DatManager:
         if target_exists == "overwrite" and path.lower() == "{cwd}":
             target_exists = "error"  # never wipe the working directory
 
-        expanded_path, skip_execution = self.prepare_dat_path(path, target_exists=target_exists)
+        expanded_path, skip_execution, names = self._place(path, target_exists=target_exists)
         if skip_execution:
             return self.load(dat_class, name_or_path=expanded_path)
 
         path = self.resolve_path(expanded_path)
+        spec = expand_spec(spec, names)
+        if path.startswith(self.dat_folder):
+            Dat.set(spec, DAT_NAME, self.get_path_name(path))
         os.makedirs(path, exist_ok=True)
         logger.info("Creating Dat %s under path: <%s>", dat_class, path)
-        with Path(path, SPEC_YAML).open("w") as f:
-            yaml.dump(spec, f, Dumper=_SpecDumper, sort_keys=False)
+        try:
+            text = yaml.dump(spec, Dumper=_SpecDumper, sort_keys=False)
+        except yaml.representer.RepresenterError as e:
+            shutil.rmtree(path, ignore_errors=True)
+            raise TypeError(
+                f"Dat.create: the spec is not data once expanded ({e.args[0]}); a "
+                "`{...}` reference in a spec must resolve to something YAML can hold"
+            ) from None
+        Path(path, SPEC_YAML).write_text(text)
         return self.load(dat_class, name_or_path=path)
 
     def load(
@@ -389,7 +419,7 @@ class DatManager:
         if not os.path.exists(path):
             raise KeyError(
                 f"LOAD_DAT: Could not find <{name_or_path!r}> as absolute, "
-                f"under cwd {cwd}, or in {self.sync_folders}"
+                f"under cwd {cwd}, or in {self.dat_folders}"
             )
         path = os.path.abspath(path)
         if (cached := self.dat_cache.get(path)) and isinstance(cached, dat_class):
@@ -441,7 +471,7 @@ class DatManager:
     def get_path_name(self, path: Union[str, Path]) -> str:
         path = str(path)
         try:
-            match = 1 + len(os.path.commonpath([self.main_sync_folder, path]))
+            match = 1 + len(os.path.commonpath([self.dat_folder, path]))
             return path[match:] if match > 2 else path
         except ValueError:
             return path
@@ -465,12 +495,24 @@ class DatManager:
         variables: Optional[Dict[str, Any]] = None,
         target_exists: str = "error",
     ) -> Tuple[str, bool]:
-        """Expand a path template under the sync folder and settle a collision.
+        """Expand a path template under the dat folder and settle a collision.
 
         Returns `(path, skip_execution)`; `skip_execution` is True only for
         `target_exists: use` on an existing folder.  `overwrite` deletes the folder;
         `increment` (or a `{unique}` in the template) counts up `_2`, `_3`, …
         """
+        path, skip, _ = self._place(path_spec, variables=variables, target_exists=target_exists)
+        return path, skip
+
+    def _place(
+        self,
+        path_spec: Union[str, Path, None],
+        *,
+        variables: Optional[Dict[str, Any]] = None,
+        target_exists: str = "error",
+    ) -> Tuple[str, bool, Dict[str, Any]]:
+        """`prepare_dat_path`, also returning the names the path expanded with, so the
+        spec can be expanded with the very same `now` and `unique`."""
         if path_spec is None:
             path_spec = _DEFAULT_PATH_TEMPLATE
         path_spec = str(path_spec)
@@ -486,14 +528,14 @@ class DatManager:
                 raise TypeError(
                     f"path template {path_spec!r} expanded to {expanded!r}, "
                     "not a string")
-            expanded_path = os.path.join(self.main_sync_folder, expanded)
+            expanded_path = os.path.join(self.dat_folder, expanded)
             if not os.path.exists(expanded_path):
-                return expanded_path, False
+                return expanded_path, False, names
             elif target_exists == "use":
-                return expanded_path, True
+                return expanded_path, True, names
             elif target_exists == "overwrite":
                 shutil.rmtree(expanded_path)
-                return expanded_path, False
+                return expanded_path, False, names
             elif target_exists == "increment" or "{unique}" in path_spec:
                 count += 1
             else:
@@ -510,13 +552,13 @@ class DatManager:
             return path
         if (mount_path := do.resolve_dat_folder(name)) is not None:
             return mount_path
-        for folder in self.sync_folders:
+        for folder in self.dat_folders:
             path = os.path.join(folder, name)
             if os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
                 os.path.join(path, SPEC_YAML)
             ):
                 return path
-        return os.path.join(self.main_sync_folder, name)
+        return os.path.join(self.dat_folder, name)
 
 
 # =============================================================================
@@ -529,7 +571,7 @@ class Dat:
     The spec is the complete recipe: `dat.do` names the function, `dat.args` and
     `dat.kwargs` its arguments, `dat.name` the path template, `dat.base` what it
     inherits from.  `get_spec()` returns it with every `{}` reference expanded (once,
-    lazily); `get_spec(raw=True)` is the file as written.  `get_results()` is the
+    lazily); every `{}` in it was expanded once, at create.  `get_results()` is the
     mutable `_result_.yaml`.
 
     Subclasses override `validate_spec` to check or coerce a spec on create and load
@@ -549,7 +591,6 @@ class Dat:
 
     _path: str
     _spec: SpecDict
-    _expanded: Optional[SpecDict]
     _result: SpecDict
 
     def __init__(
@@ -560,7 +601,6 @@ class Dat:
     ) -> None:
         self._path = os.path.abspath(str(path))
         self._spec = spec
-        self._expanded = None
         self._result = result or {}
 
     @classmethod
@@ -585,13 +625,9 @@ class Dat:
                 )
         return spec
 
-    def get_spec(self, raw: bool = False) -> SpecDict:
-        """The spec, with every `{}` reference expanded (cached) — or as written."""
-        if raw:
-            return self._spec
-        if self._expanded is None:
-            self._expanded = expand_spec(self._spec)
-        return self._expanded
+    def get_spec(self) -> SpecDict:
+        """The spec as written -- every `{}` was expanded once, when the dat was created."""
+        return self._spec
 
     @property
     def spec(self) -> SpecDict:

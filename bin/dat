@@ -3,11 +3,12 @@
 #
 #   dat TARGET [ARG ...] [KEY=VALUE ...]     dat list | info | version | --help
 #
-# Walks up from $PWD to the nearest .dataconfig.yaml, picks an interpreter
-# ($DAT_PYTHON, else the config's `python:` key, else .venv beside the config,
-# else python3 on PATH), and execs `python -m dvc_dat "$@"` with the working
-# directory unchanged.  With an environment active, the console script of the
-# same name shadows this copy and does the same thing.
+# Walks up from $PWD to the nearest .dataconfig.yaml, picks a command
+# ($DAT_RUN, else the config's `run:` key, else `.venv/bin/python -m dvc_dat`
+# beside the config, else `python3 -m dvc_dat`), and execs it with the
+# arguments appended and the working directory unchanged.  With an
+# environment active, the console script of the same name shadows this copy
+# and does the same thing.
 # Exit 3 when no .dataconfig.yaml is above the working directory.
 
 # -- the nearest .dataconfig.yaml, git style ---------------------------------
@@ -20,38 +21,41 @@ while [ ! -f "$dir/.dataconfig.yaml" ]; do
     dir=$(dirname "$dir")
 done
 
-# -- the config's `python:` key: one top-level line, no YAML parser needed ----
-cfg_python=$(sed -n 's/^python:[[:space:]]*//p' "$dir/.dataconfig.yaml" | head -n 1 |
+# -- the config's `run:` key: one top-level line, no YAML parser needed -------
+cfg_run=$(sed -n 's/^run:[[:space:]]*//p' "$dir/.dataconfig.yaml" | head -n 1 |
     sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")
 
-# -- pick the interpreter -----------------------------------------------------
-if [ -n "$DAT_PYTHON" ]; then
-    python=$DAT_PYTHON
-elif [ -n "$cfg_python" ]; then
-    case $cfg_python in
-        /*) python=$cfg_python ;;         # absolute, as written
-        *) python=$dir/$cfg_python ;;     # relative to the config folder
-    esac
+# -- pick the command ---------------------------------------------------------
+if [ -n "$DAT_RUN" ]; then
+    run=$DAT_RUN
+elif [ -n "$cfg_run" ]; then
+    run=$cfg_run
 elif [ -x "$dir/.venv/bin/python" ]; then
-    python=$dir/.venv/bin/python
+    run="$dir/.venv/bin/python -m dvc_dat"
 else
-    python=python3
+    run="python3 -m dvc_dat"
 fi
 
-# A folder means the venv holding it.
-[ -d "$python" ] && python=$python/bin/python
+# The command's words, then the arguments as given.
+eval "set -- $run \"\$@\""
 
-case $python in
+# A relative path in the first word is relative to the config folder.
+case $1 in
+    /*) ;;
+    */*) first=$dir/$1; shift; set -- "$first" "$@" ;;
+esac
+
+case $1 in
     */*)
-        [ -x "$python" ] || {
-            echo "dat: $python is not an executable interpreter" >&2
+        [ -x "$1" ] || {
+            echo "dat: $1 is not an executable" >&2
             exit 1
         } ;;
     *)
-        command -v "$python" >/dev/null 2>&1 || {
-            echo "dat: $python is not on PATH" >&2
+        command -v "$1" >/dev/null 2>&1 || {
+            echo "dat: $1 is not on PATH" >&2
             exit 1
         } ;;
 esac
 
-exec "$python" -m dvc_dat "$@"
+exec "$@"

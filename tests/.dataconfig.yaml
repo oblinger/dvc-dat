@@ -1,11 +1,8 @@
 # DVC-Dat Test Configuration
 # This configures where test Dats are stored during test runs.
 
-# Local folder where test Dats are stored (relative to this file's directory)
-local_prefix: test_sync_folder/
-
-# Additional local folders to search for Dats
-extra_local_prefixes: []
+# Where test dats live (relative to this file's directory)
+dat_folders: test_sync_folder/
 
 # Imported when the config installs; the test mounts live there
 main: mounts

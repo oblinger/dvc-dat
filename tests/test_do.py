@@ -119,14 +119,14 @@ class TestCommandLine:
                           "   q  rrr  S  t  uuu  v  jackpot   XXX  y")
 
     def test_tweaking_command_from_cmdline(self):
-        line = """./do my_letters --set dat.title "Re-configured letterator" """ + \
+        line = """./do my_letters --set "dat.title=Re-configured letterator" """ + \
                 """--json rules '[[2, "my_letters.triple_it"]]'"""
         expect = """a  bbb  c  ddd  e  fff  g  hhh  i""" + \
                  """  jjj  k  lll  m  nnn  o  ppp  q  rrr  s  ttt  u  vvv  w  xxx  y"""
         assert run_capture_tail(line) == expect
 
     def test_setting_multiple_params_at_once(self):
-        line = """./do my_letters --sets dat.title=Quickie,start=100,end=110"""
+        line = """./do my_letters --set dat.title=Quickie --set start=100 --set end=110"""
         expect = """D  e  fff  g  h  JACKPOT JACKPOT JACKPOT   j  k  lll  m"""
         assert run_capture_tail(line) == expect
 

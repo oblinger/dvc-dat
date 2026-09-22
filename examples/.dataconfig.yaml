@@ -1,11 +1,8 @@
 # DVC-Dat Examples Configuration
 # Points to test folders for shared example data
 
-# Local folder where example Dats are stored
-local_prefix: ../tests/test_sync_folder/
-
-# Additional local folders to search for Dats
-extra_local_prefixes: []
+# Where the example dats live
+dat_folders: ../tests/test_sync_folder/
 
 # Imported when the config installs; the example mounts live there
 main: mounts

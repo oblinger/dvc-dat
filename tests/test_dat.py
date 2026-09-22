@@ -43,8 +43,8 @@ def spec2():
 class TestDatAccessors:
     def test_path_accessors(self, spec1):
         dat = Dat.create(spec=spec1, path="any/path/goes/here/my_dat")
-        # sync_folder may have trailing slash, so use rstrip to normalize
-        expected_path = f"{Dat.manager.sync_folder.rstrip('/')}/any/path/goes/here/my_dat"
+        # dat_folder may have trailing slash, so use rstrip to normalize
+        expected_path = f"{Dat.manager.dat_folder.rstrip('/')}/any/path/goes/here/my_dat"
         assert dat.get_path() == expected_path
         assert dat.get_path_name() == "any/path/goes/here/my_dat"
         assert dat.get_path_tail() == "my_dat"

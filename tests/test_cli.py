@@ -18,7 +18,7 @@ BOOT = REPO / "bin" / "dat"
 def _env(**extra: str) -> dict:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(REPO)
-    env.pop("DAT_PYTHON", None)
+    env.pop("DAT_RUN", None)
     env.update(extra)
     return env
 
@@ -48,11 +48,11 @@ def no_config_dir(tmp_path: Path) -> Path:
     return folder
 
 
-def make_project(root: Path, python: str = None) -> Path:
+def make_project(root: Path, run: str = None) -> Path:
     """A minimal dat project: a config, a main that mounts one script folder."""
-    config = ["local_prefix: data/", "main: project_main"]
-    if python is not None:
-        config.append(f"python: {python}")
+    config = ["dat_folders: data/", "main: project_main"]
+    if run is not None:
+        config.append(f"run: {run}")
     (root / ".dataconfig.yaml").write_text("\n".join(config) + "\n")
     (root / "project_main.py").write_text(
         "from pathlib import Path\n"
@@ -120,17 +120,18 @@ class TestVerbs:
         assert code == 0 and "letterator" in out and "hello_world" not in out
 
     def test_do_verb(self):
-        assert dat("do", "hello_world") == (0, "hello world!\nhello world!", "")
+        assert dat("hello_world") == (0, "hello world!\nhello world!", "")
 
     def test_shorthand_is_do(self):
-        assert dat("hello_world") == dat("do", "hello_world")
+        code, _, err = dat("do", "hello_world")   # `do` is not a verb any more
+        assert code == 2 and "cannot load 'do'" in err
 
     def test_shorthand_on_a_template(self):
         code, out, _ = dat("my_letters")
         assert code == 0 and out.endswith("XXX  y")
 
     def test_unloadable_target_exits_2(self):
-        code, out, err = dat("do", "no_such_thing")
+        code, out, err = dat("no_such_thing")
         assert code == 2 and out == ""
         assert "no_such_thing" in err and err.startswith("dat:")
 
@@ -138,21 +139,21 @@ class TestVerbs:
         assert dat("no_such_thing")[0] == 2
 
     def test_a_failing_run_exits_1(self):
-        code, _, err = dat("do", "hello_again.salutation", "bogus_keyword=1")
+        code, _, err = dat("hello_again.salutation", "bogus_keyword=1")
         assert code == 1
         assert "bogus_keyword" in err and "Traceback" not in err
 
     def test_dat_debug_shows_the_traceback(self):
-        code, _, err = dat("do", "hello_again.salutation", "bogus_keyword=1",
+        code, _, err = dat("hello_again.salutation", "bogus_keyword=1",
                            env=_env(DAT_DEBUG="1"))
         assert code != 0 and "Traceback" in err
 
     def test_unknown_option_exits_1(self):
-        code, _, err = dat("do", "hello_world", "--emphasis")
+        code, _, err = dat("hello_world", "--emphasis")
         assert code == 1 and "KEY=VALUE" in err
 
     def test_do_with_no_target_exits_1(self):
-        code, _, err = dat("do")
+        code, _, err = dat("--dry-run")
         assert code == 1 and "TARGET" in err
 
 
@@ -177,7 +178,7 @@ class TestArguments:
         assert (code, out) == (0, "args=['--not-an-option', 'k=3'] kwargs={}")
 
     def test_target_name_is_not_a_scalar(self):
-        code, out, _ = dat("do", "hello_world")
+        code, out, _ = dat("hello_world")
         assert (code, out) == (0, "hello world!\nhello world!")
 
     def test_keyword_args_reach_a_function(self):
@@ -191,16 +192,16 @@ class TestArguments:
         assert (code, out) == (0, "do('echo_args', 7, k=1)")
 
     def test_set(self):
-        line = ["my_letters", "--set", "dat.title", "Re-configured letterator",
+        line = ["my_letters", "--set", "dat.title=Re-configured letterator",
                 "--json", "rules", '[[2, "my_letters.triple_it"]]']
         code, out, _ = dat(*line)
         assert code == 0
         assert out.endswith("a  bbb  c  ddd  e  fff  g  hhh  i  jjj  k  lll  m"
                             "  nnn  o  ppp  q  rrr  s  ttt  u  vvv  w  xxx  y")
 
-    def test_sets(self):
-        code, out, _ = dat("my_letters", "--sets",
-                           "dat.title=Quickie,start=100,end=110")
+    def test_set_repeats(self):
+        code, out, _ = dat("my_letters", "--set", "dat.title=Quickie",
+                           "--set", "start=100", "--set", "end=110")
         assert code == 0
         assert out.endswith("D  e  fff  g  h  JACKPOT JACKPOT JACKPOT   j  k  lll  m")
 
@@ -209,11 +210,11 @@ class TestArguments:
         assert code == 1 and "JSON" in err
 
     def test_set_on_a_function_exits_1(self):
-        code, _, err = dat("hello_world", "--set", "a.b", "1")
+        code, _, err = dat("hello_world", "--set", "a.b=1")
         assert code == 1 and "--set" in err
 
     def test_missing_operand_exits_1(self):
-        code, _, err = dat("my_letters", "--set", "dat.title")
+        code, _, err = dat("my_letters", "--set", "dat.title")   # no '='
         assert code == 1 and "--set" in err
 
     def test_usage_of_a_target_without_one(self):
@@ -221,18 +222,18 @@ class TestArguments:
         assert code == 0 and "SYNOPSIS" in out
 
     def test_usage_with_no_target(self):
-        code, out, _ = dat("do", "--usage")
+        code, out, _ = dat("--usage")
         assert code == 0 and "SYNOPSIS" in out
 
 
 class TestBootstrap:
     def test_no_args_prints_the_same_usage(self, tmp_path):
-        nested = make_project(tmp_path, python=sys.executable)
+        nested = make_project(tmp_path, run=f"{sys.executable} -m dvc_dat")
         code, out, _ = run_boot(cwd=nested)
         assert code == 0 and "SYNOPSIS" in out
 
     def test_verbs_pass_through(self, tmp_path):
-        nested = make_project(tmp_path, python=sys.executable)
+        nested = make_project(tmp_path, run=f"{sys.executable} -m dvc_dat")
         code, out, _ = run_boot("list", "greet", cwd=nested)
         assert code == 0 and "greet" in out
 
@@ -242,19 +243,19 @@ class TestBootstrap:
         assert ".dataconfig.yaml" in err
 
     def test_end_to_end_from_a_nested_folder(self, tmp_path):
-        nested = make_project(tmp_path, python=sys.executable)
+        nested = make_project(tmp_path, run=f"{sys.executable} -m dvc_dat")
         code, out, err = run_boot("greet", "dan", "loud=true", cwd=nested)
         assert (code, out, err) == (0, "HELLO DAN", "")
 
-    def test_python_key_may_be_a_folder(self, tmp_path):
-        make_wrapper(tmp_path / "myenv", "FOLDER-FORM")
-        nested = make_project(tmp_path, python=str(tmp_path / "myenv"))
+    def test_run_key_is_a_command(self, tmp_path):
+        make_wrapper(tmp_path / "myenv", "COMMAND-FORM")
+        nested = make_project(tmp_path, run=f"{tmp_path}/myenv/bin/python -m dvc_dat")
         code, out, _ = run_boot("greet", cwd=nested)
-        assert code == 0 and out.splitlines() == ["FOLDER-FORM", "hello world"]
+        assert code == 0 and out.splitlines() == ["COMMAND-FORM", "hello world"]
 
-    def test_python_key_is_relative_to_the_config(self, tmp_path):
+    def test_run_key_is_relative_to_the_config(self, tmp_path):
         make_wrapper(tmp_path / "myenv", "RELATIVE-FORM")
-        nested = make_project(tmp_path, python="myenv")
+        nested = make_project(tmp_path, run="myenv/bin/python -m dvc_dat")
         code, out, _ = run_boot("greet", cwd=nested)
         assert code == 0 and out.splitlines() == ["RELATIVE-FORM", "hello world"]
 
@@ -264,15 +265,15 @@ class TestBootstrap:
         code, out, _ = run_boot("greet", cwd=nested)
         assert code == 0 and out.splitlines() == ["DOT-VENV", "hello world"]
 
-    def test_dat_python_overrides_the_config(self, tmp_path):
+    def test_dat_run_overrides_the_config(self, tmp_path):
         make_wrapper(tmp_path / "override", "ENV-FORM")
-        nested = make_project(tmp_path, python=sys.executable)
-        env = _env(DAT_PYTHON=str(tmp_path / "override" / "bin" / "python"))
+        nested = make_project(tmp_path, run=f"{sys.executable} -m dvc_dat")
+        env = _env(DAT_RUN=f"{tmp_path}/override/bin/python -m dvc_dat")
         code, out, _ = run_boot("greet", cwd=nested, env=env)
         assert code == 0 and out.splitlines() == ["ENV-FORM", "hello world"]
 
-    def test_a_missing_interpreter_fails_visibly(self, tmp_path):
-        nested = make_project(tmp_path, python="/no/such/python")
+    def test_a_missing_command_fails_visibly(self, tmp_path):
+        nested = make_project(tmp_path, run="/no/such/python -m dvc_dat")
         code, _, err = run_boot("greet", cwd=nested)
         assert code == 1 and "/no/such/python" in err
 
@@ -282,7 +283,7 @@ class TestImportRoot:
 
     @staticmethod
     def _project(root: Path) -> Path:
-        (root / ".dataconfig.yaml").write_text("local_prefix: data/\n")
+        (root / ".dataconfig.yaml").write_text("dat_folders: data/\n")
         (root / "mypkg").mkdir()
         (root / "mypkg" / "__init__.py").write_text("")
         (root / "mypkg" / "job.py").write_text("def run():\n    return 42\n")
@@ -303,5 +304,5 @@ class TestImportRoot:
     def test_x_from_a_subfolder(self, tmp_path):
         notes = self._project(tmp_path)
         code, out, err = run_boot("mypkg.job.run", cwd=notes,
-                               env=_env(DAT_PYTHON=sys.executable))
+                               env=_env(DAT_RUN=f"{sys.executable} -m dvc_dat"))
         assert (code, out) == (0, "42"), err
