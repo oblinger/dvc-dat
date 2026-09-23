@@ -89,7 +89,7 @@ def _merge_by_name(base: List[Dict], over: List[Dict]) -> List[Dict]:
 DAT_CONFIG_FILE = ".datconfig.yaml"
 DAT_CONFIG_OVERRIDE_FILE = ".datconfig.override.yaml"
 ENV_PREFIX = "DAT_"
-_CONFIG_KEYS = ("dat_folders", "art_folder", "run")    # `run` is read by `bin/dat` only
+_CONFIG_KEYS = ("dat_folders", "art_folder", "manager", "run")    # `run`: `bin/dat` only
 _DEFAULT_DAT_FOLDER = "data"
 _DEFAULT_ART_FOLDER = "art"           # beside the dat folder, never inside it
 
@@ -116,11 +116,32 @@ def _read_config(path: Optional[Path]) -> Dict[str, Any]:
     if not isinstance(values, dict):
         raise ValueError(
             f"{path}: expected a mapping of config keys, got {type(values).__name__}")
-    unknown = sorted(set(values) - set(_CONFIG_KEYS))
+    return values
+
+
+def _check_keys(path: Optional[Path], values: Dict[str, Any], known: Tuple[str, ...]) -> None:
+    """An unknown key is `ValueError`, naming the file and the known keys."""
+    unknown = sorted(set(values) - set(known))
     if unknown:
         raise ValueError(
-            f"{path}: unknown config key(s) {unknown}; known keys are {list(_CONFIG_KEYS)}")
-    return values
+            f"{path}: unknown config key(s) {unknown}; known keys are {list(known)}")
+
+
+def _import_dotted(name: str) -> Any:
+    """The object a dotted `module.attr` path names: the longest importable
+    module, then `getattr` the rest."""
+    parts = name.split(".")
+    for cut in range(len(parts) - 1, 0, -1):
+        try:
+            obj = importlib.import_module(".".join(parts[:cut]))
+        except ModuleNotFoundError as e:
+            if e.name and ".".join(parts[:cut]).startswith(e.name):
+                continue
+            raise
+        for attr in parts[cut:]:
+            obj = getattr(obj, attr)
+        return obj
+    raise ImportError(f"no importable module in {name!r}")
 
 
 def _within(path: str, folder: str) -> bool:
@@ -439,6 +460,12 @@ class DatManager:
         no file they resolve against `start`.  `art_folder` defaults to `art/`
         beside the file, a sibling of `data/`.  An unknown key is `ValueError`.
         `do` as in the constructor.
+
+        A `manager:` key names the class to build, dotted (`mylab.store.Store`):
+        a subclass of the class this is called on, imported once the config
+        folder is on `sys.path`.  Its `CONFIG_KEYS` are extra keys it accepts,
+        handed to its constructor as keyword arguments; any other unknown key is
+        still an error.
         """
         start = Path(start) if start is not None else Path.cwd()
         name = DAT_CONFIG_FILE
@@ -446,12 +473,27 @@ class DatManager:
             start, name = start.parent, start.name
         config_path = _find_file_up(start, name)
         override_path = _find_file_up(start, DAT_CONFIG_OVERRIDE_FILE)
-        values = merge_dicts(_read_config(config_path), _read_config(override_path))
+        file_values, override_values = _read_config(config_path), _read_config(override_path)
+        values = merge_dicts(file_values, override_values)
         if (env := os.environ.get(ENV_PREFIX + "FOLDERS")):
             values["dat_folders"] = env
         if (env := os.environ.get(ENV_PREFIX + "ART_FOLDER")):
             values["art_folder"] = env
         root = os.path.realpath(config_path.parent if config_path else start)
+        if root not in sys.path:
+            sys.path.insert(0, root)    # the config folder is the import root
+        klass = cls
+        if (manager_name := values.get("manager")) is not None:
+            if not isinstance(manager_name, str):
+                raise ValueError(f"{config_path}: manager is a dotted class path, "
+                                 f"got {manager_name!r}")
+            klass = _import_dotted(manager_name)
+            if not (isinstance(klass, type) and issubclass(klass, cls)):
+                raise TypeError(f"{config_path}: manager {manager_name!r} is {klass!r}, "
+                                f"not a subclass of {cls.__name__}")
+        extra = tuple(getattr(klass, "CONFIG_KEYS", ()))
+        _check_keys(config_path, file_values, _CONFIG_KEYS + extra)
+        _check_keys(override_path, override_values, _CONFIG_KEYS + extra)
         folders = values.get("dat_folders", _DEFAULT_DAT_FOLDER)
         folders = [folders] if isinstance(folders, str) else folders
         if not isinstance(folders, list) or not all(isinstance(f, str) and f for f in folders):
@@ -460,11 +502,10 @@ class DatManager:
         art_folder = values.get("art_folder", _DEFAULT_ART_FOLDER)
         if not (isinstance(art_folder, str) and art_folder):
             raise ValueError(f"{config_path}: art_folder is a folder, got {art_folder!r}")
-        manager = cls(dat_folders=[os.path.join(root, f) for f in folders],
-                      art_folder=os.path.join(root, art_folder), do=do)
+        manager = klass(dat_folders=[os.path.join(root, f) for f in folders],
+                        art_folder=os.path.join(root, art_folder), do=do,
+                        **{k: values[k] for k in extra if k in values})
         manager._config_dir = root
-        if root not in sys.path:
-            sys.path.insert(0, root)    # the config folder is the import root
         return manager
 
     def expand(self, text: str, vars: Optional[Dict[str, Any]] = None) -> Any:
@@ -609,6 +650,23 @@ class DatManager:
         if cache_after_load:
             self._dat_cache[path] = dat
         return dat
+
+    def load_path(self, name: Union[str, Path]) -> Path:
+        """Where `load(name)` would find its object -- a dat's folder, or an
+        artifact's payload -- as a `Path`, with nothing built: no factory runs.
+        Recorded on the running dat exactly as `load` records it."""
+        if str(name).startswith(ART_PREFIX):
+            _, folder = self._art_path(str(name))
+            sidecar_path = os.path.join(folder, ART_FILE)
+            if not os.path.exists(sidecar_path):
+                raise FileNotFoundError(f"load_path: no artifact {name!r} (no {sidecar_path})")
+            sidecar = yaml.safe_load(Path(sidecar_path).read_text()) or {}
+            _record(str(name), sidecar.get("sha256"))
+            payload = sidecar.get("payload", ".")
+            return Path(folder) if payload == "." else Path(folder, payload)
+        dat = self._load(name)
+        _record(dat.get_path_name(), dat._sha256())
+        return Path(dat.get_path())
 
     def exists(self, name: Union[str, Path]) -> bool:
         """True if a dat's `_spec_` file is at `name` (resolved like `load`), or

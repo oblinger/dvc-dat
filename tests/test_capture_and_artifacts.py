@@ -286,3 +286,29 @@ class TestDatHash:
         assert dat._sha256().startswith("sha256:")
         assert not dat.verify()
 
+
+
+class TestLoadPath:
+    def test_a_dat_gives_its_folder_and_is_recorded(self, m):
+        prev = m.create({"dat": {}}, path="prev")
+        dat = m.create({"dat": {}}, path="run")
+        with m.recording(dat):
+            assert m.load_path("prev") == Path(prev.get_path())
+        assert dat.get_results()["dat"]["dependencies"] == {"prev": prev._sha256()}
+
+    def test_an_artifact_gives_its_payload_and_builds_nothing(self, m, clip):
+        digest = m.save(clip, "art:video/G1")
+        built = []
+        m.register_artifact("video", lambda path: built.append(path))
+        dat = m.create({"dat": {}}, path="run")
+        with m.recording(dat):
+            path = m.load_path("art:video/G1")
+        assert path.name == "G1.mp4" and path.read_bytes() == b"frames"
+        assert built == []                           # no factory ran
+        assert dat.get_results()["dat"]["dependencies"] == {"art:video/G1": digest}
+
+    def test_a_missing_name_raises(self, m):
+        with pytest.raises(KeyError):
+            m.load_path("nope")
+        with pytest.raises(FileNotFoundError):
+            m.load_path("art:video/nope")
