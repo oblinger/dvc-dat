@@ -175,7 +175,11 @@ folder's contents to `<art_folder>/<kind>/<rest>/`; an existing name is a
 `art:` name hands the payload's path to the factory registered for its
 kind (a class whose constructor takes the path, else a lambda) and returns
 a `Path` when none is. The artifact folder is `art_folder:` in
-`.datconfig.yaml`, else `art/` under the first dat folder.
+`.datconfig.yaml`, else `art/` beside the config file — a sibling of `data/`.
+The artifact folder and the dat folders never nest (that is a `ValueError`),
+so an artifact name and a dat name can never collide. A `DatManager` built
+by hand with no `art_folder` holds no artifacts: `save` and `art:` loads
+raise `RuntimeError`.
 
 ## Dependencies by capture
 
@@ -255,8 +259,9 @@ The library itself validates with no schema library at all.
 # are created, all are searched when a dat is loaded by name
 dat_folders: data
 
-# where artifacts live (default: art/ under the first dat folder)
-art_folder: data/art
+# where artifacts live, beside the dat folder, never inside it
+# (default: art)
+art_folder: art
 
 # the command a copy of bin/dat hands its arguments to (see cli.md):
 # your program's main: imports what it mounts, calls dat.cli_main()

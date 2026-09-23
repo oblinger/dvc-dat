@@ -6,6 +6,22 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.5.0 — 2026-09-23
+
+**The artifact folder sits beside the dat folders, never inside them** (Dan,
+2026-09-23: with 2.4's default `art/` inside `data/`, a dat named `art/...`
+and an artifact name collide). Breaking for a 2.4 caller that relied on the
+default; shipped as a minor per the rule above 2.2.0.
+
+- **Nesting is refused**: an `art_folder` inside a dat folder, or a dat
+  folder inside it, is `ValueError`, from the constructor and from
+  `load_dat_config`.
+- **`load_dat_config` defaults `art_folder` to `art/` beside the config file**,
+  a sibling of `data/` (was `art/` under the first dat folder).
+- **`DatManager(dat_folders=[...])` with no `art_folder` holds no artifacts**:
+  `save` and `art:` loads raise `RuntimeError` naming the missing folder.
+  `dat info` prints `(none)`.
+
 ## 2.4.0 — 2026-09-23
 
 **Artifacts and dependencies by capture, in DAT itself** (DAT F018; was SVP's
