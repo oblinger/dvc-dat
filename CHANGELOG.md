@@ -6,6 +6,15 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.6.0 — 2026-09-23
+
+**`--json` reads like `--set`** (Dan, 2026-09-23). Breaking for a command line
+that used the two-word form; shipped as a minor per the rule above 2.2.0.
+
+- `--json DOTTED.KEY=JSON`, one pair per flag, repeatable, mixing freely with
+  `--set` — was `--json DOTTED.KEY '<json>'`. A missing `=` is an error
+  naming the form. Migration: `--json rules '[[2, 3]]'` → `--json 'rules=[[2, 3]]'`.
+
 ## 2.5.0 — 2026-09-23
 
 **The artifact folder sits beside the dat folders, never inside them** (Dan,

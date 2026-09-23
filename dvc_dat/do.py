@@ -510,9 +510,10 @@ DESCRIPTION
     the options and pass anything after it as a fixed argument.
 
 OPTIONS
-    --set DOTTED.KEY=VALUE      (repeatable; VALUE is a YAML scalar)
-    --json DOTTED.KEY '<json value>'
-                Update those spec keys of a template before it forks
+    --set DOTTED.KEY=VALUE      VALUE a YAML scalar
+    --json DOTTED.KEY=JSON      JSON a JSON value
+                Update one spec key of a template before it forks; each
+                repeats, one KEY=VALUE per flag
 
     --dry-run   Print the python do() call instead of making it
     --usage     Print TARGET's own usage (a <base>.usage value, or the spec's
@@ -679,20 +680,19 @@ def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
         if arg == "--":
             args += argv[i + 1:]
             break
-        elif arg == "--json":
-            key, value = _operands(argv, i, 2)
-            try:
-                value = json.loads(value)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"--json {key}: illegal JSON: {e}")
-            Dat.set(overrides, key, value)
-            i += 2
-        elif arg == "--set":
+        elif arg in ("--set", "--json"):
             (pair,) = _operands(argv, i, 1)
             key, eq, value = pair.partition("=")
             if not eq or not key:
-                raise ValueError(f"--set needs DOTTED.KEY=VALUE, got {pair!r}")
-            Dat.set(overrides, key, _scalar(value))
+                raise ValueError(f"{arg} needs DOTTED.KEY=VALUE, got {pair!r}")
+            if arg == "--json":
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"--json {key}: illegal JSON: {e}")
+            else:
+                value = _scalar(value)
+            Dat.set(overrides, key, value)
             i += 1
         elif arg in ("--dry-run", "--usage"):
             flags.add(arg[2:])

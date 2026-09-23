@@ -120,7 +120,7 @@ class TestCommandLine:
 
     def test_tweaking_command_from_cmdline(self):
         line = """./do my_letters --set "dat.title=Re-configured letterator" """ + \
-                """--json rules '[[2, "my_letters.triple_it"]]'"""
+                """--json 'rules=[[2, "my_letters.triple_it"]]'"""
         expect = """a  bbb  c  ddd  e  fff  g  hhh  i""" + \
                  """  jjj  k  lll  m  nnn  o  ppp  q  rrr  s  ttt  u  vvv  w  xxx  y"""
         assert run_capture_tail(line) == expect
