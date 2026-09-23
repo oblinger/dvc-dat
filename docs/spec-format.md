@@ -183,8 +183,11 @@ dat:
 
 `catalog.nightly` wins where they disagree.
 
-Nested mappings merge key by key; any other value, a list included, is
-replaced whole by the later spec. The same merge is `merge_dicts(*dicts)`,
+Nested mappings merge key by key. Two lists whose entries are all mappings
+with a `name` merge by name: a later entry merges into the earlier one of
+the same name, a new name is appended in order, and `{name: X, remove: true}`
+deletes X — so a variant lists only the stages it touches. Any other value,
+any other list included, is replaced whole by the later spec. The same merge is `merge_dicts(*dicts)`,
 for a spec hydrated by hand:
 
 ```python

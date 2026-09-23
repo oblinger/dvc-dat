@@ -216,6 +216,9 @@ at once never mix their maps.
 
 `dat.base` names a spec to inherit from — or a **list** of them, merged left to
 right with later entries winning, so a dat can inherit from a DAG of specs.
+Lists of named entries (`stages: [{name: detect, …}, …]`) merge by `name`,
+so a child names only the entries it changes, adds or removes
+(`{name: X, remove: true}`); see [Spec Format](spec-format.md).
 Resolution is recursive and happens before the spec is written, so `dat.base`
 never appears in a stored spec: what is on disk is the whole recipe.
 
