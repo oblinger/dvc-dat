@@ -227,10 +227,19 @@ which code — the branch, commit and dirty flag (tracked files) of the git
 checkout holding the source of the function `dat.do` names — and what it
 used. Code outside a checkout records no `code`; a detached HEAD records
 `branch: null`. `dependencies` maps every dat and artifact the run loaded
-through its manager to its hash: an artifact's `sha256`, a dat's own
-`dat.sha256` when its results carry one, else `null`. A dat's key is its
-name under its dat folder (its absolute path outside every folder); a run
-that loaded nothing records `{}`.
+through its manager to its hash: an artifact's `sha256`, a dat's
+`dat.sha256` — never `null`. A dat's key is its name under its dat folder
+(its absolute path outside every folder); a run that loaded nothing records
+`{}`.
+
+`dat.sha256` is the dat's content hash, stamped by every `save()` (and so
+by `create` and by every run): the sha256 of sorted `relpath\0sha256` lines
+over every file in the folder, `_result_.yaml` included. That one file is
+hashed as its sorted-key YAML dump with `dat.sha256` set to `excluded`, so
+the hash can live inside the file it covers. `dat.verify()` recomputes it the
+same way and is `True` while the folder is exactly as it was last saved —
+a changed data file, spec or result makes it `False`, reformatting the YAML
+does not. A dat saved before 2.9 carries no hash; it is hashed when loaded.
 
 ```yaml
 dat:
@@ -241,8 +250,9 @@ dat:
     commit: 9d8df8f1c2a6e0b7d5f4e3a2b1c0d9e8f7a6b5c4
     dirty: false
   dependencies:
-    runs/a: null
+    games/G1: "sha256:4b1e…"
     art:video/G1: "sha256:9f3c…"
+  sha256: "sha256:7c0a…"
 accuracy: 0.95
 ```
 

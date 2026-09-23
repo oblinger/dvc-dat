@@ -161,7 +161,9 @@ class TestCapture:
                            path="run")
         assert world.execute(dat) == "ran"
         deps = stored_results(dat)["dat"]["dependencies"]
-        assert deps == {"prev": None, "art:video/G1": self.digest}
+        assert deps == {"prev": world.load("prev").get_results()["dat"]["sha256"],
+                        "art:video/G1": self.digest}
+        assert all(v and v.startswith("sha256:") for v in deps.values())
 
     def test_a_run_with_no_loads_says_so(self, world):
         world.do.mount(value=lambda dat: None, at="quiet")
@@ -172,18 +174,21 @@ class TestCapture:
     def test_a_nested_run_records_its_own_and_appears_once_outside(self, world):
         dat = world.create({"dat": {"do": "outer"}}, path="outer_run")
         world.execute(dat)
+        inner = world.load("inner")
         assert stored_results(dat)["dat"]["dependencies"] == \
-            {"inner": None, "art:video/G1": self.digest}
-        assert stored_results(world.load("inner"))["dat"]["dependencies"] == {"prev": None}
+            {"inner": inner.get_results()["dat"]["sha256"], "art:video/G1": self.digest}
+        assert stored_results(inner)["dat"]["dependencies"] == \
+            {"prev": world.load("prev").get_results()["dat"]["sha256"]}
 
     def test_a_dats_own_hash_is_its_entry(self, world):
         prev = world.load("prev")
-        Dat.set(prev.get_results(), "dat.sha256", "sha256:abc")
-        prev.save()
+        prev.get_results()["note"] = "changed"
+        prev.save()                                   # a new state, a new hash
         dat = world.create({"dat": {"do": "uses_both", "kwargs": {"prev": "prev"}}},
                            path="run2")
         world.execute(dat)
-        assert stored_results(dat)["dat"]["dependencies"]["prev"] == "sha256:abc"
+        assert stored_results(dat)["dat"]["dependencies"]["prev"] == \
+            prev.get_results()["dat"]["sha256"]
 
     def test_recording_by_hand(self, world):
         dat = world.create({"dat": {}}, path="builder")
@@ -237,3 +242,47 @@ class TestCapture:
             t.join()
         assert a.get_results()["dat"]["dependencies"] == {"only_a": None}
         assert b.get_results()["dat"]["dependencies"] == {"only_b": None}
+
+
+class TestDatHash:
+    def test_every_dat_is_hashed_from_birth_and_verifies(self, m):
+        dat = m.create({"dat": {}, "k": 1}, path="born")
+        assert dat.get_results()["dat"]["sha256"].startswith("sha256:")
+        assert dat.verify()
+
+    def test_the_hash_covers_the_data_the_spec_and_the_results(self, m):
+        dat = m.create({"dat": {}}, path="h")
+        first = dat.get_results()["dat"]["sha256"]
+        Path(dat.get_path(), "data.bin").write_bytes(b"x")
+        assert not dat.verify()                       # a file changed under it
+        dat.save()
+        second = dat.get_results()["dat"]["sha256"]
+        assert second != first and dat.verify()
+        dat.get_results()["accuracy"] = 0.9
+        dat.save()
+        assert dat.get_results()["dat"]["sha256"] != second and dat.verify()
+
+    def test_editing_the_results_file_by_hand_fails_verification(self, m):
+        dat = m.create({"dat": {}}, path="edited")
+        path = Path(dat.get_path(), RESULT_YAML)
+        path.write_text(path.read_text() + "tampered: true\n")
+        assert not dat.verify()
+
+    def test_reformatting_the_results_file_does_not(self, m):
+        dat = m.create({"dat": {}}, path="reformatted")
+        dat.get_results()["b"] = 2
+        dat.get_results()["a"] = 1
+        dat.save()
+        path = Path(dat.get_path(), RESULT_YAML)
+        path.write_text(yaml.safe_dump(yaml.safe_load(path.read_text()), sort_keys=True))
+        assert dat.verify()
+
+    def test_a_dat_saved_before_2_9_is_hashed_on_load(self, m, tmp_path):
+        old = tmp_path / "dats" / "old"
+        old.mkdir(parents=True)
+        (old / "_spec_.yaml").write_text("dat: {kind: Dat}\n")
+        (old / RESULT_YAML).write_text("accuracy: 0.5\n")    # no dat.sha256
+        dat = m.load("old")
+        assert dat._sha256().startswith("sha256:")
+        assert not dat.verify()
+

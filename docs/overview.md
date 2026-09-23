@@ -85,7 +85,8 @@ given.
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |
 | `.get_path_name() -> str` | Its name, relative to the dat folder |
-| `.save()` | Write the results to `_result_.yaml` |
+| `.save()` | Write the results to `_result_.yaml`, stamping `dat.sha256` |
+| `.verify() -> bool` | True while the folder still hashes to its `dat.sha256` |
 | `.delete()` | Remove the folder |
 | `.copy(NAME)` / `.move(NAME)` | Copy or move the dat |
 

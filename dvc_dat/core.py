@@ -111,7 +111,8 @@ DAT_RUN_AT = "dat.run_at"              # result: when the last run started
 DAT_RUN_TIME = "dat.run_time"          # result: how long it took
 DAT_CODE = "dat.code"                  # result: branch, commit, dirty of the code run
 DAT_DEPENDENCIES = "dat.dependencies"  # result: every dat and artifact the run loaded
-DAT_SHA256 = "dat.sha256"              # result: a dat's hash, when its run records one
+DAT_SHA256 = "dat.sha256"              # result: the dat's content hash, stamped by save()
+_HASH_PLACEHOLDER = "excluded"         # what dat.sha256 reads while the dat is hashed
 
 ART_PREFIX = "art:"                    # an artifact's name: art:<kind>/<rest>
 ART_FILE = "_art_.yaml"                # an artifact's sidecar
@@ -170,6 +171,24 @@ def _hash_payload(folder: str, payload: str) -> str:
             if rel != ART_FILE:
                 lines.append(f"{rel}\0{_sha256_file(os.path.join(root, file))}\n")
     return hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
+
+
+def _hash_dat(folder: str, results: Dict[str, Any]) -> str:
+    """`"sha256:<hex>"` over every file in a dat's folder, `_result_.yaml`
+    included: it counts as its sorted-key dump with `dat.sha256` set to
+    `excluded`, so the hash can sit inside the file it covers and a later
+    check recomputes it the same way."""
+    lines = []
+    for root, _, files in os.walk(folder):
+        for file in files:
+            rel = os.path.relpath(os.path.join(root, file), folder)
+            if rel != RESULT_YAML:
+                lines.append(f"{rel}\0{_sha256_file(os.path.join(root, file))}\n")
+    canonical = deepcopy(results or {})
+    _dotted_set(canonical, DAT_SHA256.split("."), _HASH_PLACEHOLDER)
+    text = yaml.dump(canonical, Dumper=_SpecDumper, sort_keys=True)
+    lines.append(f"{RESULT_YAML}\0{hashlib.sha256(text.encode()).hexdigest()}\n")
+    return "sha256:" + hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
 
 
 def _git(folder: str, *args: str) -> Optional[str]:
@@ -472,7 +491,9 @@ class DatManager:
                 "`{...}` reference in a spec must resolve to something YAML can hold"
             ) from None
         Path(path, SPEC_YAML).write_text(text)
-        return self._load(path, dat_class=dat_class)
+        dat = self._load(path, dat_class=dat_class)
+        dat.save()                      # every dat carries its hash from birth
+        return dat
 
     def _spec_of(self, spec: Union[Dict, str, None]) -> Dict:
         """A private copy of `spec` (a dict, or a dotted name loaded through `do`),
@@ -504,7 +525,7 @@ class DatManager:
         if str(name).startswith(ART_PREFIX):
             return self._load_artifact(str(name))
         dat = self._load(name, cache_after_load=cache_after_load)
-        _record(dat.get_path_name(), Dat.get(dat.get_results(), DAT_SHA256, None))
+        _record(dat.get_path_name(), dat._sha256())
         return dat
 
     def _load(
@@ -641,14 +662,21 @@ class DatManager:
         """Every `load` (and `save`) inside the block lands in `dat.dependencies`.
         `execute` runs its function inside one.  Blocks nest: when an inner block
         ends, its dat becomes one entry of the outer one."""
+        with self._capture(dat) as outer:
+            yield
+        if outer is not None:
+            _record(dat.get_path_name(), dat._sha256())
+
+    @contextlib.contextmanager
+    def _capture(self, dat: "Dat") -> Iterator[Optional["Dat"]]:
+        """Push `dat` as the recording dat; yields the dat it would be recorded
+        into when the block ends (None at top level, or when that is itself)."""
         stack = _recording.get()
         token = _recording.set(stack + ((self, dat),))
         try:
-            yield
+            yield stack[-1][1] if stack and stack[-1][1] is not dat else None
         finally:
             _recording.reset(token)
-        if stack and stack[-1][1] is not dat:     # a dat is never its own dependency
-            _record(dat.get_path_name(), Dat.get(dat.get_results(), DAT_SHA256, None))
 
     def record_dependency(self, name: str, sha256: Optional[str] = None) -> None:
         """Add `name -> sha256` to the recording dat's `dat.dependencies`, for what
@@ -691,7 +719,7 @@ class DatManager:
         run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         Dat.set(dat.get_results(), DAT_DEPENDENCIES, {})    # a run with no loads says so
         before = time.time()
-        with self.recording(dat):
+        with self._capture(dat) as outer:
             result = fn(dat, *args, **kwargs)
         time_ms = (time.time() - before) * 1000
         exec_time = (time.strftime("%H:%M:%S", time.gmtime(time_ms // 1000))
@@ -701,6 +729,8 @@ class DatManager:
         if (code := _code_of(fn)) is not None:
             Dat.set(dat.get_results(), DAT_CODE, code)
         dat.save()
+        if outer is not None:           # recorded by its final hash
+            _record(dat.get_path_name(), dat._sha256())
         return result
 
     def _class_of(self, kind: Optional[str]) -> Type["Dat"]:
@@ -971,10 +1001,25 @@ class Dat(metaclass=_DatMeta):
         return dat
 
     def save(self) -> None:
-        """Write the results to `_result_.yaml`."""
-        if self._result:
-            with Path(self.get_path(), RESULT_YAML).open("w") as out:
-                yaml.dump(self._result, out, Dumper=_SpecDumper, sort_keys=False)
+        """Write the results to `_result_.yaml`, stamping `dat.sha256` with the
+        hash of the whole folder as it now stands."""
+        Dat.set(self._result, DAT_SHA256, _hash_dat(self._path, self._result))
+        with Path(self.get_path(), RESULT_YAML).open("w") as out:
+            yaml.dump(self._result, out, Dumper=_SpecDumper, sort_keys=False)
+
+    def verify(self) -> bool:
+        """True when the folder on disk still hashes to the `dat.sha256` its
+        `_result_.yaml` carries -- the dat is exactly as it was last saved."""
+        result_path = Path(self._path, RESULT_YAML)
+        if not result_path.exists():
+            return False
+        on_disk = yaml.safe_load(result_path.read_text()) or {}
+        stored = Dat.get(on_disk, DAT_SHA256, None)
+        return stored is not None and stored == _hash_dat(self._path, on_disk)
+
+    def _sha256(self) -> str:
+        """The recorded hash, or -- for a dat saved before 2.9 -- the one it has now."""
+        return Dat.get(self._result, DAT_SHA256, None) or _hash_dat(self._path, self._result)
 
     def delete(self, *, must_exist=True) -> bool:
         """Delete the folder and its contents."""

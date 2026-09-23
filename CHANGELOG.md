@@ -6,6 +6,21 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.9.0 — 2026-09-23
+
+**Every dat has a content hash** (Dan, 2026-09-23: "I don't think anything
+should have a null content hash"). Additive for callers; every
+`_result_.yaml` written from now on carries `dat.sha256`.
+
+- **`dat.sha256`**, stamped by every `save()` — so by `create` and by every
+  run: the sha256 over every file in the folder, `_result_.yaml` included,
+  that file counted as its sorted-key dump with `dat.sha256` set to
+  `excluded`.
+- **`dat.verify() -> bool`**: the folder still hashes to its `dat.sha256`.
+- **`dat.dependencies` entries for dats are hashes, never `null`**; a nested
+  run is recorded by its final hash. A dat saved before 2.9 is hashed on load.
+- `create` now writes `_result_.yaml` (holding the hash) for every dat.
+
 ## 2.8.0 — 2026-09-23
 
 **The package exports four classes** (Dan, 2026-09-23: "everything truly is
