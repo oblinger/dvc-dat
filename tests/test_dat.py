@@ -56,7 +56,8 @@ class TestDatAccessors:
         # Extra fields are at the top level in the new system
         assert spec_dict["my_key1"] == spec1["my_key1"]
         assert spec_dict["my_key2"] == spec1["my_key2"]
-        assert dat.get_results() == {}
+        assert list(dat.get_results()) == ["dat"]              # only its hash, from birth
+        assert dat.get_results()["dat"]["sha256"].startswith("sha256:")
         Dat.set(dat.get_results(), "result_key", "result_val")
         assert dat.delete()
 

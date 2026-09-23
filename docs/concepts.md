@@ -194,8 +194,11 @@ raise `RuntimeError`.
 Every load goes through a manager, so a run's inputs are whatever it
 loaded. `execute` runs the function inside `m.recording(dat)`, and every
 `load` (and `save`) inside that block lands in `dat.dependencies` in
-`_result_.yaml`, name to hash. A nested `do()` records its own loads, and
-the outer run records the inner dat as one entry. A load that reaches
+`_result_.yaml`, name to hash. A dat's hash is its `dat.sha256`, the
+content hash every `save()` stamps over the whole folder — so a dependency
+entry is never `null`, and `dat.verify()` tells you whether an input is
+still exactly what the run saw. A nested `do()` records its own loads, and
+the outer run records the inner dat as one entry, by its final hash. A load that reaches
 around the manager is not a dependency unless the run says so:
 
 ```python
