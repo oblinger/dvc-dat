@@ -11,4 +11,4 @@ Releases follow [semver](https://semver.org). The public contract is
 resolution and the `dat` CLI: a change to any of those is a **major** version;
 a new capability that leaves every existing consumer working is **minor**; a
 fix is **patch**. Every release is listed in `CHANGELOG.md` at the repo root.
-Consumers pin a tag: `dvc_dat @ git+https://github.com/oblinger/dvc-dat@v2.0.0`.
+Consumers pin a tag: `dvc_dat @ git+https://github.com/oblinger/dvc-dat@v3.0.1`.
