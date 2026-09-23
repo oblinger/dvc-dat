@@ -30,12 +30,16 @@ dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
 dat.do.mount(module="tests.fixtures", at="fixtures")
 
 if __name__ == "__main__":
-    if os.environ.get("DAT_CLI_CONFIG"):   # launched by the dat bootstrap
+    # launched by the dat bootstrap
+    if os.environ.get("DAT_CLI_CONFIG"):
         sys.exit(dat.cli_main())
 ```
 
-The mounts land on the one `do` object the process holds, so a
-`from dvc_dat import do` that ran earlier sees them. A notebook gets the same
+The mounts land on the process's default `do` — the namespace of
+`Dat.manager` — so a `from dvc_dat import do` that ran earlier sees them,
+and mounts made before the config is installed survive it. A second
+`DatManager(config)` has a `do` of its own, and `m.do.mount(...)` lands
+there and nowhere else (see [Core Concepts](concepts.md)). A notebook gets the same
 namespace by importing `mypkg.main`; the config's folder is first on
 `sys.path`, so that import works from any directory. With no `run:` the
 bootstrap runs the library's own main, and a dotted name is a Python name and
@@ -189,7 +193,8 @@ dat.do.mount(folder=str(SRC / "scripts"), at="scripts")
 dat.do.mount(value={"debug": False, "version": "2.0.0"}, at="config")
 
 if __name__ == "__main__":
-    if os.environ.get("DAT_CLI_CONFIG"):   # launched by the dat bootstrap
+    # launched by the dat bootstrap
+    if os.environ.get("DAT_CLI_CONFIG"):
         sys.exit(dat.cli_main())
 ```
 

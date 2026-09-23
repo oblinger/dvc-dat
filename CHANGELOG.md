@@ -6,6 +6,40 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.3.0 — 2026-09-22
+
+The 1.x ownership, restored (Dan, 2026-09-22): a `DatManager` owns its
+config **and** its namespace. 2.0 had inverted it — the `do` singleton held
+the config, `configure()` built `Dat.manager`, and the storage code reached
+for the global `do` — so a second `Do()` had mounts of its own but
+`Dat.create` of a spec whose base was mounted only there failed, and
+`Do().configure(x)` moved the global dat folder. Every name callers type
+today keeps working.
+
+- **`DatManager.do`**: every manager carries a `Do` bound to it — its
+  mounts, its `load`, its runner — and everything the manager does (a
+  dotted spec, `dat.base`, `{}` expansion, path resolution) goes through
+  it, never the global. `DatManager(config)` is a second world:
+  `m.do.mount(...)`, `m.do("x")`, `m.create(...)`, `m.load(...)` stay
+  inside `m` and never touch `Dat.manager` or its folders. `dt` is mounted
+  in every world.
+- **`Do.manager`** (and `do.config`, now a property of it): the world a
+  namespace belongs to, built on first use as before. A `Do` runs a
+  template through its own manager; the module-level `do` is the default
+  world's namespace, and `Dat.manager` is `do.manager`. A bare `Do()` is
+  a namespace with no world yet; its first use or `configure(...)` gives
+  it a fresh manager of its own, so it no longer moves the global config.
+- **`do.configure(source)`** keeps the manager (and every mount) and
+  hands it the new config; `Dat.manager` keeps its identity across a
+  reconfigure. On any other `Do`, the default world is untouched.
+- **`DatManager.expand` / `expand_spec`**: the module functions with
+  dotted names resolved through that manager's `do`; the module-level
+  `expand` / `expand_spec` still resolve through the default world.
+- A dat remembers the manager that loaded it: `get_path_name`, `delete`,
+  `copy`, `move` and `DatContainer.get_dats` work in a second world.
+- Removed the private `Dat._manager` class slot (the global lived there);
+  a test that swapped it uses `do.configure(config)` now.
+
 ## 2.2.1 — 2026-09-22
 
 - `Dat(spec)` raises a `TypeError` that names the two ways to get a dat:

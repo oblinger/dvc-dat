@@ -82,15 +82,24 @@ A dat's location carries no meaning the library relies on. Metadata lives in the
 spec and in the results, and a consumer finds dats by querying their contents,
 never by parsing a path.
 
-## `do` is a singleton, and it configures itself on first use
+## `do` is the default world, and it configures itself on first use
+
+A **world** is a `DatManager`: a config (where dats live) and the namespace
+that names them. A manager owns its `do` — a `Do` bound to it, carrying its
+mounts, its `load` and its runner — and everything the manager does (a
+dotted spec, `dat.base`, `{}` expansion, resolving a name to a folder) goes
+through that `do` and no other. `Dat.create` / `Dat.load` are trampolines to
+`Dat.manager`, the process's default world, and the module-level `do` is
+that world's namespace: `Dat.manager.do is do`.
 
 `import dvc_dat` touches no filesystem: it hands you a `do` that can already
-resolve importable names, with `do.config is None` and no `Dat.manager` built.
-The **first** call that needs a config — a `do(...)`, a `do.load(...)`, a
-`Dat.load` / `Dat.create`, any touch of `Dat.manager` — reads the nearest
-`.dataconfig.yaml` walking up from the working directory, builds `Dat.manager`
-from it, and puts the config's folder first on `sys.path`. Nothing in an
-ordinary program calls `configure`:
+resolve importable names, with `do.config is None` and no `Dat.manager`
+built. The **first** call that needs a config — a `do(...)`, a
+`do.load(...)`, a `Dat.load` / `Dat.create`, any touch of `Dat.manager` —
+reads the nearest `.dataconfig.yaml` walking up from the working directory,
+builds the manager from it (adopting `do`, so every `do.mount(...)` made
+before that moment is kept), and puts the config's folder first on
+`sys.path`. Nothing in an ordinary program calls `configure`:
 
 ```python
 from dvc_dat import do
@@ -101,18 +110,36 @@ do("mypkg.train.baseline", lr=0.5)
 
 `do.configure(source)` stays for the cases where the default is wrong — a
 config somewhere other than above the working directory, or one you built in
-code:
+code. It hands the manager the new config and keeps the namespace: mounts
+survive, and `Dat.manager` is the same object before and after:
 
 ```python
 # a folder, a config file, or a DataConfig
 do.configure(project_root)
 ```
 
-Mounts land on the same object either way, so a name imported before the
-config was installed keeps resolving. The `dat` command-line tool needs no
-special handling (see [Command Line](cli.md)); a long-lived service that
-starts in one directory and works in another should call `do.configure()`
-explicitly rather than depend on where the process happened to launch.
+A second world is a second manager. Its `do`, its folders and its dats are
+its own; nothing it does reaches `Dat.manager`, and it sees none of the
+default world's mounts:
+
+```python
+from dvc_dat import Dat, DataConfig, DatManager
+
+m = DatManager(DataConfig(cwd=root, dat_folders="dats/"))
+m.do.mount(folder="catalog", at="catalog", relative_to=root)
+m.do("catalog.experiment", lr=0.5)   # created and run inside m
+m.load(Dat, "runs/experiment1")      # searched in m's folders
+m.expand_spec(spec)                  # {} through m's namespace
+```
+
+A bare `Do()` is a namespace with no world yet; its first use, or its
+`configure(...)`, gives it a fresh manager of its own. It is a probe, not a
+handle on the default world: `Do().configure(x)` moves nothing global.
+
+The `dat` command-line tool needs no special handling (see
+[Command Line](cli.md)); a long-lived service that starts in one directory
+and works in another should call `do.configure()` explicitly rather than
+depend on where the process happened to launch.
 
 ## Templates: `dat.base`
 
@@ -173,7 +200,7 @@ The library itself validates with no schema library at all.
 dat_folders: data
 
 # the command a copy of bin/dat hands its arguments to (see cli.md):
-# your program's main, which imports what it mounts and calls dat.cli_main()
+# your program's main: imports what it mounts, calls dat.cli_main()
 run: .venv/bin/python -m mypkg.main
 ```
 

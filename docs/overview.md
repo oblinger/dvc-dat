@@ -1,7 +1,7 @@
 # DVC-DAT API Reference
 
 A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
-itself. `do` is the one namespace and the one runner.
+itself. `do` is the default namespace and runner; `Dat.manager` is its world.
 
 ## Quick Links
 
@@ -26,7 +26,7 @@ from dvc_dat import (
 | `DatManager` | Creates, finds and loads dats; reached as `Dat.manager` |
 | `DataConfig` | The `.dataconfig.yaml` values |
 | `Do` | The do class — one instance, `do` |
-| `do` | The singleton: namespace, runner, configuration |
+| `do` | The default namespace, runner and configuration; `Dat.manager.do` |
 | `cli_main` | The `dat` command line for a program's own main |
 | `expand` / `expand_spec` | The `{}` grammar |
 | `merge_dicts` | The zipper merge `dat.base` uses |
@@ -151,8 +151,10 @@ Like git, dvc-dat walks up from the working directory looking for
 `.dataconfig.yaml`. An empty file is a complete config.
 
 ```yaml
-dat_folders: data            # or a list: the first is written, all are read
-run: .venv/bin/python -m mypkg.main   # what a copy of bin/dat execs
+# or a list: the first is written, all are read
+dat_folders: data
+# what a copy of bin/dat execs
+run: .venv/bin/python -m mypkg.main
 ```
 
 Those are the only keys; anything else is an error that names the file and the
