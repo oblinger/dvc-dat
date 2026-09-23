@@ -13,7 +13,7 @@ that used the two-word form; shipped as a minor per the rule above 2.2.0.
 
 - `--json DOTTED.KEY=JSON`, one pair per flag, repeatable, mixing freely with
   `--set` — was `--json DOTTED.KEY '<json>'`. A missing `=` is an error
-  naming the form. Migration: `--json rules '[[2, 3]]'` → `--json 'rules=[[2, 3]]'`.
+  naming the form. Migration: `--json rules '[[2, 3]]'` → `--json rules='[[2, 3]]'` (the quotes are the shell's; the word `dat` sees is `rules=[[2, 3]]`).
 
 ## 2.5.0 — 2026-09-23
 

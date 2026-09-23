@@ -88,7 +88,7 @@ a plain function is an error.
 ```bash
 dat my_letters --set "dat.title=Re-configured letterator"
 dat my_letters --set dat.title=Quickie --set start=100 --set end=110
-dat my_letters --json 'rules=[[2, "my_letters.triple_it"]]'
+dat my_letters --json rules='[[2, "my_letters.triple_it"]]'
 ```
 
 ## Exit status
