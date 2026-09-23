@@ -253,6 +253,41 @@ def test_merge_dicts_is_the_base_zipper():
     assert base == {"a": {"x": 1, "y": 2}, "l": [1, 2]}      # inputs untouched
 
 
+
+class TestMergeByName:
+    """Dan, 2026-09-23 (SVP T150 Q1): named list entries merge by name."""
+    stages = {"stages": [{"name": "detect", "fps": 30}, {"name": "track", "k": 5},
+                         {"name": "score"}]}
+
+    def test_a_named_entry_merges_into_its_namesake(self):
+        out = Dat.merge_dicts(self.stages, {"stages": [{"name": "track", "k": 9}]})
+        assert out["stages"] == [{"name": "detect", "fps": 30}, {"name": "track", "k": 9},
+                                 {"name": "score"}]
+
+    def test_a_new_name_appends_in_order(self):
+        out = Dat.merge_dicts(self.stages, {"stages": [{"name": "viz"}, {"name": "zip"}]})
+        assert [e["name"] for e in out["stages"]] == ["detect", "track", "score", "viz", "zip"]
+
+    def test_remove_deletes_by_name(self):
+        out = Dat.merge_dicts(self.stages, {"stages": [{"name": "track", "remove": True}]})
+        assert [e["name"] for e in out["stages"]] == ["detect", "score"]
+
+    def test_entries_merge_recursively(self):
+        base = {"s": [{"name": "p", "cfg": {"a": 1, "b": 2}}]}
+        out = Dat.merge_dicts(base, {"s": [{"name": "p", "cfg": {"b": 3}}]})
+        assert out["s"] == [{"name": "p", "cfg": {"a": 1, "b": 3}}]
+
+    def test_an_unnamed_list_is_still_replaced_whole(self):
+        base = {"s": [{"name": "p"}], "l": [1, 2]}
+        assert Dat.merge_dicts(base, {"s": [{"x": 1}], "l": [3]}) == {"s": [{"x": 1}], "l": [3]}
+
+    def test_dat_base_uses_it(self, tmp_path):
+        m = DatManager(dat_folders=[str(tmp_path)])
+        m.do.mount(value=self.stages, at="parent")
+        dat = m.create({"dat": {"base": "parent"}, "stages": [{"name": "viz"}]}, path="child")
+        assert [e["name"] for e in dat.get_spec()["stages"]] == ["detect", "track", "score", "viz"]
+
+
 class TestMountRefusesImportClash:
     """A mounted name is never also an importable one (Dan, 2026-09-22, F012 Q2)."""
 

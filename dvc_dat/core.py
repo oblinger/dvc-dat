@@ -35,7 +35,14 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 def merge_dicts(*dicts: Dict, inplace: bool = False) -> Dict:
-    """Recursively merge N dicts; each dict overrides the ones before it."""
+    """Recursively merge N dicts; each dict overrides the ones before it.
+
+    Mappings merge key by key.  Two lists whose entries are all mappings with a
+    `name` merge by name: a later entry merges into the earlier one of the same
+    name, a new name is appended in the later list's order, and an entry
+    `{name: X, remove: true}` deletes X.  Anything else, any other list
+    included, is replaced whole by the later value.
+    """
     if len(dicts) == 1:
         return dicts[0]
     dict_1 = dicts[0]
@@ -45,9 +52,34 @@ def merge_dicts(*dicts: Dict, inplace: bool = False) -> Dict:
     for k, v in dict_2.items():
         if isinstance(v, dict) and isinstance(dict_1.get(k), dict):
             dict_1[k] = merge_dicts(dict_1[k], v)
+        elif _named_list(v) and _named_list(dict_1.get(k)):
+            dict_1[k] = _merge_by_name(dict_1[k], v)
         else:
             dict_1[k] = deepcopy(v)
     return merge_dicts(dict_1, *dicts[2:])
+
+
+def _named_list(value: Any) -> bool:
+    """A non-empty list whose every entry is a mapping carrying a `name`."""
+    return (isinstance(value, list) and bool(value)
+            and all(isinstance(e, dict) and "name" in e for e in value))
+
+
+def _merge_by_name(base: List[Dict], over: List[Dict]) -> List[Dict]:
+    """`over` merged into `base` by each entry's `name` (see `merge_dicts`)."""
+    merged = [deepcopy(e) for e in base]
+    index = {e["name"]: i for i, e in enumerate(merged)}
+    removed = set()
+    for entry in over:
+        name = entry["name"]
+        if entry.get("remove") is True:
+            removed.add(name)
+        elif name in index:
+            merged[index[name]] = merge_dicts(merged[index[name]], entry)
+        else:
+            index[name] = len(merged)
+            merged.append(deepcopy(entry))
+    return [e for e in merged if e["name"] not in removed]
 
 
 # =============================================================================

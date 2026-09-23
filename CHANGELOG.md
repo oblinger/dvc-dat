@@ -6,6 +6,17 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.10.0 — 2026-09-23
+
+**Named list entries merge by name** (Dan, 2026-09-23, ruled on SVP T150 Q1
+after measuring ALG2's configs: every variant appends a stage, edits fields
+inside one, or replaces the list). In `merge_dicts`, and so in `dat.base`,
+two lists whose entries are all mappings with a `name` merge by name: a later
+entry merges into its namesake, a new name appends in order, and
+`{name: X, remove: true}` deletes X. Any other list is still replaced whole.
+A spec that relied on a named list being replaced whole now merges; name
+every entry it keeps, or remove the rest.
+
 ## 2.9.0 — 2026-09-23
 
 **Every dat has a content hash** (Dan, 2026-09-23: "I don't think anything
