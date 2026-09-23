@@ -15,7 +15,7 @@ from dvc_dat import Dat, do
 # Create a dat with its own metadata
 dat = Dat.create(
     path="experiments/exp1",
-    spec={"dat": {"kind": "Dat"}, "params": {"lr": 0.01}},
+    spec={"params": {"lr": 0.01}},
 )
 
 # Open it later

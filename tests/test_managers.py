@@ -49,7 +49,7 @@ class TestTwoWorlds:
         assert ma.do("tmpl") == {"name": "run_a", "args": [], "kwargs": {"tag": "a"}}
         assert mb.do("tmpl", 7) == {"name": "run_b", "args": [7], "kwargs": {"tag": "b"}}
 
-        dat_a, dat_b = ma.load(Dat, "run_a"), mb.load(Dat, "run_b")
+        dat_a, dat_b = ma.load("run_a"), mb.load("run_b")
         assert dat_a.get_path().startswith(ma.dat_folder)
         assert dat_b.get_path().startswith(mb.dat_folder)
         assert dat_a.get_spec()["who"] == "world a"        # `{}` through its own namespace
@@ -57,7 +57,7 @@ class TestTwoWorlds:
         assert dat_b.get_spec()["dat"]["kwargs"] == {"tag": "b"}   # `dat.base` through its own
         assert not ma.exists("run_b") and not mb.exists("run_a")
         with pytest.raises(KeyError):
-            ma.load(Dat, "run_b")
+            ma.load("run_b")
 
         assert Dat.manager.dat_folder == global_folder      # the default world: untouched
         assert set(do.keys()) == global_names
@@ -74,7 +74,7 @@ class TestTwoWorlds:
 
     def test_a_dotted_spec_and_its_base_resolve_in_the_managers_namespace(self, worlds):
         ma, mb = worlds
-        dat = ma.create(Dat, spec="tmpl")
+        dat = ma.create("tmpl")
         assert dat.get_path_name() == "run_a"
         assert dat.get_spec()["dat"]["kwargs"] == {"tag": "a"}
         assert "base" not in dat.get_spec()["dat"]
@@ -121,7 +121,7 @@ class TestTheDefaultWorld:
             Dat.load(name).delete()
         dat = Dat.create(path=name, spec={"k": "v"})
         assert dat.get_path().startswith(Dat.manager.dat_folder)
-        assert Dat.load(name) is Dat.manager.load(Dat, name)
+        assert Dat.load(name) is Dat.manager.load(name)
         assert Dat.manager.exists(name)
         dat.delete()
 

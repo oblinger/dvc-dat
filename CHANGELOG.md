@@ -8,6 +8,29 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## 2.3.0 — 2026-09-22
 
+**The run and the class belong to the manager** (SVP's handoff, 2026-09-22).
+Breaking for a caller of `DatManager.create` / `load`, and for code that
+compares `dat.kind` to a bare name; shipped as a minor per the rule above
+2.2.0.
+
+- **`DatManager.execute(dat)`** is the run: `do(...)` calls it, and so does
+  every `do(...)` a running function makes, so a `DatManager` subclass that
+  overrides it wraps every run. It replaces the private `Do._run_dat`.
+- **A run records its code**: `dat.code: {branch, commit, dirty}` in
+  `_result_.yaml`, from the git checkout holding the source of the function
+  `dat.do` names; nothing outside a checkout.
+- **`dat.kind` is a dotted `module.qualname`** (`dvc_dat.core.Dat`,
+  `mylab.runs.Run`), written by `create` and imported by `load`. An
+  unimportable kind is `ImportError` and a non-`Dat` is `TypeError`; neither
+  downgrades to `Dat`. A bare name on disk is still read the old way.
+- **`manager.create(spec=None, *, path=None)`** and
+  **`manager.load(name_or_path, *, cache_after_load=True)`** take no class;
+  the spec decides. `load`'s ignored `cwd` is gone, from `Dat.load` too.
+- **`Cls.load(name) -> Cls`** raises `TypeError` unless the dat is a `Cls`
+  (was `ValueError` on a kind mismatch); **`Cls.create`** gives a spec with no
+  kind `Cls`, and refuses a kind outside `Cls` before writing anything.
+- `repr(dat)` is `<ClassName: name>`, not the spec's kind.
+
 The 1.x ownership, restored (Dan, 2026-09-22): a `DatManager` owns its
 config **and** its namespace. 2.0 had inverted it — the `do` singleton held
 the config, `configure()` built `Dat.manager`, and the storage code reached

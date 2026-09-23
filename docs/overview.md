@@ -70,6 +70,7 @@ given.
 | `Dat.load(NAME) -> Dat` | Load a dat by name or path |
 | `Dat.validate_spec(SPEC) -> SPEC` | Classmethod hook, run on create and load |
 | `Dat.manager.exists(NAME) -> bool` | True iff the named dat exists |
+| `Dat.manager.execute(DAT)` | Run a dat; every run in a world goes through it |
 | `.get_spec() -> dict` | The spec — every `{}` was expanded once, at create |
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |

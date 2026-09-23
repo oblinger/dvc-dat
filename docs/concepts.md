@@ -128,9 +128,18 @@ from dvc_dat import Dat, DataConfig, DatManager
 m = DatManager(DataConfig(cwd=root, dat_folders="dats/"))
 m.do.mount(folder="catalog", at="catalog", relative_to=root)
 m.do("catalog.experiment", lr=0.5)   # created and run inside m
-m.load(Dat, "runs/experiment1")      # searched in m's folders
+m.load("runs/experiment1")           # searched in m's folders
 m.expand_spec(spec)                  # {} through m's namespace
 ```
+
+A manager takes no class: `m.create(spec)` and `m.load(name)` build the class
+the spec's `dat.kind` names. `Run.load(name)` and `Run.create(...)` are the
+typed forms on the default world — the result is a `Run`, or a `TypeError`.
+
+Every run in a world goes through `m.execute(dat)`: `m.do(...)`, and each
+`do(...)` a running function makes, land there. A subclass of `DatManager`
+that overrides `execute` and calls `super().execute(dat)` wraps every run —
+to record what the run loaded, say.
 
 A bare `Do()` is a namespace with no world yet; its first use, or its
 `configure(...)`, gives it a fresh manager of its own. It is a probe, not a

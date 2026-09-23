@@ -112,7 +112,7 @@ class Do:
         try:
             if isinstance(obj, Dat):
                 if not args and not kwargs:
-                    return self._run_dat(obj)
+                    return self.manager.execute(obj)
                 obj = copy.deepcopy(obj.get_spec())
                 if Dat.get(obj, DAT_TARGET_EXISTS, "error") == "error":
                     Dat.set(obj, DAT_TARGET_EXISTS, "increment")   # a fork lands beside its parent
@@ -124,7 +124,7 @@ class Do:
             dat, skip_execution = self._dat_from_template(spec)
             if skip_execution:
                 return dat
-            return self._run_dat(dat)
+            return self.manager.execute(dat)
         except Exception as e:
             raise Exception(f"In {target!r}") from e
 
@@ -142,29 +142,6 @@ class Do:
             Dat.set(spec, DAT_KWARGS, merged)
         return spec
 
-    def _run_dat(self, dat: Dat) -> Any:
-        """Run a dat as its spec says; record when and how long in its results."""
-        spec = dat.get_spec()
-        fn = Dat.get(spec, DAT_DO, None)
-        if fn is None:
-            return dat
-        if isinstance(fn, str):
-            fn = self.load(fn)
-        if not callable(fn):
-            raise TypeError(f"{DAT_DO} in {dat!r} is {fn!r}, not callable")
-        args = list(Dat.get(spec, DAT_ARGS, None) or [])
-        kwargs = dict(Dat.get(spec, DAT_KWARGS, None) or {})
-        run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        before = time.time()
-        result = fn(dat, *args, **kwargs)
-        time_ms = (time.time() - before) * 1000
-        exec_time = (time.strftime("%H:%M:%S", time.gmtime(time_ms // 1000))
-                     + ".{:03d}".format(int(time_ms % 1000)))
-        Dat.set(dat.get_results(), DAT_RUN_AT, run_at)
-        Dat.set(dat.get_results(), DAT_RUN_TIME, exec_time)
-        dat.save()
-        return result
-
     def _dat_from_template(self, spec: Spec, *, path: Optional[str] = None) -> Tuple[Dat, bool]:
         """Create the dat a template spec describes (see `DatManager.create`).
 
@@ -178,8 +155,8 @@ class Do:
         if target_exists == "use":
             expanded, exists = manager._prepare_dat_path(path, target_exists="use")
             if exists:
-                return manager.load(Dat, expanded), True
-        return manager.create(Dat, path=path, spec=spec), False
+                return manager.load(expanded), True
+        return manager.create(spec, path=path), False
 
     # -- specs ---------------------------------------------------------------
 

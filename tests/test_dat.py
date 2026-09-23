@@ -102,7 +102,7 @@ class TestCreateSaveAndLoad:
         assert Dat.get(dat, ["my_key1"]) == "my_val1"
         # dat section contains only kind/base/do
         dat_dict = Dat.get(dat, ["dat"])
-        assert dat_dict["kind"] == "Dat"
+        assert dat_dict["kind"] == "dvc_dat.core.Dat"
 
     def test_set_creates_levels(self, spec1):
         Dat.set(spec1, "bip.bop.boop", 3.14)
@@ -172,7 +172,7 @@ class TestDatContainers:
 
         reload: DatContainer[Dat] = DatContainer.load(TMP_PATH)
         assert isinstance(reload, DatContainer)
-        assert Dat.get(reload.get_spec(), "dat.kind") == "DatContainer"
+        assert Dat.get(reload.get_spec(), "dat.kind") == "dvc_dat.core.DatContainer"
 
         paths = reload.get_dat_paths()
         assert isinstance(paths, list)

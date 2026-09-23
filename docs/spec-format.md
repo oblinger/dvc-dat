@@ -8,17 +8,23 @@ the file, and nothing is supplied at the call site.
 
 ```yaml
 dat:
-  kind: Dat
+  kind: dvc_dat.core.Dat
 ```
 
-`dat.kind` names the Python class. It defaults to the class that created the
-dat, so the minimal spec a template has to write is `{}`.
+`dat.kind` names the Python class as a dotted `module.qualname`, the way
+pickle does. It defaults to the class that created the dat, so the minimal spec
+a template has to write is `{}`. Loading imports it: a class that cannot be
+imported is an `ImportError`, one that is not a `Dat` is a `TypeError`. A bare
+name (`Run`), as dats written before 2.3 carry, is still read: it is looked up
+among the loaded subclasses of `Dat`, and reads as `Dat` when none matches. A
+class defined in a script or notebook is written `__main__.Run`, which only
+that process can import.
 
 ## The `dat` section
 
 ```yaml
 dat:
-  kind: Dat
+  kind: dvc_dat.core.Dat
   base: catalog.base_template
   name: "runs/{YYYY}-{MM}/exp{unique}"
   do: scripts.run_experiment
@@ -29,7 +35,7 @@ dat:
 
 | Field | Description |
 |-------|-------------|
-| `kind` | Python class name. `Dat` or a subclass. |
+| `kind` | Dotted class path. `dvc_dat.core.Dat` or a subclass. |
 | `base` | A spec to inherit from — a dotted name, a spec, or a **list** of either. Resolved before the spec is written, so it never appears in a stored spec. |
 | `name` | The path template for the dat's folder. Used when `Dat.create()` is given no `path`. |
 | `do` | Dotted name of the function to run. |
@@ -76,7 +82,7 @@ Any key outside `dat:` is the dat's own data and is kept as written:
 
 ```yaml
 dat:
-  kind: Dat
+  kind: dvc_dat.core.Dat
 title: My Experiment
 parameters:
   learning_rate: 0.01
@@ -136,7 +142,7 @@ them instead of writing a parser.
 
 ```yaml
 dat:
-  kind: Dat
+  kind: dvc_dat.core.Dat
 defaults:
   optimizer: adam
   epochs: 100
@@ -146,7 +152,7 @@ defaults:
 
 ```yaml
 dat:
-  kind: Dat
+  kind: dvc_dat.core.Dat
   base: catalog.base
 defaults:
   epochs: 200
@@ -157,7 +163,7 @@ custom_param: true
 
 ```yaml
 dat:
-  kind: Dat
+  kind: dvc_dat.core.Dat
 defaults:
   optimizer: adam
   epochs: 200
@@ -212,12 +218,19 @@ hand-written check, or with none at all.
 ## Result file
 
 `_result_.yaml` holds only what running the dat produced: whatever the function
-put in `dat.get_results()`, plus the two facts the runner knows.
+put in `dat.get_results()`, plus what the runner knows: when, how long, and
+which code — the branch, commit and dirty flag (tracked files) of the git
+checkout holding the source of the function `dat.do` names. Code outside a
+checkout records no `code`; a detached HEAD records `branch: null`.
 
 ```yaml
 dat:
   run_at: "2026-09-21 16:20:19"
   run_time: "00:00:00.011"
+  code:
+    branch: main
+    commit: 9d8df8f1c2a6e0b7d5f4e3a2b1c0d9e8f7a6b5c4
+    dirty: false
 accuracy: 0.95
 ```
 

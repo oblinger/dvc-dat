@@ -73,11 +73,11 @@ class TestDataConfig:
                     spec={"dat": {"kind": "Dat"}, "my_key": "my_value"},
                 )
                 assert dat is not None
-                assert dat.get_spec()["dat"]["kind"] == "Dat"
+                assert dat.get_spec()["dat"]["kind"] == "dvc_dat.core.Dat"
                 assert os.path.exists(dat.get_path())
 
                 loaded = Dat.load(dat.get_path())
-                assert loaded.get_spec()["dat"]["kind"] == "Dat"
+                assert loaded.get_spec()["dat"]["kind"] == "dvc_dat.core.Dat"
                 dat.delete()
             finally:
                 do.configure(original_config)
