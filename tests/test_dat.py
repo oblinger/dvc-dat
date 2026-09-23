@@ -43,8 +43,7 @@ def spec2():
 class TestDatAccessors:
     def test_path_accessors(self, spec1):
         dat = Dat.create(spec=spec1, path="any/path/goes/here/my_dat")
-        # dat_folder may have trailing slash, so use rstrip to normalize
-        expected_path = f"{Dat.manager.dat_folder.rstrip('/')}/any/path/goes/here/my_dat"
+        expected_path = f"{Dat.manager._dat_folders[0]}/any/path/goes/here/my_dat"
         assert dat.get_path() == expected_path
         assert dat.get_path_name() == "any/path/goes/here/my_dat"
         assert dat.delete()
@@ -102,7 +101,7 @@ class TestCreateSaveAndLoad:
         assert Dat.get(dat, ["my_key1"]) == "my_val1"
         # dat section contains only kind/base/do
         dat_dict = Dat.get(dat, ["dat"])
-        assert dat_dict["kind"] == "Dat"
+        assert dat_dict["kind"] == "dvc_dat.core.Dat"
 
     def test_set_creates_levels(self, spec1):
         Dat.set(spec1, "bip.bop.boop", 3.14)
@@ -172,7 +171,7 @@ class TestDatContainers:
 
         reload: DatContainer[Dat] = DatContainer.load(TMP_PATH)
         assert isinstance(reload, DatContainer)
-        assert Dat.get(reload.get_spec(), "dat.kind") == "DatContainer"
+        assert Dat.get(reload.get_spec(), "dat.kind") == "dvc_dat.core.DatContainer"
 
         paths = reload.get_dat_paths()
         assert isinstance(paths, list)

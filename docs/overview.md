@@ -1,7 +1,7 @@
 # DVC-DAT API Reference
 
 A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
-itself. `do` is the one namespace and the one runner.
+itself. `Dat.manager` is the default world; `do` is its namespace and runner.
 
 ## Quick Links
 
@@ -13,7 +13,7 @@ itself. `do` is the one namespace and the one runner.
 
 ```python
 from dvc_dat import (
-    Dat, DatContainer, DatManager, DataConfig,
+    Dat, DatContainer, DatManager,
     Do, do, cli_main,
     expand, expand_spec, merge_dicts,
 )
@@ -23,10 +23,9 @@ from dvc_dat import (
 |------|------------|
 | `Dat` | A dat folder: its spec, its results, its path |
 | `DatContainer` | A dat whose folder holds other dats |
-| `DatManager` | Creates, finds and loads dats; reached as `Dat.manager` |
-| `DataConfig` | The `.dataconfig.yaml` values |
+| `DatManager` | Creates, finds, loads and runs dats; `Dat.manager` is the default, assign to replace |
 | `Do` | The do class — one instance, `do` |
-| `do` | The singleton: namespace, runner, configuration |
+| `do` | The default namespace and runner; forwards to `Dat.manager.do` |
 | `cli_main` | The `dat` command line for a program's own main |
 | `expand` / `expand_spec` | The `{}` grammar |
 | `merge_dicts` | The zipper merge `dat.base` uses |
@@ -52,8 +51,6 @@ what `dat.do` names. `dat.run_at` and `dat.run_time` land in the results.
 |--------|-------------|
 | `do.load(NAME, default=, kind=)` | The object a dotted name names |
 | `do.name_of(OBJ) -> str` | The name `load` takes back to `OBJ` |
-| `do.configure(SOURCE) -> DataConfig` | Install a chosen config; first use does this for you |
-| `do.config` | The `DataConfig` in force, or `None` |
 | `do.mount(at=, folder=/file=/module=/value=)` | Add one name to the namespace; your program calls it |
 | `do.keys()` | Every mounted base name |
 
@@ -69,7 +66,11 @@ given.
 | `Dat.create(path=, spec=) -> Dat` | Create a dat from a path template and spec |
 | `Dat.load(NAME) -> Dat` | Load a dat by name or path |
 | `Dat.validate_spec(SPEC) -> SPEC` | Classmethod hook, run on create and load |
+| `Dat.manager` | The default world; built on first use by `DatManager.load_dat_config()`, replaced by assignment |
+| `DatManager(dat_folders=[...], do=None)` | A world on a list of folders, keyword-only; nothing read from disk |
+| `DatManager.load_dat_config(START) -> DatManager` | A new manager from the `.datconfig.yaml` above `START` |
 | `Dat.manager.exists(NAME) -> bool` | True iff the named dat exists |
+| `Dat.manager.execute(DAT)` | Run a dat; every run in a world goes through it |
 | `.get_spec() -> dict` | The spec — every `{}` was expanded once, at create |
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |
@@ -80,8 +81,8 @@ given.
 
 `DatContainer` adds `.get_dat_paths() -> [str]` and `.get_dats() -> [Dat]`.
 
-NAME is an absolute path, a path under the config folder, a mounted dat name,
-or a path under one of the dat folders.
+NAME is an absolute path, a mounted dat name, or a path under one of the dat
+folders.
 
 ## Dict trees
 
@@ -133,7 +134,7 @@ dat TARGET --dry-run
 dat TARGET --usage
 ```
 
-`dat` configures itself from the nearest `.dataconfig.yaml`. A target that
+`dat` configures itself from the nearest `.datconfig.yaml`. A target that
 is a template spec is forked: the fixed arguments become its `dat.args`,
 the `KEY=VALUE` pairs update its `dat.kwargs`, and `--set` / `--json` update
 any spec key. Every argument value is a YAML scalar. `list`, `info` and
@@ -145,14 +146,16 @@ directory. The environment's `dat` console script does not read `run:`: it
 runs the library's own command line, with no project mounts. See **[Command Line](cli.md)** for every
 reserved word, flag and exit code, the bootstrap and the `run:` config key.
 
-## `.dataconfig.yaml`
+## `.datconfig.yaml`
 
 Like git, dvc-dat walks up from the working directory looking for
-`.dataconfig.yaml`. An empty file is a complete config.
+`.datconfig.yaml`. An empty file is a complete config.
 
 ```yaml
-dat_folders: data            # or a list: the first is written, all are read
-run: .venv/bin/python -m mypkg.main   # what a copy of bin/dat execs
+# or a list: the first is written, all are read
+dat_folders: data
+# what a copy of bin/dat execs
+run: .venv/bin/python -m mypkg.main
 ```
 
 Those are the only keys; anything else is an error that names the file and the

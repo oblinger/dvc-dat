@@ -6,6 +6,76 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.3.0 — 2026-09-22
+
+**The run and the class belong to the manager** (SVP's handoff, 2026-09-22).
+Breaking for a caller of `DatManager.create` / `load`, and for code that
+compares `dat.kind` to a bare name; shipped as a minor per the rule above
+2.2.0.
+
+- **`DatManager.execute(dat)`** is the run: `do(...)` calls it, and so does
+  every `do(...)` a running function makes, so a `DatManager` subclass that
+  overrides it wraps every run. It replaces the private `Do._run_dat`.
+- **A run records its code**: `dat.code: {branch, commit, dirty}` in
+  `_result_.yaml`, from the git checkout holding the source of the function
+  `dat.do` names; nothing outside a checkout.
+- **`dat.kind` is a dotted `module.qualname`** (`dvc_dat.core.Dat`,
+  `mylab.runs.Run`), written by `create` and imported by `load`. An
+  unimportable kind is `ImportError` and a non-`Dat` is `TypeError`; neither
+  downgrades to `Dat`. A bare name on disk is still read the old way.
+- **`manager.create(spec=None, *, path=None)`** and
+  **`manager.load(name_or_path, *, cache_after_load=True)`** take no class;
+  the spec decides. `load`'s ignored `cwd` is gone, from `Dat.load` too.
+- **`Cls.load(name) -> Cls`** raises `TypeError` unless the dat is a `Cls`
+  (was `ValueError` on a kind mismatch); **`Cls.create`** gives a spec with no
+  kind `Cls`, and refuses a kind outside `Cls` before writing anything.
+- `repr(dat)` is `<ClassName: name>`, not the spec's kind.
+
+**One object: the manager** (Dan, 2026-09-22/23, DAT T017). A `DatManager`
+owns its folders **and** its namespace, and it is the only thing a program
+configures. 2.0 had inverted it — the `do` singleton held a `DataConfig`,
+`configure()` built `Dat.manager`, and the storage code reached for the
+global `do` — so a second `Do()` had mounts of its own but `Dat.create` of a
+spec whose base was mounted only there failed.
+
+- **`DatManager(*, dat_folders, do=None)`**: keyword-only, `dat_folders` a
+  required list (a string is `TypeError`), searched in order by name, the
+  first written to; nothing is read from disk. `do` is its only public
+  attribute. Every manager carries a `Do` bound to it — its mounts, its
+  `load`, its runner — and everything the manager does (a dotted spec,
+  `dat.base`, `{}` expansion, path resolution) goes through it. `do=`
+  adopts an existing namespace with its mounts. `dt` is mounted in every
+  world.
+- **`DatManager.load_dat_config(start=None, *, do=None)`**: a new manager from
+  the `.datconfig.yaml` found walking up from `start` (a config file names
+  itself); the file's folder goes first on `sys.path`.
+- **`Dat.manager`** is a plain class attribute: filled on first read by
+  `load_dat_config()`, replaced by assignment, shared by every subclass.
+  Adopting the default `do` (`DatManager(..., do=dvc_dat.do)`) makes the new
+  manager the default and keeps every mount.
+- **`dvc_dat.do`** forwards to `Dat.manager.do`, whichever manager that is.
+  A bare `Do()` mounts and loads; running in it before a manager adopts it
+  is `RuntimeError`.
+- **`DatManager.expand` / `expand_spec`**: dotted names through that
+  manager's `do`; the module functions resolve through the default world.
+- A dat remembers the manager that loaded it (`dat.manager`):
+  `get_path_name`, `delete`, `copy`, `move` and `DatContainer.get_dats`
+  work in a second world.
+
+Removed, each with its replacement:
+
+| Gone | Instead |
+| --- | --- |
+| `.dataconfig.yaml`, `.dataconfig.override.yaml` | `.datconfig.yaml`, `.datconfig.override.yaml` — rename the file |
+| `DataConfig`, `DataConfig.new(cwd=X)` | `DatManager.load_dat_config(X)` |
+| `DatManager(config)` | `DatManager(dat_folders=[...])` |
+| `do.configure(X)` | `Dat.manager = DatManager.load_dat_config(X, do=dvc_dat.do)` |
+| `do.config`, `manager.config`, `config.cwd` | none; `sys.path[0]` is the config folder |
+| `manager.dat_folder`, `manager.dat_folders` | private; name dats, not folders |
+| `DAT_CWD` | none; `load_dat_config(start)` |
+| `load` of a path relative to the config folder | an absolute path, or a name under a dat folder |
+| `cli_main(config=DataConfig)` | `cli_main(config=folder_or_file)` |
+
 ## 2.2.1 — 2026-09-22
 
 - `Dat(spec)` raises a `TypeError` that names the two ways to get a dat:

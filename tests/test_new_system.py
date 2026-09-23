@@ -1,4 +1,5 @@
-"""Configuration: DataConfig discovery, precedence, and the DatManager built from it."""
+"""Configuration: `DatManager.load_dat_config` discovery and precedence, the
+constructor, and the default world `Dat.manager`."""
 import importlib
 import os
 import sys
@@ -9,137 +10,184 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import Dat, DataConfig, DatManager, cli_main, do  # noqa: E402
-from dvc_dat.core import DATA_CONFIG_FILE  # noqa: E402
+import dvc_dat  # noqa: E402
+from dvc_dat import Dat, DatManager, cli_main, do  # noqa: E402
+from dvc_dat.core import DAT_CONFIG_FILE, DAT_CONFIG_OVERRIDE_FILE  # noqa: E402
 from dvc_dat.do import Do  # noqa: E402
 
 
-class TestDataConfig:
-    def test_dataconfig_creation(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config = DataConfig.new(cwd=tmpdir)
-            assert config.cwd == os.path.realpath(tmpdir)
-            assert config.dat_folders[0].endswith("/")
+@pytest.fixture
+def default_world():
+    """Restore `Dat.manager` after a test that replaces it."""
+    before = Dat.manager
+    yield before
+    Dat.manager = before
 
-    def test_new_searches_from_cwd_argument(self, monkeypatch):
-        """`new(cwd=X)` finds the config above X, not above the process cwd."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = os.path.realpath(tmpdir)
-            with open(os.path.join(root, DATA_CONFIG_FILE), "w") as f:
-                f.write("dat_folders: from_arg/\n")
-            nested = os.path.join(root, "a", "b")
-            os.makedirs(nested)
-            with tempfile.TemporaryDirectory() as elsewhere:
-                monkeypatch.chdir(elsewhere)
-                config = DataConfig.new(cwd=nested)
-            assert config.cwd == nested
-            assert config.dat_folders == [os.path.join(nested, "from_arg/")]
 
-    def test_only_dat_prefixed_environment_keys_override(self, monkeypatch):
+class TestLoadDatConfig:
+    def test_no_file_means_data_under_start(self, tmp_path):
+        manager = DatManager.load_dat_config(tmp_path)
+        assert manager._dat_folders == [os.path.join(os.path.realpath(tmp_path), "data")]
+        assert manager._config_dir == os.path.realpath(tmp_path)
+
+    def test_searches_up_from_start(self, tmp_path, monkeypatch):
+        """`load_dat_config(X)` finds the config above X, not above the process cwd."""
+        root = os.path.realpath(tmp_path)
+        Path(root, DAT_CONFIG_FILE).write_text("dat_folders: from_arg/\n")
+        nested = os.path.join(root, "a", "b")
+        os.makedirs(nested)
+        with tempfile.TemporaryDirectory() as elsewhere:
+            monkeypatch.chdir(elsewhere)
+            manager = DatManager.load_dat_config(nested)
+        assert manager._config_dir == root
+        assert manager._dat_folders == [os.path.join(root, "from_arg")]
+        assert sys.path[0] == root          # the config folder is the import root
+
+    def test_a_config_file_names_itself(self, tmp_path):
+        Path(tmp_path, "other.yaml").write_text("dat_folders: [x, y]\n")
+        manager = DatManager.load_dat_config(tmp_path / "other.yaml")
+        root = os.path.realpath(tmp_path)
+        assert manager._dat_folders == [os.path.join(root, "x"), os.path.join(root, "y")]
+
+    def test_override_file_wins_over_the_file(self, tmp_path):
+        Path(tmp_path, DAT_CONFIG_FILE).write_text("dat_folders: base/\n")
+        Path(tmp_path, DAT_CONFIG_OVERRIDE_FILE).write_text("dat_folders: over/\n")
+        manager = DatManager.load_dat_config(tmp_path)
+        assert manager._dat_folders[0].endswith("/over")
+
+    def test_only_dat_prefixed_environment_keys_override(self, tmp_path, monkeypatch):
         """`DAT_FOLDERS` overrides `dat_folders`; a bare `dat_folders` does not."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            monkeypatch.setenv("dat_folders", "bare/")
-            monkeypatch.setenv("DAT_UNKNOWN", "ignored")
-            assert DataConfig.new(cwd=tmpdir).dat_folders[0].endswith("/data/")
-            monkeypatch.setenv("DAT_FOLDERS", "prefixed/")
-            assert DataConfig.new(cwd=tmpdir).dat_folders[0].endswith("/prefixed/")
+        Path(tmp_path, DAT_CONFIG_OVERRIDE_FILE).write_text("dat_folders: over/\n")
+        monkeypatch.setenv("dat_folders", "bare/")
+        monkeypatch.setenv("DAT_UNKNOWN", "ignored")
+        assert DatManager.load_dat_config(tmp_path)._dat_folders[0].endswith("/over")
+        monkeypatch.setenv("DAT_FOLDERS", "prefixed/")
+        assert DatManager.load_dat_config(tmp_path)._dat_folders[0].endswith("/prefixed")
 
-    def test_unknown_config_key_is_an_error(self):
+    def test_unknown_config_key_is_an_error(self, tmp_path):
         """2.0: an unrecognized key in a config file is named, not silently ignored."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir, DATA_CONFIG_FILE)
-            path.write_text("dat_folders: data/\nremote_prefix: sv-ai-data/\n")
-            with pytest.raises(ValueError) as caught:
-                DataConfig.new(cwd=tmpdir)
-            message = str(caught.value)
-            assert "remote_prefix" in message
-            assert str(path) in message
-            assert "dat_folders" in message   # names the known keys
+        path = Path(tmp_path, DAT_CONFIG_FILE)
+        path.write_text("dat_folders: data/\nremote_prefix: sv-ai-data/\n")
+        with pytest.raises(ValueError) as caught:
+            DatManager.load_dat_config(tmp_path)
+        message = str(caught.value)
+        assert "remote_prefix" in message
+        assert str(path) in message
+        assert "dat_folders" in message   # names the known keys
 
-    def test_datmanager_creation(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config = DataConfig(cwd=tmpdir)
-            manager = DatManager(config=config)
-            assert manager.dat_folder == config.dat_folders[0]
+    def test_the_old_file_name_is_not_read(self, tmp_path):
+        Path(tmp_path, ".dataconfig.yaml").write_text("dat_folders: old/\n")
+        assert DatManager.load_dat_config(tmp_path)._dat_folders[0].endswith("/data")
 
-    def test_dat_create_and_load(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config = DataConfig(cwd=tmpdir)
-            original_manager = Dat._manager
-            Dat._manager = DatManager(config=config)
-            try:
-                dat = Dat.create(
-                    path="test_dat",
-                    spec={"dat": {"kind": "Dat"}, "my_key": "my_value"},
-                )
-                assert dat is not None
-                assert dat.get_spec()["dat"]["kind"] == "Dat"
-                assert os.path.exists(dat.get_path())
+    def test_config_file_discovery_from_the_working_directory(self, tmp_path, monkeypatch):
+        """A `.datconfig.yaml` above the working directory is found and used."""
+        Path(tmp_path, DAT_CONFIG_FILE).write_text(
+            "dat_folders: [my_custom_data_folder/, /tmp/elsewhere]\n")
+        subdir = tmp_path / "some" / "nested" / "path"
+        subdir.mkdir(parents=True)
+        monkeypatch.chdir(subdir)
+        manager = DatManager.load_dat_config()
+        assert manager._dat_folders[0].endswith("/my_custom_data_folder")
+        assert manager._dat_folders[1] == os.path.realpath("/tmp/elsewhere")
+        assert manager._config_dir == os.path.realpath(tmp_path)
 
-                loaded = Dat.load(dat.get_path())
-                assert loaded.get_spec()["dat"]["kind"] == "Dat"
-                dat.delete()
-            finally:
-                Dat._manager = original_manager
-
-
-class TestDataConfigFileDiscovery:
-    def test_config_file_discovery(self):
-        """A `.dataconfig.yaml` above the working directory is found and used."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir, DATA_CONFIG_FILE).write_text(
-                "dat_folders: [my_custom_data_folder/, /tmp/elsewhere]\n"
-            )
-            subdir = Path(tmpdir) / "some" / "nested" / "path"
-            subdir.mkdir(parents=True)
-
-            original_cwd = os.getcwd()
-            try:
-                os.chdir(subdir)
-                config = DataConfig.new()
-                assert "my_custom_data_folder" in config.dat_folders[0]
-                assert config.dat_folders[1] == "/tmp/elsewhere/"
-                assert config.cwd == os.path.realpath(tmpdir)
-            finally:
-                os.chdir(original_cwd)
-
-    def test_tests_folder_config(self):
+    def test_tests_folder_config(self, monkeypatch):
         tests_dir = Path(__file__).parent
-        assert (tests_dir / DATA_CONFIG_FILE).exists()
-
-        original_cwd = os.getcwd()
-        try:
-            os.chdir(tests_dir)
-            config = DataConfig.new()
-            assert "test_sync_folder" in config.dat_folders[0]
-        finally:
-            os.chdir(original_cwd)
+        assert (tests_dir / DAT_CONFIG_FILE).exists()
+        monkeypatch.chdir(tests_dir)
+        assert "test_sync_folder" in DatManager.load_dat_config()._dat_folders[0]
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+class TestConstructor:
+    def test_keyword_only_list_required(self, tmp_path):
+        with pytest.raises(TypeError):
+            DatManager([str(tmp_path)])                      # positional
+        with pytest.raises(TypeError, match="list of folders"):
+            DatManager(dat_folders=str(tmp_path))            # a string
+        with pytest.raises(ValueError):
+            DatManager(dat_folders=[])
+        with pytest.raises(TypeError):
+            DatManager()
+
+    def test_nothing_is_read_from_disk(self, tmp_path):
+        Path(tmp_path, DAT_CONFIG_FILE).write_text("dat_folders: [ignored]\n")
+        manager = DatManager(dat_folders=[str(tmp_path / "dats")])
+        assert manager._dat_folders == [os.path.realpath(tmp_path / "dats")]
+        assert manager._config_dir is None
+
+    def test_the_only_public_attribute_is_do(self, tmp_path):
+        manager = DatManager(dat_folders=[str(tmp_path)])
+        public = [n for n in vars(manager) if not n.startswith("_")]
+        assert public == ["do"]
+        for gone in ("config", "dat_folder", "dat_folders", "cwd"):
+            assert not hasattr(manager, gone)
+        assert not hasattr(dvc_dat, "DataConfig")
+        assert not hasattr(Do, "configure") and not hasattr(Do, "config")
+
+    def test_dat_create_and_load(self, tmp_path):
+        manager = DatManager(dat_folders=[str(tmp_path)])
+        dat = manager.create({"dat": {"kind": "Dat"}, "my_key": "my_value"}, path="test_dat")
+        assert dat.get_spec()["dat"]["kind"] == "dvc_dat.core.Dat"
+        assert dat.get_path_name() == "test_dat"
+        assert manager.load("test_dat") is dat
+
+
+class TestDefaultWorld:
+    def test_assigning_redirects_dat_load_and_do(self, tmp_path, default_world):
+        mine = DatManager(dat_folders=[str(tmp_path)])
+        mine.create({"dat": {"kind": "Dat"}}, path="here")
+        Dat.manager = mine
+        assert Dat.load("here").get_path() == os.path.join(os.path.realpath(tmp_path), "here")
+        assert do.manager is mine
+        assert do.load("dt.list") is mine.do.load("dt.list")
+
+    def test_subclasses_share_it(self, default_world):
+        class Run(Dat):
+            pass
+        assert Run.manager is Dat.manager
+
+    def test_adopting_the_default_do_keeps_mounts(self, tmp_path, default_world):
+        do.mount(value={"x": 1}, at="adopt_probe")
+        replaced = DatManager(dat_folders=[str(tmp_path)], do=do)
+        assert Dat.manager is replaced
+        assert do.load("adopt_probe.x") == 1
+        assert replaced.do is default_world.do
+
+    def test_a_plain_manager_does_not_replace_it(self, tmp_path, default_world):
+        DatManager(dat_folders=[str(tmp_path)])
+        assert Dat.manager is default_world
+
+    def test_only_a_manager_may_be_assigned(self, default_world):
+        with pytest.raises(TypeError):
+            Dat.manager = "nope"
+
+    def test_first_use_builds_it_from_the_working_directory(self, tmp_path, monkeypatch,
+                                                            default_world):
+        Path(tmp_path, DAT_CONFIG_FILE).write_text("dat_folders: warehouse/\n")
+        monkeypatch.chdir(tmp_path)
+        Dat.manager = None
+        assert Dat.manager._dat_folders == [os.path.join(os.path.realpath(tmp_path), "warehouse")]
+        assert do.manager is Dat.manager
 
 
 class TestDatCliConfigVariable:
-    def test_cli_main_reads_the_file_it_names(self, tmp_path, monkeypatch, capsys):
+    def test_cli_main_reads_the_file_it_names(self, tmp_path, monkeypatch, capsys,
+                                              default_world):
         """`DAT_CLI_CONFIG` (set by the bootstrap) is read by `cli_main`, not by
-        discovery: `DataConfig.new()` still walks up from the working directory."""
+        discovery: `load_dat_config()` still walks up from the working directory."""
         project = tmp_path / "proj"
         project.mkdir()
-        (project / DATA_CONFIG_FILE).write_text("dat_folders: pinned/\n")
+        (project / DAT_CONFIG_FILE).write_text("dat_folders: pinned/\n")
         elsewhere = tmp_path / "elsewhere"
         elsewhere.mkdir()
-        (elsewhere / DATA_CONFIG_FILE).write_text("dat_folders: here/\n")
+        (elsewhere / DAT_CONFIG_FILE).write_text("dat_folders: here/\n")
         monkeypatch.chdir(elsewhere)
-        monkeypatch.setenv("DAT_CLI_CONFIG", str(project / DATA_CONFIG_FILE))
-        before = do.config
-        try:
-            assert DataConfig.new().dat_folders[0].endswith("/here/")
-            assert cli_main(["dat", "info"]) == 0
-            assert "/pinned/" in capsys.readouterr().out
-            assert do.config.cwd == os.path.realpath(project)
-        finally:
-            do.configure(before)
+        monkeypatch.setenv("DAT_CLI_CONFIG", str(project / DAT_CONFIG_FILE))
+        assert DatManager.load_dat_config()._dat_folders[0].endswith("/here")
+        assert cli_main(["dat", "info"]) == 0
+        assert "/pinned" in capsys.readouterr().out
+        assert Dat.manager._config_dir == os.path.realpath(project)
+        assert sys.path[0] == os.path.realpath(project)
 
     def test_a_missing_file_is_an_error(self, tmp_path, monkeypatch):
         monkeypatch.setenv("DAT_CLI_CONFIG", str(tmp_path / "nope.yaml"))

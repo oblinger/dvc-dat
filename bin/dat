@@ -3,7 +3,7 @@
 #
 #   dat TARGET [ARG ...] [KEY=VALUE ...]     dat list | info | version | --help
 #
-# Walks up from $PWD to the nearest .dataconfig.yaml, picks a command
+# Walks up from $PWD to the nearest .datconfig.yaml, picks a command
 # ($DAT_RUN, else the config's `run:` key, else `.venv/bin/python -m dvc_dat`
 # beside the config, else `python3 -m dvc_dat`), and execs it with the
 # arguments appended and the working directory unchanged.  The child sees
@@ -12,24 +12,24 @@
 # an environment active, the console script of the same name shadows this
 # copy; it runs the library's own CLI with no project mounts and never
 # reads `run:`.
-# Exit 3 when no .dataconfig.yaml is above the working directory.
+# Exit 3 when no .datconfig.yaml is above the working directory.
 
-# -- the nearest .dataconfig.yaml, git style ---------------------------------
+# -- the nearest .datconfig.yaml, git style ---------------------------------
 dir=$PWD
-while [ ! -f "$dir/.dataconfig.yaml" ]; do
+while [ ! -f "$dir/.datconfig.yaml" ]; do
     [ "$dir" = "/" ] && {
-        echo "dat: no .dataconfig.yaml in $PWD or any parent" >&2
+        echo "dat: no .datconfig.yaml in $PWD or any parent" >&2
         exit 3
     }
     dir=$(dirname "$dir")
 done
 
 # -- tell the child it was launched by `dat`, and with which config ---------
-DAT_CLI_CONFIG=$dir/.dataconfig.yaml
+DAT_CLI_CONFIG=$dir/.datconfig.yaml
 export DAT_CLI_CONFIG
 
 # -- the config's `run:` key: one top-level line, no YAML parser needed -------
-cfg_run=$(sed -n 's/^run:[[:space:]]*//p' "$dir/.dataconfig.yaml" | head -n 1 |
+cfg_run=$(sed -n 's/^run:[[:space:]]*//p' "$dir/.datconfig.yaml" | head -n 1 |
     sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")
 
 # -- pick the command ---------------------------------------------------------

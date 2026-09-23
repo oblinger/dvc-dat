@@ -10,12 +10,12 @@ is a folder whose `_spec_.yaml` is a complete, argumentless recipe for itself;
 from dvc_dat import Dat, do
 
 # Importing reads nothing; the first use below finds the nearest
-# .dataconfig.yaml, walking up from the working directory.
+# .datconfig.yaml, walking up from the working directory.
 
 # Create a dat with its own metadata
 dat = Dat.create(
     path="experiments/exp1",
-    spec={"dat": {"kind": "Dat"}, "params": {"lr": 0.01}},
+    spec={"params": {"lr": 0.01}},
 )
 
 # Open it later
