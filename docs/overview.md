@@ -77,6 +77,7 @@ given.
 | `Dat.manager.exists(NAME) -> bool` | True iff the named dat (or `art:` artifact) exists |
 | `m.save(SOURCE, "art:KIND/REST") -> str` | Copy a file or folder in as an artifact, write-once; returns `"sha256:<hex>"` |
 | `m.load("art:KIND/REST")` | The artifact, through its kind's factory; a `Path` when none is registered |
+| `m.load_path(NAME) -> Path` | Where `load` finds it — a dat's folder, an artifact's payload; nothing built, still recorded |
 | `m.register_artifact(KIND, FACTORY)` | `FACTORY(path)` builds what `load` returns for that kind |
 | `m.recording(DAT)` | Context manager: every `load` inside lands in `DAT`'s `dat.dependencies` |
 | `m.record_dependency(NAME, sha256=None)` | An entry by hand; `RuntimeError` when nothing is recording |
@@ -168,6 +169,8 @@ Like git, dvc-dat walks up from the working directory looking for
 dat_folders: data
 # beside the dat folder, never inside it (default: art)
 art_folder: art
+# optional: the DatManager subclass to build, and its own keys
+# manager: mylab.store.Store
 # what a copy of bin/dat execs
 run: .venv/bin/python -m mypkg.main
 ```

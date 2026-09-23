@@ -179,7 +179,8 @@ m.load("art:assets/lock")                 # unregistered: a Path
 
 `save` copies a file to `<art_folder>/<kind>/<rest>/<basename>` and a
 folder's contents to `<art_folder>/<kind>/<rest>/`; an existing name is a
-`FileExistsError` — there is no overwrite and no increment. `load` of an
+`FileExistsError` — there is no overwrite and no increment. `load_path(name)` returns that path — a dat's folder,
+an artifact's payload — and builds nothing, recorded like a `load`. `load` of an
 `art:` name hands the payload's path to the factory registered for its
 kind (a class whose constructor takes the path, else a lambda) and returns
 a `Path` when none is. The artifact folder is `art_folder:` in
@@ -279,12 +280,17 @@ dat_folders: data
 # (default: art)
 art_folder: art
 
+# optional: the DatManager subclass to build, dotted; its own
+# CONFIG_KEYS are allowed here and reach its constructor
+manager: mylab.store.Store
+
 # the command a copy of bin/dat hands its arguments to (see cli.md):
 # your program's main: imports what it mounts, calls Dat.cli_main()
 run: .venv/bin/python -m mypkg.main
 ```
 
-Those three keys are the whole file, and an empty file is a complete config.
+Those four keys are the whole file, plus any key the named `manager` class lists
+in its `CONFIG_KEYS`; an empty file is a complete config.
 An unrecognized key is an error naming the file, the key and the known keys —
 a typo is never silently ignored. The config's folder is the project's import
 root: `load_dat_config` puts it first on `sys.path`, so the project's own

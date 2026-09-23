@@ -382,3 +382,46 @@ class TestValueMountPaths:
 def test_the_constructor_points_at_create_and_load():
     with pytest.raises(TypeError, match=r"Dat.create\(spec=...\) makes one"):
         Dat({"dat": {"kind": "Dat"}})
+
+
+class TestManagerKey:
+    """`manager:` in .datconfig.yaml names the DatManager subclass to build."""
+
+    def write(self, root, text):
+        (root / "mylab_store.py").write_text(
+            "from dvc_dat import DatManager\n"
+            "class Store(DatManager):\n"
+            "    CONFIG_KEYS = ('mirror',)\n"
+            "    def __init__(self, *, mirror=None, **kw):\n"
+            "        super().__init__(**kw)\n"
+            "        self.mirror = mirror\n"
+            "class NotAManager:\n"
+            "    pass\n")
+        (root / DAT_CONFIG_FILE).write_text(text)
+
+    def test_the_named_class_is_built_with_its_own_keys(self, tmp_path):
+        self.write(tmp_path, "manager: mylab_store.Store\nmirror: gs://team\n")
+        m = DatManager.load_dat_config(tmp_path)
+        assert type(m).__name__ == "Store" and m.mirror == "gs://team"
+        assert m._dat_folders[0].endswith("/data")
+
+    def test_its_keys_are_unknown_without_it(self, tmp_path):
+        self.write(tmp_path, "mirror: gs://team\n")
+        with pytest.raises(ValueError, match="mirror"):
+            DatManager.load_dat_config(tmp_path)
+
+    def test_a_typo_is_still_an_error(self, tmp_path):
+        self.write(tmp_path, "manager: mylab_store.Store\nmiror: x\n")
+        with pytest.raises(ValueError, match="miror"):
+            DatManager.load_dat_config(tmp_path)
+
+    def test_a_class_that_is_not_a_manager_is_refused(self, tmp_path):
+        self.write(tmp_path, "manager: mylab_store.NotAManager\n")
+        with pytest.raises(TypeError, match="not a subclass"):
+            DatManager.load_dat_config(tmp_path)
+
+    def test_the_default_world_uses_it(self, tmp_path, monkeypatch, default_world):
+        self.write(tmp_path, "manager: mylab_store.Store\n")
+        monkeypatch.chdir(tmp_path)
+        Dat.manager = None
+        assert type(Dat.manager).__name__ == "Store"

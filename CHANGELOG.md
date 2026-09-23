@@ -6,6 +6,18 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.11.0 — 2026-09-23
+
+From Dan's 2026-09-23 call with Juan. Additive.
+
+- **`DatManager.load_path(name) -> Path`**: a dat's folder or an artifact's
+  payload, with nothing built — no factory runs — for heavy objects and for
+  tools that read the file themselves. Recorded on the running dat like `load`.
+- **`manager:` in `.datconfig.yaml`**: the dotted `DatManager` subclass that
+  `load_dat_config` builds, and so the default world's class. The subclass's
+  `CONFIG_KEYS` are extra keys the file may carry, handed to its constructor;
+  any other unknown key is still an error.
+
 ## 2.10.0 — 2026-09-23
 
 **Named list entries merge by name** (Dan, 2026-09-23, ruled on SVP T150 Q1
