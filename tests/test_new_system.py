@@ -281,3 +281,8 @@ class TestValueMountPaths:
         probe.mount(value={"pi": 3.14159}, at="consts")
         with pytest.raises(KeyError, match="'tau' is missing"):
             probe.load("consts.tau")
+
+
+def test_the_constructor_points_at_create_and_load():
+    with pytest.raises(TypeError, match=r"Dat.create\(spec=...\) makes one"):
+        Dat({"dat": {"kind": "Dat"}})

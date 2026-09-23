@@ -6,6 +6,12 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.2.1 — 2026-09-22
+
+- `Dat(spec)` raises a `TypeError` that names the two ways to get a dat:
+  `Dat.create(spec=...)` makes one on disk, `Dat.load(path)` reads one. The
+  constructor stays `(path, spec)` and writes nothing (Dan, 2026-09-22).
+
 ## 2.2.0 — 2026-09-22
 
 Breaking, as a minor: 2.x was public for a few hours with one consumer, so the
