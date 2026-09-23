@@ -1,4 +1,4 @@
-"""dvc_dat 2.6 — dats are folders whose `_spec_.yaml` is a complete, argumentless recipe.
+"""dvc_dat 2.7 — dats are folders whose `_spec_.yaml` is a complete, argumentless recipe.
 
     from dvc_dat import Dat, DatManager, do, expand
 
@@ -7,7 +7,7 @@
     Dat.manager = DatManager(dat_folders=["/work"])   # replaces the default world
 """
 
-__version__ = "2.6.0"
+__version__ = "2.7.0"
 
 from .core import (
     Dat,

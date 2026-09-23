@@ -115,7 +115,7 @@ See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
 
 ## dat_tools — DataFrames and Excel
 
-`dvc_dat.dat_tools` is mounted as `dt`, and `dt.list` is `dat list`.
+`dvc_dat.dat_tools` is mounted as `dt`, and `dt.list` is `dat --list`.
 
 | Function | Description |
 |----------|-------------|
@@ -131,9 +131,9 @@ See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
 
 ```
 dat TARGET [ARG ...] [KEY=VALUE ...]
-dat list [PREFIX]
-dat info
-dat version
+dat --list [PREFIX]
+dat --info
+dat --version
 
 dat TARGET --set DOTTED.KEY=VALUE [--set ...]
 dat TARGET --json DOTTED.KEY=JSON [--json ...]
@@ -144,14 +144,15 @@ dat TARGET --usage
 `dat` configures itself from the nearest `.datconfig.yaml`. A target that
 is a template spec is forked: the fixed arguments become its `dat.args`,
 the `KEY=VALUE` pairs update its `dat.kwargs`, and `--set` / `--json` update
-any spec key. Every argument value is a YAML scalar. `list`, `info` and
-`version` are reserved words. The exit code is `0` ran, `1` failed, `2` the
+any spec key. Every argument value is a YAML scalar. A first word is
+always a target; `--list`, `--info`, `--version` and `--help` are the
+commands that are not. The exit code is `0` ran, `1` failed, `2` the
 target does not load.
 
 A copy of `bin/dat` on your `PATH` runs your project's `run:` main from any
 directory. The environment's `dat` console script does not read `run:`: it
 runs the library's own command line, with no project mounts. See **[Command Line](cli.md)** for every
-reserved word, flag and exit code, the bootstrap and the `run:` config key.
+command, flag and exit code, the bootstrap and the `run:` config key.
 
 ## `.datconfig.yaml`
 

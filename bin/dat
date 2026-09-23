@@ -1,7 +1,7 @@
 #!/bin/sh
 # dat -- the dat command from any directory, without activating an environment.
 #
-#   dat TARGET [ARG ...] [KEY=VALUE ...]     dat list | info | version | --help
+#   dat TARGET [ARG ...] [KEY=VALUE ...]     dat --list | --info | --version | --help
 #
 # Walks up from $PWD to the nearest .datconfig.yaml, picks a command
 # ($DAT_RUN, else the config's `run:` key, else `.venv/bin/python -m dvc_dat`

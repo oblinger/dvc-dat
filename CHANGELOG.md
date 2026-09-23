@@ -6,6 +6,18 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.7.0 — 2026-09-23
+
+**A word runs a dat; a flag asks `dat` about itself** (Dan, 2026-09-23).
+Breaking for a command line using the bare verbs; shipped as a minor per the
+rule above 2.2.0.
+
+- `dat --list [PREFIX]`, `dat --info`, `dat --version`, `dat --help` are the
+  commands that do not run a target. The bare `dat list`, `dat info` and
+  `dat version` are gone.
+- No reserved words: a first word is always a `TARGET`, so a target named
+  `list`, `info` or `version` now runs from the shell.
+
 ## 2.6.0 — 2026-09-23
 
 **`--json` reads like `--set`** (Dan, 2026-09-23). Breaking for a command line

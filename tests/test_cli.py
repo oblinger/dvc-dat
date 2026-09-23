@@ -92,17 +92,16 @@ def make_wrapper(folder: Path, marker: str) -> Path:
 class TestVerbs:
     def test_bare_dat_prints_usage(self):
         code, out, _ = dat()
-        assert code == 0 and "SYNOPSIS" in out and "dat list" in out
+        assert code == 0 and "SYNOPSIS" in out and "dat --list" in out
 
     @pytest.mark.parametrize("flag", ["-h", "--help"])
     def test_help(self, flag):
         code, out, _ = dat(flag)
         assert code == 0 and "SYNOPSIS" in out
 
-    @pytest.mark.parametrize("form", ["--version", "version"])
-    def test_version(self, form):
+    def test_version(self):
         from dvc_dat import __version__
-        code, out, _ = dat(form)
+        code, out, _ = dat("--version")
         assert (code, out) == (0, __version__)
 
     def test_version_needs_no_config(self, no_config_dir):
@@ -114,27 +113,31 @@ class TestVerbs:
         code, out, _ = dat("--help", cwd=no_config_dir)
         assert code == 0 and "SYNOPSIS" in out
 
-    @pytest.mark.parametrize("form", ["info", "--info"])
-    def test_info(self, form):
-        code, out, _ = dat(form)
+    def test_info(self):
+        code, out, _ = dat("--info")
         assert code == 0
         assert "Dat version" in out and "test_sync_folder" in out
         assert str(TESTS / ".datconfig.yaml") in out
 
     def test_list(self):
-        code, out, _ = dat("list")
+        code, out, _ = dat("--list")
         assert code == 0 and "hello_world" in out and "my_letters" in out
 
+    @pytest.mark.parametrize("word", ["list", "info", "version"])
+    def test_a_bare_word_is_always_a_target(self, word):
+        code, _, err = dat(word)
+        assert code == 2 and f"cannot load {word!r}" in err
+
     def test_list_shows_the_one_builtin_mount(self):
-        code, out, _ = dat("list", "d")
+        code, out, _ = dat("--list", "d")
         names = [line.split()[0] for line in out.splitlines()[1:]]
         assert code == 0 and "dt" in names and "dat_tools" not in names
 
     def test_dt_list_is_the_list_command(self):
-        assert dat("dt.list", "letter")[1] == dat("list", "letter")[1]
+        assert dat("dt.list", "letter")[1] == dat("--list", "letter")[1]
 
     def test_list_with_prefix(self):
-        code, out, _ = dat("list", "letter")
+        code, out, _ = dat("--list", "letter")
         assert code == 0 and "letterator" in out and "hello_world" not in out
 
     def test_do_verb(self):
@@ -261,7 +264,7 @@ class TestBootstrap:
 
     def test_verbs_pass_through(self, tmp_path):
         nested = make_project(tmp_path, python=sys.executable)
-        code, out, _ = run_boot("list", "greet", cwd=nested)
+        code, out, _ = run_boot("--list", "greet", cwd=nested)
         assert code == 0 and "greet" in out
 
     def test_the_main_is_its_own_without_the_bootstrap(self, tmp_path):
