@@ -5,6 +5,9 @@ for itself, plus a `_result_.yaml` holding what running it produced.  The do-sys
 (`dvc_dat.do`) runs specs; this module stores and loads them.
 """
 
+import contextlib
+import contextvars
+import hashlib
 import importlib
 import inspect
 import json
@@ -17,10 +20,10 @@ import time
 import weakref
 from copy import deepcopy
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Tuple, Type, TypeVar, Union
 
 import yaml
 
@@ -54,7 +57,7 @@ def merge_dicts(*dicts: Dict, inplace: bool = False) -> Dict:
 DAT_CONFIG_FILE = ".datconfig.yaml"
 DAT_CONFIG_OVERRIDE_FILE = ".datconfig.override.yaml"
 ENV_PREFIX = "DAT_"
-_CONFIG_KEYS = ("dat_folders", "run")    # `run` is read by `bin/dat` only
+_CONFIG_KEYS = ("dat_folders", "art_folder", "run")    # `run` is read by `bin/dat` only
 _DEFAULT_DAT_FOLDER = "data"
 
 
@@ -106,6 +109,15 @@ DAT_KWARGS = "dat.kwargs"              # its keyword arguments
 DAT_RUN_AT = "dat.run_at"              # result: when the last run started
 DAT_RUN_TIME = "dat.run_time"          # result: how long it took
 DAT_CODE = "dat.code"                  # result: branch, commit, dirty of the code run
+DAT_DEPENDENCIES = "dat.dependencies"  # result: every dat and artifact the run loaded
+DAT_SHA256 = "dat.sha256"              # result: a dat's hash, when its run records one
+
+ART_PREFIX = "art:"                    # an artifact's name: art:<kind>/<rest>
+ART_FILE = "_art_.yaml"                # an artifact's sidecar
+
+# The dats recording right now, innermost last: a stack of (manager, dat).
+_recording: "contextvars.ContextVar[Tuple[Tuple[DatManager, Dat], ...]]" = \
+    contextvars.ContextVar("dvc_dat_recording", default=())
 
 _DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
 
@@ -122,6 +134,41 @@ def _find_subclass_by_name(klass: Type, name: str) -> Optional[Type]:
         if result := _find_subclass_by_name(sub, name):
             return result
     return None
+
+
+def _record(name: str, sha256: Optional[str]) -> None:
+    """`name -> sha256` into the innermost recording dat's `dat.dependencies`;
+    nothing when no dat is recording."""
+    stack = _recording.get()
+    if stack:
+        results = stack[-1][1].get_results()
+        deps = Dat.get(results, DAT_DEPENDENCIES, None)
+        if deps is None:
+            deps = {}
+            Dat.set(results, DAT_DEPENDENCIES, deps)
+        deps[name] = sha256
+
+
+def _sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _hash_payload(folder: str, payload: str) -> str:
+    """A file's hash is its bytes'; a folder's is the hash of its sorted
+    `relpath\\0sha256\\n` lines, the top-level sidecar left out."""
+    if payload != ".":
+        return _sha256_file(os.path.join(folder, payload))
+    lines = []
+    for root, _, files in os.walk(folder):
+        for file in files:
+            rel = os.path.relpath(os.path.join(root, file), folder)
+            if rel != ART_FILE:
+                lines.append(f"{rel}\0{_sha256_file(os.path.join(root, file))}\n")
+    return hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
 
 
 def _git(folder: str, *args: str) -> Optional[str]:
@@ -283,13 +330,17 @@ class DatManager:
 
     do: "Do"
     _dat_folders: List[str]
+    _art_folder: str
     _config_dir: Optional[str]
     _dat_cache: "weakref.WeakValueDictionary[str, Dat]"
+    _factories: Dict[str, Callable[[Path], Any]]
 
-    def __init__(self, *, dat_folders: List[str], do: Optional["Do"] = None):
+    def __init__(self, *, dat_folders: List[str], art_folder: Optional[str] = None,
+                 do: Optional["Do"] = None):
         """A world on `dat_folders` -- searched in order by name, the first written
-        to.  Nothing is read from disk.  `do` adopts an existing namespace with its
-        mounts; adopting the default world's makes this the default world."""
+        to -- and `art_folder` (default `art/` under the first).  Nothing is read
+        from disk.  `do` adopts an existing namespace with its mounts; adopting
+        the default world's makes this the default world."""
         from .do import Do, _DefaultDo
         from . import dat_tools
 
@@ -298,8 +349,12 @@ class DatManager:
         if not dat_folders or not all(isinstance(f, (str, Path)) and str(f) for f in dat_folders):
             raise ValueError(f"DatManager: dat_folders needs at least one folder, got {dat_folders!r}")
         self._dat_folders = [os.path.realpath(str(f)) for f in dat_folders]
+        self._art_folder = os.path.realpath(
+            str(art_folder) if art_folder is not None
+            else os.path.join(self._dat_folders[0], "art"))
         self._config_dir = None
         self._dat_cache = weakref.WeakValueDictionary()
+        self._factories = {}
 
         default = False
         if isinstance(do, _DefaultDo):
@@ -320,10 +375,10 @@ class DatManager:
         (default the working directory; a config file names itself).
 
         Precedence, lowest to highest: the file, `.datconfig.override.yaml`, then
-        `DAT_FOLDERS` in the environment.  Relative folders resolve against the
-        file's folder, which goes first on `sys.path`; with no file they resolve
-        against `start`.  An unknown key is `ValueError`.  `do` as in the
-        constructor.
+        `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment.  Relative folders
+        resolve against the file's folder, which goes first on `sys.path`; with
+        no file they resolve against `start`.  An unknown key is `ValueError`.
+        `do` as in the constructor.
         """
         start = Path(start) if start is not None else Path.cwd()
         name = DAT_CONFIG_FILE
@@ -334,13 +389,20 @@ class DatManager:
         values = merge_dicts(_read_config(config_path), _read_config(override_path))
         if (env := os.environ.get(ENV_PREFIX + "FOLDERS")):
             values["dat_folders"] = env
+        if (env := os.environ.get(ENV_PREFIX + "ART_FOLDER")):
+            values["art_folder"] = env
         root = os.path.realpath(config_path.parent if config_path else start)
         folders = values.get("dat_folders", _DEFAULT_DAT_FOLDER)
         folders = [folders] if isinstance(folders, str) else folders
         if not isinstance(folders, list) or not all(isinstance(f, str) and f for f in folders):
             raise ValueError(f"{config_path}: dat_folders is a folder or a list of them, "
                              f"got {values.get('dat_folders')!r}")
-        manager = cls(dat_folders=[os.path.join(root, f) for f in folders], do=do)
+        art_folder = values.get("art_folder")
+        if art_folder is not None and not (isinstance(art_folder, str) and art_folder):
+            raise ValueError(f"{config_path}: art_folder is a folder, got {art_folder!r}")
+        manager = cls(dat_folders=[os.path.join(root, f) for f in folders],
+                      art_folder=os.path.join(root, art_folder) if art_folder else None,
+                      do=do)
         manager._config_dir = root
         if root not in sys.path:
             sys.path.insert(0, root)    # the config folder is the import root
@@ -420,16 +482,22 @@ class DatManager:
 
     def load(
         self,
-        name_or_path: Union[str, Path],
+        name: Union[str, Path],
         *,
         cache_after_load: bool = True,
-    ) -> "Dat":
-        """Load a dat from disk, as the class its `dat.kind` names.
+    ) -> Any:
+        """A dat, as the class its `dat.kind` names -- or an `art:<kind>/<rest>`
+        artifact, through its kind's factory (a `Path` when none is registered).
 
-        Searched as an absolute path, in the do-system's mounts, then in each
-        dat folder.
+        A dat is searched as an absolute path, in the do-system's mounts, then in
+        each dat folder.  Inside a `recording`, the load lands in that dat's
+        `dat.dependencies`.  `cache_after_load` applies to dats only.
         """
-        return self._load(name_or_path, cache_after_load=cache_after_load)
+        if str(name).startswith(ART_PREFIX):
+            return self._load_artifact(str(name))
+        dat = self._load(name, cache_after_load=cache_after_load)
+        _record(dat.get_path_name(), Dat.get(dat.get_results(), DAT_SHA256, None))
+        return dat
 
     def _load(
         self,
@@ -481,12 +549,101 @@ class DatManager:
             self._dat_cache[path] = dat
         return dat
 
-    def exists(self, path: Union[str, Path]) -> bool:
-        """True if a dat's `_spec_` file is at `path` (resolved like `load`)."""
-        path = self._resolve_path(str(path))
+    def exists(self, name: Union[str, Path]) -> bool:
+        """True if a dat's `_spec_` file is at `name` (resolved like `load`), or
+        for an `art:` name, its `_art_.yaml`."""
+        if str(name).startswith(ART_PREFIX):
+            return os.path.exists(os.path.join(self._art_path(str(name))[1], ART_FILE))
+        path = self._resolve_path(str(name))
         return os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
             os.path.join(path, SPEC_YAML)
         )
+
+    # -- artifacts -------------------------------------------------------------
+
+    def register_artifact(self, kind: str, factory: Callable[[Path], Any]) -> None:
+        """What `load` returns for `art:<kind>/...`: `factory(path)` -- a class whose
+        constructor takes the path, else a lambda.  A second registration of a
+        kind replaces the first."""
+        if not isinstance(kind, str) or not kind or "/" in kind:
+            raise ValueError(f"register_artifact: kind is a name without '/', got {kind!r}")
+        if not callable(factory):
+            raise TypeError(f"register_artifact: factory is a callable, got {factory!r}")
+        self._factories[kind] = factory
+
+    def save(self, source: Union[str, Path], name: str) -> str:
+        """Copy the file or folder `source` in as artifact `name` (`art:<kind>/<rest>`),
+        write its `_art_.yaml`, and return its hash, `"sha256:<hex>"`.
+
+        A file lands as `<art_folder>/<kind>/<rest>/<basename>`, a folder's contents
+        as `<art_folder>/<kind>/<rest>/`, the sidecar beside them.  Write-once: an
+        existing name is `FileExistsError`.  Inside a `recording` the artifact
+        lands in that dat's `dat.dependencies`.
+        """
+        kind, folder = self._art_path(name)
+        source = Path(source)
+        if not source.exists():
+            raise FileNotFoundError(f"save: no file or folder at {str(source)!r}")
+        if os.path.exists(folder):
+            raise FileExistsError(f"save: artifact {name!r} exists at {folder!r}")
+        if source.is_dir():
+            shutil.copytree(source, folder)
+            payload = "."
+        else:
+            os.makedirs(folder)
+            shutil.copy2(source, os.path.join(folder, source.name))
+            payload = source.name
+        sha256 = "sha256:" + _hash_payload(folder, payload)
+        sidecar = {"kind": kind, "name": name, "payload": payload, "sha256": sha256,
+                   "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        Path(folder, ART_FILE).write_text(yaml.safe_dump(sidecar, sort_keys=False))
+        _record(name, sha256)
+        return sha256
+
+    def _art_path(self, name: str) -> Tuple[str, str]:
+        """`(kind, folder)` of an `art:<kind>/<rest>` name."""
+        kind, _, rest = name[len(ART_PREFIX):].partition("/")
+        if not name.startswith(ART_PREFIX) or not kind or not rest.strip("/"):
+            raise ValueError(f"an artifact name is art:<kind>/<rest>, got {name!r}")
+        folder = os.path.normpath(os.path.join(self._art_folder, kind, rest))
+        if not _within(folder, os.path.join(self._art_folder, kind)):
+            raise ValueError(f"artifact name {name!r} leaves the artifact folder")
+        return kind, folder
+
+    def _load_artifact(self, name: str) -> Any:
+        kind, folder = self._art_path(name)
+        sidecar_path = os.path.join(folder, ART_FILE)
+        if not os.path.exists(sidecar_path):
+            raise FileNotFoundError(f"load: no artifact {name!r} (no {sidecar_path})")
+        sidecar = yaml.safe_load(Path(sidecar_path).read_text()) or {}
+        _record(name, sidecar.get("sha256"))
+        payload = sidecar.get("payload", ".")
+        path = Path(folder) if payload == "." else Path(folder, payload)
+        factory = self._factories.get(kind)
+        return factory(path) if factory is not None else path
+
+    # -- recording -------------------------------------------------------------
+
+    @contextlib.contextmanager
+    def recording(self, dat: "Dat") -> Iterator[None]:
+        """Every `load` (and `save`) inside the block lands in `dat.dependencies`.
+        `execute` runs its function inside one.  Blocks nest: when an inner block
+        ends, its dat becomes one entry of the outer one."""
+        stack = _recording.get()
+        token = _recording.set(stack + ((self, dat),))
+        try:
+            yield
+        finally:
+            _recording.reset(token)
+        if stack and stack[-1][1] is not dat:     # a dat is never its own dependency
+            _record(dat.get_path_name(), Dat.get(dat.get_results(), DAT_SHA256, None))
+
+    def record_dependency(self, name: str, sha256: Optional[str] = None) -> None:
+        """Add `name -> sha256` to the recording dat's `dat.dependencies`, for what
+        a run used without a `load`.  `RuntimeError` when nothing is recording."""
+        if not _recording.get():
+            raise RuntimeError("record_dependency: no dat is recording")
+        _record(name, sha256)
 
     def _get_path_name(self, path: Union[str, Path]) -> str:
         path = str(path)
@@ -500,10 +657,11 @@ class DatManager:
         """Run `dat` as its spec says, and record the run in its results.
 
         Calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do`
-        names, loaded through this world's `do`; then records `dat.run_at`,
-        `dat.run_time` and `dat.code` (the branch, commit and dirty flag of the git
-        checkout holding `fn`'s source; nothing outside a checkout) and saves the
-        results.  Every run in this world comes here -- `do(...)` and the `do(...)`
+        names, loaded through this world's `do`, inside `recording(dat)`; then
+        records `dat.run_at`, `dat.run_time`, `dat.code` (the branch, commit and
+        dirty flag of the git checkout holding `fn`'s source; nothing outside a
+        checkout) and `dat.dependencies` (every dat and artifact the run loaded,
+        name to hash) and saves the results.  Every run in this world comes here -- `do(...)` and the `do(...)`
         calls nested inside a running function alike -- so a subclass that wraps
         this wraps every run.  Returns `fn`'s value, or `dat` when there is no
         `dat.do`.
@@ -519,8 +677,10 @@ class DatManager:
         args = list(Dat.get(spec, DAT_ARGS, None) or [])
         kwargs = dict(Dat.get(spec, DAT_KWARGS, None) or {})
         run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        Dat.set(dat.get_results(), DAT_DEPENDENCIES, {})    # a run with no loads says so
         before = time.time()
-        result = fn(dat, *args, **kwargs)
+        with self.recording(dat):
+            result = fn(dat, *args, **kwargs)
         time_ms = (time.time() - before) * 1000
         exec_time = (time.strftime("%H:%M:%S", time.gmtime(time_ms // 1000))
                      + ".{:03d}".format(int(time_ms % 1000)))

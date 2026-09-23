@@ -220,8 +220,13 @@ hand-written check, or with none at all.
 `_result_.yaml` holds only what running the dat produced: whatever the function
 put in `dat.get_results()`, plus what the runner knows: when, how long, and
 which code — the branch, commit and dirty flag (tracked files) of the git
-checkout holding the source of the function `dat.do` names. Code outside a
-checkout records no `code`; a detached HEAD records `branch: null`.
+checkout holding the source of the function `dat.do` names — and what it
+used. Code outside a checkout records no `code`; a detached HEAD records
+`branch: null`. `dependencies` maps every dat and artifact the run loaded
+through its manager to its hash: an artifact's `sha256`, a dat's own
+`dat.sha256` when its results carry one, else `null`. A dat's key is its
+name under its dat folder (its absolute path outside every folder); a run
+that loaded nothing records `{}`.
 
 ```yaml
 dat:
@@ -231,6 +236,9 @@ dat:
     branch: main
     commit: 9d8df8f1c2a6e0b7d5f4e3a2b1c0d9e8f7a6b5c4
     dirty: false
+  dependencies:
+    runs/a: null
+    art:video/G1: "sha256:9f3c…"
 accuracy: 0.95
 ```
 

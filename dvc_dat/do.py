@@ -647,6 +647,7 @@ def _cmd_info(argv: List[str]) -> int:
     print("\n# -- Dat Configuration Info -- ")
     print(f"# Dat version       : {__version__}")
     print(f"# Dat folder        : {manager._dat_folders[0]}")
+    print(f"# Artifact folder   : {manager._art_folder}")
     print(f"# .datconfig folder : {config_dir}")
     config_file = os.path.join(config_dir, DAT_CONFIG_FILE) if config_dir else None
     if config_file and os.path.exists(config_file):
