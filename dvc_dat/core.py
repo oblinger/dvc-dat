@@ -321,7 +321,7 @@ def expand_spec(spec: Any, vars: Optional[Dict[str, Any]] = None, *,
 # =============================================================================
 
 class DatManager:
-    """Singleton that creates, finds and loads dats under the sync folder.
+    """Singleton that creates, finds and loads dats under the dat folders.
 
     Reached as `Dat.manager`.  Built lazily from `DataConfig.new()` (discovery walks up
     from the process's working directory) or explicitly by `do.configure(...)`.
@@ -411,15 +411,14 @@ class DatManager:
         """Load a dat from disk, as the class its `dat.kind` names.
 
         Searched as an absolute path, under the config folder, in the do-system's
-        mounts, then in each sync folder.
+        mounts, then in each dat folder.
         """
         name_or_path = str(name_or_path)
-        cwd = cwd or os.getcwd()
         path = self._resolve_path(name_or_path)
         if not os.path.exists(path):
             raise KeyError(
                 f"LOAD_DAT: Could not find <{name_or_path!r}> as absolute, "
-                f"under cwd {cwd}, or in {self.dat_folders}"
+                f"under the config folder {self.config.cwd}, or in {self.dat_folders}"
             )
         path = os.path.abspath(path)
         if (cached := self._dat_cache.get(path)) and isinstance(cached, dat_class):
@@ -633,7 +632,7 @@ class Dat:
         return self._path
 
     def get_path_name(self) -> str:
-        """The name (path relative to the sync folder) of this Dat."""
+        """The name (path relative to its dat folder) of this Dat."""
         return Dat.manager._get_path_name(self._path)
 
     @classmethod

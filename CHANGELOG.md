@@ -6,6 +6,19 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 3.0.1 — 2026-09-22
+
+- A value mount answers to the dotted paths inside it, as
+  `docs/mount-commands.md` promised: after
+  `do.mount(value={"pi": 3.14159}, at="constants")`, `do.load("constants.pi")`
+  is `3.14159`. In 3.0.0 only the exact mounted name resolved.
+- `dat list PREFIX` matches names that start with `PREFIX`; it matched any
+  name containing it.
+- `Dat.load`'s not-found error names the config folder it searched, not the
+  process's working directory.
+- Docs: `spec-format.md` no longer contradicts itself on function-valued
+  references; "sync folder" is gone from the docstrings.
+
 ## 3.0.0 — 2026-09-22
 
 Breaking: public names removed or made private. Nothing is kept as an alias.

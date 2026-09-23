@@ -210,10 +210,21 @@ class Do:
     def _load_mounted(self, dotted_name: str) -> Any:
         parts = dotted_name.split(".")
         file_base = parts[0]
-        if self._registered_values and _DO_NULL != \
-                (value := self._registered_values.get(dotted_name, _DO_NULL)):
-            value = _parse_yaml_prefix(value)
-            return copy.deepcopy(value) if isinstance(value, dict) else value
+        if self._registered_values:
+            for cut in range(len(parts), 0, -1):   # the longest mounted prefix
+                key = ".".join(parts[:cut])
+                if _DO_NULL == (value := self._registered_values.get(key, _DO_NULL)):
+                    continue
+                value = _parse_yaml_prefix(value)
+                if cut < len(parts):
+                    if not isinstance(value, dict):
+                        raise KeyError(f"do.load: {key!r} is a mounted value, "
+                                       f"not a mapping; {dotted_name!r} is not in it")
+                    value = Dat.get(value, parts[cut:], _DO_NULL)
+                    if value is _DO_NULL:
+                        raise KeyError(f"do.load: {'.'.join(parts[cut:])!r} "
+                                       f"is missing from the value mounted at {key!r}")
+                return copy.deepcopy(value) if isinstance(value, dict) else value
         obj = self._get_base(file_base, default=None)
         if obj is None:
             # A folder mount indexes its files by path under `at`: `catalog/models/baseline`

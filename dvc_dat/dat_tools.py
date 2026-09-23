@@ -42,7 +42,7 @@ def cmd_list(prefix: str = ""):
     """Lists all do names with a given prefix."""
     print(f"\nBase names matching: '{prefix}*'")
     for k in do.keys():
-        if prefix not in k:
+        if not k.startswith(prefix):
             continue
         v = do.load(k, default="<module>")
         print(f"  {k:25} -->  {v}")  # noqa
