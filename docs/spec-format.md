@@ -112,9 +112,10 @@ inlined. A reference to anything else — a function, a class — is a
 | `{{` `}}` | a literal `{` and `}` |
 
 An undotted name that is neither a built-in nor a key of the `vars` dict passed
-to `expand()` is a `KeyError`. A string that is *exactly* one reference yields
-the referenced object itself, so a spec value can be a function or a dict, not
-only text.
+to `expand()` is a `KeyError`. Called directly, `expand()` returns the
+referenced object itself for a string that is *exactly* one reference, a
+function included. At create the rule above holds: data is inlined, and a
+function or class is refused.
 
 **YAML quoting.** A value that *begins* with `{` must be quoted:
 

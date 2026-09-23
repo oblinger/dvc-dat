@@ -266,3 +266,18 @@ class TestMountRefusesImportClash:
         importlib.invalidate_caches()
         with pytest.raises(ValueError, match="'configs2' is an importable module"):
             Do().mount(folder=str(site / "configs"), at="configs2")
+
+
+class TestValueMountPaths:
+    def test_a_value_mount_answers_below_itself(self):
+        probe = Do()
+        probe.mount(value={"pi": 3.14159, "deep": {"e": 2.71828}}, at="consts")
+        assert probe.load("consts.pi") == 3.14159
+        assert probe.load("consts.deep.e") == 2.71828
+        assert probe.load("consts")["pi"] == 3.14159
+
+    def test_a_missing_key_is_named(self):
+        probe = Do()
+        probe.mount(value={"pi": 3.14159}, at="consts")
+        with pytest.raises(KeyError, match="'tau' is missing"):
+            probe.load("consts.tau")

@@ -29,7 +29,7 @@ dat --help                                the usage message
 | Command | Does |
 |---------|------|
 | `dat TARGET [ARG ...] [KEY=VALUE ...]` | `do(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
-| `dat list [PREFIX]` | Every mounted name whose name contains `PREFIX`, with what it loads to. The library mounts `dt` (`dvc_dat.dat_tools`) itself; `dat dt.list` is the same command. |
+| `dat list [PREFIX]` | Every mounted name that starts with `PREFIX`, with what it loads to. The library mounts `dt` (`dvc_dat.dat_tools`) itself; `dat dt.list` is the same command. |
 | `dat info` | The version, the dat folder, the config folder and the `.dataconfig.yaml` in force. `dat --info` is the same command. |
 | `dat version` | The version. `dat --version` is the same command. |
 | `dat` · `dat --help` · `dat -h` | The usage message. |
