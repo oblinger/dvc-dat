@@ -46,8 +46,8 @@ Excel reports need the optional extra: `pip install -e ".[excel]"`.
 dat catalog.experiment epochs=200
 # print that do(...) call instead of making it
 dat catalog.experiment epochs=200 --dry-run
-dat list catalog
-dat info
+dat --list catalog
+dat --info
 ```
 
 `dat` configures itself from the nearest `.datconfig.yaml`. A copy of

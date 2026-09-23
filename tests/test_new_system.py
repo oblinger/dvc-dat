@@ -184,7 +184,7 @@ class TestDatCliConfigVariable:
         monkeypatch.chdir(elsewhere)
         monkeypatch.setenv("DAT_CLI_CONFIG", str(project / DAT_CONFIG_FILE))
         assert DatManager.load_dat_config()._dat_folders[0].endswith("/here")
-        assert cli_main(["dat", "info"]) == 0
+        assert cli_main(["dat", "--info"]) == 0
         assert "/pinned" in capsys.readouterr().out
         assert Dat.manager._config_dir == os.path.realpath(project)
         assert sys.path[0] == os.path.realpath(project)
@@ -192,7 +192,7 @@ class TestDatCliConfigVariable:
     def test_a_missing_file_is_an_error(self, tmp_path, monkeypatch):
         monkeypatch.setenv("DAT_CLI_CONFIG", str(tmp_path / "nope.yaml"))
         with pytest.raises(ValueError, match="DAT_CLI_CONFIG"):
-            cli_main(["dat", "info"])
+            cli_main(["dat", "--info"])
 
 
 class TestFolderMountPaths:

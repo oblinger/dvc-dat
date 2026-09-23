@@ -488,15 +488,15 @@ do = _DefaultDo()
 USAGE = """
 SYNOPSIS
     dat TARGET [ARG ...] [KEY=VALUE ...]        run TARGET
-    dat list [PREFIX]                           the mounted names
-    dat info                                    version, dat folder, config
-    dat version                                 the version
+    dat --list [PREFIX]                         the mounted names
+    dat --info                                  version, folders, config
+    dat --version                               the version
     dat --help                                  this message
 
 DESCRIPTION
     `dat` configures itself from the nearest .datconfig.yaml before it runs
-    anything that needs the namespace.  `list`, `info` and `version` are
-    reserved words; anything else in first position is a TARGET.
+    anything that needs the namespace.  A word in first position is always
+    a TARGET; the commands that ask `dat` about itself are flags.
 
     `dat TARGET ...` calls do(TARGET, *ARGS, **KWARGS).  A TARGET that is a
     template spec is forked: the fixed ARGs become its dat.args and the
@@ -531,7 +531,7 @@ EXAMPLES
     dat hello_world
     dat hello_again.salutation Maxim emphasis=true lucky_number=7
     dat my_letters --set dat.title=Quickie --set start=100 --set end=110
-    dat list hello
+    dat --list hello
 """
 
 _KWARG = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=")
@@ -570,20 +570,20 @@ def _do_argv(argv: List[str]) -> int:
     if not args or args[0] in ("-h", "--help"):
         print(USAGE)
         return 0
-    verb, rest = args[0], args[1:]
-    if verb in ("version", "--version"):
+    command, rest = args[0], args[1:]
+    if command == "--version":
         from . import __version__
         print(__version__)
         return 0
-    elif verb in ("info", "--info"):
+    elif command == "--info":
         return _cmd_info(rest)
-    elif verb == "list":
+    elif command == "--list":
         return _cmd_list(rest)
     return _cmd_do(args)
 
 
 def _cmd_do(argv: List[str]) -> int:
-    """`dat TARGET ...` -- everything that is not a reserved word."""
+    """`dat TARGET ...` -- every line whose first word is not a flag."""
     try:
         overrides, args, kwargs, flags = _parse_argv(argv)
     except ValueError as e:
@@ -633,18 +633,18 @@ def _cmd_do(argv: List[str]) -> int:
 
 
 def _cmd_list(argv: List[str]) -> int:
-    """`dat list [PREFIX]` -- the mounted names."""
+    """`dat --list [PREFIX]` -- the mounted names."""
     if len(argv) > 1:
-        return _fail("list takes at most one PREFIX")
+        return _fail("--list takes at most one PREFIX")
     from .dat_tools import cmd_list
     cmd_list(argv[0] if argv else "")
     return 0
 
 
 def _cmd_info(argv: List[str]) -> int:
-    """`dat info` -- the version, the dat folder and the config in force."""
+    """`dat --info` -- the version, the folders and the config in force."""
     if argv:
-        return _fail("info takes no arguments")
+        return _fail("--info takes no arguments")
     from . import __version__
     manager = Dat.manager
     config_dir = manager._config_dir

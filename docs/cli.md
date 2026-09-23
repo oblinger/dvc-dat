@@ -18,25 +18,25 @@ installed.
 
 ```
 dat TARGET [ARG ...] [KEY=VALUE ...]      run TARGET
-dat list [PREFIX]                         the mounted names
-dat info                                  version, folder, config
-dat version                               the version
+dat --list [PREFIX]                       the mounted names
+dat --info                                version, folders, config
+dat --version                             the version
 dat --help                                the usage message
 ```
 
-## Reserved words
+## Commands
 
 | Command | Does |
 |---------|------|
 | `dat TARGET [ARG ...] [KEY=VALUE ...]` | `do(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
-| `dat list [PREFIX]` | Every mounted name that starts with `PREFIX`, with what it loads to. The library mounts `dt` (`dvc_dat.dat_tools`) itself; `dat dt.list` is the same command. |
-| `dat info` | The version, the first dat folder, the config folder and the `.datconfig.yaml` in force. `dat --info` is the same command. |
-| `dat version` | The version. `dat --version` is the same command. |
+| `dat --list [PREFIX]` | Every mounted name that starts with `PREFIX`, with what it loads to. The library mounts `dt` (`dvc_dat.dat_tools`) itself; `dat dt.list` is the same command. |
+| `dat --info` | The version, the dat and artifact folders, the config folder and the `.datconfig.yaml` in force. |
+| `dat --version` | The version. |
 | `dat` · `dat --help` · `dat -h` | The usage message. |
 
-`list`, `info` and `version` are reserved words in the first position and
-nowhere else; anything else in the first position is a `TARGET`. A target
-that happens to be named `list` cannot be run from the shell — rename it.
+A word in the first position is always a `TARGET`; the commands that ask
+`dat` about itself are flags. There are no reserved words, so a target
+named `list` runs like any other.
 
 ## Arguments
 
