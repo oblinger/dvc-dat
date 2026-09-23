@@ -6,6 +6,27 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.4.0 — 2026-09-23
+
+**Artifacts and dependencies by capture, in DAT itself** (DAT F018; was SVP's
+F152). Additive: every 2.3 caller keeps working.
+
+- **`DatManager.save(source, "art:<kind>/<rest>") -> "sha256:<hex>"`** copies
+  a file or folder into the artifact folder, write-once, with a
+  `_art_.yaml` sidecar (`kind`, `name`, `payload`, `sha256`, `saved_at`).
+- **`DatManager.load("art:<kind>/<rest>")`** returns the artifact through the
+  factory **`register_artifact(kind, factory)`** named — `factory(path)`, a
+  class or a lambda — or a `Path` when none is registered. `exists` answers
+  for `art:` names too.
+- **`dat.dependencies`** in `_result_.yaml`: `execute` runs inside
+  **`recording(dat)`**, so every `load` (and `save`) a run makes is recorded,
+  name to hash (`null` for a dat without `dat.sha256`); `{}` when it loaded
+  nothing. Nested runs record their own; the outer records the inner dat
+  once. **`record_dependency(name, sha256=None)`** adds an entry by hand.
+- **`DatManager(..., art_folder=None)`**; `.datconfig.yaml` gains
+  `art_folder:` (default `art/` under the first dat folder) and the
+  environment `DAT_ART_FOLDER`. `dat info` prints it.
+
 ## 2.3.0 — 2026-09-22
 
 **The run and the class belong to the manager** (SVP's handoff, 2026-09-22).

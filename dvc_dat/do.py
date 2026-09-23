@@ -46,9 +46,11 @@ class Do:
     """A do namespace and runner, bound to the `DatManager` whose world it names.
 
     Every manager builds its own, reached as `manager.do`; the module-level `do`
-    forwards to `Dat.manager.do`.  A bare `Do()` is a namespace with no world:
-    it mounts and loads, and a manager built with `do=` adopts it; running
-    anything in it before then is `RuntimeError`.
+    forwards to `Dat.manager.do`.  A bare `Do()` is a plain namespace of Python
+    objects: it mounts, loads, names and calls plain callables with no manager
+    at all.  Running a dat (a spec or a `Dat`) is the one thing that needs a
+    world -- `Do(manager=m)`, or a manager built with `do=` adopts it -- and is
+    `RuntimeError` without one.
     """
 
     _base_locations: Dict[str, str]
@@ -66,7 +68,8 @@ class Do:
     def manager(self) -> DatManager:
         """The world this namespace belongs to."""
         if self._manager is None:
-            raise RuntimeError("this Do has no manager; build one with "
+            raise RuntimeError("this Do is a namespace with no manager, and running a "
+                               "dat needs one: Do(manager=m), or "
                                "DatManager(dat_folders=[...], do=this_do)")
         return self._manager
 
@@ -647,6 +650,7 @@ def _cmd_info(argv: List[str]) -> int:
     print("\n# -- Dat Configuration Info -- ")
     print(f"# Dat version       : {__version__}")
     print(f"# Dat folder        : {manager._dat_folders[0]}")
+    print(f"# Artifact folder   : {manager._art_folder}")
     print(f"# .datconfig folder : {config_dir}")
     config_file = os.path.join(config_dir, DAT_CONFIG_FILE) if config_dir else None
     if config_file and os.path.exists(config_file):

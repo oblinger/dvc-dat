@@ -45,7 +45,9 @@ do(TARGET, *args, **kwargs)
 | a **string** | `do.load`-ed first, then one of the above |
 
 The run itself is `fn(dat, *spec.dat.args, **spec.dat.kwargs)`, where `fn` is
-what `dat.do` names. `dat.run_at` and `dat.run_time` land in the results.
+what `dat.do` names. `dat.run_at`, `dat.run_time`, `dat.code` and
+`dat.dependencies` (everything the run loaded, name to hash) land in the
+results.
 
 | Method | Description |
 |--------|-------------|
@@ -69,7 +71,12 @@ given.
 | `Dat.manager` | The default world; built on first use by `DatManager.load_dat_config()`, replaced by assignment |
 | `DatManager(dat_folders=[...], do=None)` | A world on a list of folders, keyword-only; nothing read from disk |
 | `DatManager.load_dat_config(START) -> DatManager` | A new manager from the `.datconfig.yaml` above `START` |
-| `Dat.manager.exists(NAME) -> bool` | True iff the named dat exists |
+| `Dat.manager.exists(NAME) -> bool` | True iff the named dat (or `art:` artifact) exists |
+| `m.save(SOURCE, "art:KIND/REST") -> str` | Copy a file or folder in as an artifact, write-once; returns `"sha256:<hex>"` |
+| `m.load("art:KIND/REST")` | The artifact, through its kind's factory; a `Path` when none is registered |
+| `m.register_artifact(KIND, FACTORY)` | `FACTORY(path)` builds what `load` returns for that kind |
+| `m.recording(DAT)` | Context manager: every `load` inside lands in `DAT`'s `dat.dependencies` |
+| `m.record_dependency(NAME, sha256=None)` | An entry by hand; `RuntimeError` when nothing is recording |
 | `Dat.manager.execute(DAT)` | Run a dat; every run in a world goes through it |
 | `.get_spec() -> dict` | The spec — every `{}` was expanded once, at create |
 | `.get_results() -> dict` | The mutable results tree |
@@ -154,6 +161,8 @@ Like git, dvc-dat walks up from the working directory looking for
 ```yaml
 # or a list: the first is written, all are read
 dat_folders: data
+# default: art/ under the first dat folder
+art_folder: data/art
 # what a copy of bin/dat execs
 run: .venv/bin/python -m mypkg.main
 ```

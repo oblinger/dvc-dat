@@ -154,6 +154,49 @@ The `dat` command-line tool needs no special handling (see
 and works in another should assign `Dat.manager` explicitly rather than
 depend on where the process happened to launch.
 
+## Artifacts
+
+An **artifact** is a file or folder saved into the manager's artifact
+folder under a name `art:<kind>/<rest>` — write-once, hashed, with a
+`_art_.yaml` sidecar beside it (`kind`, `name`, `payload`, `sha256`,
+`saved_at`). A file is hashed as its bytes, a folder as the sorted
+`relpath\0sha256` lines of its files.
+
+```python
+m.register_artifact("video", VideoClip)   # VideoClip(path)
+m.save("/tmp/G1.mp4", "art:video/G1")     # -> "sha256:9f3c..."
+clip = m.load("art:video/G1")             # a VideoClip
+m.load("art:assets/lock")                 # unregistered: a Path
+```
+
+`save` copies a file to `<art_folder>/<kind>/<rest>/<basename>` and a
+folder's contents to `<art_folder>/<kind>/<rest>/`; an existing name is a
+`FileExistsError` — there is no overwrite and no increment. `load` of an
+`art:` name hands the payload's path to the factory registered for its
+kind (a class whose constructor takes the path, else a lambda) and returns
+a `Path` when none is. The artifact folder is `art_folder:` in
+`.datconfig.yaml`, else `art/` under the first dat folder.
+
+## Dependencies by capture
+
+Every load goes through a manager, so a run's inputs are whatever it
+loaded. `execute` runs the function inside `m.recording(dat)`, and every
+`load` (and `save`) inside that block lands in `dat.dependencies` in
+`_result_.yaml`, name to hash. A nested `do()` records its own loads, and
+the outer run records the inner dat as one entry. A load that reaches
+around the manager is not a dependency unless the run says so:
+
+```python
+m.record_dependency("https://example.com/weights", "sha256:...")
+
+# the same capture outside a run -- a builder gathering a dat's inputs
+with m.recording(dat):
+    cfg = m.load("art:assets/lock")      # recorded in dat
+```
+
+Recording is per thread and per task (a `contextvars` stack), so two runs
+at once never mix their maps.
+
 ## Templates: `dat.base`
 
 `dat.base` names a spec to inherit from — or a **list** of them, merged left to
@@ -212,12 +255,15 @@ The library itself validates with no schema library at all.
 # are created, all are searched when a dat is loaded by name
 dat_folders: data
 
+# where artifacts live (default: art/ under the first dat folder)
+art_folder: data/art
+
 # the command a copy of bin/dat hands its arguments to (see cli.md):
 # your program's main: imports what it mounts, calls dat.cli_main()
 run: .venv/bin/python -m mypkg.main
 ```
 
-Those two keys are the whole file, and an empty file is a complete config.
+Those three keys are the whole file, and an empty file is a complete config.
 An unrecognized key is an error naming the file, the key and the known keys —
 a typo is never silently ignored. The config's folder is the project's import
 root: `load_dat_config` puts it first on `sys.path`, so the project's own
@@ -225,7 +271,8 @@ modules resolve from any working directory, installed or not.
 
 The file is found by walking up from the working directory, or from the path
 given to `DatManager.load_dat_config(start)`. A `.datconfig.override.yaml`
-wins over it, and `DAT_FOLDERS` in the environment wins over both. `run` is
+wins over it, and `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment win
+over both. `run` is
 read by the `bin/dat` bootstrap only (`DAT_RUN` overrides it there). The
 bootstrap hands its child the config it found as `DAT_CLI_CONFIG`, which
 `cli_main()` alone reads.
