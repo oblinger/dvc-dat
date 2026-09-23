@@ -211,7 +211,7 @@ class TestArguments:
 
     def test_set(self):
         line = ["my_letters", "--set", "dat.title=Re-configured letterator",
-                "--json", "rules", '[[2, "my_letters.triple_it"]]']
+                "--json", 'rules=[[2, "my_letters.triple_it"]]']
         code, out, _ = dat(*line)
         assert code == 0
         assert out.endswith("a  bbb  c  ddd  e  fff  g  hhh  i  jjj  k  lll  m"
@@ -224,8 +224,17 @@ class TestArguments:
         assert out.endswith("D  e  fff  g  h  JACKPOT JACKPOT JACKPOT   j  k  lll  m")
 
     def test_illegal_json_exits_1(self):
-        code, _, err = dat("my_letters", "--json", "rules", "[not json")
+        code, _, err = dat("my_letters", "--json", "rules=[not json")
         assert code == 1 and "JSON" in err
+
+    def test_json_needs_key_equals_value(self):
+        code, _, err = dat("my_letters", "--json", "rules", "[[2, 3]]")
+        assert code == 1 and "--json needs DOTTED.KEY=VALUE" in err
+
+    def test_json_repeats_and_mixes_with_set(self):
+        code, out, _ = dat("my_letters", "--json", "start=100", "--json", "end=110",
+                           "--set", "dat.title=Quickie", "--dry-run")
+        assert code == 0 and "'start': 100" in out and "'end': 110" in out
 
     def test_set_on_a_function_exits_1(self):
         code, _, err = dat("hello_world", "--set", "a.b=1")

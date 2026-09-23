@@ -136,7 +136,7 @@ dat info
 dat version
 
 dat TARGET --set DOTTED.KEY=VALUE [--set ...]
-dat TARGET --json DOTTED.KEY '<json>'
+dat TARGET --json DOTTED.KEY=JSON [--json ...]
 dat TARGET --dry-run
 dat TARGET --usage
 ```
