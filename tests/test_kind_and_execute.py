@@ -14,7 +14,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from dvc_dat import Dat, DataConfig, DatManager  # noqa: E402
+from dvc_dat import Dat, DatManager  # noqa: E402
 
 
 class Run(Dat):
@@ -35,7 +35,7 @@ def inner(dat, n):
 
 @pytest.fixture
 def m(tmp_path):
-    manager = DatManager(DataConfig(cwd=str(tmp_path), dat_folders="dats/"))
+    manager = DatManager(dat_folders=[str(tmp_path / "dats")])
     manager.do.mount(value=outer, at="outer")
     manager.do.mount(value=inner, at="inner")
     return manager
@@ -46,7 +46,7 @@ def kind_on_disk(dat):
 
 
 def write_spec(m, name, kind):
-    folder = Path(m.dat_folder, name)
+    folder = Path(m._dat_folders[0], name)
     folder.mkdir(parents=True)
     (folder / "_spec_.yaml").write_text(yaml.safe_dump({"dat": {"kind": kind}}))
 
@@ -114,7 +114,7 @@ class TestExecute:
                 seen.append(dat.get_path_name())
                 return super().execute(dat)
 
-        m = Recording(DataConfig(cwd=str(tmp_path), dat_folders="dats/"))
+        m = Recording(dat_folders=[str(tmp_path / "dats")])
         m.do.mount(value=outer, at="outer")
         m.do.mount(value=inner, at="inner")
         assert m.do({"dat": {"do": "outer", "name": "outer"}}, 4) == 50

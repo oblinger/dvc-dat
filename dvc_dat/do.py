@@ -4,14 +4,14 @@
     do.load("pkg.mod.fn")         # the object a dotted name imports to
     do.name_of(obj)               # the dotted name that loads back to obj
     do.mount(folder=..., at=...)  # add names to the namespace, in code
-    do.configure(...)             # install a .dataconfig.yaml (dat folders)
 
-`do` is the process's default namespace; its manager is `Dat.manager`, and
-`DatManager(config)` is another world with a `do` of its own.  A dotted name
-is a mounted name, else exactly what `import` means in this environment,
-`getattr` below that.  Mounts are `do.mount(...)` calls in the program;
-`.dataconfig.yaml` holds none.  Importing never reads the filesystem; the
-first use configures from the nearest `.dataconfig.yaml`.
+`do` is the process's default namespace: it forwards to `Dat.manager.do`,
+whichever manager that is.  `DatManager(dat_folders=[...])` is another world
+with a `do` of its own.  A dotted name is a mounted name, else exactly what
+`import` means in this environment, `getattr` below that.  Mounts are
+`do.mount(...)` calls in the program; `.datconfig.yaml` holds none.  Importing
+never reads the filesystem; the first use builds `Dat.manager` from the
+nearest `.datconfig.yaml`.
 """
 
 import copy
@@ -30,8 +30,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, U
 import yaml
 
 from .core import (
-    DAT_ARGS, DAT_BASE, DAT_DO, DAT_KWARGS, DAT_NAME, DAT_RUN_AT, DAT_RUN_TIME,
-    DAT_TARGET_EXISTS, Dat, DataConfig, DatManager, merge_dicts,
+    DAT_ARGS, DAT_BASE, DAT_CONFIG_FILE, DAT_DO, DAT_KWARGS, DAT_NAME, DAT_RUN_AT, DAT_RUN_TIME,
+    DAT_TARGET_EXISTS, Dat, DatManager, merge_dicts,
 )
 
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
@@ -45,11 +45,10 @@ Spec = Dict[str, Any]
 class Do:
     """A do namespace and runner, bound to the `DatManager` whose world it names.
 
-    The module-level `do` is the process's default; `Dat.manager` is its manager.
-    `DatManager(config)` makes another world and its own `Do` with it, reached as
-    `manager.do`.  A bare `Do()` is a namespace that has no world yet: its first
-    use (or `configure(...)`) gives it a fresh manager of its own, so nothing it
-    mounts, runs or creates touches `Dat.manager`.
+    Every manager builds its own, reached as `manager.do`; the module-level `do`
+    forwards to `Dat.manager.do`.  A bare `Do()` is a namespace with no world:
+    it mounts and loads, and a manager built with `do=` adopts it; running
+    anything in it before then is `RuntimeError`.
     """
 
     _base_locations: Dict[str, str]
@@ -62,33 +61,14 @@ class Do:
         self._base_locations = {}
         self._registered_values = None
         self._manager = manager
-        self._configuring = False
-
-    @property
-    def config(self) -> Optional[DataConfig]:
-        """The config in force, None until first use or `configure(...)`."""
-        return self._manager.config if self._manager is not None else None
 
     @property
     def manager(self) -> DatManager:
-        """The world this namespace belongs to; built on first use."""
-        self._ensure_configured()
+        """The world this namespace belongs to."""
+        if self._manager is None:
+            raise RuntimeError("this Do has no manager; build one with "
+                               "DatManager(dat_folders=[...], do=this_do)")
         return self._manager
-
-    def _ensure_configured(self) -> None:
-        """Install a config the first time one is needed.
-
-        Import reads no filesystem; the first `load`, call or `Dat.manager` access
-        discovers `.dataconfig.yaml` from the working directory and installs it
-        (its dat folders; mounts are `do.mount(...)` calls, never config).
-        `configure(...)` stays for a config chosen by hand.
-        """
-        if self._manager is None and not self._configuring:
-            self._configuring = True
-            try:
-                self.configure()
-            finally:
-                self._configuring = False
 
     # -- running -------------------------------------------------------------
 
@@ -107,7 +87,6 @@ class Do:
         `dat.run_time` land in the results.  A template with no `dat.do` just
         creates the dat and returns it.
         """
-        self._ensure_configured()
         obj = self.load(target) if isinstance(target, str) else target
         try:
             if isinstance(obj, Dat):
@@ -189,7 +168,6 @@ class Do:
         unless `default` is given.  A `.py`/`.yaml`/`.json` mount's contents are
         returned as loaded; a string starting with `yaml` is parsed as YAML.
         """
-        self._ensure_configured()
         try:
             result = self._load_mounted(dotted_name)
             if result is _DO_NULL:
@@ -297,37 +275,6 @@ class Do:
         return None
 
     # -- mounting ------------------------------------------------------------
-
-    def configure(self, source: Union[None, str, Path, DataConfig] = None) -> DataConfig:
-        """Install a config on this namespace's world; the config folder goes first
-        on `sys.path`.
-
-        `source` is a `DataConfig`, a folder to search up from, a config file, or
-        None for discovery from the working directory.  A namespace with no world
-        yet gets a fresh `DatManager` adopting it; one that has a world keeps it
-        (and every mount) and the manager takes on the new config.  On the
-        module-level `do` that is `Dat.manager`; on any other `Do` the default
-        world is untouched.  The namespace is whatever the running program has
-        imported; nothing here imports on its behalf.
-        """
-        if isinstance(source, DataConfig):
-            config = source
-        elif source is None:
-            config = DataConfig.new()
-        else:
-            source = Path(source)
-            if source.is_file():
-                config = DataConfig.new(cwd=source.parent, config_name=source.name)
-            else:
-                config = DataConfig.new(cwd=source)
-        if self._manager is None:
-            DatManager(config, do=self)         # adopts this namespace as its own
-        else:
-            self._manager._install(config)
-        root = str(config.cwd)          # the config folder is the import root
-        if root not in sys.path:
-            sys.path.insert(0, root)
-        return config
 
     def mount(self, *,
               folder: Optional[str] = None,
@@ -502,8 +449,33 @@ def _build_loadables_index(folder: str, at: str) -> Dict[str, Any]:
     return results
 
 
-# The process's default namespace; its manager is `Dat.manager`, built on first use.
-do = Do()
+class _DefaultDo:
+    """`dvc_dat.do`: forwards every call and attribute to `Dat.manager.do`, so it
+    always acts on the default world, whichever manager that is."""
+
+    __slots__ = ()
+
+    @staticmethod
+    def _current() -> Optional[Do]:
+        """The default world's `Do` if one is built yet, else None (reads no config)."""
+        from . import core
+        return core._default_manager.do if core._default_manager is not None else None
+
+    def __call__(self, *args, **kwargs) -> Any:
+        return Dat.manager.do(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(Dat.manager.do, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError(f"dvc_dat.do forwards to Dat.manager.do; set {name!r} there")
+
+    def __repr__(self) -> str:
+        return f"<dvc_dat.do -> {self._current()!r}>"
+
+
+# The process's default namespace: `Dat.manager.do`, whichever manager that is.
+do = _DefaultDo()
 
 
 # =============================================================================
@@ -519,7 +491,7 @@ SYNOPSIS
     dat --help                                  this message
 
 DESCRIPTION
-    `dat` configures itself from the nearest .dataconfig.yaml before it runs
+    `dat` configures itself from the nearest .datconfig.yaml before it runs
     anything that needs the namespace.  `list`, `info` and `version` are
     reserved words; anything else in first position is a TARGET.
 
@@ -565,25 +537,26 @@ ENV_CLI_CONFIG = "DAT_CLI_CONFIG"     # set by the bootstrap, read here and nowh
 
 
 def cli_main(argv: Optional[List[str]] = None, *,
-             config: Union[None, str, Path, DataConfig] = None) -> int:
+             config: Union[None, str, Path] = None) -> int:
     """The `dat` command line, for a program's own main.
 
     A program that mounts names -- or simply wants `dat` to run inside its own
-    imports -- names its main in `.dataconfig.yaml`'s `run:` and, when
+    imports -- names its main in `.datconfig.yaml`'s `run:` and, when
     `DAT_CLI_CONFIG` is set, ends with `sys.exit(dat.cli_main())`.  The bootstrap
     copy of `bin/dat` sets that one variable -- the config file it found -- for
     the program it launches, so the main knows it was launched by `dat` and the
     config is read once; nothing else reads the variable.  `argv` defaults to
-    `sys.argv`; `config` (a folder, a config file or a `DataConfig`) is installed
-    instead, for a program running the command line on a config it chose.  The
-    return value is the exit status.
+    `sys.argv`; `config` (a folder or a config file) replaces the default world,
+    `Dat.manager = DatManager.load_dat_config(config, do=dvc_dat.do)`, keeping
+    its mounts; with neither, first use discovers one.  The return value is the
+    exit status.
     """
     if config is None:
         config = os.environ.get(ENV_CLI_CONFIG) or None
         if config and not Path(config).is_file():
             raise ValueError(f"{ENV_CLI_CONFIG}={config}: no such config file")
     if config is not None:
-        do.configure(config)
+        Dat.manager = DatManager.load_dat_config(config, do=do)
     return _do_argv(list(sys.argv if argv is None else argv))
 
 
@@ -617,7 +590,6 @@ def _cmd_do(argv: List[str]) -> int:
             return 0
         return _fail("no TARGET given; `dat --help` for usage")
     target, fixed = args[0], [_scalar(a) for a in args[1:]]
-    _configured()
     try:
         cmd = do.load(target)
     except (ImportError, AttributeError, KeyError) as e:
@@ -660,7 +632,6 @@ def _cmd_list(argv: List[str]) -> int:
     """`dat list [PREFIX]` -- the mounted names."""
     if len(argv) > 1:
         return _fail("list takes at most one PREFIX")
-    _configured()
     from .dat_tools import cmd_list
     cmd_list(argv[0] if argv else "")
     return 0
@@ -671,27 +642,21 @@ def _cmd_info(argv: List[str]) -> int:
     if argv:
         return _fail("info takes no arguments")
     from . import __version__
-    config = _configured()
+    manager = Dat.manager
+    config_dir = manager._config_dir
     print("\n# -- Dat Configuration Info -- ")
     print(f"# Dat version       : {__version__}")
-    print(f"# Dat folder        : {do.manager.dat_folder}")
-    print(f"# .dataconfig folder: {config.cwd}")
-    config_file = os.path.join(config.cwd, ".dataconfig.yaml")
-    if os.path.exists(config_file):
-        print(f"# .dataconfig.yaml  : {config_file}")
+    print(f"# Dat folder        : {manager._dat_folders[0]}")
+    print(f"# .datconfig folder : {config_dir}")
+    config_file = os.path.join(config_dir, DAT_CONFIG_FILE) if config_dir else None
+    if config_file and os.path.exists(config_file):
+        print(f"# .datconfig.yaml   : {config_file}")
         with open(config_file) as f:
             print(f.read())
     else:
-        print("# (no .dataconfig.yaml found)")
+        print("# (no .datconfig.yaml found)")
     print()
     return 0
-
-
-def _configured() -> DataConfig:
-    """The config in force, reading the nearest `.dataconfig.yaml` if none is."""
-    if do.config is None:
-        do.configure()
-    return do.config
 
 
 def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:

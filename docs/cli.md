@@ -1,7 +1,7 @@
 # Command Line
 
 `dat` is the command line. It configures itself from the nearest
-`.dataconfig.yaml` — walking up from the working directory — before it runs
+`.datconfig.yaml` — walking up from the working directory — before it runs
 anything that needs the namespace; `dat --version` and `dat --help` need no
 config at all.
 
@@ -30,7 +30,7 @@ dat --help                                the usage message
 |---------|------|
 | `dat TARGET [ARG ...] [KEY=VALUE ...]` | `do(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
 | `dat list [PREFIX]` | Every mounted name that starts with `PREFIX`, with what it loads to. The library mounts `dt` (`dvc_dat.dat_tools`) itself; `dat dt.list` is the same command. |
-| `dat info` | The version, the dat folder, the config folder and the `.dataconfig.yaml` in force. `dat --info` is the same command. |
+| `dat info` | The version, the first dat folder, the config folder and the `.datconfig.yaml` in force. `dat --info` is the same command. |
 | `dat version` | The version. `dat --version` is the same command. |
 | `dat` · `dat --help` · `dat -h` | The usage message. |
 
@@ -98,7 +98,7 @@ dat my_letters --json rules '[[2, "my_letters.triple_it"]]'
 | `0` | Ran. |
 | `1` | The run raised, or the command line was malformed. |
 | `2` | `TARGET` does not load. |
-| `3` | (the bootstrap copy only) no `.dataconfig.yaml` above the working directory. |
+| `3` | (the bootstrap copy only) no `.datconfig.yaml` above the working directory. |
 
 A failed run prints one line on stderr and no traceback. Set `DAT_DEBUG=1` to
 get the traceback instead.
@@ -112,7 +112,7 @@ environment active, the console script of the same name comes first on
 `PATH`; it runs the library's own command line with no project mounts and
 never reads `run:`, so call the copy by its path to get your main:
 
-1. Walk up from the working directory to the nearest `.dataconfig.yaml` (it
+1. Walk up from the working directory to the nearest `.datconfig.yaml` (it
    stops at `/`; with none found it prints a message and exits `3`).
 2. Pick the command — the first of:
    - `$DAT_RUN`,
@@ -136,7 +136,7 @@ cp .../dvc-dat/bin/dat ~/bin/dat
 cd any/deep/subfolder && dat train epochs=200
 ```
 
-## `run:` in `.dataconfig.yaml`
+## `run:` in `.datconfig.yaml`
 
 ```yaml
 dat_folders: data
@@ -162,8 +162,9 @@ if __name__ == "__main__":
 ```
 
 `cli_main(argv=None, *, config=None)` takes the config as a parameter
-instead, for a program that runs the command line on a config it chose;
-the environment variable is never the way to hand it one.
-The library itself never reads the key — it is there so that one file
-describes the whole project. `DataConfig.run` carries it, with a relative
-first word made absolute.
+instead — a folder or a config file — for a program that runs the command
+line on a config it chose: it does
+`Dat.manager = DatManager.load_dat_config(config, do=dvc_dat.do)`, keeping
+the program's mounts. The environment variable is never the way to hand it
+one. The library itself never reads the `run` key — it is there so that one
+file describes the whole project.

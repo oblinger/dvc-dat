@@ -1,15 +1,15 @@
 """dvc_dat 2.3 — dats are folders whose `_spec_.yaml` is a complete, argumentless recipe.
 
-    from dvc_dat import Dat, do, expand
+    from dvc_dat import Dat, DatManager, do, expand
 
     do("catalog.experiment", epochs=10)   # forks a new spec, creates a dat, runs it
     Dat.load("runs/2026-09/exp")          # opens a dat on disk
+    Dat.manager = DatManager(dat_folders=["/work"])   # replaces the default world
 """
 
 __version__ = "2.3.0"
 
 from .core import (
-    DataConfig,
     Dat,
     DatContainer,
     DatManager,
@@ -23,7 +23,6 @@ __all__ = [
     "Dat",
     "DatContainer",
     "DatManager",
-    "DataConfig",
     "Do",
     "cli_main",
     "do",

@@ -14,9 +14,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from dvc_dat import (  # noqa: E402
-    Dat, DataConfig, Do, do, expand, expand_spec, merge_dicts,
+    Dat, DatManager, Do, do, expand, expand_spec, merge_dicts,
 )
-from dvc_dat.core import DATA_CONFIG_FILE, SPEC_YAML, RESULT_YAML  # noqa: E402
+from dvc_dat.core import DAT_CONFIG_FILE, SPEC_YAML, RESULT_YAML  # noqa: E402
 
 V2 = "v2tests"
 SAMPLE = {"a": 1, "b": [2, 3]}     # a data object a spec may reference whole
@@ -38,10 +38,10 @@ def stored(dat_or_path, file_name=SPEC_YAML):
 
 @pytest.fixture
 def restore_manager():
-    """Undo whatever a test's own `configure()` did to the default world."""
-    saved_config = do.config
+    """Put back the default world a test replaced."""
+    saved = Dat.manager
     yield
-    do.configure(saved_config)
+    Dat.manager = saved
 
 
 class TestForkRule:
@@ -296,41 +296,40 @@ class TestStaticResolution:
             do.name_of(lambda: None)
 
 
-class TestExplicitConfigure:
-    def test_configure_mounts_onto_the_object_imported_earlier(self, tmp_path,
-                                                               restore_manager):
+class TestExplicitConfig:
+    def test_a_loaded_config_adopting_do_keeps_its_mounts(self, tmp_path,
+                                                          restore_manager):
         (tmp_path / "mounted").mkdir()
         (tmp_path / "mounted" / "v2_greeter.py").write_text(
             "def __main__():\n    return 'hi'\n")
         (tmp_path / "explicit_main.py").write_text(
             "from pathlib import Path\nfrom dvc_dat import do\n"
             "do.mount(folder=str(Path(__file__).parent / 'mounted'))\n")
-        (tmp_path / DATA_CONFIG_FILE).write_text("dat_folders: sync/\n")
+        (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: sync/\n")
 
         assert do.load("v2_greeter", default=None) is None
 
-        manager_before = Dat.manager
-        config = do.configure(tmp_path)
-        assert isinstance(config, DataConfig)
+        do_before = do._current()
+        Dat.manager = DatManager.load_dat_config(tmp_path, do=do)
         import explicit_main  # noqa: F401  -- the config folder is on sys.path now
         assert do("v2_greeter") == "hi"             # its mounts landed on `do`
-        assert do.config.cwd == os.path.realpath(tmp_path)
-        assert Dat.manager is manager_before       # the world kept its identity ...
-        assert Dat.manager.dat_folder == os.path.join(os.path.realpath(tmp_path), "sync/")
+        assert sys.path[0] == os.path.realpath(tmp_path)
+        assert do._current() is do_before          # the namespace kept its identity
+        assert do.load("v2_echo") is echo          # ... and the mounts made before
+        assert Dat.manager._dat_folders == [os.path.join(os.path.realpath(tmp_path), "sync")]
 
-    def test_configure_accepts_a_config_file(self, tmp_path, restore_manager):
-        config_file = tmp_path / DATA_CONFIG_FILE
+    def test_load_dat_config_accepts_a_config_file(self, tmp_path):
+        config_file = tmp_path / DAT_CONFIG_FILE
         config_file.write_text("dat_folders: elsewhere/\n")
-        before = Dat.manager.dat_folder
-        probe = Do()                               # a world of its own (2.3)
-        assert probe.configure(config_file).dat_folders[0].endswith("/elsewhere/")
-        assert probe.manager.dat_folder.endswith("/elsewhere/")
-        assert Dat.manager.dat_folder == before
+        before = Dat.manager
+        other = DatManager.load_dat_config(config_file)   # a world of its own
+        assert other._dat_folders[0].endswith("/elsewhere")
+        assert Dat.manager is before
 
     def test_importing_dvc_dat_reads_no_config(self, tmp_path):
         result = subprocess.run(
             [sys.executable, "-c",
-             "import dvc_dat; print(dvc_dat.do.config, dvc_dat.do._manager)"],
+             "import dvc_dat; print(dvc_dat.core._default_manager, dvc_dat.do._current())"],
             cwd=tmp_path, capture_output=True, text=True,
             env={**os.environ, "PYTHONPATH": str(REPO_ROOT)})
         assert result.returncode == 0, result.stderr
@@ -346,7 +345,7 @@ class TestCleanup:
 
 
 def test_first_use_installs_the_config(tmp_path):
-    """T010 Q1: nobody calls `configure()`; the first use discovers a config
+    """T010 Q1: nobody configures anything; the first use builds `Dat.manager`
     from cwd.  The namespace is what the program imported (T011, Dan)."""
     pkg = tmp_path / "lazypkg"
     pkg.mkdir()
@@ -355,18 +354,16 @@ def test_first_use_installs_the_config(tmp_path):
     (tmp_path / "lazy_main.py").write_text(
         "from dvc_dat import do\nimport lazypkg.job\n"
         "do.mount(module=lazypkg.job, at='lazy')\n")
-    (tmp_path / DATA_CONFIG_FILE).write_text("dat_folders: warehouse\n")
+    (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: warehouse\n")
     (tmp_path / "notes").mkdir()                # a subfolder: cwd is not the root
 
     probe = (
         "from dvc_dat import do, Dat\n"
         "import lazy_main\n"                    # the program's own mounts
-        "assert do.config is None and do._manager is None\n"
-        "fn = do.load('lazy.run')\n"            # the alias, with no configure()
+        "fn = do.load('lazy.run')\n"            # the alias, nothing configured
         "assert fn(None) == 'ran'\n"
-        "assert do.config is not None\n"       # ... first use installed one
         "assert do.load('lazypkg.job.run') is fn\n"   # the static floor agrees
-        "print(Dat.manager.dat_folder)\n"
+        "print(Dat.manager._dat_folders[0])\n"
     )
     result = subprocess.run(
         [sys.executable, "-c", probe], cwd=tmp_path / "notes",
@@ -379,7 +376,7 @@ def test_first_use_installs_the_config(tmp_path):
 def test_increment_on_a_plain_name_counts_up(tmp_path, restore_manager):
     """`target_exists: increment` on a name with no `{unique}` appends `_2`, `_3`
     instead of spinning forever (found 2026-09-22)."""
-    do.configure(DataConfig(cwd=str(tmp_path), dat_folders="data/"))
+    Dat.manager = DatManager(dat_folders=[str(tmp_path / "data")], do=do)
     spec ={"dat": {"kind": "Dat", "name": "plain", "target_exists": "increment"}}
     assert Dat.create(spec=spec).get_path_name() == "plain"
     assert Dat.create(spec=spec).get_path_name() == "plain_2"

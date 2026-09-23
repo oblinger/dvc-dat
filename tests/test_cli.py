@@ -41,12 +41,12 @@ def run_boot(*args: str, cwd, env=None):
 
 @pytest.fixture
 def no_config_dir(tmp_path: Path) -> Path:
-    """A directory with no `.dataconfig.yaml` anywhere above it."""
+    """A directory with no `.datconfig.yaml` anywhere above it."""
     folder = tmp_path / "elsewhere"
     folder.mkdir()
     for parent in [folder, *folder.parents]:
-        if (parent / ".dataconfig.yaml").exists():
-            pytest.skip(f"a .dataconfig.yaml sits above {folder}")
+        if (parent / ".datconfig.yaml").exists():
+            pytest.skip(f"a .datconfig.yaml sits above {folder}")
     return folder
 
 
@@ -57,7 +57,7 @@ def make_project(root: Path, python: str = None) -> Path:
     config = ["dat_folders: data/"]
     if python is not None:
         config.append(f"run: {python} -m project_main")
-    (root / ".dataconfig.yaml").write_text("\n".join(config) + "\n")
+    (root / ".datconfig.yaml").write_text("\n".join(config) + "\n")
     (root / "project_main.py").write_text(
         "import os\n"
         "import sys\n"
@@ -119,7 +119,7 @@ class TestVerbs:
         code, out, _ = dat(form)
         assert code == 0
         assert "Dat version" in out and "test_sync_folder" in out
-        assert str(TESTS / ".dataconfig.yaml") in out
+        assert str(TESTS / ".datconfig.yaml") in out
 
     def test_list(self):
         code, out, _ = dat("list")
@@ -268,7 +268,7 @@ class TestBootstrap:
     def test_no_config_above_exits_3(self, no_config_dir):
         code, out, err = run_boot("greet", cwd=no_config_dir)
         assert code == 3 and out == ""
-        assert ".dataconfig.yaml" in err
+        assert ".datconfig.yaml" in err
 
     def test_end_to_end_from_a_nested_folder(self, tmp_path):
         nested = make_project(tmp_path, python=sys.executable)
@@ -315,7 +315,7 @@ class TestImportRoot:
 
     @staticmethod
     def _project(root: Path) -> Path:
-        (root / ".dataconfig.yaml").write_text("dat_folders: data/\n")
+        (root / ".datconfig.yaml").write_text("dat_folders: data/\n")
         (root / "mypkg").mkdir()
         (root / "mypkg" / "__init__.py").write_text("")
         (root / "mypkg" / "job.py").write_text("def run():\n    return 42\n")

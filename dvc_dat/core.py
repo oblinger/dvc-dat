@@ -16,7 +16,7 @@ import subprocess
 import time
 import weakref
 from copy import deepcopy
-from dataclasses import dataclass, field, fields
+import sys
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
@@ -51,134 +51,45 @@ def merge_dicts(*dicts: Dict, inplace: bool = False) -> Dict:
 # Configuration
 # =============================================================================
 
-DATA_CONFIG_FILE = ".dataconfig.yaml"
-DATA_CONFIG_OVERRIDE_FILE = ".dataconfig.override.yaml"
+DAT_CONFIG_FILE = ".datconfig.yaml"
+DAT_CONFIG_OVERRIDE_FILE = ".datconfig.override.yaml"
 ENV_PREFIX = "DAT_"
+_CONFIG_KEYS = ("dat_folders", "run")    # `run` is read by `bin/dat` only
+_DEFAULT_DAT_FOLDER = "data"
 
 
-@dataclass
-class DataConfig:
-    """Where dats are stored, and the command `bin/dat` runs.
+def _find_file_up(path: Union[str, Path], file_name: str) -> Optional[Path]:
+    """`file_name` in `path` or the nearest of its parents, else None."""
+    path = Path(path).absolute()
+    prev_path: Optional[Path] = None
+    while prev_path != path:
+        candidate = path / file_name
+        if candidate.exists():
+            return candidate
+        prev_path = path
+        path = path.parent
+    return None
 
-    A config holds no mounts: those are `do.mount(...)` calls in the program.
 
-    Attributes
-    ----------
-    cwd : folder the config was found in (or given); relative paths resolve against it.
-    dat_folders : where dats live -- one folder, or a list.  The first is where new
-        dats are created; all are searched, in order, when a dat is loaded by name.
-    run : the command a copy of `bin/dat` hands its arguments to -- your own
-        program's main, which imports what it needs and calls `cli_main()`; default
-        `.venv/bin/python -m dvc_dat` beside the config.  A relative path in its
-        first word is relative to `cwd`.  Nothing in the library reads it.
-    """
+def _read_config(path: Optional[Path]) -> Dict[str, Any]:
+    """The keys of one config file; an unknown key is `ValueError`."""
+    if not path:
+        return {}
+    with path.open("r") as f:
+        values = yaml.safe_load(f) or {}
+    if not isinstance(values, dict):
+        raise ValueError(
+            f"{path}: expected a mapping of config keys, got {type(values).__name__}")
+    unknown = sorted(set(values) - set(_CONFIG_KEYS))
+    if unknown:
+        raise ValueError(
+            f"{path}: unknown config key(s) {unknown}; known keys are {list(_CONFIG_KEYS)}")
+    return values
 
-    cwd: str
-    dat_folders: Union[str, List[str]] = "data/"
-    run: Optional[str] = None
 
-    @classmethod
-    def _field_names(cls) -> List[str]:
-        return [f.name for f in fields(cls)]
-
-    @classmethod
-    def _env_names(cls) -> Dict[str, str]:
-        """Environment variable -> field: `DAT_FOLDERS`, `DAT_RUN`, `DAT_CWD`."""
-        prefix = ENV_PREFIX.lower()
-        return {ENV_PREFIX + (n[len(prefix):] if n.startswith(prefix) else n).upper(): n
-                for n in cls._field_names()}
-
-    @classmethod
-    def new(
-        cls,
-        cwd: Optional[Union[str, Path]] = None,
-        config_name: str = DATA_CONFIG_FILE,
-        config_override_name: str = DATA_CONFIG_OVERRIDE_FILE,
-        override_values: Optional[Dict[str, Any]] = None,
-        verbose: bool = False,
-    ) -> "DataConfig":
-        """Create a DataConfig by searching for config files up the directory tree.
-
-        Precedence, lowest to highest: `config_name`, `config_override_name`,
-        `override_values`, then `DAT_<KEY>` environment variables.  Discovery walks up
-        from `cwd` when given, else from the process's working directory.
-        """
-        if cwd:
-            cwd = str(cwd)
-        if override_values is None:
-            override_values = {}
-
-        search_root = Path(cwd) if cwd else Path.cwd()
-        config_path = cls._find_file_up(search_root, config_name)
-        config_override_path = cls._find_file_up(search_root, config_override_name)
-
-        config_values = cls._read(config_path, verbose)
-        config_override_values = cls._read(config_override_path, verbose)
-
-        if not cwd:
-            cwd = str(config_path.parent) if config_path else str(Path.cwd())
-
-        # Only DAT_<FIELD> variables reach the config; a field's own `dat_` prefix
-        # folds into the DAT_ (DAT_FOLDERS -> dat_folders, DAT_RUN -> run).
-        environ_values = {
-            name: os.environ[env] for env, name in cls._env_names().items() if env in os.environ
-        }
-
-        final_values: Dict[str, Any] = merge_dicts(
-            config_values, config_override_values, override_values, environ_values, {"cwd": cwd},
-        )
-        return cls(**final_values)
-
-    @classmethod
-    def _read(cls, path: Optional[Path], verbose: bool) -> Dict[str, Any]:
-        if not path:
-            return {}
-        with path.open("r") as f:
-            values = yaml.safe_load(f) or {}
-        if not isinstance(values, dict):
-            raise ValueError(
-                f"{path}: expected a mapping of config keys, "
-                f"got {type(values).__name__}")
-        unknown = sorted(set(values) - set(cls._field_names()))
-        if unknown:
-            raise ValueError(
-                f"{path}: unknown config key(s) {unknown}; known keys are {cls._field_names()}"
-            )
-        if verbose:
-            logger.debug("%s found and loaded.", path)
-        return values
-
-    @staticmethod
-    def _find_file_up(path: Union[str, Path], file_name: str) -> Optional[Path]:
-        """Look for `file_name` in `path` and each of its parents."""
-        path = Path(path).absolute()
-        prev_path: Optional[Path] = None
-        while prev_path != path:
-            candidate = path / file_name
-            if candidate.exists():
-                return candidate
-            prev_path = path
-            path = path.parent
-        return None
-
-    def __post_init__(self) -> None:
-        """Make every path in the config absolute; `dat_folders` becomes a list."""
-        self.cwd = os.path.realpath(self.cwd)
-        folders = [self.dat_folders] if isinstance(self.dat_folders, str) else list(self.dat_folders)
-        if not folders or not all(isinstance(f, str) and f for f in folders):
-            raise ValueError(f"dat_folders: a folder or a list of folders, got {self.dat_folders!r}")
-        self.dat_folders = [self._folder(f) for f in folders]
-        if self.run:
-            head, _, tail = self.run.strip().partition(" ")
-            if "/" in head and not os.path.isabs(head):
-                head = os.path.normpath(os.path.join(self.cwd, head))
-            self.run = head + (" " + tail if tail else "")
-
-    def _folder(self, folder: str) -> str:
-        if not os.path.isabs(folder):
-            folder = os.path.join(self.cwd, folder)
-        folder = os.path.normpath(folder)
-        return folder if folder.endswith("/") else folder + "/"
+def _within(path: str, folder: str) -> bool:
+    """True if `path` is `folder` or lies inside it."""
+    return path == folder or path.startswith(folder.rstrip(os.sep) + os.sep)
 
 
 # =============================================================================
@@ -259,15 +170,6 @@ PathLike = Union[str, Path]
 SpecValue = Union[str, int, float, bool, None, "SpecDict", List[Any]]
 SpecDict = Dict[str, SpecValue]
 DatType = TypeVar("DatType", bound="Dat")
-
-
-class classproperty:
-    """Decorator for class-level properties (like @property but for the class itself)."""
-    def __init__(self, func):
-        self.func = func
-
-    def __get__(self, obj, objtype=None):
-        return self.func(objtype)
 
 
 class _DataState(Enum):
@@ -369,46 +271,80 @@ def expand_spec(spec: Any, vars: Optional[Dict[str, Any]] = None, *,
 # =============================================================================
 
 class DatManager:
-    """A world of dats: a config (where dats live) and the namespace that names them.
+    """A world of dats: the dat folders, and the namespace that names things in them.
 
     A manager owns its `do` -- a `Do` bound to it, carrying its mounts, its `load`
     and its runner -- and everything the manager does (a dotted spec, `dat.base`,
-    `{}` expansion, path resolution) goes through that `do`, never another one.
-    The process's default world is `Dat.manager`, the manager of the module-level
-    `dvc_dat.do`, built lazily on first use from `DataConfig.new()` (discovery
-    walks up from the working directory) or explicitly by `do.configure(...)`.
-    A second world is `DatManager(config)`: its `do`, its folders, its dats.
+    `{}` expansion, path resolution, every run) goes through that `do`.  The
+    process's default world is `Dat.manager`, built on first use by
+    `DatManager.load_dat_config()` and replaced by assigning to it.  Any number
+    of others coexist.  `do` is the only public attribute.
     """
 
-    config: DataConfig
-    dat_folders: List[str]
     do: "Do"
+    _dat_folders: List[str]
+    _config_dir: Optional[str]
     _dat_cache: "weakref.WeakValueDictionary[str, Dat]"
 
-    @property
-    def dat_folder(self) -> str:
-        """Where new dats are created: the first of `dat_folders`."""
-        return self.dat_folders[0]
-
-    def __init__(self, config: Optional[DataConfig] = None, *, do: Optional["Do"] = None):
-        """Build a manager on `config` (default: discovered), with its own `do` --
-        or adopting `do`, a namespace that mounted names before it had a world."""
-        from .do import Do
+    def __init__(self, *, dat_folders: List[str], do: Optional["Do"] = None):
+        """A world on `dat_folders` -- searched in order by name, the first written
+        to.  Nothing is read from disk.  `do` adopts an existing namespace with its
+        mounts; adopting the default world's makes this the default world."""
+        from .do import Do, _DefaultDo
         from . import dat_tools
 
-        if config is None:
-            config = DataConfig.new()
-        self._install(config)
+        if isinstance(dat_folders, (str, Path)) or not isinstance(dat_folders, (list, tuple)):
+            raise TypeError(f"DatManager: dat_folders is a list of folders, got {dat_folders!r}")
+        if not dat_folders or not all(isinstance(f, (str, Path)) and str(f) for f in dat_folders):
+            raise ValueError(f"DatManager: dat_folders needs at least one folder, got {dat_folders!r}")
+        self._dat_folders = [os.path.realpath(str(f)) for f in dat_folders]
+        self._config_dir = None
+        self._dat_cache = weakref.WeakValueDictionary()
+
+        default = False
+        if isinstance(do, _DefaultDo):
+            do, default = do._current(), True
+        elif do is not None and _default_manager is not None and do is _default_manager.do:
+            default = True
         self.do = Do(manager=self) if do is None else do
         self.do._manager = self
         self.do.mount(module=dat_tools, at="dt")
         self.do.mount(value=dat_tools.cmd_list, at="dt.list")
+        if default:
+            Dat.manager = self
 
-    def _install(self, config: DataConfig) -> None:
-        """Take on `config`: its folders become this manager's; the cache resets."""
-        self.config = config
-        self.dat_folders = list(config.dat_folders)
-        self._dat_cache = weakref.WeakValueDictionary()
+    @classmethod
+    def load_dat_config(cls, start: Union[str, Path, None] = None, *,
+                        do: Optional["Do"] = None) -> "DatManager":
+        """A new manager from the `.datconfig.yaml` found walking up from `start`
+        (default the working directory; a config file names itself).
+
+        Precedence, lowest to highest: the file, `.datconfig.override.yaml`, then
+        `DAT_FOLDERS` in the environment.  Relative folders resolve against the
+        file's folder, which goes first on `sys.path`; with no file they resolve
+        against `start`.  An unknown key is `ValueError`.  `do` as in the
+        constructor.
+        """
+        start = Path(start) if start is not None else Path.cwd()
+        name = DAT_CONFIG_FILE
+        if start.is_file():
+            start, name = start.parent, start.name
+        config_path = _find_file_up(start, name)
+        override_path = _find_file_up(start, DAT_CONFIG_OVERRIDE_FILE)
+        values = merge_dicts(_read_config(config_path), _read_config(override_path))
+        if (env := os.environ.get(ENV_PREFIX + "FOLDERS")):
+            values["dat_folders"] = env
+        root = os.path.realpath(config_path.parent if config_path else start)
+        folders = values.get("dat_folders", _DEFAULT_DAT_FOLDER)
+        folders = [folders] if isinstance(folders, str) else folders
+        if not isinstance(folders, list) or not all(isinstance(f, str) and f for f in folders):
+            raise ValueError(f"{config_path}: dat_folders is a folder or a list of them, "
+                             f"got {values.get('dat_folders')!r}")
+        manager = cls(dat_folders=[os.path.join(root, f) for f in folders], do=do)
+        manager._config_dir = root
+        if root not in sys.path:
+            sys.path.insert(0, root)    # the config folder is the import root
+        return manager
 
     def expand(self, text: str, vars: Optional[Dict[str, Any]] = None) -> Any:
         """`expand`, with dotted names resolved through this manager's `do`."""
@@ -453,7 +389,7 @@ class DatManager:
 
         path = self._resolve_path(expanded_path)
         spec = self.expand_spec(spec, names)
-        if path.startswith(self.dat_folder):
+        if _within(os.path.realpath(path), self._dat_folders[0]):
             Dat.set(spec, DAT_NAME, self._get_path_name(path))
         os.makedirs(path, exist_ok=True)
         logger.info("Creating Dat %s under path: <%s>", dat_class, path)
@@ -490,8 +426,8 @@ class DatManager:
     ) -> "Dat":
         """Load a dat from disk, as the class its `dat.kind` names.
 
-        Searched as an absolute path, under the config folder, in the do-system's
-        mounts, then in each dat folder.
+        Searched as an absolute path, in the do-system's mounts, then in each
+        dat folder.
         """
         return self._load(name_or_path, cache_after_load=cache_after_load)
 
@@ -510,7 +446,7 @@ class DatManager:
         if not os.path.exists(path):
             raise KeyError(
                 f"LOAD_DAT: Could not find <{name_or_path!r}> as absolute, "
-                f"under the config folder {self.config.cwd}, or in {self.dat_folders}"
+                f"as a mounted dat, or in {self._dat_folders}"
             )
         path = os.path.abspath(path)
         if (cached := self._dat_cache.get(path)) is not None and (
@@ -554,11 +490,11 @@ class DatManager:
 
     def _get_path_name(self, path: Union[str, Path]) -> str:
         path = str(path)
-        try:
-            match = 1 + len(os.path.commonpath([self.dat_folder, path]))
-            return path[match:] if match > 2 else path
-        except ValueError:
-            return path
+        real = os.path.realpath(path)
+        for folder in self._dat_folders:
+            if real != folder and _within(real, folder):
+                return os.path.relpath(real, folder)
+        return path
 
     def execute(self, dat: "Dat") -> Any:
         """Run `dat` as its spec says, and record the run in its results.
@@ -670,7 +606,7 @@ class DatManager:
                 raise TypeError(
                     f"path template {path_spec!r} expanded to {expanded!r}, "
                     "not a string")
-            expanded_path = os.path.join(self.dat_folder, expanded)
+            expanded_path = os.path.join(self._dat_folders[0], expanded)
             if not os.path.exists(expanded_path):
                 return expanded_path, False, names
             elif target_exists == "use":
@@ -687,25 +623,47 @@ class DatManager:
         name = str(name)
         if os.path.isabs(name):
             return name
-        path = os.path.join(self.config.cwd, name)
-        if os.path.exists(path):
-            return path
         if (mount_path := self.do._resolve_dat_folder(name)) is not None:
             return mount_path
-        for folder in self.dat_folders:
+        for folder in self._dat_folders:
             path = os.path.join(folder, name)
             if os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
                 os.path.join(path, SPEC_YAML)
             ):
                 return path
-        return os.path.join(self.dat_folder, name)
+        return os.path.join(self._dat_folders[0], name)
 
 
 # =============================================================================
 # Dat
 # =============================================================================
 
-class Dat:
+_default_manager: Optional[DatManager] = None
+
+
+class _DatMeta(type):
+    """Gives `Dat` (and every subclass) `manager`, the process's default world:
+    a plain assignable class attribute, filled on first read by
+    `DatManager.load_dat_config()`.  `Run.manager is Dat.manager`."""
+
+    @property
+    def manager(cls) -> DatManager:
+        global _default_manager
+        if _default_manager is None:
+            _default_manager = DatManager.load_dat_config()
+        return _default_manager
+
+    @manager.setter
+    def manager(cls, value: Optional[DatManager]) -> None:
+        global _default_manager
+        if value is not None and not isinstance(value, DatManager):
+            raise TypeError(f"Dat.manager is a DatManager, got {value!r}")
+        if value is not None:
+            value.do._manager = value       # its namespace answers to it again
+        _default_manager = value
+
+
+class Dat(metaclass=_DatMeta):
     """A folder of data described by its `_spec_.yaml`.
 
     The spec is the complete recipe: `dat.do` names the function, `dat.args` and
@@ -718,14 +676,11 @@ class Dat:
     (a schema library inside it is the subclass's choice and dependency).
     """
 
-    @classproperty
-    def manager(cls) -> DatManager:
-        """The process's default world: the manager of the module-level `do`.
-
-        `Dat.create` / `Dat.load` trampoline here; built on first use.
-        """
-        from .do import do
-        return do.manager
+    @property
+    def manager(self) -> DatManager:
+        """The world this dat belongs to: the manager that loaded it, else the default.
+        (`Dat.manager` on the class is the default world; see `_DatMeta`.)"""
+        return self._world()
 
     _path: str
     _spec: SpecDict

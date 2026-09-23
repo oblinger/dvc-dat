@@ -6,13 +6,13 @@ import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import Do, do
+from dvc_dat import DatManager, Do, do
 
 
 @pytest.fixture
-def empty_do():
+def empty_do(tmp_path):
     """A do namespace with nothing mounted, in a world of its own (2.3)."""
-    return Do()
+    return DatManager(dat_folders=[str(tmp_path)]).do
 
 
 def run_capture(line: str) -> str:

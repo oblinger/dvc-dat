@@ -1,8 +1,8 @@
 """2.3: a `DatManager` owns its `do`; two worlds in one process stay apart.
 
-The 1.x ownership restored (Dan, 2026-09-22): the manager holds the config and
+The 1.x ownership restored (Dan, 2026-09-22): the manager holds the folders and
 the namespace, `Dat.create` / `Dat.load` trampoline to `Dat.manager`, and the
-module-level `do` is that manager's namespace.
+module-level `do` forwards to that manager's namespace.
 """
 import os
 import subprocess
@@ -14,8 +14,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from dvc_dat import Dat, DataConfig, DatManager, Do, do  # noqa: E402
-from dvc_dat.core import DATA_CONFIG_FILE  # noqa: E402
+from dvc_dat import Dat, DatManager, Do, do  # noqa: E402
+from dvc_dat.core import DAT_CONFIG_FILE  # noqa: E402
 
 
 def echo(dat, *args, **kwargs):
@@ -25,7 +25,7 @@ def echo(dat, *args, **kwargs):
 def world(root: Path, tag: str) -> DatManager:
     """A manager on `root`, whose namespace holds a base-chained template that
     only it can see -- the same names in every world, different content."""
-    manager = DatManager(DataConfig(cwd=str(root), dat_folders="dats/"))
+    manager = DatManager(dat_folders=[str(root / "dats")])
     manager.do.mount(value=echo, at="fn")
     manager.do.mount(value={"tag": tag, "who": f"world {tag}"}, at="consts")
     manager.do.mount(value={"dat": {"do": "fn", "kwargs": {"tag": tag}}}, at="base")
@@ -44,14 +44,14 @@ def worlds(tmp_path):
 class TestTwoWorlds:
     def test_each_runs_its_own_template_into_its_own_folder(self, worlds):
         ma, mb = worlds
-        global_folder, global_names = Dat.manager.dat_folder, set(do.keys())
+        global_folder, global_names = Dat.manager._dat_folders, set(do.keys())
 
         assert ma.do("tmpl") == {"name": "run_a", "args": [], "kwargs": {"tag": "a"}}
         assert mb.do("tmpl", 7) == {"name": "run_b", "args": [7], "kwargs": {"tag": "b"}}
 
         dat_a, dat_b = ma.load("run_a"), mb.load("run_b")
-        assert dat_a.get_path().startswith(ma.dat_folder)
-        assert dat_b.get_path().startswith(mb.dat_folder)
+        assert dat_a.get_path().startswith(ma._dat_folders[0])
+        assert dat_b.get_path().startswith(mb._dat_folders[0])
         assert dat_a.get_spec()["who"] == "world a"        # `{}` through its own namespace
         assert dat_b.get_spec()["who"] == "world b"
         assert dat_b.get_spec()["dat"]["kwargs"] == {"tag": "b"}   # `dat.base` through its own
@@ -59,7 +59,7 @@ class TestTwoWorlds:
         with pytest.raises(KeyError):
             ma.load("run_b")
 
-        assert Dat.manager.dat_folder == global_folder      # the default world: untouched
+        assert Dat.manager._dat_folders == global_folder    # the default world: untouched
         assert set(do.keys()) == global_names
         assert do.load("tmpl", default=None) is None
         assert not Dat.manager.exists("run_a") and not Dat.manager.exists("run_b")
@@ -86,57 +86,57 @@ class TestTwoWorlds:
     def test_a_managers_do_is_bound_to_it(self, worlds):
         ma, _ = worlds
         assert ma.do.manager is ma
-        assert ma.do.config is ma.config
         assert ma.do is not do
 
 
-class TestReconfiguration:
-    def test_reconfiguring_a_second_manager_leaves_the_default_alone(self, tmp_path):
-        before = Dat.manager.dat_folder
-        m = DatManager(DataConfig(cwd=str(tmp_path), dat_folders="one/"))
+class TestAdoption:
+    def test_a_second_manager_adopting_a_namespace_keeps_its_mounts(self, tmp_path):
+        before = Dat.manager
+        m = DatManager(dat_folders=[str(tmp_path / "one")])
         m.do.mount(value=1, at="kept")
-        m.do.configure(DataConfig(cwd=str(tmp_path), dat_folders="two/"))
-        assert m.dat_folder.endswith("/two/")
-        assert m.do.manager is m                           # same world, new config
-        assert m.do.load("kept") == 1                      # mounts survive
-        assert Dat.manager.dat_folder == before
+        m2 = DatManager(dat_folders=[str(tmp_path / "two")], do=m.do)
+        assert m2._dat_folders[0].endswith("/two")
+        assert m2.do is m.do and m2.do.manager is m2       # the namespace moved
+        assert m2.do.load("kept") == 1                     # mounts survive
+        assert Dat.manager is before                       # not the default's do
 
-    def test_a_bare_do_configures_a_world_of_its_own(self, tmp_path):
-        before = Dat.manager.dat_folder
-        (tmp_path / DATA_CONFIG_FILE).write_text("dat_folders: mine/\n")
+    def test_a_bare_do_mounts_and_loads_but_cannot_run(self, tmp_path):
         probe = Do()
-        assert probe.config is None
-        probe.configure(tmp_path)
-        assert probe.manager.dat_folder.endswith("/mine/")
-        assert probe.manager is not Dat.manager
-        assert Dat.manager.dat_folder == before
+        probe.mount(value={"x": 1}, at="bare")
+        assert probe.load("bare.x") == 1
+        with pytest.raises(Exception) as caught:
+            probe({"dat": {"do": "bare"}})
+        assert isinstance(caught.value.__cause__, RuntimeError)
+        assert "no manager" in str(caught.value.__cause__)
+        m = DatManager(dat_folders=[str(tmp_path)], do=probe)
+        assert probe.manager is m and probe.load("bare.x") == 1
 
 
 class TestTheDefaultWorld:
     def test_dat_create_and_load_trampoline_to_the_manager(self):
         assert Dat.manager is do.manager
-        assert Dat.manager.do is do
+        assert do._current() is Dat.manager.do
         name = "managers/trampoline"
         if Dat.manager.exists(name):
             Dat.load(name).delete()
         dat = Dat.create(path=name, spec={"k": "v"})
-        assert dat.get_path().startswith(Dat.manager.dat_folder)
+        assert dat.get_path().startswith(Dat.manager._dat_folders[0])
         assert Dat.load(name) is Dat.manager.load(name)
         assert Dat.manager.exists(name)
         dat.delete()
 
-    def test_early_mounts_survive_first_use_configuration(self, tmp_path):
-        (tmp_path / DATA_CONFIG_FILE).write_text("dat_folders: warehouse/\n")
+    def test_first_use_builds_the_default_world(self, tmp_path):
+        (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: warehouse/\n")
         probe = (
             "from dvc_dat import do, Dat\n"
-            "do.mount(value={'x': 1}, at='early')\n"
-            "assert do.config is None and do._manager is None\n"
-            "assert do.load('early.x') == 1\n"              # first use configures
-            "assert do.config is not None\n"
-            "assert Dat.manager is do.manager and Dat.manager.do is do\n"
+            "from dvc_dat import core\n"
+            "assert core._default_manager is None\n"       # import read nothing
+            "do.mount(value={'x': 1}, at='early')\n"        # first use builds it
+            "assert core._default_manager is not None\n"
+            "assert Dat.manager is do.manager\n"
             "assert do.load('early.x') == 1\n"
             "assert do.load('dt.list') is not None\n"
-            "print(Dat.manager.dat_folder)\n"
+            "print(Dat.manager._dat_folders[0])\n"
         )
         result = subprocess.run(
             [sys.executable, "-c", probe], cwd=tmp_path,

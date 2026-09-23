@@ -9,10 +9,10 @@ literal value — and for giving an importable thing a shorter name.
 Mounts are made in code, by `do.mount(...)`, by your own program — the
 namespace is whatever the running program imported. For the shell, your
 program's main does the mounting and hands the command line to `dat.cli_main()`,
-and `.dataconfig.yaml` names that main as `run:`:
+and `.datconfig.yaml` names that main as `run:`:
 
 ```yaml
-# .dataconfig.yaml
+# .datconfig.yaml
 dat_folders: data
 run: .venv/bin/python -m mypkg.main
 ```
@@ -173,7 +173,7 @@ object and the installed one each keep a name of their own.
 ## Complete example
 
 ```yaml
-# .dataconfig.yaml
+# .datconfig.yaml
 dat_folders: data
 run: .venv/bin/python -m myproject.main
 ```

@@ -11,7 +11,7 @@ namespace and the one runner.
 ```python
 from dvc_dat import Dat, do
 
-# Importing reads no files; the first use finds .dataconfig.yaml.
+# Importing reads no files; the first use finds .datconfig.yaml.
 # A dotted name resolves through do.mount names, then by import.
 template = do.load("catalog.experiment")
 
@@ -50,7 +50,7 @@ dat list catalog
 dat info
 ```
 
-`dat` configures itself from the nearest `.dataconfig.yaml`. A copy of
+`dat` configures itself from the nearest `.datconfig.yaml`. A copy of
 `bin/dat` on your `PATH` runs your project's `run:` main from any directory
 with no environment activated. The environment's `dat` console script does
 not read `run:`: it runs the library's own command line, with no project
