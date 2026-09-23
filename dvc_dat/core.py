@@ -591,9 +591,13 @@ class Dat:
     def __init__(
         self,
         path: Union[str, Path],
-        spec: SpecDict,
+        spec: Optional[SpecDict] = None,
         result: Optional[SpecDict] = None,
     ) -> None:
+        if spec is None or not isinstance(path, (str, Path)):
+            raise TypeError(
+                f"{type(self).__name__}(...) is not how a dat is made: "
+                f"Dat.create(spec=...) makes one on disk, Dat.load(path) reads one")
         self._path = os.path.abspath(str(path))
         self._spec = spec
         self._result = result or {}
