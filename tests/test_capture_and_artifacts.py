@@ -21,7 +21,7 @@ def sha(data: bytes) -> str:
 
 @pytest.fixture
 def m(tmp_path):
-    return DatManager(dat_folders=[str(tmp_path / "dats")])
+    return DatManager(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "art"))
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ class TestArtifacts:
     def test_a_file_round_trips_with_its_hash(self, m, clip, tmp_path):
         digest = m.save(clip, "art:video/G1")
         assert digest == "sha256:" + sha(b"frames")
-        home = tmp_path / "dats" / "art" / "video" / "G1"
+        home = tmp_path / "art" / "video" / "G1"
         sidecar = yaml.safe_load((home / ART_FILE).read_text())
         assert sidecar["kind"] == "video" and sidecar["name"] == "art:video/G1"
         assert sidecar["payload"] == "G1.mp4" and sidecar["sha256"] == digest
@@ -98,6 +98,29 @@ class TestArtifacts:
         m = DatManager(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "store"))
         m.save(clip, "art:video/G1")
         assert (tmp_path / "store" / "video" / "G1" / ART_FILE).exists()
+
+    def test_no_art_folder_means_no_artifacts(self, tmp_path, clip):
+        m = DatManager(dat_folders=[str(tmp_path / "dats")])
+        with pytest.raises(RuntimeError, match="no art_folder"):
+            m.save(clip, "art:video/G1")
+        with pytest.raises(RuntimeError, match="no art_folder"):
+            m.load("art:video/G1")
+
+    @pytest.mark.parametrize("dats, art", [("data", "data/art"), ("data/runs", "data"),
+                                           ("data", "data")])
+    def test_the_two_folders_never_nest(self, tmp_path, dats, art):
+        with pytest.raises(ValueError, match="nest"):
+            DatManager(dat_folders=[str(tmp_path / "other"), str(tmp_path / dats)],
+                       art_folder=str(tmp_path / art))
+        (tmp_path / DAT_CONFIG_FILE).write_text(f"dat_folders: {dats}\nart_folder: {art}\n")
+        with pytest.raises(ValueError, match="nest"):
+            DatManager.load_dat_config(tmp_path)
+
+    def test_load_dat_config_puts_art_beside_data(self, tmp_path):
+        m = DatManager.load_dat_config(tmp_path)
+        root = os.path.realpath(tmp_path)
+        assert m._dat_folders == [os.path.join(root, "data")]
+        assert m._art_folder == os.path.join(root, "art")
 
     def test_load_dat_config_reads_art_folder(self, tmp_path, clip, monkeypatch):
         (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: dats\nart_folder: blobs\n")
@@ -189,7 +212,7 @@ class TestCapture:
             def execute(self, dat):
                 with self.recording(dat):
                     return super().execute(dat)
-        m = Store(dat_folders=[str(tmp_path / "dats")])
+        m = Store(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "art"))
         m.do.mount(value=lambda dat: None, at="quiet")
         dat = m.create({"dat": {"do": "quiet"}}, path="wrapped")
         m.execute(dat)

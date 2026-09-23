@@ -59,6 +59,7 @@ DAT_CONFIG_OVERRIDE_FILE = ".datconfig.override.yaml"
 ENV_PREFIX = "DAT_"
 _CONFIG_KEYS = ("dat_folders", "art_folder", "run")    # `run` is read by `bin/dat` only
 _DEFAULT_DAT_FOLDER = "data"
+_DEFAULT_ART_FOLDER = "art"           # beside the dat folder, never inside it
 
 
 def _find_file_up(path: Union[str, Path], file_name: str) -> Optional[Path]:
@@ -330,7 +331,7 @@ class DatManager:
 
     do: "Do"
     _dat_folders: List[str]
-    _art_folder: str
+    _art_folder: Optional[str]
     _config_dir: Optional[str]
     _dat_cache: "weakref.WeakValueDictionary[str, Dat]"
     _factories: Dict[str, Callable[[Path], Any]]
@@ -338,7 +339,9 @@ class DatManager:
     def __init__(self, *, dat_folders: List[str], art_folder: Optional[str] = None,
                  do: Optional["Do"] = None):
         """A world on `dat_folders` -- searched in order by name, the first written
-        to -- and `art_folder` (default `art/` under the first).  Nothing is read
+        to -- and `art_folder`, where artifacts live; with none, this world holds
+        no artifacts.  The two never nest: an artifact folder inside a dat
+        folder, or a dat folder inside it, is `ValueError`.  Nothing is read
         from disk.  `do` adopts an existing namespace with its mounts; adopting
         the default world's makes this the default world."""
         from .do import Do, _DefaultDo
@@ -349,9 +352,14 @@ class DatManager:
         if not dat_folders or not all(isinstance(f, (str, Path)) and str(f) for f in dat_folders):
             raise ValueError(f"DatManager: dat_folders needs at least one folder, got {dat_folders!r}")
         self._dat_folders = [os.path.realpath(str(f)) for f in dat_folders]
-        self._art_folder = os.path.realpath(
-            str(art_folder) if art_folder is not None
-            else os.path.join(self._dat_folders[0], "art"))
+        self._art_folder = os.path.realpath(str(art_folder)) if art_folder is not None else None
+        if self._art_folder is not None:
+            for folder in self._dat_folders:
+                if _within(self._art_folder, folder) or _within(folder, self._art_folder):
+                    raise ValueError(
+                        f"DatManager: art_folder {self._art_folder!r} and dat folder "
+                        f"{folder!r} nest; artifact and dat names would collide -- keep "
+                        "them apart (e.g. data/ and art/ side by side)")
         self._config_dir = None
         self._dat_cache = weakref.WeakValueDictionary()
         self._factories = {}
@@ -377,7 +385,8 @@ class DatManager:
         Precedence, lowest to highest: the file, `.datconfig.override.yaml`, then
         `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment.  Relative folders
         resolve against the file's folder, which goes first on `sys.path`; with
-        no file they resolve against `start`.  An unknown key is `ValueError`.
+        no file they resolve against `start`.  `art_folder` defaults to `art/`
+        beside the file, a sibling of `data/`.  An unknown key is `ValueError`.
         `do` as in the constructor.
         """
         start = Path(start) if start is not None else Path.cwd()
@@ -397,12 +406,11 @@ class DatManager:
         if not isinstance(folders, list) or not all(isinstance(f, str) and f for f in folders):
             raise ValueError(f"{config_path}: dat_folders is a folder or a list of them, "
                              f"got {values.get('dat_folders')!r}")
-        art_folder = values.get("art_folder")
-        if art_folder is not None and not (isinstance(art_folder, str) and art_folder):
+        art_folder = values.get("art_folder", _DEFAULT_ART_FOLDER)
+        if not (isinstance(art_folder, str) and art_folder):
             raise ValueError(f"{config_path}: art_folder is a folder, got {art_folder!r}")
         manager = cls(dat_folders=[os.path.join(root, f) for f in folders],
-                      art_folder=os.path.join(root, art_folder) if art_folder else None,
-                      do=do)
+                      art_folder=os.path.join(root, art_folder), do=do)
         manager._config_dir = root
         if root not in sys.path:
             sys.path.insert(0, root)    # the config folder is the import root
@@ -605,6 +613,10 @@ class DatManager:
         kind, _, rest = name[len(ART_PREFIX):].partition("/")
         if not name.startswith(ART_PREFIX) or not kind or not rest.strip("/"):
             raise ValueError(f"an artifact name is art:<kind>/<rest>, got {name!r}")
+        if self._art_folder is None:
+            raise RuntimeError(f"{name!r}: this manager has no art_folder; build it with "
+                               "DatManager(..., art_folder=...) or set art_folder: in "
+                               ".datconfig.yaml")
         folder = os.path.normpath(os.path.join(self._art_folder, kind, rest))
         if not _within(folder, os.path.join(self._art_folder, kind)):
             raise ValueError(f"artifact name {name!r} leaves the artifact folder")

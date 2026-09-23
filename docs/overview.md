@@ -161,8 +161,8 @@ Like git, dvc-dat walks up from the working directory looking for
 ```yaml
 # or a list: the first is written, all are read
 dat_folders: data
-# default: art/ under the first dat folder
-art_folder: data/art
+# beside the dat folder, never inside it (default: art)
+art_folder: art
 # what a copy of bin/dat execs
 run: .venv/bin/python -m mypkg.main
 ```
