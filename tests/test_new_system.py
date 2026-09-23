@@ -65,8 +65,8 @@ class TestDataConfig:
     def test_dat_create_and_load(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config = DataConfig(cwd=tmpdir)
-            original_manager = Dat._manager
-            Dat._manager = DatManager(config=config)
+            original_config = do.config
+            do.configure(config)
             try:
                 dat = Dat.create(
                     path="test_dat",
@@ -80,7 +80,7 @@ class TestDataConfig:
                 assert loaded.get_spec()["dat"]["kind"] == "Dat"
                 dat.delete()
             finally:
-                Dat._manager = original_manager
+                do.configure(original_config)
 
 
 class TestDataConfigFileDiscovery:

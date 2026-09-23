@@ -11,7 +11,7 @@ from dvc_dat import Do, do
 
 @pytest.fixture
 def empty_do():
-    """A do namespace with nothing mounted (it still shares `Dat.manager`)."""
+    """A do namespace with nothing mounted, in a world of its own (2.3)."""
     return Do()
 
 

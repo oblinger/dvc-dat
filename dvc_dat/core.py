@@ -256,7 +256,7 @@ def _resolve_name(name: str, vars: Dict[str, Any], resolver: Optional[Callable[[
         raise ValueError("expand: empty reference '{}'")
     if "." in name:
         if resolver is None:
-            from .do import do
+            from .do import do          # the default world; a manager passes its own
             resolver = do.load
         return resolver(name)
     if name in vars:
@@ -321,14 +321,20 @@ def expand_spec(spec: Any, vars: Optional[Dict[str, Any]] = None, *,
 # =============================================================================
 
 class DatManager:
-    """Singleton that creates, finds and loads dats under the dat folders.
+    """A world of dats: a config (where dats live) and the namespace that names them.
 
-    Reached as `Dat.manager`.  Built lazily from `DataConfig.new()` (discovery walks up
-    from the process's working directory) or explicitly by `do.configure(...)`.
+    A manager owns its `do` -- a `Do` bound to it, carrying its mounts, its `load`
+    and its runner -- and everything the manager does (a dotted spec, `dat.base`,
+    `{}` expansion, path resolution) goes through that `do`, never another one.
+    The process's default world is `Dat.manager`, the manager of the module-level
+    `dvc_dat.do`, built lazily on first use from `DataConfig.new()` (discovery
+    walks up from the working directory) or explicitly by `do.configure(...)`.
+    A second world is `DatManager(config)`: its `do`, its folders, its dats.
     """
 
     config: DataConfig
     dat_folders: List[str]
+    do: "Do"
     _dat_cache: "weakref.WeakValueDictionary[str, Dat]"
 
     @property
@@ -336,12 +342,33 @@ class DatManager:
         """Where new dats are created: the first of `dat_folders`."""
         return self.dat_folders[0]
 
-    def __init__(self, config: Optional[DataConfig] = None):
+    def __init__(self, config: Optional[DataConfig] = None, *, do: Optional["Do"] = None):
+        """Build a manager on `config` (default: discovered), with its own `do` --
+        or adopting `do`, a namespace that mounted names before it had a world."""
+        from .do import Do
+        from . import dat_tools
+
         if config is None:
             config = DataConfig.new()
+        self._install(config)
+        self.do = Do(manager=self) if do is None else do
+        self.do._manager = self
+        self.do.mount(module=dat_tools, at="dt")
+        self.do.mount(value=dat_tools.cmd_list, at="dt.list")
+
+    def _install(self, config: DataConfig) -> None:
+        """Take on `config`: its folders become this manager's; the cache resets."""
         self.config = config
         self.dat_folders = list(config.dat_folders)
         self._dat_cache = weakref.WeakValueDictionary()
+
+    def expand(self, text: str, vars: Optional[Dict[str, Any]] = None) -> Any:
+        """`expand`, with dotted names resolved through this manager's `do`."""
+        return expand(text, vars, resolver=self.do.load)
+
+    def expand_spec(self, spec: Any, vars: Optional[Dict[str, Any]] = None) -> Any:
+        """`expand_spec`, with dotted names resolved through this manager's `do`."""
+        return expand_spec(spec, vars, resolver=self.do.load)
 
     def create(
         self,
@@ -359,15 +386,13 @@ class DatManager:
         with the same values the folder got, and the expanded spec is what is
         written: a spec on disk is a record, never a template.
         """
-        from .do import do
-
         if spec is None:
             spec = {"dat": {"kind": dat_class.__name__}}
         if isinstance(spec, str):
-            spec = do.load(spec)
+            spec = self.do.load(spec)
         if not isinstance(spec, dict):
             raise TypeError(f"Dat.create: spec must be a dict or a dotted name, not {spec!r}")
-        spec = do._resolve_base(deepcopy(spec))
+        spec = self.do._resolve_base(deepcopy(spec))
         spec.setdefault("dat", {})
         spec["dat"].setdefault("kind", dat_class.__name__)
         spec = dat_class.validate_spec(spec)
@@ -384,7 +409,7 @@ class DatManager:
             return self.load(dat_class, name_or_path=expanded_path)
 
         path = self._resolve_path(expanded_path)
-        spec = expand_spec(spec, names)
+        spec = self.expand_spec(spec, names)
         if path.startswith(self.dat_folder):
             Dat.set(spec, DAT_NAME, self._get_path_name(path))
         os.makedirs(path, exist_ok=True)
@@ -456,6 +481,7 @@ class DatManager:
                 result = yaml.safe_load(f) or {}
 
         dat = dat_class(path=path, spec=spec, result=result)
+        dat._manager = self
         if cache_after_load:
             self._dat_cache[path] = dat
         return dat
@@ -518,7 +544,7 @@ class DatManager:
             names = {**_builtins(now),
                      "unique": "" if count == 1 else f"_{count}",
                      **(variables or {})}
-            expanded = expand(path_spec, names)
+            expanded = self.expand(path_spec, names)
             if not isinstance(expanded, str):
                 raise TypeError(
                     f"path template {path_spec!r} expanded to {expanded!r}, "
@@ -537,15 +563,13 @@ class DatManager:
                 raise FileExistsError(f"DAT: Create failed, dir {expanded_path!r} exists")
 
     def _resolve_path(self, name: Union[str, Path]) -> str:
-        from .do import do
-
         name = str(name)
         if os.path.isabs(name):
             return name
         path = os.path.join(self.config.cwd, name)
         if os.path.exists(path):
             return path
-        if (mount_path := do._resolve_dat_folder(name)) is not None:
+        if (mount_path := self.do._resolve_dat_folder(name)) is not None:
             return mount_path
         for folder in self.dat_folders:
             path = os.path.join(folder, name)
@@ -573,20 +597,19 @@ class Dat:
     (a schema library inside it is the subclass's choice and dependency).
     """
 
-    _manager: Optional[DatManager] = None
-
     @classproperty
     def manager(cls) -> DatManager:
-        if Dat._manager is None:
-            from .do import do
-            do._ensure_configured()          # also builds Dat._manager
-        if Dat._manager is None:
-            Dat._manager = DatManager()
-        return Dat._manager
+        """The process's default world: the manager of the module-level `do`.
+
+        `Dat.create` / `Dat.load` trampoline here; built on first use.
+        """
+        from .do import do
+        return do.manager
 
     _path: str
     _spec: SpecDict
     _result: SpecDict
+    _manager: Optional[DatManager]      # the world this dat was loaded by, if any
 
     def __init__(
         self,
@@ -601,6 +624,11 @@ class Dat:
         self._path = os.path.abspath(str(path))
         self._spec = spec
         self._result = result or {}
+        self._manager = None
+
+    def _world(self) -> DatManager:
+        """The manager that loaded this dat, else the default one."""
+        return self._manager if self._manager is not None else Dat.manager
 
     @classmethod
     def validate_spec(cls, spec: SpecDict) -> SpecDict:
@@ -637,7 +665,7 @@ class Dat:
 
     def get_path_name(self) -> str:
         """The name (path relative to its dat folder) of this Dat."""
-        return Dat.manager._get_path_name(self._path)
+        return self._world()._get_path_name(self._path)
 
     @classmethod
     def load(
@@ -666,7 +694,7 @@ class Dat:
 
     def delete(self, *, must_exist=True) -> bool:
         """Delete the folder and its contents."""
-        Dat.manager._dat_cache.pop(self._path, None)
+        self._world()._dat_cache.pop(self._path, None)
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
@@ -676,19 +704,21 @@ class Dat:
         return True
 
     def copy(self: DatType, new_path: Union[str, Path]) -> DatType:
-        new_path_ = Dat.manager._resolve_path(new_path)
+        manager = self._world()
+        new_path_ = manager._resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
         shutil.copytree(self._path, new_path_)
-        return Dat.manager.load(type(self), new_path_)
+        return manager.load(type(self), new_path_)
 
     def move(self: DatType, new_path: Union[str, Path]) -> DatType:
-        Dat.manager._dat_cache.pop(self._path, None)
-        new_path_ = Dat.manager._resolve_path(new_path)
+        manager = self._world()
+        manager._dat_cache.pop(self._path, None)
+        new_path_ = manager._resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
         shutil.move(self._path, new_path_)
-        return Dat.manager.load(type(self), new_path_)
+        return manager.load(type(self), new_path_)
 
     def __repr__(self):
         kind = Dat.get(self._spec, DAT_KIND, self.__class__.__name__)
@@ -726,7 +756,8 @@ class DatContainer(Dat, Generic[DatType]):
     def get_dats(self) -> List[DatType]:
         """The contained Dats (all stay in memory until this container is released)."""
         if self._dats is _DataState.NOT_LOADED:
-            self._dats = [Dat.load(p) for p in self.get_dat_paths()]  # type: ignore
+            manager = self._world()
+            self._dats = [manager.load(Dat, p) for p in self.get_dat_paths()]  # type: ignore
         return self._dats  # type: ignore
 
     @staticmethod

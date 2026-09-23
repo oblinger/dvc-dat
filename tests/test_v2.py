@@ -38,10 +38,10 @@ def stored(dat_or_path, file_name=SPEC_YAML):
 
 @pytest.fixture
 def restore_manager():
-    """Undo whatever a test's own `configure()` did to the process singletons."""
-    saved_manager, saved_config = Dat._manager, do.config
+    """Undo whatever a test's own `configure()` did to the default world."""
+    saved_config = do.config
     yield
-    Dat._manager, do.config = saved_manager, saved_config
+    do.configure(saved_config)
 
 
 class TestForkRule:
@@ -309,24 +309,28 @@ class TestExplicitConfigure:
 
         assert do.load("v2_greeter", default=None) is None
 
-        probe = Do()
-        config = probe.configure(tmp_path)
+        manager_before = Dat.manager
+        config = do.configure(tmp_path)
         assert isinstance(config, DataConfig)
         import explicit_main  # noqa: F401  -- the config folder is on sys.path now
         assert do("v2_greeter") == "hi"             # its mounts landed on `do`
-        assert probe.config.cwd == os.path.realpath(tmp_path)
+        assert do.config.cwd == os.path.realpath(tmp_path)
+        assert Dat.manager is manager_before       # the world kept its identity ...
         assert Dat.manager.dat_folder == os.path.join(os.path.realpath(tmp_path), "sync/")
 
     def test_configure_accepts_a_config_file(self, tmp_path, restore_manager):
         config_file = tmp_path / DATA_CONFIG_FILE
         config_file.write_text("dat_folders: elsewhere/\n")
-        probe = Do()
+        before = Dat.manager.dat_folder
+        probe = Do()                               # a world of its own (2.3)
         assert probe.configure(config_file).dat_folders[0].endswith("/elsewhere/")
+        assert probe.manager.dat_folder.endswith("/elsewhere/")
+        assert Dat.manager.dat_folder == before
 
     def test_importing_dvc_dat_reads_no_config(self, tmp_path):
         result = subprocess.run(
             [sys.executable, "-c",
-             "import dvc_dat; print(dvc_dat.do.config, dvc_dat.Dat._manager)"],
+             "import dvc_dat; print(dvc_dat.do.config, dvc_dat.do._manager)"],
             cwd=tmp_path, capture_output=True, text=True,
             env={**os.environ, "PYTHONPATH": str(REPO_ROOT)})
         assert result.returncode == 0, result.stderr
@@ -357,7 +361,7 @@ def test_first_use_installs_the_config(tmp_path):
     probe = (
         "from dvc_dat import do, Dat\n"
         "import lazy_main\n"                    # the program's own mounts
-        "assert do.config is None and Dat._manager is None\n"
+        "assert do.config is None and do._manager is None\n"
         "fn = do.load('lazy.run')\n"            # the alias, with no configure()
         "assert fn(None) == 'ran'\n"
         "assert do.config is not None\n"       # ... first use installed one
@@ -375,9 +379,8 @@ def test_first_use_installs_the_config(tmp_path):
 def test_increment_on_a_plain_name_counts_up(tmp_path, restore_manager):
     """`target_exists: increment` on a name with no `{unique}` appends `_2`, `_3`
     instead of spinning forever (found 2026-09-22)."""
-    from dvc_dat.core import DatManager, DataConfig
-    Dat._manager = DatManager(DataConfig(cwd=str(tmp_path), dat_folders="data/"))
-    spec = {"dat": {"kind": "Dat", "name": "plain", "target_exists": "increment"}}
+    do.configure(DataConfig(cwd=str(tmp_path), dat_folders="data/"))
+    spec ={"dat": {"kind": "Dat", "name": "plain", "target_exists": "increment"}}
     assert Dat.create(spec=spec).get_path_name() == "plain"
     assert Dat.create(spec=spec).get_path_name() == "plain_2"
     assert Dat.create(spec=spec).get_path_name() == "plain_3"
