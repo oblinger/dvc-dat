@@ -12,11 +12,9 @@ itself. `Dat.manager` is the default world; `do` is its namespace and runner.
 ## What the package exports
 
 ```python
-from dvc_dat import (
-    Dat, DatContainer, DatManager,
-    Do, do, cli_main,
-    expand, expand_spec, merge_dicts,
-)
+from dvc_dat import Dat, DatContainer, DatManager, Do
+
+do = Dat.do     # the usual shortcut; follows Dat.manager
 ```
 
 | Name | What it is |
@@ -24,11 +22,16 @@ from dvc_dat import (
 | `Dat` | A dat folder: its spec, its results, its path |
 | `DatContainer` | A dat whose folder holds other dats |
 | `DatManager` | Creates, finds, loads and runs dats; `Dat.manager` is the default, assign to replace |
-| `Do` | The do class — one instance, `do` |
-| `do` | The default namespace and runner; forwards to `Dat.manager.do` |
-| `cli_main` | The `dat` command line for a program's own main |
-| `expand` / `expand_spec` | The `{}` grammar |
-| `merge_dicts` | The zipper merge `dat.base` uses |
+| `Do` | A namespace and runner; every manager has one |
+
+Everything else hangs off those four:
+
+| Name | What it is |
+|------|------------|
+| `Dat.do` | The default world's namespace and runner, forwarding to `Dat.manager.do` |
+| `Dat.cli_main` | The `dat` command line for a program's own main |
+| `Dat.merge_dicts` | The zipper merge `dat.base` uses |
+| `Dat.manager.expand` / `expand_spec` | The `{}` grammar |
 
 ## Running and loading — `do`
 
@@ -108,8 +111,8 @@ Dat.get(x, "a.b.c")      # 1
 
 | Function | Description |
 |----------|-------------|
-| `expand(TEXT, vars=None)` | Resolve the `{}` references in one string |
-| `expand_spec(SPEC, vars=None)` | Resolve them throughout a spec tree |
+| `Dat.manager.expand(TEXT, vars=None)` | Resolve the `{}` references in one string |
+| `Dat.manager.expand_spec(SPEC, vars=None)` | Resolve them throughout a spec tree |
 
 See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
 
@@ -171,4 +174,4 @@ run: .venv/bin/python -m mypkg.main
 Those are the only keys; anything else is an error that names the file and the
 key. The config's folder is the import root. The namespace is whatever the
 running program imported; `run:` names your program's main, which mounts what
-it mounts and ends with `sys.exit(dat.cli_main())`. See **[Mounts](mount-commands.md)**.
+it mounts and ends with `sys.exit(Dat.cli_main())`. See **[Mounts](mount-commands.md)**.

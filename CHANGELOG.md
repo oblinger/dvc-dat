@@ -6,6 +6,28 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.8.0 — 2026-09-23
+
+**The package exports four classes** (Dan, 2026-09-23: "everything truly is
+contained inside of DAT, but if you want that shortcut you can easily do
+it"). Breaking for every `from dvc_dat import do` and kin; shipped as a
+minor per the rule above 2.2.0.
+
+- `from dvc_dat import Dat, DatContainer, DatManager, Do` — and `__version__`
+  — is the whole surface.
+- **`Dat.do`** is the default world's runner and namespace. It returns the
+  forwarder to `Dat.manager.do`, so `do = Dat.do` binds a shortcut that keeps
+  following a later reassignment of `Dat.manager`.
+- **`Dat.merge_dicts`** (beside `Dat.get` / `Dat.set`) and **`Dat.cli_main`**.
+- `expand` / `expand_spec` are `Dat.manager.expand` / `expand_spec`.
+
+| Gone | Instead |
+| --- | --- |
+| `from dvc_dat import do` / `dvc_dat.do(...)` | `do = Dat.do` / `Dat.do(...)` |
+| `dvc_dat.cli_main()` | `Dat.cli_main()` |
+| `dvc_dat.merge_dicts` | `Dat.merge_dicts` |
+| `dvc_dat.expand`, `expand_spec` | `Dat.manager.expand`, `expand_spec` |
+
 ## 2.7.0 — 2026-09-23
 
 **A word runs a dat; a flag asks `dat` about itself** (Dan, 2026-09-23).

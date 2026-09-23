@@ -11,7 +11,9 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import dvc_dat  # noqa: E402
-from dvc_dat import Dat, DatManager, cli_main, do  # noqa: E402
+from dvc_dat import Dat, DatManager  # noqa: E402
+
+do, cli_main = Dat.do, Dat.cli_main
 from dvc_dat.core import DAT_CONFIG_FILE, DAT_CONFIG_OVERRIDE_FILE  # noqa: E402
 from dvc_dat.do import Do  # noqa: E402
 
@@ -141,6 +143,17 @@ class TestDefaultWorld:
         assert do.manager is mine
         assert do.load("dt.list") is mine.do.load("dt.list")
 
+    def test_a_bound_shortcut_follows_a_reassignment(self, tmp_path, default_world):
+        shortcut = Dat.do
+        replaced = DatManager(dat_folders=[str(tmp_path)])
+        Dat.manager = replaced
+        assert shortcut.manager is replaced
+
+    def test_the_package_exports_the_four_classes(self):
+        assert sorted(dvc_dat.__all__) == ["Dat", "DatContainer", "DatManager", "Do"]
+        for gone in ("cli_main", "expand", "expand_spec", "merge_dicts"):
+            assert not hasattr(dvc_dat, gone)
+
     def test_subclasses_share_it(self, default_world):
         class Run(Dat):
             pass
@@ -233,7 +246,7 @@ class TestFolderMountPaths:
 
 
 def test_merge_dicts_is_the_base_zipper():
-    from dvc_dat import merge_dicts
+    merge_dicts = Dat.merge_dicts
     base = {"a": {"x": 1, "y": 2}, "l": [1, 2]}
     over = {"a": {"x": 9}, "l": [3]}
     assert merge_dicts(base, over) == {"a": {"x": 9, "y": 2}, "l": [3]}

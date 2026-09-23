@@ -150,21 +150,21 @@ mounts, the library's own command line will do: `uv run dat`, `conda run -n
 ml dat`, `.venv/bin/python -m dvc_dat`. A project that mounts names points it at
 its **own main** — `run: .venv/bin/python -m mypkg.main` — a module that
 imports what it needs, makes its `do.mount(...)` calls and, when
-`DAT_CLI_CONFIG` is set, ends with `sys.exit(dat.cli_main())`, so the shell
+`DAT_CLI_CONFIG` is set, ends with `sys.exit(Dat.cli_main())`, so the shell
 runs inside the program's own namespace and the same main is free to do
 anything else when run by hand:
 
 ```python
 if __name__ == "__main__":
     if os.environ.get("DAT_CLI_CONFIG"):   # launched by the dat bootstrap
-        sys.exit(dat.cli_main())
+        sys.exit(Dat.cli_main())
     ...                                    # your own main
 ```
 
-`cli_main(argv=None, *, config=None)` takes the config as a parameter
+`Dat.cli_main(argv=None, *, config=None)` takes the config as a parameter
 instead — a folder or a config file — for a program that runs the command
 line on a config it chose: it does
-`Dat.manager = DatManager.load_dat_config(config, do=dvc_dat.do)`, keeping
+`Dat.manager = DatManager.load_dat_config(config, do=Dat.do)`, keeping
 the program's mounts. The environment variable is never the way to hand it
 one. The library itself never reads the `run` key — it is there so that one
 file describes the whole project.

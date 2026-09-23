@@ -14,7 +14,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from dvc_dat import Dat, DatManager, Do, do  # noqa: E402
+from dvc_dat import Dat, DatManager, Do  # noqa: E402
+
+do = Dat.do
 from dvc_dat.core import DAT_CONFIG_FILE  # noqa: E402
 
 
@@ -128,7 +130,7 @@ class TestTheDefaultWorld:
     def test_first_use_builds_the_default_world(self, tmp_path):
         (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: warehouse/\n")
         probe = (
-            "from dvc_dat import do, Dat\n"
+            "from dvc_dat import Dat\ndo = Dat.do\n"
             "from dvc_dat import core\n"
             "assert core._default_manager is None\n"       # import read nothing
             "do.mount(value={'x': 1}, at='early')\n"        # first use builds it

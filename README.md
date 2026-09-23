@@ -9,7 +9,9 @@ itself; `_result_.yaml` holds only what running it produced. `do` is the one
 namespace and the one runner.
 
 ```python
-from dvc_dat import Dat, do
+from dvc_dat import Dat
+
+do = Dat.do   # the shortcut; follows Dat.manager
 
 # Importing reads no files; the first use finds .datconfig.yaml.
 # A dotted name resolves through do.mount names, then by import.

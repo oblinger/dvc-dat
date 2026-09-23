@@ -10,7 +10,9 @@ from pathlib import Path
 tests_dir = Path(__file__).parent
 sys.path.insert(0, str(tests_dir.parent))
 
-from dvc_dat import Dat, DatManager, do  # noqa: E402
+from dvc_dat import Dat, DatManager  # noqa: E402
+
+do = Dat.do
 
 Dat.manager = DatManager.load_dat_config(tests_dir, do=do)
 import mounts  # noqa: E402,F401  -- the test namespace; a program imports its own

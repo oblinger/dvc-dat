@@ -13,9 +13,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from dvc_dat import (  # noqa: E402
-    Dat, DatManager, Do, do, expand, expand_spec, merge_dicts,
-)
+from dvc_dat import Dat, DatManager, Do  # noqa: E402
+from dvc_dat.core import expand, expand_spec  # noqa: E402
+
+do, merge_dicts = Dat.do, Dat.merge_dicts
 from dvc_dat.core import DAT_CONFIG_FILE, SPEC_YAML, RESULT_YAML  # noqa: E402
 
 V2 = "v2tests"
@@ -303,7 +304,7 @@ class TestExplicitConfig:
         (tmp_path / "mounted" / "v2_greeter.py").write_text(
             "def __main__():\n    return 'hi'\n")
         (tmp_path / "explicit_main.py").write_text(
-            "from pathlib import Path\nfrom dvc_dat import do\n"
+            "from pathlib import Path\nfrom dvc_dat import Dat\ndo = Dat.do\n"
             "do.mount(folder=str(Path(__file__).parent / 'mounted'))\n")
         (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: sync/\n")
 
@@ -329,7 +330,7 @@ class TestExplicitConfig:
     def test_importing_dvc_dat_reads_no_config(self, tmp_path):
         result = subprocess.run(
             [sys.executable, "-c",
-             "import dvc_dat; print(dvc_dat.core._default_manager, dvc_dat.do._current())"],
+             "import dvc_dat; print(dvc_dat.core._default_manager, dvc_dat.Dat.do._current())"],
             cwd=tmp_path, capture_output=True, text=True,
             env={**os.environ, "PYTHONPATH": str(REPO_ROOT)})
         assert result.returncode == 0, result.stderr
@@ -352,13 +353,13 @@ def test_first_use_installs_the_config(tmp_path):
     (pkg / "__init__.py").write_text("")
     (pkg / "job.py").write_text("def run(dat):\n    return 'ran'\n")
     (tmp_path / "lazy_main.py").write_text(
-        "from dvc_dat import do\nimport lazypkg.job\n"
+        "from dvc_dat import Dat\ndo = Dat.do\nimport lazypkg.job\n"
         "do.mount(module=lazypkg.job, at='lazy')\n")
     (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: warehouse\n")
     (tmp_path / "notes").mkdir()                # a subfolder: cwd is not the root
 
     probe = (
-        "from dvc_dat import do, Dat\n"
+        "from dvc_dat import Dat\ndo = Dat.do\n"
         "import lazy_main\n"                    # the program's own mounts
         "fn = do.load('lazy.run')\n"            # the alias, nothing configured
         "assert fn(None) == 'ran'\n"

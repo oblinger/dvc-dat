@@ -6,7 +6,9 @@ itself. `_result_.yaml` holds only what running it produced.
 `dvc_dat` has one namespace and one runner, both reached through `do`:
 
 ```python
-from dvc_dat import Dat, do
+from dvc_dat import Dat
+
+do = Dat.do   # the shortcut; follows Dat.manager
 
 # a dotted name -> a Python object; the first call builds
 # Dat.manager from the nearest .datconfig.yaml
@@ -59,7 +61,9 @@ same dat arguments forks a new one and leaves the original byte-identical.
 spec. `merge_dicts` is the same zipper merge `dat.base` uses:
 
 ```python
-from dvc_dat import Dat, do, merge_dicts
+from dvc_dat import Dat
+
+do, merge_dicts = Dat.do, Dat.merge_dicts
 
 # d's dat.name is the folder it landed in; increment lands beside it
 spec = merge_dicts(d.get_spec(),
@@ -120,7 +124,9 @@ module-level `do` forwards to `Dat.manager.do`, whichever manager that is.
 Nothing in an ordinary program configures anything:
 
 ```python
-from dvc_dat import do
+from dvc_dat import Dat
+
+do = Dat.do
 
 # finds .datconfig.yaml on the way
 do("mypkg.train.baseline", lr=0.5)
@@ -131,7 +137,9 @@ they were made on, so a replacement that should keep them adopts the
 default `do`, which also makes it the default:
 
 ```python
-from dvc_dat import Dat, DatManager, do
+from dvc_dat import Dat, DatManager
+
+do = Dat.do
 
 Dat.manager = DatManager.load_dat_config(project_root, do=do)
 Dat.manager = Store(dat_folders=["/work"], do=do)   # a subclass
@@ -215,7 +223,9 @@ once, with the same `now` and `unique` the folder got, and writes the result:
 `get_spec()` returns the stored values, and nothing is expanded on read.
 
 ```python
-from dvc_dat import expand, expand_spec
+from dvc_dat import Dat
+
+expand = Dat.manager.expand
 
 # 'runs/2026-09/exp'
 expand("runs/{YYYY}-{MM}/exp")
@@ -264,7 +274,7 @@ dat_folders: data
 art_folder: art
 
 # the command a copy of bin/dat hands its arguments to (see cli.md):
-# your program's main: imports what it mounts, calls dat.cli_main()
+# your program's main: imports what it mounts, calls Dat.cli_main()
 run: .venv/bin/python -m mypkg.main
 ```
 
