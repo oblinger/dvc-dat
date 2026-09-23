@@ -6,20 +6,12 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
-## 3.0.1 — 2026-09-22
+## 2.2.0 — 2026-09-22
 
-- A value mount answers to the dotted paths inside it, as
-  `docs/mount-commands.md` promised: after
-  `do.mount(value={"pi": 3.14159}, at="constants")`, `do.load("constants.pi")`
-  is `3.14159`. In 3.0.0 only the exact mounted name resolved.
-- `dat list PREFIX` matches names that start with `PREFIX`; it matched any
-  name containing it.
-- `Dat.load`'s not-found error names the config folder it searched, not the
-  process's working directory.
-- Docs: `spec-format.md` no longer contradicts itself on function-valued
-  references; "sync folder" is gone from the docstrings.
-
-## 3.0.0 — 2026-09-22
+Breaking, as a minor: 2.x was public for a few hours with one consumer, so the
+API it settled on ships as 2.2 rather than a new major (Dan, 2026-09-22).
+Tags `v3.0.0` and `v3.0.1`, briefly published the same day, are withdrawn;
+this release is their content.
 
 Breaking: public names removed or made private. Nothing is kept as an alias.
 
@@ -59,7 +51,7 @@ Breaking: public names removed or made private. Nothing is kept as an alias.
   three 1.x notebooks; `standard_do_scripts/` and the 1.x example fixtures
   are gone; `tests/test_examples.py` runs the notebook.
 
-### Migrating from 2.x
+### Migrating from 2.0 and 2.1
 
 | 2.x | 3.0 |
 |-----|-----|
@@ -89,6 +81,19 @@ Breaking: public names removed or made private. Nothing is kept as an alias.
 | `do.load("dat_tools.X")` / `dat_tools.list` | `dt.X` / `dt.list` |
 | `dvc_dat.__main__:main` | `dvc_dat.do:cli_main` |
 
+### Fixes found by the docs audit
+
+- A value mount answers to the dotted paths inside it, as
+  `docs/mount-commands.md` promised: after
+  `do.mount(value={"pi": 3.14159}, at="constants")`, `do.load("constants.pi")`
+  is `3.14159`. Before, only the exact mounted name resolved.
+- `dat list PREFIX` matches names that start with `PREFIX`; it matched any
+  name containing it.
+- `Dat.load`'s not-found error names the config folder it searched, not the
+  process's working directory.
+- Docs: `spec-format.md` no longer contradicts itself on function-valued
+  references; "sync folder" is gone from the docstrings.
+
 ## 2.1.0 — 2026-09-22
 
 - **`do.mount` refuses a name that is also importable.** When a top-level
@@ -101,7 +106,7 @@ Breaking: public names removed or made private. Nothing is kept as an alias.
 - A created dat's spec never changes, and there is no `fork` method: the
   recipe is `Dat.create(spec=merge_dicts(d.get_spec(), overrides))`,
   documented in `docs/concepts.md` (the overrides must carry
-  `{"dat": {"target_exists": "increment"}}`; see 3.0.0).
+  `{"dat": {"target_exists": "increment"}}`; see 2.2.0).
 
 ## 2.0.2 — 2026-09-22
 
