@@ -7,7 +7,9 @@ is a folder whose `_spec_.yaml` is a complete, argumentless recipe for itself;
 ## Quick Start
 
 ```python
-from dvc_dat import Dat, do
+from dvc_dat import Dat
+
+do = Dat.do   # the shortcut; follows Dat.manager
 
 # Importing reads nothing; the first use below finds the nearest
 # .datconfig.yaml, walking up from the working directory.

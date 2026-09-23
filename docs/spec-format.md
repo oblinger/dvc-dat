@@ -188,7 +188,9 @@ replaced whole by the later spec. The same merge is `merge_dicts(*dicts)`,
 for a spec hydrated by hand:
 
 ```python
-from dvc_dat import Dat, do, merge_dicts
+from dvc_dat import Dat
+
+do, merge_dicts = Dat.do, Dat.merge_dicts
 
 spec = merge_dicts(do.load("configs.bb.base"), {"gameset": "G7"})
 Dat.create(spec=spec)
@@ -199,7 +201,9 @@ variation of an existing dat `d` asks to land beside it — without
 `increment` the create raises `FileExistsError`:
 
 ```python
-from dvc_dat import Dat, merge_dicts
+from dvc_dat import Dat
+
+merge_dicts = Dat.merge_dicts
 
 spec = merge_dicts(d.get_spec(),
                    {"dat": {"target_exists": "increment"},

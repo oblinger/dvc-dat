@@ -6,7 +6,9 @@ import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import DatManager, Do, do
+from dvc_dat import Dat, DatManager, Do
+
+do = Dat.do
 
 
 @pytest.fixture
@@ -172,13 +174,11 @@ class TestRegisteringStuff:
 
 class TestTemplatedDatCreationAndDeletion:
     def test_empty_creation_and_deletion(self):
-        from dvc_dat import do
         dat, _ = do._dat_from_template({})
         assert dat, "Couldn't create Persistable"
         assert dat.delete(), "Couldn't delete Persistable"
 
     def test_creation_and_deletion_with_spec(self):
-        from dvc_dat import do
         spec1 = {"dat": {"name": "test_dats/{YY}-{MM} Dats{unique}"}}
         dat, _ = do._dat_from_template(spec1)
         assert dat, "Couldn't create Persistable"

@@ -8,7 +8,7 @@ literal value — and for giving an importable thing a shorter name.
 
 Mounts are made in code, by `do.mount(...)`, by your own program — the
 namespace is whatever the running program imported. For the shell, your
-program's main does the mounting and hands the command line to `dat.cli_main()`,
+program's main does the mounting and hands the command line to `Dat.cli_main()`,
 and `.datconfig.yaml` names that main as `run:`:
 
 ```yaml
@@ -22,23 +22,23 @@ run: .venv/bin/python -m mypkg.main
 import os
 import sys
 from pathlib import Path
-import dvc_dat as dat
+from dvc_dat import Dat
 
 ROOT = Path(__file__).parent.parent
 
-dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
-dat.do.mount(module="tests.fixtures", at="fixtures")
+Dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
+Dat.do.mount(module="tests.fixtures", at="fixtures")
 
 if __name__ == "__main__":
     # launched by the dat bootstrap
     if os.environ.get("DAT_CLI_CONFIG"):
-        sys.exit(dat.cli_main())
+        sys.exit(Dat.cli_main())
 ```
 
 The mounts land on the process's default `do` — the namespace of
-`Dat.manager` — so a `from dvc_dat import do` that ran earlier sees them,
+`Dat.manager` — so a `do = Dat.do` bound earlier sees them,
 and mounts made before the config is installed survive it. A second
-`DatManager(config)` has a `do` of its own, and `m.do.mount(...)` lands
+`DatManager(dat_folders=[...])` has a `do` of its own, and `m.do.mount(...)` lands
 there and nowhere else (see [Core Concepts](concepts.md)). A notebook gets the same
 namespace by importing `mypkg.main`; the config's folder is first on
 `sys.path`, so that import works from any directory. With no `run:` the
@@ -183,25 +183,27 @@ run: .venv/bin/python -m myproject.main
 import os
 import sys
 from pathlib import Path
-import dvc_dat as dat
+from dvc_dat import Dat
 
 SRC = Path(__file__).parent.parent
 
-dat.do.mount(folder=str(SRC / "myproject" / "catalog"), at="catalog")
-dat.do.mount(module="tests.fixtures", at="fixtures")
-dat.do.mount(folder=str(SRC / "scripts"), at="scripts")
-dat.do.mount(value={"debug": False, "version": "2.0.0"}, at="config")
+Dat.do.mount(folder=str(SRC / "myproject" / "catalog"), at="catalog")
+Dat.do.mount(module="tests.fixtures", at="fixtures")
+Dat.do.mount(folder=str(SRC / "scripts"), at="scripts")
+Dat.do.mount(value={"debug": False, "version": "2.0.0"}, at="config")
 
 if __name__ == "__main__":
     # launched by the dat bootstrap
     if os.environ.get("DAT_CLI_CONFIG"):
-        sys.exit(dat.cli_main())
+        sys.exit(Dat.cli_main())
 ```
 
 Usage, from a program that has imported `myproject.main`:
 
 ```python
-from dvc_dat import do
+from dvc_dat import Dat
+
+do = Dat.do
 
 # Load a template; the config installs itself on first use
 spec = do.load("catalog.experiment")

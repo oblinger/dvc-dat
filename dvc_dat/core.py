@@ -816,7 +816,16 @@ _default_manager: Optional[DatManager] = None
 class _DatMeta(type):
     """Gives `Dat` (and every subclass) `manager`, the process's default world:
     a plain assignable class attribute, filled on first read by
-    `DatManager.load_dat_config()`.  `Run.manager is Dat.manager`."""
+    `DatManager.load_dat_config()`.  `Run.manager is Dat.manager`.  And `do`,
+    the default world's runner and namespace."""
+
+    @property
+    def do(cls) -> Any:
+        """The default world's runner and namespace: a forwarder to
+        `Dat.manager.do`, whichever manager that is when it is called, so
+        `do = Dat.do` binds a shortcut that follows a later reassignment."""
+        from .do import do
+        return do
 
     @property
     def manager(cls) -> DatManager:
@@ -899,6 +908,15 @@ class Dat(metaclass=_DatMeta):
                     f"(a value starting with '{{' must be quoted in YAML)"
                 )
         return spec
+
+    merge_dicts = staticmethod(merge_dicts)
+
+    @staticmethod
+    def cli_main(argv: Optional[List[str]] = None, *,
+                 config: Union[None, str, Path] = None) -> int:
+        """The `dat` command line, for a program's own main; see `dvc_dat.do.cli_main`."""
+        from .do import cli_main
+        return cli_main(argv, config=config)
 
     def get_spec(self) -> SpecDict:
         """The spec as written -- every `{}` was expanded once, when the dat was created."""

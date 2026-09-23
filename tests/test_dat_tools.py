@@ -6,7 +6,9 @@ import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import Dat, do
+from dvc_dat import Dat
+
+do = Dat.do
 from dvc_dat.dat_tools import to_excel, Cube, from_dat
 
 do.mount(at="test_dat_tools", module="tests.test_dat_tools")

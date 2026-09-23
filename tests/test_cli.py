@@ -62,11 +62,11 @@ def make_project(root: Path, python: str = None) -> Path:
         "import os\n"
         "import sys\n"
         "from pathlib import Path\n"
-        "import dvc_dat as dat\n"
-        "dat.do.mount(folder=str(Path(__file__).parent / 'scripts'))\n"
+        "from dvc_dat import Dat\n"
+        "Dat.do.mount(folder=str(Path(__file__).parent / 'scripts'))\n"
         "if __name__ == '__main__':\n"
         "    if os.environ.get('DAT_CLI_CONFIG'):   # launched by the dat bootstrap\n"
-        "        sys.exit(dat.cli_main())\n"
+        "        sys.exit(Dat.cli_main())\n"
         "    print('own main')\n"
     )
     (root / "scripts").mkdir()
