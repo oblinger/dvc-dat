@@ -103,8 +103,9 @@ disk is a record, never a template: `get_spec()` is the file, `dat.name` is
 the folder the dat actually landed in, and `{now}` is the moment it was made.
 A reference inside a longer string must resolve to a string or a number; a
 reference that is the whole value may be any data YAML can hold, and is
-inlined. A reference to anything else — a function, a class — is a
-`TypeError` at create, and no folder is made.
+inlined. A reference to anything else — a class, an object — is a
+`TypeError` at create, and no folder is made. A reference to a **function**
+is a call: its return value is what lands in the spec.
 
 | Reference | Resolves to |
 |-----------|-------------|
@@ -114,14 +115,26 @@ inlined. A reference to anything else — a function, a class — is a
 | `{now}` | timestamp `yy-mm-dd_HH-MM-SS` |
 | `{cwd}` | the working directory, full path |
 | `{unique}` | empty, then `_2`, `_3`, … |
-| `{a.b.c}` | whatever `do.load("a.b.c")` returns |
+| `{a.b.c}` | whatever `do.load("a.b.c")` returns — called, when that is a function or method |
+| `{a.b.c(1, "x", k=2)}` | `do.load("a.b.c")` called with those arguments |
 | `{{` `}}` | a literal `{` and `}` |
 
+**Calls.** A dotted name that resolves to a function or method — a Python
+function, a builtin, a method, a function mounted with `do.mount(value=fn)` —
+is called with no arguments: `{meta.commit}` puts the commit in the spec.
+Parentheses call it with arguments, which are Python literals only (numbers,
+strings, `True` `False` `None`, and lists, tuples or dicts of them — no names,
+no expressions, and no `{` `}` inside a reference); they also call a class or
+any other callable. A class or a callable object without parentheses is not
+called: a mounted proxy such as SVP's `asset` keeps answering `{asset.ocr}`
+with its string. A function is called each time its reference is expanded —
+once for the folder name and once for the spec when both carry it.
+
 An undotted name that is neither a built-in nor a key of the `vars` dict passed
-to `expand()` is a `KeyError`. Called directly, `expand()` returns the
-referenced object itself for a string that is *exactly* one reference, a
-function included. At create the rule above holds: data is inlined, and a
-function or class is refused.
+to `expand()` is a `KeyError`, and cannot be called. Called directly,
+`expand()` returns the referenced object itself for a string that is *exactly*
+one reference. At create the rule above holds: data is inlined, and a class
+or other object is refused.
 
 **YAML quoting.** A value that *begins* with `{` must be quoted:
 
