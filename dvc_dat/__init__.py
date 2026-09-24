@@ -10,7 +10,7 @@
 The package exports four classes; everything else hangs off them.
 """
 
-__version__ = "2.14.0"
+__version__ = "2.14.1"
 
 from .core import Dat, DatContainer, DatManager
 from .do import Do

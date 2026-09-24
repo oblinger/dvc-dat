@@ -79,7 +79,7 @@ given.
 | `m.load(NAME_OR_URN)` | A dat, or an artifact built by its recorded `type` (a `Path` with none) |
 | `m.load(NAME, verify=True)` | Re-hash what is handed back; `ValueError` on a mismatch |
 | `m.standing(NAME)` / `Dat.standing(NAME)` | `rolling`, `open`, `sealed`, `referenceable`; `None` when absent |
-| `m.reindex() -> int` | Rebuild `_index_.yaml` from the folders |
+| `m.reindex() -> int` | Rebuild `_index_.json` from the folders |
 | `m.roots(DEPS)` / `DatManager.code_of(FN)` | The seal's trim; a run's `dat.code` |
 | `m.load_path(NAME) -> Path` | Where `load` finds it — a dat's folder, an artifact's payload; nothing built, still recorded |
 | `m.recording(DAT)` | Context manager: every `load` inside lands in `DAT`'s `dat.dependencies` |
@@ -172,8 +172,8 @@ Like git, dvc-dat walks up from the working directory looking for
 dat_folders: data
 # beside the dat folder, never inside it (default: art)
 art_folder: art
-# optional: the store's index (default: _index_.yaml in art_folder)
-# index: art/_index_.yaml
+# optional: the store's index (default: _index_.json in art_folder)
+# index: art/_index_.json
 # optional: re-hash every load (default: false)
 # verify: false
 # optional: the DatManager subclass to build, and its own keys

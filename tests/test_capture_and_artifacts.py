@@ -2,6 +2,7 @@
 dependencies by capture (`recording`, `record_dependency`, `dat.dependencies`),
 and `dat.standing` (2.14)."""
 import hashlib
+import json
 import os
 import sys
 import threading
@@ -58,7 +59,7 @@ def sidecar(tmp_path, rel):
 
 
 def index(tmp_path):
-    return yaml.safe_load((tmp_path / "art" / INDEX_FILE).read_text())["entries"]
+    return json.loads((tmp_path / "art" / INDEX_FILE).read_text())["entries"]
 
 
 class VideoClip:
@@ -230,13 +231,13 @@ class TestIndex:
         assert not [p for p in (tmp_path / "art").iterdir() if p.name.endswith(".tmp")]
 
     def test_index_moves_it(self, tmp_path, clip):
-        (tmp_path / DAT_CONFIG_FILE).write_text("index: meta/where.yaml\n")
+        (tmp_path / DAT_CONFIG_FILE).write_text("index: meta/where.json\n")
         m = DatManager.load_dat_config(tmp_path)
         m.save(clip, name="video/G1")
-        assert (tmp_path / "meta" / "where.yaml").exists()
-        other = DatManager(dat_folders=[str(tmp_path / "d")], index=str(tmp_path / "i.yaml"))
+        assert (tmp_path / "meta" / "where.json").exists()
+        other = DatManager(dat_folders=[str(tmp_path / "d")], index=str(tmp_path / "i.json"))
         other.create({"dat": {}}, path="x").save()
-        assert (tmp_path / "i.yaml").exists()
+        assert (tmp_path / "i.json").exists()
 
     def test_reindex_rebuilds_it_from_the_folders(self, m, clip, tmp_path):
         urn = m.save(clip, name="video/G1")
