@@ -75,8 +75,9 @@ given.
 | `DatManager(dat_folders=[...], art_folder=None, index=None, do=None, verify=False)` | A world on a list of folders, keyword-only; nothing read from disk |
 | `DatManager.load_dat_config(START) -> DatManager` | A new manager from the `.datconfig.yaml` above `START` |
 | `Dat.manager.exists(NAME) -> bool` | True iff a dat or artifact is stored under the name or URN |
-| `m.save(SOURCE, type=None, name=None, link=False) -> str` | Store a file or folder as an artifact; returns its URN `"sha256:<hex>"`; stored bytes get a second name, nothing copied |
-| `m.load(NAME_OR_URN)` | A dat, or an artifact built by its recorded `type` (a `Path` with none) |
+| `Dat.save_artifact(SOURCE, type=None, name=None, link=False) -> str` | Store a file or folder as an artifact, keywords only; returns its URN `"sha256:<hex>"`; stored bytes get a second name, nothing copied |
+| `Dat.load_artifact(NAME_OR_URN)` | The artifact, built by its recorded `type` (a `Path` with none) |
+| `m.save_artifact(...)` / `m.load_artifact(...)` | The same, in world `m`; `m.load(NAME_OR_URN)` takes a dat or an artifact |
 | `m.load(NAME, verify=True)` | Re-hash what is handed back; `ValueError` on a mismatch |
 | `m.standing(NAME)` / `Dat.standing(NAME)` | `rolling`, `open`, `sealed`, `referenceable`; `None` when absent |
 | `m.reindex() -> int` | Rebuild `_index_.json` from the folders |

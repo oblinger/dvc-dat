@@ -6,6 +6,19 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.15.0 — 2026-09-24
+
+**Artifact verbs by their own names** (Dan, T023 Q4). Breaking for a line
+public only hours, so a minor.
+
+- **`Dat.save_artifact(source, *, type=None, name=None, link=False)`** and
+  **`Dat.load_artifact(name_or_urn)`** forward to the default world, beside
+  `Dat.load`, `Dat.create` and `Dat.standing`: the manager can stay out of
+  sight. `Dat.load` stays typed to dats; `dat.save()` still seals a dat.
+- The manager's **`save` is now `save_artifact`**, with `type` and `name`
+  keyword-only; **`load_artifact`** is new, and refuses a dat's name.
+  `m.load` still takes either.
+
 ## 2.14.1 — 2026-09-24
 
 - **The index is JSON**, `_index_.json`: every save reads and rewrites it,

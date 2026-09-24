@@ -214,19 +214,23 @@ folder as the sorted `relpath\0sha256` lines of its files.
 
 ```python
 # returns the URN, "sha256:9f3c..."
-urn = m.save("/tmp/G1.mp4", VideoClip, "games/G1/video")
-clip = m.load("games/G1/video")    # VideoClip(path)
-clip = m.load(urn)                 # the same artifact, by its URN
+urn = Dat.save_artifact("/tmp/G1.mp4", type=VideoClip,
+                        name="games/G1/video")
+clip = Dat.load_artifact("games/G1/video")   # VideoClip(path)
+clip = Dat.load_artifact(urn)                # the same, by URN
 # no type, no name: it loads as a Path, by its URN only
-m.save("/tmp/lock.json")
+Dat.save_artifact("/tmp/lock.json")
 ```
 
-`save(source, type=None, name=None, *, link=False)` returns the artifact's
-URN, `sha256:<hex>`. **The type** is what `load` hands the payload's path
+`Dat.save_artifact` and `Dat.load_artifact` forward to the default world's
+`save_artifact(source, *, type=None, name=None, link=False)` and
+`load_artifact(name_or_urn)`; `Dat.load` stays a dat's, and `dat.save()` a
+dat's seal. `save_artifact` returns the artifact's
+URN, `sha256:<hex>`. **The type** is what `load_artifact` hands the payload's path
 to: a class or callable, recorded by its dotted name, or that name as a
 string — anything `do.load` resolves. A factory that cannot be imported (a
 lambda, a closure) is mounted once, `m.do.mount(value=fn, at="video.clip")`,
-and named `type="video.clip"`. With no type, `load` returns the `Path`.
+and named `type="video.clip"`. With no type, `load_artifact` returns the `Path`.
 Nothing is registered. **The name** is any relative path, and carries no
 type; changing what a thing is never means renaming it. A name is held once
 — an existing one is `FileExistsError`, with no overwrite and no increment.
@@ -241,7 +245,7 @@ and builds nothing, recorded like a `load`.
 
 **One namespace, one index.** Dats and artifacts share one namespace: a name
 held by one is refused to the other, and a name found in both is a
-`ValueError`. `load`, `load_path`, `exists` and `standing` take a name or a
+`ValueError`. `load_artifact`, the manager's `load` and `load_path`, `exists` and `standing` take a name or a
 URN. The store keeps one index file, `_index_.json` in the artifact folder
 (`index:` in `.datconfig.yaml` moves it), keyed by every artifact name and
 every `sha256:` URN — an artifact's, and each saved dat's current hash. It is
@@ -253,14 +257,14 @@ written then still load, the prefix stripped.
 The artifact folder is `art_folder:` in `.datconfig.yaml`, else `art/`
 beside the config file — a sibling of `data/`. The artifact folder and the
 dat folders never nest (that is a `ValueError`). A `DatManager` built by hand
-with no `art_folder` holds no artifacts: `save` raises `RuntimeError`, and
+with no `art_folder` holds no artifacts: `save_artifact` raises `RuntimeError`, and
 its index lives in the first dat folder.
 
 ## Dependencies by capture
 
 Every load goes through a manager, so a run's inputs are whatever it
 loaded. `execute` runs the function inside `m.recording(dat)`, and every
-`load` (and `save`) inside that block lands in `dat.dependencies` in
+`load` (and `save_artifact`) inside that block lands in `dat.dependencies` in
 `_result_.yaml`, name to hash. A dat's hash is its `dat.sha256`, the
 content hash its seal stamps over the whole folder — `unsealed` for a dat
 still open — and `dat.verify()` tells you whether an input is still exactly
@@ -273,7 +277,7 @@ m.record_dependency("https://example.com/weights", "sha256:...")
 
 # the same capture outside a run -- a builder gathering a dat's inputs
 with m.recording(dat):
-    cfg = m.load("assets/lock")          # recorded in dat
+    cfg = m.load_artifact("assets/lock")   # recorded in dat
 ```
 
 Recording is per thread and per task (a `contextvars` stack), so two runs
