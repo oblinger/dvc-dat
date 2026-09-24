@@ -231,18 +231,22 @@ checkout holding the source of the function `dat.do` names — and what it
 used. Code outside a checkout records no `code`; a detached HEAD records
 `branch: null`. `dependencies` maps every dat and artifact the run loaded
 through its manager to its hash: an artifact's `sha256`, a dat's
-`dat.sha256` — never `null`. A dat's key is its name under its dat folder
-(its absolute path outside every folder); a run that loaded nothing records
-`{}`.
+`dat.sha256`, or `unsealed` for a dat not yet sealed. A dat's key is its name
+under its dat folder (its absolute path outside every folder); a run that
+loaded nothing records `{}`. A dat sealed outside its own run records
+`$MANUAL: manual`. At the seal an entry that another entry already depends on is
+dropped.
 
-`dat.sha256` is the dat's content hash, stamped by every `save()` (and so
-by `create` and by every run): the sha256 of sorted `relpath\0sha256` lines
+`_result_.yaml` is written only by `dat.save()`, which seals the dat once:
+`create` writes no results file, and a run leaves its record in memory until
+the dat is saved. `dat.sha256` is the dat's content hash, stamped at the seal
+— absent when a dependency was `unsealed`: the sha256 of sorted `relpath\0sha256` lines
 over every file in the folder, `_result_.yaml` included. That one file is
 hashed as its sorted-key YAML dump with `dat.sha256` set to `excluded`, so
 the hash can live inside the file it covers. `dat.verify()` recomputes it the
 same way and is `True` while the folder is exactly as it was last saved —
 a changed data file, spec or result makes it `False`, reformatting the YAML
-does not. A dat saved before 2.9 carries no hash; it is hashed when loaded.
+does not. A dat saved before 2.9 carries no hash: it is unsealed until saved.
 
 ```yaml
 dat:

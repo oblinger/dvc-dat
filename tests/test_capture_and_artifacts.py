@@ -134,16 +134,19 @@ class TestArtifacts:
 def uses_both(dat, prev):
     dat.manager.load(prev)
     dat.manager.load("art:video/G1")
+    dat.save()
     return "ran"
 
 
 def outer(dat):
     dat.manager.do({"dat": {"do": "inner_fn", "name": "inner"}})
     dat.manager.load("art:video/G1")
+    dat.save()
 
 
 def inner_fn(dat):
     dat.manager.load("prev")
+    dat.save()
 
 
 class TestCapture:
@@ -153,7 +156,7 @@ class TestCapture:
         m.do.mount(value=outer, at="outer")
         m.do.mount(value=inner_fn, at="inner_fn")
         self.digest = m.save(clip, "art:video/G1")
-        m.create({"dat": {}}, path="prev")
+        m.create({"dat": {}}, path="prev").save()
         return m
 
     def test_a_runs_loads_land_in_its_dependencies(self, world):
@@ -166,7 +169,7 @@ class TestCapture:
         assert all(v and v.startswith("sha256:") for v in deps.values())
 
     def test_a_run_with_no_loads_says_so(self, world):
-        world.do.mount(value=lambda dat: None, at="quiet")
+        world.do.mount(value=lambda dat: dat.save(), at="quiet")
         dat = world.create({"dat": {"do": "quiet"}}, path="quiet_run")
         world.execute(dat)
         assert stored_results(dat)["dat"]["dependencies"] == {}
@@ -180,15 +183,17 @@ class TestCapture:
         assert stored_results(inner)["dat"]["dependencies"] == \
             {"prev": world.load("prev").get_results()["dat"]["sha256"]}
 
-    def test_a_dats_own_hash_is_its_entry(self, world):
-        prev = world.load("prev")
-        prev.get_results()["note"] = "changed"
-        prev.save()                                   # a new state, a new hash
-        dat = world.create({"dat": {"do": "uses_both", "kwargs": {"prev": "prev"}}},
+    def test_an_unsealed_dependency_leaves_the_run_unsealed(self, world):
+        world.create({"dat": {}}, path="draft")         # never saved
+        dat = world.create({"dat": {"do": "uses_both", "kwargs": {"prev": "draft"}}},
                            path="run2")
         world.execute(dat)
-        assert stored_results(dat)["dat"]["dependencies"]["prev"] == \
-            prev.get_results()["dat"]["sha256"]
+        results = stored_results(dat)
+        assert results["dat"]["dependencies"]["draft"] == "unsealed"
+        assert "sha256" not in results["dat"] and not dat.sealed
+        dat.get_results()["note"] = "again"
+        dat.save()                                    # still unsealed: saves again
+        assert stored_results(dat)["note"] == "again" and not dat.sealed
 
     def test_recording_by_hand(self, world):
         dat = world.create({"dat": {}}, path="builder")
@@ -218,7 +223,7 @@ class TestCapture:
                 with self.recording(dat):
                     return super().execute(dat)
         m = Store(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "art"))
-        m.do.mount(value=lambda dat: None, at="quiet")
+        m.do.mount(value=lambda dat: dat.save(), at="quiet")
         dat = m.create({"dat": {"do": "quiet"}}, path="wrapped")
         m.execute(dat)
         assert stored_results(dat)["dat"]["dependencies"] == {}
@@ -244,26 +249,87 @@ class TestCapture:
         assert b.get_results()["dat"]["dependencies"] == {"only_b": None}
 
 
-class TestDatHash:
-    def test_every_dat_is_hashed_from_birth_and_verifies(self, m):
+class TestSeal:
+    def test_create_does_not_seal_and_the_first_save_does(self, m):
         dat = m.create({"dat": {}, "k": 1}, path="born")
-        assert dat.get_results()["dat"]["sha256"].startswith("sha256:")
+        assert not dat.sealed and not Path(dat.get_path(), RESULT_YAML).exists()
+        dat.save()
+        assert dat.sealed and dat.get_results()["dat"]["sha256"].startswith("sha256:")
         assert dat.verify()
 
+    def test_a_second_save_is_refused(self, m):
+        dat = m.create({"dat": {}}, path="once")
+        dat.save()
+        with pytest.raises(RuntimeError, match="sealed"):
+            dat.save()
+
+    def test_a_dat_saved_without_a_run_is_marked_manual(self, m):
+        dat = m.create({"dat": {}}, path="by_hand")
+        dat.save()
+        assert stored_results(dat)["dat"]["dependencies"] == {"$MANUAL": "manual"}
+
+    def test_execute_does_not_save(self, m):
+        m.do.mount(value=lambda dat: "ran", at="plain")
+        dat = m.create({"dat": {"do": "plain"}}, path="unsaved")
+        assert m.execute(dat) == "ran"
+        assert not Path(dat.get_path(), RESULT_YAML).exists()
+        assert dat.get_results()["dat"]["run_at"]           # recorded, in memory
+        dat.save()                                  # sealed outside the run: by hand
+        assert dat.sealed and stored_results(dat)["dat"]["dependencies"] == {"$MANUAL": "manual"}
+
+    def test_a_save_inside_the_run_seals_when_it_ends(self, m):
+        seen = {}
+
+        def fn(dat):
+            dat.save()
+            seen["sealed_inside"] = dat.sealed
+        m.do.mount(value=fn, at="saves")
+        dat = m.create({"dat": {"do": "saves"}}, path="inside")
+        m.execute(dat)
+        assert seen["sealed_inside"] is False
+        results = stored_results(dat)["dat"]
+        assert results["run_time"] and results["sha256"] and dat.verify()
+        assert "$MANUAL" not in results["dependencies"]
+
+    def test_an_unsealed_dat_runs_again_in_place(self, m):
+        m.do.mount(value=lambda dat: "ran", at="plain")
+        dat = m.create({"dat": {"do": "plain"}}, path="twice")
+        assert m.execute(dat) == "ran" and m.execute(dat) == "ran"
+
+    def test_execute_refuses_a_sealed_dat(self, m):
+        m.do.mount(value=lambda dat: dat.save(), at="saves")
+        dat = m.create({"dat": {"do": "saves"}}, path="ran_once")
+        m.execute(dat)
+        with pytest.raises(RuntimeError, match="sealed"):
+            m.execute(dat)
+
+    def test_the_seal_keeps_the_roots_only(self, m):
+        base = m.create({"dat": {}}, path="base")
+        base.save()
+        mid = m.create({"dat": {}}, path="mid")
+        with m.recording(mid):
+            m.load("base")
+        mid.save()
+        top = m.create({"dat": {}}, path="top")
+        with m.recording(top):
+            m.load("base")
+            m.load("mid")
+        top.save()
+        assert stored_results(top)["dat"]["dependencies"] == {"mid": mid._sha256()}
+
+
+class TestDatHash:
     def test_the_hash_covers_the_data_the_spec_and_the_results(self, m):
         dat = m.create({"dat": {}}, path="h")
-        first = dat.get_results()["dat"]["sha256"]
         Path(dat.get_path(), "data.bin").write_bytes(b"x")
+        dat.save()
+        assert dat.verify()
+        Path(dat.get_path(), "data.bin").write_bytes(b"y")
         assert not dat.verify()                       # a file changed under it
-        dat.save()
-        second = dat.get_results()["dat"]["sha256"]
-        assert second != first and dat.verify()
-        dat.get_results()["accuracy"] = 0.9
-        dat.save()
-        assert dat.get_results()["dat"]["sha256"] != second and dat.verify()
 
     def test_editing_the_results_file_by_hand_fails_verification(self, m):
         dat = m.create({"dat": {}}, path="edited")
+        dat.save()
         path = Path(dat.get_path(), RESULT_YAML)
         path.write_text(path.read_text() + "tampered: true\n")
         assert not dat.verify()
@@ -277,20 +343,22 @@ class TestDatHash:
         path.write_text(yaml.safe_dump(yaml.safe_load(path.read_text()), sort_keys=True))
         assert dat.verify()
 
-    def test_a_dat_saved_before_2_9_is_hashed_on_load(self, m, tmp_path):
+    def test_a_dat_saved_before_2_9_is_unsealed(self, m, tmp_path):
         old = tmp_path / "dats" / "old"
         old.mkdir(parents=True)
         (old / "_spec_.yaml").write_text("dat: {kind: Dat}\n")
         (old / RESULT_YAML).write_text("accuracy: 0.5\n")    # no dat.sha256
         dat = m.load("old")
-        assert dat._sha256().startswith("sha256:")
-        assert not dat.verify()
+        assert not dat.sealed and not dat.verify()
+        dat.save()                                          # sealed by hand, now
+        assert dat.sealed and dat.verify()
 
 
 
 class TestLoadPath:
     def test_a_dat_gives_its_folder_and_is_recorded(self, m):
         prev = m.create({"dat": {}}, path="prev")
+        prev.save()
         dat = m.create({"dat": {}}, path="run")
         with m.recording(dat):
             assert m.load_path("prev") == Path(prev.get_path())

@@ -2,7 +2,7 @@
 
 **dvc_dat** manages data artifacts as folders that describe themselves. A dat
 is a folder whose `_spec_.yaml` is a complete, argumentless recipe for itself;
-`_result_.yaml` holds only what running it produced.
+`_result_.yaml` holds what running it produced, written once when `dat.save()` seals it.
 
 ## Quick Start
 
