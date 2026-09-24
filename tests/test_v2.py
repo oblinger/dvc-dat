@@ -183,10 +183,44 @@ class TestExpand:
             expand("{no_such_name}")
 
     def test_a_dotted_name_resolves_through_do_load(self):
-        assert expand("{os.path.join}") is os.path.join          # whole value: the object
+        import collections
+        assert expand("{collections.OrderedDict}") is collections.OrderedDict  # a class: itself
         assert expand("sep is {os.sep}") == f"sep is {os.sep}"   # embedded: a string
         with pytest.raises(TypeError):
-            expand("fn is {os.path.join}")                       # embedded: not a scalar
+            expand("cls is {collections.OrderedDict}")           # embedded: not a scalar
+
+    def test_a_function_is_called_with_no_arguments(self):
+        assert expand("{os.getcwd}") == os.getcwd()
+        assert expand("at {os.getcwd}/x") == f"at {os.getcwd()}/x"
+
+    def test_literal_arguments_call_it(self):
+        assert expand('{os.path.join("a", "b")}') == os.path.join("a", "b")
+        assert expand("{builtins.max(1, 7, 3)}") == 7
+        assert expand("{builtins.round(2.567, ndigits=1)}") == 2.6
+        assert expand("{collections.OrderedDict()}") == {}       # parentheses call a class
+
+    @pytest.mark.parametrize("ref", ["{os.path.join(x)}", "{builtins.max(1 + 2)}",
+                                     "{builtins.max(*[1])}", "{builtins.max(1))}"])
+    def test_arguments_are_literals_only(self, ref):
+        with pytest.raises(ValueError, match="expand"):
+            expand(ref)
+
+    def test_a_call_needs_a_dotted_callable(self):
+        with pytest.raises(ValueError, match="only a dotted name"):
+            expand("{who()}", {"who": "x"})
+        with pytest.raises(TypeError, match="not callable"):
+            expand("{os.sep()}")
+
+    def test_mounted_functions_are_called_and_callable_objects_are_not(self):
+        class Proxy:                      # like SVP's `asset`: callable, attribute access
+            ocr = "ocr-2026-09-23"
+
+            def __call__(self):
+                raise AssertionError("a callable object is never called")
+        do.mount(value=lambda: "c2dbdc6", at="v2_meta.commit")
+        do.mount(value=Proxy(), at="v2_asset.proxy")
+        assert expand("{v2_meta.commit}") == "c2dbdc6"
+        assert isinstance(expand("{v2_asset.proxy}"), Proxy)
 
     def test_a_whole_value_reference_keeps_the_object(self):
         marker = object()
@@ -208,19 +242,21 @@ class TestGetSpec:
         """T011 Q7 (B): every `{}` is expanded at create; the file holds the values."""
         dat = Dat.create(path=f"{V2}/expanded", spec={
             "dat": {"kind": "Dat", "target_exists": "overwrite"},
-            "stamp": "{YYYY}", "sep": "{os.sep}", "cfg": "{test_v2.SAMPLE}"})
+            "stamp": "{YYYY}", "sep": "{os.sep}", "cfg": "{test_v2.SAMPLE}",
+            "where": "{os.getcwd}"})
 
         year = datetime.now().strftime("%Y")
         assert dat.get_spec()["stamp"] == year
         assert stored(dat)["stamp"] == year            # the file holds the value
         assert stored(dat)["sep"] == os.sep
         assert isinstance(stored(dat)["cfg"], dict)    # a whole-value reference: data, inlined
+        assert stored(dat)["where"] == os.getcwd()     # a function: called once, its value kept
         assert dat.get_spec()["dat"]["name"] == f"{V2}/expanded"   # the name is the folder
 
     def test_a_reference_to_a_non_data_object_is_refused_at_create(self):
         with pytest.raises(TypeError):
             Dat.create(path=f"{V2}/notdata", spec={
-                "dat": {"kind": "Dat", "target_exists": "overwrite"}, "fn": "{os.path.join}"})
+                "dat": {"kind": "Dat", "target_exists": "overwrite"}, "fn": "{collections.OrderedDict}"})
         assert not Dat.manager.exists(f"{V2}/notdata")
 
     def test_a_fork_from_a_dat_lands_beside_it(self):

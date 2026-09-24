@@ -1,4 +1,4 @@
-"""dvc_dat 2.15 — dats are folders whose `_spec_.yaml` is a complete, argumentless recipe.
+"""dvc_dat 2.16 — dats are folders whose `_spec_.yaml` is a complete, argumentless recipe.
 
     from dvc_dat import Dat, DatManager
 
@@ -10,7 +10,7 @@
 The package exports four classes; everything else hangs off them.
 """
 
-__version__ = "2.15.0"
+__version__ = "2.16.0"
 
 from .core import Dat, DatContainer, DatManager
 from .do import Do

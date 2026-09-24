@@ -313,7 +313,8 @@ expand("{svp.CONFIG}")
 
 - an **undotted** name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`)
   or a key of the `vars` dict you pass; anything else is a `KeyError`
-- a **dotted** name resolves through `do.load`, at create
+- a **dotted** name resolves through `do.load`, at create; a function is
+  called (`{meta.commit}`), and `{meta.tag("v", 2)}` calls it with literals
 - `{{` and `}}` are the literal braces
 - a string that is *exactly* one reference returns the referenced **object**;
   otherwise references are substituted as text

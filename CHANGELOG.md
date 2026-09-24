@@ -6,6 +6,20 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.16.0 — 2026-09-24
+
+**`{…}` references call functions** (Dan, SVP T161 Q2, from the Juan call:
+a `meta` module — commit, branch, version, time — straight from templates).
+
+- `{mod.fn}` whose dotted name resolves to a function or method is called
+  with no arguments, and its value is what expands. A mounted function
+  counts; a class or a callable object does not, so a proxy like SVP's
+  `asset` still answers `{asset.ocr}` with its string.
+- `{mod.fn(1, "x", key=2)}` calls it with Python literals only.
+- Changed: `expand("{os.path.join}")` used to return the function; it now
+  calls it. A reference that should stay an object needs to be a class or a
+  value.
+
 ## 2.15.0 — 2026-09-24
 
 **Artifact verbs by their own names** (Dan, T023 Q4). Breaking for a line

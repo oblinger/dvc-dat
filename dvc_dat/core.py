@@ -6,6 +6,7 @@ for itself, plus a `_result_.yaml` holding what running it produced.  The do-sys
 """
 
 import contextlib
+import ast
 import contextvars
 import hashlib
 import importlib
@@ -398,10 +399,55 @@ def _builtins(now: Optional[datetime] = None) -> Dict[str, str]:
     }
 
 
+_CALL = re.compile(r"^([A-Za-z_][\w.]*)\s*\((.*)\)$", re.DOTALL)
+
+
+def _literal_args(text: str, reference: str) -> Tuple[List[Any], Dict[str, Any]]:
+    """The arguments of `{fn(...)}`: Python literals only, positional then
+    keyword; no names, no expressions, no `*` or `**`."""
+    try:
+        call = ast.parse(f"_({text})", mode="eval").body
+    except SyntaxError:
+        raise ValueError(f"expand: {{{reference}}}: the arguments do not parse") from None
+    assert isinstance(call, ast.Call)
+    try:
+        if any(isinstance(a, ast.Starred) for a in call.args) or any(
+                k.arg is None for k in call.keywords):
+            raise ValueError
+        args = [ast.literal_eval(a) for a in call.args]
+        kwargs = {k.arg: ast.literal_eval(k.value) for k in call.keywords}
+    except ValueError:
+        raise ValueError(f"expand: {{{reference}}}: arguments are Python literals only -- "
+                         "numbers, strings, True/False/None, and lists, tuples or "
+                         "dicts of them") from None
+    return args, kwargs
+
+
 def _resolve_name(name: str, vars: Dict[str, Any], resolver: Optional[Callable[[str], Any]]) -> Any:
+    """What one `{}` reference expands to.  A dotted name that resolves to a
+    function or method is called with no arguments; `{a.b(1, k=2)}` calls
+    whatever `a.b` resolves to with those literals.  A class, or any other
+    callable object, is returned as it is unless called with parentheses."""
     name = name.strip()
     if not name:
         raise ValueError("expand: empty reference '{}'")
+    if (call := _CALL.match(name)):
+        target = call.group(1)
+        if "." not in target:
+            raise ValueError(f"expand: {{{name}}}: only a dotted name can be called")
+        fn = _lookup_name(target, vars, resolver)
+        if not callable(fn):
+            raise TypeError(f"expand: {{{name}}}: {target!r} is {fn!r}, not callable")
+        args, kwargs = _literal_args(call.group(2), name)
+        return fn(*args, **kwargs)
+    value = _lookup_name(name, vars, resolver)
+    if "." in name and inspect.isroutine(value):
+        return value()
+    return value
+
+
+def _lookup_name(name: str, vars: Dict[str, Any],
+                 resolver: Optional[Callable[[str], Any]]) -> Any:
     if "." in name:
         if resolver is None:
             from .do import do          # the default world; a manager passes its own
@@ -420,7 +466,9 @@ def expand(text: str, vars: Optional[Dict[str, Any]] = None, *,
     """Expand the `{}` references in `text`.
 
     `{name}` with an undotted name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`)
-    or a key of `vars`; `{dotted.name}` is resolved through `do.load` (or `resolver`);
+    or a key of `vars`; `{dotted.name}` is resolved through `do.load` (or `resolver`),
+    and called when it is a function or method; `{dotted.fn(1, "x", k=2)}` calls it
+    with those literal arguments;
     `{{` and `}}` are the literal braces.  A `text` that is exactly one reference returns
     the referenced object itself, not its string form; a reference inside a longer
     string must be a string or a number.
