@@ -69,7 +69,7 @@ class VideoClip:
 
 class TestArtifacts:
     def test_a_file_round_trips_with_its_hash(self, m, clip, tmp_path):
-        urn = m.save(clip, name="video/G1")
+        urn = m.save_artifact(clip, name="video/G1")
         assert urn == "sha256:" + sha(b"frames")
         home = tmp_path / "art" / "video" / "G1"
         card = sidecar(tmp_path, "video/G1")
@@ -83,7 +83,7 @@ class TestArtifacts:
         assert m.exists("video/G1") and m.exists(urn) and not m.exists("video/G2")
 
     def test_a_folder_round_trips_with_its_hash(self, m, folder):
-        urn = m.save(folder, name="assets/lock")
+        urn = m.save_artifact(folder, name="assets/lock")
         lines = sorted([f"a.txt\0{sha(b'a')}\n", f"sub/b.txt\0{sha(b'b')}\n"])
         assert urn == "sha256:" + sha("".join(lines).encode())
         loaded = m.load("assets/lock")
@@ -91,29 +91,27 @@ class TestArtifacts:
         assert yaml.safe_load((loaded / ART_FILE).read_text())["payload"] == "."
 
     def test_a_name_is_written_once(self, m, clip, tmp_path):
-        m.save(clip, name="video/G1")
+        m.save_artifact(clip, name="video/G1")
         other = tmp_path / "other.mp4"
         other.write_bytes(b"other")
         with pytest.raises(FileExistsError):
-            m.save(other, name="video/G1")
+            m.save_artifact(other, name="video/G1")
 
     @pytest.mark.parametrize("name", ["/G1", "video/", "v/../../x", "sha256:ab", "a//b"])
     def test_a_malformed_name_is_refused(self, m, clip, name):
         with pytest.raises(ValueError):
-            m.save(clip, name=name)
+            m.save_artifact(clip, name=name)
 
     def test_a_name_inside_an_artifact_is_refused(self, m, clip, tmp_path):
-        m.save(clip, name="video/G1")
+        m.save_artifact(clip, name="video/G1")
         other = tmp_path / "x.bin"
         other.write_bytes(b"x")
         with pytest.raises(ValueError, match="inside the artifact 'video/G1'"):
-            m.save(other, name="video/G1/more")
+            m.save_artifact(other, name="video/G1/more")
 
-    def test_the_2_13_call_shape_says_what_moved(self, m, clip):
-        with pytest.raises(TypeError, match="second argument is the type"):
-            m.save(clip, "art:video/G1")
-        with pytest.raises(TypeError, match="second argument is the type"):
-            m.save(clip, "video/G1")
+    def test_type_and_name_are_keywords(self, m, clip):
+        with pytest.raises(TypeError, match="positional"):
+            m.save_artifact(clip, "video/G1")
 
     def test_a_missing_artifact_names_itself(self, m):
         with pytest.raises(FileNotFoundError, match="art:video/nope"):
@@ -123,14 +121,14 @@ class TestArtifacts:
 
     def test_the_art_folder_can_be_given(self, tmp_path, clip):
         m = DatManager(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "store"))
-        m.save(clip, name="video/G1")
+        m.save_artifact(clip, name="video/G1")
         assert (tmp_path / "store" / "video" / "G1" / ART_FILE).exists()
         assert (tmp_path / "store" / INDEX_FILE).exists()
 
     def test_no_art_folder_means_no_artifacts(self, tmp_path, clip):
         m = DatManager(dat_folders=[str(tmp_path / "dats")])
         with pytest.raises(RuntimeError, match="no art_folder"):
-            m.save(clip, name="video/G1")
+            m.save_artifact(clip, name="video/G1")
         with pytest.raises(RuntimeError, match="no art_folder"):
             m.load("art:video/G1")
 
@@ -154,7 +152,7 @@ class TestArtifacts:
     def test_load_dat_config_reads_art_folder(self, tmp_path, clip, monkeypatch):
         (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: dats\nart_folder: blobs\n")
         m = DatManager.load_dat_config(tmp_path)
-        m.save(clip, name="video/G1")
+        m.save_artifact(clip, name="video/G1")
         assert (tmp_path / "blobs" / "video" / "G1" / ART_FILE).exists()
         monkeypatch.setenv("DAT_ART_FOLDER", str(tmp_path / "env"))
         assert DatManager.load_dat_config(tmp_path)._art_folder == os.path.realpath(tmp_path / "env")
@@ -162,32 +160,60 @@ class TestArtifacts:
 
 class TestType:
     def test_a_class_is_recorded_by_its_dotted_name_and_built_at_load(self, m, clip, tmp_path):
-        m.save(clip, VideoClip, "video/G1")
+        m.save_artifact(clip, type=VideoClip, name="video/G1")
         assert sidecar(tmp_path, "video/G1")["type"] == m.do.name_of(VideoClip)
         video = m.load("video/G1")
         assert isinstance(video, VideoClip) and video.path.name == "G1.mp4"
 
     def test_a_mounted_factory_is_named_by_its_mount(self, m, folder):
         m.do.mount(value=lambda path: sorted(os.listdir(path)), at="listing.of")
-        m.save(folder, type="listing.of", name="assets/lock")
+        m.save_artifact(folder, type="listing.of", name="assets/lock")
         assert m.load("assets/lock") == [ART_FILE, "a.txt", "sub"]
 
     def test_a_factory_that_cannot_be_imported_says_to_mount_it(self, m, clip):
         with pytest.raises(TypeError, match="mount it"):
-            m.save(clip, lambda path: path, "video/G1")
+            m.save_artifact(clip, type=lambda path: path, name="video/G1")
 
     def test_a_type_name_that_does_not_resolve_is_refused(self, m, clip):
         with pytest.raises(ValueError, match="does not resolve"):
-            m.save(clip, "no.such.factory", "video/G1")
+            m.save_artifact(clip, type="no.such.factory", name="video/G1")
 
     def test_load_path_builds_nothing(self, m, clip):
-        m.save(clip, VideoClip, "video/G1")
+        m.save_artifact(clip, type=VideoClip, name="video/G1")
         assert m.load_path("video/G1").name == "G1.mp4"
+
+
+class TestTrampolines:
+    def test_dat_saves_and_loads_artifacts_in_the_default_world(self, m, clip):
+        before = Dat.manager
+        Dat.manager = m
+        try:
+            urn = Dat.save_artifact(clip, type=VideoClip, name="video/G1")
+            assert isinstance(Dat.load_artifact("video/G1"), VideoClip)
+            assert Dat.load_artifact(urn).path.name == "G1.mp4"
+            assert Dat.standing("video/G1") == "referenceable"
+        finally:
+            Dat.manager = before
+
+    def test_load_artifact_refuses_a_dat_and_dat_load_an_artifact(self, m, clip):
+        m.create({"dat": {}}, path="d")
+        m.save_artifact(clip, name="video/G1")
+        with pytest.raises(KeyError, match="it is a dat"):
+            m.load_artifact("d")
+        with pytest.raises(KeyError, match="no artifact 'nope'"):
+            m.load_artifact("nope")
+        before = Dat.manager
+        Dat.manager = m
+        try:
+            with pytest.raises(TypeError, match="not a Dat"):
+                Dat.load("video/G1")
+        finally:
+            Dat.manager = before
 
 
 class TestNoNameAndDedupe:
     def test_no_name_stores_under_the_urn_only(self, m, clip, tmp_path):
-        urn = m.save(clip)
+        urn = m.save_artifact(clip)
         hexed = urn[len("sha256:"):]
         assert (tmp_path / "art" / "sha256" / hexed / "G1.mp4").read_bytes() == b"frames"
         assert sidecar(tmp_path, f"sha256/{hexed}")["names"] == []
@@ -195,34 +221,34 @@ class TestNoNameAndDedupe:
         assert index(tmp_path) == {urn: {"art": f"sha256/{hexed}"}}
 
     def test_a_second_name_for_stored_bytes_copies_nothing(self, m, clip, tmp_path):
-        urn = m.save(clip, name="video/G1")
-        assert m.save(clip, name="video/G1-again") == urn
+        urn = m.save_artifact(clip, name="video/G1")
+        assert m.save_artifact(clip, name="video/G1-again") == urn
         assert not (tmp_path / "art" / "video" / "G1-again").exists()
         assert m.load("video/G1-again") == m.load("video/G1")
         assert sidecar(tmp_path, "video/G1")["names"] == ["video/G1", "video/G1-again"]
         assert index(tmp_path)["video/G1-again"] == {"art": "video/G1"}
-        assert m.save(clip) == urn                     # unnamed: nothing new
+        assert m.save_artifact(clip) == urn                     # unnamed: nothing new
         assert not (tmp_path / "art" / "sha256").exists()
 
     def test_an_equal_hash_with_a_different_size_is_refused(self, m, clip, tmp_path):
-        m.save(clip, name="video/G1")
+        m.save_artifact(clip, name="video/G1")
         card_path = tmp_path / "art" / "video" / "G1" / ART_FILE
         card = yaml.safe_load(card_path.read_text())
         card["size"] = 999
         card_path.write_text(yaml.safe_dump(card))
         with pytest.raises(ValueError, match="999 bytes"):
-            m.save(clip, name="video/G1-again")
+            m.save_artifact(clip, name="video/G1-again")
 
     def test_stored_bytes_keep_their_type(self, m, clip):
-        m.save(clip, VideoClip, "video/G1")
+        m.save_artifact(clip, type=VideoClip, name="video/G1")
         with pytest.raises(ValueError, match="with type"):
-            m.save(clip, "os.path.basename", "video/G1-as-name")
-        assert isinstance(m.load(m.save(clip, name="video/G1-b")), VideoClip)
+            m.save_artifact(clip, type="os.path.basename", name="video/G1-as-name")
+        assert isinstance(m.load(m.save_artifact(clip, name="video/G1-b")), VideoClip)
 
 
 class TestIndex:
     def test_the_index_keys_names_and_urns_and_is_written_whole(self, m, clip, tmp_path):
-        urn = m.save(clip, name="video/G1")
+        urn = m.save_artifact(clip, name="video/G1")
         dat = m.create({"dat": {}}, path="d")
         dat.save()
         assert index(tmp_path) == {"video/G1": {"art": "video/G1"},
@@ -233,15 +259,15 @@ class TestIndex:
     def test_index_moves_it(self, tmp_path, clip):
         (tmp_path / DAT_CONFIG_FILE).write_text("index: meta/where.json\n")
         m = DatManager.load_dat_config(tmp_path)
-        m.save(clip, name="video/G1")
+        m.save_artifact(clip, name="video/G1")
         assert (tmp_path / "meta" / "where.json").exists()
         other = DatManager(dat_folders=[str(tmp_path / "d")], index=str(tmp_path / "i.json"))
         other.create({"dat": {}}, path="x").save()
         assert (tmp_path / "i.json").exists()
 
     def test_reindex_rebuilds_it_from_the_folders(self, m, clip, tmp_path):
-        urn = m.save(clip, name="video/G1")
-        m.save(clip, name="video/G1-again")
+        urn = m.save_artifact(clip, name="video/G1")
+        m.save_artifact(clip, name="video/G1-again")
         dat = m.create({"dat": {}}, path="d")
         dat.save()
         before = index(tmp_path)
@@ -274,15 +300,15 @@ class TestOneNamespace:
     def test_a_dat_name_is_not_an_artifact_name(self, m, clip):
         m.create({"dat": {}}, path="games/G1")
         with pytest.raises(FileExistsError, match="a dat's name"):
-            m.save(clip, name="games/G1")
+            m.save_artifact(clip, name="games/G1")
 
     def test_an_artifact_name_is_not_a_dat_name(self, m, clip):
-        m.save(clip, name="games/G1")
+        m.save_artifact(clip, name="games/G1")
         with pytest.raises(FileExistsError, match="an artifact's name"):
             m.create({"dat": {}}, path="games/G1")
 
     def test_a_name_both_hold_is_refused_at_load(self, m, clip, tmp_path):
-        m.save(clip, name="games/G1")
+        m.save_artifact(clip, name="games/G1")
         (tmp_path / "dats" / "games" / "G1").mkdir(parents=True)
         (tmp_path / "dats" / "games" / "G1" / "_spec_.yaml").write_text("dat: {}\n")
         with pytest.raises(ValueError, match="both a dat and an artifact"):
@@ -342,7 +368,7 @@ class TestCapture:
         m.do.mount(value=uses_both, at="uses_both")
         m.do.mount(value=outer, at="outer")
         m.do.mount(value=inner_fn, at="inner_fn")
-        self.digest = m.save(clip, name="video/G1")
+        self.digest = m.save_artifact(clip, name="video/G1")
         m.create({"dat": {}}, path="prev").save()
         return m
 
@@ -394,8 +420,8 @@ class TestCapture:
         out.write_bytes(b"out")
         dat = world.create({"dat": {}}, path="saver")
         with world.recording(dat):
-            digest = world.save(out, name="blob/out")
-            unnamed = world.save(tmp_path / "G1.mp4")
+            digest = world.save_artifact(out, name="blob/out")
+            unnamed = world.save_artifact(tmp_path / "G1.mp4")
         assert dat.get_results()["dat"]["dependencies"] == {"blob/out": digest,
                                                              unnamed: unnamed}
 
@@ -512,7 +538,7 @@ class TestStanding:
         m.create({"dat": {}}, path="base").save()          # hand-sealed: referenceable
         m.create({"dat": {"standing": "rolling"}}, path="roll").save()
         m.create({"dat": {}}, path="draft")                 # never saved: open
-        m.save(clip, name="video/G1")
+        m.save_artifact(clip, name="video/G1")
         return m
 
     def test_a_rolling_dat_saves_again_and_never_freezes(self, w):
@@ -632,7 +658,7 @@ class TestVerifyingLoad:
     def test_the_manager_switch_and_artifacts(self, tmp_path, clip):
         m = DatManager(dat_folders=[str(tmp_path / "dats")],
                        art_folder=str(tmp_path / "art"), verify=True)
-        m.save(clip, name="video/G1")
+        m.save_artifact(clip, name="video/G1")
         (tmp_path / "art" / "video" / "G1" / "G1.mp4").write_bytes(b"corrupt")
         with pytest.raises(ValueError, match="video/G1"):
             m.load_path("video/G1")
@@ -652,7 +678,7 @@ class TestHeldAsks:
         assert code is None or set(code) == {"branch", "commit", "dirty"}
 
     def test_link_hard_links_the_payload(self, m, clip, tmp_path):
-        m.save(clip, name="video/G1", link=True)
+        m.save_artifact(clip, name="video/G1", link=True)
         stored = tmp_path / "art" / "video" / "G1" / "G1.mp4"
         assert os.stat(stored).st_ino == os.stat(clip).st_ino
 
@@ -693,7 +719,7 @@ class TestLoadPath:
         assert dat.get_results()["dat"]["dependencies"] == {"prev": prev._sha256()}
 
     def test_an_artifact_gives_its_payload_and_is_recorded(self, m, clip):
-        digest = m.save(clip, VideoClip, "video/G1")
+        digest = m.save_artifact(clip, type=VideoClip, name="video/G1")
         dat = m.create({"dat": {}}, path="run")
         with m.recording(dat):
             path = m.load_path("video/G1")

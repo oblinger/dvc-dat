@@ -932,8 +932,9 @@ class DatManager:
 
     # -- artifacts -------------------------------------------------------------
 
-    def save(self, source: Union[str, Path], type: Union[None, str, Callable] = None,
-             name: Optional[str] = None, *, link: bool = False) -> str:
+    def save_artifact(self, source: Union[str, Path], *,
+                      type: Union[None, str, Callable] = None,
+                      name: Optional[str] = None, link: bool = False) -> str:
         """Store the file or folder `source` as an artifact and return its URN,
         `"sha256:<hex>"`.
 
@@ -949,25 +950,21 @@ class DatManager:
         the payload instead of copying it (same filesystem only).  Inside a
         `recording` the artifact lands in that dat's `dat.dependencies`.
         """
-        if isinstance(type, str) and name is None and (
-                type.startswith(ART_PREFIX) or "/" in type):
-            raise TypeError(f"save: {type!r} is a name, and the second argument is the "
-                            "type since 2.14: save(source, type=None, name=None)")
         art = self._require_art_folder(str(name or source))
         type_name = self._type_name(type)
         key = None if name is None else _art_key(name)
         if key is not None and not self._valid_name(key):
-            raise ValueError(f"save: an artifact name is a relative path of plain "
+            raise ValueError(f"save_artifact: an artifact name is a relative path of plain "
                              f"segments, got {name!r}")
         source = Path(source)
         if not source.exists():
-            raise FileNotFoundError(f"save: no file or folder at {str(source)!r}")
+            raise FileNotFoundError(f"save_artifact: no file or folder at {str(source)!r}")
         payload = "." if source.is_dir() else source.name
         sha256 = URN_PREFIX + (_hash_payload(str(source), ".") if source.is_dir()
                                else _sha256_file(str(source)))
         size = _payload_size(source)
         if key is not None and self._dat_exists(key):
-            raise FileExistsError(f"save: {key!r} is a dat's name; dats and artifacts "
+            raise FileExistsError(f"save_artifact: {key!r} is a dat's name; dats and artifacts "
                                   "share one namespace")
         with self._index_update() as index:
             if key is not None:
@@ -994,17 +991,29 @@ class DatManager:
         _record(key if key is not None else sha256, sha256)
         return sha256
 
+    def load_artifact(self, name: Union[str, Path], *,
+                      verify: Optional[bool] = None) -> Any:
+        """The artifact `name` (a name, an `art:` name or a URN) names, handed to
+        the type recorded at its save -- its payload's `Path` with none.  A name
+        that is a dat's is `KeyError`; `load` takes either."""
+        kind, where = self._locate(name)
+        if kind != "art":
+            raise KeyError(f"load_artifact: no artifact {str(name)!r}"
+                           + ("; it is a dat -- load it with load()"
+                              if self._dat_exists(where) else ""))
+        return self._load_artifact(str(name), where, verify)
+
     def _check_name_free(self, key: str, index: Dict[str, Dict[str, str]]) -> None:
         """A name is held once: not by another artifact, not as a folder of
         other artifacts, not inside one."""
         art = self._art_folder
         folder = os.path.normpath(os.path.join(art, key))
         if key in index or os.path.exists(folder):
-            raise FileExistsError(f"save: artifact {key!r} exists")
+            raise FileExistsError(f"save_artifact: artifact {key!r} exists")
         parts = key.split("/")
         for cut in range(1, len(parts)):
             if os.path.exists(os.path.join(art, *parts[:cut], ART_FILE)):
-                raise ValueError(f"save: {key!r} lies inside the artifact "
+                raise ValueError(f"save_artifact: {key!r} lies inside the artifact "
                                  f"{'/'.join(parts[:cut])!r}")
 
     def _add_name(self, rel: str, sha256: str, size: int, type_name: Optional[str],
@@ -1014,10 +1023,10 @@ class DatManager:
         sidecar_path = Path(self._art_folder, rel, ART_FILE)
         sidecar = yaml.safe_load(sidecar_path.read_text()) or {}
         if sidecar.get("size") is not None and sidecar["size"] != size:
-            raise ValueError(f"save: {sha256} is stored at {rel!r} with "
+            raise ValueError(f"save_artifact: {sha256} is stored at {rel!r} with "
                              f"{sidecar['size']} bytes, and this source has {size}")
         if type_name is not None and sidecar.get("type") != type_name:
-            raise ValueError(f"save: these bytes are stored at {rel!r} with type "
+            raise ValueError(f"save_artifact: these bytes are stored at {rel!r} with type "
                              f"{sidecar.get('type')!r}, not {type_name!r}")
         if key is not None:
             sidecar["names"] = _sidecar_names(sidecar) + [key]
@@ -1033,22 +1042,22 @@ class DatManager:
             try:
                 obj = self.do.load(type)
             except (ImportError, AttributeError, KeyError) as e:
-                raise ValueError(f"save: type {type!r} does not resolve through "
+                raise ValueError(f"save_artifact: type {type!r} does not resolve through "
                                  f"do.load: {e}") from None
             if not callable(obj):
-                raise TypeError(f"save: type {type!r} is {obj!r}, not callable")
+                raise TypeError(f"save_artifact: type {type!r} is {obj!r}, not callable")
             return type
         if not callable(type):
-            raise TypeError(f"save: type is a class, a callable or its dotted name, "
+            raise TypeError(f"save_artifact: type is a class, a callable or its dotted name, "
                             f"got {type!r}")
         hint = ("; mount it -- do.mount(value=..., at='some.name') -- and pass "
                 "type='some.name'")
         try:
             dotted = self.do.name_of(type)
         except ValueError:
-            raise TypeError(f"save: {type!r} has no importable dotted name{hint}") from None
+            raise TypeError(f"save_artifact: {type!r} has no importable dotted name{hint}") from None
         if self.do.load(dotted, default=None) is not type:
-            raise TypeError(f"save: {type!r} does not load back as {dotted!r}{hint}")
+            raise TypeError(f"save_artifact: {type!r} does not load back as {dotted!r}{hint}")
         return dotted
 
     def _load_artifact(self, name: str, folder: str, verify: Optional[bool]) -> Any:
@@ -1117,7 +1126,7 @@ class DatManager:
 
     @contextlib.contextmanager
     def recording(self, dat: "Dat") -> Iterator[None]:
-        """Every `load` (and `save`) inside the block lands in `dat.dependencies`.
+        """Every `load` (and `save_artifact`) inside the block lands in `dat.dependencies`.
         `execute` runs its function inside one.  Blocks nest: when an inner block
         ends, its dat becomes one entry of the outer one."""
         with self._capture(dat) as outer:
@@ -1548,6 +1557,19 @@ class Dat(metaclass=_DatMeta):
 
     def _standing(self) -> str:
         return self._written
+
+    @staticmethod
+    def save_artifact(source: Union[str, Path], *, type: Union[None, str, Callable] = None,
+                      name: Optional[str] = None, link: bool = False) -> str:
+        """`Dat.manager.save_artifact(...)`: store a file or folder as an
+        artifact of `type` under `name`; returns its `sha256:` URN."""
+        return Dat.manager.save_artifact(source, type=type, name=name, link=link)
+
+    @staticmethod
+    def load_artifact(name: Union[str, Path], *, verify: Optional[bool] = None) -> Any:
+        """`Dat.manager.load_artifact(name)`: an artifact by name or URN, built
+        by its recorded type (a `Path` with none)."""
+        return Dat.manager.load_artifact(name, verify=verify)
 
     def _demands_referenceable(self) -> bool:
         return Dat.get(self._spec, DAT_STANDING, None) == REFERENCEABLE
