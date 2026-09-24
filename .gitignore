@@ -15,3 +15,5 @@ site/sitemap.xml.gz
 *.egg-info/
 /tests/test_sync_folder/(*
 /build/
+# the test world's artifact store and index (2.14)
+/tests/art/

@@ -54,7 +54,7 @@ do("catalog.experiment", 3, epochs=200)
 The consequence is the point: **the spec is the record.** Nothing about the
 arguments goes into `_result_.yaml`, and no sealed dat is ever rewritten by a
 run. Handing a dat arguments forks a new one and leaves the original
-byte-identical; `do(dat)` with none re-runs it in place while it is unsealed.
+byte-identical; `do(dat)` with none re-runs it in place while it is open.
 
 ## The seal
 
@@ -69,22 +69,30 @@ dependency `$MANUAL`: well defined, but what it was made from is not fully
 recorded. At the seal the dependency map keeps its roots only: an entry that
 another entry already depends on is dropped.
 
-`Dat.status(name)` says where a name stands, read from its files without
-building it: `ABSENT`, `OPEN` (loads, may still change), `SEALED` (frozen) or
-`ROLLING`.
+## Standing
 
-**Rolling dats.** `dat.rolling: true` in a spec declares a dat that is saved
-again at will — a game whose annotations get corrected — and never freezes.
-The spec never changes, so neither does the declaration.
+Every save stamps **`dat.standing`**, how far the dat can be relied on:
 
-**Referenceable.** The seal stamps `dat.referenceable`: true when the dat is
-not rolling, a run's code was clean and committed (a hand seal has none to
-check), and every dependency was referenceable. Inside a run, loading a
-rolling dat or an unreferenceable one makes the run unreferenceable; loading
-an open dat records it as `unsealed` and keeps the run open for good — its
-`save()` writes, never seals. `execute(dat, referenceable=True)` turns each of
-these into an error at the load, and refuses dirty code up front. Outside a
-run anything loads.
+| Standing | Means |
+|----------|-------|
+| `rolling` | saved again at will, never frozen — a game whose annotations get corrected |
+| `open` | a checkpoint, or a run that read an open dat: may still change |
+| `sealed` | frozen |
+| `referenceable` | frozen, made by clean committed code from referenceable inputs only |
+
+The seal earns the least standing of its inputs — a rolling input counts as
+sealed, an artifact and a hand seal's `$MANUAL` as referenceable — capped at
+`sealed` when a run's code was dirty or outside a git checkout. An input that
+was open is recorded `unsealed` and keeps the run open for good: its `save()`
+writes, never seals. `Dat.standing(name)` reads it from the files without
+building anything; `None` means nothing is stored under the name.
+
+In a spec, `dat.standing` is a demand. `rolling` declares a dat that never
+freezes (the spec never changes, so neither does the declaration).
+`referenceable` makes anything less an error: a load of an input that is not
+referenceable raises there, dirty code raises before the run starts, and a
+seal that would earn less raises instead of writing. With no `dat.standing`
+the dat takes what it earns. Outside a run anything loads.
 
 **The verifying load.** `load(name, verify=True)` (or `verify: true` in
 `.datconfig.yaml`, or `DatManager(..., verify=True)`) re-hashes what it hands
@@ -199,31 +207,54 @@ depend on where the process happened to launch.
 
 ## Artifacts
 
-An **artifact** is a file or folder saved into the manager's artifact
-folder under a name `art:<kind>/<rest>` — write-once, hashed, with a
-`_art_.yaml` sidecar beside it (`kind`, `name`, `payload`, `sha256`,
-`saved_at`). A file is hashed as its bytes, a folder as the sorted
-`relpath\0sha256` lines of its files.
+An **artifact** is a file or folder stored in the manager's artifact folder —
+hashed, write-once, with a `_art_.yaml` sidecar beside it (`type`, `names`,
+`payload`, `sha256`, `size`, `saved_at`). A file is hashed as its bytes, a
+folder as the sorted `relpath\0sha256` lines of its files.
 
 ```python
-m.register_artifact("video", VideoClip)   # VideoClip(path)
-m.save("/tmp/G1.mp4", "art:video/G1")     # -> "sha256:9f3c..."
-clip = m.load("art:video/G1")             # a VideoClip
-m.load("art:assets/lock")                 # unregistered: a Path
+# returns the URN, "sha256:9f3c..."
+urn = m.save("/tmp/G1.mp4", VideoClip, "games/G1/video")
+clip = m.load("games/G1/video")    # VideoClip(path)
+clip = m.load(urn)                 # the same artifact, by its URN
+# no type, no name: it loads as a Path, by its URN only
+m.save("/tmp/lock.json")
 ```
 
-`save` copies a file to `<art_folder>/<kind>/<rest>/<basename>` and a
-folder's contents to `<art_folder>/<kind>/<rest>/`; an existing name is a
-`FileExistsError` — there is no overwrite and no increment. `load_path(name)` returns that path — a dat's folder,
-an artifact's payload — and builds nothing, recorded like a `load`. `load` of an
-`art:` name hands the payload's path to the factory registered for its
-kind (a class whose constructor takes the path, else a lambda) and returns
-a `Path` when none is. The artifact folder is `art_folder:` in
-`.datconfig.yaml`, else `art/` beside the config file — a sibling of `data/`.
-The artifact folder and the dat folders never nest (that is a `ValueError`),
-so an artifact name and a dat name can never collide. A `DatManager` built
-by hand with no `art_folder` holds no artifacts: `save` and `art:` loads
-raise `RuntimeError`.
+`save(source, type=None, name=None, *, link=False)` returns the artifact's
+URN, `sha256:<hex>`. **The type** is what `load` hands the payload's path
+to: a class or callable, recorded by its dotted name, or that name as a
+string — anything `do.load` resolves. A factory that cannot be imported (a
+lambda, a closure) is mounted once, `m.do.mount(value=fn, at="video.clip")`,
+and named `type="video.clip"`. With no type, `load` returns the `Path`.
+Nothing is registered. **The name** is any relative path, and carries no
+type; changing what a thing is never means renaming it. A name is held once
+— an existing one is `FileExistsError`, with no overwrite and no increment.
+With no name the artifact answers to its URN only.
+
+A file lands at `<art_folder>/<name>/<basename>`, a folder's contents at
+`<art_folder>/<name>/` (`sha256/<hex>/` with no name). **Bytes already stored
+are not stored again**: saving them under a new name adds that name as a
+second key and copies nothing; the same hash with a different byte size is
+refused. `load_path(name)` returns the payload's path — or a dat's folder —
+and builds nothing, recorded like a `load`.
+
+**One namespace, one index.** Dats and artifacts share one namespace: a name
+held by one is refused to the other, and a name found in both is a
+`ValueError`. `load`, `load_path`, `exists` and `standing` take a name or a
+URN. The store keeps one index file, `_index_.yaml` in the artifact folder
+(`index:` in `.datconfig.yaml` moves it), keyed by every artifact name and
+every `sha256:` URN — an artifact's, and each saved dat's current hash. It is
+written through a lock and a rename, so it is never torn; `m.reindex()`
+rebuilds it from the folders. A named artifact's folder is found without it,
+so a store written before 2.14 loads by name as it stands, and `art:` names
+written then still load, the prefix stripped.
+
+The artifact folder is `art_folder:` in `.datconfig.yaml`, else `art/`
+beside the config file — a sibling of `data/`. The artifact folder and the
+dat folders never nest (that is a `ValueError`). A `DatManager` built by hand
+with no `art_folder` holds no artifacts: `save` raises `RuntimeError`, and
+its index lives in the first dat folder.
 
 ## Dependencies by capture
 
@@ -231,8 +262,8 @@ Every load goes through a manager, so a run's inputs are whatever it
 loaded. `execute` runs the function inside `m.recording(dat)`, and every
 `load` (and `save`) inside that block lands in `dat.dependencies` in
 `_result_.yaml`, name to hash. A dat's hash is its `dat.sha256`, the
-content hash its seal stamps over the whole folder — `unsealed` for a dat not
-yet sealed — and `dat.verify()` tells you whether an input is still exactly
+content hash its seal stamps over the whole folder — `unsealed` for a dat
+still open — and `dat.verify()` tells you whether an input is still exactly
 what the run saw. A nested `do()` records its own loads, and
 the outer run records the inner dat as one entry, by its final hash. A load that reaches
 around the manager is not a dependency unless the run says so:
@@ -242,7 +273,7 @@ m.record_dependency("https://example.com/weights", "sha256:...")
 
 # the same capture outside a run -- a builder gathering a dat's inputs
 with m.recording(dat):
-    cfg = m.load("art:assets/lock")      # recorded in dat
+    cfg = m.load("assets/lock")          # recorded in dat
 ```
 
 Recording is per thread and per task (a `contextvars` stack), so two runs
@@ -315,6 +346,13 @@ dat_folders: data
 # (default: art)
 art_folder: art
 
+# the store's index of names and sha256: URNs
+# (default: _index_.yaml in the artifact folder)
+index: art/_index_.yaml
+
+# re-hash every load against its stored sha256 (default: false)
+verify: false
+
 # optional: the DatManager subclass to build, dotted; its own
 # CONFIG_KEYS are allowed here and reach its constructor
 manager: mylab.store.Store
@@ -324,7 +362,7 @@ manager: mylab.store.Store
 run: .venv/bin/python -m mypkg.main
 ```
 
-Those four keys are the whole file, plus any key the named `manager` class lists
+Those six keys are the whole file, plus any key the named `manager` class lists
 in its `CONFIG_KEYS`; an empty file is a complete config.
 An unrecognized key is an error naming the file, the key and the known keys —
 a typo is never silently ignored. The config's folder is the project's import

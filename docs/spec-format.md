@@ -231,7 +231,8 @@ checkout holding the source of the function `dat.do` names — and what it
 used. Code outside a checkout records no `code`; a detached HEAD records
 `branch: null`. `dependencies` maps every dat and artifact the run loaded
 through its manager to its hash: an artifact's `sha256`, a dat's
-`dat.sha256`, or `unsealed` for a dat still open. A dat's key is its name
+`dat.sha256`, or `unsealed` for a dat still open. A dat's key is its name, an
+artifact's its name or, with none, its URN
 under its dat folder (its absolute path outside every folder); a run that
 loaded nothing records `{}`. A dat sealed outside its own run records
 `$MANUAL: manual`. At the seal an entry that another entry already depends on is
@@ -239,17 +240,20 @@ dropped.
 
 `_result_.yaml` is written only by `dat.save()`: `create` writes no results
 file, and a run leaves its record in memory until the dat is saved. A dat is
-sealed when the file carries `dat.run_time` (a run's own save, finished) or
-`$MANUAL` (a hand save), and no `unsealed` entry; the seal adds
-`dat.referenceable: true|false`. `dat.rolling: true` belongs in the spec, not
-here. `dat.sha256` is the hash of the version saved, stamped by every save: the sha256 of sorted `relpath\0sha256` lines
+stamps `dat.standing` at every save — `rolling`, `open`, `sealed` or
+`referenceable`, what that save earned (see [Standing](concepts.md#standing)).
+In the spec, `dat.standing` is a demand, `rolling` or `referenceable`.
+`dat.sha256` is the hash of the version saved, stamped by every save: the sha256 of sorted `relpath\0sha256` lines
 over every file in the folder, `_result_.yaml` included. That one file is
 hashed as its sorted-key YAML dump with `dat.sha256` set to `excluded`, so
 the hash can live inside the file it covers. `dat.verify()` recomputes it the
 same way and is `True` while the folder is exactly as it was last saved —
 a changed data file, spec or result makes it `False`, reformatting the YAML
-does not. A dat saved before 2.9 carries no hash; with no `dat.run_time` it is
-open until saved, and without `dat.referenceable` it is not referenceable.
+does not. A file written before 2.14 carries no `dat.standing` and reads by
+the 2.13 rule: sealed when it has `dat.run_time` or `$MANUAL` and no
+`unsealed` entry, referenceable when it says `dat.referenceable: true`,
+rolling when its spec says `dat.rolling: true`, else open. A dat saved before
+2.9 carries no hash and is open until saved.
 
 ```yaml
 dat:
@@ -261,7 +265,8 @@ dat:
     dirty: false
   dependencies:
     games/G1: "sha256:4b1e…"
-    art:video/G1: "sha256:9f3c…"
+    games/G1/video: "sha256:9f3c…"
+  standing: referenceable
   sha256: "sha256:7c0a…"
 accuracy: 0.95
 ```

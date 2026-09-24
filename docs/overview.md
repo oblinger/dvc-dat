@@ -72,16 +72,16 @@ given.
 | `Dat.load(NAME) -> Dat` | Load a dat by name or path |
 | `Dat.validate_spec(SPEC) -> SPEC` | Classmethod hook, run on create and load |
 | `Dat.manager` | The default world; built on first use by `DatManager.load_dat_config()`, replaced by assignment |
-| `DatManager(dat_folders=[...], do=None)` | A world on a list of folders, keyword-only; nothing read from disk |
+| `DatManager(dat_folders=[...], art_folder=None, index=None, do=None, verify=False)` | A world on a list of folders, keyword-only; nothing read from disk |
 | `DatManager.load_dat_config(START) -> DatManager` | A new manager from the `.datconfig.yaml` above `START` |
-| `Dat.manager.exists(NAME) -> bool` | True iff the named dat (or `art:` artifact) exists |
-| `m.save(SOURCE, "art:KIND/REST", link=False) -> str` | Copy (or hard-link) a file or folder in as an artifact, write-once; returns `"sha256:<hex>"` |
-| `m.load("art:KIND/REST")` | The artifact, through its kind's factory; a `Path` when none is registered |
+| `Dat.manager.exists(NAME) -> bool` | True iff a dat or artifact is stored under the name or URN |
+| `m.save(SOURCE, type=None, name=None, link=False) -> str` | Store a file or folder as an artifact; returns its URN `"sha256:<hex>"`; stored bytes get a second name, nothing copied |
+| `m.load(NAME_OR_URN)` | A dat, or an artifact built by its recorded `type` (a `Path` with none) |
 | `m.load(NAME, verify=True)` | Re-hash what is handed back; `ValueError` on a mismatch |
-| `m.status(NAME)` / `Dat.status(NAME)` | `Dat.Status.ABSENT`, `OPEN`, `SEALED` or `ROLLING` |
+| `m.standing(NAME)` / `Dat.standing(NAME)` | `rolling`, `open`, `sealed`, `referenceable`; `None` when absent |
+| `m.reindex() -> int` | Rebuild `_index_.yaml` from the folders |
 | `m.roots(DEPS)` / `DatManager.code_of(FN)` | The seal's trim; a run's `dat.code` |
 | `m.load_path(NAME) -> Path` | Where `load` finds it — a dat's folder, an artifact's payload; nothing built, still recorded |
-| `m.register_artifact(KIND, FACTORY)` | `FACTORY(path)` builds what `load` returns for that kind |
 | `m.recording(DAT)` | Context manager: every `load` inside lands in `DAT`'s `dat.dependencies` |
 | `m.record_dependency(NAME, sha256=None)` | An entry by hand; `RuntimeError` when nothing is recording |
 | `Dat.manager.execute(DAT)` | Run a dat; every run in a world goes through it |
@@ -89,7 +89,7 @@ given.
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |
 | `.get_path_name() -> str` | Its name, relative to the dat folder |
-| `.save()` | Write `_result_.yaml`, stamp `dat.sha256`; the save that counts seals |
+| `.save()` | Write `_result_.yaml`, stamp `dat.sha256` and `dat.standing`; the save that counts seals |
 | `.verify() -> bool` | True while the folder still hashes to its `dat.sha256` |
 | `.delete()` | Remove the folder |
 | `.copy(NAME)` / `.move(NAME)` | Copy or move the dat |
@@ -172,6 +172,10 @@ Like git, dvc-dat walks up from the working directory looking for
 dat_folders: data
 # beside the dat folder, never inside it (default: art)
 art_folder: art
+# optional: the store's index (default: _index_.yaml in art_folder)
+# index: art/_index_.yaml
+# optional: re-hash every load (default: false)
+# verify: false
 # optional: the DatManager subclass to build, and its own keys
 # manager: mylab.store.Store
 # what a copy of bin/dat execs

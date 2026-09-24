@@ -6,6 +6,39 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.14.0 — 2026-09-24
+
+**The store: one index, `dat.standing`, type at save** (Dan, T023 and F026
+Q1). Breaking for a line public only hours, so a minor.
+
+- **`dat.standing`** replaces `dat.rolling`, `dat.referenceable`,
+  `Dat.status` and `Dat.Status`: one key, `rolling | open | sealed |
+  referenceable`, stamped by every save. A seal earns the least of its
+  inputs (rolling counts as sealed), capped at sealed by dirty code. In a
+  spec it is a demand: `rolling`, or `referenceable`, which replaces
+  **`execute(dat, referenceable=True)`** (gone). `Dat.standing(name)` /
+  `m.standing(name)` reads it from the files, `None` when absent. Files
+  written before 2.14 read by the 2.13 rule.
+- **`save(source, type=None, name=None, *, link=False)`**: `type` is a class
+  or callable recorded as its dotted name, or that name as a string;
+  `load` resolves it through `do.load` and calls it with the path.
+  **`register_artifact` is gone** — mount a factory that cannot be
+  imported and name it. The name is any relative path and carries no type;
+  with none the artifact answers to its URN only. `save` returns the URN.
+  The 2.13 call `save(path, "art:…")` is a `TypeError` saying so.
+- **Dedupe**: stored bytes saved under a new name get that name as a second
+  key, copying nothing; an equal hash with a different size is refused.
+- **One index**, `_index_.yaml` in the artifact folder (`index:` config key,
+  `DatManager(index=)`), keyed by every artifact name and every `sha256:`
+  URN, dats included; locked and written by rename; `m.reindex()` rebuilds
+  it. `load`, `load_path`, `exists`, `standing` take a name or a URN.
+- **One namespace**: a dat name and an artifact name never coincide; a
+  name both hold on disk is `ValueError`. The `art:<kind>/` rule is gone;
+  `art:` names written before still load, the prefix stripped, and a
+  dependency on one counts as an artifact.
+- A world with the default config now writes `art/_index_.yaml` beside
+  `data/` on its first save; ignore it where `data/` is ignored.
+
 ## 2.13.0 — 2026-09-24
 
 **Provenance v2** (Dan, SVP F155 Q1 and Q4, reconciled with T021). Breaking
