@@ -62,9 +62,9 @@ A run saves nothing by itself. **`dat.save()` seals the dat**: it writes
 `_result_.yaml` and stamps `dat.sha256`, the hash of the whole folder, and it
 works once — a second `save()` and any later run of that dat are refused.
 Called inside the dat's own run, the seal waits until the run returns, so the
-record is whole. A dat saved without ever being run — a data folder filled by
-hand — gets the dependency `$MANUAL`: it is well defined, but what it was made
-from is not recorded. A run that loads a dat not yet sealed records it as
+record is whole. A dat saved anywhere else — a data folder filled by hand, or
+a run's results saved after it returned — gets the dependency `$MANUAL`: it is
+well defined, but what it was made from is not fully recorded. A run that loads a dat not yet sealed records it as
 `unsealed`, and that dat can then never be sealed: its `save()` writes the
 results with no hash, and may be called again. At the seal the dependency
 map keeps its roots only: an entry that another entry already depends on is

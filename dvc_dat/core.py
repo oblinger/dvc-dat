@@ -842,7 +842,7 @@ class DatManager:
         if (code := _code_of(fn)) is not None:
             Dat.set(dat.get_results(), DAT_CODE, code)
         if dat._save_asked:
-            dat.save()
+            dat._seal(manual=False)
         if outer is not None:           # recorded by its final hash, if it has one
             _record(dat.get_path_name(), dat._sha256() or DEP_UNSEALED)
         return result
@@ -1127,8 +1127,9 @@ class Dat(metaclass=_DatMeta):
         refused.
 
         Called inside the dat's own run, the seal waits for the run to end, so
-        the record is whole.  A dat never run gets the dependency `$MANUAL`: it
-        was made by hand, and its dependencies are incomplete.  A dependency
+        the record is whole.  Called anywhere else, the dat gets the dependency
+        `$MANUAL`: it was made or finished by hand, and its dependencies are
+        incomplete.  A dependency
         that was itself unsealed when loaded taints the dat: it is written but
         never sealed, and may be saved again.  At the seal, a dependency that is
         already a dependency of another entry is dropped, so the map holds the
@@ -1137,10 +1138,13 @@ class Dat(metaclass=_DatMeta):
         if self._running:
             self._save_asked = True
             return
+        self._seal(manual=True)
+
+    def _seal(self, *, manual: bool) -> None:
         if self.sealed:
             raise RuntimeError(f"save: {self!r} is sealed; a dat is saved once")
         deps = Dat.get(self._result, DAT_DEPENDENCIES, None)
-        if Dat.get(self._result, DAT_RUN_AT, None) is None:
+        if manual:
             deps = dict(deps or {})
             deps.setdefault(DEP_MANUAL, "manual")
         if deps:

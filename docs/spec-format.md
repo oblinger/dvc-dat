@@ -233,8 +233,8 @@ used. Code outside a checkout records no `code`; a detached HEAD records
 through its manager to its hash: an artifact's `sha256`, a dat's
 `dat.sha256`, or `unsealed` for a dat not yet sealed. A dat's key is its name
 under its dat folder (its absolute path outside every folder); a run that
-loaded nothing records `{}`. A dat sealed without a run records `$MANUAL:
-manual`. At the seal an entry that another entry already depends on is
+loaded nothing records `{}`. A dat sealed outside its own run records
+`$MANUAL: manual`. At the seal an entry that another entry already depends on is
 dropped.
 
 `_result_.yaml` is written only by `dat.save()`, which seals the dat once:

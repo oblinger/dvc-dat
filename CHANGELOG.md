@@ -19,8 +19,9 @@ only hours, so a minor.
   run seals when the run returns, with the whole record. `dat.sealed` says
   which.
 - **`create` writes no `_result_.yaml`**; a created dat is unsealed.
-- **`$MANUAL`**: a dat sealed without ever being run gets the dependency
-  `$MANUAL: manual` — made by hand, its dependencies incomplete.
+- **`$MANUAL`**: a dat sealed anywhere but inside its own run gets the
+  dependency `$MANUAL: manual` — made or finished by hand, its dependencies
+  incomplete.
 - **`unsealed`**: loading a dat not yet sealed records it under that value,
   and the loading dat can then never be sealed: its `save()` writes the
   results with no hash and may be repeated.

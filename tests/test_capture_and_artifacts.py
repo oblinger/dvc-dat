@@ -274,8 +274,8 @@ class TestSeal:
         assert m.execute(dat) == "ran"
         assert not Path(dat.get_path(), RESULT_YAML).exists()
         assert dat.get_results()["dat"]["run_at"]           # recorded, in memory
-        dat.save()                                          # the caller seals it
-        assert dat.sealed and "$MANUAL" not in stored_results(dat)["dat"]["dependencies"]
+        dat.save()                                  # sealed outside the run: by hand
+        assert dat.sealed and stored_results(dat)["dat"]["dependencies"] == {"$MANUAL": "manual"}
 
     def test_a_save_inside_the_run_seals_when_it_ends(self, m):
         seen = {}
@@ -289,6 +289,7 @@ class TestSeal:
         assert seen["sealed_inside"] is False
         results = stored_results(dat)["dat"]
         assert results["run_time"] and results["sha256"] and dat.verify()
+        assert "$MANUAL" not in results["dependencies"]
 
     def test_an_unsealed_dat_runs_again_in_place(self, m):
         m.do.mount(value=lambda dat: "ran", at="plain")
