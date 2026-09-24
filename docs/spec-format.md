@@ -231,22 +231,25 @@ checkout holding the source of the function `dat.do` names — and what it
 used. Code outside a checkout records no `code`; a detached HEAD records
 `branch: null`. `dependencies` maps every dat and artifact the run loaded
 through its manager to its hash: an artifact's `sha256`, a dat's
-`dat.sha256`, or `unsealed` for a dat not yet sealed. A dat's key is its name
+`dat.sha256`, or `unsealed` for a dat still open. A dat's key is its name
 under its dat folder (its absolute path outside every folder); a run that
 loaded nothing records `{}`. A dat sealed outside its own run records
 `$MANUAL: manual`. At the seal an entry that another entry already depends on is
 dropped.
 
-`_result_.yaml` is written only by `dat.save()`, which seals the dat once:
-`create` writes no results file, and a run leaves its record in memory until
-the dat is saved. `dat.sha256` is the dat's content hash, stamped at the seal
-— absent when a dependency was `unsealed`: the sha256 of sorted `relpath\0sha256` lines
+`_result_.yaml` is written only by `dat.save()`: `create` writes no results
+file, and a run leaves its record in memory until the dat is saved. A dat is
+sealed when the file carries `dat.run_time` (a run's own save, finished) or
+`$MANUAL` (a hand save), and no `unsealed` entry; the seal adds
+`dat.referenceable: true|false`. `dat.rolling: true` belongs in the spec, not
+here. `dat.sha256` is the hash of the version saved, stamped by every save: the sha256 of sorted `relpath\0sha256` lines
 over every file in the folder, `_result_.yaml` included. That one file is
 hashed as its sorted-key YAML dump with `dat.sha256` set to `excluded`, so
 the hash can live inside the file it covers. `dat.verify()` recomputes it the
 same way and is `True` while the folder is exactly as it was last saved —
 a changed data file, spec or result makes it `False`, reformatting the YAML
-does not. A dat saved before 2.9 carries no hash: it is unsealed until saved.
+does not. A dat saved before 2.9 carries no hash; with no `dat.run_time` it is
+open until saved, and without `dat.referenceable` it is not referenceable.
 
 ```yaml
 dat:

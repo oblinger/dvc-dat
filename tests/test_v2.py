@@ -142,7 +142,7 @@ class TestBaseList:
         do.mount(at="v2_base_a", value={"dat": {}, "x": 1, "shared": "from_a"})
         do.mount(at="v2_base_b", value={"dat": {}, "y": 2, "shared": "from_b"})
 
-        spec = do._resolve_base({"dat": {"base": ["v2_base_a", "v2_base_b"]}, "z": 3})
+        spec = do.resolve({"dat": {"base": ["v2_base_a", "v2_base_b"]}, "z": 3})
         assert (spec["x"], spec["y"], spec["z"]) == (1, 2, 3)
         assert spec["shared"] == "from_b"      # the later entry wins
         assert "base" not in spec["dat"]
@@ -160,7 +160,7 @@ class TestBaseList:
 
     def test_a_falsy_override_still_overrides(self):
         do.mount(at="v2_base_truthy", value={"dat": {}, "flag": True, "count": 7})
-        spec = do._resolve_base({"dat": {"base": "v2_base_truthy"}, "flag": False, "count": 0})
+        spec = do.resolve({"dat": {"base": "v2_base_truthy"}, "flag": False, "count": 0})
         assert spec["flag"] is False and spec["count"] == 0
 
 

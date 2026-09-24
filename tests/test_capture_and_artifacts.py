@@ -190,10 +190,12 @@ class TestCapture:
         world.execute(dat)
         results = stored_results(dat)
         assert results["dat"]["dependencies"]["draft"] == "unsealed"
-        assert "sha256" not in results["dat"] and not dat.sealed
+        assert "referenceable" not in results["dat"]
+        assert world.status(dat) is Dat.Status.OPEN == world.status("run2")
         dat.get_results()["note"] = "again"
-        dat.save()                                    # still unsealed: saves again
-        assert stored_results(dat)["note"] == "again" and not dat.sealed
+        dat.save()                                    # still open: saves again
+        assert stored_results(dat)["note"] == "again"
+        assert world.status("run2") is Dat.Status.OPEN
 
     def test_recording_by_hand(self, world):
         dat = world.create({"dat": {}}, path="builder")
@@ -252,9 +254,11 @@ class TestCapture:
 class TestSeal:
     def test_create_does_not_seal_and_the_first_save_does(self, m):
         dat = m.create({"dat": {}, "k": 1}, path="born")
-        assert not dat.sealed and not Path(dat.get_path(), RESULT_YAML).exists()
+        assert m.status("born") is Dat.Status.OPEN
+        assert not Path(dat.get_path(), RESULT_YAML).exists()
         dat.save()
-        assert dat.sealed and dat.get_results()["dat"]["sha256"].startswith("sha256:")
+        assert m.status("born") is Dat.Status.SEALED
+        assert dat.get_results()["dat"]["sha256"].startswith("sha256:")
         assert dat.verify()
 
     def test_a_second_save_is_refused(self, m):
@@ -275,18 +279,20 @@ class TestSeal:
         assert not Path(dat.get_path(), RESULT_YAML).exists()
         assert dat.get_results()["dat"]["run_at"]           # recorded, in memory
         dat.save()                                  # sealed outside the run: by hand
-        assert dat.sealed and stored_results(dat)["dat"]["dependencies"] == {"$MANUAL": "manual"}
+        assert m.status(dat) is Dat.Status.SEALED
+        assert stored_results(dat)["dat"]["dependencies"] == {"$MANUAL": "manual"}
 
     def test_a_save_inside_the_run_seals_when_it_ends(self, m):
         seen = {}
 
         def fn(dat):
             dat.save()
-            seen["sealed_inside"] = dat.sealed
+            seen["inside"] = m.status("inside")
+            seen["checkpoint"] = stored_results(dat)["dat"]["sha256"]
         m.do.mount(value=fn, at="saves")
         dat = m.create({"dat": {"do": "saves"}}, path="inside")
         m.execute(dat)
-        assert seen["sealed_inside"] is False
+        assert seen["inside"] is Dat.Status.OPEN and seen["checkpoint"]
         results = stored_results(dat)["dat"]
         assert results["run_time"] and results["sha256"] and dat.verify()
         assert "$MANUAL" not in results["dependencies"]
@@ -316,6 +322,121 @@ class TestSeal:
             m.load("mid")
         top.save()
         assert stored_results(top)["dat"]["dependencies"] == {"mid": mid._sha256()}
+
+
+class TestRolling:
+    def test_a_rolling_dat_saves_again_and_never_freezes(self, m):
+        dat = m.create({"dat": {"rolling": True}}, path="G1")
+        assert m.status("G1") is Dat.Status.ROLLING
+        dat.save()
+        first = stored_results(dat)["dat"]["sha256"]
+        Path(dat.get_path(), "labels.txt").write_text("fixed")
+        dat.save()                                     # rewritten: allowed
+        assert stored_results(dat)["dat"]["sha256"] != first
+        assert stored_results(dat)["dat"]["referenceable"] is False
+        assert m.status("G1") is Dat.Status.ROLLING
+
+    def test_a_rolling_dat_runs_again(self, m):
+        m.do.mount(value=lambda dat: dat.save(), at="saves")
+        dat = m.create({"dat": {"do": "saves", "rolling": True}}, path="roll")
+        m.execute(dat)
+        m.execute(dat)
+        assert m.status("roll") is Dat.Status.ROLLING
+
+
+class TestReferenceable:
+    @pytest.fixture
+    def w(self, m):
+        m.do.mount(value=lambda dat, src: (dat.manager.load(src), dat.save()), at="reads")
+        base = m.create({"dat": {}}, path="base")
+        base.save()                                    # hand-sealed: referenceable
+        m.create({"dat": {"rolling": True}}, path="roll").save()
+        return m
+
+    def test_a_hand_seal_is_referenceable(self, w):
+        assert stored_results(w.load("base"))["dat"]["referenceable"] is True
+
+    def test_a_rolling_input_makes_the_run_unreferenceable(self, w):
+        dat = w.create({"dat": {"do": "reads", "args": ["roll"]}}, path="r1")
+        w.execute(dat)
+        assert w.status("r1") is Dat.Status.SEALED
+        assert stored_results(dat)["dat"]["referenceable"] is False
+
+    def test_a_dirty_run_is_unreferenceable_and_a_clean_one_is_not(self, w, monkeypatch):
+        import dvc_dat.core as core
+        for dirty in (True, False):
+            monkeypatch.setattr(core, "_code_of", lambda fn, d=dirty: {
+                "branch": "main", "commit": "c", "dirty": d})
+            dat = w.create({"dat": {"do": "reads", "args": ["base"]}}, path=f"d{dirty}")
+            w.execute(dat)
+            assert stored_results(dat)["dat"]["referenceable"] is (not dirty)
+
+    def test_referenceable_true_fails_loudly_on_a_rolling_input(self, w, monkeypatch):
+        import dvc_dat.core as core
+        monkeypatch.setattr(core, "_code_of", lambda fn: {
+            "branch": "main", "commit": "c", "dirty": False})
+        dat = w.create({"dat": {"do": "reads", "args": ["roll"]}}, path="loud")
+        with pytest.raises(RuntimeError, match="'roll' is rolling"):
+            w.execute(dat, referenceable=True)
+
+    def test_referenceable_true_refuses_dirty_code(self, w, monkeypatch):
+        import dvc_dat.core as core
+        monkeypatch.setattr(core, "_code_of", lambda fn: {
+            "branch": "main", "commit": "c", "dirty": True})
+        dat = w.create({"dat": {"do": "reads", "args": ["base"]}}, path="dirty")
+        with pytest.raises(RuntimeError, match="dirty"):
+            w.execute(dat, referenceable=True)
+
+
+class TestStatus:
+    def test_every_value_read_from_disk(self, m, clip):
+        assert m.status("nope") is Dat.Status.ABSENT
+        m.create({"dat": {}}, path="o")
+        assert m.status("o") is Dat.Status.OPEN
+        assert m.status("art:video/G1") is Dat.Status.ABSENT
+        m.save(clip, "art:video/G1")
+        assert m.status("art:video/G1") is Dat.Status.SEALED
+
+    def test_dat_status_asks_the_default_world(self):
+        assert Dat.status("certainly/not/here") is Dat.Status.ABSENT
+
+
+class TestVerifyingLoad:
+    def test_a_changed_dat_is_refused_with_both_hashes(self, m):
+        dat = m.create({"dat": {}}, path="v")
+        dat.save()
+        m.load("v", verify=True)                       # intact: loads
+        Path(dat.get_path(), "extra.bin").write_bytes(b"x")
+        with pytest.raises(ValueError, match="hashes to sha256:.*not its stored sha256:"):
+            m.load("v", verify=True)
+        m.load("v")                                    # off by default
+
+    def test_the_manager_switch_and_artifacts(self, tmp_path, clip):
+        m = DatManager(dat_folders=[str(tmp_path / "dats")],
+                       art_folder=str(tmp_path / "art"), verify=True)
+        m.save(clip, "art:video/G1")
+        (tmp_path / "art" / "video" / "G1" / "G1.mp4").write_bytes(b"corrupt")
+        with pytest.raises(ValueError, match="art:video/G1"):
+            m.load_path("art:video/G1")
+
+
+class TestHeldAsks:
+    def test_roots_is_the_seal_trim(self, m):
+        m.create({"dat": {}}, path="a").save()
+        mid = m.create({"dat": {}}, path="b")
+        with m.recording(mid):
+            m.load("a")
+        mid.save()
+        assert list(m.roots({"a": "x", "b": "y"})) == ["b"]
+
+    def test_code_of(self):
+        code = DatManager.code_of(test_code_of)
+        assert code is None or set(code) == {"branch", "commit", "dirty"}
+
+    def test_link_hard_links_the_payload(self, m, clip, tmp_path):
+        m.save(clip, "art:video/G1", link=True)
+        stored = tmp_path / "art" / "video" / "G1" / "G1.mp4"
+        assert os.stat(stored).st_ino == os.stat(clip).st_ino
 
 
 class TestDatHash:
@@ -349,9 +470,9 @@ class TestDatHash:
         (old / "_spec_.yaml").write_text("dat: {kind: Dat}\n")
         (old / RESULT_YAML).write_text("accuracy: 0.5\n")    # no dat.sha256
         dat = m.load("old")
-        assert not dat.sealed and not dat.verify()
+        assert m.status("old") is Dat.Status.OPEN and not dat.verify()
         dat.save()                                          # sealed by hand, now
-        assert dat.sealed and dat.verify()
+        assert m.status("old") is Dat.Status.SEALED and dat.verify()
 
 
 
@@ -380,3 +501,7 @@ class TestLoadPath:
             m.load_path("nope")
         with pytest.raises(FileNotFoundError):
             m.load_path("art:video/nope")
+
+
+def test_code_of():
+    """A module-level function, so `code_of` has a source file to look up."""
