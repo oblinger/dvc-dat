@@ -89,7 +89,7 @@ def _merge_by_name(base: List[Dict], over: List[Dict]) -> List[Dict]:
 DAT_CONFIG_FILE = ".datconfig.yaml"
 DAT_CONFIG_OVERRIDE_FILE = ".datconfig.override.yaml"
 ENV_PREFIX = "DAT_"
-_CONFIG_KEYS = ("dat_folders", "art_folder", "manager", "verify", "run")    # `run`: `bin/dat` only
+_CONFIG_KEYS = ("dat_folders", "art_folder", "index", "manager", "verify", "run")  # `run`: `bin/dat` only
 _DEFAULT_DAT_FOLDER = "data"
 _DEFAULT_ART_FOLDER = "art"           # beside the dat folder, never inside it
 
@@ -167,12 +167,25 @@ DAT_DEPENDENCIES = "dat.dependencies"  # result: every dat and artifact the run 
 DAT_SHA256 = "dat.sha256"              # result: the dat's content hash, stamped by save()
 _HASH_PLACEHOLDER = "excluded"         # what dat.sha256 reads while the dat is hashed
 DEP_MANUAL = "$MANUAL"                 # dependency of a dat sealed without a run
-DEP_UNSEALED = "unsealed"              # the hash recorded for a dat not yet sealed
-DAT_ROLLING = "dat.rolling"            # spec: may be saved again after its seal
-DAT_REFERENCEABLE = "dat.referenceable"  # result: stamped at the seal
+DEP_UNSEALED = "unsealed"              # the hash recorded for a dat still open
+DAT_STANDING = "dat.standing"          # spec: a demand; results: what the last save earned
 
-ART_PREFIX = "art:"                    # an artifact's name: art:<kind>/<rest>
+# A dat's standing, a ladder of how far it can be relied on.  `rolling` is saved
+# again at will; `open` may still change; `sealed` is frozen; `referenceable` is
+# frozen and made from clean committed code out of referenceable inputs only.
+ROLLING, OPEN, SEALED, REFERENCEABLE = "rolling", "open", "sealed", "referenceable"
+STANDINGS = (ROLLING, OPEN, SEALED, REFERENCEABLE)
+_FROZEN = (SEALED, REFERENCEABLE)
+_RANK = {OPEN: 0, SEALED: 1, REFERENCEABLE: 2}   # as an input, rolling counts as sealed
+_SPEC_DEMANDS = (ROLLING, REFERENCEABLE)          # what a spec may ask for
+_LEGACY_ROLLING = "dat.rolling"                   # 2.13, read only
+_LEGACY_REFERENCEABLE = "dat.referenceable"       # 2.13, read only
+
+URN_PREFIX = "sha256:"                 # every stored thing answers to sha256:<hex>
+ART_PREFIX = "art:"                    # written before 2.14; stripped from a name
 ART_FILE = "_art_.yaml"                # an artifact's sidecar
+INDEX_FILE = "_index_.yaml"            # names and URNs of the store, one namespace
+_URN_FOLDER = "sha256"                 # where an unnamed artifact lives: sha256/<hex>/
 
 # The dats recording right now, innermost last: a stack of (manager, dat).
 _recording: "contextvars.ContextVar[Tuple[Tuple[DatManager, Dat], ...]]" = \
@@ -210,21 +223,63 @@ def _record(name: str, sha256: Optional[str]) -> None:
 
 def _record_dat(dat: "Dat") -> None:
     """Record `dat` in the running dat's dependencies -- by its hash, `unsealed`
-    while it is open -- and refuse it when that run demands referenceable
-    inputs and `dat` is not one."""
+    while it is open -- and refuse it when that dat demands `dat.standing:
+    referenceable` and `dat` is not."""
     stack = _recording.get()
     if not stack:
         return
-    status = dat._status()
+    standing = dat._standing()
     sha256 = dat._sha256()
     _record(dat.get_path_name(),
-            DEP_UNSEALED if status is Dat.Status.OPEN or sha256 is None else sha256)
+            DEP_UNSEALED if standing == OPEN or sha256 is None else sha256)
     runner = stack[-1][1]
-    if runner._demand_referenceable and not dat._referenceable():
-        why = {Dat.Status.OPEN: "is open, not sealed",
-               Dat.Status.ROLLING: "is rolling"}.get(status, "is not referenceable")
-        raise RuntimeError(f"{runner!r} runs referenceable=True, and "
-                           f"{dat.get_path_name()!r} {why}")
+    if runner._demands_referenceable() and standing != REFERENCEABLE:
+        raise RuntimeError(f"{runner!r} demands dat.standing: referenceable, and "
+                           f"{dat.get_path_name()!r} is {standing}")
+
+
+def _standing_of(spec: Dict[str, Any], result: Dict[str, Any]) -> str:
+    """A dat's standing from its spec and its results as written.  A file saved
+    before 2.14 carries none: open unless a run finished it or a hand saved it
+    and no input was open, then referenceable when 2.13 stamped it so."""
+    stamped = Dat.get(result, DAT_STANDING, None)
+    if stamped is not None:
+        return stamped
+    if (Dat.get(spec, DAT_STANDING, None) == ROLLING
+            or Dat.get(spec, _LEGACY_ROLLING, None) is True):
+        return ROLLING
+    deps = Dat.get(result, DAT_DEPENDENCIES, None) or {}
+    if DEP_UNSEALED in deps.values() or not (
+            Dat.get(result, DAT_RUN_TIME, None) is not None or DEP_MANUAL in deps):
+        return OPEN
+    return REFERENCEABLE if Dat.get(result, _LEGACY_REFERENCEABLE, None) is True else SEALED
+
+
+def _art_key(name: Union[str, Path]) -> str:
+    """A name as the store keys it: the `art:` prefix of a name written before
+    2.14 stripped."""
+    name = str(name)
+    return name[len(ART_PREFIX):] if name.startswith(ART_PREFIX) else name
+
+
+def _sidecar_names(sidecar: Dict[str, Any]) -> List[str]:
+    """Every name an artifact's sidecar gives it (a 2.13 sidecar holds one)."""
+    if "names" in sidecar:
+        return list(sidecar["names"] or [])
+    return [_art_key(sidecar["name"])] if sidecar.get("name") else []
+
+
+def _payload_size(path: Path) -> int:
+    """Bytes in a file, or in every file of a folder but its top-level sidecar."""
+    if not path.is_dir():
+        return path.stat().st_size
+    total = 0
+    for root, _, files in os.walk(path):
+        for file in files:
+            full = os.path.join(root, file)
+            if os.path.relpath(full, path) != ART_FILE:
+                total += os.path.getsize(full)
+    return total
 
 
 def _sha256_file(path: str) -> str:
@@ -429,17 +484,20 @@ class DatManager:
     _art_folder: Optional[str]
     _config_dir: Optional[str]
     _dat_cache: "weakref.WeakValueDictionary[str, Dat]"
-    _factories: Dict[str, Callable[[Path], Any]]
+    _index_file: str
 
     def __init__(self, *, dat_folders: List[str], art_folder: Optional[str] = None,
-                 do: Optional["Do"] = None, verify: bool = False):
+                 index: Optional[str] = None, do: Optional["Do"] = None,
+                 verify: bool = False):
         """A world on `dat_folders` -- searched in order by name, the first written
         to -- and `art_folder`, where artifacts live; with none, this world holds
         no artifacts.  The two never nest: an artifact folder inside a dat
         folder, or a dat folder inside it, is `ValueError`.  Nothing is read
         from disk.  `do` adopts an existing namespace with its mounts; adopting
         the default world's makes this the default world.  `verify` re-hashes
-        every load against its stored `sha256` (see `load`)."""
+        every load against its stored `sha256` (see `load`).  `index` is the
+        file keying every name and `sha256:` URN of the store, default
+        `_index_.yaml` in the artifact folder, else in the first dat folder."""
         from .do import Do, _DefaultDo
         from . import dat_tools
 
@@ -458,7 +516,9 @@ class DatManager:
                         "them apart (e.g. data/ and art/ side by side)")
         self._config_dir = None
         self._dat_cache = weakref.WeakValueDictionary()
-        self._factories = {}
+        self._index_file = os.path.realpath(str(index)) if index is not None else \
+            os.path.join(self._art_folder or self._dat_folders[0], INDEX_FILE)
+        self._index_cache: Optional[Tuple[Tuple[int, int], Dict[str, Dict[str, str]]]] = None
         if not isinstance(verify, bool):
             raise TypeError(f"DatManager: verify is True or False, got {verify!r}")
         self._verify = verify
@@ -485,7 +545,8 @@ class DatManager:
         `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment.  Relative folders
         resolve against the file's folder, which goes first on `sys.path`; with
         no file they resolve against `start`.  `art_folder` defaults to `art/`
-        beside the file, a sibling of `data/`.  An unknown key is `ValueError`.
+        beside the file, a sibling of `data/`; `index:` moves the store's index
+        file.  An unknown key is `ValueError`.
         `do` as in the constructor.
 
         A `manager:` key names the class to build, dotted (`mylab.store.Store`):
@@ -532,9 +593,14 @@ class DatManager:
         art_folder = values.get("art_folder", _DEFAULT_ART_FOLDER)
         if not (isinstance(art_folder, str) and art_folder):
             raise ValueError(f"{config_path}: art_folder is a folder, got {art_folder!r}")
+        extra_values = {k: values[k] for k in extra if k in values}
+        if (index := values.get("index")) is not None:
+            if not (isinstance(index, str) and index):
+                raise ValueError(f"{config_path}: index is a file, got {index!r}")
+            extra_values["index"] = os.path.join(root, index)
         manager = klass(dat_folders=[os.path.join(root, f) for f in folders],
                         art_folder=os.path.join(root, art_folder), do=do, verify=verify,
-                        **{k: values[k] for k in extra if k in values})
+                        **extra_values)
         manager._config_dir = root
         return manager
 
@@ -583,6 +649,9 @@ class DatManager:
         spec = self.expand_spec(spec, names)
         if _within(os.path.realpath(path), self._dat_folders[0]):
             Dat.set(spec, DAT_NAME, self._get_path_name(path))
+            if self._artifact_folder(self._get_path_name(path)) is not None:
+                raise FileExistsError(f"Dat.create: {self._get_path_name(path)!r} is an "
+                                      "artifact's name; dats and artifacts share one namespace")
         os.makedirs(path, exist_ok=True)
         logger.info("Creating Dat %s under path: <%s>", dat_class, path)
         try:
@@ -617,8 +686,11 @@ class DatManager:
         cache_after_load: bool = True,
         verify: Optional[bool] = None,
     ) -> Any:
-        """A dat, as the class its `dat.kind` names -- or an `art:<kind>/<rest>`
-        artifact, through its kind's factory (a `Path` when none is registered).
+        """What `name` names: a dat, as the class its `dat.kind` names, or an
+        artifact, through the type recorded at its save (its payload's `Path`
+        when it has none).  `name` may be a dat's name, an artifact's, or the
+        `sha256:<hex>` URN of either; a name held by both a dat and an
+        artifact is `ValueError`.
 
         A dat is searched as an absolute path, in the do-system's mounts, then in
         each dat folder.  Inside a `recording`, the load lands in that dat's
@@ -627,9 +699,11 @@ class DatManager:
         `ValueError` naming both hashes when it differs from the stored one; a
         dat with no hash has nothing to check.
         """
-        if str(name).startswith(ART_PREFIX):
-            return self._load_artifact(str(name), verify=verify)
-        dat = self._load(name, cache_after_load=cache_after_load)
+        kind, where = self._locate(name)
+        if kind == "art":
+            return self._load_artifact(str(name), where, verify)
+        dat = self._load(where, cache_after_load=cache_after_load)
+        self._check_urn(name, dat)
         self._check(dat, verify)
         _record_dat(dat)
         return dat
@@ -686,92 +760,315 @@ class DatManager:
 
     def load_path(self, name: Union[str, Path], *, verify: Optional[bool] = None) -> Path:
         """Where `load(name)` would find its object -- a dat's folder, or an
-        artifact's payload -- as a `Path`, with nothing built: no factory runs.
-        Recorded, and verified, exactly as `load` does."""
-        if str(name).startswith(ART_PREFIX):
-            return self._artifact_path(str(name), verify)
-        dat = self._load(name)
+        artifact's payload -- as a `Path`, with nothing built: no type is
+        called.  Recorded, and verified, exactly as `load` does."""
+        kind, where = self._locate(name)
+        if kind == "art":
+            return self._artifact_payload(str(name), where, verify)[0]
+        dat = self._load(where)
+        self._check_urn(name, dat)
         self._check(dat, verify)
         _record_dat(dat)
         return Path(dat.get_path())
 
     def exists(self, name: Union[str, Path]) -> bool:
-        """True if a dat's `_spec_` file is at `name` (resolved like `load`), or
-        for an `art:` name, its `_art_.yaml`."""
-        if str(name).startswith(ART_PREFIX):
-            return os.path.exists(os.path.join(self._art_path(str(name))[1], ART_FILE))
-        path = self._resolve_path(str(name))
+        """True if `name` (a dat's name, an artifact's, or a URN) names
+        something stored."""
+        try:
+            kind, where = self._locate(name)
+        except (KeyError, FileNotFoundError):
+            return False
+        if kind == "art":
+            return True
+        path = self._resolve_path(where)
         return os.path.exists(os.path.join(path, SPEC_JSON)) or os.path.exists(
-            os.path.join(path, SPEC_YAML)
-        )
+            os.path.join(path, SPEC_YAML))
 
-    # -- artifacts -------------------------------------------------------------
+    # -- the store: names, URNs, the index --------------------------------------
 
-    def register_artifact(self, kind: str, factory: Callable[[Path], Any]) -> None:
-        """What `load` returns for `art:<kind>/...`: `factory(path)` -- a class whose
-        constructor takes the path, else a lambda.  A second registration of a
-        kind replaces the first."""
-        if not isinstance(kind, str) or not kind or "/" in kind:
-            raise ValueError(f"register_artifact: kind is a name without '/', got {kind!r}")
-        if not callable(factory):
-            raise TypeError(f"register_artifact: factory is a callable, got {factory!r}")
-        self._factories[kind] = factory
+    def _locate(self, name: Union[str, Path]) -> Tuple[str, str]:
+        """`("art", folder)` for an artifact, `("dat", name_or_path)` for a dat.
+        A URN not in the index is `KeyError`; an `art:` name with no artifact is
+        `FileNotFoundError`; a name both hold is `ValueError`."""
+        text = str(name)
+        if text.startswith(URN_PREFIX):
+            entry = self._read_index().get(text)
+            if entry is None:
+                raise KeyError(f"load: {text} is not in the index {self._index_file}; "
+                               "reindex() rebuilds it from the folders")
+            if "art" in entry:
+                return "art", os.path.join(self._require_art_folder(text), entry["art"])
+            return "dat", entry["dat"]
+        if text.startswith(ART_PREFIX):
+            self._require_art_folder(text)
+            folder = self._artifact_folder(text)
+            if folder is None:
+                raise FileNotFoundError(f"load: no artifact {text!r}")
+            return "art", folder
+        folder = None if os.path.isabs(text) else self._artifact_folder(text)
+        if folder is not None:
+            if self._dat_exists(text):
+                raise ValueError(f"{text!r} names both a dat and an artifact; "
+                                 "rename one -- they share one namespace")
+            return "art", folder
+        return "dat", text
 
-    def save(self, source: Union[str, Path], name: str, *, link: bool = False) -> str:
-        """Copy the file or folder `source` in as artifact `name` (`art:<kind>/<rest>`),
-        write its `_art_.yaml`, and return its hash, `"sha256:<hex>"`.
-
-        A file lands as `<art_folder>/<kind>/<rest>/<basename>`, a folder's contents
-        as `<art_folder>/<kind>/<rest>/`, the sidecar beside them.  Write-once: an
-        existing name is `FileExistsError`.  `link` hard-links the payload into
-        the store instead of copying it (same filesystem only).  Inside a
-        `recording` the artifact lands in that dat's `dat.dependencies`.
-        """
-        kind, folder = self._art_path(name)
-        source = Path(source)
-        if not source.exists():
-            raise FileNotFoundError(f"save: no file or folder at {str(source)!r}")
-        if os.path.exists(folder):
-            raise FileExistsError(f"save: artifact {name!r} exists at {folder!r}")
-        if source.is_dir():
-            shutil.copytree(source, folder, copy_function=os.link if link else shutil.copy2)
-            payload = "."
-        else:
-            os.makedirs(folder)
-            (os.link if link else shutil.copy2)(source, os.path.join(folder, source.name))
-            payload = source.name
-        sha256 = "sha256:" + _hash_payload(folder, payload)
-        sidecar = {"kind": kind, "name": name, "payload": payload, "sha256": sha256,
-                   "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-        Path(folder, ART_FILE).write_text(yaml.safe_dump(sidecar, sort_keys=False))
-        _record(name, sha256)
-        return sha256
-
-    def _art_path(self, name: str) -> Tuple[str, str]:
-        """`(kind, folder)` of an `art:<kind>/<rest>` name."""
-        kind, _, rest = name[len(ART_PREFIX):].partition("/")
-        if not name.startswith(ART_PREFIX) or not kind or not rest.strip("/"):
-            raise ValueError(f"an artifact name is art:<kind>/<rest>, got {name!r}")
+    def _require_art_folder(self, name: str) -> str:
         if self._art_folder is None:
             raise RuntimeError(f"{name!r}: this manager has no art_folder; build it with "
                                "DatManager(..., art_folder=...) or set art_folder: in "
                                ".datconfig.yaml")
-        folder = os.path.normpath(os.path.join(self._art_folder, kind, rest))
-        if not _within(folder, os.path.join(self._art_folder, kind)):
-            raise ValueError(f"artifact name {name!r} leaves the artifact folder")
-        return kind, folder
+        return self._art_folder
 
-    def _load_artifact(self, name: str, *, verify: Optional[bool] = None) -> Any:
-        path = self._artifact_path(name, verify)
-        factory = self._factories.get(self._art_path(name)[0])
-        return factory(path) if factory is not None else path
+    def _artifact_folder(self, name: Union[str, Path]) -> Optional[str]:
+        """The folder of the artifact `name` (a name, an `art:` name or a URN)
+        holds, else None: the index first, then the folder the name is."""
+        if self._art_folder is None:
+            return None
+        key = _art_key(name)
+        entry = self._read_index().get(key)
+        if entry is not None:
+            return os.path.join(self._art_folder, entry["art"]) if "art" in entry else None
+        if key.startswith(URN_PREFIX) or not self._valid_name(key):
+            return None
+        folder = os.path.normpath(os.path.join(self._art_folder, key))
+        return folder if os.path.exists(os.path.join(folder, ART_FILE)) else None
 
-    def _artifact_path(self, name: str, verify: Optional[bool]) -> Path:
-        """An artifact's payload path, checked, verified and recorded."""
-        _, folder = self._art_path(name)
+    @staticmethod
+    def _valid_name(name: str) -> bool:
+        parts = name.split("/")
+        return (bool(name) and not name.startswith(URN_PREFIX) and not os.path.isabs(name)
+                and all(p not in ("", ".", "..") for p in parts))
+
+    def _dat_exists(self, name: str) -> bool:
+        path = self._resolve_path(name)
+        return os.path.exists(os.path.join(path, SPEC_YAML)) or os.path.exists(
+            os.path.join(path, SPEC_JSON))
+
+    def _read_index(self) -> Dict[str, Dict[str, str]]:
+        """Every key of the index -- names and `sha256:` URNs -- to its entry,
+        `{art: <folder under the artifact folder>}` or `{dat: <name>}`.  A
+        subclass that keeps the index elsewhere overrides this and
+        `_index_update`."""
+        try:
+            st = os.stat(self._index_file)
+        except FileNotFoundError:
+            return {}
+        stamp = (st.st_mtime_ns, st.st_size)
+        if self._index_cache is None or self._index_cache[0] != stamp:
+            data = yaml.safe_load(Path(self._index_file).read_text()) or {}
+            self._index_cache = (stamp, dict(data.get("entries") or {}))
+        return self._index_cache[1]
+
+    @contextlib.contextmanager
+    def _index_update(self) -> Iterator[Dict[str, Dict[str, str]]]:
+        """The index, locked against other processes, to change in place; written
+        back through a temporary file and a rename, so a crash never leaves it
+        torn."""
+        import fcntl                            # POSIX; only a store write needs it
+        folder = os.path.dirname(self._index_file)
+        os.makedirs(folder, exist_ok=True)
+        lock_path = os.path.splitext(self._index_file)[0] + ".lock"
+        with open(lock_path, "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            self._index_cache = None
+            entries = dict(self._read_index())
+            yield entries
+            tmp = f"{self._index_file}.{os.getpid()}.tmp"
+            Path(tmp).write_text(yaml.safe_dump(
+                {"dvc_dat_index": 1, "entries": entries}, sort_keys=True))
+            os.replace(tmp, self._index_file)
+            self._index_cache = None
+
+    def _index_dat(self, dat: "Dat", old: Optional[str]) -> None:
+        """Key `dat`'s current hash to it, dropping the hash it replaced."""
+        name, sha256 = dat.get_path_name(), dat._sha256()
+        with self._index_update() as index:
+            if old and index.get(old) == {"dat": name}:
+                del index[old]
+            if sha256:
+                index[sha256] = {"dat": name}
+
+    def _index_forget(self, name: str) -> None:
+        """Drop every key that leads to the dat `name`."""
+        if not os.path.exists(self._index_file):
+            return
+        with self._index_update() as index:
+            for key in [k for k, v in index.items() if v == {"dat": name}]:
+                del index[key]
+
+    def reindex(self) -> int:
+        """Rebuild the index from the folders: every artifact's names and URN
+        from its sidecar, every saved dat's URN from its results.  Returns the
+        number of keys."""
+        entries: Dict[str, Dict[str, str]] = {}
+        if self._art_folder is not None and os.path.isdir(self._art_folder):
+            for root, dirs, files in os.walk(self._art_folder):
+                if ART_FILE not in files:
+                    continue
+                dirs[:] = []                    # a payload folder holds no artifacts
+                rel = os.path.relpath(root, self._art_folder)
+                sidecar = yaml.safe_load(Path(root, ART_FILE).read_text()) or {}
+                if sidecar.get("sha256"):
+                    entries.setdefault(sidecar["sha256"], {"art": rel})
+                for name in _sidecar_names(sidecar):
+                    entries[name] = {"art": rel}
+        for folder in self._dat_folders:
+            for root, _, files in os.walk(folder):
+                if RESULT_YAML in files and (SPEC_YAML in files or SPEC_JSON in files):
+                    result = yaml.safe_load(Path(root, RESULT_YAML).read_text()) or {}
+                    if (sha256 := Dat.get(result, DAT_SHA256, None)):
+                        entries.setdefault(sha256, {"dat": self._get_path_name(root)})
+        with self._index_update() as index:
+            index.clear()
+            index.update(entries)
+        return len(entries)
+
+    def _check_urn(self, name: Union[str, Path], dat: "Dat") -> None:
+        """A dat loaded by URN must still hash to it."""
+        if str(name).startswith(URN_PREFIX) and dat._sha256() != str(name):
+            raise ValueError(f"load: the index keys {name} to {dat.get_path_name()!r}, "
+                             f"which was saved again as {dat._sha256()}; reindex()")
+
+    # -- artifacts -------------------------------------------------------------
+
+    def save(self, source: Union[str, Path], type: Union[None, str, Callable] = None,
+             name: Optional[str] = None, *, link: bool = False) -> str:
+        """Store the file or folder `source` as an artifact and return its URN,
+        `"sha256:<hex>"`.
+
+        `type` is what `load` hands the payload's path to: a class or callable,
+        recorded as its dotted name, or that name as a string -- anything
+        `do.load` resolves, a mounted value included.  With no type, `load`
+        returns the path.  `name` is a path-like name of your choosing, held
+        once and never overwritten; with none, the artifact answers to its URN
+        only.  Bytes already stored are not stored again: the new name becomes
+        a second key to them.  A file lands as `<art_folder>/<name>/<basename>`,
+        a folder's contents as `<art_folder>/<name>/` (`sha256/<hex>/` with no
+        name), with the sidecar `_art_.yaml` beside them.  `link` hard-links
+        the payload instead of copying it (same filesystem only).  Inside a
+        `recording` the artifact lands in that dat's `dat.dependencies`.
+        """
+        if isinstance(type, str) and name is None and (
+                type.startswith(ART_PREFIX) or "/" in type):
+            raise TypeError(f"save: {type!r} is a name, and the second argument is the "
+                            "type since 2.14: save(source, type=None, name=None)")
+        art = self._require_art_folder(str(name or source))
+        type_name = self._type_name(type)
+        key = None if name is None else _art_key(name)
+        if key is not None and not self._valid_name(key):
+            raise ValueError(f"save: an artifact name is a relative path of plain "
+                             f"segments, got {name!r}")
+        source = Path(source)
+        if not source.exists():
+            raise FileNotFoundError(f"save: no file or folder at {str(source)!r}")
+        payload = "." if source.is_dir() else source.name
+        sha256 = URN_PREFIX + (_hash_payload(str(source), ".") if source.is_dir()
+                               else _sha256_file(str(source)))
+        size = _payload_size(source)
+        if key is not None and self._dat_exists(key):
+            raise FileExistsError(f"save: {key!r} is a dat's name; dats and artifacts "
+                                  "share one namespace")
+        with self._index_update() as index:
+            if key is not None:
+                self._check_name_free(key, index)
+            held = index.get(sha256)
+            if held is not None and "art" in held:
+                self._add_name(held["art"], sha256, size, type_name, key, index)
+            else:
+                rel = key if key is not None else f"{_URN_FOLDER}/{sha256[len(URN_PREFIX):]}"
+                folder = os.path.join(art, rel)
+                if source.is_dir():
+                    shutil.copytree(source, folder,
+                                    copy_function=os.link if link else shutil.copy2)
+                else:
+                    os.makedirs(folder)
+                    (os.link if link else shutil.copy2)(source, os.path.join(folder, source.name))
+                sidecar = {"type": type_name, "names": [key] if key is not None else [],
+                           "payload": payload, "sha256": sha256, "size": size,
+                           "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+                Path(folder, ART_FILE).write_text(yaml.safe_dump(sidecar, sort_keys=False))
+                index[sha256] = {"art": rel}
+                if key is not None:
+                    index[key] = {"art": rel}
+        _record(key if key is not None else sha256, sha256)
+        return sha256
+
+    def _check_name_free(self, key: str, index: Dict[str, Dict[str, str]]) -> None:
+        """A name is held once: not by another artifact, not as a folder of
+        other artifacts, not inside one."""
+        art = self._art_folder
+        folder = os.path.normpath(os.path.join(art, key))
+        if key in index or os.path.exists(folder):
+            raise FileExistsError(f"save: artifact {key!r} exists")
+        parts = key.split("/")
+        for cut in range(1, len(parts)):
+            if os.path.exists(os.path.join(art, *parts[:cut], ART_FILE)):
+                raise ValueError(f"save: {key!r} lies inside the artifact "
+                                 f"{'/'.join(parts[:cut])!r}")
+
+    def _add_name(self, rel: str, sha256: str, size: int, type_name: Optional[str],
+                  key: Optional[str], index: Dict[str, Dict[str, str]]) -> None:
+        """Bytes already stored at `rel`: check they are the same, and give them
+        the name `key` too; nothing is copied."""
+        sidecar_path = Path(self._art_folder, rel, ART_FILE)
+        sidecar = yaml.safe_load(sidecar_path.read_text()) or {}
+        if sidecar.get("size") is not None and sidecar["size"] != size:
+            raise ValueError(f"save: {sha256} is stored at {rel!r} with "
+                             f"{sidecar['size']} bytes, and this source has {size}")
+        if type_name is not None and sidecar.get("type") != type_name:
+            raise ValueError(f"save: these bytes are stored at {rel!r} with type "
+                             f"{sidecar.get('type')!r}, not {type_name!r}")
+        if key is not None:
+            sidecar["names"] = _sidecar_names(sidecar) + [key]
+            sidecar.pop("name", None)
+            sidecar_path.write_text(yaml.safe_dump(sidecar, sort_keys=False))
+            index[key] = {"art": rel}
+
+    def _type_name(self, type: Union[None, str, Callable]) -> Optional[str]:
+        """The dotted name `type` is recorded as, checked to resolve back to it."""
+        if type is None:
+            return None
+        if isinstance(type, str):
+            try:
+                obj = self.do.load(type)
+            except (ImportError, AttributeError, KeyError) as e:
+                raise ValueError(f"save: type {type!r} does not resolve through "
+                                 f"do.load: {e}") from None
+            if not callable(obj):
+                raise TypeError(f"save: type {type!r} is {obj!r}, not callable")
+            return type
+        if not callable(type):
+            raise TypeError(f"save: type is a class, a callable or its dotted name, "
+                            f"got {type!r}")
+        hint = ("; mount it -- do.mount(value=..., at='some.name') -- and pass "
+                "type='some.name'")
+        try:
+            dotted = self.do.name_of(type)
+        except ValueError:
+            raise TypeError(f"save: {type!r} has no importable dotted name{hint}") from None
+        if self.do.load(dotted, default=None) is not type:
+            raise TypeError(f"save: {type!r} does not load back as {dotted!r}{hint}")
+        return dotted
+
+    def _load_artifact(self, name: str, folder: str, verify: Optional[bool]) -> Any:
+        path, sidecar = self._artifact_payload(name, folder, verify)
+        if not sidecar.get("type"):
+            return path
+        try:
+            factory = self.do.load(sidecar["type"])
+        except (ImportError, AttributeError, KeyError) as e:
+            raise ImportError(f"load: artifact {name!r} has type {sidecar['type']!r}, "
+                              f"which does not resolve through do.load: {e}") from None
+        return factory(path)
+
+    def _artifact_payload(self, name: str, folder: str,
+                          verify: Optional[bool]) -> Tuple[Path, Dict[str, Any]]:
+        """An artifact's payload path and sidecar, checked, verified and recorded."""
         sidecar_path = os.path.join(folder, ART_FILE)
         if not os.path.exists(sidecar_path):
-            raise FileNotFoundError(f"load: no artifact {name!r} (no {sidecar_path})")
+            raise FileNotFoundError(f"load: no artifact {name!r} (no {sidecar_path}); "
+                                    "reindex() rebuilds the index from the folders")
         sidecar = yaml.safe_load(Path(sidecar_path).read_text()) or {}
         payload = sidecar.get("payload", ".")
         if (self._verify if verify is None else verify) and sidecar.get("sha256"):
@@ -779,8 +1076,8 @@ class DatManager:
             if actual != sidecar["sha256"]:
                 raise ValueError(f"load: artifact {name!r} hashes to {actual}, "
                                  f"not its stored {sidecar['sha256']}")
-        _record(name, sidecar.get("sha256"))
-        return Path(folder) if payload == "." else Path(folder, payload)
+        _record(_art_key(name), sidecar.get("sha256"))
+        return (Path(folder) if payload == "." else Path(folder, payload)), sidecar
 
     def _check(self, dat: "Dat", verify: Optional[bool]) -> None:
         """The verifying load of a dat: its folder against its stored hash."""
@@ -793,26 +1090,28 @@ class DatManager:
             raise ValueError(f"load: dat {dat.get_path_name()!r} hashes to {actual}, "
                              f"not its stored {stored}")
 
-    def status(self, name: Union[str, Path, "Dat"]) -> "Dat.Status":
-        """What `name` is in this world, read from its sidecars without building
-        it: `ABSENT`, `OPEN` (loads, may still change), `SEALED` (frozen), or
-        `ROLLING` (loads, never freezes).  An artifact is `ABSENT` or `SEALED`."""
+    def standing(self, name: Union[str, Path, "Dat"]) -> Optional[str]:
+        """How far `name` can be relied on, read from its files without
+        building it: `rolling`, `open`, `sealed` or `referenceable`; None when
+        nothing is stored under it.  An artifact is `referenceable`."""
         if isinstance(name, Dat):
-            return name._status()
-        if str(name).startswith(ART_PREFIX):
-            return Dat.Status.SEALED if self.exists(name) else Dat.Status.ABSENT
-        path = self._resolve_path(str(name))
+            return name._standing()
+        try:
+            kind, where = self._locate(name)
+        except (KeyError, FileNotFoundError):
+            return None
+        if kind == "art":
+            return REFERENCEABLE
+        path = self._resolve_path(where)
         if Path(path, SPEC_YAML).exists():
             spec = yaml.safe_load(Path(path, SPEC_YAML).read_text()) or {}
         elif Path(path, SPEC_JSON).exists():
             spec = json.loads(Path(path, SPEC_JSON).read_text()) or {}
         else:
-            return Dat.Status.ABSENT
-        if Dat.get(spec, DAT_ROLLING, False) is True:
-            return Dat.Status.ROLLING
+            return None
         result_path = Path(path, RESULT_YAML)
         result = (yaml.safe_load(result_path.read_text()) or {}) if result_path.exists() else {}
-        return Dat.Status.SEALED if _is_sealed(result) else Dat.Status.OPEN
+        return _standing_of(spec, result)
 
     # -- recording -------------------------------------------------------------
 
@@ -855,7 +1154,7 @@ class DatManager:
         among its own dependencies -- the trim a seal applies."""
         below: set = set()
         for name in deps:
-            if name.startswith(ART_PREFIX) or name == DEP_MANUAL:
+            if name == DEP_MANUAL or self._artifact_folder(name) is not None:
                 continue
             try:
                 dat = self._load(name)
@@ -864,19 +1163,43 @@ class DatManager:
             below.update(Dat.get(dat.get_results(), DAT_DEPENDENCIES, None) or {})
         return {k: v for k, v in deps.items() if k not in below}
 
-    def _dep_referenceable(self, name: str, value: Any) -> bool:
-        """Whether a dependency entry is referenceable: an artifact or a
-        `$MANUAL` mark always, a dat when sealed and stamped so, anything else
-        recorded by hand when it carries a hash."""
-        if name == DEP_MANUAL or name.startswith(ART_PREFIX):
-            return True
+    def _dep_standing(self, name: str, value: Any) -> str:
+        """An input's standing: an artifact or a `$MANUAL` mark referenceable,
+        an entry recorded `unsealed` open, a dat its own, anything else
+        recorded by hand referenceable when it carries a hash."""
+        if name == DEP_MANUAL:
+            return REFERENCEABLE
         if value == DEP_UNSEALED:
-            return False
+            return OPEN
+        if self._artifact_folder(name) is not None:
+            return REFERENCEABLE
         try:
             dat = self._load(name)
         except (KeyError, FileNotFoundError):
-            return value is not None
-        return dat._referenceable()
+            return REFERENCEABLE if value is not None else SEALED
+        return dat._standing()
+
+    def _earned(self, result: Dict[str, Any], deps: Dict[str, Any]) -> Tuple[str, str]:
+        """The standing a seal earns, and why it is no higher: the least of its
+        inputs' (rolling counts as sealed), capped at sealed by a run's code
+        that is dirty or outside a checkout."""
+        earned, why = REFERENCEABLE, ""
+
+        def cap(to: str, reason: str) -> None:
+            nonlocal earned, why
+            if _RANK[to] < _RANK[earned]:
+                earned, why = to, reason
+        if Dat.get(result, DAT_RUN_AT, None) is not None:
+            code = Dat.get(result, DAT_CODE, None)
+            if code is None:
+                cap(SEALED, "its code is outside a git checkout")
+            elif code.get("dirty"):
+                cap(SEALED, "its code is dirty")
+        for name, value in deps.items():
+            standing = self._dep_standing(name, value)
+            cap(SEALED if standing == ROLLING else standing,
+                f"its input {name!r} is {standing}")
+        return earned, why
 
     def _get_path_name(self, path: Union[str, Path]) -> str:
         path = str(path)
@@ -886,7 +1209,7 @@ class DatManager:
                 return os.path.relpath(real, folder)
         return path
 
-    def execute(self, dat: "Dat", *, referenceable: bool = False) -> Any:
+    def execute(self, dat: "Dat") -> Any:
         """Run `dat` as its spec says, and record the run in its results.
 
         Calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do`
@@ -897,8 +1220,8 @@ class DatManager:
         name to hash) in its results.  It saves nothing by itself: a
         `dat.save()` inside `fn` writes a checkpoint and asks for the seal, which
         comes when `fn` returns, with the whole record.  A sealed dat is refused
-        (a rolling one runs again).  `referenceable=True` demands referenceable
-        inputs: a load of an open, rolling or unreferenceable dat raises there,
+        (a rolling one runs again).  A spec saying `dat.standing: referenceable`
+        demands it: a load of an input that is not referenceable raises there,
         and so does code that is dirty or outside a checkout.  Every run in
         this world comes here -- `do(...)` and the `do(...)` calls nested inside a
         running function alike -- so a subclass that wraps this wraps every run.
@@ -912,13 +1235,14 @@ class DatManager:
             fn = self.do.load(fn)
         if not callable(fn):
             raise TypeError(f"{DAT_DO} in {dat!r} is {fn!r}, not callable")
-        if dat._status() is Dat.Status.SEALED:
+        if dat._standing() in _FROZEN:
             raise RuntimeError(f"execute: {dat!r} is sealed; fork it with do(dat, ...) "
                                "or copy it")
         code = _code_of(fn)
-        if referenceable and (code is None or code.get("dirty")):
-            raise RuntimeError(f"execute: {dat!r} runs referenceable=True, and the code "
-                               f"of {fn!r} is {'dirty' if code else 'outside a git checkout'}")
+        if dat._demands_referenceable() and (code is None or code.get("dirty")):
+            raise RuntimeError(f"execute: {dat!r} demands dat.standing: referenceable, and "
+                               f"the code of {fn!r} is "
+                               f"{'dirty' if code else 'outside a git checkout'}")
         args = list(Dat.get(spec, DAT_ARGS, None) or [])
         kwargs = dict(Dat.get(spec, DAT_KWARGS, None) or {})
         run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -927,12 +1251,12 @@ class DatManager:
         Dat.set(dat.get_results(), DAT_RUN_AT, run_at)
         if code is not None:
             Dat.set(dat.get_results(), DAT_CODE, code)
-        dat._running, dat._save_asked, dat._demand_referenceable = True, False, referenceable
+        dat._running, dat._save_asked = True, False
         try:
             with self._capture(dat) as outer:
                 result = fn(dat, *args, **kwargs)
         finally:
-            dat._running, dat._demand_referenceable = False, False
+            dat._running = False
         time_ms = (time.time() - before) * 1000
         exec_time = (time.strftime("%H:%M:%S", time.gmtime(time_ms // 1000))
                      + ".{:03d}".format(int(time_ms % 1000)))
@@ -1084,23 +1408,6 @@ class _DatMeta(type):
         _default_manager = value
 
 
-class _Status(Enum):
-    """What a name is: `Dat.status(name)`."""
-    ABSENT = "absent"       # nothing under the name
-    OPEN = "open"           # loads; may still change until it seals
-    SEALED = "sealed"       # frozen
-    ROLLING = "rolling"     # loads; saved again at will, never frozen
-
-
-def _is_sealed(result: Dict[str, Any]) -> bool:
-    """A result file seals its dat when a run finished it or a hand saved it --
-    unless an input was recorded `unsealed`, which keeps it open for good."""
-    deps = Dat.get(result, DAT_DEPENDENCIES, None) or {}
-    if DEP_UNSEALED in deps.values():
-        return False
-    return Dat.get(result, DAT_RUN_TIME, None) is not None or DEP_MANUAL in deps
-
-
 class Dat(metaclass=_DatMeta):
     """A folder of data described by its `_spec_.yaml`.
 
@@ -1141,8 +1448,7 @@ class Dat(metaclass=_DatMeta):
         self._manager = None
         self._running = False           # inside its own execute
         self._save_asked = False        # save() was called while running
-        self._demand_referenceable = False
-        self._sealed = _is_sealed(self._result)   # as last written
+        self._written = _standing_of(self._spec, self._result)   # as last written
 
     def _world(self) -> DatManager:
         """The manager that loaded this dat, else the default one."""
@@ -1162,6 +1468,9 @@ class Dat(metaclass=_DatMeta):
         if not isinstance(dat, dict):
             raise TypeError(f"{cls.__name__}: spec['dat'] is a mapping, got {type(dat).__name__}")
         dat.setdefault("kind", _kind_name(cls))
+        if dat.get("standing") is not None and dat["standing"] not in _SPEC_DEMANDS:
+            raise ValueError(f"{cls.__name__}: dat.standing in a spec is one of "
+                             f"{list(_SPEC_DEMANDS)}, got {dat['standing']!r}")
         for key in ("kind", "name", "do", "target_exists"):
             if key in dat and dat[key] is not None and not isinstance(dat[key], str):
                 raise TypeError(
@@ -1231,41 +1540,40 @@ class Dat(metaclass=_DatMeta):
             raise TypeError(f"{what}: {dat!r} is a {type(dat).__name__}, not a {cls.__name__}")
         return dat
 
-    Status = _Status
-
     @staticmethod
-    def status(name: Union[str, Path, "Dat"]) -> _Status:
-        """`Dat.manager.status(name)`: `ABSENT`, `OPEN`, `SEALED` or `ROLLING`."""
-        return Dat.manager.status(name)
+    def standing(name: Union[str, Path, "Dat"]) -> Optional[str]:
+        """`Dat.manager.standing(name)`: `rolling`, `open`, `sealed`,
+        `referenceable`, or None when nothing is stored under `name`."""
+        return Dat.manager.standing(name)
 
-    def _status(self) -> _Status:
-        if Dat.get(self._spec, DAT_ROLLING, False) is True:
-            return _Status.ROLLING
-        return _Status.SEALED if self._sealed else _Status.OPEN
+    def _standing(self) -> str:
+        return self._written
 
-    def _referenceable(self) -> bool:
-        return self._sealed and Dat.get(self._result, DAT_REFERENCEABLE, None) is True
+    def _demands_referenceable(self) -> bool:
+        return Dat.get(self._spec, DAT_STANDING, None) == REFERENCEABLE
 
     def save(self) -> None:
         """Write `_result_.yaml`, stamping `dat.sha256`, the hash of the whole
-        folder as it now stands; the first save that counts seals the dat.
+        folder as it now stands, and `dat.standing`, what the save earned; the
+        first save that counts seals the dat.
 
-        Inside the dat's own run a save writes a checkpoint and asks for the
-        seal, which comes when the run returns.  Anywhere else it seals now and
-        adds the dependency `$MANUAL`: made or finished by hand, its
-        dependencies incomplete.  A sealed dat refuses a second save; a
-        rolling one (`dat.rolling: true` in its spec) saves at will and never
-        freezes.  A dependency recorded `unsealed` keeps the dat open: it is
-        written, never sealed.  At the seal the dependency map keeps its roots
-        only, and `dat.referenceable` is stamped: not rolling, a run's code
-        clean and committed, and every dependency referenceable.
+        Inside the dat's own run a save writes a checkpoint (`open`) and asks
+        for the seal, which comes when the run returns.  Anywhere else it seals
+        now and adds the dependency `$MANUAL`: made or finished by hand, its
+        dependencies incomplete.  A sealed dat refuses a second save.  The
+        seal trims the dependency map to its roots and stamps the least
+        standing of its inputs (a rolling one counts as sealed), capped at
+        `sealed` by a run's code that is dirty or outside a checkout; an input
+        recorded `unsealed` keeps it `open` for good.  A spec saying
+        `dat.standing: rolling` saves at will and never freezes; one saying
+        `referenceable` makes a seal that earns less an error.
         """
-        status = self._status()
-        if status is _Status.SEALED:
+        standing = self._standing()
+        if standing in _FROZEN:
             raise RuntimeError(f"save: {self!r} is sealed; a dat is saved once")
         if self._running:
             self._save_asked = True
-            self._write()               # a checkpoint
+            self._write(ROLLING if standing == ROLLING else OPEN)   # a checkpoint
             return
         self._seal(manual=True)
 
@@ -1278,21 +1586,25 @@ class Dat(metaclass=_DatMeta):
         if deps:
             deps = manager.roots(deps)
             Dat.set(self._result, DAT_DEPENDENCIES, deps)
-        if DEP_UNSEALED in (deps or {}).values():
-            self._write()               # an open input: open, never sealed
+        if self._standing() == ROLLING:
+            self._write(ROLLING)
             return
-        rolling = self._status() is _Status.ROLLING
-        code = Dat.get(self._result, DAT_CODE, None)
-        clean = DEP_MANUAL in (deps or {}) or bool(code and not code.get("dirty"))
-        Dat.set(self._result, DAT_REFERENCEABLE, not rolling and clean and all(
-            manager._dep_referenceable(k, v) for k, v in (deps or {}).items()))
-        self._write()
-        self._sealed = True
+        earned, why = manager._earned(self._result, deps or {})
+        if self._demands_referenceable() and earned != REFERENCEABLE:
+            raise RuntimeError(f"save: {self!r} demands dat.standing: referenceable, "
+                               f"and {why}")
+        self._write(earned)
 
-    def _write(self) -> None:
+    def _write(self, standing: str) -> None:
+        old = self._sha256()
+        if isinstance(self._result.get("dat"), dict):
+            self._result["dat"].pop("referenceable", None)     # 2.13's key
+        Dat.set(self._result, DAT_STANDING, standing)
         Dat.set(self._result, DAT_SHA256, _hash_dat(self._path, self._result))
         with Path(self.get_path(), RESULT_YAML).open("w") as out:
             yaml.dump(self._result, out, Dumper=_SpecDumper, sort_keys=False)
+        self._written = standing
+        self._world()._index_dat(self, old)
 
     def verify(self) -> bool:
         """True when the folder on disk still hashes to the `dat.sha256` its
@@ -1311,6 +1623,7 @@ class Dat(metaclass=_DatMeta):
     def delete(self, *, must_exist=True) -> bool:
         """Delete the folder and its contents."""
         self._world()._dat_cache.pop(self._path, None)
+        self._world()._index_forget(self.get_path_name())
         try:
             shutil.rmtree(self._path)
         except FileNotFoundError:
@@ -1333,8 +1646,12 @@ class Dat(metaclass=_DatMeta):
         new_path_ = manager._resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT MOVE: Folder exists {new_path!r}.")
+        manager._index_forget(self.get_path_name())
         shutil.move(self._path, new_path_)
-        return manager._load(new_path_, dat_class=type(self))
+        moved = manager._load(new_path_, dat_class=type(self))
+        if moved._sha256():
+            manager._index_dat(moved, None)
+        return moved
 
     def __repr__(self):
         return f"<{type(self).__name__}: {self.get_path_name()}>"
