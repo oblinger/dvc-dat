@@ -24,7 +24,8 @@ SAMPLE = {"a": 1, "b": [2, 3]}     # a data object a spec may reference whole
 
 
 def echo(_dat, *args, **kwargs):
-    """A do-fn that reports the arguments the spec handed it."""
+    """A do-fn that reports the arguments the spec handed it, and seals its dat."""
+    _dat.save()
     return {"args": list(args), "kwargs": dict(kwargs)}
 
 
@@ -83,7 +84,7 @@ class TestForkRule:
         assert do("v2_args", 1, 2) == {"args": [1, 2], "kwargs": {}}   # not [4,5,6,1,2]
         assert stored(Dat.load(name))["dat"]["args"] == [1, 2]
 
-    def test_a_dat_reruns_in_place_and_forks_when_given_arguments(self):
+    def test_a_sealed_dat_does_not_rerun_and_forks_when_given_arguments(self):
         do.mount(at="v2_forkable", value={
             "dat": {"do": "v2_echo", "name": f"{V2}/forkable{{unique}}"}})
         for stale in (f"{V2}/forkable", f"{V2}/forkable_2"):
@@ -95,8 +96,10 @@ class TestForkRule:
         spec_file = Path(dat.get_path(), SPEC_YAML)
         before = spec_file.read_bytes()
 
-        # No arguments: the dat on disk runs again, as it is.
-        assert do(dat) == {"args": [1], "kwargs": {}}
+        # No arguments: a sealed dat does not run again.
+        with pytest.raises(Exception) as err:
+            do(dat)
+        assert "sealed" in str(err.value.__cause__)
         assert spec_file.read_bytes() == before
         assert not Dat.manager.exists(f"{V2}/forkable_2")
 

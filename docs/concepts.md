@@ -52,9 +52,23 @@ do("catalog.experiment", 3, epochs=200)
 ```
 
 The consequence is the point: **the spec is the record.** Nothing about the
-arguments goes into `_result_.yaml`, and no dat on disk is ever rewritten by a
-run. Re-running an existing dat is `do(dat)` with no arguments; handing that
-same dat arguments forks a new one and leaves the original byte-identical.
+arguments goes into `_result_.yaml`, and no sealed dat is ever rewritten by a
+run. Handing a dat arguments forks a new one and leaves the original
+byte-identical; `do(dat)` with none re-runs it in place while it is unsealed.
+
+## The seal
+
+A run saves nothing by itself. **`dat.save()` seals the dat**: it writes
+`_result_.yaml` and stamps `dat.sha256`, the hash of the whole folder, and it
+works once — a second `save()` and any later run of that dat are refused.
+Called inside the dat's own run, the seal waits until the run returns, so the
+record is whole. A dat saved without ever being run — a data folder filled by
+hand — gets the dependency `$MANUAL`: it is well defined, but what it was made
+from is not recorded. A run that loads a dat not yet sealed records it as
+`unsealed`, and that dat can then never be sealed: its `save()` writes the
+results with no hash, and may be called again. At the seal the dependency
+map keeps its roots only: an entry that another entry already depends on is
+dropped.
 
 **A created dat's spec never changes.** There is no method that rewrites
 `_spec_.yaml`. To try a variation, make a new dat from an edited copy of the
@@ -196,9 +210,9 @@ Every load goes through a manager, so a run's inputs are whatever it
 loaded. `execute` runs the function inside `m.recording(dat)`, and every
 `load` (and `save`) inside that block lands in `dat.dependencies` in
 `_result_.yaml`, name to hash. A dat's hash is its `dat.sha256`, the
-content hash every `save()` stamps over the whole folder — so a dependency
-entry is never `null`, and `dat.verify()` tells you whether an input is
-still exactly what the run saw. A nested `do()` records its own loads, and
+content hash its seal stamps over the whole folder — `unsealed` for a dat not
+yet sealed — and `dat.verify()` tells you whether an input is still exactly
+what the run saw. A nested `do()` records its own loads, and
 the outer run records the inner dat as one entry, by its final hash. A load that reaches
 around the manager is not a dependency unless the run says so:
 

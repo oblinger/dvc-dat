@@ -82,8 +82,9 @@ class Do:
         - a **template spec** (dict, or a name that loads to one) is forked — `args`
           replace `dat.args`, `kwargs` update `dat.kwargs` — the new spec creates a
           dat, and that dat runs with no call-site arguments;
-        - a **Dat** re-runs in place when no arguments are given, and forks a new dat
-          from its spec when they are.  A dat on disk is never rewritten by a run.
+        - a **Dat** re-runs in place when no arguments are given -- refused once it
+          is sealed -- and forks a new dat from its spec when they are.  A run
+          saves nothing; `dat.save()` seals the dat.
 
         A run calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do`
         names; the return value is the call's value, and `dat.run_at` /

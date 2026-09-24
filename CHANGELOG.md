@@ -6,6 +6,29 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.12.0 — 2026-09-23
+
+**The seal** (Dan, 2026-09-23, T021 Q1; T022). Breaking for a line public
+only hours, so a minor.
+
+- **A run saves nothing.** `execute` records `run_at`, `run_time`, `code` and
+  `dependencies` in the dat's results and leaves them in memory.
+- **`dat.save()` seals the dat, once.** It writes `_result_.yaml` and stamps
+  `dat.sha256`; a second `save()` is `RuntimeError`, and so is running a
+  sealed dat (`do(dat)` with no arguments). A `save()` inside the dat's own
+  run seals when the run returns, with the whole record. `dat.sealed` says
+  which.
+- **`create` writes no `_result_.yaml`**; a created dat is unsealed.
+- **`$MANUAL`**: a dat sealed without ever being run gets the dependency
+  `$MANUAL: manual` — made by hand, its dependencies incomplete.
+- **`unsealed`**: loading a dat not yet sealed records it under that value,
+  and the loading dat can then never be sealed: its `save()` writes the
+  results with no hash and may be repeated.
+- **Roots only**: at the seal, a dependency that another entry already lists
+  among its own dependencies is dropped.
+- A dat saved before 2.9 is unsealed (no longer hashed on load).
+- `tests/do` put the repo ahead of any installed `dvc_dat`.
+
 ## 2.11.0 — 2026-09-23
 
 From Dan's 2026-09-23 call with Juan. Additive.

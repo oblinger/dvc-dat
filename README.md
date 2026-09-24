@@ -26,9 +26,9 @@ dat = Dat.create(spec="catalog.experiment", path="runs/exp1")
 dat = Dat.load("runs/exp1")
 ```
 
-Arguments never ride beside a spec at the call site. `do(dat)` re-runs a dat on
-disk exactly as it is; `do(dat, x=1)` forks a new dat and leaves the original
-untouched. Nothing about the arguments is recorded in `_result_.yaml` — the
+Arguments never ride beside a spec at the call site. `do(dat, x=1)` forks a
+new dat and leaves the original untouched; `do(dat)` re-runs a dat that is not
+yet sealed. A run saves nothing by itself: `dat.save()` seals the dat, once. Nothing about the arguments is recorded in `_result_.yaml` — the
 spec is the record.
 
 See the [full documentation](docs/index.md) for details.

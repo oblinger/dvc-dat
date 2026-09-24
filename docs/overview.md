@@ -43,7 +43,7 @@ do(TARGET, *args, **kwargs)
 |----------|--------------|
 | a **callable** | called as `TARGET(*args, **kwargs)` |
 | a **spec** (dict) | forked with the arguments, created, run |
-| a **Dat**, no arguments | re-run in place |
+| a **Dat**, no arguments | re-run in place; refused once sealed |
 | a **Dat**, with arguments | forked into a new dat; the original is untouched |
 | a **string** | `do.load`-ed first, then one of the above |
 
@@ -86,7 +86,8 @@ given.
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |
 | `.get_path_name() -> str` | Its name, relative to the dat folder |
-| `.save()` | Write the results to `_result_.yaml`, stamping `dat.sha256` |
+| `.save()` | Seal: write `_result_.yaml`, stamp `dat.sha256`; once only |
+| `.sealed -> bool` | True once saved with a hash |
 | `.verify() -> bool` | True while the folder still hashes to its `dat.sha256` |
 | `.delete()` | Remove the folder |
 | `.copy(NAME)` / `.move(NAME)` | Copy or move the dat |
