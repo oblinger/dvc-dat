@@ -58,17 +58,38 @@ byte-identical; `do(dat)` with none re-runs it in place while it is unsealed.
 
 ## The seal
 
-A run saves nothing by itself. **`dat.save()` seals the dat**: it writes
-`_result_.yaml` and stamps `dat.sha256`, the hash of the whole folder, and it
-works once — a second `save()` and any later run of that dat are refused.
-Called inside the dat's own run, the seal waits until the run returns, so the
-record is whole. A dat saved anywhere else — a data folder filled by hand, or
-a run's results saved after it returned — gets the dependency `$MANUAL`: it is
-well defined, but what it was made from is not fully recorded. A run that loads a dat not yet sealed records it as
-`unsealed`, and that dat can then never be sealed: its `save()` writes the
-results with no hash, and may be called again. At the seal the dependency
-map keeps its roots only: an entry that another entry already depends on is
-dropped.
+A run saves nothing by itself. Every `dat.save()` writes `_result_.yaml` and
+stamps `dat.sha256`, the hash of the whole folder as it stands; the save that
+counts **seals** the dat, after which a second `save()` and any later run of it
+are refused. Inside the dat's own run a save is a checkpoint — a crash leaves
+something readable — and asks for the seal, which comes when the run returns,
+with the whole record. A save anywhere else — a data folder filled by hand, or
+a run's results saved after it returned — seals at once and adds the
+dependency `$MANUAL`: well defined, but what it was made from is not fully
+recorded. At the seal the dependency map keeps its roots only: an entry that
+another entry already depends on is dropped.
+
+`Dat.status(name)` says where a name stands, read from its files without
+building it: `ABSENT`, `OPEN` (loads, may still change), `SEALED` (frozen) or
+`ROLLING`.
+
+**Rolling dats.** `dat.rolling: true` in a spec declares a dat that is saved
+again at will — a game whose annotations get corrected — and never freezes.
+The spec never changes, so neither does the declaration.
+
+**Referenceable.** The seal stamps `dat.referenceable`: true when the dat is
+not rolling, a run's code was clean and committed (a hand seal has none to
+check), and every dependency was referenceable. Inside a run, loading a
+rolling dat or an unreferenceable one makes the run unreferenceable; loading
+an open dat records it as `unsealed` and keeps the run open for good — its
+`save()` writes, never seals. `execute(dat, referenceable=True)` turns each of
+these into an error at the load, and refuses dirty code up front. Outside a
+run anything loads.
+
+**The verifying load.** `load(name, verify=True)` (or `verify: true` in
+`.datconfig.yaml`, or `DatManager(..., verify=True)`) re-hashes what it hands
+back and raises when the bytes are not the ones sealed — for storage that can
+corrupt or transfer a folder.
 
 **A created dat's spec never changes.** There is no method that rewrites
 `_spec_.yaml`. To try a variation, make a new dat from an edited copy of the

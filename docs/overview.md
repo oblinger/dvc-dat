@@ -43,7 +43,7 @@ do(TARGET, *args, **kwargs)
 |----------|--------------|
 | a **callable** | called as `TARGET(*args, **kwargs)` |
 | a **spec** (dict) | forked with the arguments, created, run |
-| a **Dat**, no arguments | re-run in place; refused once sealed |
+| a **Dat**, no arguments | re-run in place; refused once sealed (a rolling dat runs again) |
 | a **Dat**, with arguments | forked into a new dat; the original is untouched |
 | a **string** | `do.load`-ed first, then one of the above |
 
@@ -75,8 +75,11 @@ given.
 | `DatManager(dat_folders=[...], do=None)` | A world on a list of folders, keyword-only; nothing read from disk |
 | `DatManager.load_dat_config(START) -> DatManager` | A new manager from the `.datconfig.yaml` above `START` |
 | `Dat.manager.exists(NAME) -> bool` | True iff the named dat (or `art:` artifact) exists |
-| `m.save(SOURCE, "art:KIND/REST") -> str` | Copy a file or folder in as an artifact, write-once; returns `"sha256:<hex>"` |
+| `m.save(SOURCE, "art:KIND/REST", link=False) -> str` | Copy (or hard-link) a file or folder in as an artifact, write-once; returns `"sha256:<hex>"` |
 | `m.load("art:KIND/REST")` | The artifact, through its kind's factory; a `Path` when none is registered |
+| `m.load(NAME, verify=True)` | Re-hash what is handed back; `ValueError` on a mismatch |
+| `m.status(NAME)` / `Dat.status(NAME)` | `Dat.Status.ABSENT`, `OPEN`, `SEALED` or `ROLLING` |
+| `m.roots(DEPS)` / `DatManager.code_of(FN)` | The seal's trim; a run's `dat.code` |
 | `m.load_path(NAME) -> Path` | Where `load` finds it — a dat's folder, an artifact's payload; nothing built, still recorded |
 | `m.register_artifact(KIND, FACTORY)` | `FACTORY(path)` builds what `load` returns for that kind |
 | `m.recording(DAT)` | Context manager: every `load` inside lands in `DAT`'s `dat.dependencies` |
@@ -86,8 +89,7 @@ given.
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |
 | `.get_path_name() -> str` | Its name, relative to the dat folder |
-| `.save()` | Seal: write `_result_.yaml`, stamp `dat.sha256`; once only |
-| `.sealed -> bool` | True once saved with a hash |
+| `.save()` | Write `_result_.yaml`, stamp `dat.sha256`; the save that counts seals |
 | `.verify() -> bool` | True while the folder still hashes to its `dat.sha256` |
 | `.delete()` | Remove the folder |
 | `.copy(NAME)` / `.move(NAME)` | Copy or move the dat |

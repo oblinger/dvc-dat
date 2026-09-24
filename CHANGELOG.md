@@ -6,6 +6,30 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.13.0 — 2026-09-24
+
+**Provenance v2** (Dan, SVP F155 Q1 and Q4, reconciled with T021). Breaking
+for a line public only hours, so a minor.
+
+- **Every save stamps `dat.sha256`** again; the save that counts seals. A save
+  inside the dat's own run is a checkpoint written to disk, and the seal comes
+  when the run returns; a save outside seals at once with `$MANUAL`.
+- **`dat.rolling: true`** (spec): saved at will, runs again, never frozen.
+- **`dat.referenceable`**, stamped at the seal: not rolling, clean committed
+  code (runs only), every dependency referenceable. A rolling or
+  unreferenceable input makes the run unreferenceable; an open one keeps it
+  open. **`execute(dat, referenceable=True)`** makes each an error at the load
+  and refuses dirty code.
+- **`Dat.status(name)` / `m.status(name)`** → `Dat.Status.ABSENT | OPEN |
+  SEALED | ROLLING`, from the files, nothing built. `dat.sealed` is gone.
+- **The verifying load**: `load(name, verify=True)`, `load_path(..., verify=)`,
+  `DatManager(verify=True)`, `verify:` in `.datconfig.yaml` — re-hash, and
+  `ValueError` naming both hashes on a mismatch.
+- **Public**: `m.roots(deps)`, `DatManager.code_of(fn)`, `Do.resolve(spec)`
+  (was `_resolve_base`); `m.save(..., link=True)` hard-links the payload.
+- A sealed file is one with `dat.run_time` or `$MANUAL` and no `unsealed`
+  entry; without `dat.referenceable` it is not referenceable.
+
 ## 2.12.0 — 2026-09-23
 
 **The seal** (Dan, 2026-09-23, T021 Q1; T022). Breaking for a line public
