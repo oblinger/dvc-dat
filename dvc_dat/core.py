@@ -184,7 +184,7 @@ _LEGACY_REFERENCEABLE = "dat.referenceable"       # 2.13, read only
 URN_PREFIX = "sha256:"                 # every stored thing answers to sha256:<hex>
 ART_PREFIX = "art:"                    # written before 2.14; stripped from a name
 ART_FILE = "_art_.yaml"                # an artifact's sidecar
-INDEX_FILE = "_index_.yaml"            # names and URNs of the store, one namespace
+INDEX_FILE = "_index_.json"            # names and URNs of the store, one namespace
 _URN_FOLDER = "sha256"                 # where an unnamed artifact lives: sha256/<hex>/
 
 # The dats recording right now, innermost last: a stack of (manager, dat).
@@ -497,7 +497,7 @@ class DatManager:
         the default world's makes this the default world.  `verify` re-hashes
         every load against its stored `sha256` (see `load`).  `index` is the
         file keying every name and `sha256:` URN of the store, default
-        `_index_.yaml` in the artifact folder, else in the first dat folder."""
+        `_index_.json` in the artifact folder, else in the first dat folder."""
         from .do import Do, _DefaultDo
         from . import dat_tools
 
@@ -856,7 +856,7 @@ class DatManager:
             return {}
         stamp = (st.st_mtime_ns, st.st_size)
         if self._index_cache is None or self._index_cache[0] != stamp:
-            data = yaml.safe_load(Path(self._index_file).read_text()) or {}
+            data = json.loads(Path(self._index_file).read_text() or "{}")
             self._index_cache = (stamp, dict(data.get("entries") or {}))
         return self._index_cache[1]
 
@@ -875,8 +875,8 @@ class DatManager:
             entries = dict(self._read_index())
             yield entries
             tmp = f"{self._index_file}.{os.getpid()}.tmp"
-            Path(tmp).write_text(yaml.safe_dump(
-                {"dvc_dat_index": 1, "entries": entries}, sort_keys=True))
+            Path(tmp).write_text(json.dumps(
+                {"dvc_dat_index": 1, "entries": entries}, indent=1, sort_keys=True))
             os.replace(tmp, self._index_file)
             self._index_cache = None
 

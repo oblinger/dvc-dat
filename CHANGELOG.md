@@ -6,6 +6,12 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.14.1 — 2026-09-24
+
+- **The index is JSON**, `_index_.json`: every save reads and rewrites it,
+  and at 15 000 keys YAML took 1.5 s a save where JSON takes 0.01 s. A
+  2.14.0 `_index_.yaml` is not read; `m.reindex()` builds the new one.
+
 ## 2.14.0 — 2026-09-24
 
 **The store: one index, `dat.standing`, type at save** (Dan, T023 and F026

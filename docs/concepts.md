@@ -242,7 +242,7 @@ and builds nothing, recorded like a `load`.
 **One namespace, one index.** Dats and artifacts share one namespace: a name
 held by one is refused to the other, and a name found in both is a
 `ValueError`. `load`, `load_path`, `exists` and `standing` take a name or a
-URN. The store keeps one index file, `_index_.yaml` in the artifact folder
+URN. The store keeps one index file, `_index_.json` in the artifact folder
 (`index:` in `.datconfig.yaml` moves it), keyed by every artifact name and
 every `sha256:` URN — an artifact's, and each saved dat's current hash. It is
 written through a lock and a rename, so it is never torn; `m.reindex()`
@@ -347,8 +347,8 @@ dat_folders: data
 art_folder: art
 
 # the store's index of names and sha256: URNs
-# (default: _index_.yaml in the artifact folder)
-index: art/_index_.yaml
+# (default: _index_.json in the artifact folder)
+index: art/_index_.json
 
 # re-hash every load against its stored sha256 (default: false)
 verify: false
