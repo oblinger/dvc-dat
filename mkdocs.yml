@@ -6,4 +6,5 @@ nav:
   - About: about.md
   - Overview: overview.md
   - Command Line: cli.md
+  - Ledger: ledger.md
 

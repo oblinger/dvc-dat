@@ -20,7 +20,7 @@ excel = ["xlsxwriter"]
 dat = "dvc_dat.do:cli_main"
 
 [tool.setuptools]
-packages = ["dvc_dat"]
+packages = ["dvc_dat", "dvc_dat.ledger"]
 
 [tool.setuptools.dynamic]
 version = {attr = "dvc_dat.__init__.__version__"}

@@ -6,6 +6,29 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.17.0 — 2026-09-28
+
+**`dvc_dat.ledger`: the ledger beside the dat** (Dan with Juan, 2026-09-28:
+a dat is space, the ledger is time). The generic core of SVP's `svp.ledger`,
+under the names ruled on SVP T195. New subpackage; nothing existing changes.
+
+- One append-only table of events `(added, rev, subject, predicate, object)`,
+  one rev per transaction, the transaction's `by` and `date` as rows on
+  `tx/<rev>`; every read a function of a rev.
+- `Ledger`: `add`, `remove`, `transaction(by=)`, `rev()`,
+  `query(s, p, o, rev=as-of, tx=one transaction)`; derived `assign` (was
+  `set`), `held`, `history`, `last`, `objects`, `subjects(p, o)`, `get_spec`,
+  `set_spec`, `exists`, `date`; `save`/`load`/`ref` for artifacts;
+  `Ledger.open(profile)` from a `ledger.profile.yaml` or `DAT_LEDGER`;
+  static `encode`/`decode`.
+- Typed values by prefix (`str:` `json:` `blob:` `dat:` `art:<type>:` `node:`);
+  `Ref` as plain data; artifact types `json`, `file`, `ckpt`, `video`, and any
+  `Artifact` subclass with a `token`.
+- SQLite backend (`SqliteLedger`, over the shared `SqlLedger` base) with a
+  write-once content-addressed shelf and the `whereabouts` table; other
+  backends by dotted class name in the profile.
+- `docs/ledger.md`; `examples/ledger_walkthrough.ipynb`, run by the tests.
+
 ## 2.16.0 — 2026-09-24
 
 **`{…}` references call functions** (Dan, SVP T161 Q2, from the Juan call:

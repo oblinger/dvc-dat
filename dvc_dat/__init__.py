@@ -1,4 +1,4 @@
-"""dvc_dat 2.16 — dats are folders whose `_spec_.yaml` is a complete, argumentless recipe.
+"""dvc_dat 2.17 — dats are folders whose `_spec_.yaml` is a complete, argumentless recipe.
 
     from dvc_dat import Dat, DatManager
 
@@ -7,10 +7,11 @@
     Dat.manager = DatManager(dat_folders=["/work"])   # replaces the default world
     do = Dat.do                              # a shortcut that follows Dat.manager
 
-The package exports four classes; everything else hangs off them.
+The package exports four classes; everything else hangs off them. The ledger,
+the dat's record in time, is its own subpackage: `from dvc_dat.ledger import Ledger`.
 """
 
-__version__ = "2.16.0"
+__version__ = "2.17.0"
 
 from .core import Dat, DatContainer, DatManager
 from .do import Do
