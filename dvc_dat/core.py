@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import shutil
+import socket
 import subprocess
 import time
 import weakref
@@ -161,12 +162,17 @@ DAT_TARGET_EXISTS = "dat.target_exists"  # error | use | overwrite | increment
 DAT_DO = "dat.do"                      # the function to run
 DAT_ARGS = "dat.args"                  # its positional arguments
 DAT_KWARGS = "dat.kwargs"              # its keyword arguments
-DAT_RUN_AT = "dat.run_at"              # result: when the last run started
-DAT_RUN_TIME = "dat.run_time"          # result: how long it took
-DAT_CODE = "dat.code"                  # result: branch, commit, dirty of the code run
+DAT_RUN_AT = "dat.run_at"              # run: when it started
+DAT_RUN_TIME = "dat.run_time"          # run: how long it took
+DAT_CODE = "dat.code"                  # run: branch, commit, dirty of the code it ran
+DAT_HOST = "dat.host"                  # run: the machine
+DAT_PID = "dat.pid"                    # run: the process
+DAT_CONTENT = "dat.content"            # run: the dat.sha256 it sealed
 DAT_DEPENDENCIES = "dat.dependencies"  # result: every dat and artifact the run loaded
 DAT_SHA256 = "dat.sha256"              # result: the dat's content hash, stamped by save()
 _HASH_PLACEHOLDER = "excluded"         # what dat.sha256 reads while the dat is hashed
+DAT_HASH = "dat.hash"                  # result: `functional` since 3.0 -- the rule dat.sha256 follows
+HASH_FUNCTIONAL = "functional"         # ... name and run/ left out; absent: the 2.x whole-folder rule
 DEP_MANUAL = "$MANUAL"                 # dependency of a dat sealed without a run
 DEP_UNSEALED = "unsealed"              # the hash recorded for a dat still open
 DAT_STANDING = "dat.standing"          # spec: a demand; results: what the last save earned
@@ -187,6 +193,8 @@ ART_PREFIX = "art:"                    # written before 2.14; stripped from a na
 ART_FILE = "_art_.yaml"                # an artifact's sidecar
 INDEX_FILE = "_index_.json"            # names and URNs of the store, one namespace
 _URN_FOLDER = "sha256"                 # where an unnamed artifact lives: sha256/<hex>/
+RUN_FOLDER = "run"                     # the run sub-dat: the one execution that made the dat
+WORK_FOLDER = "work"                   # its scratch, the working directory while it runs
 
 # The dats recording right now, innermost last: a stack of (manager, dat).
 _recording: "contextvars.ContextVar[Tuple[Tuple[DatManager, Dat], ...]]" = \
@@ -306,16 +314,34 @@ def _hash_payload(folder: str, payload: str) -> str:
 
 
 def _hash_dat(folder: str, results: Dict[str, Any]) -> str:
-    """`"sha256:<hex>"` over every file in a dat's folder, `_result_.yaml`
-    included: it counts as its sorted-key dump with `dat.sha256` set to
-    `excluded`, so the hash can sit inside the file it covers and a later
-    check recomputes it the same way."""
+    """`"sha256:<hex>"` over a dat's folder: the functional rule when the
+    results say `dat.hash: functional` (every save since 3.0), else the 2.x
+    rule a file written before carries.
+
+    Functional: every file but the `run/` sub-dat and `dat.name` -- the run is
+    the record of one execution and the name is the dat's address, neither is
+    content -- so two runs of one recipe at two places hash the same when the
+    code is functional.  `_spec_.yaml` counts as its sorted-key dump with
+    `dat.name` left out, `_result_.yaml` as its sorted-key dump with
+    `dat.sha256` set to `excluded`, so the hash can sit inside the file it
+    covers and a later check recomputes it the same way.  2.x: every file as
+    its bytes, `_result_.yaml` as above."""
+    functional = Dat.get(results or {}, DAT_HASH, None) == HASH_FUNCTIONAL
     lines = []
-    for root, _, files in os.walk(folder):
+    for root, dirs, files in os.walk(folder):
+        if root == folder and functional:
+            dirs[:] = [d for d in dirs if d != RUN_FOLDER]
         for file in files:
             rel = os.path.relpath(os.path.join(root, file), folder)
-            if rel != RESULT_YAML:
-                lines.append(f"{rel}\0{_sha256_file(os.path.join(root, file))}\n")
+            if rel == RESULT_YAML or (functional and rel == SPEC_YAML):
+                continue
+            lines.append(f"{rel}\0{_sha256_file(os.path.join(root, file))}\n")
+    if functional:
+        spec = yaml.safe_load(Path(folder, SPEC_YAML).read_text()) or {}
+        if isinstance(spec.get("dat"), dict):
+            spec["dat"].pop("name", None)
+        text = yaml.dump(spec, Dumper=_SpecDumper, sort_keys=True)
+        lines.append(f"{SPEC_YAML}\0{hashlib.sha256(text.encode()).hexdigest()}\n")
     canonical = deepcopy(results or {})
     _dotted_set(canonical, DAT_SHA256.split("."), _HASH_PLACEHOLDER)
     text = yaml.dump(canonical, Dumper=_SpecDumper, sort_keys=True)
@@ -350,6 +376,19 @@ def _code_of(fn: Callable) -> Optional[Dict[str, Any]]:
     status = _git(folder, "status", "--porcelain", "--untracked-files=no")
     return {"branch": None if branch in (None, "HEAD") else branch,
             "commit": commit, "dirty": bool(status)}
+
+
+def _write_run(run: "Dat") -> None:
+    """Write a run sub-dat's `_result_.yaml`: no hash (its scratch is not
+    content, and may be large), `dat.standing: sealed` once it has finished."""
+    results = run.get_results()
+    if Dat.get(results, DAT_RUN_TIME, None) is not None:
+        Dat.set(results, DAT_STANDING, SEALED)
+    with Path(run.get_path(), RESULT_YAML).open("w") as out:
+        yaml.dump(results, out, Dumper=_SpecDumper, sort_keys=False)
+    run._written = _standing_of(run.get_spec(), results)
+
+
 _NO_ARG = object()
 
 
@@ -1236,18 +1275,21 @@ class DatManager:
             return REFERENCEABLE if value is not None else SEALED
         return dat._standing()
 
-    def _earned(self, result: Dict[str, Any], deps: Dict[str, Any]) -> Tuple[str, str]:
+    def _earned(self, dat: "Dat", deps: Dict[str, Any]) -> Tuple[str, str]:
         """The standing a seal earns, and why it is no higher: the least of its
         inputs' (rolling counts as sealed), capped at sealed by a run's code
-        that is dirty or outside a checkout."""
+        that is dirty or outside a checkout.  The run is `dat.run`; a dat
+        written before 3.0 holds the run's record in its own results."""
         earned, why = REFERENCEABLE, ""
 
         def cap(to: str, reason: str) -> None:
             nonlocal earned, why
             if _RANK[to] < _RANK[earned]:
                 earned, why = to, reason
-        if Dat.get(result, DAT_RUN_AT, None) is not None:
-            code = Dat.get(result, DAT_CODE, None)
+        run = dat.run
+        record = run.get_results() if run is not None else dat.get_results()
+        if Dat.get(record, DAT_RUN_AT, None) is not None:
+            code = Dat.get(record, DAT_CODE, None)
             if code is None:
                 cap(SEALED, "its code is outside a git checkout")
             elif code.get("dirty"):
@@ -1267,22 +1309,28 @@ class DatManager:
         return path
 
     def execute(self, dat: "Dat") -> Any:
-        """Run `dat` as its spec says, and record the run in its results.
+        """Run `dat` as its spec says, and record the run in `dat.run`.
 
         Calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do`
-        names, loaded through this world's `do`, inside `recording(dat)`; then
-        records `dat.run_at`, `dat.run_time`, `dat.code` (the branch, commit and
-        dirty flag of the git checkout holding `fn`'s source; nothing outside a
-        checkout) and `dat.dependencies` (every dat and artifact the run loaded,
-        name to hash) in its results.  It saves nothing by itself: a
-        `dat.save()` inside `fn` writes a checkpoint and asks for the seal, which
-        comes when `fn` returns, with the whole record.  A sealed dat is refused
-        (a rolling one runs again).  A spec saying `dat.standing: referenceable`
-        demands it: a load of an input that is not referenceable raises there,
-        and so does code that is dirty or outside a checkout.  Every run in
-        this world comes here -- `do(...)` and the `do(...)` calls nested inside a
-        running function alike -- so a subclass that wraps this wraps every run.
-        Returns `fn`'s value, or `dat` when there is no `dat.do`.
+        names, loaded through this world's `do`, inside `recording(dat)`.  The
+        run is a sub-dat, `run/` inside the dat, made fresh here: its results
+        take `dat.run_at`, `dat.host`, `dat.pid` and `dat.code` (the branch,
+        commit and dirty flag of the git checkout holding `fn`'s source; nothing
+        outside a checkout) before `fn` starts, `dat.run_time` when it returns,
+        and `dat.content`, the hash the dat sealed, after the seal.  `fn` runs
+        with `run/work/` as the working directory, so what it writes without
+        naming a place lands in scratch, outside the dat's hash.  The dat's own
+        results take `dat.dependencies` (every dat and artifact the run loaded,
+        name to hash).  It saves nothing by itself: a `dat.save()` inside `fn`
+        writes a checkpoint and asks for the seal, which comes when `fn`
+        returns, with the whole record.  A sealed dat is refused (a rolling one
+        runs again, and its `run/` is replaced).  A spec saying `dat.standing:
+        referenceable` demands it: a load of an input that is not referenceable
+        raises there, and so does code that is dirty or outside a checkout.
+        Every run in this world comes here -- `do(...)` and the `do(...)` calls
+        nested inside a running function alike -- so a subclass that wraps this
+        wraps every run.  Returns `fn`'s value, or `dat` when there is no
+        `dat.do`.
         """
         spec = dat.get_spec()
         fn = Dat.get(spec, DAT_DO, None)
@@ -1302,27 +1350,48 @@ class DatManager:
                                f"{'dirty' if code else 'outside a git checkout'}")
         args = list(Dat.get(spec, DAT_ARGS, None) or [])
         kwargs = dict(Dat.get(spec, DAT_KWARGS, None) or {})
-        run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         Dat.set(dat.get_results(), DAT_DEPENDENCIES, {})    # a run with no loads says so
-        before = time.time()
-        Dat.set(dat.get_results(), DAT_RUN_AT, run_at)
-        if code is not None:
-            Dat.set(dat.get_results(), DAT_CODE, code)
+        run = self._start_run(dat, code)
         dat._running, dat._save_asked = True, False
+        before = time.time()
+        cwd = os.getcwd()
+        os.chdir(os.path.join(run.get_path(), WORK_FOLDER))
         try:
             with self._capture(dat) as outer:
                 result = fn(dat, *args, **kwargs)
         finally:
+            os.chdir(cwd)
             dat._running = False
         time_ms = (time.time() - before) * 1000
         exec_time = (time.strftime("%H:%M:%S", time.gmtime(time_ms // 1000))
                      + ".{:03d}".format(int(time_ms % 1000)))
-        Dat.set(dat.get_results(), DAT_RUN_TIME, exec_time)
+        Dat.set(run.get_results(), DAT_RUN_TIME, exec_time)
+        _write_run(run)
         if dat._save_asked:
             dat._seal(manual=False)
         if outer is not None:           # recorded by its final hash, if it has one
             _record_dat(dat)
         return result
+
+    def _start_run(self, dat: "Dat", code: Optional[Dict[str, Any]]) -> "Dat":
+        """A fresh `run/` sub-dat inside `dat` -- the one before it, if any,
+        removed -- with its start facts written, and `dat.run` pointing at it."""
+        path = os.path.join(dat.get_path(), RUN_FOLDER)
+        if os.path.exists(path):
+            shutil.rmtree(path)
+        os.makedirs(os.path.join(path, WORK_FOLDER))
+        spec = {"dat": {"kind": _kind_name(Dat)}}
+        Path(path, SPEC_YAML).write_text(yaml.dump(spec, Dumper=_SpecDumper, sort_keys=False))
+        run = Dat(path=path, spec=spec)
+        run._manager = self
+        Dat.set(run.get_results(), DAT_RUN_AT, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        Dat.set(run.get_results(), DAT_HOST, socket.gethostname())
+        Dat.set(run.get_results(), DAT_PID, os.getpid())
+        if code is not None:
+            Dat.set(run.get_results(), DAT_CODE, code)
+        _write_run(run)
+        dat._run = run
+        return run
 
     def _class_of(self, kind: Optional[str]) -> Type["Dat"]:
         """The class a `dat.kind` names.
@@ -1505,7 +1574,22 @@ class Dat(metaclass=_DatMeta):
         self._manager = None
         self._running = False           # inside its own execute
         self._save_asked = False        # save() was called while running
+        self._run: Optional["Dat"] = None   # the run sub-dat, once known
         self._written = _standing_of(self._spec, self._result)   # as last written
+
+    @property
+    def run(self) -> Optional["Dat"]:
+        """The run that made this dat: the sub-dat `run/`, whose results hold
+        `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and
+        `dat.content`, and whose `work/` is the run's scratch.  None for a dat
+        never run (one filled by hand, or written before 3.0, which holds its
+        run's record in its own results).  A run is not content: it is outside
+        the dat's hash, and nothing may depend on it."""
+        if self._run is None:
+            path = os.path.join(self._path, RUN_FOLDER)
+            if os.path.exists(os.path.join(path, SPEC_YAML)):
+                self._run = self._world()._load(path, dat_class=Dat, cache_after_load=False)
+        return self._run
 
     def _world(self) -> DatManager:
         """The manager that loaded this dat, else the default one."""
@@ -1623,9 +1707,9 @@ class Dat(metaclass=_DatMeta):
         return Dat.get(self._spec, DAT_STANDING, None) == REFERENCEABLE
 
     def save(self) -> None:
-        """Write `_result_.yaml`, stamping `dat.sha256`, the hash of the whole
-        folder as it now stands, and `dat.standing`, what the save earned; the
-        first save that counts seals the dat.
+        """Write `_result_.yaml`, stamping `dat.sha256`, the hash of the folder
+        as it now stands (its `run/` left out), and `dat.standing`, what the
+        save earned; the first save that counts seals the dat.
 
         Inside the dat's own run a save writes a checkpoint (`open`) and asks
         for the seal, which comes when the run returns.  Anywhere else it seals
@@ -1659,7 +1743,7 @@ class Dat(metaclass=_DatMeta):
         if self._standing() == ROLLING:
             self._write(ROLLING)
             return
-        earned, why = manager._earned(self._result, deps or {})
+        earned, why = manager._earned(self, deps or {})
         if self._demands_referenceable() and earned != REFERENCEABLE:
             raise RuntimeError(f"save: {self!r} demands dat.standing: referenceable, "
                                f"and {why}")
@@ -1670,15 +1754,21 @@ class Dat(metaclass=_DatMeta):
         if isinstance(self._result.get("dat"), dict):
             self._result["dat"].pop("referenceable", None)     # 2.13's key
         Dat.set(self._result, DAT_STANDING, standing)
+        Dat.set(self._result, DAT_HASH, HASH_FUNCTIONAL)
         Dat.set(self._result, DAT_SHA256, _hash_dat(self._path, self._result))
         with Path(self.get_path(), RESULT_YAML).open("w") as out:
             yaml.dump(self._result, out, Dumper=_SpecDumper, sort_keys=False)
         self._written = standing
         self._world()._index_dat(self, old)
+        run = self.run
+        if run is not None and Dat.get(run.get_results(), DAT_RUN_TIME, None) is not None:
+            Dat.set(run.get_results(), DAT_CONTENT, self._sha256())   # what the run sealed
+            _write_run(run)
 
     def verify(self) -> bool:
-        """True when the folder on disk still hashes to the `dat.sha256` its
-        `_result_.yaml` carries -- the dat is exactly as it was last saved."""
+        """True when the folder on disk (its `run/` left out) still hashes to
+        the `dat.sha256` its `_result_.yaml` carries -- the dat is exactly as
+        it was last saved."""
         result_path = Path(self._path, RESULT_YAML)
         if not result_path.exists():
             return False
@@ -1702,12 +1792,16 @@ class Dat(metaclass=_DatMeta):
             return False
         return True
 
-    def copy(self: DatType, new_path: Union[str, Path]) -> DatType:
+    def copy(self: DatType, new_path: Union[str, Path], *, run: bool = True) -> DatType:
+        """A copy of the folder at `new_path`; `run=False` leaves `run/` behind,
+        which changes nothing about the copy's hash."""
         manager = self._world()
         new_path_ = manager._resolve_path(new_path)
         if os.path.exists(new_path_):
             raise Exception(f"DAT COPY: Folder exists {new_path!r}.")
-        shutil.copytree(self._path, new_path_)
+        ignore = None if run else (
+            lambda folder, names: [RUN_FOLDER] if folder == self._path else [])
+        shutil.copytree(self._path, new_path_, ignore=ignore)
         return manager._load(new_path_, dat_class=type(self))
 
     def move(self: DatType, new_path: Union[str, Path]) -> DatType:
@@ -1767,6 +1861,8 @@ class DatContainer(Dat, Generic[DatType]):
         root_path = str(root_path)
         results = []
         for root, dirs, files in os.walk(root_path):
+            if SPEC_YAML in files or SPEC_JSON in files:
+                dirs[:] = [d for d in dirs if d != RUN_FOLDER]   # a dat's run is not a child
             for name in files:
                 if name == SPEC_JSON or name == SPEC_YAML:
                     results.append(os.path.dirname(os.path.join(root, name)))

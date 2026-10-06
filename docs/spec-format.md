@@ -238,11 +238,9 @@ hand-written check, or with none at all.
 ## Result file
 
 `_result_.yaml` holds only what running the dat produced: whatever the function
-put in `dat.get_results()`, plus what the runner knows: when, how long, and
-which code — the branch, commit and dirty flag (tracked files) of the git
-checkout holding the source of the function `dat.do` names — and what it
-used. Code outside a checkout records no `code`; a detached HEAD records
-`branch: null`. `dependencies` maps every dat and artifact the run loaded
+put in `dat.get_results()`, plus what it used. When, where, how long and
+which code are the run's, not the dat's: they are in the run sub-dat (see
+below). `dependencies` maps every dat and artifact the run loaded
 through its manager to its hash: an artifact's `sha256`, a dat's
 `dat.sha256`, or `unsealed` for a dat still open. A dat's key is its name, an
 artifact's its name or, with none, its URN
@@ -256,13 +254,17 @@ file, and a run leaves its record in memory until the dat is saved. A dat is
 stamps `dat.standing` at every save — `rolling`, `open`, `sealed` or
 `referenceable`, what that save earned (see [Standing](concepts.md#standing)).
 In the spec, `dat.standing` is a demand, `rolling` or `referenceable`.
-`dat.sha256` is the hash of the version saved, stamped by every save: the sha256 of sorted `relpath\0sha256` lines
-over every file in the folder, `_result_.yaml` included. That one file is
-hashed as its sorted-key YAML dump with `dat.sha256` set to `excluded`, so
-the hash can live inside the file it covers. `dat.verify()` recomputes it the
-same way and is `True` while the folder is exactly as it was last saved —
-a changed data file, spec or result makes it `False`, reformatting the YAML
-does not. A file written before 2.14 carries no `dat.standing` and reads by
+`dat.sha256` is the hash of the content saved, stamped by every save: the
+sha256 of sorted `relpath\0sha256` lines over every file in the folder but
+the `run/` sub-dat. `_spec_.yaml` is hashed as its sorted-key YAML dump with
+`dat.name` left out (the name is the dat's address, not its content), and
+`_result_.yaml` as its sorted-key dump with `dat.sha256` set to `excluded`,
+so the hash can live inside the file it covers. `dat.hash: functional` marks
+a file hashed this way; a file without it was written before 3.0 and hashes
+by the 2.x rule, every file as its bytes, the name and all. `dat.verify()`
+recomputes it the same way and is `True` while the content is exactly as it
+was last saved — a changed data file, recipe or result makes it `False`;
+reformatting the YAML, renaming the dat or anything under `run/` does not. A file written before 2.14 carries no `dat.standing` and reads by
 the 2.13 rule: sealed when it has `dat.run_time` or `$MANUAL` and no
 `unsealed` entry, referenceable when it says `dat.referenceable: true`,
 rolling when its spec says `dat.rolling: true`, else open. A dat saved before
@@ -270,21 +272,42 @@ rolling when its spec says `dat.rolling: true`, else open. A dat saved before
 
 ```yaml
 dat:
-  run_at: "2026-09-21 16:20:19"
-  run_time: "00:00:00.011"
-  code:
-    branch: main
-    commit: 9d8df8f1c2a6e0b7d5f4e3a2b1c0d9e8f7a6b5c4
-    dirty: false
   dependencies:
     games/G1: "sha256:4b1e…"
     games/G1/video: "sha256:9f3c…"
   standing: referenceable
+  hash: functional
   sha256: "sha256:7c0a…"
 accuracy: 0.95
 ```
 
 Arguments are **not** recorded here. They are in the spec.
+
+## The run sub-dat
+
+Every `execute` makes `run/` inside the dat, a dat of its own with a minimal
+`_spec_.yaml` and a `_result_.yaml` holding the execution — when, how long,
+where, and which code: the branch, commit and dirty flag (tracked files) of
+the git checkout holding the source of the function `dat.do` names. Code
+outside a checkout records no `code`; a detached HEAD records `branch:
+null`. `content` is the `dat.sha256` the run sealed, written after the
+seal. `run/work/` is the run's scratch and its working directory. A run that
+has finished reads `standing: sealed`; it carries no `sha256` of its own.
+A dat runs once (a rolling one again, replacing `run/`), so there is one.
+
+```yaml
+dat:
+  run_at: "2026-10-06 11:02:41"
+  host: gpu-7
+  pid: 41218
+  code:
+    branch: main
+    commit: 9d8df8f1c2a6e0b7d5f4e3a2b1c0d9e8f7a6b5c4
+    dirty: false
+  run_time: "00:04:12.380"
+  standing: sealed
+  content: "sha256:7c0a…"
+```
 
 ## See Also
 

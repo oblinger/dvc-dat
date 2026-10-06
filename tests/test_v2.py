@@ -63,7 +63,9 @@ class TestForkRule:
 
         results = stored(Dat.load(name), RESULT_YAML)
         assert "args" not in results["dat"] and "kwargs" not in results["dat"]
-        assert results["dat"]["run_at"] and results["dat"]["run_time"]
+        assert "run_at" not in results["dat"]
+        run = stored(Dat.load(name).run, RESULT_YAML)
+        assert run["dat"]["run_at"] and run["dat"]["run_time"]
 
     def test_kwargs_update_the_templates_kwargs_key_by_key(self):
         name = f"{V2}/fork_kwargs_merge"

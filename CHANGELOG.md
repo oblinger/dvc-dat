@@ -6,6 +6,34 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 3.0.0 — 2026-10-06
+
+**A dat is its functional content; the run that made it is a sub-dat
+inside it, outside the hash** (Dan, 2026-10-06, DAT F030 / SVP F358: "the
+spec is the logical recipe; the run is procedural by nature"). A major:
+`_result_.yaml` loses the run's keys.
+
+- **`run/`**, a sub-dat every `execute` makes fresh inside the dat: its
+  results hold `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`,
+  `dat.code` and `dat.content` (the `dat.sha256` the run sealed); its
+  `work/` is the run's scratch and the working directory while the code
+  runs. `dat.run` is the sub-dat, `None` for a dat filled by hand. A rolling
+  dat's `run/` is replaced each time it runs. A run has no hash of its own
+  and reads `dat.standing: sealed` once finished.
+- **`dat.sha256` is the content hash**: `run/` left out, and `dat.name`
+  left out of `_spec_.yaml`, which is hashed as its sorted-key dump. Two
+  runs of one recipe hash the same when the code is functional, wherever and
+  whenever they ran; a dat that differs from its twin wrote something
+  undeclared. `dat.hash: functional` in `_result_.yaml` marks the rule; a
+  file written before 3.0 carries no mark and keeps hashing by the 2.x rule,
+  so every existing dat still verifies and the index holds.
+- **`_result_.yaml` no longer holds `dat.run_at`, `dat.run_time` or
+  `dat.code`** — read them from `dat.run.get_results()`. The seal still caps
+  standing at `sealed` on dirty or uncheckouted code, read from the run.
+- `Dat.copy(name, run=False)` copies the content only. A `DatContainer`
+  does not list its dats' runs. `verify()` is unmoved by a rename or by
+  anything under `run/`.
+
 ## 2.17.0 — 2026-09-28
 
 **`dvc_dat.ledger`: the ledger beside the dat** (Dan with Juan, 2026-09-28:
