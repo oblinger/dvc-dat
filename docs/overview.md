@@ -48,9 +48,10 @@ do(TARGET, *args, **kwargs)
 | a **string** | `do.load`-ed first, then one of the above |
 
 The run itself is `fn(dat, *spec.dat.args, **spec.dat.kwargs)`, where `fn` is
-what `dat.do` names. `dat.run_at`, `dat.run_time`, `dat.code` and
-`dat.dependencies` (everything the run loaded, name to hash) land in the
-results.
+what `dat.do` names, run with `run/work/` as the working directory.
+`dat.dependencies` (everything the run loaded, name to hash) lands in the
+results; `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid` and `dat.code`
+land in the run sub-dat, `dat.run`, which is outside the dat's hash.
 
 | Method | Description |
 |--------|-------------|
@@ -90,10 +91,11 @@ given.
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |
 | `.get_path_name() -> str` | Its name, relative to the dat folder |
-| `.save()` | Write `_result_.yaml`, stamp `dat.sha256` and `dat.standing`; the save that counts seals |
-| `.verify() -> bool` | True while the folder still hashes to its `dat.sha256` |
+| `.save()` | Write `_result_.yaml`, stamp `dat.sha256` (content: `run/` and the name left out) and `dat.standing`; the save that counts seals |
+| `.verify() -> bool` | True while the content still hashes to its `dat.sha256` |
+| `.run -> Dat` | The run sub-dat `run/`: `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code`, `dat.content`; its `work/` is the scratch |
 | `.delete()` | Remove the folder |
-| `.copy(NAME)` / `.move(NAME)` | Copy or move the dat |
+| `.copy(NAME, run=True)` / `.move(NAME)` | Copy or move the dat; `run=False` copies the content only |
 
 `DatContainer` adds `.get_dat_paths() -> [str]` and `.get_dats() -> [Dat]`.
 

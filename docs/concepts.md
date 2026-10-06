@@ -59,15 +59,41 @@ byte-identical; `do(dat)` with none re-runs it in place while it is open.
 ## The seal
 
 A run saves nothing by itself. Every `dat.save()` writes `_result_.yaml` and
-stamps `dat.sha256`, the hash of the whole folder as it stands; the save that
-counts **seals** the dat, after which a second `save()` and any later run of it
-are refused. Inside the dat's own run a save is a checkpoint — a crash leaves
+stamps `dat.sha256`, the hash of the dat's content (see [The run](#the-run)
+for what is not content); the save that counts **seals** the dat, after
+which a second `save()` and any later run of it are refused. Inside the dat's own run a save is a checkpoint — a crash leaves
 something readable — and asks for the seal, which comes when the run returns,
 with the whole record. A save anywhere else — a data folder filled by hand, or
 a run's results saved after it returned — seals at once and adds the
 dependency `$MANUAL`: well defined, but what it was made from is not fully
 recorded. At the seal the dependency map keeps its roots only: an entry that
 another entry already depends on is dropped.
+
+## The run
+
+A dat is its functional content: the recipe in `_spec_.yaml`, the files the
+run wrote, and `_result_.yaml`. The run that made it is a **sub-dat**,
+`run/` inside the dat, made fresh by every `execute` (a rolling dat's is
+replaced each time it runs). Its results hold the execution: `dat.run_at`,
+`dat.run_time`, `dat.host`, `dat.pid`, `dat.code` (the branch, commit and
+dirty flag of the git checkout holding the code's source; nothing outside a
+checkout) and `dat.content`, the `dat.sha256` the run sealed. Its `work/` is
+the run's scratch, and the working directory while the code runs: a file the
+code writes without naming a place lands there. `dat.run` is the sub-dat
+(`None` for a dat filled by hand).
+
+The run is **not content**. `dat.sha256` leaves `run/` out, and leaves
+`dat.name` out of the spec, since the name is where the dat is, not what it
+is. So two runs of one recipe hash the same when the code is functional —
+on two machines, at two paths, on two days — and a dat that hashes
+differently from its twin wrote something undeclared, which is usually
+sitting in `work/`. Dependencies key on the hash, so nothing can depend on a
+run: a run loaded inside a recording is recorded `unsealed`, as any dat
+without a hash is. A run sub-dat carries `dat.standing: sealed` once it has
+finished and no `dat.sha256` of its own (its scratch may be large). A dat
+written before 3.0 holds its run's record in its own results and hashes by
+the 2.x rule, whole folder and name included; `dat.hash: functional` in
+`_result_.yaml` marks the rule a file follows.
 
 ## Standing
 
@@ -82,7 +108,8 @@ Every save stamps **`dat.standing`**, how far the dat can be relied on:
 
 The seal earns the least standing of its inputs — a rolling input counts as
 sealed, an artifact and a hand seal's `$MANUAL` as referenceable — capped at
-`sealed` when a run's code was dirty or outside a git checkout. An input that
+`sealed` when the run's code (`dat.run`'s `dat.code`) was dirty or outside a
+git checkout. An input that
 was open is recorded `unsealed` and keeps the run open for good: its `save()`
 writes, never seals. `Dat.standing(name)` reads it from the files without
 building anything; `None` means nothing is stored under the name.

@@ -483,7 +483,8 @@ class TestSeal:
         dat = m.create({"dat": {"do": "plain"}}, path="unsaved")
         assert m.execute(dat) == "ran"
         assert not Path(dat.get_path(), RESULT_YAML).exists()
-        assert dat.get_results()["dat"]["run_at"]           # recorded, in memory
+        assert "run_at" not in dat.get_results()["dat"]     # the run is the sub-dat's
+        assert dat.run.get_results()["dat"]["run_at"]
         assert m.standing(dat) == "open"
         dat.save()                                  # sealed outside the run: by hand
         assert m.standing(dat) == "referenceable"
@@ -501,8 +502,11 @@ class TestSeal:
         m.execute(dat)
         assert seen["inside"] == "open" and seen["checkpoint"]
         results = stored_results(dat)["dat"]
-        assert results["run_time"] and results["standing"] == "referenceable" and dat.verify()
+        assert "run_time" not in results
+        assert results["standing"] == "referenceable" and dat.verify()
         assert "$MANUAL" not in results["dependencies"]
+        run = stored_results(dat.run)["dat"]
+        assert run["run_time"] and run["content"] == results["sha256"]
 
     def test_an_open_dat_runs_again_in_place(self, m):
         m.do.mount(value=lambda dat: "ran", at="plain")
@@ -735,3 +739,143 @@ class TestLoadPath:
 
 def test_code_of():
     """A module-level function, so `code_of` has a source file to look up."""
+
+
+class TestTheRun:
+    """3.0: a dat is its functional content; the run that made it is the
+    sub-dat `run/`, outside the hash."""
+
+    def test_the_run_is_a_sub_dat_with_the_execution_facts(self, m, clean_code):
+        m.do.mount(value=lambda dat: "ran", at="plain")
+        dat = m.create({"dat": {"do": "plain"}}, path="runs/one")
+        m.execute(dat)
+        run = dat.run
+        assert run.get_path() == os.path.join(dat.get_path(), "run")
+        assert (Path(run.get_path()) / "_spec_.yaml").exists()
+        facts = stored_results(run)["dat"]
+        assert facts["run_at"] and facts["run_time"] and facts["host"] and facts["pid"]
+        assert facts["code"] == {"branch": "main", "commit": "c", "dirty": False}
+        assert facts["standing"] == "sealed" and "sha256" not in facts
+        assert "content" not in facts                      # not sealed, no content yet
+        assert (Path(run.get_path()) / "work").is_dir()
+
+    def test_two_runs_of_one_recipe_hash_the_same(self, m, clean_code):
+        def fn(dat):
+            Path(dat.get_path(), "out.txt").write_text("deterministic")
+            dat.get_results()["loss"] = 0.5
+            dat.save()
+        m.do.mount(value=fn, at="det")
+        m.do({"dat": {"do": "det", "name": "runs/a"}})
+        m.do({"dat": {"do": "det", "name": "runs/b"}})
+        a, b = m.load("runs/a"), m.load("runs/b")
+        assert a.get_results()["dat"]["sha256"] == b.get_results()["dat"]["sha256"]
+        ra, rb = stored_results(a.run)["dat"], stored_results(b.run)["dat"]
+        assert ra["content"] == rb["content"] == a.get_results()["dat"]["sha256"]
+        assert a.verify() and b.verify()
+
+    def test_what_a_run_writes_to_its_working_directory_is_scratch(self, m, clean_code):
+        seen = {}
+
+        def fn(dat):
+            Path("scratch.bin").write_bytes(b"x" * 10)
+            seen["cwd"] = os.getcwd()
+            dat.save()
+        m.do.mount(value=fn, at="scratch")
+        here = os.getcwd()
+        m.do({"dat": {"do": "scratch", "name": "runs/s"}})
+        dat = m.load("runs/s")
+        assert os.getcwd() == here
+        assert os.path.realpath(seen["cwd"]) == os.path.realpath(
+            os.path.join(dat.get_path(), "run", "work"))
+        assert (Path(dat.run.get_path()) / "work" / "scratch.bin").exists()
+        assert dat.verify()
+        (Path(dat.run.get_path()) / "work" / "more.bin").write_bytes(b"y")
+        assert dat.verify()                                 # run/ is not content
+
+    def test_a_rolling_dat_replaces_its_run(self, m, clean_code):
+        m.do.mount(value=lambda dat: dat.save(), at="roll")
+        dat = m.create({"dat": {"do": "roll", "standing": "rolling"}}, path="runs/roll")
+        m.execute(dat)
+        first = stored_results(dat.run)["dat"]
+        Path(dat.run.get_path(), "work", "left.txt").write_text("from the first run")
+        m.execute(dat)
+        second = stored_results(dat.run)["dat"]
+        assert second["content"] == dat.get_results()["dat"]["sha256"]
+        assert not (Path(dat.run.get_path()) / "work" / "left.txt").exists()
+        assert first["run_at"] <= second["run_at"]
+
+    def test_a_dat_written_before_3_0_hashes_as_it_did(self, m, tmp_path):
+        folder = tmp_path / "dats" / "old"
+        folder.mkdir(parents=True)
+        (folder / "_spec_.yaml").write_text(yaml.safe_dump({"dat": {"kind": "dvc_dat.core.Dat"}}))
+        (folder / "out.txt").write_text("old content")
+        result = {"dat": {"run_at": "2026-09-21 16:20:19", "run_time": "00:00:00.011",
+                          "code": {"branch": "main", "commit": "c", "dirty": False},
+                          "dependencies": {}, "standing": "referenceable"}}
+        import dvc_dat.core as core
+        from copy import deepcopy
+        hashed = deepcopy(result)
+        Dat.set(hashed, "dat.sha256", core._hash_dat(str(folder), result))
+        # the hash as 2.x computed it: every file, _result_.yaml as its dump with the placeholder
+        import hashlib
+        lines = []
+        for root, _, files in os.walk(folder):
+            for file in files:
+                rel = os.path.relpath(os.path.join(root, file), folder)
+                if rel != RESULT_YAML:
+                    lines.append(f"{rel}\0{core._sha256_file(os.path.join(root, file))}\n")
+        canon = deepcopy(result); Dat.set(canon, "dat.sha256", "excluded")
+        text = yaml.dump(canon, Dumper=core._SpecDumper, sort_keys=True)
+        lines.append(f"{RESULT_YAML}\0{hashlib.sha256(text.encode()).hexdigest()}\n")
+        old_rule = "sha256:" + hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
+        assert hashed["dat"]["sha256"] == old_rule
+        (folder / RESULT_YAML).write_text(yaml.safe_dump(hashed))
+        dat = m.load("old")
+        assert dat.verify() and dat.run is None
+        assert m.standing("old") == "referenceable"
+        with pytest.raises(RuntimeError, match="saved once"):
+            dat.save()
+
+    def test_copy_without_the_run(self, m, clean_code):
+        m.do.mount(value=lambda dat: dat.save(), at="plain")
+        m.do({"dat": {"do": "plain", "name": "runs/src"}})
+        dat = m.load("runs/src")
+        full = dat.copy("runs/full")
+        bare = dat.copy("runs/bare", run=False)
+        assert full.run is not None and bare.run is None
+        assert full.verify() and bare.verify()
+        assert bare.get_results()["dat"]["sha256"] == dat.get_results()["dat"]["sha256"]
+
+    def test_a_container_does_not_list_its_dats_runs(self, m, clean_code):
+        from dvc_dat import DatContainer
+        m.do.mount(value=lambda dat: dat.save(), at="plain")
+        m.create({"dat": {"kind": "dvc_dat.core.DatContainer"}}, path="box")
+        m.do({"dat": {"do": "plain", "name": "box/child"}})
+        box = m.load("box")
+        assert isinstance(box, DatContainer)
+        assert [os.path.basename(p) for p in box.get_dat_paths()] == ["child"]
+
+    def test_the_run_is_read_back_from_disk(self, m, clean_code):
+        m.do.mount(value=lambda dat: dat.save(), at="plain")
+        m.do({"dat": {"do": "plain", "name": "runs/disk"}})
+        made = m.load("runs/disk")
+        fresh = DatManager(dat_folders=m._dat_folders, art_folder=m._art_folder)
+        dat = fresh.load("runs/disk")
+        assert dat.run.get_results()["dat"]["content"] == made.get_results()["dat"]["sha256"]
+        assert fresh.standing("runs/disk") == "referenceable"
+
+    def test_the_name_is_an_address_not_content(self, m, clean_code):
+        m.do.mount(value=lambda dat: dat.save(), at="plain")
+        m.do({"dat": {"do": "plain", "name": "runs/named"}})
+        dat = m.load("runs/named")
+        assert stored_results(dat)["dat"]["hash"] == "functional"
+        before = dat.get_results()["dat"]["sha256"]
+        moved = dat.move("runs/renamed")
+        assert moved.verify() and moved.get_results()["dat"]["sha256"] == before
+        spec_path = Path(moved.get_path(), "_spec_.yaml")
+        spec_path.write_text(yaml.safe_dump(yaml.safe_load(spec_path.read_text()), sort_keys=True))
+        assert moved.verify()                               # reformatting is not a change
+        spec = yaml.safe_load(spec_path.read_text())
+        spec["dat"]["kwargs"] = {"changed": True}
+        spec_path.write_text(yaml.safe_dump(spec))
+        assert not moved.verify()                           # the recipe is

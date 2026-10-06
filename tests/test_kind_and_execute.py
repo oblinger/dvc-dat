@@ -123,18 +123,19 @@ class TestExecute:
     def test_a_run_records_the_checkout_of_the_code_it_ran(self, m):
         dat = m.create({"dat": {"do": "inner", "name": "a", "args": [1]}})
         assert m.execute(dat) == 10
-        code = dat.get_results()["dat"]["code"]
+        code = dat.run.get_results()["dat"]["code"]
         head = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
                               capture_output=True, text=True).stdout.strip()
         assert code["commit"] == head
         assert isinstance(code["dirty"], bool)
-        assert "run_at" in dat.get_results()["dat"]
+        assert "run_at" in dat.run.get_results()["dat"]
+        assert "run_at" not in dat.get_results()["dat"]
 
     def test_code_outside_a_checkout_records_nothing(self, m):
         m.do.mount(value=id, at="builtin")
         dat = m.create({"dat": {"do": "builtin", "name": "b"}})
         m.execute(dat)
-        assert "code" not in dat.get_results()["dat"]
+        assert "code" not in dat.run.get_results()["dat"]
 
     def test_no_do_returns_the_dat(self, m):
         dat = m.create({"dat": {"name": "c"}})
