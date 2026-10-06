@@ -313,7 +313,7 @@ def _hash_payload(folder: str, payload: str) -> str:
     return hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
 
 
-def _hash_dat(folder: str, results: Dict[str, Any]) -> str:
+def _hash_dat(folder: Union[str, Path], results: Dict[str, Any]) -> str:
     """`"sha256:<hex>"` over a dat's folder: the functional rule when the
     results say `dat.hash: functional` (every save since 3.0), else the 2.x
     rule a file written before carries.
@@ -326,6 +326,7 @@ def _hash_dat(folder: str, results: Dict[str, Any]) -> str:
     `dat.sha256` set to `excluded`, so the hash can sit inside the file it
     covers and a later check recomputes it the same way.  2.x: every file as
     its bytes, `_result_.yaml` as above."""
+    folder = os.fspath(folder)          # a Path would never equal os.walk's str root
     functional = Dat.get(results or {}, DAT_HASH, None) == HASH_FUNCTIONAL
     lines = []
     for root, dirs, files in os.walk(folder):

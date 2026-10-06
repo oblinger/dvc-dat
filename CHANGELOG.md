@@ -6,6 +6,13 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 3.0.1 — 2026-10-06
+
+- Fix: `_hash_dat` given a `pathlib.Path` hashed `run/` in (the top-level
+  check compared a `Path` with `os.walk`'s `str`) and returned a wrong hash
+  with no error; found by SVP's first verify on a real box. `verify()` and
+  the saves always passed a `str` and were right.
+
 ## 3.0.0 — 2026-10-06
 
 **A dat is its functional content; the run that made it is a sub-dat

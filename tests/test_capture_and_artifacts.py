@@ -879,3 +879,12 @@ class TestTheRun:
         spec["dat"]["kwargs"] = {"changed": True}
         spec_path.write_text(yaml.safe_dump(spec))
         assert not moved.verify()                           # the recipe is
+
+    def test_hash_dat_takes_a_path_and_still_leaves_the_run_out(self, m, clean_code):
+        import dvc_dat.core as core
+        m.do.mount(value=lambda dat: dat.save(), at="plain")
+        m.do({"dat": {"do": "plain", "name": "runs/pathed"}})
+        dat = m.load("runs/pathed")
+        stored = stored_results(dat)
+        assert core._hash_dat(Path(dat.get_path()), stored) == stored["dat"]["sha256"]
+        assert core._hash_dat(dat.get_path(), stored) == stored["dat"]["sha256"]
