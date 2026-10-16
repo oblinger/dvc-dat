@@ -128,7 +128,7 @@ class SqlLedger(Ledger):
                 rev = self._next_rev(ex)
                 rows = self._resolve(ex, ops)
                 rows.append((f"tx/{rev}", "by", "str:" + by, True))
-                rows.append((f"tx/{rev}", "date", "str:" + self._today().isoformat(), True))
+                rows.append((f"tx/{rev}", "time", "str:" + self._now().isoformat(), True))
                 for i, (s, p, o, added) in enumerate(rows):
                     ex("INSERT INTO events (id, ord, subject, predicate, object, added) VALUES (?, ?, ?, ?, ?, ?)",
                        (rev, i, s, p, o, added))

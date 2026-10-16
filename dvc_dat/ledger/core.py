@@ -135,7 +135,7 @@ class Ledger(ABC):
 
     @abstractmethod
     def _commit(self, ops: Sequence[Op], by: str, blobs: Dict[str, bytes]) -> Rev:
-        """Write ``ops`` plus ``tx/<rev> by`` and ``date`` under one new rev, all or nothing."""
+        """Write ``ops`` plus ``tx/<rev> by`` and ``time`` under one new rev, all or nothing."""
 
     @abstractmethod
     def _set_whereabouts(self, hash: str, region: str) -> None:
@@ -151,9 +151,9 @@ class Ledger(ABC):
         raise NotImplementedError(f"{cls.__name__} cannot be opened from a profile")
 
     @staticmethod
-    def _today() -> _dt.date:
-        """The day a transaction is stamped with: UTC, so every box agrees."""
-        return _dt.datetime.now(_dt.timezone.utc).date()
+    def _now() -> _dt.datetime:
+        """The moment a transaction is stamped with: UTC to the microsecond, so every box agrees."""
+        return _dt.datetime.now(_dt.timezone.utc)
 
     # -- helpers ------------------------------------------------------------
 
@@ -308,13 +308,20 @@ class Ledger(ABC):
         o = encode_value(object)[0]
         return bool(self._fold(_name(subject, "subject"), _name(predicate, "predicate"), o, self._at(rev)))
 
-    def date(self, rev: Rev) -> _dt.date:
-        """The day transaction ``rev`` was written: ``last("tx/<rev>", "date")``."""
+    def time(self, rev: Rev) -> _dt.datetime:
+        """When transaction ``rev`` was written: ``last("tx/<rev>", "time")``, a UTC datetime.
+
+        A ledger written before 4.0 stamped a UTC day under ``date``; such a
+        transaction reads as that day at 00:00 UTC.
+        """
         at = self._at(rev)
+        when = self.last(f"tx/{at}", "time", rev=at)
+        if isinstance(when, str):
+            return _dt.datetime.fromisoformat(when)
         day = self.last(f"tx/{at}", "date", rev=at)
-        if not isinstance(day, str):
-            raise KeyError(f"no transaction has rev {rev}")
-        return _dt.date.fromisoformat(day)
+        if isinstance(day, str):
+            return _dt.datetime.combine(_dt.date.fromisoformat(day), _dt.time(), tzinfo=_dt.timezone.utc)
+        raise KeyError(f"no transaction has rev {rev}")
 
     # -- static -------------------------------------------------------------
 

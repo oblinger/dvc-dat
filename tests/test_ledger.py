@@ -100,7 +100,7 @@ def test_example_end_to_end(S: Ledger, tmp_path: Path) -> None:
     hist = L.history("version", "bb")
     assert [(e.object, e.added) for e in hist] == [("1.0.0", True), ("1.0.0", False), ("1.0.1", True)]
     one = L.query(tx=r)
-    assert [(e.subject, e.predicate) for e in one][-2:] == [(f"tx/{r}", "by"), (f"tx/{r}", "date")]
+    assert [(e.subject, e.predicate) for e in one][-2:] == [(f"tx/{r}", "by"), (f"tx/{r}", "time")]
     assert all(e.rev == r for e in one)
 
     n = L.set_spec("game/G7", {"court": "hs-wood-3"}, by="dan")
@@ -108,7 +108,7 @@ def test_example_end_to_end(S: Ledger, tmp_path: Path) -> None:
     assert L.get_spec("game/G7", rev=r)["court"] == "hs-wood-2"
     assert n == L.rev()
     assert Ledger.encode(shots) == f"art:json:{shots.hash}"
-    assert L.date(r) == Ledger._today()
+    assert abs(Ledger._now() - L.time(r)) < dt.timedelta(minutes=1)
     assert L.last(f"tx/{r}", "by") == "juan"
 
 
@@ -163,7 +163,7 @@ def test_typed_objects_decoded_at_the_surface(S: Ledger) -> None:
 def test_provenance_is_triples(S: Ledger) -> None:
     r = S.assign("g", "p", "v", by="dan")
     assert S.last(f"tx/{r}", "by") == "dan"
-    assert S.date(r) == Ledger._today()
+    assert abs(Ledger._now() - S.time(r)) < dt.timedelta(minutes=1)
     with sqlite3.connect(S.path) as c:  # type: ignore[attr-defined]
         cols = [row[1] for row in c.execute("PRAGMA table_info(events)")]
     assert cols == ["id", "ord", "subject", "predicate", "object", "added"]
@@ -172,11 +172,20 @@ def test_provenance_is_triples(S: Ledger) -> None:
     assert S.last(f"tx/{r}", "confirmed_by") == "juan"
 
 
-def test_same_evidence_date_from_rows(L: Ledger, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Ledger, "_today", staticmethod(lambda: dt.date(2026, 9, 25)))
+def test_same_evidence_time_from_rows(L: Ledger, monkeypatch: pytest.MonkeyPatch) -> None:
+    stamp = dt.datetime(2026, 9, 25, 14, 3, 7, 250000, tzinfo=dt.timezone.utc)
+    monkeypatch.setattr(Ledger, "_now", staticmethod(lambda: stamp))
     r = L.assign("g", "p", "v", by="t")
-    assert L.date(r) == dt.date(2026, 9, 25)
-    assert L.last(f"tx/{r}", "date") == "2026-09-25"
+    assert L.time(r) == stamp
+    assert L.last(f"tx/{r}", "time") == "2026-09-25T14:03:07.250000+00:00"
+
+
+def test_a_pre_3_1_day_row_reads_as_midnight_utc(S: Ledger) -> None:
+    r = S.assign("g", "p", "v", by="t")
+    with sqlite3.connect(S.path) as c:  # type: ignore[attr-defined]  # rewrite the stamp as a 3.0 ledger wrote it
+        c.execute("UPDATE events SET predicate = 'date', object = 'str:2026-09-25' "
+                  "WHERE id = ? AND subject = ? AND predicate = 'time'", (r, f"tx/{r}"))
+    assert S.time(r) == dt.datetime(2026, 9, 25, tzinfo=dt.timezone.utc)
 
 
 def test_side_effects_events_only(S: Ledger, tmp_path: Path) -> None:
@@ -501,7 +510,7 @@ def test_error_value_unencodable_object(L: Ledger) -> None:
 def test_error_value_rev_above_current(L: Ledger) -> None:
     L.add("s", "p", "x", by="t")
     for call in (lambda: L.last("s", "p", rev=2), lambda: L.query(rev=5), lambda: L.query(tx=2),
-                 lambda: L.held(rev=-1), lambda: L.date(9)):
+                 lambda: L.held(rev=-1), lambda: L.time(9)):
         with pytest.raises(ValueError):
             call()
 

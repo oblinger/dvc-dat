@@ -93,7 +93,7 @@ through `Ledger.default`, the ledger `Ledger.open` last returned.
 | `get_spec(s, *, rev=None) -> dict` | `last` for every predicate of `s` |
 | `set_spec(s, mapping, *, by) -> Rev` | One `assign` per key, one rev |
 | `exists(s, p, o, *, rev=None) -> bool` | Whether the triple is held |
-| `date(rev) -> date` | The day a transaction was written |
+| `time(rev) -> datetime` | When a transaction was written: UTC, to the microsecond (a pre-4.0 ledger's day rows read as 00:00 UTC) |
 
 | Static | |
 | --- | --- |
