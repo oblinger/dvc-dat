@@ -6,6 +6,16 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 4.0.0 — 2026-10-16
+
+- **Ledger: a transaction is stamped with a UTC timestamp, not a day.** The
+  row is `tx/<rev> time`, ISO 8601 to the microsecond; `Ledger.time(rev)`
+  returns an aware UTC `datetime`. `Ledger.date(rev)` and the `tx/<rev> date`
+  row are gone (major: a public accessor removed). A ledger written by 3.x
+  keeps its `date` rows and `time(rev)` reads them as that day at 00:00 UTC.
+  Dan, reading SVP's ledger demo: a day threw away when a write happened for
+  nothing.
+
 ## 3.0.1 — 2026-10-06
 
 - Fix: `_hash_dat` given a `pathlib.Path` hashed `run/` in (the top-level
