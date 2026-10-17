@@ -1,10 +1,10 @@
-"""The walkthrough notebooks (doc/demo) run top to bottom against the library as it is, and print what they promise."""
+"""The walkthrough notebooks (doc/DAT Demos) run top to bottom against the library as it is, and print what they promise."""
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-EXAMPLES = Path(__file__).parent.parent / "doc" / "demo"
+EXAMPLES = Path(__file__).parent.parent / "doc" / "DAT Demos"
 
 
 def run_notebook(name, tmp_path):

@@ -21,7 +21,7 @@ L.assign("game/G7", "annot:shots", shots, by="dan")
 L.last("game/G7", "annot:shots").load()   # {"shots": [1, 2]}
 ```
 
-[`demo/demo-ledger.ipynb`](demo/demo-ledger.ipynb) runs the whole API; [`demo/demo-ledger-walkthrough.ipynb`](demo/demo-ledger-walkthrough.ipynb) runs this story and prints every row as stored.
+[`DAT Demos/demo-ledger.ipynb`](DAT%20Demos/demo-ledger.ipynb) runs the whole API; [`DAT Demos/demo-ledger-walkthrough.ipynb`](DAT%20Demos/demo-ledger-walkthrough.ipynb) runs this story and prints every row as stored.
 
 ## The datom
 

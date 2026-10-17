@@ -68,13 +68,13 @@ uv run python -m pytest
 
 ## Demos
 
-Runnable notebooks in [`doc/demo/`](https://github.com/oblinger/dvc-dat/tree/main/doc/demo), each paired
+Runnable notebooks in [`doc/DAT Demos/`](https://github.com/oblinger/dvc-dat/tree/main/doc/DAT%20Demos), each paired
 with a `py:percent` script (jupytext) and executed with its outputs kept; `just demo` re-syncs and re-runs them:
 
-- [`demo-walkthrough`](https://github.com/oblinger/dvc-dat/blob/main/doc/demo/demo-walkthrough.ipynb) — a small project end to end: a mounted
+- [`demo-walkthrough`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-walkthrough.ipynb) — a small project end to end: a mounted
   folder of YAML templates, a `dat.base` chain, `do()` and a keyword fork, loading a dat, the
   `merge_dicts` recipe, and the command-line main.
-- [`demo-dats`](https://github.com/oblinger/dvc-dat/blob/main/doc/demo/demo-dats.ipynb) — dats, dependencies and versions: seal, hash, `dat.dependencies` two deep.
-- [`demo-etl`](https://github.com/oblinger/dvc-dat/blob/main/doc/demo/demo-etl.ipynb) — datasets built on datasets: gamey → binning → trial → metrics.
-- [`demo-ledger`](https://github.com/oblinger/dvc-dat/blob/main/doc/demo/demo-ledger.ipynb) — the ledger API: transactions, reads at a rev, artifacts, a dat by `Ref`.
-- [`demo-ledger-walkthrough`](https://github.com/oblinger/dvc-dat/blob/main/doc/demo/demo-ledger-walkthrough.ipynb) — the ledger's rows exactly as stored.
+- [`demo-dats`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-dats.ipynb) — dats, dependencies and versions: seal, hash, `dat.dependencies` two deep.
+- [`demo-etl`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-etl.ipynb) — datasets built on datasets: gamey → binning → trial → metrics.
+- [`demo-ledger`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-ledger.ipynb) — the ledger API: transactions, reads at a rev, artifacts, a dat by `Ref`.
+- [`demo-ledger-walkthrough`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-ledger-walkthrough.ipynb) — the ledger's rows exactly as stored.

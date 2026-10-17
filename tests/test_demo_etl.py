@@ -1,4 +1,4 @@
-"""The ETL-demo kinds (doc/demo/demo_kinds/etl.py): gamey -> binning -> trial -> metrics, each sealed over the one below."""
+"""The ETL-demo kinds (doc/DAT Demos/demo_kinds/etl.py): gamey -> binning -> trial -> metrics, each sealed over the one below."""
 
 import statistics
 import sys
@@ -8,7 +8,7 @@ import pytest
 
 from dvc_dat import Dat, DatManager
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "doc" / "demo"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "doc" / "DAT Demos"))
 from demo_kinds.etl import Binning, Gamey, Metrics, Trial  # noqa: E402
 
 

@@ -1,10 +1,10 @@
-"""Every demo notebook (doc/demo/demo-*.ipynb) runs top to bottom, and matches its paired script.
+"""Every demo notebook (doc/DAT Demos/demo-*.ipynb) runs top to bottom, and matches its paired script.
 
 Each is executed in a fresh kernel from this venv, in memory: the committed
 .ipynb (outputs kept) is not rewritten here; ``just demo`` does that.
 
 Each notebook is paired by jupytext with a ``py:percent`` script beside it
-(``doc/demo/jupytext.toml``): the script is the reviewable source, the notebook
+(``doc/DAT Demos/jupytext.toml``): the script is the reviewable source, the notebook
 keeps the outputs, and an edit to either is carried to the other by
 ``jupytext --sync`` (``just demo`` runs it first). The pairing test refuses a
 pair that has drifted.
@@ -19,7 +19,7 @@ import nbformat
 import pytest
 from nbclient import NotebookClient
 
-HERE = Path(__file__).parent.parent / "doc" / "demo"
+HERE = Path(__file__).parent.parent / "doc" / "DAT Demos"
 NOTEBOOKS = sorted(p.name for p in HERE.glob("demo-*.ipynb"))
 
 

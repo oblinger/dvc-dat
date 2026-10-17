@@ -43,12 +43,12 @@ result = do("catalog.experiment", epochs=200)
 
 ## Demos
 
-Notebooks in [`demo/`](https://github.com/oblinger/dvc-dat/tree/main/doc/demo), each paired with a `py:percent` script and executed with its
+Notebooks in [`DAT Demos/`](https://github.com/oblinger/dvc-dat/tree/main/doc/DAT%20Demos), each paired with a `py:percent` script and executed with its
 outputs kept (`just demo` re-syncs and re-runs them; the tests run every one):
 
-- **[`demo-walkthrough`](demo/demo-walkthrough.ipynb)** — one project, end to end: mounts,
+- **[`demo-walkthrough`](DAT%20Demos/demo-walkthrough.ipynb)** — one project, end to end: mounts,
   `dat.base`, `do()` and a fork, `Dat.load`, `merge_dicts`, the command-line main
-- **[`demo-dats`](demo/demo-dats.ipynb)** — dats, dependencies and versions
-- **[`demo-etl`](demo/demo-etl.ipynb)** — datasets built on datasets, each seal over the stage below
-- **[`demo-ledger`](demo/demo-ledger.ipynb)** — the ledger API, end to end
-- **[`demo-ledger-walkthrough`](demo/demo-ledger-walkthrough.ipynb)** — the ledger's rows exactly as stored
+- **[`demo-dats`](DAT%20Demos/demo-dats.ipynb)** — dats, dependencies and versions
+- **[`demo-etl`](DAT%20Demos/demo-etl.ipynb)** — datasets built on datasets, each seal over the stage below
+- **[`demo-ledger`](DAT%20Demos/demo-ledger.ipynb)** — the ledger API, end to end
+- **[`demo-ledger-walkthrough`](DAT%20Demos/demo-ledger-walkthrough.ipynb)** — the ledger's rows exactly as stored

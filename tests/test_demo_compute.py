@@ -1,4 +1,4 @@
-"""The dats-demo kinds (doc/demo/demo_kinds/compute.py): Numbers seals a list; Compute evaluates over dats and records what it loaded."""
+"""The dats-demo kinds (doc/DAT Demos/demo_kinds/compute.py): Numbers seals a list; Compute evaluates over dats and records what it loaded."""
 
 import sys
 from pathlib import Path
@@ -7,7 +7,7 @@ import pytest
 
 from dvc_dat import Dat, DatManager
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "doc" / "demo"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "doc" / "DAT Demos"))
 from demo_kinds.compute import Compute, Numbers, evaluate  # noqa: E402
 
 
