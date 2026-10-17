@@ -4,8 +4,7 @@ __pycache__
 .virtual_documents
 .idea
 /data/
-site/sitemap.xml
-site/sitemap.xml.gz
+/site/
 /tests/test_sync_folder/test_dats
 # Dats the suite writes with generated names -- 130 of these were swept into a
 # commit once; the examples/ twin was ignored but this one was missed.

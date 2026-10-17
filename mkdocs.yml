@@ -1,5 +1,6 @@
 site_name: ML-DAT
 theme: material
+docs_dir: doc
 
 nav:
   - Home: index.md
