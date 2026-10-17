@@ -33,7 +33,7 @@ dat when the run returns, stamping its `dat.standing`; `dat.standing: rolling`
 in a spec declares one that is saved at will. Nothing about the arguments is recorded in `_result_.yaml` — the
 spec is the record.
 
-See the [full documentation](docs/index.md) for details.
+See the [full documentation](doc/index.md) for details.
 
 ## Installation
 
@@ -58,7 +58,7 @@ dat --info
 `bin/dat` on your `PATH` runs your project's `run:` main from any directory
 with no environment activated. The environment's `dat` console script does
 not read `run:`: it runs the library's own command line, with no project
-mounts. See [the CLI reference](docs/cli.md).
+mounts. See [the CLI reference](doc/cli.md).
 
 ## Testing
 
@@ -66,9 +66,15 @@ mounts. See [the CLI reference](docs/cli.md).
 uv run python -m pytest
 ```
 
-## Example
+## Demos
 
-[`examples/walkthrough.ipynb`](https://github.com/oblinger/dvc-dat/blob/main/examples/walkthrough.ipynb)
-builds a small project in a temp folder and runs it end to end: a mounted
-folder of YAML templates, a `dat.base` chain, `do()` and a keyword fork,
-loading a dat, the `merge_dicts` recipe, and the command-line main.
+Runnable notebooks in [`doc/DAT Demos/`](https://github.com/oblinger/dvc-dat/tree/main/doc/DAT%20Demos), each paired
+with a `py:percent` script (jupytext) and executed with its outputs kept; `just demo` re-syncs and re-runs them:
+
+- [`demo-walkthrough`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-walkthrough.ipynb) — a small project end to end: a mounted
+  folder of YAML templates, a `dat.base` chain, `do()` and a keyword fork, loading a dat, the
+  `merge_dicts` recipe, and the command-line main.
+- [`demo-dats`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-dats.ipynb) — dats, dependencies and versions: seal, hash, `dat.dependencies` two deep.
+- [`demo-etl`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-etl.ipynb) — datasets built on datasets: gamey → binning → trial → metrics.
+- [`demo-ledger`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-ledger.ipynb) — the ledger API: transactions, reads at a rev, artifacts, a dat by `Ref`.
+- [`demo-ledger-walkthrough`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-ledger-walkthrough.ipynb) — the ledger's rows exactly as stored.

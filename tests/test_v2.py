@@ -425,7 +425,7 @@ def test_increment_on_a_plain_name_counts_up(tmp_path, restore_manager):
     assert Dat.create(spec=spec).get_path_name() == "plain_3"
 
 
-DOCS = REPO_ROOT / "docs"
+DOCS = REPO_ROOT / "doc"
 
 
 @pytest.mark.parametrize("page", ["concepts.md", "spec-format.md"])

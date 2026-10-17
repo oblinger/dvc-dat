@@ -210,7 +210,7 @@ class TestDatCliConfigVariable:
 
 class TestFolderMountPaths:
     """A folder mount answers to dotted paths: `at`, then the file's path under the
-    folder, as `docs/mount-commands.md` § folder promises."""
+    folder, as `doc/mount-commands.md` § folder promises."""
 
     @pytest.fixture
     def catalog(self, tmp_path):
