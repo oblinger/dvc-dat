@@ -8,7 +8,7 @@ dependencies = [
     "pandas",
     "pyyaml",
 ]
-requires-python = ">= 3.8"
+requires-python = ">=3.11"
 keywords = ["dvc"]
 readme = "README.md"
 dynamic = ["version"]
