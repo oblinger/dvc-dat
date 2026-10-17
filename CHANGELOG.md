@@ -6,6 +6,13 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## Unreleased
+
+- **Python 3.11 is the floor; 3.8–3.10 dropped.** `requires-python = ">=3.11"`;
+  CI runs 3.11 and 3.14 (Dan, 2026-10-17).
+- The docs live in `doc/` (was `docs/`), the demo notebooks in `doc/DAT Demos/`
+  (was `examples/`), each a jupytext pair; a `justfile` (`test`, `demo`, `docs`).
+
 ## 4.0.0 — 2026-10-16
 
 - **Ledger: a transaction is stamped with a UTC timestamp, not a day.** The
