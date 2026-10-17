@@ -16,3 +16,4 @@ __pycache__
 /build/
 # the test world's artifact store and index (2.14)
 /tests/art/
+.vscode/
