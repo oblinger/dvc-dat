@@ -52,16 +52,17 @@ L = Ledger.create(scratch_ledger)         # 1. an empty ledger
 L = Ledger.open(scratch_ledger)           # 2. reopened by path
 
 # %% [markdown]
-# In real code a project names its ledger once, in `.datconfig.yaml`
-# at its root, and every script in it says `Ledger.open()` with no
-# argument: the open walks up from the working directory to the
-# nearest `.datconfig.yaml` carrying a `ledger:` key.
+# In real code a project names its ledger once and every script in
+# it says `Ledger.open()` with no argument. `Ledger.init(project)`
+# is the one creating verb: it writes `.datconfig.yaml` with a
+# `ledger:` line and makes the ledger it names, the way `git init`
+# makes the directory and the config together. `open()` then walks
+# up from the working directory to the nearest `.datconfig.yaml`
+# carrying `ledger:`; it never creates anything.
 
 # %%
 project = Path("scratch/triples-demo/project").resolve()
-project.mkdir(parents=True, exist_ok=True)
-(project / ".datconfig.yaml").write_text(
-    f"ledger: {scratch_ledger}\n")
+Ledger.init(project)                      # .datconfig.yaml + ledger
 os.chdir(project)
 
 L = Ledger.open()                         # 3. the project's ledger
