@@ -455,7 +455,15 @@ print(t.rev.get("game/G3", "home"))      # None: every row retracted
 # so `rev["game/G3"]` would raise `KeyError`.
 
 # %% [markdown]
-# ## `get`, `in`, `asserted`
+# ## Triple accessors
+#
+# Every read so far was one closed thing at one spot. These are the
+# ways to reach the ledger as triples: the softer two-position read,
+# the membership test, the history of a triple, every match of a
+# pattern, and subjects as a table.
+
+# %% [markdown]
+# ### `get`, `in`, `asserted`
 
 # %%
 rev = L.at()
@@ -476,7 +484,7 @@ print(rev.asserted("game/G1", "officials", "kim"))
 # included.
 
 # %% [markdown]
-# ## `all` binds the open positions
+# ### `all` binds the open positions
 
 # %%
 print(sorted(rev.all("game/G1")))       # (predicate, object) pairs
@@ -498,7 +506,7 @@ print(rev.get("game/G1", "home", since=rev1))   # None: at rev1
 # to an interval: `rev.all(since=a)` is the delta from `a`.
 
 # %% [markdown]
-# ## Subjects as a table: `select`
+# ### Subjects as a table: `select`
 
 # %%
 print(sorted(rev.select(("home", "away"), s="game/*")))
@@ -528,7 +536,14 @@ print(rev9.select(("home", "court"), where={"court": None},
 # every read here returns a `str` or a JSON document.
 
 # %% [markdown]
-# ## Declaring an index
+# ## Ledger management
+#
+# Four topics that are about the ledger rather than about any one
+# subject: each is a row on a reserved subject or a keyword on a
+# transaction, nothing more.
+
+# %% [markdown]
+# ### Declaring an index
 
 # %%
 with L.transaction(by="human:dan") as t:
@@ -546,7 +561,7 @@ print(rev.select(("away",), home="G1"))     # [('G3',)]
 # before; an undeclared predicate is still a row, found by scan.
 
 # %% [markdown]
-# ## A named revision
+# ### Revision naming
 #
 # A named revision is any subject's `rev` row, and `L.at` reads a
 # digit-only string as a revision id.
@@ -559,7 +574,7 @@ prod_rev = L.at(rev["env/prod", "rev"])       # L.at("2")
 print(prod_rev.id, prod_rev.get("game/G1", "court"))   # 2 south
 
 # %% [markdown]
-# ## `db/type`
+# ### Predicate typing: `db/type`
 #
 # Checked at the write and on the strict reads.
 
@@ -618,7 +633,7 @@ with L.transaction(by="human:dan") as t:
     t.add("game/G1", "attendance", "1200")
 
 # %% [markdown]
-# ## A clock: `bump` under `lock=`
+# ### Transaction locking: `bump` under `lock=`
 #
 # `bump` on `code/<repo>` reads the checkout from the environment
 # provider. This notebook does not run inside an sv-pipe checkout,
