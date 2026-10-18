@@ -108,8 +108,11 @@ print(Ref(r1, r1.tx).preds["why"])   # season opener
 # not.
 
 # %% [markdown]
-# An exception in the body writes nothing. Notice the top did not
-# move and `court` is still `north`.
+# ### An exception in the body writes nothing
+#
+# The `with` block is the transaction: a clean exit commits one
+# revision, an exception rolls back everything the body added.
+# Notice the top did not move and `court` is still `north`.
 
 # %%
 try:
