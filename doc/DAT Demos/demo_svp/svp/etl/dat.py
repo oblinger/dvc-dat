@@ -1,13 +1,13 @@
 """`svp.etl.dat`: a `Dat` as a `Value`, and the dat constructor.
 
-`dat(spec, **kwargs)` (SVP447 Values idea 10) makes a dat from its
-spec and runs the spec's `main` with the remaining arguments. Its
-preds merge spec keys and result metrics under one namespace (idea
-12): `game`, `stage`, `bins` from the spec, `metrics.<m>` from the
-result.
+`dat(spec, work, **kwargs)` (SVP447 Values idea 10) builds a dat in
+the folder the eval hands it (F447 Q36, lean A) and runs the spec's
+`main` there. Its preds merge spec keys and result metrics under one
+namespace: `game`, `stage`, `bins` from the spec, `metrics.<m>` from
+the result. `main` is imported by the spec's key at run time, so the
+one `fn` trace item hashes the modules the run loaded (Q37, lean A).
 """
 import importlib
-import tempfile
 from pathlib import Path
 
 import yaml
@@ -33,16 +33,15 @@ class StageDat(Dat):
         return yaml.safe_load(text)
 
 
-def build(rev, spec: dict, **kwargs) -> StageDat:
-    """Make a dat from its spec and run it: the constructor's body."""
+def build(rev, spec: dict, work: Path, **kwargs) -> StageDat:
+    """Build a dat from its spec in `work`: the constructor's body."""
     module, name = spec["main"].rsplit(".", 1)
     main = getattr(importlib.import_module(module), name)
-    folder = Path(tempfile.mkdtemp(prefix=f"{spec['stage']}-"))
     args = {k: v for k, v in spec.items() if k != "main"}
-    result = main(rev, folder, **args, **kwargs)
-    (folder / "_spec_.yaml").write_text(yaml.safe_dump(spec))
-    (folder / "_result_.yaml").write_text(yaml.safe_dump(result))
-    d = StageDat(folder)
+    result = main(rev, work, **args, **kwargs)
+    (work / "_spec_.yaml").write_text(yaml.safe_dump(spec))
+    (work / "_result_.yaml").write_text(yaml.safe_dump(result))
+    d = StageDat(work)
     d.preds.update({k: spec[k] for k in SPEC_PREDS if k in spec})
     for m in METRICS:
         d.preds[f"metrics.{m}"] = attr(result, f"metrics.{m}")
@@ -50,6 +49,6 @@ def build(rev, spec: dict, **kwargs) -> StageDat:
 
 
 @ledger_fn
-def dat(rev, *, spec: dict, **kwargs) -> StageDat:
-    """The dat constructor: the spec first, then what `main` takes."""
-    return build(rev, spec, **kwargs)
+def dat(rev, *, spec: dict, work: Path, **kwargs) -> StageDat:
+    """The dat constructor: `spec` the question, `work` the folder."""
+    return build(rev, spec, work, **kwargs)
