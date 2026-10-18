@@ -235,11 +235,12 @@ except TypeError as e:
     print("TypeError:", e)
 
 # %% [markdown]
-# ### The three doors are one
+# ### The two doors are one
 #
-# A hand seal, `eval`, and a call on the `Fn` that `load_fn` hands
-# back all write these same rows, so everything below reads a value
-# the same way whichever door sealed it.
+# A hand seal and `eval` (calling the `Fn` that `load_fn` hands back
+# is `eval`) write these same rows, so everything below reads a
+# value the same way whichever door sealed it; an eval's entry adds
+# only `db/fn` and `db/keys`.
 
 # %% [markdown]
 # ## A value function
