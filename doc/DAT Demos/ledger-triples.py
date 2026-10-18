@@ -19,10 +19,10 @@
 # transaction, every read is a function of one revision. No `eval`
 # and no value functions here: the running example is plain
 # metadata about games (`game/G1`: teams, date, court, officials)
-# and a few clock subjects (`code/sv-pipe`, `schema/tape`).
+# and a few clock subjects (`code/demo-game`, `schema/tape`).
 #
-# Written to the ledger design of 2026-10-18 (SVP447 Ledger Module,
-# API, Versions; F447 A37–A49). It runs once `ledger2` is rebuilt
+# Written to the ledger design of 2026-10-18 (Ledger Module, API,
+# Versions; F447 A37–A51). It runs once `ledger2` is rebuilt
 # to that design (T534); until then it is the design, not a demo.
 # Revision numbers in the comments count from 1, the first
 # transaction on the project's ledger.
@@ -633,35 +633,47 @@ with L.transaction(by="human:dan") as t:
     t.add("game/G1", "attendance", "1200")
 
 # %% [markdown]
-# ### Transaction locking: `bump` under `lock=`
+# ### A real code repository
 #
-# `bump` on `code/<repo>` reads the checkout from the environment
-# provider. This notebook does not run inside an sv-pipe checkout,
-# so it installs a stand-in; `Code`, `Env` and `set_env_provider`
-# are part of the module interface for exactly this.
+# Every value function runs in a git checkout, the ledger records
+# which commit, and the notebook makes a tiny one of its own; no
+# value function runs here, so one empty package is enough.
 
 # %%
-from dvc_dat.ledger import Code, Env, set_env_provider
+import subprocess, sys
 
-ENV = Env({"sv-pipe": Code("0.2.3", "b48dca7c")},
-          lock="sha256:5e1f", platform="darwin-arm64-py3.11")
-set_env_provider(lambda module: ENV)
+demo_repo_path = (project_path.parent / "demo-game").resolve()
+(demo_repo_path / "demo_game").mkdir(parents=True, exist_ok=True)
+(demo_repo_path / "demo_game/__init__.py").write_text("")
+git_cmd = ["git", "-c", "user.name=demo",
+           "-c", "user.email=demo@example.com"]
+for args in (["init", "-q"], ["add", "."],
+             ["commit", "-q", "-m", "demo-game 0.1.0"]):
+    subprocess.run(git_cmd + args, cwd=demo_repo_path, check=True)
+sys.path.insert(0, str(demo_repo_path))
+import demo_game                       # discovery sees it imported
+
+# %% [markdown]
+# ### Transaction locking: `bump` under `lock=`
+#
+# `bump` on `code/<repo>` reads the commit by git discovery over
+# the modules this process imported.
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("code/sv-pipe", "version", "0.2.2")   # the clock's start
+    t.add("code/demo-game", "version", "0.1.0")  # the clock's start
 with L.transaction(by="human:dan", lock=10, time=True,
                    why="T531 re-baseline") as t:
-    new = bump(t, "code/sv-pipe")         # patch: 0.2.2 -> 0.2.3
+    new = bump(t, "code/demo-game")       # patch: 0.1.0 -> 0.1.1
     t.add(t.tx, "checked", "G1,G4,G5")
 rev = t.rev
-print(new, rev["code/sv-pipe"])
-# 0.2.3 {'version': '0.2.3', 'commit': 'b48dca7c'}
+print(new, rev["code/demo-game"])
+# 0.1.1 {'version': '0.1.1', 'commit': '<the demo commit>'}
 
 # %% [markdown]
 # `bump` reads the version through `t.base`, writes the next one,
 # and on `code/<repo>` writes `commit` beside it, read from the
-# environment: the caller never writes `commit`. `lock=10` holds
+# checkout: the caller never writes `commit`. `lock=10` holds
 # the write lock for the body, so nothing slips between the read
 # and the write.
 
@@ -712,11 +724,11 @@ print(L.at()["schema/tape", "version"])  # 0.0.9: add went back
 # goes up.
 
 # %%
-with L.transaction(by="agent:svp", lock=5) as t:
-    v = t.base["code/sv-pipe", "version"]
-    c = t.base["code/sv-pipe", "commit"]
-    t.add("rel/pipe", "pair", f"{v}+{c}")
-print(L.at()["rel/pipe", "pair"])         # 0.2.3+b48dca7c
+with L.transaction(by="agent:release", lock=5) as t:
+    v = t.base["code/demo-game", "version"]
+    c = t.base["code/demo-game", "commit"]
+    t.add("rel/demo-game", "pair", f"{v}+{c}")
+print(L.at()["rel/demo-game", "pair"])    # 0.1.1+<commit>
 
 # %% [markdown]
 # A body that reads and then writes takes `lock=`. Notice that past
@@ -724,16 +736,16 @@ print(L.at()["rel/pipe", "pair"])         # 0.2.3+b48dca7c
 
 # %%
 try:
-    with L.transaction(by="agent:svp", lock=0.5) as t:
-        t.add("rel/pipe", "pair", "never")
+    with L.transaction(by="agent:release", lock=0.5) as t:
+        t.add("rel/demo-game", "pair", "never")
         time.sleep(2)                     # past the limit
 except LockTimeout as e:
     print("LockTimeout:", e)
-print(L.at()["rel/pipe", "pair"])         # 0.2.3+b48dca7c
+print(L.at()["rel/demo-game", "pair"])    # 0.1.1+<commit>
 
 # %%
 rev = L.at()
-when = rev.asserted("code/sv-pipe", "version", "0.2.2")
+when = rev.asserted("code/demo-game", "version", "0.1.0")
 print(when)                               # [Rev(...)]: when it was set
 print(when[0][when[0].tx, "db/by"])       # human:dan: by whom
 
