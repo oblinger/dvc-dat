@@ -22,7 +22,7 @@
 # and a few clock subjects (`code/sv-pipe`, `schema/tape`).
 #
 # Written to the ledger design of 2026-10-18 (SVP447 Ledger Module,
-# API, Versions; F447 A37–A47). It runs once `ledger2` is rebuilt
+# API, Versions; F447 A37–A49). It runs once `ledger2` is rebuilt
 # to that design (T534); until then it is the design, not a demo.
 # Revision numbers in the comments count from 1, the first
 # transaction on the project's ledger.
@@ -80,14 +80,6 @@ print((project_path / ".datconfig.yaml").read_text())
 L = Ledger()                              # the project's ledger
 
 # %% [markdown]
-# A declaration is itself a row, on the predicate's own subject:
-# `officials` is declared `many` before any game uses it.
-
-# %%
-with L.transaction(by="human:dan") as t:
-    t.add("db/pred/officials", "db/cardinality", "many")   # rev 1
-
-# %% [markdown]
 # ## One transaction is one revision
 
 # %%
@@ -97,12 +89,13 @@ with L.transaction(by="human:dan", time=True,
     t.add("game/G1", "away", "G5")
     t.add("game/G1", "date", "2026-10-11")
     t.add("game/G1", "court", "north")
-r2 = t.rev
-print(r2.id, r2.tx)                  # 2 db/tx/2
-print(r2[r2.tx, "db/by"])            # human:dan
-print(r2[r2.tx, "db/time"])          # 2026-10-18T15:52:07Z (UTC)
-print(sorted(r2[r2.tx]))             # ['db/by', 'db/time', 'why']
-print(r2[r2.tx]["why"])              # season opener
+rev1 = t.rev
+print(rev1.id, rev1.tx)              # 1 db/tx/1
+print(rev1.get(rev1.tx, "db/by"))    # human:dan
+print(rev1.get(rev1.tx, "db/time"))  # 2026-10-18T15:52:07Z (UTC)
+print(sorted(p for p, o in rev1.all(rev1.tx)))
+# ['db/by', 'db/time', 'why']
+print(rev1.get(rev1.tx, "why"))      # season opener
 
 # %% [markdown]
 # `time=True` asks for the wall-clock stamp; without it a revision
@@ -128,21 +121,21 @@ try:
         raise RuntimeError("changed my mind")
 except RuntimeError as e:
     print("RuntimeError:", e)
-print(L.at().id == r2.id)            # True: nothing written
-print(L.at()["game/G1", "court"])    # north
+print(L.at().id == rev1.id)              # True: nothing written
+print(L.at().get("game/G1", "court"))    # north
 
 # %% [markdown]
 # ## A second transaction, and the ledger as rows
 #
 # One more transaction: the court moves, and two officials are
-# named. `t[s, p] = o` is an `add` (more under Bracket writes).
+# named. `t[s, p] = o` is an `add` (more under The `[]` accessor).
 
 # %%
 with L.transaction(by="human:dan") as t:
     t["game/G1", "court"] = "south"
     t.add("game/G1", "officials", "kim")
     t.add("game/G1", "officials", "ortiz")
-r3 = t.rev
+rev2 = t.rev
 
 # %% [markdown]
 # Every row so far, unfolded, in revision order: `rows()` is the
@@ -157,48 +150,154 @@ for r in rows:
     print(f"{r.rev.id:>3}  {r.subject:<18} {r.predicate:<15} "
           f"{r.object}")
 # rev  subject            predicate       object
-#   1  db/pred/officials  db/cardinality  many
+#   1  game/G1            home            G4
+#   1  game/G1            away            G5
+#   1  game/G1            date            2026-10-11
+#   1  game/G1            court           north
 #   1  db/tx/1            db/by           human:dan
-#   2  game/G1            home            G4
-#   2  game/G1            away            G5
-#   2  game/G1            date            2026-10-11
-#   2  game/G1            court           north
+#   1  db/tx/1            db/time         2026-10-18T15:52:07Z
+#   1  db/tx/1            why             season opener
+#   2  game/G1            court           south
+#   2  game/G1            officials       kim
+#   2  game/G1            officials       ortiz
 #   2  db/tx/2            db/by           human:dan
-#   2  db/tx/2            db/time         2026-10-18T15:52:07Z
-#   2  db/tx/2            why             season opener
-#   3  game/G1            court           south
-#   3  game/G1            officials       kim
-#   3  game/G1            officials       ortiz
-#   3  db/tx/3            db/by           human:dan
+
+# %% [markdown]
+# ## Folding semantics
+#
+# Every read except `rows` and `asserted` folds: it turns the rows
+# at or before its revision into the state they mean. How a
+# predicate folds is its cardinality.
+
+# %% [markdown]
+# ### The ledger folds
+#
+# The same `game/G1` rows, read at the top. Notice one `court`,
+# `south`: on a `one` predicate `add` is assignment and the latest
+# add wins. No retraction row was ever written for `north`.
 
 # %%
-rev = L.at()
-print(rev["game/G1"])                # the record: the fold
-# {'home': 'G4', 'away': 'G5', 'date': '2026-10-11',
-#  'court': 'south', 'officials': ['kim', 'ortiz']}
+print(sorted(rev2.all("game/G1")))      # (predicate, object) pairs
+# [('away', 'G5'), ('court', 'south'), ('date', '2026-10-11'),
+#  ('home', 'G4'), ('officials', 'ortiz')]
+print(rev2.get("game/G1", "court"))     # south
+print(rev1.get("game/G1", "court"))     # north: rev1 never changes
 
 # %% [markdown]
-# Raw rows above, the fold below: one `court`, the later one, and
-# `officials` as a list of both.
+# `rev1` is a frozen view: a later transaction adds rows after it,
+# never changes what it reads.
 
 # %% [markdown]
-# ## The fold: `add` as assignment and accumulation
+# ### Without a declaration every predicate is one
+#
+# `officials` was asserted twice, `kim` and `ortiz`, and the fold
+# kept only `ortiz`. Notice that this is wrong for officials: a game
+# has several. Nothing declared `officials`, so it folds as `one`,
+# the default, and the later add won.
 
 # %%
-print(r3["game/G1", "court"])          # south
-print(r2["game/G1", "court"])          # north: r2 never changes
-print(r3.all("game/G1", "officials"))  # ['kim', 'ortiz']
-print(r2.all("game/G1", "officials"))  # []
+print(rev2.get("game/G1", "officials"))   # ortiz
+print(rev2.all("game/G1", "officials"))   # ['ortiz']
 
 # %% [markdown]
-# `add` is assignment on a `one` predicate and accumulation on a
-# `many` one. No retraction row was written for `north`: the
-# predicate's cardinality, `one` by default, decides at read time
-# that the latest `add` is the value, and `many` keeps every member.
-# `r2` is a frozen view.
+# ### Declaring many, and the fold is as-of
+#
+# A declaration is itself a row, on the predicate's own subject,
+# `db/pred/officials`, written by an ordinary transaction.
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t.add("db/pred/officials", "db/cardinality", "many")
+rev3 = t.rev
+print(rev3.all("game/G1", "officials"))   # ['kim', 'ortiz']
+print(rev2.all("game/G1", "officials"))   # ['ortiz']
+print(rev2.get("game/G1", "officials"))   # ortiz
 
 # %% [markdown]
-# ## Reading at one, two and three positions
+# Notice `kim` is back without being written again: from `rev3` on
+# every earlier `officials` add is a set member. The declaration is
+# as-of, so a read at `rev2` still folds `officials` as `one` and
+# still answers `ortiz`; reads of the past do not change.
+
+# %% [markdown]
+# ### Accumulation
+#
+# On a `many` predicate the members are a set. Notice `kim`, added
+# again while held, changes nothing.
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t.add("game/G1", "officials", "lee")
+    t.add("game/G1", "officials", "kim")   # held: no change
+rev4 = t.rev
+print(rev4.all("game/G1", "officials"))   # ['kim', 'ortiz', 'lee']
+
+# %% [markdown]
+# A remove, then a re-add. Notice `kim` comes back at the end.
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t.remove("game/G1", "officials", "kim")
+rev5 = t.rev
+with L.transaction(by="human:dan") as t:
+    t.add("game/G1", "officials", "kim")
+rev6 = t.rev
+print(rev5.all("game/G1", "officials"))   # ['ortiz', 'lee']
+print(rev6.all("game/G1", "officials"))   # ['ortiz', 'lee', 'kim']
+
+# %% [markdown]
+# Members come in assertion order, each at the revision of its
+# earliest add not since removed: re-adding a present member (`kim`
+# at `rev4`) keeps its place; remove then re-add moves `kim` to the
+# end, at `rev6`.
+
+# %% [markdown]
+# ### Flipping back
+#
+# Declaring `one` again: from that revision on the latest add wins.
+# Notice the answer is `kim`, added last at `rev6`.
+
+# %%
+with L.transaction(by="human:dan", why="one lead official") as t:
+    t.add("db/pred/officials", "db/cardinality", "one")
+rev7 = t.rev
+print(rev7.get("game/G1", "officials"))   # kim: latest add wins
+
+# %% [markdown]
+# `rev6` is frozen at a revision where `officials` is `many`.
+# Notice `get` still refuses it there and names `all`.
+
+# %%
+try:
+    rev6.get("game/G1", "officials")
+except TypeError as e:
+    print("TypeError:", e)                 # many: use all
+
+# %% [markdown]
+# A flip writes and removes no `officials` row, so flipping to
+# `many` again brings the set back whole. Read at every revision:
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t.add("db/pred/officials", "db/cardinality", "many")
+rev8 = t.rev
+for n in range(rev1.id, rev8.id + 1):
+    print(n, L.at(n).all("game/G1", "officials"))
+# 1 []
+# 2 ['ortiz']
+# 3 ['kim', 'ortiz']
+# 4 ['kim', 'ortiz', 'lee']
+# 5 ['ortiz', 'lee']
+# 6 ['ortiz', 'lee', 'kim']
+# 7 ['kim']
+# 8 ['ortiz', 'lee', 'kim']
+
+# %% [markdown]
+# Each `L.at(n)` folds every row at or before `n` by the
+# declarations at or before `n`; a revision is a view, not a copy.
+
+# %% [markdown]
+# ## The `[]` accessor
 #
 # A second game first, so the reads have two subjects.
 
@@ -208,31 +307,32 @@ with L.transaction(by="human:dan") as t:
     t.add("game/G2", "away", "G3")
     t.add("game/G2", "date", "2026-10-12")
     t.add("game/G2", "court", "north")
-r4 = t.rev
+rev9 = t.rev
+
+# %% [markdown]
+# `[]` reads the fold and returns the positions the pattern leaves
+# open. Three positions first: rows have revisions, so a held
+# triple answers with the revision of its earliest add not since
+# removed, on a `many` predicate too.
 
 # %%
 rev = L.at()
-print(rev["game/G2"])                # one position: the record
-# {'home': 'G1', 'away': 'G3', 'date': '2026-10-12',
-#  'court': 'north'}
-print(rev["game/G1", "home"])        # G4: exactly one object
-print(rev["game/G1", "home", "G4"])  # Rev(2): its earliest add
-print(rev.get("game/G9", "home"))    # None: rev["game/G9"] raises
+print(rev["game/G1", "home", "G4"])           # Rev(1)
+print(rev["game/G1", "officials", "kim"])     # Rev(6)
+print(rev["game/G1", "officials", "ortiz"])   # Rev(2)
 
 # %% [markdown]
-# `[]` returns the positions the pattern leaves open: one position,
-# the record; two, the one object of a `one` predicate; three, the
-# revision of a held triple. Notice a superseded or retracted
-# triple raises rather than answering with history.
+# Notice a superseded or retracted triple raises rather than
+# answering with history.
 
 # %%
 try:
     rev["game/G1", "court", "north"]
 except KeyError as e:
-    print("KeyError:", e)            # superseded at r3: not held
+    print("KeyError:", e)            # superseded at rev2: not held
 
 # %% [markdown]
-# Bracket reads take exact subjects. A glob is a `TypeError`, not
+# Bracket reads take exact subjects: a glob is a `TypeError`, never
 # an empty answer; globs live on `all` and `select`.
 
 # %%
@@ -242,21 +342,138 @@ except TypeError as e:
     print("TypeError:", e)
 
 # %% [markdown]
+# Two positions: the one object of a `one` predicate.
+
+# %%
+print(rev["game/G1", "home"])        # G4
+print(rev["game/G1", "court"])       # south: the latest add
+
+# %% [markdown]
+# Nothing there is a `KeyError`. Notice `game/G1` has no `score`
+# yet.
+
+# %%
+try:
+    rev["game/G1", "score"]
+except KeyError as e:
+    print("KeyError:", e)
+
+# %% [markdown]
+# A `many` predicate is refused by its declaration, however many
+# members it holds. Notice the message names `all`.
+
+# %%
+try:
+    rev["game/G1", "officials"]
+except TypeError as e:
+    print("TypeError:", e)                 # many: use all
+
+# %% [markdown]
+# One position: the record, a `dict`, which is the fold. A `one`
+# predicate maps to its object, a `many` predicate to its list, and
+# `db/` rows are in it like any other.
+
+# %%
+print(rev["game/G1"])
+# {'home': 'G4', 'away': 'G5', 'date': '2026-10-11',
+#  'court': 'south', 'officials': ['ortiz', 'lee', 'kim']}
+print(rev["game/G2"])
+# {'home': 'G1', 'away': 'G3', 'date': '2026-10-12',
+#  'court': 'north'}
+print(rev["db/pred/officials"])      # {'db/cardinality': 'many'}
+
+# %% [markdown]
+# ### Writing through the bracket
+#
+# On a transaction the bracket is the mirror. `t[s, p] = o` is an
+# `add`; `t[s] = {...}` is closed world over the user rows. A third
+# game, written as a record, then rewritten without its `date`.
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t["game/G3"] = {"home": "G2", "away": "G5",
+                    "date": "2026-10-13", "court": "east"}
+with L.transaction(by="human:dan") as t:
+    t["game/G3"] = {"home": "G2", "away": "G5", "court": "east"}
+rev11 = t.rev
+print(rev11["game/G3"] == {"home": "G2", "away": "G5",
+                           "court": "east"})   # True: no date
+
+# %% [markdown]
+# Notice `date`, absent from the dict, was retracted. `del t[s, p]`
+# retracts what the predicate holds.
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t["game/G3", "date"] = "2026-10-14"
+    del t["game/G3", "court"]
+rev12 = t.rev
+print(rev12["game/G3", "date"])                # 2026-10-14
+print(rev12.get("game/G3", "court"))           # None: retracted
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t["game/G3"] = t.base["game/G3"]
+noop_rev = t.rev
+print([row for row in noop_rev.all(since=rev12)
+       if not row[0].startswith("db/tx/")])   # []: nothing moved
+
+# %% [markdown]
+# Writing a record back as it was writes no data row; only the
+# transaction's own `db/tx/<rev>` rows are new. `db/` rows are
+# never touched by `t[s] = {...}`: a `db/` key equal to the current
+# row is ignored, which is what lets a record read with `db/` rows
+# be written back. Notice one that differs is refused: machinery is
+# not written through the bracket.
+
+# %%
+try:
+    with L.transaction(by="human:dan") as t:
+        t["game/G3"] = {**t.base["game/G3"], "db/doc": "a game"}
+except TypeError as e:
+    print("TypeError:", e)               # db/doc differs
+
+# %% [markdown]
+# `t[s, p] = o` writes `one` predicates only; a record write
+# `t[s] = {...}` takes a list for a `many` key. Notice the refusal
+# names the predicate's cardinality.
+
+# %%
+try:
+    with L.transaction(by="human:dan") as t:
+        t["game/G1", "officials"] = "park"
+except TypeError as e:
+    print("TypeError:", e)                 # t[s, p] = o: one only
+
+# %%
+with L.transaction(by="human:dan") as t:
+    del t["game/G3"]
+print(t.rev.get("game/G3", "home"))      # None: every row retracted
+
+# %% [markdown]
+# `del t[s]` retracts the user rows: `game/G3` now holds nothing,
+# so `rev["game/G3"]` would raise `KeyError`.
+
+# %% [markdown]
 # ## `get`, `in`, `asserted`
 
 # %%
+rev = L.at()
 print(rev.get("game/G1", "score"))                # None
 print(rev.get("game/G1", "score", default="tbd")) # tbd
 print(("game/G1", "home", "G4") in rev)           # True
 print(("game/G1", "court", "north") in rev)       # False
-print(rev.asserted("game/G1", "court", "north"))  # [Rev(2)]
+print(rev.asserted("game/G1", "court", "north"))  # [Rev(1)]
 print(rev.asserted("game/G1", "court", "west"))   # []
+print(rev.asserted("game/G1", "officials", "kim"))
+# [Rev(2), Rev(4), Rev(6)]
 
 # %% [markdown]
 # `get` is `[]` answering `default` instead of raising on none.
 # `in` is the no-raise membership test, by the same fold.
 # `asserted` walks history: `north` is gone from the fold and still
-# in the history.
+# in the history, and every add of `kim` is listed, the removed one
+# included.
 
 # %% [markdown]
 # ## `all` binds the open positions
@@ -264,14 +481,15 @@ print(rev.asserted("game/G1", "court", "west"))   # []
 # %%
 print(sorted(rev.all("game/G1")))       # (predicate, object) pairs
 # [('away', 'G5'), ('court', 'south'), ('date', '2026-10-11'),
-#  ('home', 'G4'), ('officials', 'kim'), ('officials', 'ortiz')]
+#  ('home', 'G4'), ('officials', 'kim'), ('officials', 'lee'),
+#  ('officials', 'ortiz')]
 print(rev.all("game/G1", "home"))       # ['G4']: always a list
-print(rev.all("game/G1", "home", "G4")) # [Rev(2)]
-print([row for row in rev.all(since=r3)
+print(rev.all("game/G1", "home", "G4")) # [Rev(1)]
+print([row for row in rev9.all(since=rev8)
        if not row[0].startswith("db/tx/")])
-# game/G2's four rows: what (r3, r4] asserted
-print(rev.get("game/G1", "court", since=r2))  # south
-print(rev.get("game/G1", "home", since=r2))   # None: set at r2
+# game/G2's four rows: what (rev8, rev9] asserted
+print(rev.get("game/G1", "court", since=rev1))  # south
+print(rev.get("game/G1", "home", since=rev1))   # None: at rev1
 
 # %% [markdown]
 # `all` returns what the pattern leaves open, a list on either
@@ -294,14 +512,14 @@ print(rev.select(("court",), s="game/G2"))    # [('north',)]
 # tuples. The spec gives `select` no order, so the notebook sorts.
 
 # %%
-print(rev.select(("home", "court"), where={"court": None},
-                 since=r3))                  # [('G1', 'north')]
+print(rev9.select(("home", "court"), where={"court": None},
+                  since=rev8))               # [('G1', 'north')]
 
 # %% [markdown]
 # `since=` on the subject operations, in the Versions § 6 forms:
 # `where={"court": None}` is *has a court row, any value*, and only
-# `game/G2` asserted one in `(r3, r4]`; `game/G1`'s `south` is at
-# r3 itself.
+# `game/G2` asserted one in `(rev8, rev9]`; `game/G1`'s `south` is
+# at `rev2`.
 
 # %% [markdown]
 # `select` has siblings, `refs`, `values`, `value` and `load`, and
@@ -328,119 +546,17 @@ print(rev.select(("away",), home="G1"))     # [('G3',)]
 # before; an undeclared predicate is still a row, found by scan.
 
 # %% [markdown]
-# ## `many` as a set
+# ## A named revision
+#
+# A named revision is any subject's `rev` row, and `L.at` reads a
+# digit-only string as a revision id.
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("game/G1", "officials", "lee")
-    t.add("game/G1", "officials", "kim")   # held already: no change
+    t["env/prod", "rev"] = str(rev2.id)
 rev = L.at()
-print(rev.all("game/G1", "officials"))     # ['kim', 'ortiz', 'lee']
-
-# %% [markdown]
-# The `officials` of r3, built on. A set: `kim`, added again while
-# held, changes nothing. Notice below that `[]` refuses `officials`
-# by its declaration, however many members it holds, and names
-# `all`.
-
-# %%
-try:
-    rev["game/G1", "officials"]
-except TypeError as e:
-    print("TypeError:", e)                 # many: use all
-
-# %%
-with L.transaction(by="human:dan") as t:
-    t.remove("game/G1", "officials", "kim")
-with L.transaction(by="human:dan") as t:
-    t.add("game/G1", "officials", "kim")
-    t.add("game/G1", "officials", "ortiz")  # present: keeps place
-rev = L.at()
-print(rev.all("game/G1", "officials"))   # ['ortiz', 'lee', 'kim']
-print(rev["game/G1", "officials", "kim"])     # Rev(8)
-print(rev["game/G1", "officials", "ortiz"])   # Rev(3)
-print(rev.asserted("game/G1", "officials", "kim"))
-# [Rev(3), Rev(6), Rev(8)]
-
-# %% [markdown]
-# Order is assertion order by each member's earliest add not since
-# removed: re-adding a present member (`kim` at 6, `ortiz` at 8)
-# keeps its place; remove then re-add moves `kim` to the end. The
-# three-position read answers with that earliest surviving add;
-# `asserted` lists every add, the removed one included.
-
-# %% [markdown]
-# The bracket `t[s, p] = o` writes `one` predicates only; a record
-# write `t[s] = {...}` takes a list for a `many` key. Notice the
-# refusal names the predicate's cardinality.
-
-# %%
-try:
-    with L.transaction(by="human:dan") as t:
-        t["game/G1", "officials"] = "park"
-except TypeError as e:
-    print("TypeError:", e)                 # t[s, p] = o: one only
-
-# %% [markdown]
-# ## The fold, revision by revision
-
-# %%
-for n in range(r2.id, L.at().id + 1):
-    r = L.at(n)
-    print(n, r.get("game/G1", "court"),
-          r.all("game/G1", "officials"))
-# 2 north []
-# 3 south ['kim', 'ortiz']
-# 4 south ['kim', 'ortiz']
-# 5 south ['kim', 'ortiz']
-# 6 south ['kim', 'ortiz', 'lee']
-# 7 south ['ortiz', 'lee']
-# 8 south ['ortiz', 'lee', 'kim']
-
-# %% [markdown]
-# Each `L.at(n)` folds every row at or before `n`; a revision is a
-# view, not a copy. A named revision is any subject's `rev` row,
-# and `L.at` reads a digit-only string as a revision id.
-
-# %%
-with L.transaction(by="human:dan") as t:
-    t["env/prod", "rev"] = str(r3.id)
-rev = L.at()
-prod = L.at(rev["env/prod", "rev"])        # L.at("3")
-print(prod.id, prod.get("game/G1", "court"))   # 3 south
-
-# %% [markdown]
-# ## Flipping cardinality
-
-# %%
-before = L.at()
-with L.transaction(by="human:dan", why="courts are shared") as t:
-    t.add("db/pred/court", "db/cardinality", "many")
-flip = t.rev
-print(before.all("game/G1", "court"))    # ['south']: one, latest
-print(flip.all("game/G1", "court"))      # ['north', 'south']
-
-# %% [markdown]
-# A declaration is as-of: reads before `flip` fold `court` as
-# `one`, reads from `flip` on fold every earlier `add` as a set
-# member, superseded values included, since an assignment never
-# wrote a retraction.
-
-# %%
-with L.transaction(by="human:dan") as t:
-    t.add("db/pred/court", "db/cardinality", "one")
-print(t.rev.get("game/G1", "court"))     # south: latest add wins
-
-# %% [markdown]
-# Flipping back makes the latest add win again from that revision.
-# Notice `flip` itself still refuses the two-position read: it is
-# frozen at a revision where `court` is `many`.
-
-# %%
-try:
-    flip["game/G1", "court"]
-except TypeError as e:
-    print("TypeError:", e)
+prod_rev = L.at(rev["env/prod", "rev"])       # L.at("2")
+print(prod_rev.id, prod_rev.get("game/G1", "court"))   # 2 south
 
 # %% [markdown]
 # ## `db/type`
@@ -453,7 +569,7 @@ with L.transaction(by="human:dan") as t:
 with L.transaction(by="human:dan") as t:
     t.add("db/pred/score", "db/type", "str")
     t.add("db/pred/date", "db/type", "str")
-top = L.at().id
+top_rev = L.at()
 
 # %% [markdown]
 # A predicate may declare the tag its objects take: `str`, `json`,
@@ -466,7 +582,7 @@ try:
         t.add("game/G2", "date", {"y": 2026, "m": 10})
 except TypeError as e:
     print("TypeError:", e)               # json under a str pred
-print(L.at().id == top)                  # True: nothing written
+print(L.at().id == top_rev.id)           # True: nothing written
 
 # %% [markdown]
 # Rows written before the declaration are not re-checked at the
@@ -609,51 +725,3 @@ print(when[0][when[0].tx, "db/by"])       # human:dan: by whom
 # %% [markdown]
 # The reverse lookup for a version: `asserted` names the revision,
 # and its `db/tx/<rev>` rows say who, and when if stamped.
-
-# %% [markdown]
-# ## Bracket writes
-
-# %%
-with L.transaction(by="human:dan") as t:
-    t["game/G2"] = {"home": "G1", "away": "G3", "court": "east"}
-    t["game/G1", "date"] = "2026-10-10"
-    del t["game/G1", "court"]
-wrote = t.rev
-print(wrote["game/G2"] == {"home": "G1", "away": "G3",
-                           "court": "east"})   # True: no date
-print(wrote["game/G1", "date"])                # 2026-10-10
-print(wrote.get("game/G1", "court"))           # None: retracted
-
-# %% [markdown]
-# `t[s, p] = o` is an `add`. `t[s] = {...}` is closed world over
-# the user rows: `game/G2`'s `date`, absent from the dict, was
-# retracted. `del t[s, p]` retracts what the predicate holds.
-
-# %%
-with L.transaction(by="human:dan") as t:
-    t["game/G2"] = t.base["game/G2"]
-noop = t.rev
-print([row for row in noop.all(since=wrote)
-       if not row[0].startswith("db/tx/")])   # []: nothing moved
-
-# %% [markdown]
-# Writing a record back as it was writes no data row; only the
-# transaction's own `db/tx/<rev>` rows are new. Notice a `db/` key
-# in the dict that differs from the current row is refused:
-# machinery is not written through the bracket.
-
-# %%
-try:
-    with L.transaction(by="human:dan") as t:
-        t["game/G2"] = {**t.base["game/G2"], "db/doc": "a game"}
-except TypeError as e:
-    print("TypeError:", e)               # db/doc differs
-
-# %%
-with L.transaction(by="human:dan") as t:
-    del t["game/G2"]
-print(t.rev.get("game/G2", "home"))      # None: every row retracted
-
-# %% [markdown]
-# `del t[s]` retracts the user rows: `game/G2` now holds nothing,
-# so `rev["game/G2"]` would raise `KeyError`.
