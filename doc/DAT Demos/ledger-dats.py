@@ -37,7 +37,7 @@
 # run actually loaded, not the static import closure.
 
 # %%
-import json, shutil, sys, tempfile
+import json, shutil, sys
 from pathlib import Path
 
 from dvc_dat.ledger import Ledger, Ref, bump
@@ -45,14 +45,14 @@ from dvc_dat.ledger import NotEvaluated, Unindexed
 from dvc_dat.ledger import UnmountedImport, UntracedRead
 from dvc_dat.ledger import Code, Env, set_env_provider
 
-tmp = Path(tempfile.mkdtemp(prefix="ledger-dats-"))
-L = Ledger.create(tmp / "ledger")        # open() never creates
-checkout = tmp / "sv-pipe"
-shutil.copytree("demo_svp", checkout)
-sys.path.insert(0, str(checkout))
+scratch_ledger_path = Path("scratch/dats-demo/ledger").resolve()
+L = Ledger(scratch_ledger_path, create=True)   # the one explicit act
+checkout_path = Path("scratch/dats-demo/sv-pipe").resolve()
+shutil.copytree("demo_svp", checkout_path, dirs_exist_ok=True)
+sys.path.insert(0, str(checkout_path))
 
 def env(version, commit):
-    code = Code(version, commit, path=checkout)
+    code = Code(version, commit, path=checkout_path)
     return Env({"sv-pipe": code}, lock="sha256:5e1f",
                platform="darwin-arm64-py3.11")
 ENV = {"now": env("0.2.2", "7d742989")}
@@ -147,9 +147,9 @@ with L.transaction(by="human:dan", why="dats demo") as t:
                               ("G4", "west", "pro")]:
         t[f"game/{g}"] = {"court": court, "gameset": gameset}
 rev = L.at()
-f = rev.load_fn("svp.etl.track.tracks")
-print(f.mode, f.mount)          # sandbox svp.etl
-print(f.module)                 # <tmp>/sv-pipe/svp/etl/track.py
+tracks_fn = rev.load_fn("svp.etl.track.tracks")
+print(tracks_fn.mode, tracks_fn.mount)  # sandbox svp.etl
+print(tracks_fn.module)  # <checkout_path>/svp/etl/track.py
 
 # %% [markdown]
 # The mount row names its repo, and the provider maps `sv-pipe` to
@@ -160,32 +160,32 @@ print(f.module)                 # <tmp>/sv-pipe/svp/etl/track.py
 # In a real checkout a file at its root does this setup:
 #
 # ```yaml
-# # .datconfig.yaml
-# ledger: /data/ledgers/sv-pipe      # what Ledger.open() finds
+# ledger: /data/ledgers/sv-pipe
 # mounts:
-#   svp.etl: svp/etl                 # asserted as db/mount rows
+#   svp.etl: svp/etl
 # ```
 #
-# `Ledger.open()` walks up from the cwd to the nearest
-# `.datconfig.yaml` with a `ledger:` key; `mounts:` is sugar that
-# `open()` asserts as the `db/root` and `db/repo` rows when they are
-# missing, the repo being the checkout the file sits in. `DAT_LEDGER`,
-# when set, overrides the walk: it is how a sandbox worker in a
-# scratch cwd finds its parent's ledger (A44).
+# That is the whole of `.datconfig.yaml`. `Ledger()`, with no path,
+# finds it: it walks up from the cwd to the nearest `.datconfig.yaml`
+# with a `ledger:` key and opens the ledger it names. `mounts:` is
+# sugar that `Ledger()` asserts as the `db/root` and `db/repo` rows
+# when they are missing, the repo being the checkout the file sits
+# in. `DAT_LEDGER`, when set, overrides the walk: it is how a sandbox
+# worker in a scratch cwd finds its parent's ledger (A44).
 
 # %% [markdown]
 # ## The dat constructor
 
 # %%
-spec = {"main": "svp.etl.detect.find", "stage": "detect",
-        "game": "G1", "bins": 16}
-d = rev.eval("svp.etl.dat.dat", spec=spec)
-print(dict(sorted(d.preds.items())))
+detect_spec_record = {"main": "svp.etl.detect.find",
+                      "stage": "detect", "game": "G1", "bins": 16}
+spec_dat = rev.eval("svp.etl.dat.dat", spec=detect_spec_record)
+print(dict(sorted(spec_dat.preds.items())))
 # {"bins": "16", "game": "G1", "metrics.count": "40",
 #  "metrics.score": "…", "stage": "detect"}
-print(sorted(p.name for p in d.path.iterdir()))
+print(sorted(file_path.name for file_path in spec_dat.path.iterdir()))
 # ["_result_.yaml", "_spec_.yaml", "boxes.json"]
-print(L.at()[d.subject, "db/keys"])     # the question, one row
+print(L.at()[spec_dat.subject, "db/keys"])  # the question, one row
 # {"spec": {"bins": 16, "game": "G1",
 #           "main": "svp.etl.detect.find", "stage": "detect"}}
 
@@ -206,13 +206,14 @@ print(L.at()[d.subject, "db/keys"])     # the question, one row
 # at another `fn` subject.
 
 # %%
-mods = L.at()[d.trace["fn"], "db/modules"]
-print(sorted(mods))      # ["svp/etl/dat.py", "svp/etl/detect.py"]
+module_paths = L.at()[spec_dat.trace["fn"], "db/modules"]
+print(sorted(module_paths))  # ["svp/etl/dat.py", "svp/etl/detect.py"]
 
 # %%
-det1 = rev.eval("svp.etl.detect.detections", game="G1")
-print(det1.same_as(d), det1.subject != d.subject)    # True True
-print(Ref(L.at(), det1.subject).preds["metrics.count"])   # 40
+detections_dat = rev.eval("svp.etl.detect.detections", game="G1")
+print(detections_dat.same_as(spec_dat),
+      detections_dat.subject != spec_dat.subject)   # True True
+print(Ref(L.at(), detections_dat.subject).preds["metrics.count"])  # 40
 
 # %% [markdown]
 # The stage function and the constructor given the same spec make
@@ -224,11 +225,11 @@ print(Ref(L.at(), det1.subject).preds["metrics.count"])   # 40
 
 # %%
 rev = L.at()
-m1 = rev.eval("svp.etl.model.train", game="G1")
-print(m1, m1.preds["stage"], m1.preds["gameset"])
+model_dat = rev.eval("svp.etl.model.train", game="G1")
+print(model_dat, model_dat.preds["stage"], model_dat.preds["gameset"])
 # <8 hex> model normie
-for item in sorted(m1.trace):
-    print(item, "->", m1.trace[item])
+for item in sorted(model_dat.trace):
+    print(item, "->", model_dat.trace[item])
 # cfg/train epochs -> 8
 # eval:svp.etl.track.tracks{"game":"G1"}
 #     -> ref:svp.etl.dat.StageDat:<hash>
@@ -252,15 +253,17 @@ print(L.at().select(("stage", "metrics.count"), kind=StageDat,
 
 # %%
 rev = L.at()
-trk3 = rev.eval("svp.etl.track.tracks", game="G3")    # a hit
-spec = {"main": "svp.etl.model.fit", "stage": "model",
-        "game": "G3", "epochs": 20}
-(tmp / "by-hand").mkdir()
-mine = build(rev, spec, tmp / "by-hand")
-mine.preds["gameset"] = "pro"
+tracks_g3_dat = rev.eval("svp.etl.track.tracks", game="G3")  # a hit
+fit_spec_record = {"main": "svp.etl.model.fit", "stage": "model",
+                   "game": "G3", "epochs": 20}
+work_path = Path("scratch/dats-demo/by-hand").resolve()
+work_path.mkdir(parents=True, exist_ok=True)
+hand_dat = build(rev, fit_spec_record, work_path)
+hand_dat.preds["gameset"] = "pro"
 with L.transaction(by="human:dan", why="a long run by hand") as t:
-    t.add_value(mine, deps=[trk3], provenance="human:dan")
-print(dict(sorted(mine.trace.items())))
+    t.add_value(hand_dat, deps=[tracks_g3_dat],
+                provenance="human:dan")
+print(dict(sorted(hand_dat.trace.items())))
 # {"code/sv-pipe": "0.2.2+7d742989",
 #  "platform": "darwin-arm64-py3.11",
 #  "ref:svp.etl.dat.StageDat:<hash>": "ref:…StageDat:<hash>",
@@ -278,9 +281,9 @@ print(dict(sorted(mine.trace.items())))
 # %%
 rev = L.at()
 print(len(rev.refs(kind=StageDat, stage="model", game="G3")))  # 2
-proof = rev.refs(kind=StageDat, stage="model", game="G3",
-                 where={"db/provenance": "eval:sandbox"})
-print(len(proof))                                              # 1
+proof_refs = rev.refs(kind=StageDat, stage="model", game="G3",
+                      where={"db/provenance": "eval:sandbox"})
+print(len(proof_refs))                                         # 1
 
 # %% [markdown]
 # ## What the sandbox refuses
@@ -315,18 +318,19 @@ except UntracedRead as e:
 
 # %%
 rev = L.at()
-trk1 = rev.eval("svp.etl.track.tracks", game="G1")    # a hit
-pre_bump = rev
+tracks_dat = rev.eval("svp.etl.track.tracks", game="G1")  # a hit
+pre_bump_rev = rev
 
-track_py = checkout / "svp/etl/track.py"
-track_py.write_text(track_py.read_text()
+track_path = checkout_path / "svp/etl/track.py"
+track_path.write_text(track_path.read_text()
                     + "\n# tidied: no change in behaviour\n")
 ENV["now"] = env("0.2.3", "c0ffee12")    # the edit, committed
 with L.transaction(by="human:dan", why="tidy track") as t:
     bump(t, "code/sv-pipe")              # 0.2.3, commit c0ffee12
 rev = L.at()
-print(det1.matches(rev), trk1.matches(rev))     # True False
-print(m1.matches(rev))                          # False, for now
+print(detections_dat.matches(rev),
+      tracks_dat.matches(rev))                  # True False
+print(model_dat.matches(rev))                   # False, for now
 
 # %% [markdown]
 # A sandbox trace pins the modules a stage loaded, not the repo's
@@ -336,13 +340,13 @@ print(m1.matches(rev))                          # False, for now
 # its nested `tracks` item has no entry that holds at this rev yet.
 
 # %%
-m1b = rev.eval("svp.etl.model.train", game="G1")
-trk1b = rev.eval("svp.etl.track.tracks", game="G1")   # hit by now
-print(trk1b.subject != trk1.subject)    # True: re-derived
-print(trk1b.same_as(trk1))              # True: the same bytes
-print(m1b.subject == m1.subject)        # True: the model hit
-print(m1.matches(L.at()))               # True, now
-print(trk1.diff(trk1b))
+model_hit_dat = rev.eval("svp.etl.model.train", game="G1")
+retracked_dat = rev.eval("svp.etl.track.tracks", game="G1")  # a hit
+print(retracked_dat.subject != tracks_dat.subject)  # True: re-derived
+print(retracked_dat.same_as(tracks_dat))  # True: the same bytes
+print(model_hit_dat.subject == model_dat.subject)  # True: the model hit
+print(model_dat.matches(L.at()))        # True, now
+print(tracks_dat.diff(retracked_dat))
 # {"fn": ("db/fn/svp.etl.track.tracks/<a>",
 #         "db/fn/svp.etl.track.tracks/<b>")}
 
@@ -384,12 +388,14 @@ except Unindexed as e:
 with L.transaction(by="human:dan", time=True,
                    why="October release") as t:
     bump(t, "db", "minor", confirm=lambda old, new: True)
-rel = L.at("3.2.0")
-print(rel.id == t.rev.id, rel["db", "version"])     # True 3.2.0
-print(rel["code/sv-pipe", "version"],
-      rel["code/dvc-dat", "version"])               # 0.2.3 5.0.0
-print(rel["cfg/train", "epochs"])                   # 8
-print(sorted({s for s, p, o in rel.all(since=pre_bump)}))
+release_rev = L.at("3.2.0")
+print(release_rev.id == t.rev.id,
+      release_rev["db", "version"])               # True 3.2.0
+print(release_rev["code/sv-pipe", "version"],
+      release_rev["code/dvc-dat", "version"])       # 0.2.3 5.0.0
+print(release_rev["cfg/train", "epochs"])           # 8
+print(sorted({s for s, p, o
+              in release_rev.all(since=pre_bump_rev)}))
 
 # %% [markdown]
 # A release is a bump of `db`'s own `version`: one revision, named
@@ -419,13 +425,13 @@ print(len(L.at().refs(kind=StageDat, since=rev)))   # 2
 
 # %%
 rev = L.at()
-s = rev.eval("svp.etl.report.scores", gameset="normie")
-print(type(s).__name__)                  # Table
-q = [k for k in s.trace if k.startswith("q:")]
-print(q)
+scores_table = rev.eval("svp.etl.report.scores", gameset="normie")
+print(type(scores_table).__name__)       # Table
+q_items = [k for k in scores_table.trace if k.startswith("q:")]
+print(q_items)
 # ['q:{"gameset":"normie","kind":"svp.etl.dat.StageDat",
 #     "stage":"model"}']
-print(len(json.loads(s.trace[q[0]])))    # 4: the models it read
+print(len(json.loads(scores_table.trace[q_items[0]])))   # 4 models
 
 # %% [markdown]
 # The query inside the function is a trace item, `q:` and its where
@@ -439,21 +445,25 @@ with L.transaction(by="human:dan", why="G3 plays normie") as t:
     t["game/G3", "gameset"] = "normie"
 rev = L.at()
 rev.eval("svp.etl.model.train", game="G3")    # re-derived
-print(s.matches(rev))                         # False
-print(list(s.diff(rev.eval("svp.etl.report.scores",
-                           gameset="normie"))))   # the q: item
+print(scores_table.matches(rev))              # False
+print(list(scores_table.diff(rev.eval("svp.etl.report.scores",
+                                      gameset="normie"))))
+# the q: item
 
 # %% [markdown]
 # ## The latest model for every game of a set
 
 # %%
 rev = L.at()
-latest = {}
-for r in rev.refs(kind=StageDat, stage="model", gameset="normie"):
-    g = r.preds["game"]
-    if g not in latest or r.sealed_at.id > latest[g].sealed_at.id:
-        latest[g] = r
-print({g: r.preds["metrics.score"] for g, r in latest.items()})
+latest_refs = {}
+for model_ref in rev.refs(kind=StageDat, stage="model",
+                          gameset="normie"):
+    g = model_ref.preds["game"]
+    if (g not in latest_refs
+            or model_ref.sealed_at.id > latest_refs[g].sealed_at.id):
+        latest_refs[g] = model_ref
+print({g: model_ref.preds["metrics.score"]
+       for g, model_ref in latest_refs.items()})
 
 # %% [markdown]
 # Nothing is loaded: `Ref.preds` and `Ref.sealed_at` come with the
@@ -465,12 +475,12 @@ print({g: r.preds["metrics.score"] for g, r in latest.items()})
 # ## Running at an old revision
 
 # %%
-old = L.at("3.2.0")
-m_old = old.eval("svp.etl.model.train", game="G1")
-print(m_old.subject == m1.subject)      # True: the epochs-8 model
-m_now = L.at().eval("svp.etl.model.train", game="G1")
-print(m_now.subject == m_old.subject)   # False: the epochs-12 one
-print(m_old.diff(m_now))
+release_rev = L.at("3.2.0")
+old_model_dat = release_rev.eval("svp.etl.model.train", game="G1")
+print(old_model_dat.subject == model_dat.subject)  # True: epochs 8
+now_model_dat = L.at().eval("svp.etl.model.train", game="G1")
+print(now_model_dat.subject == old_model_dat.subject)  # False: 12
+print(old_model_dat.diff(now_model_dat))
 # {"cfg/train epochs": ("8", "12")}
 
 # %% [markdown]
@@ -480,13 +490,13 @@ print(m_old.diff(m_now))
 # binding is the hit, and nothing runs.
 
 # %% [markdown]
-# G4 was never trained, and `pre_bump` says `code/sv-pipe` is
+# G4 was never trained, and `pre_bump_rev` says `code/sv-pipe` is
 # `7d742989` while this environment is `c0ffee12`, so a miss there
 # will not run.
 
 # %%
 try:
-    pre_bump.eval("svp.etl.model.train", game="G4")
+    pre_bump_rev.eval("svp.etl.model.train", game="G4")
 except NotEvaluated as e:
     print("NotEvaluated:", e)
 
