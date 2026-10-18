@@ -1,6 +1,6 @@
-"""`svp.etl.dat`: a `Dat` as a `Value`, and the dat constructor.
+"""`demo_game.etl.dat`: a `Dat` as a `Value`, and the dat constructor.
 
-`dat(spec, work, **kwargs)` (SVP447 Values idea 10) builds a dat in
+`dat(spec, work, **kwargs)` builds a dat in
 the folder the eval hands it (F447 Q36, lean A) and runs the spec's
 `main` there. Its preds merge spec keys and result metrics under one
 namespace: `game`, `stage`, `bins` from the spec, `metrics.<m>` from

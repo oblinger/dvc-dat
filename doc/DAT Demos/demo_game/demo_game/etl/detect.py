@@ -1,11 +1,12 @@
-"""`svp.etl.detect`: stage 1, detections from the game's rows."""
+"""`demo_game.etl.detect`: stage 1, detections from the game's rows."""
 import json
 from pathlib import Path
 
 from dvc_dat.ledger import ledger_fn
-from svp.etl.dat import StageDat, build
+from demo_game.etl.dat import StageDat, build
 
-SPEC = {"main": "svp.etl.detect.find", "stage": "detect", "bins": 16}
+SPEC = {"main": "demo_game.etl.detect.find", "stage": "detect",
+        "bins": 16}
 
 
 @ledger_fn

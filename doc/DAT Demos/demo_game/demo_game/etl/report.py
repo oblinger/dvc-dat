@@ -1,8 +1,8 @@
-"""`svp.etl.report`: one parquet `Table` over a game set's models."""
+"""`demo_game.etl.report`: one parquet `Table` over a game set."""
 import pyarrow as pa
 
 from dvc_dat.ledger import Table, ledger_fn
-from svp.etl.dat import StageDat
+from demo_game.etl.dat import StageDat
 
 
 @ledger_fn

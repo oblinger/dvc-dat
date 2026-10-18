@@ -1,4 +1,4 @@
-"""`svp.identity.train`: a revision function of a game."""
+"""`demo_game.identity.train`: a revision function of a game."""
 
 
 def train(rev, *, game: str, epochs: int = 8):

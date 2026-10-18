@@ -1,4 +1,4 @@
-"""`svp.game`: the worked example of SVP447 Values, a game's cut.
+"""`demo_game.game`: the values notebook's worked example, a cut.
 
 A `Value` subclass lives in a module, never in a notebook cell: the
 `db/value` row names its class by dotted name (`Ref.type`), and a
@@ -91,7 +91,7 @@ def noisy(rev, *, game: str) -> dict:
 
 @ledger_class(preds=("game",))
 class Still(Value):
-    """One frame of a game's video; was `svp.legacy.Frame`."""
+    """One frame of a game's video; was `demo_game.legacy.Frame`."""
 
     def __init__(self, image: bytes):
         self.image = image

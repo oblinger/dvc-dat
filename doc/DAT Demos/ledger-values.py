@@ -22,8 +22,8 @@
 # on `game/G1` itself. Every value is found by its preds, and every
 # one can say why it would no longer be the answer.
 #
-# Written to the ledger design of 2026-10-18 (SVP447 Ledger Module,
-# Values § The worked example, F447 A39–A50). It runs once
+# Written to the ledger design of 2026-10-18 (Ledger Module, Values
+# § The worked example, F447 A39–A51). It runs once
 # `ledger2` is rebuilt to that design (T534); until then it is the
 # design, not a demo. Revision numbers in the comments count from
 # 1, the first transaction on this ledger.
@@ -32,35 +32,54 @@
 # ## Setup
 
 # %%
+import shutil
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from dvc_dat.ledger import Ledger, Ref, bump
 from dvc_dat.ledger import AliasLoop, Exists, Multiple, Undeclared
-from dvc_dat.ledger import Code, Env, set_env_provider
 
-sys.path.insert(0, "demo_svp")           # the stand-in svp package
 scratch_ledger_path = Path("scratch/values-demo/ledger").resolve()
 L = Ledger(scratch_ledger_path, create=True)   # made, then opened
 
 # %% [markdown]
-# A notebook runs inside no sv-pipe checkout, so the environment
-# provider stands in for one: it is what `eval` and `bump` ask for
-# the commit the code is at.
+# ### A real code repository
+#
+# Every value function runs in a git checkout, the ledger records
+# which commit, and the notebook makes a tiny one of its own: the
+# `demo_game` package beside this notebook, copied into scratch.
 
 # %%
-ENV = Env({"sv-pipe": Code("0.2.2", "7d742989")},
-          lock="sha256:5e1f", platform="darwin-arm64-py3.11")
-set_env_provider(lambda module: ENV)
+demo_repo_path = Path("scratch/values-demo/demo-game").resolve()
+shutil.copytree("demo_game", demo_repo_path,
+                ignore=shutil.ignore_patterns("__pycache__"))
+
+
+def git(*args: str) -> str:
+    """Run git in the demo repository; return its stdout."""
+    cmd = ["git", "-c", "user.name=demo",
+           "-c", "user.email=demo@example.com", *args]
+    done = subprocess.run(cmd, cwd=demo_repo_path, check=True,
+                          capture_output=True, text=True)
+    return done.stdout.strip()
+
+
+git("init", "-q")
+git("add", ".")
+git("commit", "-q", "-m", "demo-game 0.1.0")
+commit_sha = git("rev-parse", "HEAD")
+sys.path.insert(0, str(demo_repo_path))
 
 # %% [markdown]
 # The two games, as plain rows written with the bracket, and the
-# code clock `eval` checks against the environment.
+# code clock `eval` checks against the commit it discovers.
 
 # %%
 with L.transaction(by="human:dan", why="season opener") as t:
-    t["code/sv-pipe"] = {"version": "0.2.2", "commit": "7d742989"}
+    t["code/demo-game"] = {"version": "0.1.0",
+                           "commit": commit_sha}
     t["game/G1"] = {"home": "G4", "away": "G5",
                     "date": "2026-10-11", "court": "north"}
     t["game/G2"] = {"home": "G1", "away": "G3",
@@ -77,7 +96,7 @@ print(rev["game/G1"])
 # %%
 with L.transaction(by="human:dan") as t:
     t.add("db/pred/team", "db/cardinality", "many")
-    t.add("db/pred/video", "db/type", "svp.game.Video")
+    t.add("db/pred/video", "db/type", "demo_game.game.Video")
     t.add("db/pred/span", "db/type", "json")
 
 # %% [markdown]
@@ -86,7 +105,7 @@ with L.transaction(by="human:dan") as t:
 # %% [markdown]
 # ### The class
 #
-# The kinds and value functions live in `demo_svp/svp/game.py`: a
+# The kinds and value functions live in `demo_game/game.py`: a
 # `Value` subclass defined in a cell has no dotted name for a later
 # `load` to import. The kind of a raw video:
 #
@@ -111,7 +130,7 @@ with L.transaction(by="human:dan") as t:
 # line each: the bytes are the frames.
 
 # %%
-from svp.game import Video, Cut, Still
+from demo_game.game import Video, Cut, Still
 
 # %% [markdown]
 # ### Preds on the object, then the seal
@@ -121,7 +140,7 @@ video_value = Video(b"G1 wide camera, 9000 frames")
 video_value.preds.update(game="G1", camera="wide", span=[0, 9000])
 with L.transaction(by="human:dan") as t:
     t.add_value(video_value, alias="video/G1",
-                provenance="import:alg2")
+                provenance="import:archive")
 print(video_value)                   # video/G1
 print(video_value.subject[:8], video_value.sealed)  # <8 hex> True
 print(video_value.preds)
@@ -151,7 +170,7 @@ g2_video = Video(b"G2 wide camera, 8400 frames")
 g2_video.preds.update(game="G2", camera="wide", span=[0, 8400])
 with L.transaction(by="human:dan") as t:
     t.add_value(g2_video, alias="video/G2",
-                provenance="import:alg2")
+                provenance="import:archive")
 
 # %% [markdown]
 # ### What the ledger holds now
@@ -163,19 +182,19 @@ with L.transaction(by="human:dan") as t:
 seal_rev = video_value.rev
 for row in seal_rev.rows(since=L.at(seal_rev.id - 1)):
     print(row)
-# rev  subject   predicate                object
-#   3  <hash>    db/value                 ref:svp.game.Video:<hash>
-#   3  <hash>    db/kind                  svp.game.Video
-#   3  <hash>    db/provenance            import:alg2
-#   3  <hash>    db/preds                 ["game","camera","span"]
-#   3  <hash>    db/trace/code/sv-pipe    0.2.2+7d742989
-#   3  <hash>    db/trace/platform        darwin-arm64-py3.11
-#   3  <hash>    db/trace/uv.lock         sha256:5e1f
-#   3  <hash>    game                     G1
-#   3  <hash>    camera                   wide
-#   3  <hash>    span                     [0, 9000]
-#   3  video/G1  db/alias                 <hash>
-#   3  db/tx/3   db/by                    human:dan
+# rev subject  predicate               object
+#   3 <hash>   db/value                ref:demo_game.game.Video:<hash>
+#   3 <hash>   db/kind                 demo_game.game.Video
+#   3 <hash>   db/provenance           import:archive
+#   3 <hash>   db/preds                ["game","camera","span"]
+#   3 <hash>   db/trace/code/demo-game 0.1.0+<8 hex>
+#   3 <hash>   db/trace/platform       darwin-arm64-py3.11
+#   3 <hash>   db/trace/uv.lock        sha256:<hash>
+#   3 <hash>   game                    G1
+#   3 <hash>   camera                  wide
+#   3 <hash>   span                    [0, 9000]
+#   3 video/G1 db/alias                <hash>
+#   3 db/tx/3  db/by                   human:dan
 
 # %% [markdown]
 # `db/value` names the bytes by class and hash; `db/kind` is the
@@ -186,8 +205,8 @@ for row in seal_rev.rows(since=L.at(seal_rev.id - 1)):
 
 # %%
 print(dict(sorted(video_value.trace.items())))
-# {"code/sv-pipe": "0.2.2+7d742989",
-#  "platform": "darwin-arm64-py3.11", "uv.lock": "sha256:5e1f"}
+# {"code/demo-game": "0.1.0+<8 hex>",
+#  "platform": "darwin-arm64-py3.11", "uv.lock": "sha256:<hash>"}
 
 # %% [markdown]
 # ### What a hand seal refuses
@@ -278,7 +297,7 @@ except TypeError as e:
 
 # %%
 rev = L.at()
-cut_153 = rev.eval("svp.game.cut", game="G1", version="1.5.3")
+cut_153 = rev.eval("demo_game.game.cut", game="G1", version="1.5.3")
 print(cut_153, cut_153.sealed)       # <8 hex> True: no alias yet
 print(cut_153.rev.id > rev.id)       # True: sealed in its own rev
 print(sorted(cut_153.preds["team"]), cut_153.preds["video"])
@@ -291,7 +310,8 @@ print(sorted(cut_153.preds["team"]), cut_153.preds["video"])
 
 # %%
 top_id = L.at().id
-again_cut = L.at().eval("svp.game.cut", game="G1", version="1.5.3")
+again_cut = L.at().eval("demo_game.game.cut", game="G1",
+                        version="1.5.3")
 print(again_cut.subject == cut_153.subject)  # True: a hit
 print(L.at().id == top_id)           # True: nothing written
 print(again_cut.rev.id == cut_153.rev.id)  # True: the seal's rev
@@ -316,23 +336,23 @@ for row in entry_rev.rows(since=L.at(entry_rev.id - 1)):
 # %%
 for item in sorted(cut_153.trace):
     print(item, "->", cut_153.trace[item])
-# code/sv-pipe -> 0.2.2+7d742989
-# fn -> db/fn/svp.game.cut/<hash>
+# code/demo-game -> 0.1.0+<8 hex>
+# fn -> db/fn/demo_game.game.cut/<hash>
 # game/G1 away -> G5
 # game/G1 home -> G4
 # platform -> darwin-arm64-py3.11
-# q:{"game":"G1","kind":"svp.game.Video"}
-#     -> ["ref:svp.game.Video:<hash>"]
-# ref:svp.game.Video:<hash> -> ref:svp.game.Video:<hash>
-# uv.lock -> sha256:5e1f
+# q:{"game":"G1","kind":"demo_game.game.Video"}
+#     -> ["ref:demo_game.game.Video:<hash>"]
+# ref:demo_game.game.Video:<hash> -> ref:demo_game.game.Video:<hash>
+# uv.lock -> sha256:<hash>
 
 # %% [markdown]
 # The trace is recorded, not declared: `fn`, the code the name
-# resolved to (in base mode too, beside `code/sv-pipe`, A39); the
+# resolved to (in base mode too, beside `code/demo-game`, A39); the
 # two game rows read by name; the `value` query as a `q:` item
 # holding what it answered, so a second G1 video later is a miss
 # rather than a stale hit (A41); the video by its bytes; and the
-# environment, as on the hand seal.
+# environment, discovered, as on the hand seal.
 
 # %% [markdown]
 # ### memo=False and memo="get"
@@ -342,9 +362,9 @@ for item in sorted(cut_153.trace):
 
 # %%
 rev = L.at()
-print(rev.eval("svp.game.cut", game="G2", version="1.5.3",
+print(rev.eval("demo_game.game.cut", game="G2", version="1.5.3",
                memo="get"))          # None: never run
-dry_cut = rev.eval("svp.game.cut", game="G1", version="1.5.3",
+dry_cut = rev.eval("demo_game.game.cut", game="G1", version="1.5.3",
                    memo=False)
 print(dry_cut.sealed, dry_cut.same_as(cut_153))  # False True
 print(L.at().id == rev.id)           # True: nothing written
@@ -356,11 +376,11 @@ print(L.at().id == rev.id)           # True: nothing written
 # resolves to at this rev, and calling it is the eval.
 
 # %%
-cut_fn = rev.load_fn("svp.game.cut")
+cut_fn = rev.load_fn("demo_game.game.cut")
 print(cut_fn.mode, cut_fn.signature)
 # base (*, game: str, version: str)
 print(cut_fn.sha[:8], cut_fn.subject)
-# <8 hex> db/fn/svp.game.cut/<hash>
+# <8 hex> db/fn/demo_game.game.cut/<hash>
 print(cut_153.trace["fn"] == cut_fn.subject)   # True: the code ran
 cut_g2 = cut_fn(game="G2", version="1.5.3")  # a miss: runs, seals
 
@@ -389,12 +409,12 @@ print(current_cut.same_as(cut_153),
       current_cut.subject == cut_153.subject)     # True True
 video_ref = current_cut.preds["video"]
 print(type(video_ref).__name__, video_ref.type)
-# Ref <class 'svp.game.Video'>
+# Ref <class 'demo_game.game.Video'>
 print(video_ref.preds)
 # {"game": "G1", "camera": "wide", "span": [0, 9000]}: no load
 loaded_video = video_ref.load()      # fetches the bytes
 print(type(loaded_video), loaded_video.sealed)
-# <class 'svp.game.Video'> True
+# <class 'demo_game.game.Video'> True
 
 # %% [markdown]
 # `rev.load("game/G1")` follows the alias to the current cut.
@@ -406,7 +426,7 @@ print(type(loaded_video), loaded_video.sealed)
 game_ref = Ref(rev, "game/G1")
 print(game_ref, game_ref.name)       # game/G1 game/G1
 print(game_ref.subject == cut_153.subject)  # True: alias resolved
-print(game_ref.type)                 # <class 'svp.game.Cut'>
+print(game_ref.type)                 # <class 'demo_game.game.Cut'>
 print(game_ref.preds["version"])     # 1.5.3: the cut's preds
 print(cut_153)                       # game/G1: it has a name now
 
@@ -467,11 +487,11 @@ except Multiple as e:
 # `db/keys` row.
 
 # %%
-for memo_ref in rev.refs(fn="svp.game.cut"):
+for memo_ref in rev.refs(fn="demo_game.game.cut"):
     print(memo_ref, rev[memo_ref.subject, "db/keys"])
 # game/G1 {"game": "G1", "version": "1.5.3"}
 # game/G2 {"game": "G2", "version": "1.5.3"}
-print(len(rev.values(fn="svp.game.cut")))    # 2, loaded
+print(len(rev.values(fn="demo_game.game.cut")))    # 2, loaded
 
 # %%
 cut_refs = rev.refs(kind=Cut)
@@ -566,7 +586,7 @@ print(rev.refs(kind=Cut, team="G6"))            # [<8 hex>]
 
 # %%
 rev = L.at()
-cut_154 = rev.eval("svp.game.cut", game="G1", version="1.5.4")
+cut_154 = rev.eval("demo_game.game.cut", game="G1", version="1.5.4")
 print(cut_154)                           # <8 hex>: no alias yet
 with L.transaction(by="human:dan", why="cutter 1.5.4") as t:
     t.add("game/G1", "db/alias", cut_154.subject)
@@ -621,7 +641,7 @@ rev = L.at()
 print(cut_154.matches(rev))                 # False
 
 # %%
-cut_home_g6 = rev.eval("svp.game.cut", game="G1", version="1.5.4")
+cut_home_g6 = rev.eval("demo_game.game.cut", game="G1", version="1.5.4")
 print(cut_home_g6.subject != cut_154.subject)  # True: re-derived
 print(sorted(cut_home_g6.preds["team"]))    # ["G5", "G6"]
 print(cut_154.diff(cut_home_g6))
@@ -647,12 +667,13 @@ print(rev.load("game/G1").subject == cut_154.subject)  # unmoved
 # ```
 
 # %%
-poster_value = rev.eval("svp.game.poster", game="G1")
+poster_value = rev.eval("demo_game.game.poster", game="G1")
 for item in sorted(poster_value.trace):
     if item.startswith(("game/", "ref:")):
         print(item, "->", poster_value.trace[item])
-# game/G1 db/alias -> ref:svp.game.Cut:<cut_154 bytes>
-# ref:svp.game.Cut:<cut_154 bytes> -> ref:svp.game.Cut:<cut_154 bytes>
+# game/G1 db/alias -> ref:demo_game.game.Cut:<cut_154 bytes>
+# ref:demo_game.game.Cut:<cut_154 bytes>
+#     -> ref:demo_game.game.Cut:<cut_154 bytes>
 
 # %% [markdown]
 # The load through `game/G1` recorded the binding, the name to the
@@ -666,7 +687,7 @@ with L.transaction(by="human:dan") as t:
     t.add("game/G1", "db/alias", cut_home_g6.subject)
 rev = L.at()
 print(poster_value.matches(rev))         # False
-poster_g6_value = rev.eval("svp.game.poster", game="G1")
+poster_g6_value = rev.eval("demo_game.game.poster", game="G1")
 print(sorted(poster_value.diff(poster_g6_value)))
 # the game/G1 db/alias binding, and each side's value item
 
@@ -687,10 +708,10 @@ print(cut_154.same_as(cut_153),
 
 # %%
 rev = L.at()
-thumb3_value = rev.eval("svp.game.thumb",
+thumb3_value = rev.eval("demo_game.game.thumb",
                         clip=Ref(rev, cut_153.subject))
 top_id = L.at().id
-thumb4_value = rev.eval("svp.game.thumb",
+thumb4_value = rev.eval("demo_game.game.thumb",
                         clip=Ref(rev, cut_154.subject))
 print(thumb4_value.subject == thumb3_value.subject,
       L.at().id == top_id)                        # True True
@@ -713,7 +734,7 @@ with L.transaction(by="human:dan", why="back to 1.5.3") as t:
     t.add("game/G1", "db/alias", cut_153.subject)
 rev = L.at()
 print(poster_value.matches(rev))         # True: identical bytes
-again_poster = rev.eval("svp.game.poster", game="G1")
+again_poster = rev.eval("demo_game.game.poster", game="G1")
 print(again_poster.subject == poster_value.subject)  # True: a hit
 
 # %% [markdown]
@@ -734,15 +755,15 @@ print(again_poster.subject == poster_value.subject)  # True: a hit
 # %%
 rev = L.at()
 def ask(_):
-    return rev.eval("svp.game.noisy", game="G1")
+    return rev.eval("demo_game.game.noisy", game="G1")
 with ThreadPoolExecutor(2) as pool:
     a_value, b_value = pool.map(ask, range(2))  # both miss, both run
 print(a_value.same_as(b_value),
       a_value.subject != b_value.subject)         # False True
-noisy_refs = L.at().refs(fn="svp.game.noisy")
+noisy_refs = L.at().refs(fn="demo_game.game.noisy")
 print(len(noisy_refs))                  # 2: one question, both kept
 latest_ref = max(noisy_refs, key=lambda r: r.sealed_at.id)
-hit_value = L.at().eval("svp.game.noisy", game="G1")
+hit_value = L.at().eval("demo_game.game.noisy", game="G1")
 print(hit_value.subject == latest_ref.subject)  # True: latest
 
 # %% [markdown]
@@ -765,13 +786,13 @@ print(rev["db/pred/team", "db/cardinality"])   # many
 print(sorted(cut_153.preds["team"]))           # ["G4", "G5"]
 print(rev["db/pred/span", "db/type"])          # json
 print(video_value.preds["span"])               # [0, 9000]
-print(rev["db/pred/video", "db/type"])         # svp.game.Video
+print(rev["db/pred/video", "db/type"])         # demo_game.game.Video
 
 # %% [markdown]
 # `team` is declared `many`, so a cut's teams are a list, one row
 # per member. `span` is typed `json`, so a `one` pred may hold a
 # list (A36). `video` is typed: its object must be a `Video`,
-# stored `ref:svp.game.Video:<hash>`, an edge of the value graph.
+# stored `ref:demo_game.game.Video:<hash>`, an edge of the value graph.
 # A list under an untyped `one` pred is refused at the seal.
 
 # %%
@@ -785,20 +806,21 @@ except TypeError as e:
 # %% [markdown]
 # ### A renamed class: `db/moved`
 #
-# `Still` was `svp.legacy.Frame`; values sealed before the move
+# `Still` was `demo_game.legacy.Frame`; values sealed before the move
 # keep the old dotted name in their `db/kind` row. One `db/moved`
 # row records the move, and the loader and `kind=` follow it (A19,
-# A32). `svp.legacy` survives only so this cell can seal under the
+# A32). `demo_game.legacy` survives only so this cell can seal under the
 # old name.
 
 # %%
-from svp.legacy import Frame
+from demo_game.legacy import Frame
 old_frame = Frame(b"G1 frame 4500")
 old_frame.preds["game"] = "G1"
 with L.transaction(by="human:dan") as t:
     t.add_value(old_frame)
 with L.transaction(by="human:dan", why="Frame is Still now") as t:
-    t.add("db/kind/svp.legacy.Frame", "db/moved", "svp.game.Still")
+    t.add("db/kind/demo_game.legacy.Frame", "db/moved",
+          "demo_game.game.Still")
 new_still = Still(b"G1 frame 6000")
 new_still.preds["game"] = "G1"
 with L.transaction(by="human:dan") as t:
@@ -806,8 +828,8 @@ with L.transaction(by="human:dan") as t:
 rev = L.at()
 print(len(rev.refs(kind=Still)))       # 2: the old name followed
 frame_ref = Ref(rev, old_frame.subject)
-print(rev[frame_ref.subject, "db/kind"])  # svp.legacy.Frame
-print(frame_ref.type)                  # <class 'svp.game.Still'>
+print(rev[frame_ref.subject, "db/kind"])  # demo_game.legacy.Frame
+print(frame_ref.type)                  # <class 'demo_game.game.Still'>
 
 # %% [markdown]
 # ### `AliasLoop`
