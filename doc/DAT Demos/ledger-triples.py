@@ -41,15 +41,15 @@ from pathlib import Path
 from dvc_dat.ledger import Ledger, Ref, Pickled, bump
 from dvc_dat.ledger import LockTimeout
 
-scratch_ledger = Path("scratch/triples-demo/ledger").resolve()
-L = Ledger.create(scratch_ledger)         # 1. an empty ledger
+scratch_ledger_path = Path("scratch/triples-demo/ledger").resolve()
+L = Ledger.create(scratch_ledger_path)         # 1. an empty ledger
 
 # %% [markdown]
 # `Ledger.create(path)` is the one call that makes a ledger.
 # `Ledger.open(path)` opens an existing one and never creates.
 
 # %%
-L = Ledger.open(scratch_ledger)           # 2. reopened by path
+L = Ledger.open(scratch_ledger_path)           # 2. reopened by path
 
 # %% [markdown]
 # In real code a project names its ledger once and every script in
@@ -61,9 +61,9 @@ L = Ledger.open(scratch_ledger)           # 2. reopened by path
 # carrying `ledger:`; it never creates anything.
 
 # %%
-project = Path("scratch/triples-demo/project").resolve()
-Ledger.init(project)                      # .datconfig.yaml + ledger
-os.chdir(project)
+project_path = Path("scratch/triples-demo/project").resolve()
+Ledger.init(project_path)                 # .datconfig.yaml + ledger
+os.chdir(project_path)
 
 L = Ledger.open()                         # 3. the project's ledger
 
