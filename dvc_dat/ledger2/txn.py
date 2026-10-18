@@ -304,12 +304,18 @@ class Transaction:
                 subj, h, at = d.subject, d.hash, d.rev
                 if subj is None and id(d) in self._pending:
                     subj, at = self._pending[id(d)][1], None
+                elif d.sealed:
+                    # A sealed subject is immutable, so it is checked as of now: an eval's value
+                    # carries the revision it was evaluated at, which predates its own seal.
+                    at = None
             else:
                 raise TypeError(f"a dep is a Value, a Ref or an Fn, not {type(d).__name__}")
             if subj is None or h is None:
                 raise ValueError(f"dep {d!r} has no subject or no value: load it, or seal it first")
             if pending.get(subj) != h:
                 held = Ref(at if at is not None else base, subj).hash
+                if held is None and at is None:
+                    held = Ref(self._ledger.at(), subj).hash
                 if held != h:
                     raise ValueError(f"dep {subj!r}: its hash {h} is not the value the ledger holds ({held})")
             trace[f"dat:{subj}" if at is None or at.id == base.id else f"dat:{subj}@{at.id}"] = h

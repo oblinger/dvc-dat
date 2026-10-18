@@ -540,6 +540,23 @@ class TestTransactionSeal:
             subj = t.seal(Note("x"), deps=[run])
         assert f"trace.dat:run/G5@{run.rev.id}" in dict(L.at().all(subj))
 
+    def test_fresh_eval_value_as_a_dep(self, coded):
+        # A miss hands back a value whose rev is the evaluating revision, which predates the
+        # seal; the dep check must still find the (immutable) memo subject.
+        m = coded.at().eval("l2fns.double", x=2)
+        assert m.rev.id < coded.at().id
+        with coded.transaction(by="t") as t:
+            subj = t.seal(Note("report"), deps=[m])
+        assert coded.at()[subj, f"trace.dat:{m.subject}"] == m.hash
+        with coded.transaction(by="t") as t:   # eval inside the block: sealed after t.base
+            m3 = coded.at().eval("l2fns.double", x=3)
+            t.seal(Note("report 3"), deps=[m3])
+        with pytest.raises(ValueError):
+            with coded.transaction(by="t") as t:
+                fake = Note("forged")
+                fake._provenance(subject=m.subject, rev=m.rev, trace={}, sealed=True)
+                t.seal(Note("x"), deps=[fake])
+
     def test_several_seals_and_a_pointer(self, L):
         a, b = Note("a"), Note("b")
         with L.transaction(by="t") as t:
