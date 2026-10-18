@@ -35,37 +35,36 @@
 # once, near the end, only to have a sealed subject to point at.
 
 # %%
-import os, tempfile, time
+import os, time
 from pathlib import Path
 
 from dvc_dat.ledger import Ledger, Ref, Pickled, bump
 from dvc_dat.ledger import LedgerError, LockTimeout
 
-tmp = Path(tempfile.mkdtemp(prefix="ledger-triples-")) / "ledger"
-L = Ledger.create(tmp)                    # an empty ledger
+scratch_ledger = Path("scratch/triples-demo/ledger").resolve()
+L = Ledger.create(scratch_ledger)         # 1. an empty ledger
 
 # %% [markdown]
 # `Ledger.create(path)` is the one call that makes a ledger.
 # `Ledger.open(path)` opens an existing one and never creates.
 
 # %%
-L = Ledger.open(tmp)                      # the same ledger, reopened
+L = Ledger.open(scratch_ledger)           # 2. reopened by path
 
 # %% [markdown]
-# `Ledger.open()` with no argument walks up from the working
-# directory for the nearest `.datconfig.yaml` carrying a `ledger:`
-# key. Notice the error names every directory it searched, and that
-# nothing was created. (`DAT_LEDGER`, when set, overrides the walk.)
+# In real code a project names its ledger once, in `.datconfig.yaml`
+# at its root, and every script in it says `Ledger.open()` with no
+# argument: the open walks up from the working directory to the
+# nearest `.datconfig.yaml` carrying a `ledger:` key.
 
 # %%
-here = os.getcwd()
-os.chdir(tempfile.mkdtemp())              # no .datconfig.yaml above
-try:
-    Ledger.open()
-except LedgerError as e:
-    print("LedgerError:", e)              # the directories searched
-finally:
-    os.chdir(here)
+project = Path("scratch/triples-demo/project").resolve()
+project.mkdir(parents=True, exist_ok=True)
+(project / ".datconfig.yaml").write_text(
+    f"ledger: {scratch_ledger}\n")
+os.chdir(project)
+
+L = Ledger.open()                         # 3. the project's ledger
 
 # %% [markdown]
 # ## One transaction is one revision
