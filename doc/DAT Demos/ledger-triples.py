@@ -151,8 +151,11 @@ r3 = t.rev
 # first, and two `officials` rows side by side.
 
 # %%
-for row in L.at().rows():                 # every row, unfolded
-    print(row)
+rows = L.at().rows()                      # every row, unfolded
+print(f"{'rev':>3}  {'subject':<18} {'predicate':<15} object")
+for r in rows:
+    print(f"{r.rev.id:>3}  {r.subject:<18} {r.predicate:<15} "
+          f"{r.object}")
 # rev  subject            predicate       object
 #   1  db/pred/officials  db/cardinality  many
 #   1  db/tx/1            db/by           human:dan
