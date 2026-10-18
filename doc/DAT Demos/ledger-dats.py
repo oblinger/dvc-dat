@@ -24,8 +24,8 @@
 # refs, and a release is a bump of the ledger's own version that
 # pins every code subject at once.
 #
-# Written to the ledger design of 2026-10-18 (SVP447 Ledger Module,
-# Values ideas 10 and 12, Versions § 4, F447 A39–A44). It runs once
+# Written to the ledger design of 2026-10-18 (Ledger Module, Values
+# ideas 10 and 12, Versions § 4, F447 A39–A51). It runs once
 # `ledger2` is rebuilt to that design (T534); until then it is the
 # design, not a demo.
 
@@ -37,38 +37,50 @@
 # run actually loaded, not the static import closure.
 
 # %%
-import json, shutil, sys
+import importlib, json, shutil, subprocess, sys
 from pathlib import Path
 
 from dvc_dat.ledger import Ledger, Ref, bump
 from dvc_dat.ledger import NotEvaluated, Unindexed
 from dvc_dat.ledger import UnmountedImport, UntracedRead
-from dvc_dat.ledger import Code, Env, set_env_provider
 
 scratch_ledger_path = Path("scratch/dats-demo/ledger").resolve()
 L = Ledger(scratch_ledger_path, create=True)   # the one explicit act
-checkout_path = Path("scratch/dats-demo/sv-pipe").resolve()
-shutil.copytree("demo_svp", checkout_path, dirs_exist_ok=True)
-sys.path.insert(0, str(checkout_path))
-
-def env(version, commit):
-    code = Code(version, commit, path=checkout_path)
-    return Env({"sv-pipe": code}, lock="sha256:5e1f",
-               platform="darwin-arm64-py3.11")
-ENV = {"now": env("0.2.2", "7d742989")}
-set_env_provider(lambda module: ENV["now"])
 
 # %% [markdown]
-# A notebook runs inside no sv-pipe checkout, so the environment
-# provider stands in for one: it says which commit `sv-pipe` is at
-# and where its checkout is, which is where a mount's root resolves
-# (A40). The stand-in package is copied to a scratch checkout only
-# because a later cell edits a stage.
-
-# %% [markdown]
-# ## The module: `svp.etl`
+# ### A real code repository
 #
-# The kind and the stages live in `demo_svp/svp/etl/`, one module
+# Every value function runs in a git checkout, the ledger records
+# which commit, and the notebook makes a tiny one of its own: the
+# `demo_game` package beside this notebook, copied into scratch.
+# Discovery finds it from the imported module's folder, and a
+# mount's root resolves against it (A40).
+
+# %%
+demo_repo_path = Path("scratch/dats-demo/demo-game").resolve()
+shutil.copytree("demo_game", demo_repo_path,
+                ignore=shutil.ignore_patterns("__pycache__"))
+
+
+def git(*args: str) -> str:
+    """Run git in the demo repository; return its stdout."""
+    cmd = ["git", "-c", "user.name=demo",
+           "-c", "user.email=demo@example.com", *args]
+    done = subprocess.run(cmd, cwd=demo_repo_path, check=True,
+                          capture_output=True, text=True)
+    return done.stdout.strip()
+
+
+git("init", "-q")
+git("add", ".")
+git("commit", "-q", "-m", "demo-game 0.1.0")
+commit_sha = git("rev-parse", "HEAD")
+sys.path.insert(0, str(demo_repo_path))
+
+# %% [markdown]
+# ## The module: `demo_game.etl`
+#
+# The kind and the stages live in `demo_game/etl/`, one module
 # per stage. From `dat.py`, the constructor:
 #
 # ```python
@@ -107,7 +119,7 @@ set_env_provider(lambda module: ENV["now"])
 #
 #
 # def link(rev, work, *, game, **_):
-#     dets = rev.eval("svp.etl.detect.detections", game=game)
+#     dets = rev.eval("demo_game.etl.detect.detections", game=game)
 #     boxes = json.loads((dets.path / "boxes.json").read_text())
 #     runs = [b for a, b in zip(boxes, boxes[1:]) if a <= b]
 #     (work / "tracks.json").write_text(json.dumps(runs))
@@ -121,14 +133,15 @@ set_env_provider(lambda module: ENV["now"])
 # @ledger_fn
 # def train(rev, *, game: str, work: Path) -> StageDat:
 #     epochs = int(rev["cfg/train", "epochs"])            # traced
-#     d = build(rev, {"main": "svp.etl.model.fit", "stage": "model",
-#                     "game": game, "epochs": epochs}, work)
+#     d = build(rev, {"main": "demo_game.etl.model.fit",
+#                     "stage": "model", "game": game,
+#                     "epochs": epochs}, work)
 #     d.preds["gameset"] = rev[f"game/{game}", "gameset"]  # traced
 #     return d
 # ```
 
 # %%
-from svp.etl.dat import StageDat, build
+from demo_game.etl.dat import StageDat, build
 
 # %% [markdown]
 # ## The ledger: games, a config, a mount
@@ -136,10 +149,11 @@ from svp.etl.dat import StageDat, build
 # %%
 with L.transaction(by="human:dan", why="dats demo") as t:
     t.add("db", "version", "3.1.4")
-    t["code/sv-pipe"] = {"version": "0.2.2", "commit": "7d742989"}
+    t["code/demo-game"] = {"version": "0.1.0",
+                           "commit": commit_sha}
     t["code/dvc-dat"] = {"version": "5.0.0", "commit": "a1b2c3d4"}
-    t.add("db/mount/svp.etl", "db/root", "svp/etl")
-    t.add("db/mount/svp.etl", "db/repo", "sv-pipe")
+    t.add("db/mount/demo_game.etl", "db/root", "demo_game/etl")
+    t.add("db/mount/demo_game.etl", "db/repo", "demo-game")
     t["cfg/train"] = {"epochs": "8"}
     for g, court, gameset in [("G1", "north", "normie"),
                               ("G2", "east", "normie"),
@@ -147,22 +161,22 @@ with L.transaction(by="human:dan", why="dats demo") as t:
                               ("G4", "west", "pro")]:
         t[f"game/{g}"] = {"court": court, "gameset": gameset}
 rev = L.at()
-tracks_fn = rev.load_fn("svp.etl.track.tracks")
-print(tracks_fn.mode, tracks_fn.mount)  # sandbox svp.etl
-print(tracks_fn.module)  # <checkout_path>/svp/etl/track.py
+tracks_fn = rev.load_fn("demo_game.etl.track.tracks")
+print(tracks_fn.mode, tracks_fn.mount)  # sandbox demo_game.etl
+print(tracks_fn.module)  # <demo_repo_path>/demo_game/etl/track.py
 
 # %% [markdown]
-# The mount row names its repo, and the provider maps `sv-pipe` to
-# the checkout; `db/root` is relative to it. Every `svp.etl` name
+# The mount row names its repo, and discovery finds the `demo-game`
+# checkout; `db/root` is relative to it. Every `demo_game.etl` name
 # now runs in the sandbox, whose trace pins the code a run loaded
-# rather than the whole repo's `code/sv-pipe`.
+# rather than the whole repo's `code/demo-game`.
 #
 # In a real checkout a file at its root does this setup:
 #
 # ```yaml
-# ledger: /data/ledgers/sv-pipe
+# ledger: /data/ledgers/demo-game
 # mounts:
-#   svp.etl: svp/etl
+#   demo_game.etl: demo_game/etl
 # ```
 #
 # That is the whole of `.datconfig.yaml`. `Ledger()`, with no path,
@@ -177,9 +191,10 @@ print(tracks_fn.module)  # <checkout_path>/svp/etl/track.py
 # ## The dat constructor
 
 # %%
-detect_spec_record = {"main": "svp.etl.detect.find",
+detect_spec_record = {"main": "demo_game.etl.detect.find",
                       "stage": "detect", "game": "G1", "bins": 16}
-spec_dat = rev.eval("svp.etl.dat.dat", spec=detect_spec_record)
+spec_dat = rev.eval("demo_game.etl.dat.dat",
+                    spec=detect_spec_record)
 print(dict(sorted(spec_dat.preds.items())))
 # {"bins": "16", "game": "G1", "metrics.count": "40",
 #  "metrics.score": "…", "stage": "detect"}
@@ -187,7 +202,8 @@ print(sorted(file_path.name for file_path in spec_dat.path.iterdir()))
 # ["_result_.yaml", "_spec_.yaml", "boxes.json"]
 print(L.at()[spec_dat.subject, "db/keys"])  # the question, one row
 # {"spec": {"bins": 16, "game": "G1",
-#           "main": "svp.etl.detect.find", "stage": "detect"}}
+#           "main": "demo_game.etl.detect.find",
+#           "stage": "detect"}}
 
 # %% [markdown]
 # The spec is the whole question: one key, a JSON object (A38), in
@@ -207,10 +223,12 @@ print(L.at()[spec_dat.subject, "db/keys"])  # the question, one row
 
 # %%
 module_paths = L.at()[spec_dat.trace["fn"], "db/modules"]
-print(sorted(module_paths))  # ["svp/etl/dat.py", "svp/etl/detect.py"]
+print(sorted(module_paths))
+# ["demo_game/etl/dat.py", "demo_game/etl/detect.py"]
 
 # %%
-detections_dat = rev.eval("svp.etl.detect.detections", game="G1")
+detections_dat = rev.eval("demo_game.etl.detect.detections",
+                          game="G1")
 print(detections_dat.same_as(spec_dat),
       detections_dat.subject != spec_dat.subject)   # True True
 print(Ref(L.at(), detections_dat.subject).preds["metrics.count"])  # 40
@@ -225,20 +243,20 @@ print(Ref(L.at(), detections_dat.subject).preds["metrics.count"])  # 40
 
 # %%
 rev = L.at()
-model_dat = rev.eval("svp.etl.model.train", game="G1")
+model_dat = rev.eval("demo_game.etl.model.train", game="G1")
 print(model_dat, model_dat.preds["stage"], model_dat.preds["gameset"])
 # <8 hex> model normie
 for item in sorted(model_dat.trace):
     print(item, "->", model_dat.trace[item])
 # cfg/train epochs -> 8
-# eval:svp.etl.track.tracks{"game":"G1"}
-#     -> ref:svp.etl.dat.StageDat:<hash>
-# fn -> db/fn/svp.etl.model.train/<hash>
+# eval:demo_game.etl.track.tracks{"game":"G1"}
+#     -> ref:demo_game.etl.dat.StageDat:<hash>
+# fn -> db/fn/demo_game.etl.model.train/<hash>
 # game/G1 gameset -> normie
 # platform -> darwin-arm64-py3.11
-# uv.lock -> sha256:5e1f
+# uv.lock -> sha256:<hash>
 for g in ("G2", "G3"):
-    rev.eval("svp.etl.model.train", game=g)
+    rev.eval("demo_game.etl.model.train", game=g)
 print(L.at().select(("stage", "metrics.count"), kind=StageDat,
                     game="G1"))
 # two ("detect", "40"), one track, one model: no promised order
@@ -253,9 +271,10 @@ print(L.at().select(("stage", "metrics.count"), kind=StageDat,
 
 # %%
 rev = L.at()
-tracks_g3_dat = rev.eval("svp.etl.track.tracks", game="G3")  # a hit
-fit_spec_record = {"main": "svp.etl.model.fit", "stage": "model",
-                   "game": "G3", "epochs": 20}
+tracks_g3_dat = rev.eval("demo_game.etl.track.tracks",
+                         game="G3")                # a hit
+fit_spec_record = {"main": "demo_game.etl.model.fit",
+                   "stage": "model", "game": "G3", "epochs": 20}
 work_path = Path("scratch/dats-demo/by-hand").resolve()
 work_path.mkdir(parents=True, exist_ok=True)
 hand_dat = build(rev, fit_spec_record, work_path)
@@ -264,10 +283,10 @@ with L.transaction(by="human:dan", why="a long run by hand") as t:
     t.add_value(hand_dat, deps=[tracks_g3_dat],
                 provenance="human:dan")
 print(dict(sorted(hand_dat.trace.items())))
-# {"code/sv-pipe": "0.2.2+7d742989",
+# {"code/demo-game": "0.1.0+<8 hex>",
 #  "platform": "darwin-arm64-py3.11",
-#  "ref:svp.etl.dat.StageDat:<hash>": "ref:…StageDat:<hash>",
-#  "uv.lock": "sha256:5e1f"}
+#  "ref:demo_game.etl.dat.StageDat:<hash>": "ref:…StageDat:<hash>",
+#  "uv.lock": "sha256:<hash>"}
 
 # %% [markdown]
 # The same stage run by hand and sealed with `add_value`: its trace
@@ -288,13 +307,13 @@ print(len(proof_refs))                                         # 1
 # %% [markdown]
 # ## What the sandbox refuses
 #
-# `svp.etl.stray` holds two functions that reach past the mount.
-# The first imports `svp.shots`, which is in the repo but under no
-# mount.
+# `demo_game.etl.stray` holds two functions that reach past the
+# mount. The first imports `demo_game.shots`, which is in the repo
+# but under no mount.
 
 # %%
 try:
-    rev.eval("svp.etl.stray.borrow", game="G1")
+    rev.eval("demo_game.etl.stray.borrow", game="G1")
 except UnmountedImport as e:
     print("UnmountedImport:", e)
 
@@ -304,7 +323,7 @@ except UnmountedImport as e:
 
 # %%
 try:
-    rev.eval("svp.etl.stray.snoop", game="G1")
+    rev.eval("demo_game.etl.stray.snoop", game="G1")
 except UntracedRead as e:
     print("UntracedRead:", e)         # /etc/hosts
 
@@ -318,15 +337,30 @@ except UntracedRead as e:
 
 # %%
 rev = L.at()
-tracks_dat = rev.eval("svp.etl.track.tracks", game="G1")  # a hit
+tracks_dat = rev.eval("demo_game.etl.track.tracks",
+                      game="G1")                   # a hit
 pre_bump_rev = rev
 
-track_path = checkout_path / "svp/etl/track.py"
+track_path = demo_repo_path / "demo_game/etl/track.py"
 track_path.write_text(track_path.read_text()
-                    + "\n# tidied: no change in behaviour\n")
-ENV["now"] = env("0.2.3", "c0ffee12")    # the edit, committed
+                      + "\n# tidied: no change in behaviour\n")
+try:
+    with L.transaction(by="human:dan", why="tidy track") as t:
+        bump(t, "code/demo-game")
+except ValueError as e:
+    print("ValueError:", e)       # a dirty checkout: nothing written
+
+# %% [markdown]
+# The edit is not committed yet, so there is no commit for `bump`
+# to pin. Commit it, re-import, and bump.
+
+# %%
+git("commit", "-q", "-am", "tidy track")
+commit_sha = git("rev-parse", "HEAD")
+import demo_game.etl.track
+importlib.reload(demo_game.etl.track)    # sandbox workers import anew
 with L.transaction(by="human:dan", why="tidy track") as t:
-    bump(t, "code/sv-pipe")              # 0.2.3, commit c0ffee12
+    bump(t, "code/demo-game")            # 0.1.1, the new commit
 rev = L.at()
 print(detections_dat.matches(rev),
       tracks_dat.matches(rev))                  # True False
@@ -340,15 +374,16 @@ print(model_dat.matches(rev))                   # False, for now
 # its nested `tracks` item has no entry that holds at this rev yet.
 
 # %%
-model_hit_dat = rev.eval("svp.etl.model.train", game="G1")
-retracked_dat = rev.eval("svp.etl.track.tracks", game="G1")  # a hit
+model_hit_dat = rev.eval("demo_game.etl.model.train", game="G1")
+retracked_dat = rev.eval("demo_game.etl.track.tracks",
+                         game="G1")                # a hit
 print(retracked_dat.subject != tracks_dat.subject)  # True: re-derived
 print(retracked_dat.same_as(tracks_dat))  # True: the same bytes
 print(model_hit_dat.subject == model_dat.subject)  # True: the model hit
 print(model_dat.matches(L.at()))        # True, now
 print(tracks_dat.diff(retracked_dat))
-# {"fn": ("db/fn/svp.etl.track.tracks/<a>",
-#         "db/fn/svp.etl.track.tracks/<b>")}
+# {"fn": ("db/fn/demo_game.etl.track.tracks/<a>",
+#         "db/fn/demo_game.etl.track.tracks/<b>")}
 
 # %% [markdown]
 # Asking for the model re-derived the tracks (their code moved) and
@@ -391,8 +426,8 @@ with L.transaction(by="human:dan", time=True,
 release_rev = L.at("3.2.0")
 print(release_rev.id == t.rev.id,
       release_rev["db", "version"])               # True 3.2.0
-print(release_rev["code/sv-pipe", "version"],
-      release_rev["code/dvc-dat", "version"])       # 0.2.3 5.0.0
+print(release_rev["code/demo-game", "version"],
+      release_rev["code/dvc-dat", "version"])       # 0.1.1 5.0.0
 print(release_rev["cfg/train", "epochs"])           # 8
 print(sorted({s for s, p, o
               in release_rev.all(since=pre_bump_rev)}))
@@ -409,7 +444,7 @@ with L.transaction(by="human:dan", why="train longer") as t:
     t["cfg/train", "epochs"] = "12"
 rev = L.at()
 for g in ("G1", "G2"):
-    rev.eval("svp.etl.model.train", game=g)
+    rev.eval("demo_game.etl.model.train", game=g)
 print(len(L.at().refs(kind=StageDat, since=rev)))   # 2
 
 # %% [markdown]
@@ -419,17 +454,18 @@ print(len(L.at().refs(kind=StageDat, since=rev)))   # 2
 # %% [markdown]
 # ## A table over the set
 #
-# `svp.etl.report.scores(rev, *, gameset) -> Table` queries the
-# set's models with `values` and returns their scores as a parquet
+# `demo_game.etl.report.scores(rev, *, gameset) -> Table` queries
+# the set's models with `values` and returns their scores as a parquet
 # `Table`, the shipped tabular `Value`.
 
 # %%
 rev = L.at()
-scores_table = rev.eval("svp.etl.report.scores", gameset="normie")
+scores_table = rev.eval("demo_game.etl.report.scores",
+                        gameset="normie")
 print(type(scores_table).__name__)       # Table
 q_items = [k for k in scores_table.trace if k.startswith("q:")]
 print(q_items)
-# ['q:{"gameset":"normie","kind":"svp.etl.dat.StageDat",
+# ['q:{"gameset":"normie","kind":"demo_game.etl.dat.StageDat",
 #     "stage":"model"}']
 print(len(json.loads(scores_table.trace[q_items[0]])))   # 4 models
 
@@ -444,9 +480,9 @@ print(len(json.loads(scores_table.trace[q_items[0]])))   # 4 models
 with L.transaction(by="human:dan", why="G3 plays normie") as t:
     t["game/G3", "gameset"] = "normie"
 rev = L.at()
-rev.eval("svp.etl.model.train", game="G3")    # re-derived
+rev.eval("demo_game.etl.model.train", game="G3")  # re-derived
 print(scores_table.matches(rev))              # False
-print(list(scores_table.diff(rev.eval("svp.etl.report.scores",
+print(list(scores_table.diff(rev.eval("demo_game.etl.report.scores",
                                       gameset="normie"))))
 # the q: item
 
@@ -476,9 +512,11 @@ print({g: model_ref.preds["metrics.score"]
 
 # %%
 release_rev = L.at("3.2.0")
-old_model_dat = release_rev.eval("svp.etl.model.train", game="G1")
+old_model_dat = release_rev.eval("demo_game.etl.model.train",
+                                 game="G1")
 print(old_model_dat.subject == model_dat.subject)  # True: epochs 8
-now_model_dat = L.at().eval("svp.etl.model.train", game="G1")
+now_model_dat = L.at().eval("demo_game.etl.model.train",
+                            game="G1")
 print(now_model_dat.subject == old_model_dat.subject)  # False: 12
 print(old_model_dat.diff(now_model_dat))
 # {"cfg/train epochs": ("8", "12")}
@@ -490,13 +528,13 @@ print(old_model_dat.diff(now_model_dat))
 # binding is the hit, and nothing runs.
 
 # %% [markdown]
-# G4 was never trained, and `pre_bump_rev` says `code/sv-pipe` is
-# `7d742989` while this environment is `c0ffee12`, so a miss there
-# will not run.
+# G4 was never trained, and `pre_bump_rev` says `code/demo-game`
+# is the first commit while the checkout is at the second, so a
+# miss there will not run.
 
 # %%
 try:
-    pre_bump_rev.eval("svp.etl.model.train", game="G4")
+    pre_bump_rev.eval("demo_game.etl.model.train", game="G4")
 except NotEvaluated as e:
     print("NotEvaluated:", e)
 
