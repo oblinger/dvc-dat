@@ -33,7 +33,7 @@
 # design, not a demo.
 
 # %%
-import os, sys, tempfile
+import os, sys
 from pathlib import Path
 
 import yaml
@@ -42,9 +42,9 @@ from dvc_dat.ledger import Ledger, Ref, bump
 from dvc_dat.ledger import Code, Env, set_env_provider
 
 sys.path.insert(0, "demo_svp")           # the stand-in svp package
-tmp = Path(tempfile.mkdtemp(prefix="ledger-just-"))
-L = Ledger.create(tmp)                   # open() never creates
-os.environ["DAT_LEDGER"] = str(tmp)      # the ledger recipes open
+scratch_ledger_path = Path("scratch/just-demo/ledger").resolve()
+L = Ledger(scratch_ledger_path, create=True)   # the one explicit act
+os.environ["DAT_LEDGER"] = str(scratch_ledger_path)  # for recipes
 os.environ["PYTHONPATH"] = "demo_svp"
 USER = os.environ.get("USER", "dan")
 
@@ -53,19 +53,19 @@ ENV = Env({"sv-pipe": Code("0.2.2", "7d742989")},
 set_env_provider(lambda module: ENV)
 
 
-def moves(rev, s):
-    """Each (rev id, predicate, object) asserted on s, in order."""
-    out = []
+def moves(rev, subject):
+    """Each (rev id, predicate, object) on subject, in order."""
+    move_tuples = []
     for i in range(1, rev.id + 1):
         since = L.at(i - 1) if i > 1 else None
-        for p, o in L.at(i).all(s, since=since):
-            out.append((i, p, o))
-    return out
+        for p, o in L.at(i).all(subject, since=since):
+            move_tuples.append((i, p, o))
+    return move_tuples
 
 # %% [markdown]
 # A shell cell is a process of its own: it opens this notebook's
-# ledger through `DAT_LEDGER`, which overrides `open()`'s walk up to
-# `.datconfig.yaml` (A44), and finds its environment by git
+# ledger through `DAT_LEDGER`, which overrides `Ledger()`'s walk up
+# to `.datconfig.yaml` (A44), and finds its environment by git
 # discovery in the sv-pipe checkout it runs from. The code cells use
 # the stand-in provider, since a notebook runs inside no checkout.
 # `moves` walks the revisions one at a time: no read lists every
@@ -81,17 +81,18 @@ with L.transaction(by="human:dan", why="seed") as t:
     t["game/G1"] = {"home": "G4", "away": "G5", "court": "north"}
     t.add("db/pred/team", "db/cardinality", "many")
     t.add("db/pred/video", "db/type", "svp.game.Video")
-raw = Video(b"G1 wide camera, 9000 frames")
-raw.preds.update(game="G1", camera="wide")
+video_value = Video(b"G1 wide camera, 9000 frames")
+video_value.preds.update(game="G1", camera="wide")
 with L.transaction(by="human:dan") as t:
-    t.add_value(raw, alias="video/G1", provenance="import:alg2")
-c = L.at().eval("svp.game.cut", game="G1", version="1.5.3")
+    t.add_value(video_value, alias="video/G1",
+                provenance="import:alg2")
+cut_153 = L.at().eval("svp.game.cut", game="G1", version="1.5.3")
 with L.transaction(by="human:dan") as t:
-    t.add("game/G1", "db/alias", c.subject)
+    t.add("game/G1", "db/alias", cut_153.subject)
     t["game/G1", "home"] = "G6"          # a correction
-c = L.at().eval("svp.game.cut", game="G1", version="1.5.4")
+cut_154 = L.at().eval("svp.game.cut", game="G1", version="1.5.4")
 with L.transaction(by="human:dan") as t:
-    t.add("game/G1", "db/alias", c.subject)
+    t.add("game/G1", "db/alias", cut_154.subject)
 
 # %% [markdown]
 # The values notebook's game, cut short and seeded through the API:
@@ -133,8 +134,9 @@ print(t.rev["code/sv-pipe"])    # {"version": …, "commit": "7d742989"}
 with L.transaction(by=f"human:{USER}", time=True,
                    why="release") as t:
     bump(t, "db", "minor", confirm=lambda old, new: True)
-v = t.rev["db", "version"]
-print(v, L.at(v).id == t.rev.id)         # <version> True
+release_version = t.rev["db", "version"]
+print(release_version,
+      L.at(release_version).id == t.rev.id)   # <version> True
 
 # %% [markdown]
 # ## `just values kind=Cut game=G1`
@@ -150,8 +152,8 @@ print(v, L.at(v).id == t.rev.id)         # <version> True
 # resolved against the `db/kind` rows, refused when ambiguous.
 
 # %%
-for v in L.at().values(kind=Cut, game="G1"):
-    print(v, dict(v.preds))
+for cut in L.at().values(kind=Cut, game="G1"):
+    print(cut, dict(cut.preds))
 
 # %% [markdown]
 # ## `just value game=G1 version=1.5.3`
@@ -164,8 +166,8 @@ for v in L.at().values(kind=Cut, game="G1"):
 # prints the `KeyError` or `Multiple`.
 
 # %%
-v = L.at().value(game="G1", version="1.5.3")
-print(v, dict(v.preds))
+cut_value = L.at().value(game="G1", version="1.5.3")
+print(cut_value, dict(cut_value.preds))
 
 # %% [markdown]
 # ## `just eval svp.game.cut game=G1 version=1.5.3`
@@ -182,10 +184,10 @@ print(v, dict(v.preds))
 
 # %%
 rev = L.at()
-keys = {"game": "G1", "version": "1.5.3"}
-hit = rev.eval("svp.game.cut", memo="get", **keys)
-v = hit or rev.eval("svp.game.cut", **keys)
-print("hit" if hit else "ran", v)
+keys_record = {"game": "G1", "version": "1.5.3"}
+hit_cut = rev.eval("svp.game.cut", memo="get", **keys_record)
+cut_value = hit_cut or rev.eval("svp.game.cut", **keys_record)
+print("hit" if hit_cut else "ran", cut_value)
 
 # %% [markdown]
 # ## `just why <alias|hash>`
@@ -200,11 +202,12 @@ print("hit" if hit else "ran", v)
 
 # %%
 rev = L.at()
-v = rev.load("game/G1")
-print(dict(sorted(v.trace.items())))
-print(v.matches(rev))                          # True
-named = [o for i, p, o in moves(rev, "game/G1") if p == "db/alias"]
-print(v.diff(rev.load(named[-2])))
+current_cut = rev.load("game/G1")
+print(dict(sorted(current_cut.trace.items())))
+print(current_cut.matches(rev))                # True
+alias_targets = [o for i, p, o in moves(rev, "game/G1")
+                 if p == "db/alias"]
+print(current_cut.diff(rev.load(alias_targets[-2])))
 # {"game/G1 home": ("G6", "G4")}
 
 # %% [markdown]
@@ -248,8 +251,8 @@ print(L.at()["game/G1", "texture"])          # hardwood
 # ## `just alias prod <hash>`
 
 # %%
-h = Ref(L.at(), "game/G1").subject
-# !just alias prod {h[:8]}
+cut_subject = Ref(L.at(), "game/G1").subject
+# !just alias prod {cut_subject[:8]}
 #   prod: (none) -> game/G1
 
 # %% [markdown]
@@ -259,10 +262,11 @@ h = Ref(L.at(), "game/G1").subject
 
 # %%
 rev = L.at()
-s = rev.refs(s=f"{h[:8]}*", one=True).subject
+target_subject = rev.refs(s=f"{cut_subject[:8]}*",
+                          one=True).subject
 print(rev.get("prod", "db/alias"))           # old target, or None
 with L.transaction(by=f"human:{USER}") as t:
-    t.add("prod", "db/alias", s)
+    t.add("prod", "db/alias", target_subject)
 print(Ref(L.at(), "prod"))                   # prod: the shortest
 
 # %% [markdown]
@@ -290,11 +294,11 @@ print(len(L.at().refs(where={"game": None})))   # the video, cuts
 # hashes the modules the run loaded), both still open on F447.
 
 # %%
-spec = {"main": "svp.etl.model.fit", "stage": "model",
-        "game": "G1", "epochs": 8}
-spec_file = tmp / "model-G1.yaml"
-spec_file.write_text(yaml.safe_dump(spec))
-# !just run {spec_file} alias=model/prod
+spec_record = {"main": "svp.etl.model.fit", "stage": "model",
+               "game": "G1", "epochs": 8}
+spec_path = scratch_ledger_path.parent / "model-G1.yaml"
+spec_path.write_text(yaml.safe_dump(spec_record))
+# !just run {spec_path} alias=model/prod
 #   ran  model/prod
 
 # %% [markdown]
@@ -304,8 +308,8 @@ spec_file.write_text(yaml.safe_dump(spec))
 # eval's own.
 
 # %%
-d = L.at().eval("svp.etl.dat.dat",
-                spec=yaml.safe_load(spec_file.read_text()))
+model_dat = L.at().eval("svp.etl.dat.dat",
+                        spec=yaml.safe_load(spec_path.read_text()))
 with L.transaction(by=f"human:{USER}") as t:
-    t.add("model/prod", "db/alias", d.subject)
-print(Ref(L.at(), "model/prod"), d.preds["metrics.score"])
+    t.add("model/prod", "db/alias", model_dat.subject)
+print(Ref(L.at(), "model/prod"), model_dat.preds["metrics.score"])
