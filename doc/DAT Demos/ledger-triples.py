@@ -52,19 +52,31 @@ L = Ledger.create(scratch_ledger_path)         # 1. an empty ledger
 L = Ledger.open(scratch_ledger_path)           # 2. reopened by path
 
 # %% [markdown]
+# ### A project's `.datconfig.yaml`
+#
 # In real code a project names its ledger once and every script in
 # it says `Ledger.open()` with no argument. `Ledger.init(project)`
 # is the one creating verb: it writes `.datconfig.yaml` with a
 # `ledger:` line and makes the ledger it names, the way `git init`
-# makes the directory and the config together. `open()` then walks
-# up from the working directory to the nearest `.datconfig.yaml`
-# carrying `ledger:`; it never creates anything.
+# makes the directory and the config together.
 
 # %%
 project_path = Path("scratch/triples-demo/project").resolve()
 Ledger.init(project_path)                 # .datconfig.yaml + ledger
-os.chdir(project_path)
 
+print((project_path / ".datconfig.yaml").read_text())
+# ledger: .dat/ledger
+
+# %% [markdown]
+# The one line is the whole config this notebook needs: `ledger:`,
+# a path relative to the file's own folder. The same file carries a
+# project's `mounts:` (the values and dats notebooks), and dvc-dat's
+# own keys; it is the file the dat manager already reads. `open()`
+# walks up from the working directory to the nearest `.datconfig.yaml`
+# carrying `ledger:` and never creates anything.
+
+# %%
+os.chdir(project_path)
 L = Ledger.open()                         # 3. the project's ledger
 
 # %% [markdown]
