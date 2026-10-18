@@ -144,18 +144,14 @@ with L.transaction(by="human:dan") as t:
 r3 = t.rev
 
 # %% [markdown]
-# Every row so far, revision by revision. Notice the two game
-# transactions stacked, a second `court` row after the first, and
-# two `officials` rows side by side.
+# Every row so far, unfolded, in revision order: `rows()` is the
+# ledger as it is stored, the one read that does not fold. Notice
+# the two game transactions stacked, a second `court` row after the
+# first, and two `officials` rows side by side.
 
 # %%
-print(f"rev  {'subject':<18} {'predicate':<15} object")
-prev = None
-for n in range(1, r3.id + 1):
-    r = L.at(n)
-    for s, p, o in r.all(since=prev):     # rows asserted at n
-        print(f"{n:>3}  {s:<18} {p:<15} {o}")
-    prev = r
+for row in L.at().rows():                 # every row, unfolded
+    print(row)
 # rev  subject            predicate       object
 #   1  db/pred/officials  db/cardinality  many
 #   1  db/tx/1            db/by           human:dan
