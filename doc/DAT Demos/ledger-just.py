@@ -22,35 +22,28 @@
 # an edit.
 #
 # **The justfile does not exist.** These recipes are the proposal
-# for F447 Q4 (A): hand recipes in sv-pipe's justfile calling the
-# API, SV policy as recipe lines, designed from these use cases
-# down. Running both cells of a pair does a write twice; the pair is
-# for reading side by side.
+# for F447 Q4 (A): hand recipes in a project's justfile calling the
+# API, the project's policy as recipe lines, designed from these
+# use cases down. Running both cells of a pair does a write twice;
+# the pair is for reading side by side.
 #
-# Written to the ledger design of 2026-10-18 (SVP447 Ledger Module,
-# Values § The three notebooks, F447 A39–A44). It runs once
+# Written to the ledger design of 2026-10-18 (Ledger Module, Values
+# § The three notebooks, F447 A39–A51). It runs once
 # `ledger2` is rebuilt to that design (T534); until then it is the
 # design, not a demo.
 
 # %%
-import os, sys
+import os, shutil, subprocess, sys
 from pathlib import Path
 
 import yaml
 
 from dvc_dat.ledger import Ledger, Ref, bump
-from dvc_dat.ledger import Code, Env, set_env_provider
 
-sys.path.insert(0, "demo_svp")           # the stand-in svp package
 scratch_ledger_path = Path("scratch/just-demo/ledger").resolve()
 L = Ledger(scratch_ledger_path, create=True)   # the one explicit act
 os.environ["DAT_LEDGER"] = str(scratch_ledger_path)  # for recipes
-os.environ["PYTHONPATH"] = "demo_svp"
 USER = os.environ.get("USER", "dan")
-
-ENV = Env({"sv-pipe": Code("0.2.2", "7d742989")},
-          lock="sha256:5e1f", platform="darwin-arm64-py3.11")
-set_env_provider(lambda module: ENV)
 
 
 def moves(rev, subject):
@@ -63,34 +56,65 @@ def moves(rev, subject):
     return move_tuples
 
 # %% [markdown]
-# A shell cell is a process of its own: it opens this notebook's
-# ledger through `DAT_LEDGER`, which overrides `Ledger()`'s walk up
-# to `.datconfig.yaml` (A44), and finds its environment by git
-# discovery in the sv-pipe checkout it runs from. The code cells use
-# the stand-in provider, since a notebook runs inside no checkout.
-# `moves` walks the revisions one at a time: no read lists every
-# object a subject's predicates have held, and `why` and `history`
-# need that list.
+# ### A real code repository
+#
+# Every value function runs in a git checkout, the ledger records
+# which commit, and the notebook makes a tiny one of its own: the
+# `demo_game` package beside this notebook, copied into scratch.
 
 # %%
-from svp.game import Video, Cut
+demo_repo_path = Path("scratch/just-demo/demo-game").resolve()
+shutil.copytree("demo_game", demo_repo_path,
+                ignore=shutil.ignore_patterns("__pycache__"))
+
+
+def git(*args: str) -> str:
+    """Run git in the demo repository; return its stdout."""
+    cmd = ["git", "-c", "user.name=demo",
+           "-c", "user.email=demo@example.com", *args]
+    done = subprocess.run(cmd, cwd=demo_repo_path, check=True,
+                          capture_output=True, text=True)
+    return done.stdout.strip()
+
+
+git("init", "-q")
+git("add", ".")
+git("commit", "-q", "-m", "demo-game 0.1.0")
+commit_sha = git("rev-parse", "HEAD")
+sys.path.insert(0, str(demo_repo_path))
+os.environ["PYTHONPATH"] = str(demo_repo_path)   # for recipes
+
+# %% [markdown]
+# A shell cell is a process of its own: it opens this notebook's
+# ledger through `DAT_LEDGER`, which overrides `Ledger()`'s walk up
+# to `.datconfig.yaml` (A44), and, like the code cells, finds its
+# environment by git discovery over the modules it imports, here
+# the demo repository on `PYTHONPATH`. `moves` walks the revisions
+# one at a time: no read lists every object a subject's predicates
+# have held, and `why` and `history` need that list.
+
+# %%
+from demo_game.game import Video, Cut
 
 with L.transaction(by="human:dan", why="seed") as t:
     t.add("db", "version", "3.1.4")
-    t["code/sv-pipe"] = {"version": "0.2.2", "commit": "7d742989"}
+    t["code/demo-game"] = {"version": "0.1.0",
+                           "commit": commit_sha}
     t["game/G1"] = {"home": "G4", "away": "G5", "court": "north"}
     t.add("db/pred/team", "db/cardinality", "many")
-    t.add("db/pred/video", "db/type", "svp.game.Video")
+    t.add("db/pred/video", "db/type", "demo_game.game.Video")
 video_value = Video(b"G1 wide camera, 9000 frames")
 video_value.preds.update(game="G1", camera="wide")
 with L.transaction(by="human:dan") as t:
     t.add_value(video_value, alias="video/G1",
-                provenance="import:alg2")
-cut_153 = L.at().eval("svp.game.cut", game="G1", version="1.5.3")
+                provenance="import:archive")
+cut_153 = L.at().eval("demo_game.game.cut", game="G1",
+                      version="1.5.3")
 with L.transaction(by="human:dan") as t:
     t.add("game/G1", "db/alias", cut_153.subject)
     t["game/G1", "home"] = "G6"          # a correction
-cut_154 = L.at().eval("svp.game.cut", game="G1", version="1.5.4")
+cut_154 = L.at().eval("demo_game.game.cut", game="G1",
+                      version="1.5.4")
 with L.transaction(by="human:dan") as t:
     t.add("game/G1", "db/alias", cut_154.subject)
 
@@ -100,25 +124,26 @@ with L.transaction(by="human:dan") as t:
 # 1.5.4 cut that `game/G1` now names. Everything below is a recipe.
 
 # %% [markdown]
-# ## `just bump pipe [minor|major]`
+# ## `just bump code [minor|major]`
 
 # %%
-# !just bump pipe
-# !echo yes | just bump pipe minor
+# !just bump code
+# !echo yes | just bump code minor
 
 # %% [markdown]
-# Sugar for `bump` on `code/sv-pipe` (`pipe` is the recipe's name
-# for it) under `by=human:$USER`, then `python -m svp.version sync`
-# (Q4 (A)); minor and major print the move and wait for `yes`,
-# which is `confirm=`.
+# Sugar for `bump` on the repo's own clock, `code/demo-game` (`code`
+# is the recipe's name for it), under `by=human:$USER`, then any
+# version-sync line the project adds (Q4 (A)); minor and major
+# print the move and wait for `yes`, which is `confirm=`.
 
 # %%
 with L.transaction(by=f"human:{USER}") as t:
-    bump(t, "code/sv-pipe")                    # patch
+    bump(t, "code/demo-game")                  # patch
 with L.transaction(by=f"human:{USER}") as t:
-    bump(t, "code/sv-pipe", "minor",
+    bump(t, "code/demo-game", "minor",
          confirm=lambda old, new: True)        # the recipe asks
-print(t.rev["code/sv-pipe"])    # {"version": …, "commit": "7d742989"}
+print(t.rev["code/demo-game"])  # {"version": …, "commit": <commit>}
+print(t.rev["code/demo-game", "commit"] == commit_sha)   # True
 
 # %% [markdown]
 # ## `just bump db minor`: a release
@@ -170,10 +195,10 @@ cut_value = L.at().value(game="G1", version="1.5.3")
 print(cut_value, dict(cut_value.preds))
 
 # %% [markdown]
-# ## `just eval svp.game.cut game=G1 version=1.5.3`
+# ## `just eval demo_game.game.cut game=G1 version=1.5.3`
 
 # %%
-# !just eval svp.game.cut game=G1 version=1.5.3
+# !just eval demo_game.game.cut game=G1 version=1.5.3
 #   ran  <8 hex>    (the home correction made 1.5.3 stale)
 
 # %% [markdown]
@@ -185,8 +210,8 @@ print(cut_value, dict(cut_value.preds))
 # %%
 rev = L.at()
 keys_record = {"game": "G1", "version": "1.5.3"}
-hit_cut = rev.eval("svp.game.cut", memo="get", **keys_record)
-cut_value = hit_cut or rev.eval("svp.game.cut", **keys_record)
+hit_cut = rev.eval("demo_game.game.cut", memo="get", **keys_record)
+cut_value = hit_cut or rev.eval("demo_game.game.cut", **keys_record)
 print("hit" if hit_cut else "ran", cut_value)
 
 # %% [markdown]
@@ -294,21 +319,21 @@ print(len(L.at().refs(where={"game": None})))   # the video, cuts
 # hashes the modules the run loaded), both still open on F447.
 
 # %%
-spec_record = {"main": "svp.etl.model.fit", "stage": "model",
-               "game": "G1", "epochs": 8}
+spec_record = {"main": "demo_game.etl.model.fit",
+               "stage": "model", "game": "G1", "epochs": 8}
 spec_path = scratch_ledger_path.parent / "model-G1.yaml"
 spec_path.write_text(yaml.safe_dump(spec_record))
 # !just run {spec_path} alias=model/prod
 #   ran  model/prod
 
 # %% [markdown]
-# Sugar for `rev.eval("svp.etl.dat.dat", spec=…)` on the file's
+# Sugar for `rev.eval("demo_game.etl.dat.dat", spec=…)` on the file's
 # contents, then, given `alias=`, `t.add(name, "db/alias", s)`:
 # handing the model to prod is an alias move; the seal is the
 # eval's own.
 
 # %%
-model_dat = L.at().eval("svp.etl.dat.dat",
+model_dat = L.at().eval("demo_game.etl.dat.dat",
                         spec=yaml.safe_load(spec_path.read_text()))
 with L.transaction(by=f"human:{USER}") as t:
     t.add("model/prod", "db/alias", model_dat.subject)
