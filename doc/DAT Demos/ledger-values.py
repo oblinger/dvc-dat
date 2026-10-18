@@ -28,7 +28,7 @@
 # design, not a demo.
 
 # %%
-import sys, tempfile
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -37,8 +37,8 @@ from dvc_dat.ledger import AliasLoop, Exists, Multiple, Undeclared
 from dvc_dat.ledger import Code, Env, set_env_provider
 
 sys.path.insert(0, "demo_svp")           # the stand-in svp package
-tmp = Path(tempfile.mkdtemp(prefix="ledger-values-"))
-L = Ledger.create(tmp)                   # open() never creates
+scratch_ledger_path = Path("scratch/values-demo/ledger").resolve()
+L = Ledger(scratch_ledger_path, create=True)   # the one explicit act
 
 ENV = Env({"sv-pipe": Code("0.2.2", "7d742989")},
           lock="sha256:5e1f", platform="darwin-arm64-py3.11")
@@ -129,20 +129,20 @@ print(rev["db/pred/video", "db/type"])    # svp.game.Video
 # ## A hand-made value: the raw video
 
 # %%
-raws = {}
+video_values = {}
 for g, n in (("G1", 9000), ("G2", 8400)):
-    raw = Video(f"{g} wide camera, {n} frames".encode())
-    raw.preds.update(game=g, camera="wide", span=[0, n])
-    raws[g] = raw
+    video = Video(f"{g} wide camera, {n} frames".encode())
+    video.preds.update(game=g, camera="wide", span=[0, n])
+    video_values[g] = video
 with L.transaction(by="human:dan") as t:
-    for g, raw in raws.items():
-        t.add_value(raw, alias=f"video/{g}",
+    for g, video in video_values.items():
+        t.add_value(video, alias=f"video/{g}",
                     provenance="import:alg2")
-raw = raws["G1"]
-print(raw.sealed, raw)               # True video/G1
-print(raw.subject[:8])               # the hash the alias names
-print(raw.preds["span"])             # [0, 9000]: one pred, a list
-print(dict(sorted(raw.trace.items())))
+video_value = video_values["G1"]
+print(video_value.sealed, video_value)  # True video/G1
+print(video_value.subject[:8])       # the hash the alias names
+print(video_value.preds["span"])     # [0, 9000]: one pred, a list
+print(dict(sorted(video_value.trace.items())))
 # {"code/sv-pipe": "0.2.2+7d742989",
 #  "platform": "darwin-arm64-py3.11", "uv.lock": "sha256:5e1f"}
 
@@ -159,7 +159,7 @@ print(dict(sorted(raw.trace.items())))
 
 # %%
 try:
-    raw.preds["camera"] = "tele"
+    video_value.preds["camera"] = "tele"
 except TypeError as e:
     print("TypeError:", e)
 
@@ -167,11 +167,11 @@ except TypeError as e:
 # A pred the kind did not declare is refused at the seal.
 
 # %%
-bad = Video(b"G1 tele camera, 9000 frames")
-bad.preds.update(game="G1", camera="tele", team="G4")
+bad_video = Video(b"G1 tele camera, 9000 frames")
+bad_video.preds.update(game="G1", camera="tele", team="G4")
 try:
     with L.transaction(by="human:dan") as t:
-        t.add_value(bad)
+        t.add_value(bad_video)
 except Undeclared as e:
     print("Undeclared:", e)          # team: not a Video pred
 
@@ -182,12 +182,12 @@ except Undeclared as e:
 # is refused next.
 
 # %%
-print(bad.sealed)                    # False: nothing was written
-del bad.preds["team"]
-bad.preds["camera"] = ["tele", "wide"]
+print(bad_video.sealed)              # False: nothing was written
+del bad_video.preds["team"]
+bad_video.preds["camera"] = ["tele", "wide"]
 try:
     with L.transaction(by="human:dan") as t:
-        t.add_value(bad)
+        t.add_value(bad_video)
 except TypeError as e:
     print("TypeError:", e)           # camera: a one pred, not json
 
@@ -196,10 +196,10 @@ except TypeError as e:
 # which `eval` alone writes.
 
 # %%
-bad.preds["camera"] = "tele"
+bad_video.preds["camera"] = "tele"
 try:
     with L.transaction(by="human:dan") as t:
-        t.add_value(bad, provenance="eval:sandbox")
+        t.add_value(bad_video, provenance="eval:sandbox")
 except ValueError as e:
     print("ValueError:", e)
 
@@ -210,7 +210,7 @@ except ValueError as e:
 # %%
 try:
     with L.transaction(by="human:dan") as t:
-        t.add("video/G1-tele", "note", bad)
+        t.add("video/G1-tele", "note", bad_video)
 except TypeError as e:
     print("TypeError:", e)
 
@@ -219,13 +219,13 @@ except TypeError as e:
 
 # %%
 rev = L.at()
-c3 = rev.eval("svp.game.cut", game="G1", version="1.5.3")
-print(c3, c3.sealed)                 # <8 hex> True: no alias yet
-print(c3.rev.id > rev.id)            # True: sealed in its own rev
-print(sorted(c3.preds["team"]), c3.preds["video"])
+cut_153 = rev.eval("svp.game.cut", game="G1", version="1.5.3")
+print(cut_153, cut_153.sealed)       # <8 hex> True: no alias yet
+print(cut_153.rev.id > rev.id)       # True: sealed in its own rev
+print(sorted(cut_153.preds["team"]), cut_153.preds["video"])
 # ["G4", "G5"] video/G1
-for item in sorted(c3.trace):
-    print(item, "->", c3.trace[item])
+for item in sorted(cut_153.trace):
+    print(item, "->", cut_153.trace[item])
 # code/sv-pipe -> 0.2.2+7d742989
 # fn -> db/fn/svp.game.cut/<hash>
 # game/G1 away -> G5
@@ -238,20 +238,20 @@ for item in sorted(c3.trace):
 
 # %% [markdown]
 # The miss ran the body and sealed the cut in a revision of its
-# own, which is `c3.rev`. The trace is recorded, not declared: `fn`,
-# the code the name resolved to (in base mode too, beside
-# `code/sv-pipe`, A39); the two game rows read by name; the `value`
-# query as a `q:` item holding what it answered, so a second G1
-# video later is a miss rather than a stale hit (A41); the video by
-# its bytes. The preds are what the body put in `c.preds`; the keys
+# own, which is `cut_153.rev`. The trace is recorded, not
+# declared: `fn`, the code the name resolved to (in base mode too,
+# beside `code/sv-pipe`, A39); the two game rows read by name; the
+# `value` query as a `q:` item holding what it answered, so a second
+# G1 video later is a miss rather than a stale hit (A41); the video
+# by its bytes. The preds are what the body put in `c.preds`; the keys
 # are one `db/keys` row, not preds.
 
 # %%
-top = L.at().id
-again = L.at().eval("svp.game.cut", game="G1", version="1.5.3")
-print(again.subject == c3.subject)   # True: a hit
-print(L.at().id == top)              # True: nothing written
-print(again.rev.id == c3.rev.id)     # True: still the seal's rev
+top_id = L.at().id
+again_cut = L.at().eval("svp.game.cut", game="G1", version="1.5.3")
+print(again_cut.subject == cut_153.subject)  # True: a hit
+print(L.at().id == top_id)           # True: nothing written
+print(again_cut.rev.id == cut_153.rev.id)  # True: still the seal's rev
 
 # %% [markdown]
 # The second call is a memo hit: same function, same keys, every
@@ -266,9 +266,9 @@ print(again.rev.id == c3.rev.id)     # True: still the seal's rev
 rev = L.at()
 print(rev.eval("svp.game.cut", game="G2", version="1.5.3",
                memo="get"))          # None: never run
-dry = rev.eval("svp.game.cut", game="G1", version="1.5.3",
-               memo=False)
-print(dry.sealed, dry.same_as(c3))   # False True
+dry_cut = rev.eval("svp.game.cut", game="G1", version="1.5.3",
+                   memo=False)
+print(dry_cut.sealed, dry_cut.same_as(cut_153))  # False True
 print(L.at().id == rev.id)           # True: nothing written
 
 # %% [markdown]
@@ -276,11 +276,13 @@ print(L.at().id == rev.id)           # True: nothing written
 # resolves to at this rev, and calling it is the eval.
 
 # %%
-f = rev.load_fn("svp.game.cut")
-print(f.mode, f.signature)       # base (*, game: str, version: str)
-print(f.sha[:8], f.subject)      # <8 hex> db/fn/svp.game.cut/<hash>
-print(c3.trace["fn"] == f.subject)    # True: the code c3 ran
-c2 = f(game="G2", version="1.5.3")    # a miss: runs and seals
+cut_fn = rev.load_fn("svp.game.cut")
+print(cut_fn.mode, cut_fn.signature)
+# base (*, game: str, version: str)
+print(cut_fn.sha[:8], cut_fn.subject)
+# <8 hex> db/fn/svp.game.cut/<hash>
+print(cut_153.trace["fn"] == cut_fn.subject)   # True: the code ran
+cut_g2 = cut_fn(game="G2", version="1.5.3")  # a miss: runs and seals
 
 # %% [markdown]
 # Memo entries are subjects like any other: `fn=` finds every
@@ -289,8 +291,8 @@ c2 = f(game="G2", version="1.5.3")    # a miss: runs and seals
 
 # %%
 rev = L.at()
-for r in rev.refs(fn="svp.game.cut"):
-    print(r, rev[r.subject, "db/keys"])
+for memo_ref in rev.refs(fn="svp.game.cut"):
+    print(memo_ref, rev[memo_ref.subject, "db/keys"])
 # <8 hex> {"game": "G1", "version": "1.5.3"}
 # <8 hex> {"game": "G2", "version": "1.5.3"}
 print(len(rev.values(fn="svp.game.cut")))    # 2, loaded
@@ -300,13 +302,13 @@ print(len(rev.values(fn="svp.game.cut")))    # 2, loaded
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("game/G1", "db/alias", c3.subject)
-    t.add("game/G2", "db/alias", c2.subject)
+    t.add("game/G1", "db/alias", cut_153.subject)
+    t.add("game/G2", "db/alias", cut_g2.subject)
 rev = L.at()
 print(rev["game/G1"])
 # {"home": "G4", "away": "G5", "date": "2026-10-11",
 #  "court": "north", "db/alias": "<c3's subject, 64 hex>"}
-print(c3)                            # game/G1: it has a name now
+print(cut_153)                       # game/G1: it has a name now
 
 # %% [markdown]
 # `rev["game/G1"]` is literal: the game's own rows, its `db/alias`
@@ -324,19 +326,22 @@ print(c3)                            # game/G1: it has a name now
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("review/G1", "cut", Ref(t.base, c3.subject))
-pick = L.at()["review/G1", "cut"]
-print(pick, pick.subject == c3.subject)    # game/G1 True
+    t.add("review/G1", "cut", Ref(t.base, cut_153.subject))
+pick_ref = L.at()["review/G1", "cut"]
+print(pick_ref, pick_ref.subject == cut_153.subject)  # game/G1 True
 
 # %%
-cur = rev.load("game/G1")
-print(cur.same_as(c3), cur.subject == c3.subject)   # True True
-v = cur.preds["video"]
-print(type(v).__name__, v.type)   # Ref <class 'svp.game.Video'>
-print(v.preds)
+current_cut = rev.load("game/G1")
+print(current_cut.same_as(cut_153),
+      current_cut.subject == cut_153.subject)     # True True
+video_ref = current_cut.preds["video"]
+print(type(video_ref).__name__, video_ref.type)
+# Ref <class 'svp.game.Video'>
+print(video_ref.preds)
 # {"game": "G1", "camera": "wide", "span": [0, 9000]}: no load
-x = v.load()                      # the one explicit act
-print(type(x), x.sealed)          # <class 'svp.game.Video'> True
+loaded_video = video_ref.load()   # the one explicit act
+print(type(loaded_video), loaded_video.sealed)
+# <class 'svp.game.Video'> True
 
 # %% [markdown]
 # `rev.load("game/G1")` follows the alias to the current cut.
@@ -345,12 +350,12 @@ print(type(x), x.sealed)          # <class 'svp.game.Video'> True
 # its own `load()`.
 
 # %%
-r = Ref(rev, "game/G1")
-print(r, r.name)                  # game/G1 game/G1
-print(r.subject == c3.subject)    # True: the alias, resolved
-print(r.type)                     # <class 'svp.game.Cut'>
-print(r.preds["version"])         # 1.5.3: the cut's preds
-print(r.sealed_at.id == c3.rev.id)    # True: its db/value row
+game_ref = Ref(rev, "game/G1")
+print(game_ref, game_ref.name)    # game/G1 game/G1
+print(game_ref.subject == cut_153.subject)  # True: the alias, resolved
+print(game_ref.type)              # <class 'svp.game.Cut'>
+print(game_ref.preds["version"])  # 1.5.3: the cut's preds
+print(game_ref.sealed_at.id == cut_153.rev.id)  # True: its db/value row
 
 # %% [markdown]
 # A `Ref` resolves the alias when made: `name` is what you said,
@@ -373,8 +378,8 @@ with L.transaction(by="human:dan", why="date typo") as t:
 rev = L.at()
 print(rev["game/G1", "date"], rev["game/G1", "court"])
 # 2026-10-10 C2
-print(rev.load("game/G1").same_as(c3))   # True: alias untouched
-print(c3.matches(rev))                   # True: cut read neither
+print(rev.load("game/G1").same_as(cut_153))  # True: alias untouched
+print(cut_153.matches(rev))              # True: cut read neither
 
 # %% [markdown]
 # ## Values are found by their preds
@@ -396,17 +401,18 @@ print(rev.values(team="G1"))             # [game/G2]: any member
 # `value` is exactly one, or it raises: two cuts match `kind=Cut`.
 
 # %%
-print(rev.value(game="G1", version="1.5.3").same_as(c3))   # True
+print(rev.value(game="G1", version="1.5.3").same_as(cut_153))  # True
 try:
     rev.value(kind=Cut)
 except Multiple as e:
     print("Multiple:", e)
 
 # %%
-refs = rev.refs(kind=Cut)
-print([(r, sorted(r.preds["team"])) for r in refs])
+cut_refs = rev.refs(kind=Cut)
+print([(cut_ref, sorted(cut_ref.preds["team"]))
+       for cut_ref in cut_refs])
 # (game/G1, ["G4", "G5"]) and (game/G2, ["G1", "G3"])
-print(max(refs, key=lambda r: r.sealed_at.id))   # game/G2
+print(max(cut_refs, key=lambda r: r.sealed_at.id))   # game/G2
 print(rev.select(("game", "version"), kind=Cut))
 # ("G1", "1.5.3") and ("G2", "1.5.3")
 
@@ -431,12 +437,12 @@ print(rev.select(("game", "version"), kind=Cut))
 
 # %%
 rev = L.at()
-p = rev.eval("svp.game.poster", game="G1")
-for item in sorted(p.trace):
+poster_value = rev.eval("svp.game.poster", game="G1")
+for item in sorted(poster_value.trace):
     if item.startswith(("game/", "ref:")):
-        print(item, "->", p.trace[item])
-# game/G1 db/alias -> ref:svp.game.Cut:<c3 bytes>
-# ref:svp.game.Cut:<c3 bytes> -> ref:svp.game.Cut:<c3 bytes>
+        print(item, "->", poster_value.trace[item])
+# game/G1 db/alias -> ref:svp.game.Cut:<cut_153 bytes>
+# ref:svp.game.Cut:<cut_153 bytes> -> ref:svp.game.Cut:<cut_153 bytes>
 
 # %% [markdown]
 # The load through `game/G1` recorded the binding, the name to the
@@ -448,16 +454,17 @@ for item in sorted(p.trace):
 # ## A new version: seal, then re-point
 
 # %%
-c4 = rev.eval("svp.game.cut", game="G1", version="1.5.4")
-print(c4)                                # <8 hex>: no alias yet
-print(c4.same_as(c3), c4.subject != c3.subject)   # True True
+cut_154 = rev.eval("svp.game.cut", game="G1", version="1.5.4")
+print(cut_154)                           # <8 hex>: no alias yet
+print(cut_154.same_as(cut_153),
+      cut_154.subject != cut_153.subject)         # True True
 with L.transaction(by="human:dan", why="cutter 1.5.4") as t:
-    t.add("game/G1", "db/alias", c4.subject)
+    t.add("game/G1", "db/alias", cut_154.subject)
 rev = L.at()
-print(c4, c3)                            # game/G1 <8 hex>
-print(p.matches(rev))                    # True: identical bytes
-p4 = rev.eval("svp.game.poster", game="G1")
-print(p4.subject == p.subject)           # True: a hit
+print(cut_154, cut_153)                  # game/G1 <8 hex>
+print(poster_value.matches(rev))         # True: identical bytes
+poster4_value = rev.eval("svp.game.poster", game="G1")
+print(poster4_value.subject == poster_value.subject)  # True: a hit
 
 # %% [markdown]
 # A value's `version` is a pred its constructor sets; a new version
@@ -482,12 +489,15 @@ except TypeError as e:
 
 # %%
 rev = L.at()
-t3 = rev.eval("svp.game.thumb", clip=Ref(rev, c3.subject))
-top = L.at().id
-t4 = rev.eval("svp.game.thumb", clip=Ref(rev, c4.subject))
-print(t4.subject == t3.subject, L.at().id == top)   # True True
-print(type(t3).__name__)                 # Pickled: -> dict
-print(L.at()[t3.trace["fn"], "db/returns"])          # dict
+thumb3_value = rev.eval("svp.game.thumb",
+                        clip=Ref(rev, cut_153.subject))
+top_id = L.at().id
+thumb4_value = rev.eval("svp.game.thumb",
+                        clip=Ref(rev, cut_154.subject))
+print(thumb4_value.subject == thumb3_value.subject,
+      L.at().id == top_id)                        # True True
+print(type(thumb3_value).__name__)       # Pickled: -> dict
+print(L.at()[thumb3_value.trace["fn"], "db/returns"])  # dict
 
 # %% [markdown]
 # A `Value` or `Ref` enters keys and traces by its bytes,
@@ -501,8 +511,8 @@ print(L.at()[t3.trace["fn"], "db/returns"])          # dict
 
 # %%
 with L.transaction(by="human:dan", why="court survey") as t:
-    for r in L.at().refs(kind=Cut):
-        t.add(r.subject, "texture", "hardwood")
+    for cut_ref in L.at().refs(kind=Cut):
+        t.add(cut_ref.subject, "texture", "hardwood")
 rev = L.at()
 print(Ref(rev, "game/G1").preds["texture"])     # hardwood
 print(len(rev.values(kind=Cut, texture="hardwood")))   # 3
@@ -514,12 +524,14 @@ print(len(rev.values(kind=Cut, texture="hardwood")))   # 3
 # and part of the one view of its preds.
 
 # %%
-trim = Cut(c4.clip[:12])                       # trimmed by hand
-trim.preds.update(game="G1", team=["G4", "G6"],    # G6: a typo
-                  video=c4.preds["video"])         # a Ref is fine
+trim_cut = Cut(cut_154.clip[:12])              # trimmed by hand
+trim_cut.preds.update(game="G1",
+                      team=["G4", "G6"],          # G6: a typo
+                      video=cut_154.preds["video"])   # a Ref is fine
 with L.transaction(by="human:dan") as t:
-    wrong = t.add_value(trim, deps=[c4], alias="game/G1",
-                        provenance="human:dan")
+    wrong_subject = t.add_value(trim_cut, deps=[cut_154],
+                                alias="game/G1",
+                                provenance="human:dan")
 print(sorted(Ref(L.at(), "game/G1").preds["team"]))  # G4, G6
 
 # %% [markdown]
@@ -532,7 +544,7 @@ print(sorted(Ref(L.at(), "game/G1").preds["team"]))  # G4, G6
 # %%
 try:
     with L.transaction(by="human:dan") as t:
-        t.add(wrong, "team", "G5")
+        t.add(wrong_subject, "team", "G5")
 except Exists as e:
     print("Exists:", e)
 
@@ -542,19 +554,21 @@ except Exists as e:
 # %%
 try:
     with L.transaction(by="human:dan") as t:
-        t.remove(wrong, "team", "G6")
+        t.remove(wrong_subject, "team", "G6")
 except Exists as e:
     print("Exists:", e)
 
 # %%
-fixed = Cut(trim.clip)                          # the same bytes
-fixed.preds.update(game="G1", team=["G4", "G5"],
-                   video=trim.preds["video"])
+fixed_cut = Cut(trim_cut.clip)                  # the same bytes
+fixed_cut.preds.update(game="G1", team=["G4", "G5"],
+                       video=trim_cut.preds["video"])
 with L.transaction(by="human:dan", why="team typo") as t:
-    right = t.add_value(fixed, deps=[c4], alias="game/G1",
-                        provenance="human:dan")
+    right_subject = t.add_value(fixed_cut, deps=[cut_154],
+                                alias="game/G1",
+                                provenance="human:dan")
 rev = L.at()
-print(right != wrong, fixed.same_as(trim))      # True True
+print(right_subject != wrong_subject,
+      fixed_cut.same_as(trim_cut))                # True True
 print(sorted(Ref(rev, "game/G1").preds["team"]))     # G4, G5
 print(rev.refs(kind=Cut, team="G6"))            # [<8 hex>]
 
@@ -566,9 +580,9 @@ print(rev.refs(kind=Cut, team="G6"))            # [<8 hex>]
 # no alias names it now.
 
 # %%
-print(p.matches(rev))                    # False
-p5 = rev.eval("svp.game.poster", game="G1")
-print(sorted(p.diff(p5)))
+print(poster_value.matches(rev))         # False
+poster5_value = rev.eval("svp.game.poster", game="G1")
+print(sorted(poster_value.diff(poster5_value)))
 # the game/G1 db/alias binding, and each side's value item
 
 # %% [markdown]
@@ -581,11 +595,11 @@ print(sorted(p.diff(p5)))
 
 # %%
 rev = L.at()
-print(c4.matches(rev))                      # True
+print(cut_154.matches(rev))                 # True
 with L.transaction(by="human:dan", why="home was G6") as t:
     t["game/G1", "home"] = "G6"
 rev = L.at()
-print(c4.matches(rev))                      # False
+print(cut_154.matches(rev))                 # False
 
 # %% [markdown]
 # `matches(rev)` re-reads every trace item at `rev`. The cut never
@@ -593,14 +607,14 @@ print(c4.matches(rev))                      # False
 # nothing; it read `home`, so correcting the teams makes it stale.
 
 # %%
-c5 = rev.eval("svp.game.cut", game="G1", version="1.5.4")
-print(c5.subject != c4.subject)             # True: re-derived
-print(sorted(c5.preds["team"]))             # ["G5", "G6"]
-print(c4.diff(c5))
+cut_home_g6 = rev.eval("svp.game.cut", game="G1", version="1.5.4")
+print(cut_home_g6.subject != cut_154.subject)  # True: re-derived
+print(sorted(cut_home_g6.preds["team"]))    # ["G5", "G6"]
+print(cut_154.diff(cut_home_g6))
 # {"game/G1 home": ("G4", "G6")}
-print(rev.load("game/G1").same_as(fixed))   # True: alias unmoved
+print(rev.load("game/G1").same_as(fixed_cut))  # True: alias unmoved
 with L.transaction(by="human:dan") as t:
-    t.add("game/G1", "db/alias", c5.subject)
+    t.add("game/G1", "db/alias", cut_home_g6.subject)
 
 # %% [markdown]
 # The next `eval` misses and re-derives; `diff` names the one trace
@@ -612,12 +626,12 @@ with L.transaction(by="human:dan") as t:
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("raw/G1/wide-camera", "db/alias", raw.subject)
+    t.add("raw/G1/wide-camera", "db/alias", video_value.subject)
 rev = L.at()
-r = Ref(rev, "raw/G1/wide-camera")
-print(r)                     # video/G1: the shortest, as of the head
-print(r.name)                # raw/G1/wide-camera: what you said
-print(sorted(r.aliases))     # ["raw/G1/wide-camera", "video/G1"]
+camera_ref = Ref(rev, "raw/G1/wide-camera")
+print(camera_ref)            # video/G1: the shortest, as of the head
+print(camera_ref.name)       # raw/G1/wide-camera: what you said
+print(sorted(camera_ref.aliases))  # ["raw/G1/wide-camera", "video/G1"]
 
 # %% [markdown]
 # A sealed value or its `Ref` prints as the shortest alias naming
@@ -630,10 +644,10 @@ print(sorted(r.aliases))     # ["raw/G1/wide-camera", "video/G1"]
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("hop-chain/1", "db/alias", raw.subject)
+    t.add("hop-chain/1", "db/alias", video_value.subject)
     for i in range(2, 10):
         t.add(f"hop-chain/{i}", "db/alias", f"hop-chain/{i - 1}")
-print(Ref(L.at(), "hop-chain/8").subject == raw.subject)   # True
+print(Ref(L.at(), "hop-chain/8").subject == video_value.subject)  # True
 try:
     Ref(L.at(), "hop-chain/9")
 except AliasLoop as e:
@@ -655,13 +669,14 @@ rev = L.at()
 def ask(_):
     return rev.eval("svp.game.noisy", game="G1")
 with ThreadPoolExecutor(2) as pool:
-    a, b = pool.map(ask, range(2))      # both miss, both run
-print(a.same_as(b), a.subject != b.subject)    # False True
-refs = L.at().refs(fn="svp.game.noisy")
-print(len(refs))                        # 2: one question, both kept
-last = max(refs, key=lambda r: r.sealed_at.id)
-hit = L.at().eval("svp.game.noisy", game="G1")
-print(hit.subject == last.subject)      # True: the latest-sealed
+    a_value, b_value = pool.map(ask, range(2))  # both miss, both run
+print(a_value.same_as(b_value),
+      a_value.subject != b_value.subject)         # False True
+noisy_refs = L.at().refs(fn="svp.game.noisy")
+print(len(noisy_refs))                  # 2: one question, both kept
+latest_ref = max(noisy_refs, key=lambda r: r.sealed_at.id)
+hit_value = L.at().eval("svp.game.noisy", game="G1")
+print(hit_value.subject == latest_ref.subject)  # True: latest-sealed
 
 # %% [markdown]
 # Two callers asked the same question before either had sealed, so
@@ -680,18 +695,18 @@ print(hit.subject == last.subject)      # True: the latest-sealed
 
 # %%
 from svp.legacy import Frame
-old = Frame(b"G1 frame 4500")
-old.preds["game"] = "G1"
+old_frame = Frame(b"G1 frame 4500")
+old_frame.preds["game"] = "G1"
 with L.transaction(by="human:dan") as t:
-    t.add_value(old)
+    t.add_value(old_frame)
 with L.transaction(by="human:dan", why="Frame is Still now") as t:
     t.add("db/kind/svp.legacy.Frame", "db/moved", "svp.game.Still")
-new = Still(b"G1 frame 6000")
-new.preds["game"] = "G1"
+new_still = Still(b"G1 frame 6000")
+new_still.preds["game"] = "G1"
 with L.transaction(by="human:dan") as t:
-    t.add_value(new)
+    t.add_value(new_still)
 rev = L.at()
 print(len(rev.refs(kind=Still)))       # 2: the old name followed
-r = Ref(rev, old.subject)
-print(rev[r.subject, "db/kind"])       # svp.legacy.Frame: as sealed
-print(r.type)                          # <class 'svp.game.Still'>
+frame_ref = Ref(rev, old_frame.subject)
+print(rev[frame_ref.subject, "db/kind"])  # svp.legacy.Frame: as sealed
+print(frame_ref.type)                  # <class 'svp.game.Still'>
