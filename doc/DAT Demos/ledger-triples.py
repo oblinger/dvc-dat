@@ -41,27 +41,29 @@ from dvc_dat.ledger import Ledger, bump
 from dvc_dat.ledger import LockTimeout
 
 scratch_ledger_path = Path("scratch/triples-demo/ledger").resolve()
-L = Ledger.create(scratch_ledger_path)         # an empty ledger
+L = Ledger(scratch_ledger_path, create=True)   # made, then opened
 
 # %% [markdown]
-# `Ledger.create(path)` is the one call that makes a ledger.
-# `Ledger.open(path)` opens an existing one and never creates.
+# One constructor. `Ledger(path)` opens what is there and raises
+# `LedgerError` when nothing is; `create=True` is the one explicit
+# act that makes a ledger, so an empty one never appears by accident.
 
 # %%
-L = Ledger.open(scratch_ledger_path)           # reopened by path
+L = Ledger(scratch_ledger_path)                # reopened by path
 
 # %% [markdown]
 # ### A project's `.datconfig.yaml`
 #
 # In real code a project names its ledger once and every script in
-# it says `Ledger.open()` with no argument. `Ledger.init(project)`
-# is the one creating verb: it writes `.datconfig.yaml` with a
-# `ledger:` line and makes the ledger it names, the way `git init`
-# makes the directory and the config together.
+# it says `Ledger()` with no argument. `Ledger(create=True)` with no
+# path makes a project here: it writes `.datconfig.yaml` with a
+# `ledger:` line and creates the ledger it names.
 
 # %%
 project_path = Path("scratch/triples-demo/project").resolve()
-Ledger.init(project_path)                 # .datconfig.yaml + ledger
+project_path.mkdir(parents=True, exist_ok=True)
+os.chdir(project_path)
+L = Ledger(create=True)                   # .datconfig.yaml + ledger
 
 print((project_path / ".datconfig.yaml").read_text())
 # ledger: .dat/ledger
@@ -70,13 +72,12 @@ print((project_path / ".datconfig.yaml").read_text())
 # The one line is the whole config this notebook needs: `ledger:`,
 # a path relative to the file's own folder. The same file carries a
 # project's `mounts:` (the values and dats notebooks), and dvc-dat's
-# own keys; it is the file the dat manager already reads. `open()`
+# own keys; it is the file the dat manager already reads. `Ledger()`
 # walks up from the working directory to the nearest `.datconfig.yaml`
 # carrying `ledger:` and never creates anything.
 
 # %%
-os.chdir(project_path)
-L = Ledger.open()                         # the project's ledger
+L = Ledger()                              # the project's ledger
 
 # %% [markdown]
 # A declaration is itself a row, on the predicate's own subject:
