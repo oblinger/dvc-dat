@@ -83,7 +83,8 @@ L = Ledger.open()                         # 3. the project's ledger
 # ## One transaction is one revision
 
 # %%
-with L.transaction(by="human:dan", why="season opener") as t:
+with L.transaction(by="human:dan", time=True,
+                   why="season opener") as t:
     t.add("game/G1", "home", "G4")
     t.add("game/G1", "away", "G5")
     t.add("game/G1", "date", "2026-10-11")
@@ -91,8 +92,14 @@ with L.transaction(by="human:dan", why="season opener") as t:
 r1 = t.rev
 print(r1.id, r1.tx)                  # 1 db/tx/1
 print(r1[r1.tx, "db/by"])            # human:dan
-print(sorted(r1[r1.tx]))             # ['db/by', 'why']
+print(r1[r1.tx, "db/time"])          # 2026-10-18T15:52:07Z (UTC)
+print(sorted(r1[r1.tx]))             # ['db/by', 'db/time', 'why']
 print(Ref(r1, r1.tx).preds["why"])   # season opener
+
+# %% [markdown]
+# `time=True` asks for the wall-clock stamp; without it a revision
+# carries no time, only its number and `by`. The stamp is a row like
+# any other, so `asserted` and `since=` work on it too.
 
 # %% [markdown]
 # `by` is required, once per transaction. Every other keyword is a
