@@ -314,6 +314,20 @@ print(c3)                            # game/G1: it has a name now
 # `str`. The cut now prints as `game/G1`, its shortest alias as of
 # the head.
 
+# %% [markdown]
+# ### A `ref:` row
+#
+# A `Ref` may be any row's object. `add` stores it as
+# `ref:<class>:<hash>:<subject>`, the subject a hint; every pattern
+# read hands it back as a `Ref`, unloaded, printed as its shortest
+# alias, else the hash's first eight characters.
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t.add("review/G1", "cut", Ref(t.base, c3.subject))
+pick = L.at()["review/G1", "cut"]
+print(pick, pick.subject == c3.subject)    # game/G1 True
+
 # %%
 cur = rev.load("game/G1")
 print(cur.same_as(c3), cur.subject == c3.subject)   # True True
