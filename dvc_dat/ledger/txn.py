@@ -272,7 +272,7 @@ class Transaction:
         rev = w.next_rev()
         txs = f"db/tx/{rev}"
         store = self._ledger._store
-        with store.reading_through(w.conn):
+        with store.reading_through(w):
             before = Rev(self._ledger, rev - 1)
             dropped = {op.seal_of for op in self._ops
                        if op.seal_of and op.p == "db/value" and before._held(op.seal_of, "db/value")}
@@ -294,13 +294,11 @@ class Transaction:
         rows.extend((txs, k, o, True) for k, o in self._preds)
         self._store_all()
         w.insert(rev, rows)
-        with store.reading_through(w.conn):
+        with store.reading_through(w):
             self._validate(Rev(self._ledger, rev), kept)
         for op in kept:
             if op.added and op.p == "db/index" and op.s.startswith("db/pred/") and op.o == "str:true":
-                pred = op.s[len("db/pred/"):].replace("'", "''")
-                w.conn.execute(f'CREATE INDEX IF NOT EXISTS "pred_{hash_text(pred, 16)}" ON quads '
-                               f"(object, subject, rev) WHERE predicate = '{pred}'")
+                w.create_index(op.s[len("db/pred/"):])
         return rev
 
     def _validate(self, R: "Rev", ops: List[_Op]) -> None:

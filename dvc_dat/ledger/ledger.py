@@ -20,7 +20,7 @@ import yaml
 
 from .errors import LedgerError
 from .rev import Rev
-from .store import Store
+from .store import SqliteStore, Store
 from .txn import Transaction
 
 ENV = "DAT_LEDGER"
@@ -93,7 +93,7 @@ class Ledger:
         if not (folder / "ledger.db").is_file() and not create:
             raise LedgerError(f"no ledger at {given}")
         self.path = folder
-        self._store = Store(folder)
+        self._store: Store = SqliteStore(folder)
         if cfg is not None and path is None and not create:
             self._assert_mounts(cfg)
 

@@ -91,7 +91,7 @@ def test_5_db_format_and_db_index(L):
         t.add("db/pred/home", "db/doc", "the home team")
     rev = L.at()
     assert rev["db", "db/format"] == "dvc-dat-ledger/1"
-    names = [r[0] for r in L._store.read("SELECT name FROM sqlite_master WHERE type = 'index'")]
+    names = L._store.index_names()
     assert any(n.startswith("pred_") for n in names)
     assert rev["db/pred/home"] == {"db/index": "true", "db/doc": "the home team"}
     assert [r.subject for r in rev.refs(home="G4")] == ["g"]

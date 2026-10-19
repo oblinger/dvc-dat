@@ -1,6 +1,13 @@
-"""The SQLite backend: one quad table, and an art store of bytes by hash beside it.
+"""The store interface, the SQLite backend behind it, and the art store of bytes by hash.
 
-A ledger is a folder: ``ledger.db`` (SQLite) and ``art/`` (bytes by hash,
+``Store`` names what the ledger reads and writes: ``top``, ``rows``,
+``subjects``, ``has_predicate``, ``writer`` (the write lock and one open
+transaction), ``reading_through`` (reads routed through that transaction) and
+``index_names``; ``Writer`` is the open transaction (``next_rev``, ``insert``,
+``create_index`` for ``db/index``). The art store stays a folder whatever the
+backend. ``SqliteStore`` is below; ``PostgresStore`` is in ``pgstore``.
+
+A SQLite ledger is a folder: ``ledger.db`` and ``art/`` (bytes by hash,
 and ``art/dats/`` where a ``Dat`` is materialised) inside it (A54).
 
 ``quads(rev, ord, subject, predicate, object, added)``: ``rev`` the revision,
@@ -15,11 +22,12 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, ContextManager, Iterator, List, Optional, Sequence, Tuple
 
-from .codec import sha256
+from .codec import hash_text, sha256
 from .errors import LedgerError, LockTimeout
 
 #: ``(rev, ord, subject, predicate, object, added)``
@@ -59,7 +67,69 @@ class ArtStore:
         return p.read_bytes()
 
 
-class Store:
+def index_name(pred: str) -> str:
+    """The ``db/index`` partial index's name (hashed over the quote-doubled predicate, as since 5.0)."""
+    return f"pred_{hash_text(pred.replace(chr(39), chr(39) * 2), 16)}"
+
+
+class Writer(ABC):
+    """The open write transaction, holding the write lock: read the top, append rows under the next revision."""
+
+    @abstractmethod
+    def next_rev(self) -> int:
+        """``MAX(rev) + 1``, read under the lock."""
+
+    @abstractmethod
+    def insert(self, rev: int, rows: Sequence[Tuple[str, str, str, bool]]) -> None:
+        """Append ``(subject, predicate, object, added)`` rows as ``rev``, ``ord`` their place."""
+
+    @abstractmethod
+    def create_index(self, pred: str) -> None:
+        """``db/index``: a partial index on ``(object, subject, rev)`` where ``predicate = pred``."""
+
+
+class Store(ABC):
+    """What the ledger reads and writes; ``art`` is the art store (a folder, whatever the backend)."""
+
+    art: ArtStore
+
+    @abstractmethod
+    def top(self) -> int:
+        """The highest revision, 0 for an empty ledger."""
+
+    @abstractmethod
+    def rows(self, upto: int, *, subject: Optional[str] = None, predicate: Optional[str] = None,
+             obj: Optional[str] = None, prefix: Optional[str] = None, after: int = 0) -> List[Row]:
+        """Every row with ``after < rev <= upto`` matching the columns given, in (rev, ord) order."""
+
+    @abstractmethod
+    def subjects(self, upto: int, *, predicate: Optional[str] = None, obj: Optional[str] = None,
+                 prefix: Optional[str] = None, subject: Optional[str] = None, after: int = 0) -> List[str]:
+        """The distinct subjects with an add row matching the columns given, in ``after < rev <= upto``,
+        ordered by their first such row."""
+
+    @abstractmethod
+    def has_predicate(self, predicate: str, upto: int) -> bool:
+        """Any row with this predicate at or below ``upto``."""
+
+    @abstractmethod
+    def writer(self, timeout: float, *, locked: bool) -> ContextManager[Writer]:
+        """A write transaction holding the write lock; commits on a clean exit, rolls back otherwise.
+
+        ``locked``: the caller asked for ``lock=``, so failing to take the lock within ``timeout``
+        is ``LockTimeout``; otherwise it is ``LedgerError``.
+        """
+
+    @abstractmethod
+    def reading_through(self, w: Writer) -> ContextManager[None]:
+        """Reads in this thread go through ``w`` (the open write transaction) for the block."""
+
+    @abstractmethod
+    def index_names(self) -> List[str]:
+        """The names of the indexes on the quad table."""
+
+
+class SqliteStore(Store):
     """One SQLite file. Reads on a per-thread connection; each write on a connection of its own."""
 
     def __init__(self, folder: Path) -> None:
@@ -81,10 +151,11 @@ class Store:
         return sqlite3.connect(str(self.path), isolation_level=None, timeout=timeout, check_same_thread=False)
 
     @contextmanager
-    def reading_through(self, conn: sqlite3.Connection) -> Iterator[None]:
-        """Reads in this thread go through ``conn`` (an open write transaction) for the block."""
+    def reading_through(self, w: Writer) -> Iterator[None]:
+        """Reads in this thread go through ``w`` (an open write transaction) for the block."""
+        assert isinstance(w, SqliteWriter)
         old = getattr(self._local, "override", None)
-        self._local.override = conn
+        self._local.override = w.conn
         try:
             yield
         finally:
@@ -141,13 +212,12 @@ class Store:
     def has_predicate(self, predicate: str, upto: int) -> bool:
         return bool(self.read("SELECT 1 FROM quads WHERE predicate = ? AND rev <= ? LIMIT 1", (predicate, upto)))
 
-    @contextmanager
-    def writer(self, timeout: float, *, locked: bool) -> Iterator["Writer"]:
-        """A write transaction holding SQLite's write lock; commits on a clean exit, rolls back otherwise.
+    def index_names(self) -> List[str]:
+        return [r[0] for r in self.read("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'quads'")]
 
-        ``locked``: the caller asked for ``lock=``, so failing to take the lock within ``timeout``
-        is ``LockTimeout``; otherwise it is ``LedgerError``.
-        """
+    @contextmanager
+    def writer(self, timeout: float, *, locked: bool) -> Iterator["SqliteWriter"]:
+        """A write transaction holding SQLite's write lock (``BEGIN IMMEDIATE``)."""
         conn = self._connect(timeout)
         try:
             try:
@@ -156,7 +226,7 @@ class Store:
                 if locked:
                     raise LockTimeout(f"ledger {self.path}: write lock not had within {timeout}s ({e})") from e
                 raise LedgerError(f"ledger {self.path}: write lock not had ({e})") from e
-            w = Writer(conn)
+            w = SqliteWriter(conn)
             try:
                 yield w
             except BaseException:
@@ -167,8 +237,8 @@ class Store:
             conn.close()
 
 
-class Writer:
-    """The open write transaction: read the top, append rows under the next revision."""
+class SqliteWriter(Writer):
+    """The open SQLite write transaction."""
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
@@ -180,3 +250,8 @@ class Writer:
         self.conn.executemany(
             "INSERT INTO quads (rev, ord, subject, predicate, object, added) VALUES (?, ?, ?, ?, ?, ?)",
             [(rev, i, s, p, o, int(a)) for i, (s, p, o, a) in enumerate(rows)])
+
+    def create_index(self, pred: str) -> None:
+        lit = pred.replace("'", "''")
+        self.conn.execute(f'CREATE INDEX IF NOT EXISTS "{index_name(pred)}" ON quads '
+                          f"(object, subject, rev) WHERE predicate = '{lit}'")
