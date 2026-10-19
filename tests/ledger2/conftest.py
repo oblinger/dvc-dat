@@ -1,8 +1,8 @@
-"""Fixtures for the ledger2 suite: a fresh SQLite ledger per test and a pinned environment.
+"""Fixtures for the ledger2 suite: a fresh ledger per test and a pinned environment.
 
-The environment provider is pinned so ``eval`` is deterministic: one repo,
-``testrepo``, at version 1.0.0, commit ``abc1234``, clean; ``coded`` writes the
-matching ``code/testrepo`` rows so functions may run.
+The environment provider (the test seam, A51) is pinned so ``eval`` is
+deterministic: one repo, ``testrepo``, at commit ``abc1234``, clean, its
+checkout this folder; ``coded`` writes the matching ``code/testrepo`` rows.
 """
 
 import sys
@@ -16,20 +16,20 @@ if str(HERE) not in sys.path:
 
 from dvc_dat.ledger2 import Code, Env, Ledger, set_env_provider  # noqa: E402
 
-ENV = Env({"testrepo": Code("1.0.0", "abc1234", False)}, "sha256:lock-1", "test-platform")
+ENV = Env({"testrepo": Code(None, "abc1234", False, HERE)}, "sha256:lock-1", "test-platform")
 
 
 class EnvBox:
-    """The pinned environment; a test calls ``code``/``set`` to move the code, lock or platform."""
+    """The pinned environment; a test calls ``code``/``set`` to move the commit, lock or platform."""
 
     def __init__(self):
         self.env = ENV
 
-    def __call__(self, module):
+    def __call__(self):
         return self.env
 
-    def code(self, version="1.0.0", commit="abc1234", dirty=False):
-        self.env = Env({"testrepo": Code(version, commit, dirty)}, self.env.lock, self.env.platform)
+    def code(self, commit="abc1234", dirty=False):
+        self.env = Env({"testrepo": Code(None, commit, dirty, HERE)}, self.env.lock, self.env.platform)
 
     def set(self, **kw):
         fields = {"code": self.env.code, "lock": self.env.lock, "platform": self.env.platform}
@@ -47,7 +47,7 @@ def envbox():
 
 @pytest.fixture
 def L(tmp_path):
-    return Ledger(tmp_path / "ledger2.db")
+    return Ledger(tmp_path / "ledger", create=True)
 
 
 @pytest.fixture

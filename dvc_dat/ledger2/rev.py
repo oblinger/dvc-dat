@@ -1,57 +1,73 @@
-"""``Rev``, a frozen view of the ledger at one revision, and ``Ref``, one value at one moment.
+"""``Rev``, a frozen view of the ledger at one revision; ``Ref``, one value at one moment; ``Row``.
 
-Every read lives on ``Rev``. A read folds the rows at or before the revision
-by the predicate's cardinality as of that revision (``fold``); a pattern
-fixing all three positions reads the history instead (the revisions that
-asserted the triple, superseded or not).
+Every read lives on ``Rev``. The row reads (``[]``, ``get``, ``all``, ``in``)
+fold the rows at or before the revision by each predicate's cardinality as of
+that revision, at every arity (Q19); ``asserted`` and ``rows`` are the two
+reads that walk history unfolded. The subject reads (``refs``, ``values``,
+``value``, ``select``, ``load``, ``eval``) treat the store as a table whose
+rows are subjects. No pattern read decodes a ``ref:`` object: it comes back a
+``Ref``, unloaded (Q35). Inside a value function the ``Rev`` handed to the body
+records what it reads into the function's trace (``trace``).
 """
 
 from __future__ import annotations
 
 import importlib
 import json
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
 
-from .codec import canonical, encode_plain, key_text, parse_ref, short
-from .errors import Multiple, Unindexed
-from .fold import BUILTIN_ONE, Held, cardinality_of, fold
-from .value import Value
+from .codec import canonical, encode_plain, is_hash, parse_ref, ref_text, show, strip_hint, tag
+from .errors import AliasLoop, Multiple, Unindexed
+from .fold import Held, fold
+from .value import FrozenPreds, Value, dotted
 
 if TYPE_CHECKING:
     from .fn import Fn
     from .ledger import Ledger
 
-_NONE = "<none>"
+#: Predicates whose cardinality is fixed at ``one``: every ``db/`` predicate, and the user clocks.
+FIXED_ONE = frozenset({"version", "commit"})
+ALIAS_HOPS = 8
+_OMIT = object()
+NONE_TOKEN = "<none>"
 
 
-def token(obj: Any) -> str:
-    """A read's result as one comparable string: what a trace item stores."""
-    if obj is None:
-        return _NONE
-    if isinstance(obj, str):
-        return obj
-    if isinstance(obj, (dict, list)) and not _has_refs(obj):
-        return "json:" + canonical(obj)
-    if isinstance(obj, Ref):
-        return obj.hash or ("ref:" + obj.subject)
-    if isinstance(obj, Rev):
-        return str(obj.id)
-    if isinstance(obj, (list, tuple)):
-        return "h:" + short(canonical([token(x) for x in obj]))
-    return "h:" + short(repr(obj))
+def fixed_one(p: str) -> bool:
+    return p.startswith("db/") or p in FIXED_ONE
 
 
-def _has_refs(obj: Any) -> bool:
-    if isinstance(obj, (Ref, Rev, tuple)):
-        return True
-    if isinstance(obj, dict):
-        return any(_has_refs(v) for v in obj.values())
-    if isinstance(obj, list):
-        return any(_has_refs(v) for v in obj)
-    return False
+class Row(NamedTuple):
+    """One stored row, unfolded: ``added`` is false on a remove (A48)."""
+
+    rev: "Rev"
+    subject: str
+    predicate: str
+    object: Any
+    added: bool
+
+    def __str__(self) -> str:
+        obj = self.object
+        if isinstance(obj, Ref):
+            text = obj._text()
+        elif isinstance(obj, (dict, list)):
+            text = canonical(obj)
+        else:
+            text = str(obj)
+        return f"{self.rev.id:>4} {'+' if self.added else '-'} {self.subject:<20} {self.predicate:<24} {text}"
 
 
-def _class(name: str) -> type:
+def class_named(ledger: "Ledger", name: str) -> type:
+    """The class a dotted name resolves to, following ``db/kind/<old> db/moved`` rows at the head (A19)."""
+    head = ledger.at()
+    seen = {name}
+    while True:
+        moved = head._held(f"db/kind/{name}", "db/moved")
+        if not moved:
+            break
+        name = show(moved[-1].obj)
+        if name in seen:
+            raise ImportError(f"db/moved rows form a cycle at {name!r}")
+        seen.add(name)
     parts = name.split(".")
     for i in range(len(parts) - 1, 0, -1):
         try:
@@ -65,7 +81,34 @@ def _class(name: str) -> type:
             continue
         if isinstance(obj, type):
             return obj
-    raise ImportError(f"value class {name!r} does not import (renamed or moved? a rename needs an alias row)")
+    raise ImportError(f"value class {name!r} does not import, and no db/kind/{name} db/moved row says "
+                      "where it went")
+
+
+def kind_names(ledger: "Ledger", kind: Any, rev: "Rev") -> List[str]:
+    """``kind=``: a class or dotted name, plus every earlier name a ``db/moved`` chain leads from (A32)."""
+    if isinstance(kind, type):
+        kind = dotted(kind)
+    if not isinstance(kind, str) or not kind:
+        raise TypeError(f"kind is a Value class or its dotted name, not {kind!r}")
+    names = [kind]
+    frontier = [kind]
+    while frontier:
+        n = frontier.pop()
+        for s in rev._store.subjects(rev.id, predicate="db/moved", obj="str:" + n, prefix="db/kind/"):
+            old = s[len("db/kind/"):]
+            if old not in names and any(h.obj == "str:" + n for h in rev._held(s, "db/moved")):
+                names.append(old)
+                frontier.append(old)
+    return names
+
+
+def display_name(ledger: "Ledger", subject: str) -> str:
+    """The shortest ``db/alias`` naming ``subject`` at the head, ties lexicographic; else the hash's 8 (A25)."""
+    names = ledger.at()._aliases_of(subject)
+    if names:
+        return min(names, key=lambda n: (len(n), n))
+    return subject[:8] if is_hash(subject) else subject
 
 
 class Rev:
@@ -81,8 +124,8 @@ class Rev:
 
     @property
     def tx(self) -> str:
-        """``ledger/tx/<id>``: the subject carrying this revision's transaction provenance."""
-        return f"ledger/tx/{self.id}"
+        """``db/tx/<id>``: the subject carrying this revision's transaction provenance."""
+        return f"db/tx/{self.id}"
 
     def __repr__(self) -> str:
         return f"Rev({self.id})"
@@ -106,7 +149,7 @@ class Rev:
         return self.id >= other.id
 
     def _plain(self) -> "Rev":
-        return self if self._rec is None else self.ledger.at(self.id)
+        return self if self._rec is None else Rev(self.ledger, self.id)
 
     # -- the fold -------------------------------------------------------------
 
@@ -117,14 +160,19 @@ class Rev:
     def _card(self, p: str) -> str:
         c = self._cards.get(p)
         if c is None:
-            if p in BUILTIN_ONE:
-                c = "one"
-            else:
-                c = cardinality_of(self._store.rows(self.id, subject=f"ledger/pred/{p}", predicate="cardinality"))
+            c = "one"
+            if not fixed_one(p):
+                held = fold(self._store.rows(self.id, subject=f"db/pred/{p}", predicate="db/cardinality"), "one")
+                c = "many" if held and held[0].obj == "str:many" else "one"
             self._cards[p] = c
         return c
 
-    def _after(self, since: Optional["Rev"]) -> int:
+    def _type(self, p: str) -> Optional[str]:
+        held = self._held(f"db/pred/{p}", "db/type")
+        return show(held[0].obj) if held else None
+
+    @staticmethod
+    def _after(since: Optional["Rev"]) -> int:
         if since is None:
             return 0
         if not isinstance(since, Rev):
@@ -147,397 +195,548 @@ class Rev:
         out.sort(key=lambda x: (x[2].rev, x[2].ord))
         return out
 
-    def _decode(self, text: str, row_subject: str) -> Any:
-        tag, _, rest = text.partition(":")
-        if tag == "str":
+    def _decode(self, text: str) -> Any:
+        t, _, rest = text.partition(":")
+        if t == "str":
             return rest
-        if tag == "json":
+        if t == "json":
             return json.loads(rest)
-        if tag == "ref":
-            cls, h, subj = parse_ref(text)
-            return Ref._from_row(self._plain(), subj or row_subject, h, cls)
+        if t == "ref":
+            return Ref._from_text(self._plain(), text)
         raise ValueError(f"row object {text[:60]!r}: unknown tag")
 
-    def _matcher(self, o: Any):
-        """A predicate on stored object strings: does this row hold ``o``."""
-        if isinstance(o, (Ref, Value)):
-            h = o.hash
-            subj = o.subject
+    def _check_type(self, p: str, text: str) -> None:
+        decl = self._type(p)
+        if decl is not None and not type_ok(self.ledger, decl, text):
+            raise TypeError(f"{p!r} is declared db/type {decl!r} at rev {self.id}; the stored object is "
+                            f"{tag(text)}:{show(text)[:40]!r} (the loose reads, all and rev[s], return it)")
 
-            def m(text: str) -> bool:
-                if not text.startswith("ref:"):
-                    return False
-                _c, rh, rs = parse_ref(text)
-                return rh == h if h else rs == subj
-            return m
-        plain = encode_plain(o)
-        if plain is None:
-            plain = "str:" + key_text(o)
-        return lambda text: text == plain
+    def _aliases_of(self, subject: str) -> List[str]:
+        out = []
+        for s in self._store.subjects(self.id, predicate="db/alias", obj="str:" + subject):
+            if any(h.obj == "str:" + subject for h in self._held(s, "db/alias")):
+                out.append(s)
+        return out
 
-    # -- recording (inside eval) ---------------------------------------------
+    def _record_row(self, item: str, text: Optional[str]) -> None:
+        if self._rec is not None:
+            self._rec[item] = NONE_TOKEN if text is None else strip_hint(text) if text.startswith("ref:") \
+                else show(text)
 
     def _record(self, item: str, value: str) -> None:
         if self._rec is not None:
             self._rec[item] = value
 
-    def _record_query(self, method: str, args: Sequence[Any], kwargs: Dict[str, Any], result: Any) -> None:
-        if self._rec is None:
-            return
-        if method in ("getitem", "get") and len(args) == 2 and not kwargs.get("since"):
-            s, p = args
-            if p == "version":
-                item = s
-                if s.startswith("code/"):
-                    self._record(s, self._code_token(s))
-                    return
-            else:
-                item = f"{s}#{p}"
-            self._record(item, token(result))
-            return
-        spec = canonical([method, [token(a) for a in args],
-                          {k: token(v) if not isinstance(v, (dict, tuple)) else
-                           ({kk: token(vv) for kk, vv in v.items()} if isinstance(v, dict) else list(v))
-                           for k, v in sorted(kwargs.items()) if v is not None}])
-        self._record("q:" + spec, token(result))
+    def _record_call(self, call: str, args: Sequence[Any], since: Optional["Rev"], result: Any) -> None:
+        if self._rec is not None:
+            from .trace import call_item, token
+
+            self._rec[call_item(call, args, since)] = token(result)
 
     # -- row reads ------------------------------------------------------------
+
+    @staticmethod
+    def _glob(s: Any) -> Tuple[Optional[str], Optional[str]]:
+        """``(exact, prefix)`` of a subject position."""
+        if not isinstance(s, str) or not s:
+            raise TypeError(f"a subject is a non-empty str, not {s!r}")
+        if "*" in s[:-1]:
+            raise ValueError(f"{s!r}: a glob is a prefix, 'run/0-2-2/*'; a wildcard anywhere else is refused")
+        if s.endswith("*"):
+            return None, s[:-1]
+        return s, None
+
+    @staticmethod
+    def _objtext(o: Any) -> str:
+        """The stored text a pattern's object position compares by (a ref without its hint)."""
+        if isinstance(o, Ref):
+            return o._text()
+        if isinstance(o, Value):
+            if not o.sealed:
+                raise ValueError("an unsealed Value is in no row")
+            return ref_text(dotted(type(o)), o.hash)
+        plain = encode_plain(o)
+        if plain is None:
+            raise TypeError(f"a row object is a str, JSON document or Ref, not {type(o).__name__}")
+        return plain
 
     def _pattern(self, pattern: Sequence[Any], after: int) -> List[Any]:
         n = len(pattern)
         if n > 3:
             raise TypeError(f"a pattern fixes at most 3 positions, not {n}")
-        for i, x in enumerate(pattern[:2]):
-            if not isinstance(x, str) or not x:
-                raise TypeError(f"position {i + 1} of a pattern is a non-empty str, not {x!r}")
         if n == 0:
-            return [(s, p, self._decode(h.obj, s)) for s, p, h in self._held_rows(after)]
+            return [(s, p, self._decode(h.obj)) for s, p, h in self._held_rows(after)]
+        exact, prefix = self._glob(pattern[0])
+        if n >= 2 and (not isinstance(pattern[1], str) or not pattern[1]):
+            raise TypeError(f"a predicate is a non-empty str, not {pattern[1]!r}")
         if n == 1:
-            return [(p, self._decode(h.obj, s)) for s, p, h in self._held_rows(after, subject=pattern[0])]
+            rows = self._held_rows(after, subject=exact, prefix=prefix)
+            if exact is not None:
+                return [(p, self._decode(h.obj)) for s, p, h in rows]
+            return [(s, p, self._decode(h.obj)) for s, p, h in rows]
+        p = pattern[1]
         if n == 2:
-            s, p = pattern
-            return [self._decode(h.obj, s) for h in self._held(s, p, after)]
-        s, p, o = pattern
-        m = self._matcher(o)
-        revs: List[int] = []
-        for r in self._store.rows(self.id, subject=s, predicate=p, after=after):
-            if r[5] and m(r[4]) and r[0] not in revs:
-                revs.append(r[0])
-        return [self.ledger.at(i) for i in revs]
+            if exact is not None:
+                return [self._decode(h.obj) for h in self._held(exact, p, after)]
+            return [(s, self._decode(h.obj)) for s, _p, h in self._held_rows(after, predicate=p, prefix=prefix)]
+        want = strip_hint(self._objtext(pattern[2]))
+        if exact is not None:
+            return [self.ledger.at(h.rev) for h in self._held(exact, p, after) if strip_hint(h.obj) == want]
+        return [(s, self.ledger.at(h.rev)) for s, _p, h in self._held_rows(after, predicate=p, prefix=prefix)
+                if strip_hint(h.obj) == want]
 
-    @staticmethod
-    def _key(key: Any) -> Tuple[Any, ...]:
-        if isinstance(key, str):
-            return (key,)
-        if isinstance(key, tuple) and 1 <= len(key) <= 3:
-            return key
-        raise TypeError(f"a lookup is a str or a 2- or 3-tuple, not {key!r}")
+    def _record_of(self, s: str, after: int = 0) -> Dict[str, Any]:
+        rec: Dict[str, Any] = {}
+        first: Dict[str, Tuple[int, int]] = {}
+        for _s, p, h in self._held_rows(after, subject=s):
+            if p not in first:
+                first[p] = (h.rev, h.ord)
+            if self._card(p) == "many":
+                rec.setdefault(p, []).append(self._decode(h.obj))
+            else:
+                rec[p] = self._decode(h.obj)
+        return {p: rec[p] for p in sorted(rec, key=lambda q: first[q])}
+
+    def _one(self, key: Tuple[Any, ...], after: int, strict_none: bool) -> Tuple[bool, Any]:
+        """``(found, value)`` of a 1-, 2- or 3-position bracket read."""
+        n = len(key)
+        if not 1 <= n <= 3:
+            raise TypeError(f"a bracket read fixes 1 to 3 positions, not {n}")
+        s = key[0]
+        if not isinstance(s, str) or not s:
+            raise TypeError(f"a subject is a non-empty str, not {s!r}")
+        if "*" in s:
+            raise TypeError(f"{s!r}: bracket reads take exact subjects; globs live on all and refs")
+        if n == 1:
+            rec = self._record_of(s, after)
+            return (bool(rec), rec)
+        p = key[1]
+        if not isinstance(p, str) or not p:
+            raise TypeError(f"a predicate is a non-empty str, not {p!r}")
+        if n == 2:
+            if self._card(p) == "many":
+                raise TypeError(f"{p!r} has cardinality many at rev {self.id}: one object is not its answer; "
+                                f"use all({s!r}, {p!r})")
+            held = self._held(s, p, after)
+            if not held:
+                return (False, None)
+            self._check_type(p, held[0].obj)
+            return (True, self._decode(held[0].obj))
+        found = self._pattern(key, after)
+        return (bool(found), found[0] if found else None)
 
     def __getitem__(self, key: Any) -> Any:
-        """Exactly one match of a 1-, 2- or 3-position pattern; ``KeyError`` (none) or ``Multiple`` (several)."""
-        pattern = self._key(key)
-        found = self._pattern(pattern, 0)
+        """One match of a pattern: ``rev[s]`` the record (a dict), ``rev[s, p]`` one object, ``rev[s, p, o]`` a Rev."""
+        k = (key,) if isinstance(key, str) else key
+        if not isinstance(k, tuple):
+            raise TypeError(f"a bracket read is a str or a 2- or 3-tuple, not {key!r}")
+        found, value = self._one(k, 0, True)
+        if len(k) == 2:
+            held = self._held(k[0], k[1]) if found else []
+            self._record_row(f"{k[0]} {k[1]}", held[0].obj if held else None)
+        else:
+            self._record_call("getitem", k, None, value if found else None)
         if not found:
-            raise KeyError(f"no match for {pattern!r} at rev {self.id}")
-        if len(found) > 1:
-            raise Multiple(f"{len(found)} matches for {pattern!r} at rev {self.id}")
-        self._record_query("getitem", pattern, {}, found[0])
-        return found[0]
+            what = "no rows" if len(k) == 1 else "nothing held" if len(k) == 2 else "not held (asserted gives when)"
+            raise KeyError(f"{k!r} at rev {self.id}: {what}")
+        return value
 
     def get(self, *pattern: Any, default: Any = None, since: Optional["Rev"] = None) -> Any:
-        """At most one match: none -> ``default``, several -> ``Multiple``."""
-        if not 1 <= len(pattern) <= 3:
-            raise TypeError(f"get takes 1 to 3 pattern positions, not {len(pattern)}")
-        found = self._pattern(pattern, self._after(since))
-        if len(found) > 1:
-            raise Multiple(f"{len(found)} matches for {pattern!r} at rev {self.id}")
-        out = found[0] if found else default
-        self._record_query("get", pattern, {"since": since}, None if not found else out)
-        return out
+        """``[]`` with ``default`` instead of ``KeyError`` on none; ``since`` keeps rows in ``(since, id]``."""
+        after = self._after(since)
+        found, value = self._one(tuple(pattern), after, False)
+        if len(pattern) == 2 and since is None:
+            held = self._held(pattern[0], pattern[1]) if found else []
+            self._record_row(f"{pattern[0]} {pattern[1]}", held[0].obj if held else None)
+        else:
+            self._record_call("get", pattern, since, value if found else None)
+        return value if found else default
 
     def all(self, *pattern: Any, since: Optional["Rev"] = None) -> list:
-        """Every match, by asserting revision. ``since`` keeps only rows asserted in ``(since, id]``."""
+        """Every match of the fold, binding the open positions, ordered by revision; loose (no type check)."""
         out = self._pattern(pattern, self._after(since))
-        self._record_query("all", pattern, {"since": since}, out)
+        self._record_call("all", pattern, since, out)
         return out
 
     def __contains__(self, triple: Any) -> bool:
-        """Whether the triple is held (by the fold) at this revision."""
+        """Whether the triple is held at this revision, by the same fold."""
         if not (isinstance(triple, tuple) and len(triple) == 3):
             raise TypeError("`in` takes a (subject, predicate, object) triple")
         s, p, o = triple
-        m = self._matcher(o)
-        out = any(m(h.obj) for h in self._held(s, p))
-        self._record_query("contains", triple, {}, "true" if out else "false")
+        want = strip_hint(self._objtext(o))
+        out = any(strip_hint(h.obj) == want for h in self._held(s, p))
+        self._record_call("in", triple, None, out)
+        return out
+
+    def asserted(self, subject: str, predicate: str, object: Any = _OMIT) -> list:
+        """History, unfolded. Three positions: every Rev that added the triple. Two: ``(Rev, obj, added)``."""
+        rows = self._store.rows(self.id, subject=subject, predicate=predicate)
+        if object is _OMIT:
+            out: list = [(self.ledger.at(r[0]), self._decode(r[4]), r[5]) for r in rows]
+        else:
+            want = strip_hint(self._objtext(object))
+            revs: List[int] = []
+            for r in rows:
+                if r[5] and strip_hint(r[4]) == want and r[0] not in revs:
+                    revs.append(r[0])
+            out = [self.ledger.at(i) for i in revs]
+        self._record_call("asserted", (subject, predicate) + (() if object is _OMIT else (object,)), None, out)
+        return out
+
+    def rows(self, since: Optional["Rev"] = None) -> List[Row]:
+        """Every row at or before this revision (or in ``(since, id]``), unfolded, in ``(rev, ord)`` order (A48)."""
+        revs: Dict[int, Rev] = {}
+        out = []
+        for r in self._store.rows(self.id, after=self._after(since)):
+            rv = revs.get(r[0])
+            if rv is None:
+                rv = revs[r[0]] = Rev(self.ledger, r[0])
+            out.append(Row(rv, r[2], r[3], rv._decode(r[4]), r[5]))
+        self._record_call("rows", (), since, len(out))
         return out
 
     # -- subject reads --------------------------------------------------------
 
-    def _queryable(self, pred: str) -> None:
-        if "." not in pred:
+    def _queryable(self, p: str) -> None:
+        if "." not in p or p.startswith("db/"):
             return
-        if any(h.obj == "str:true" for h in self._held(f"ledger/pred/{pred}", "index")):
+        if self._store.subjects(self.id, subject=f"db/pred/{p}"):
             return
-        if self._store.read("SELECT 1 FROM quads WHERE predicate = ? AND rev <= ? LIMIT 1", (pred, self.id)):
+        if self._store.has_predicate(p, self.id):
             return
-        raise Unindexed(f"{pred!r} is not declared indexed (ledger/pred/{pred} index true) and no row has it "
-                        f"at rev {self.id}")
+        raise Unindexed(f"{p!r}: no db/pred/{p} declaration and no row carries it at rev {self.id} (a typo?)")
 
     @staticmethod
-    def _prefix(s: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
-        """``(exact, prefix)`` for an ``s=`` constraint."""
-        if s is None:
-            return None, None
-        if not isinstance(s, str) or not s:
-            raise TypeError(f"s is a non-empty str, not {s!r}")
-        if "*" in s[:-1]:
-            raise ValueError(f"s={s!r}: a glob is a prefix, 'run/0-2-2/*'; a wildcard anywhere else is refused")
-        if s.endswith("*"):
-            return None, s[:-1]
-        return s, None
+    def _wanted(v: Any) -> Optional[str]:
+        """The stored text a where entry matches (``None``: any object)."""
+        if v is None:
+            return None
+        if getattr(v, "_is_ref", False):
+            return str(v)
+        if isinstance(v, bool) or isinstance(v, (int, float)):
+            return "str:" + str(v)
+        return strip_hint(Rev._objtext(v))
 
-    def _subjects(self, s: Any, where: Optional[Dict[str, Any]], attrs: Dict[str, Any],
-                  since: Optional["Rev"]) -> List[str]:
-        after = self._after(since)
-        exact, prefix = self._prefix(s)
-        cons: List[Tuple[str, Any]] = [("fn" if k == "fn" else f"kwargs.{k}", v) for k, v in attrs.items()]
+    def _constraints(self, kind: Any, fn: Any, where: Optional[Dict[str, Any]],
+                     preds: Dict[str, Any]) -> List[Tuple[str, Optional[List[str]]]]:
+        cons: List[Tuple[str, Optional[List[str]]]] = []
+        items = list(preds.items())
         if where is not None:
             if not isinstance(where, dict):
-                raise TypeError("where is a dict of predicate -> value (None: any value)")
-            cons.extend(where.items())
-        for p, _v in cons:
+                raise TypeError("where is a dict of predicate -> object (None: any object)")
+            items += list(where.items())
+        for p, v in items:
+            if not isinstance(p, str) or not p:
+                raise TypeError(f"a where key is a non-empty str, not {p!r}")
             self._queryable(p)
-        order: Dict[str, Tuple[int, int]] = {}
-        if not cons:
-            for subj, _p, h in self._held_rows(after, subject=exact, prefix=prefix):
-                order.setdefault(subj, (h.rev, h.ord))
-            return sorted(order, key=lambda x: (order[x], x))
-        p0, v0 = cons[0]
-        m0 = None if v0 is None else self._matcher(v0)
-        for subj, _p, h in self._held_rows(after, subject=exact, predicate=p0, prefix=prefix):
-            if m0 is None or m0(h.obj):
-                order[subj] = max(order.get(subj, (0, 0)), (h.rev, h.ord))
+            w = self._wanted(v)
+            cons.append((p, None if w is None else [w]))
+        if kind is not None:
+            cons.append(("db/kind", ["str:" + n for n in kind_names(self.ledger, kind, self)]))
+        if fn is not None:
+            if not isinstance(fn, str) or not fn:
+                raise TypeError(f"fn is a dotted function name, not {fn!r}")
+            cons.append(("db/fn", ["str:" + fn]))
+        return cons
+
+    def _subjects(self, s: Any, kind: Any, fn: Any, where: Optional[Dict[str, Any]], since: Optional["Rev"],
+                  preds: Dict[str, Any]) -> List[str]:
+        after = self._after(since)
+        exact = prefix = None
+        if s is not None:
+            exact, prefix = self._glob(s)
+        cons = self._constraints(kind, fn, where, preds)
+        if cons:
+            p, objs = cons[0]
+            cands: List[str] = []
+            for o in (objs or [None]):
+                for c in self._store.subjects(self.id, predicate=p, obj=o, subject=exact, prefix=prefix,
+                                              after=after):
+                    if c not in cands:
+                        cands.append(c)
+        else:
+            cands = self._store.subjects(self.id, subject=exact, prefix=prefix, after=after)
         out = []
-        for subj in order:
+        for c in cands:
             ok = True
-            for p, v in cons[1:]:
-                held = self._held(subj, p, after)
-                m = None if v is None else self._matcher(v)
-                if not any(m is None or m(h.obj) for h in held):
+            for p, objs in cons:
+                held = [strip_hint(h.obj) for h in self._held(c, p, after)]
+                if not held or (objs is not None and not any(o in held for o in objs)):
                     ok = False
                     break
-            if ok:
-                out.append(subj)
-        return sorted(out, key=lambda x: (order[x], x))
+            if ok and (cons or self._held_rows(after, subject=c)):
+                out.append(c)
+        return out
 
-    @staticmethod
-    def _one(found: list, one: bool, what: str) -> Any:
-        if not one:
-            return found
-        if not found:
-            raise KeyError(f"{what}: no subject matched")
-        if len(found) > 1:
-            raise Multiple(f"{what}: {len(found)} subjects matched")
-        return found[0]
+    def _query_record(self, s: Any, kind: Any, fn: Any, where: Optional[Dict[str, Any]], one: bool,
+                      since: Optional["Rev"], preds: Dict[str, Any], subjects: List[str]) -> None:
+        if self._rec is None:
+            return
+        from .trace import query_item
 
-    def refs(self, *, s: Optional[str] = None, where: Optional[Dict[str, Any]] = None, one: bool = False,
-             since: Optional["Rev"] = None, **attrs: Any) -> Any:
-        """The subjects satisfying every constraint, each a ``Ref`` at this revision."""
-        found = [Ref(self._plain(), x) for x in self._subjects(s, where, attrs, since)]
-        self._record_query("refs", (), {"s": s, "where": where, "since": since, **attrs}, found)
-        return self._one(found, one, "refs")
+        name = query_item(self.ledger, s, kind, fn, where, one, since, preds, self)
+        self._rec[name] = canonical(sorted(self._plain()._ref_text_of(x) for x in subjects))
 
-    def _column(self, subj: str, key: str) -> Any:
-        pred = key
-        if "." not in key and key != "fn" and self._held(subj, f"kwargs.{key}"):
-            pred = f"kwargs.{key}"
-        held = self._held(subj, pred)
-        if self._card(pred) == "many":
-            return [self._decode(h.obj, subj) for h in held]
-        return self._decode(held[-1].obj, subj) if held else None
+    def _ref_text_of(self, subject: str) -> str:
+        held = self._held(subject, "db/value")
+        return strip_hint(held[0].obj) if held else subject
 
-    def select(self, keys: Tuple[str, ...], *, s: Optional[str] = None, where: Optional[Dict[str, Any]] = None,
-               one: bool = False, since: Optional["Rev"] = None, **attrs: Any) -> Any:
-        """Each matching subject's values for ``keys``, as a tuple in that order."""
-        if isinstance(keys, str) or not isinstance(keys, (tuple, list)) or not keys:
-            raise TypeError(f"keys is a non-empty tuple of predicate names, not {keys!r}")
+    def refs(self, *, s: Any = None, kind: Any = None, fn: Any = None, where: Optional[Dict[str, Any]] = None,
+             one: bool = False, since: Optional["Rev"] = None, **preds: Any) -> Any:
+        """The subjects satisfying every constraint, each a ``Ref`` at this rev; ``one=True``: exactly one."""
+        plain = self._plain()
+        subs = plain._subjects(s, kind, fn, where, since, preds)
+        self._query_record(s, kind, fn, where, one, since, preds, subs)
+        if one:
+            if not subs:
+                raise KeyError(f"no subject matches at rev {self.id}")
+            if len(subs) > 1:
+                raise Multiple(f"{len(subs)} subjects match at rev {self.id}: "
+                               + ", ".join(display_name(self.ledger, x) for x in subs[:6]))
+            return Ref(plain, subs[0])
+        return [Ref(plain, x) for x in subs]
+
+    def values(self, *, s: Any = None, kind: Any = None, fn: Any = None, where: Optional[Dict[str, Any]] = None,
+               since: Optional["Rev"] = None, **preds: Any) -> List[Value]:
+        """Every sealed value matching the where clause of ``refs``, loaded at this rev."""
+        plain = self._plain()
+        subs = [x for x in plain._subjects(s, kind, fn, where, since, preds) if plain._held(x, "db/value")]
+        self._query_record(s, kind, fn, where, False, since, preds, subs)
+        out = [Ref(plain, x).load() for x in subs]
+        for v in out:
+            self._record_value(v)
+        return out
+
+    def value(self, *, s: Any = None, kind: Any = None, fn: Any = None, where: Optional[Dict[str, Any]] = None,
+              since: Optional["Rev"] = None, **preds: Any) -> Value:
+        """The one sealed value matching the where clause of ``refs``: ``KeyError`` on none, ``Multiple`` on several."""
+        plain = self._plain()
+        subs = [x for x in plain._subjects(s, kind, fn, where, since, preds) if plain._held(x, "db/value")]
+        self._query_record(s, kind, fn, where, False, since, preds, subs)
+        if not subs:
+            raise KeyError(f"no sealed value matches at rev {self.id}")
+        if len(subs) > 1:
+            raise Multiple(f"{len(subs)} values match at rev {self.id}: "
+                           + ", ".join(display_name(self.ledger, x) for x in subs[:6]))
+        v = Ref(plain, subs[0]).load()
+        self._record_value(v)
+        return v
+
+    def select(self, keys: Tuple[str, ...], *, s: Any = None, kind: Any = None, fn: Any = None,
+               where: Optional[Dict[str, Any]] = None, one: bool = False, since: Optional["Rev"] = None,
+               **preds: Any) -> Any:
+        """Each match as a tuple of its objects for ``keys`` (``None`` where absent, a list for ``many``)."""
+        if isinstance(keys, str) or not isinstance(keys, tuple) or not keys:
+            raise TypeError(f"select takes a non-empty tuple of predicate names first, not {keys!r}")
+        plain = self._plain()
         for k in keys:
-            if "." in k:
-                self._queryable(k)
-        found = [tuple(self._column(x, k) for k in keys) for x in self._subjects(s, where, attrs, since)]
-        self._record_query("select", tuple(keys), {"s": s, "where": where, "since": since, **attrs}, found)
-        return self._one(found, one, "select")
+            plain._queryable(k)
+        subs = plain._subjects(s, kind, fn, where, since, preds)
+        self._query_record(s, kind, fn, where, one, since, preds, subs)
+
+        def row(x: str) -> tuple:
+            out = []
+            for k in keys:
+                held = plain._held(x, k)
+                if plain._card(k) == "many":
+                    out.append([plain._decode(h.obj) for h in held])
+                else:
+                    out.append(plain._decode(held[0].obj) if held else None)
+            return tuple(out)
+        if one:
+            if len(subs) != 1:
+                raise (KeyError if not subs else Multiple)(f"{len(subs)} subjects match at rev {self.id}")
+            return row(subs[0])
+        return [row(x) for x in subs]
+
+    def _record_value(self, v: Value, name: Optional[str] = None) -> None:
+        if self._rec is None:
+            return
+        text = ref_text(dotted(type(v)), v.hash)
+        self._rec[text] = text
+        if name is not None and name != v.subject:
+            self._rec[f"{name} db/alias"] = text
 
     def load(self, subject: str) -> Value:
-        """``Ref(self, subject).load()``: the one read that fetches bytes."""
+        """``Ref(rev, subject).load()``: an alias resolves; reading through one records the binding (A35)."""
         r = Ref(self._plain(), subject)
         v = r.load()
-        self._record("dat:" + subject, r.hash or _NONE)
+        self._record_value(v, subject)
         return v
 
     def load_fn(self, name: str) -> "Fn":
-        """The revision function ``name`` resolves to here; loads, does not call."""
+        """The revision function a dotted name resolves to here: through the mounts (sandbox) or in process."""
         from .fn import load_fn
 
         return load_fn(self, name)
 
     def eval(self, name: str, *, memo: Any = True, **keys: Any) -> Optional[Value]:
-        """``load_fn(name)(memo=memo, **keys)``; ``name`` is a dotted string only."""
+        """``load_fn(name)(memo=memo, **keys)``: memoised evaluation (see ``Fn.__call__``)."""
         if not isinstance(name, str):
-            raise TypeError("eval takes a dotted name; the object form is the Fn itself, called")
+            raise TypeError("eval takes a dotted name; a function object would resolve in this process")
         return self.load_fn(name)(memo=memo, **keys)
 
-    # -- the present value of a trace item -----------------------------------
 
-    def _code_token(self, subject: str) -> str:
-        v = self._plain().get(subject, "version")
-        c = self._plain().get(subject, "commit")
-        if v is None and c is None:
-            return _NONE
-        return f"{v or ''}+{c}" if c is not None else str(v)
-
-    def _present(self, item: str, env: Any = None) -> str:
-        from .fn import current_env
-
-        plain = self._plain()
-        if item == "fn":
-            raise ValueError("the fn item is compared by _matches")
-        if item in ("uv.lock", "platform"):
-            env = env or current_env(None)
-            return env.lock if item == "uv.lock" else env.platform
-        if item.startswith("dat:"):
-            name = item[4:]
-            at = plain
-            base, sep, n = name.rpartition("@")
-            if sep and n.isdigit():
-                name, at = base, self.ledger.at(int(n))
-            return Ref(at, name).hash or _NONE
-        if item.startswith("eval:"):
-            body = item[5:]
-            i = body.index("{")
-            got = plain.eval(body[:i], memo="get", **json.loads(body[i:]))
-            return got.hash if got is not None else _NONE
-        if item.startswith("q:"):
-            method, args, kwargs = json.loads(item[2:])
-            return token(plain._requery(method, args, kwargs))
-        if "#" in item:
-            s, _, p = item.rpartition("#")
-            return token(plain.get(s, p))
-        if item.startswith("code/"):
-            return self._code_token(item)
-        return token(plain.get(item, "version"))
-
-    def _requery(self, method: str, args: List[Any], kwargs: Dict[str, Any]) -> Any:
-        if "since" in kwargs:
-            kwargs["since"] = self.ledger.at(int(kwargs["since"]))
-        if method == "getitem":
-            return self[tuple(args)]
-        if method == "get":
-            return self.get(*args, **kwargs)
-        if method == "all":
-            return self.all(*args, **kwargs)
-        if method == "contains":
-            return "true" if tuple(args) in self else "false"
-        if method == "refs":
-            return self.refs(**kwargs)
-        if method == "select":
-            return self.select(tuple(args), **kwargs)
-        raise ValueError(f"unknown recorded query {method!r}")
-
-    def _matches(self, trace: Dict[str, str]) -> bool:
-        from .fn import current_env, fn_name_of
-
-        env = None
-        if "fn" in trace:
-            try:
-                f = self._plain().load_fn(fn_name_of(trace["fn"]))
-            except ImportError:
-                return False
-            if f.subject != trace["fn"]:
-                return False
-            env = f.env
-        env = env or current_env(None)
-        return all(self._present(k, env) == v for k, v in trace.items() if k != "fn")
+def type_ok(ledger: "Ledger", decl: str, text: str) -> bool:
+    """Does a stored object's tag satisfy a ``db/type`` declaration (``str``, ``json``, or a class)."""
+    t = tag(text)
+    if decl in ("str", "json"):
+        return t == decl
+    if t != "ref":
+        return False
+    cls, _h, _s = parse_ref(text)
+    if cls == decl:
+        return True
+    try:
+        return issubclass(class_named(ledger, cls), class_named(ledger, decl))
+    except ImportError:
+        return False
 
 
 class Ref:
-    """A reference to one value at one moment: ``Ref(rev, subject)``, fixed when made."""
+    """A reference to one value at one moment: ``Ref(rev, name)``, the alias chain resolved when made (Q30)."""
 
-    __slots__ = ("rev", "subject", "hash", "_cls", "_target")
+    __slots__ = ("rev", "name", "_subject", "_cls", "_hash", "_lazy")
 
-    def __init__(self, rev: Rev, subject: str) -> None:
+    def __init__(self, rev: Rev, name: str) -> None:
         if not isinstance(rev, Rev):
-            raise TypeError(f"Ref(rev, subject): rev is a Rev, not {type(rev).__name__}")
-        if not isinstance(subject, str) or not subject:
-            raise TypeError(f"Ref(rev, subject): subject is a non-empty str, not {subject!r}")
+            raise TypeError(f"Ref(rev, name): rev is a Rev, not {type(rev).__name__}")
+        if not isinstance(name, str) or not name:
+            raise TypeError(f"Ref(rev, name): name is a non-empty str, not {name!r}")
         rev = rev._plain()
-        held = rev._held(subject, "value")
-        h = cls = target = None
+        subject = name
+        for _hop in range(ALIAS_HOPS + 1):
+            held = rev._held(subject, "db/alias")
+            if not held:
+                break
+            subject = show(held[0].obj)
+        else:
+            raise AliasLoop(f"{name!r}: the db/alias chain runs past {ALIAS_HOPS} hops (or loops) at rev {rev.id}")
+        cls = h = None
+        held = rev._held(subject, "db/value")
         if held:
-            text = held[-1].obj
-            if text.startswith("ref:"):
-                cls, h, target = parse_ref(text)
-        self._set(rev, subject, h, cls, target)
+            cls, h, _s = parse_ref(held[0].obj)
+        self._init(rev, name, subject, cls, h, False)
 
-    def _set(self, rev: Rev, subject: str, h: Optional[str], cls: Optional[str], target: Optional[str]) -> None:
+    def _init(self, rev: Rev, name: str, subject: Optional[str], cls: Optional[str], h: Optional[str],
+              lazy: bool) -> None:
         object.__setattr__(self, "rev", rev)
-        object.__setattr__(self, "subject", subject)
-        object.__setattr__(self, "hash", h)
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "_subject", subject)
         object.__setattr__(self, "_cls", cls)
-        object.__setattr__(self, "_target", target if target != subject else None)
+        object.__setattr__(self, "_hash", h)
+        object.__setattr__(self, "_lazy", lazy)
 
     @classmethod
-    def _from_row(cls, rev: Rev, subject: str, h: Optional[str], cname: Optional[str]) -> "Ref":
+    def _from_text(cls, rev: Rev, text: str) -> "Ref":
+        """A stored ``ref:``: its hint names the subject; hint-less, the subject resolves lazily (A28, A36)."""
+        c, h, subj = parse_ref(text)
         r = cls.__new__(cls)
-        r._set(rev, subject, h, cname, None)
+        r._init(rev, subj or "", subj, c, h, subj is None)
         return r
 
     def __setattr__(self, k: str, v: Any) -> None:
         raise AttributeError("a Ref is frozen")
 
     @property
+    def subject(self) -> Optional[str]:
+        """The value's subject: ``name`` with its alias chain resolved; for a hint-less row ref, the latest
+        entry holding these bytes as of ``rev``."""
+        if self._lazy:
+            text = ref_text(self._cls, self._hash)
+            best = None
+            for s in self.rev._store.subjects(self.rev.id, predicate="db/value", obj=text):
+                held = self.rev._held(s, "db/value")
+                if held and strip_hint(held[0].obj) == text and (best is None or held[0].rev >= best[1]):
+                    best = (s, held[0].rev)
+            object.__setattr__(self, "_subject", best[0] if best else None)
+            object.__setattr__(self, "name", best[0] if best else "")
+            object.__setattr__(self, "_lazy", False)
+        return self._subject
+
+    @property
+    def hash(self) -> Optional[str]:
+        """The hex sha256 of the bytes, when the subject has a value."""
+        return self._hash
+
+    @property
     def type(self) -> Optional[type]:
-        """The ``Value`` subclass that decodes the bytes; ``None`` for a subject with no value."""
-        return None if self._cls is None else _class(self._cls)
+        """The ``Value`` subclass that decodes the bytes (``db/moved`` followed); ``None`` with no value."""
+        return None if self._cls is None else class_named(self.rev.ledger, self._cls)
+
+    def _text(self) -> str:
+        return ref_text(self._cls, self._hash) if self._hash else f"ref:?:{self.subject}"
+
+    @property
+    def preds(self) -> FrozenPreds:
+        """The subject's non-``db/`` rows at ``rev``, annotations included; one view (A24); unchecked."""
+        s = self.subject
+        if s is None:
+            return FrozenPreds()
+        return FrozenPreds({p: o for p, o in self.rev._record_of(s).items() if not p.startswith("db/")})
+
+    @property
+    def aliases(self) -> List[str]:
+        """Every ``db/alias`` name pointing at the subject as of ``rev`` (A25)."""
+        s = self.subject
+        return [] if s is None else self.rev._aliases_of(s)
+
+    @property
+    def sealed_at(self) -> Optional[Rev]:
+        """The revision of the subject's ``db/value`` row; ``None`` with no value (A41)."""
+        s = self.subject
+        held = self.rev._held(s, "db/value") if s else []
+        return self.rev.ledger.at(held[0].rev) if held else None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Ref):
             return False
-        if self.hash is not None or other.hash is not None:
-            return self.hash == other.hash
-        return self.subject == other.subject and self.rev.id == other.rev.id
+        if self._hash is not None or other._hash is not None:
+            return self._hash == other._hash and self._cls == other._cls
+        return self.subject == other.subject
 
     def __hash__(self) -> int:
-        return hash(self.hash) if self.hash is not None else hash((self.subject, self.rev.id))
+        return hash(self._hash) if self._hash is not None else hash(self.subject)
 
     def __repr__(self) -> str:
-        return f"Ref({self.rev.id}, {self.subject!r})"
+        s = self.subject
+        if s is None:
+            return f"ref:{self._cls}:{(self._hash or '')[:8]}"
+        return display_name(self.rev.ledger, s)
 
     def __reduce__(self) -> Any:
         raise TypeError("a Ref is bound to an open ledger and does not pickle")
 
     def load(self) -> Value:
-        """Fetch the bytes, decode them by ``type``, restore the provenance from the subject's rows."""
-        return self._load(self.rev)
-
-    def _load(self, rev: Rev) -> Value:
-        """``load``, with ``rev`` (the revision the value is handed back under) as the value's ``rev``."""
-        if self.hash is None:
-            raise KeyError(f"{self.subject!r} has no value at rev {self.rev.id}")
-        target = self._target or self.subject
-        key = (self.hash, target, self.rev.id, rev.id)
-        cache = self.rev.ledger._values
-        if key in cache:
-            return cache[key]
-        store = self.rev.ledger._store.art
+        """Fetch the bytes, decode them by ``type``, restore provenance and preds: the same Value every time."""
+        s = self.subject
+        if self._hash is None or s is None:
+            raise KeyError(f"{self.name!r} has no value at rev {self.rev.id}")
+        ledger = self.rev.ledger
+        key = (s, self.rev.id, self.name)
+        cached = ledger._values.get(key)
+        if cached is not None:
+            return cached
+        store = ledger._store.art
         cls = self.type
         assert cls is not None
-        v = cls.decode(store.get(self.hash), store)
+        v = cls.decode(store.get(self._hash), store)
         if not isinstance(v, Value):
             raise TypeError(f"{cls.__name__}.decode returned {type(v).__name__}, not a Value")
-        rows = self.rev._held_rows(subject=target)
-        sealed = any(p == "provenance" for _s, p, _h in rows)
-        trace = {p[len("trace."):]: self.rev._decode(h.obj, target) for _s, p, h in rows if p.startswith("trace.")}
-        v._provenance(subject=target, rev=rev, trace=trace, sealed=sealed)
-        cache[key] = v
+        rows = self.rev._held_rows(subject=s)
+        trace = {p[len("db/trace/"):]: show(h.obj) for _s, p, h in rows if p.startswith("db/trace/")}
+        sealed_at = self.sealed_at
+        assert sealed_at is not None
+        v._provenance(subject=s, rev=sealed_at, trace=trace, preds=self.preds,
+                      loaded_as=self.name if self.name != s else None)
+        v.__dict__["_hash"] = self._hash
+        ledger._values[key] = v
         return v
+
+
+def iter_unique(xs: Iterable[str]) -> List[str]:
+    out: List[str] = []
+    for x in xs:
+        if x not in out:
+            out.append(x)
+    return out

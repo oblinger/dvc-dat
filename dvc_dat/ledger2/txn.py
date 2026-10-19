@@ -1,50 +1,44 @@
 """``Transaction``: the write set of one ``with L.transaction(...)``, one revision on exit.
 
-``add`` and ``remove`` append rows and read nothing; ``seal`` freezes a
-``Value`` into an immutable subject, reading the snapshot ``base`` to check its
-deps and find the predicates declared indexed. The ``Exists`` check (an add on
-a sealed subject's own predicates) runs at commit, inside the write lock.
+``add`` and ``remove`` append rows and read nothing; ``add_value`` seals a
+``Value`` into an immutable subject and the bracket (``t[s, p] = o``,
+``t[s] = {...}``, ``del``) is a read-then-write helper over ``add``/``remove``;
+those two read through ``t.base``. Everything that must see the transaction's
+own rows is checked at commit, inside the write lock, against the state the
+new revision would have (the rows are inserted, read back through the open
+write transaction, and rolled back on a refusal): ``Exists`` (a write on a
+sealed subject's own predicates), the ``db/alias`` target check (A18, A45)
+and the ``db/type`` check (A36, A44). Rows land in body order, then the
+transaction's own ``db/tx/<rev>`` rows (A50).
 """
 
 from __future__ import annotations
 
 import ctypes
 import datetime as _dt
+import json
 import signal
+import tempfile
 import threading
 import time as _time
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .codec import canonical, check_scalar, encode_plain, key_text, ref_text, short
-from .errors import Exists, LockTimeout
-from .value import Pickled, Value, dotted
+from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, show, strip_hint, tag
+from .errors import Exists, LockTimeout, Undeclared
+from .value import Value, dotted
 
 if TYPE_CHECKING:
     from .fn import Fn
     from .ledger import Ledger
     from .rev import Rev
 
-#: Predicates a seal writes once; a later add or remove on one of them raises ``Exists``.
-SEAL_PREDICATES = frozenset({"value", "kind", "provenance", "fn"})
-SEAL_PREFIXES = ("trace.", "kwargs.", "result.")
+#: A sealed subject's own predicates (besides its preds, named by its ``db/preds`` row).
+SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys"})
 
 
-def is_seal_predicate(p: str) -> bool:
-    return p in SEAL_PREDICATES or p.startswith(SEAL_PREFIXES)
-
-
-def index_text(v: Any) -> Optional[str]:
-    """Q5 (A): an indexed attribute's text; ``None`` for a value with no text form."""
-    if isinstance(v, (dict, list)):
-        try:
-            return canonical(v)
-        except (TypeError, ValueError):
-            return None
-    try:
-        return key_text(v)
-    except TypeError:
-        return None
+def is_seal_predicate(p: str, frozen: Sequence[str]) -> bool:
+    return p in SEAL_PREDICATES or p.startswith("db/trace/") or p in frozen
 
 
 def attr(obj: Any, path: str) -> Any:
@@ -71,16 +65,26 @@ def attr(obj: Any, path: str) -> Any:
 
 
 class _Op:
-    __slots__ = ("s", "p", "o", "added", "seal_of")
+    __slots__ = ("s", "p", "o", "added", "seal_of", "pred")
 
-    def __init__(self, s: str, p: str, o: str, added: bool, seal_of: Optional[str] = None) -> None:
-        self.s, self.p, self.o, self.added, self.seal_of = s, p, o, added, seal_of
+    def __init__(self, s: str, p: str, o: str, added: bool, seal_of: Optional[str] = None,
+                 pred: bool = False) -> None:
+        self.s, self.p, self.o, self.added, self.seal_of, self.pred = s, p, o, added, seal_of, pred
 
 
 def _name(x: Any, what: str) -> str:
     if not isinstance(x, str) or not x:
         raise TypeError(f"{what} is a non-empty str, not {x!r}")
     return x
+
+
+def code_token(rev: "Rev", repo: str, env_commit: Optional[str]) -> str:
+    """The ``code/<repo>`` trace item: ``<version>+<commit 8>`` from the rows, else ``+<env commit 8>`` (A53)."""
+    v = rev.get(f"code/{repo}", "version")
+    c = rev.get(f"code/{repo}", "commit")
+    if v is None and c is None:
+        return "+" + (env_commit or "")[:8]
+    return f"{v or ''}+{(c or '')[:8]}"
 
 
 class Transaction:
@@ -96,17 +100,23 @@ class Transaction:
             raise TypeError("time=True stamps the wall clock; no value may be passed in")
         self._lock = lock
         self._time = time
-        #: A placeholder for ``ledger/tx/<rev>``, rewritten at commit.
-        self.tx = f"ledger/tx/pending-{uuid.uuid4().hex[:12]}"
+        #: A placeholder for ``db/tx/<rev>``, rewritten at commit.
+        self.tx = f"db/tx/pending-{uuid.uuid4().hex[:12]}"
         self._preds: List[Tuple[str, str]] = []
-        self._ops: List[_Op] = []
         for k, v in preds.items():
-            self._preds.append((k, self._encode(v)))
+            if k.startswith("db/"):
+                raise TypeError(f"{k!r}: a transaction keyword is user vocabulary, never db/")
+            refuse_scalar(v)
+            plain = encode_plain(v)
+            if plain is None:
+                raise TypeError(f"transaction keyword {k!r} is a str or JSON document, not {type(v).__name__}")
+            self._preds.append((k, plain))
+        self._ops: List[_Op] = []
         self._state = "new"
         self._base: Optional["Rev"] = None
         self._rev: Optional["Rev"] = None
-        self._pending: Dict[int, Tuple[Value, str]] = {}   # id(value) -> (value, subject)
-        self._finalize: List[Tuple[Value, str, Dict[str, str], Optional["Rev"]]] = []
+        self._pending: Dict[int, Tuple[Value, str]] = {}
+        self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
         self._fns: set = set()
         self._cm: Any = None
         self._w: Any = None
@@ -177,9 +187,9 @@ class Transaction:
     def __exit__(self, et: Any, ev: Any, tb: Any) -> bool:
         self._disarm()
         if et is None and self._lock is not None and _time.monotonic() - self._t0 > self._lock:
-            et, ev, tb = LockTimeout, LockTimeout(f"lock={self._lock}: the body ran past its limit"), None
+            ev = LockTimeout(f"lock={self._lock}: the body ran past its limit; nothing written")
             self._state = "abandoned"
-            self._cm.__exit__(et, ev, tb)
+            self._cm.__exit__(LockTimeout, ev, None)
             raise ev
         if et is not None:
             self._state = "abandoned"
@@ -202,40 +212,84 @@ class Transaction:
             self._state = "abandoned"
             raise
         self._rev = self._ledger.at(rev)
-        for value, subject, trace, made in self._finalize:
-            value._provenance(subject=subject, rev=made if made is not None else self._base,
-                              trace=trace, sealed=True)
+        self._finish()
         self._state = "committed"
         return False
 
+    def _finish(self) -> None:
+        from .rev import Ref
+
+        top = self._rev
+        art = self._ledger._store.art
+        for value, subject, trace, loaded_as in self._finalize:
+            r = Ref(top, subject)
+            sealed_at = r.sealed_at or top
+            value._provenance(subject=subject, rev=sealed_at, trace=trace, preds=r.preds)
+            value._after_seal(art)
+
     def _write(self, w: Any) -> int:
+        from .rev import Rev
+
         rev = w.next_rev()
-        txs = f"ledger/tx/{rev}"
-        rows: List[Tuple[str, str, str, bool]] = [(txs, "by", "str:" + self._by, True)]
-        if self._time:
-            rows.append((txs, "time", "str:" + _dt.datetime.now(_dt.timezone.utc).isoformat(), True))
-        rows.extend((txs, k, o, True) for k, o in self._preds)
-        sealed_cache: Dict[str, bool] = {}
-
-        def sealed_before(s: str) -> bool:
-            if s not in sealed_cache:
-                sealed_cache[s] = any(r[3] == "provenance" and r[5] for r in w.rows(s))
-            return sealed_cache[s]
-
-        seal_subjects = {op.seal_of for op in self._ops if op.seal_of}
-        dropped = {s for s in seal_subjects if sealed_before(s)}   # sealed meanwhile: idempotent
+        txs = f"db/tx/{rev}"
+        store = self._ledger._store
+        with store.reading_through(w.conn):
+            before = Rev(self._ledger, rev - 1)
+            dropped = {op.seal_of for op in self._ops
+                       if op.seal_of and op.p == "db/value" and before._held(op.seal_of, "db/value")}
+        rows: List[Tuple[str, str, str, bool]] = []
+        kept: List[_Op] = []
         for op in self._ops:
-            if op.seal_of is not None:
-                if op.seal_of in dropped:
-                    continue
-            elif is_seal_predicate(op.p) and (op.s in seal_subjects or sealed_before(op.s)):
-                raise Exists(f"{op.s!r} is sealed: {op.p!r} is one of its own predicates, written once "
-                             "(annotate it with any other predicate)")
+            if op.seal_of in dropped:
+                continue            # sealed meanwhile by another writer: idempotent
             s = txs if op.s == self.tx else op.s
             o = "str:" + txs if op.o == "str:" + self.tx else op.o
             rows.append((s, op.p, o, op.added))
+            kept.append(op)
+        rows.append((txs, "db/by", "str:" + self._by, True))
+        if self._time:
+            stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            rows.append((txs, "db/time", "str:" + stamp, True))
+        rows.extend((txs, k, o, True) for k, o in self._preds)
         w.insert(rev, rows)
+        with store.reading_through(w.conn):
+            self._validate(Rev(self._ledger, rev), kept)
         return rev
+
+    def _validate(self, R: "Rev", ops: List[_Op]) -> None:
+        from .rev import Ref, type_ok
+
+        frozen: Dict[str, Optional[List[str]]] = {}
+
+        def own(s: str) -> Optional[List[str]]:
+            if s not in frozen:
+                if R._held(s, "db/value"):
+                    held = R._held(s, "db/preds")
+                    frozen[s] = json.loads(show(held[0].obj)) if held else []
+                else:
+                    frozen[s] = None
+            return frozen[s]
+        for op in ops:
+            if op.seal_of is None:
+                names = own(op.s)
+                if names is not None and is_seal_predicate(op.p, names):
+                    verb = "add" if op.added else "remove"
+                    raise Exists(f"{op.s[:12]}… is sealed: {op.p!r} is one of its own predicates, written once "
+                                 f"({verb} refused); annotate with another predicate, or seal anew and re-point")
+            if op.p == "db/alias" and op.added:
+                target = show(op.o)
+                if Ref(R, target).hash is None:
+                    raise TypeError(f"{op.s!r} db/alias {target!r}: an alias names a value, and {target!r} holds "
+                                    "no db/value row (after its own alias chain)")
+            if op.added and not op.p.startswith("db/"):
+                decl = R._type(op.p)
+                if decl is not None and not type_ok(self._ledger, decl, op.o):
+                    raise TypeError(f"{op.p!r} is declared db/type {decl!r}; {op.s[:24]!r} was given "
+                                    f"{tag(op.o)}:{show(op.o)[:40]!r}; nothing written")
+                if op.pred and decl is None and tag(op.o) != "str":
+                    what = "a list or dict" if tag(op.o) == "json" else "a Value"
+                    raise TypeError(f"pred {op.p!r} is a one pred with no db/type: {what} is refused at the seal "
+                                    f"(declare db/cardinality many, or db/type json or a class)")
 
     # -- verbs ----------------------------------------------------------------
 
@@ -243,129 +297,301 @@ class Transaction:
         if self._state != "open":
             raise RuntimeError(f"transaction is {self._state}: {verb} goes inside `with L.transaction(...) as t:`")
 
-    def _store_value(self, v: Value) -> str:
-        art = self._ledger._store.art
-        for _h, data in v._parts().items():
-            art.put(data)
-        return art.put(v.encode())
-
-    def _encode(self, o: Any, predicate: str = "") -> str:
+    def _encode(self, o: Any) -> str:
         from .rev import Ref
 
-        # `value` is always an artifact Ref (what `load` reads): there a str or JSON document is
-        # wrapped in Pickled like any other object, never stored as a plain row.
-        plain = None if predicate == "value" else encode_plain(o)
-        if plain is not None:
-            return plain
-        check_scalar(o)
+        if isinstance(o, Value):
+            raise TypeError(f"add takes a str, a JSON document or a Ref, not a {type(o).__name__}: bytes enter "
+                            "the ledger by t.add_value(value) alone")
         if isinstance(o, Ref):
-            return ref_text(o._cls, o.hash, o._target or o.subject)
-        if not isinstance(o, Value):
-            o = Pickled(o)
-        h = self._store_value(o)
-        subject = None
-        if id(o) in self._pending:
-            subject = self._pending[id(o)][1]
-        elif o.sealed:
-            subject = o.subject
-        return ref_text(dotted(type(o)), h, subject)
+            if o.hash is None:
+                raise TypeError(f"a Ref row object names a sealed value; {o.name!r} holds none")
+            return ref_text(o._cls, o.hash, o.subject)
+        refuse_scalar(o)
+        plain = encode_plain(o)
+        if plain is None:
+            raise TypeError(f"a row object is a str, a JSON document or a Ref, not {type(o).__name__}")
+        return plain
 
     def add(self, subject: str, predicate: str, object: Any) -> None:
         """Append one row; the predicate's cardinality, at read time, decides what it means."""
         self._open("add")
-        self._ops.append(_Op(_name(subject, "subject"), _name(predicate, "predicate"),
-                             self._encode(object, predicate), True))
+        _name(subject, "subject")
+        _name(predicate, "predicate")
+        if predicate == "db/value":
+            raise TypeError("db/value rows are written by t.add_value alone")
+        o = self._encode(object)
+        if predicate == "db/alias" and tag(o) != "str":
+            raise TypeError("a db/alias row's object is the subject it names, a str")
+        self._ops.append(_Op(subject, predicate, o, True))
 
     def remove(self, subject: str, predicate: str, object: Any) -> None:
-        """Append one remove row: out of the set on a many predicate, the tombstone on a single one."""
+        """Append one remove row: out of the set on a many predicate, the tombstone on a one predicate."""
         self._open("remove")
-        self._ops.append(_Op(_name(subject, "subject"), _name(predicate, "predicate"),
-                             self._encode(object, predicate), False))
+        _name(subject, "subject")
+        _name(predicate, "predicate")
+        self._ops.append(_Op(subject, predicate, self._encode(object), False))
 
-    def seal(self, value: Value, *, deps: Sequence[Any] = ()) -> str:
-        """Freeze ``value`` into the immutable subject ``<kind>/<hash of (trace, bytes hash)>``; return it."""
-        from .fn import Fn, current_env
+    # -- declarations as the body sees them: t.base plus this transaction's own rows ---------------
+
+    def _decl_now(self, p: str, which: str) -> Optional[str]:
+        for op in reversed(self._ops):
+            if op.s == f"db/pred/{p}" and op.p == which:
+                return show(op.o) if op.added else None
+        if which == "db/cardinality":
+            return self.base._card(p)
+        return self.base._type(p)
+
+    def _card_now(self, p: str) -> str:
+        from .rev import fixed_one
+
+        return "one" if fixed_one(p) else ("many" if self._decl_now(p, "db/cardinality") == "many" else "one")
+
+    # -- sealing --------------------------------------------------------------
+
+    def _value_text(self, v: Any, what: str) -> str:
         from .rev import Ref
 
-        self._open("seal")
-        if not isinstance(value, Value):
-            raise TypeError(f"seal takes a Value, not {type(value).__name__} (wrap it: Pickled(obj))")
-        base = self.base
-        trace: Dict[str, str] = {}
+        if isinstance(v, Ref):
+            if v.hash is None:
+                raise TypeError(f"{what}: {v.name!r} holds no value")
+            return ref_text(v._cls, v.hash)
+        if not v.sealed and id(v) not in self._pending:
+            raise ValueError(f"{what}: an unsealed {type(v).__name__}; seal it first (a typed pred is an edge "
+                             "to a sealed value)")
+        return ref_text(dotted(type(v)), v.hash)
+
+    def _encode_preds(self, value: Value) -> Tuple[List[Tuple[str, str]], Dict[str, Any]]:
+        """The pred rows of a seal and the canonical form that enters the subject hash (A23, A30)."""
+        from .rev import Ref
+
+        declared = type(value)._ledger_preds
+        extra = [k for k in value.preds if k not in declared]
+        if extra:
+            raise Undeclared(f"{', '.join(map(repr, extra))}: not a pred of {dotted(type(value))} "
+                             f"(@ledger_class(preds={declared!r}))")
+        rows: List[Tuple[str, str]] = []
+        canon: Dict[str, Any] = {}
+
+        def scalar(k: str, v: Any) -> str:
+            if isinstance(v, (Value, Ref)):
+                return self._value_text(v, f"pred {k!r}")
+            if isinstance(v, str):
+                return "str:" + v
+            if isinstance(v, (bool, int, float)):
+                return "str:" + str(v)
+            raise TypeError(f"pred {k!r}: a pred value is a str (an int, float or bool is coerced), "
+                            f"not {type(v).__name__}")
+        for k, v in value.preds.items():
+            if self._card_now(k) == "many":
+                members = list(v) if isinstance(v, (list, tuple)) else [v]
+                texts = []
+                for m in members:
+                    t = scalar(k, m)
+                    if t not in texts:
+                        texts.append(t)
+                rows.extend((k, t) for t in texts)
+                canon[k] = sorted(texts)
+            elif isinstance(v, (list, tuple, dict)):
+                if self._decl_now(k, "db/type") != "json":
+                    raise TypeError(f"pred {k!r}: a {type(v).__name__} under a one pred; declare "
+                                    f"(db/pred/{k}, db/cardinality, many) or (db/pred/{k}, db/type, json)")
+                text = encode_plain(list(v) if isinstance(v, tuple) else v)
+                assert text is not None
+                rows.append((k, text))
+                canon[k] = text
+            else:
+                text = scalar(k, v)
+                rows.append((k, text))
+                canon[k] = text
+        return rows, canon
+
+    def _dep_items(self, deps: Sequence[Any], trace: Dict[str, str]) -> None:
+        from .fn import Fn
+        from .rev import Ref
+
         pending = {s: v.hash for v, s in self._pending.values()}
         for d in deps:
             if isinstance(d, Fn):
                 self._ensure_fn(d)
                 trace["fn"] = d.subject
                 continue
+            name = None
             if isinstance(d, Ref):
-                subj, h, at = d.subject, d.hash, d.rev
+                subj, h, text = d.subject, d.hash, (d._text() if d.hash else None)
+                if d.name and d.name != subj:
+                    name = d.name
             elif isinstance(d, Value):
-                subj, h, at = d.subject, d.hash, d.rev
-                if subj is None and id(d) in self._pending:
-                    subj, at = self._pending[id(d)][1], None
-                elif d.sealed:
-                    # A sealed subject is immutable, so it is checked as of now: an eval's value
-                    # carries the revision it was evaluated at, which predates its own seal.
-                    at = None
+                subj, h = d.subject, d.hash
+                if id(d) in self._pending:
+                    subj = self._pending[id(d)][1]
+                elif not d.sealed:
+                    raise ValueError(f"dep {d!r} is unsealed: seal it first")
+                text = ref_text(dotted(type(d)), h)
+                name = d.__dict__.get("_loaded_as")
             else:
                 raise TypeError(f"a dep is a Value, a Ref or an Fn, not {type(d).__name__}")
-            if subj is None or h is None:
-                raise ValueError(f"dep {d!r} has no subject or no value: load it, or seal it first")
+            if subj is None or h is None or text is None:
+                raise ValueError(f"dep {d!r} has no sealed value")
             if pending.get(subj) != h:
-                held = Ref(at if at is not None else base, subj).hash
-                if held is None and at is None:
-                    held = Ref(self._ledger.at(), subj).hash
+                held = Ref(self._ledger.at(), subj).hash
                 if held != h:
-                    raise ValueError(f"dep {subj!r}: its hash {h} is not the value the ledger holds ({held})")
-            trace[f"dat:{subj}" if at is None or at.id == base.id else f"dat:{subj}@{at.id}"] = h
-        env = current_env(None)
-        for repo in env.code:
-            trace[f"code/{repo}"] = base._code_token(f"code/{repo}")
+                    raise ValueError(f"dep {subj[:12]}…: its hash is not the value the ledger holds there")
+            trace[text] = text
+            if name:
+                trace[f"{name} db/alias"] = text
+
+    def _env_items(self, trace: Dict[str, str], repos: Optional[Sequence[str]] = None) -> None:
+        from .env import current_env
+
+        env = current_env()
+        for repo in (env.code if repos is None else repos):
+            trace[f"code/{repo}"] = code_token(self.base, repo, env.code[repo].commit if repo in env.code else None)
         trace["uv.lock"] = env.lock
         trace["platform"] = env.platform
-        subject = f"{type(value).__name__}/{short(canonical({'trace': trace, 'hash': value.hash}))}"
-        return self._seal(value, subject, trace, "seal", [], None)
+
+    def add_value(self, value: Value, *, deps: Sequence[Any] = (), alias: Optional[str] = None,
+                  provenance: Optional[str] = None) -> str:
+        """Seal ``value`` into the immutable subject ``<hash of (trace, preds, bytes)>``; return the subject.
+
+        Nothing about ``value`` changes until the transaction commits; a refused seal leaves it unsealed
+        with its preds a plain dict (A43).
+        """
+        self._open("add_value")
+        if not isinstance(value, Value):
+            raise TypeError(f"add_value takes a Value, not {type(value).__name__} (wrap it: Pickled(obj))")
+        if value.sealed:
+            raise ValueError(f"{value!r} is sealed already; a different value is a new object")
+        if provenance is None:
+            provenance = "seal"
+        if not isinstance(provenance, str) or not provenance:
+            raise TypeError(f"provenance is a str, not {provenance!r}")
+        if provenance.startswith("eval:"):
+            raise ValueError(f"provenance {provenance!r}: eval: provenance is written by eval alone")
+        if alias is not None:
+            _name(alias, "alias")
+        pred_rows, canon = self._encode_preds(value)
+        trace: Dict[str, str] = {}
+        self._dep_items(deps, trace)
+        self._env_items(trace)
+        vtext = ref_text(dotted(type(value)), value.hash)
+        subject = hash_text(canonical({"trace": trace, "preds": canon, "value": vtext}))
+        self._seal(value, subject, trace, provenance, pred_rows, [], alias)
+        return subject
+
+    def _store_value(self, v: Value) -> str:
+        art = self._ledger._store.art
+        for data in v._parts().values():
+            art.put(data)
+        h = art.put(v.encode())
+        if h != v.hash:
+            raise ValueError(f"{type(v).__name__}.encode is not deterministic: two calls gave two hashes")
+        return h
+
+    def _seal(self, value: Value, subject: str, trace: Dict[str, str], provenance: str,
+              pred_rows: List[Tuple[str, str]], extra: List[Tuple[str, str]], alias: Optional[str]) -> None:
+        h = self._store_value(value)
+        already = any(s == subject for _v, s in self._pending.values())
+        self._pending[id(value)] = (value, subject)
+        self._finalize.append((value, subject, dict(trace), None))
+        if not already and not self.base._held(subject, "db/value"):
+            ops: List[Tuple[str, str, bool]] = [
+                ("db/value", ref_text(dotted(type(value)), h), False),
+                ("db/kind", "str:" + dotted(type(value)), False),
+                ("db/provenance", "str:" + provenance, False),
+                ("db/preds", "json:" + canonical(list(type(value)._ledger_preds)), False)]
+            ops += [(p, o, False) for p, o in extra]
+            ops += [(f"db/trace/{k}", "str:" + v, False) for k, v in sorted(trace.items())]
+            ops += [(p, o, True) for p, o in pred_rows]
+            for p, o, is_pred in ops:
+                self._ops.append(_Op(subject, p, o, True, seal_of=subject, pred=is_pred))
+        if alias is not None:
+            self._ops.append(_Op(alias, "db/alias", "str:" + subject, True))
 
     def _ensure_fn(self, f: "Fn") -> None:
         if f.subject in self._fns:
             return
         self._fns.add(f.subject)
-        if self.base._held(f.subject, "sha"):
+        if self.base._held(f.subject, "db/name"):
             return
-        rows = [("name", f.name), ("module", str(f.module) if f.module else ""), ("sha", f.sha),
-                ("modules", {f._module_name: f.sha}), ("mode", f.mode)]
-        if f.env.mounts is not None:
-            rows.append(("mounts", f.env.mounts))
-        for p, o in rows:
-            self._ops.append(_Op(f.subject, p, self._encode(o), True))
+        for p, o in f._rows():
+            self._ops.append(_Op(f.subject, p, o, True))
 
-    def _seal(self, value: Value, subject: str, trace: Dict[str, str], provenance: str,
-              extra: List[Tuple[str, str]], made: Optional["Rev"], keys: Optional[Dict[str, Any]] = None) -> str:
+    # -- the bracket ----------------------------------------------------------
+
+    @staticmethod
+    def _exact(s: Any) -> str:
+        _name(s, "subject")
+        if "*" in s:
+            raise TypeError(f"{s!r}: bracket writes take exact subjects; globs live on all and refs")
+        return s
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        """``t[s, p] = o``: an ``add`` on a one predicate. ``t[s] = {...}``: make the user rows equal (A34, A43)."""
+        self._open("a bracket write")
+        if isinstance(key, tuple):
+            if len(key) != 2:
+                raise TypeError("a bracket write is t[s, p] = o or t[s] = {...}")
+            s, p = self._exact(key[0]), _name(key[1], "predicate")
+            if p.startswith("db/"):
+                raise TypeError(f"{p!r}: machinery is not written through the bracket; use add")
+            if self._card_now(p) == "many":
+                raise TypeError(f"t[s, p] = o writes one predicates only; {p!r} has cardinality many "
+                                "(use add, or t[s] = {...} with a list)")
+            self.add(s, p, value)
+            return
+        s = self._exact(key)
+        if not isinstance(value, dict):
+            raise TypeError(f"t[s] = record takes a dict, not {type(value).__name__}")
         base = self.base
-        h = self._store_value(value)
-        already = any(s == subject for _v, s in self._pending.values())
-        self._pending[id(value)] = (value, subject)
-        self._finalize.append((value, subject, dict(trace), made))
-        if already or base._held(subject, "provenance"):
-            return subject
-        ops = [("value", ref_text(dotted(type(value)), h, None)), ("kind", "str:" + type(value).__name__),
-               ("provenance", "str:" + provenance)]
-        ops += [(f"trace.{k}", "str:" + v) for k, v in sorted(trace.items())]
-        ops += extra
-        written = {p for p, _o in ops}
-        record = {"kwargs": keys or {}, "result": value.obj if isinstance(value, Pickled) else value}
-        for s, _p, held in base._held_rows(predicate="index", prefix="ledger/pred/"):
-            p = s[len("ledger/pred/"):]
-            if held.obj != "str:true" or p in written:
+        current = base._record_of(s)
+        for p, o in value.items():
+            if not isinstance(p, str) or not p:
+                raise TypeError(f"a record key is a non-empty str, not {p!r}")
+            if p.startswith("db/"):
+                if p not in current or current[p] != o:
+                    raise TypeError(f"{p!r}: a db/ key differing from the current row; machinery is not "
+                                    "written through the bracket")
+        for p in [q for q in current if not q.startswith("db/") and q not in value]:
+            for h in base._held(s, p):
+                self._ops.append(_Op(s, p, h.obj, False))
+        for p, o in value.items():
+            if p.startswith("db/"):
                 continue
-            try:
-                text = index_text(attr(record, p))
-            except KeyError:
-                continue
-            if text is not None:
-                ops.append((p, "str:" + text))
-                written.add(p)
-        for p, o in ops:
-            self._ops.append(_Op(subject, p, o, True, seal_of=subject))
-        return subject
+            held = [h.obj for h in base._held(s, p)]
+            if self._card_now(p) == "many":
+                want = [self._encode(m) for m in (o if isinstance(o, list) else [o])]
+                for h in held:
+                    if strip_hint(h) not in [strip_hint(w) for w in want]:
+                        self._ops.append(_Op(s, p, h, False))
+                for w in want:
+                    if strip_hint(w) not in [strip_hint(h) for h in held]:
+                        self._ops.append(_Op(s, p, w, True))
+            else:
+                w = self._encode(o)
+                if not held or strip_hint(held[0]) != strip_hint(w):
+                    self._ops.append(_Op(s, p, w, True))
+
+    def __delitem__(self, key: Any) -> None:
+        """``del t[s, p]``: retract what ``p`` holds on ``s``. ``del t[s]``: every user row; ``db/`` rows survive."""
+        self._open("a bracket delete")
+        if isinstance(key, tuple):
+            if len(key) != 2:
+                raise TypeError("del takes t[s, p] or t[s]")
+            s, p = self._exact(key[0]), _name(key[1], "predicate")
+            if p.startswith("db/"):
+                raise TypeError(f"{p!r}: machinery is not retracted through the bracket; use remove")
+            preds = [p]
+        else:
+            s = self._exact(key)
+            preds = [q for q in self.base._record_of(s) if not q.startswith("db/")]
+        for p in preds:
+            for h in self.base._held(s, p):
+                self._ops.append(_Op(s, p, h.obj, False))
+
+
+def scratch_folder(prefix: str = "ledger-work-") -> str:
+    return tempfile.mkdtemp(prefix=prefix)
+
+
+__all__ = ["Transaction", "attr", "code_token", "parse_ref"]

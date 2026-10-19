@@ -1,5 +1,8 @@
 """The SQLite backend: one quad table, and an art store of bytes by hash beside it.
 
+A ledger is a folder: ``ledger.db`` (SQLite) and ``art/`` (bytes by hash,
+and ``art/dats/`` where a ``Dat`` is materialised) inside it (A54).
+
 ``quads(rev, ord, subject, predicate, object, added)``: ``rev`` the revision,
 ``ord`` the row's place within its transaction, ``object`` the tagged string
 (``codec``), ``added`` 0 for a ``remove`` row. Nothing is ever updated or
@@ -37,8 +40,7 @@ class ArtStore:
         self.root = Path(root)
 
     def path(self, h: str) -> Path:
-        hexd = h.split(":", 1)[1]
-        return self.root / "sha256" / hexd[:2] / hexd
+        return self.root / "sha256" / h[:2] / h
 
     def put(self, data: bytes) -> str:
         h = sha256(data)
@@ -60,9 +62,10 @@ class ArtStore:
 class Store:
     """One SQLite file. Reads on a per-thread connection; each write on a connection of its own."""
 
-    def __init__(self, path: Path) -> None:
-        self.path = Path(path)
-        self.art = ArtStore(self.path.with_suffix(".art"))
+    def __init__(self, folder: Path) -> None:
+        self.folder = Path(folder)
+        self.path = self.folder / "ledger.db"
+        self.art = ArtStore(self.folder / "art")
         self._local = threading.local()
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -77,7 +80,20 @@ class Store:
     def _connect(self, timeout: float) -> sqlite3.Connection:
         return sqlite3.connect(str(self.path), isolation_level=None, timeout=timeout, check_same_thread=False)
 
+    @contextmanager
+    def reading_through(self, conn: sqlite3.Connection) -> Iterator[None]:
+        """Reads in this thread go through ``conn`` (an open write transaction) for the block."""
+        old = getattr(self._local, "override", None)
+        self._local.override = conn
+        try:
+            yield
+        finally:
+            self._local.override = old
+
     def _reader(self) -> sqlite3.Connection:
+        over = getattr(self._local, "override", None)
+        if over is not None:
+            return over
         conn = getattr(self._local, "conn", None)
         if conn is None:
             conn = self._local.conn = self._connect(30.0)
@@ -106,6 +122,24 @@ class Store:
             params.extend([prefix, prefix + "\U0010ffff"])
         sql += " ORDER BY rev, ord"
         return [(int(r[0]), int(r[1]), r[2], r[3], r[4], bool(r[5])) for r in self.read(sql, params)]
+
+    def subjects(self, upto: int, *, predicate: Optional[str] = None, obj: Optional[str] = None,
+                 prefix: Optional[str] = None, subject: Optional[str] = None, after: int = 0) -> List[str]:
+        """The distinct subjects with an add row matching the columns given, in ``after < rev <= upto``."""
+        sql = "SELECT subject, MIN(rev * 1000000 + ord) FROM quads WHERE rev <= ? AND rev > ? AND added = 1"
+        params: List[Any] = [upto, after]
+        for col, val in (("predicate", predicate), ("object", obj), ("subject", subject)):
+            if val is not None:
+                sql += f" AND {col} = ?"
+                params.append(val)
+        if prefix is not None:
+            sql += " AND subject >= ? AND subject < ?"
+            params.extend([prefix, prefix + "\U0010ffff"])
+        sql += " GROUP BY subject ORDER BY 2"
+        return [r[0] for r in self.read(sql, params)]
+
+    def has_predicate(self, predicate: str, upto: int) -> bool:
+        return bool(self.read("SELECT 1 FROM quads WHERE predicate = ? AND rev <= ? LIMIT 1", (predicate, upto)))
 
     @contextmanager
     def writer(self, timeout: float, *, locked: bool) -> Iterator["Writer"]:
@@ -141,12 +175,6 @@ class Writer:
 
     def next_rev(self) -> int:
         return int(self.conn.execute("SELECT COALESCE(MAX(rev), 0) + 1 FROM quads").fetchone()[0])
-
-    def rows(self, subject: str) -> List[Row]:
-        cur = self.conn.execute(
-            "SELECT rev, ord, subject, predicate, object, added FROM quads WHERE subject = ? ORDER BY rev, ord",
-            (subject,))
-        return [(int(r[0]), int(r[1]), r[2], r[3], r[4], bool(r[5])) for r in cur.fetchall()]
 
     def insert(self, rev: int, rows: Sequence[Tuple[str, str, str, bool]]) -> None:
         self.conn.executemany(

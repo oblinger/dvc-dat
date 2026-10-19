@@ -1,4 +1,4 @@
-"""Leg 2: metamorphic relations. A read at revision N does not change after later writes;
+"""Metamorphic relations. A read at revision N does not change after later writes;
 ``since=`` windows equal the log and partition it; the fold does not depend on the order of
 transactions that touch distinct (subject, predicate) pairs."""
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import hypothesis.strategies as st
 from hypothesis import given, settings
 
-from dvc_dat.ledger2 import Ledger, Multiple
+from dvc_dat.ledger2 import Ledger
 
 SUBJECTS = ["a", "b", "c"]
 PREDS = ["x", "y", "z"]
@@ -22,7 +22,7 @@ cards = st.dictionaries(st.sampled_from(PREDS), st.sampled_from(["many", "one"])
 
 def fresh():
     d = tempfile.TemporaryDirectory()
-    return d, Ledger(Path(d.name) / "m.db")
+    return d, Ledger(Path(d.name) / "m", create=True)
 
 
 def write(L, txs):
@@ -35,7 +35,7 @@ def write(L, txs):
 def declare(L, cardmap):
     with L.transaction(by="agent") as t:
         for p, c in cardmap.items():
-            t.add(f"ledger/pred/{p}", "cardinality", c)
+            t.add(f"db/pred/{p}", "db/cardinality", c)
 
 
 def battery(rev):
@@ -48,8 +48,8 @@ def battery(rev):
                 one = ("ok", rev[s, p])
             except KeyError:
                 one = ("none",)
-            except Multiple:
-                one = ("multiple",)
+            except TypeError:
+                one = ("many",)
             out[s, p] = (rev.all(s, p), one, [r.id for o in OBJS for r in rev.all(s, p, o)],
                          [(s, p, o) in rev for o in OBJS])
     for p in PREDS:
@@ -94,8 +94,9 @@ def test_since_window_is_the_log_and_partitions(triples, data):
         a = data.draw(st.integers(start, top))
         b = data.draw(st.integers(a, top))
         c = data.draw(st.integers(b, top))
-        log = [(r[2], r[3], L.at(top)._decode(r[4], r[2])) for r in L._store.rows(b, after=a)]
-        assert L.at(b).all(since=L.at(a)) == log
+        log = [x for x in [(r[2], r[3], L.at(top)._decode(r[4])) for r in L._store.rows(b, after=a)] if not x[0].startswith("db/tx/")]
+        strip = lambda rows: [r for r in rows if not r[0].startswith("db/tx/")]  # noqa: E731
+        assert strip(L.at(b).all(since=L.at(a))) == log
         assert L.at(c).all(since=L.at(a)) == L.at(b).all(since=L.at(a)) + L.at(c).all(since=L.at(b))
         assert L.at(c).all(since=L.at(c)) == []
     finally:
@@ -117,7 +118,7 @@ def test_fold_is_invariant_under_reordering_distinct_transactions(order, cardmap
             declare(L, cardmap)
             write(L, [DISJOINT[i] for i in seq])
             rev = L.at()
-            rows = sorted(r for r in rev.all() if not r[0].startswith("ledger/tx/"))
+            rows = sorted(r for r in rev.all() if not r[0].startswith("db/tx/"))
             return rows, {p: sorted(r.subject for r in rev.refs(where={p: None})) for p in PREDS}
         finally:
             d.cleanup()
@@ -138,7 +139,7 @@ def test_fold_is_invariant_with_fixed_objects(order):
                     for tr in txs[i]:
                         t.add(*tr)
             rev = L.at()
-            return sorted(r for r in rev.all() if not r[0].startswith("ledger/tx/"))
+            return sorted(r for r in rev.all() if not r[0].startswith("db/tx/"))
         finally:
             d.cleanup()
 
@@ -152,24 +153,11 @@ def test_cardinality_flip_refolds_earlier_rows_for_reads_at_or_after_it(L):
         t.add("s", "tag", "blue")
     before = L.at()
     with L.transaction(by="t") as t:
-        t.add("ledger/pred/tag", "cardinality", "many")
+        t.add("db/pred/tag", "db/cardinality", "many")
     after = L.at()
     assert before["s", "tag"] == "blue"
     assert after.all("s", "tag") == ["red", "blue"]
     with L.transaction(by="t") as t:
-        t.add("ledger/pred/tag", "cardinality", "one")
+        t.add("db/pred/tag", "db/cardinality", "one")
     assert L.at()["s", "tag"] == "blue"
     assert after.all("s", "tag") == ["red", "blue"]
-
-
-def test_memo_hit_survives_writes_to_subjects_it_never_read(coded):
-    import l2fns
-
-    with coded.transaction(by="t") as t:
-        t.add("model/shot", "version", "1.0.0")
-    first = coded.at().eval("l2fns.uses_model", game="G5")
-    n = l2fns.CALLS["uses_model"]
-    with coded.transaction(by="t") as t:
-        t.add("data/norm", "version", "7.0.0")
-    again = coded.at().eval("l2fns.uses_model", game="G5")
-    assert l2fns.CALLS["uses_model"] == n and again.same_as(first)

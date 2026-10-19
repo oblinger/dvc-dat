@@ -1,110 +1,130 @@
-"""``Fn``: a revision function resolved at a ``Rev``, and ``eval`` (``Fn.__call__``), base mode only.
+"""``ledger_fn``, ``Fn`` and ``eval`` (``Fn.__call__``): a revision function resolved at a ``Rev``.
 
-Base mode: the dotted name resolves in the running process. The code
-identity is ``code/<repo>`` from the ledger, checked against the
-environment's own (``Fn.env.code``) before any run. The environment comes
-from a provider: by default git discovery over the function's source file
-(repo = the checkout's folder name, commit = HEAD, dirty = tracked changes),
-replaceable with ``set_env_provider`` (tests, notebooks, a pinned deploy).
-The sandbox (mounts, worker, ``MountFinder``) is not built: a name under a
-mounted prefix raises ``NotImplementedError``.
+``@ledger_fn`` declares and returns the function unchanged (A52): a plain call
+runs the body and returns an unsealed ``Value``, recording nothing.
+``rev.load_fn(name)`` resolves a dotted name at a revision: under a mounted
+prefix (``db/mount/<prefix>`` rows) it is a sandboxed function, loaded from the
+mounted tree and run in a worker (``sandbox``); otherwise a base function,
+resolved in this process. Calling the ``Fn`` is ``eval``: a memo lookup over
+every entry at the top whose ``db/fn`` and ``db/keys`` rows match, each
+candidate's trace matched against the rev, the latest-sealed match winning
+(Q20, A20); on a miss, run, record the trace, seal with ``db/fn``,
+``db/keys`` and ``db/provenance eval:base|eval:sandbox``.
 """
 
 from __future__ import annotations
 
-import functools
-import importlib
 import inspect
+import json
 import os
-import platform as _platform
-import subprocess
-import sys
+import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
-from .codec import canonical, key_text, ref_text, sha256, short
-from .errors import NotEvaluated, Unindexed
-from .value import Pickled, Value
+from .codec import canonical, hash_text, ref_text, sha256
+from .env import Env, current_env, repo_of
+from .errors import NotEvaluated
+from .value import Pickled, Value, dotted
 
 if TYPE_CHECKING:
     from .rev import Rev
 
-_MEMO = (True, False, "get")
+RESERVED_KEYS = ("memo", "work")
 
 
-@dataclass(frozen=True)
-class Code:
-    """One repo's code as the environment has it."""
+def ledger_fn(func: Callable) -> Callable:
+    """Mark a value function: it takes the ``Rev`` first and keywords after, and returns a ``Value``.
 
-    version: Optional[str]
-    commit: Optional[str]
-    dirty: bool = False
-
-
-@dataclass(frozen=True)
-class Env:
-    """The environment a function will run in: the base-mode half of the trace."""
-
-    code: Dict[str, Code]
-    lock: str
-    platform: str
-    mounts: Optional[str] = None
+    The return annotation is required (``TypeError`` at decoration): a ``Value`` subclass means the
+    result must be one; any other annotation means a bare result is wrapped in ``Pickled`` (A31).
+    The function comes back unchanged and still callable (A52); nothing is written on import.
+    """
+    if not callable(func):
+        raise TypeError(f"@ledger_fn goes on a function, not {func!r}")
+    ann = getattr(func, "__annotations__", {})
+    if "return" not in ann:
+        raise TypeError(f"@ledger_fn {getattr(func, '__qualname__', func)!r}: a return annotation is required "
+                        "(-> a Value subclass, or any type to be wrapped in Pickled)")
+    func.__ledger_fn__ = True  # type: ignore[attr-defined]
+    return func
 
 
-Provider = Callable[[Optional[str]], Env]
-_provider: Optional[Provider] = None
+def returns_text(func: Callable) -> str:
+    """The return annotation's source text, for ``db/returns``."""
+    ann = func.__annotations__["return"]
+    if isinstance(ann, str):
+        return ann
+    if isinstance(ann, type):
+        return ann.__qualname__
+    return repr(ann).replace("typing.", "")
 
 
-def set_env_provider(provider: Optional[Provider]) -> Optional[Provider]:
-    """Replace how the environment is found (``provider(module_name or None) -> Env``); returns the old one."""
-    global _provider
-    old, _provider = _provider, provider
-    return old
+def returns_class(func: Callable) -> Optional[type]:
+    """The ``Value`` subclass the annotation names, or ``None`` (wrap a bare result in ``Pickled``)."""
+    ann = func.__annotations__["return"]
+    if isinstance(ann, str):
+        try:
+            ann = eval(ann, func.__globals__)  # noqa: S307 - the function's own annotation
+        except Exception:
+            return None
+    if isinstance(ann, type) and issubclass(ann, Value):
+        return ann
+    return None
 
 
-def current_env(module: Optional[str]) -> Env:
-    """The environment for code in ``module`` (``None``: the process, from the working directory)."""
-    return (_provider or discover)(module)
+def encode_keys(kw: Dict[str, Any]) -> Dict[str, Any]:
+    """``db/keys``: a ``Value``/``Ref`` top-level key as ``ref:<class>:<hash>``, the rest native JSON (A17, A38)."""
+    from .rev import Ref
+
+    def nested(x: Any, k: str) -> Any:
+        if isinstance(x, (Value, Ref)):
+            raise TypeError(f"key {k!r}: a Value or Ref is a key only at the top level, never nested (A44)")
+        if isinstance(x, dict):
+            return {str(a): nested(b, k) for a, b in x.items()}
+        if isinstance(x, (list, tuple)):
+            return [nested(b, k) for b in x]
+        if x is None or isinstance(x, (str, int, float, bool)):
+            return x
+        raise TypeError(f"key {k!r}: {type(x).__name__} is not JSON-encodable")
+    out: Dict[str, Any] = {}
+    for k, v in kw.items():
+        if isinstance(v, Ref):
+            if v.hash is None:
+                raise TypeError(f"key {k!r}: {v.name!r} holds no value")
+            out[k] = v._text()
+        elif isinstance(v, Value):
+            if not v.sealed:
+                raise ValueError(f"key {k!r}: an unsealed {type(v).__name__}; seal it first")
+            out[k] = ref_text(dotted(type(v)), v.hash)
+        else:
+            out[k] = nested(v, k)
+    return out
 
 
-def _git(folder: str, *args: str) -> Optional[str]:
-    try:
-        out = subprocess.run(["git", "-C", folder, *args], capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return out.stdout.strip() if out.returncode == 0 else None
+def mounts_at(rev: "Rev") -> Dict[str, Dict[str, str]]:
+    """``prefix -> {"root", "repo", "salt"}``: the ``db/mount/<prefix>`` rows as of ``rev``."""
+    from .codec import show
+
+    out: Dict[str, Dict[str, str]] = {}
+    for s, p, h in rev._held_rows(prefix="db/mount/"):
+        out.setdefault(s[len("db/mount/"):], {})[p[len("db/"):]] = show(h.obj)
+    return {k: v for k, v in out.items() if "root" in v}
 
 
-@functools.lru_cache(maxsize=64)
-def _discover_folder(folder: str) -> Env:
-    plat = f"{sys.platform}-{_platform.machine()}-py{sys.version_info[0]}.{sys.version_info[1]}"
-    top = _git(folder, "rev-parse", "--show-toplevel")
-    if not top:
-        return Env({}, "<none>", plat)
-    commit = _git(top, "rev-parse", "HEAD")
-    dirty = bool(_git(top, "status", "--porcelain", "--untracked-files=no"))
-    lock = Path(top, "uv.lock")
-    return Env({os.path.basename(top): Code(None, commit, dirty)},
-               sha256(lock.read_bytes()) if lock.exists() else "<none>", plat)
+def mounts_hash(rev: "Rev") -> Optional[str]:
+    m = mounts_at(rev)
+    return hash_text(canonical(m), 16) if m else None
 
 
-def discover(module: Optional[str]) -> Env:
-    """The default provider: git discovery over the module's source folder (cached per folder per process)."""
-    folder = os.getcwd()
-    if module is not None:
-        f = getattr(sys.modules.get(module), "__file__", None)
-        if f:
-            folder = os.path.dirname(os.path.abspath(f))
-    return _discover_folder(folder)
+def fn_subject(name: str, modules: Dict[str, str], mounts: Optional[str]) -> str:
+    return f"db/fn/{name}/{hash_text(canonical({'modules': modules, 'mounts': mounts}), 16)}"
 
 
-def fn_name_of(subject: str) -> str:
-    """The dotted name in ``ledger/fn/<name>/<hash>``."""
-    return subject[len("ledger/fn/"):].rpartition("/")[0]
+def resolve_in_process(name: str) -> Any:
+    import importlib
 
-
-def _resolve(name: str) -> Any:
     parts = name.split(".")
     errors = []
     for i in range(len(parts) - 1, 0, -1):
@@ -123,40 +143,43 @@ def _resolve(name: str) -> Any:
     raise ImportError(f"{name!r} does not resolve in this process ({'; '.join(errors[:1]) or 'no attribute'})")
 
 
-def load_fn(rev: "Rev", name: str) -> "Fn":
-    if not isinstance(name, str) or "." not in name:
-        raise TypeError(f"a revision function is named by a dotted str, not {name!r}")
-    plain = rev._plain()
-    for s, _p, _h in plain._held_rows(predicate="root", prefix="ledger/mount/"):
-        prefix = s[len("ledger/mount/"):]
-        if name == prefix or name.startswith(prefix + "."):
-            raise NotImplementedError(
-                f"{name!r} is under the mount {prefix!r}: sandbox mode is not built in the ledger2 spike")
-    obj = _resolve(name)
-    if not callable(obj):
-        raise TypeError(f"{name!r} resolves to {type(obj).__name__}, not a function")
-    modname = getattr(obj, "__module__", None) or name.rpartition(".")[0]
-    try:
-        src = inspect.getsourcefile(obj)
-    except TypeError:
-        src = None
-    if src and os.path.exists(src):
-        sha = sha256(Path(src).read_bytes())
-    else:
-        try:
-            sha = sha256(inspect.getsource(obj).encode())
-        except (OSError, TypeError) as e:
-            raise ImportError(f"{name!r}: no source to hash ({e})") from None
+def signature_of(name: str, obj: Callable) -> Tuple[inspect.Signature, bool]:
+    """The keys a function takes (the ``Rev`` and ``work`` excluded), and whether it takes ``work``."""
     sig = inspect.signature(obj)
     params = list(sig.parameters.values())
     if not params or params[0].kind not in (inspect.Parameter.POSITIONAL_ONLY,
                                             inspect.Parameter.POSITIONAL_OR_KEYWORD):
         raise TypeError(f"{name!r}: a revision function takes the Rev as its first parameter")
-    env = current_env(modname)
-    subject = f"ledger/fn/{name}/{short(canonical({'modules': {modname: sha}, 'mounts': None}))}"
-    return Fn(name=name, module=Path(src) if src else None, sha=sha, mode="base", mount=None,
-              signature=sig.replace(parameters=params[1:]), env=env, subject=subject,
-              _rev=rev, _obj=obj, _module_name=modname)
+    rest = params[1:]
+    if any(p.name == "memo" for p in rest):
+        raise TypeError(f"{name!r}: 'memo' is reserved (Q12)")
+    takes_work = any(p.name == "work" for p in rest)
+    keep = [p for p in rest if p.name != "work"]
+    return sig.replace(parameters=keep, return_annotation=inspect.Signature.empty), takes_work
+
+
+def load_fn(rev: "Rev", name: str) -> "Fn":
+    if not isinstance(name, str) or "." not in name:
+        raise TypeError(f"a revision function is named by a dotted str, not {name!r}")
+    plain = rev._plain()
+    for prefix, info in sorted(mounts_at(plain).items(), key=lambda kv: -len(kv[0])):
+        if name.startswith(prefix + "."):
+            from .sandbox import load_sandboxed
+
+            return load_sandboxed(rev, name, prefix, info)
+    obj = resolve_in_process(name)
+    if not callable(obj) or not getattr(obj, "__ledger_fn__", False):
+        raise TypeError(f"{name!r} is not a ledger function (mark it @ledger_fn)")
+    modname = getattr(obj, "__module__", None) or name.rpartition(".")[0]
+    src = inspect.getsourcefile(obj)
+    if not src or not os.path.exists(src):
+        raise ImportError(f"{name!r}: no source file to hash")
+    sha = sha256(Path(src).read_bytes())
+    sig, takes_work = signature_of(name, obj)
+    env = current_env()
+    return Fn(name=name, module=Path(src), sha=sha, mode="base", mount=None, signature=sig, env=env,
+              subject=fn_subject(name, {modname: sha}, None), _rev=rev, _obj=obj, _takes_work=takes_work,
+              _modules={modname: sha}, _returns=returns_text(obj))
 
 
 @dataclass(frozen=True)
@@ -164,7 +187,7 @@ class Fn:
     """A revision function, resolved at ``_rev``; calling it is ``eval``."""
 
     name: str
-    module: Optional[Path]
+    module: Path
     sha: str
     mode: str
     mount: Optional[str]
@@ -172,12 +195,24 @@ class Fn:
     env: Env
     subject: str
     _rev: Any = field(repr=False, compare=False)
-    _obj: Any = field(repr=False, compare=False)
-    _module_name: str = field(repr=False, compare=False, default="")
+    _obj: Any = field(repr=False, compare=False, default=None)
+    _takes_work: bool = field(repr=False, compare=False, default=False)
+    _modules: Dict[str, str] = field(repr=False, compare=False, default_factory=dict)
+    _returns: str = field(repr=False, compare=False, default="")
+    _info: Dict[str, Any] = field(repr=False, compare=False, default_factory=dict)
 
-    # -- keys -----------------------------------------------------------------
+    def _rows(self, subject: Optional[str] = None, modules: Optional[Dict[str, str]] = None) -> List[Tuple[str, str]]:
+        """The ``db/fn/<name>/<hash>`` rows (A15, A31)."""
+        mh = mounts_hash(self._rev._plain()) if self.mode == "sandbox" else None
+        return [("db/name", "str:" + self.name), ("db/module", "str:" + str(self.module)),
+                ("db/sha", "str:" + self.sha), ("db/modules", "json:" + canonical(modules or self._modules)),
+                ("db/mounts", "str:" + (mh or "none")), ("db/mode", "str:" + self.mode),
+                ("db/returns", "str:" + self._returns)]
 
     def _bind(self, keys: Dict[str, Any]) -> Dict[str, Any]:
+        for k in RESERVED_KEYS:
+            if k in keys:
+                raise TypeError(f"{k!r} is reserved and never a key")
         bound = self.signature.bind(**keys)
         bound.apply_defaults()
         out: Dict[str, Any] = {}
@@ -188,98 +223,148 @@ class Fn:
                 out[k] = v
         return out
 
-    @staticmethod
-    def _key_obj(v: Any) -> str:
-        from .rev import Ref
-
-        if isinstance(v, Ref):
-            return ref_text(v._cls, v.hash, v._target or v.subject)
-        return "str:" + key_text(v)
-
-    @staticmethod
-    def _key_tok(v: Any) -> str:
-        from .rev import Ref, token
-
-        return token(v) if isinstance(v, Ref) else key_text(v)
-
-    # -- eval -----------------------------------------------------------------
-
     def __call__(self, *, memo: Any = True, **keys: Any) -> Optional[Value]:
-        """``True``: the memoised Value or run, seal, return; ``False``: run, seal nothing; ``"get"``: lookup only."""
-        if not any(memo is m if not isinstance(m, str) else memo == m for m in _MEMO):
+        """``True``: the memoised Value, or run, seal, return; ``False``: run, seal nothing; ``"get"``: lookup only."""
+        if not (memo is True or memo is False or memo == "get"):
             raise ValueError(f"memo is True, False or 'get', not {memo!r}")
         rev = self._rev
         plain = rev._plain()
         kw = self._bind(keys)
-        item = f"eval:{self.name}" + canonical({k: self._key_tok(v) for k, v in kw.items()})
+        enc = canonical(encode_keys(kw))
+        item = f"eval:{self.name}{enc}"
         if memo is not False:
-            hit = self._lookup(plain, kw)
+            hit = lookup(plain, self.name, enc)
             if hit is not None or memo == "get":
-                rev._record(item, hit.hash if hit is not None else "<none>")
+                rev._record(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
                 return hit
-        self._check_code(plain)
-        rec: Dict[str, str] = {}
-        from .rev import Rev
+        if self.mode == "sandbox":
+            from .sandbox import run_sandboxed
 
-        out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **kw)
-        value = out if isinstance(out, Value) else Pickled(out)
-        trace = dict(rec)
-        for repo in self.env.code:
-            trace[f"code/{repo}"] = plain._code_token(f"code/{repo}")
-        trace.update({"fn": self.subject, "uv.lock": self.env.lock, "platform": self.env.platform})
-        if memo is False:
-            value._provenance(subject=None, rev=plain, trace=trace, sealed=False)
+            value = run_sandboxed(self, plain, kw, enc, memo is not False)
         else:
-            enc = {k: self._key_obj(v) for k, v in kw.items()}
-            subject = (f"{type(value).__name__}/"
-                       f"{short(canonical({'fn': self.name, 'keys': enc, 'trace': trace, 'hash': value.hash}))}")
-            extra = [("fn", "str:" + self.name)] + [(f"kwargs.{k}", o) for k, o in sorted(enc.items())]
-            with plain.ledger.transaction(by=f"eval:{self.name}") as t:
-                t._ensure_fn(self)
-                t._seal(value, subject, trace, "eval", extra, plain, keys=kw)
-        rev._record(item, value.hash)
+            value = self._run_base(plain, kw, enc, memo is not False)
+        rev._record(item, ref_text(dotted(type(value)), value.hash))
         return value
 
-    def _lookup(self, plain: "Rev", kw: Dict[str, Any]) -> Optional[Value]:
-        from .rev import Ref
+    def _check_code(self, plain: "Rev", env: Env, repo: Optional[str]) -> str:
+        if repo is None:
+            raise NotEvaluated(f"{self.name}: its code ({self.module}) is outside any git checkout, so no "
+                               "commit can vouch for a result")
+        code = env.code[repo]
+        if code.dirty:
+            raise NotEvaluated(f"{self.name}: the checkout of {repo} has uncommitted changes; a result would "
+                               "carry false provenance")
+        c = plain.get(f"code/{repo}", "commit")
+        if c is not None and not (code.commit and (code.commit.startswith(c) or c.startswith(code.commit))):
+            raise NotEvaluated(f"{self.name}: rev {plain.id} binds code/{repo} to commit {c[:8]}; this "
+                               f"environment is at {(code.commit or '?')[:8]}; a miss there cannot run here")
+        return repo
 
-        where: Dict[str, Any] = {"fn": self.name, "provenance": "eval"}
-        where.update({f"kwargs.{k}": v for k, v in kw.items()})
-        # Entries are found at the top, not as of ``plain``: an entry sealed after ``plain`` for
-        # ``plain``'s exact trace is still the answer (Eval § 2, Versions § 7: running at an old
-        # revision hits what was sealed under its bindings). The trace is matched against ``plain``.
-        top = plain.ledger.at()
-        try:
-            cands = top._subjects(None, where, {}, None)
-        except Unindexed:
-            return None
-        want = {f"kwargs.{k}" for k in kw}
-        for s in reversed(cands):
-            rows = top._held_rows(subject=s)
-            if {p for _s, p, _h in rows if p.startswith("kwargs.")} != want:
-                continue
-            trace = {p[len("trace."):]: top._decode(h.obj, s) for _s, p, h in rows if p.startswith("trace.")}
-            if plain._matches(trace):
-                return Ref(top, s)._load(rev=plain)
-        return None
+    def _run_base(self, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> Value:
+        from .rev import Rev
+        from .txn import code_token
 
-    def _check_code(self, plain: "Rev") -> None:
-        if not self.env.code:
-            raise NotEvaluated(f"{self.name}: its code is outside any git checkout, so no code/<repo> row "
-                               "can vouch for it")
-        for repo, code in self.env.code.items():
-            subj = f"code/{repo}"
-            v, c = plain.get(subj, "version"), plain.get(subj, "commit")
-            here = f"{code.version or ''}+{code.commit or ''}"
-            if code.dirty:
-                raise NotEvaluated(f"{self.name}: the working tree of {repo} is dirty ({here}); "
-                                   "a result would carry false provenance")
-            if v is None and c is None:
-                raise NotEvaluated(f"{self.name}: rev {plain.id} has no {subj} row to run against")
-            if c is not None:
-                ok = bool(code.commit) and (code.commit.startswith(c) or c.startswith(code.commit))
-            else:
-                ok = code.version is not None and code.version == v
-            if not ok:
-                raise NotEvaluated(f"{self.name}: rev {plain.id} binds {subj} to {v}+{c}; "
-                                   f"this environment is {here}")
+        env = current_env()
+        repo = self._check_code(plain, env, repo_of(env, self.module))
+        rec: Dict[str, str] = {}
+        work = Path(tempfile.mkdtemp(prefix="ledger-work-")) if self._takes_work else None
+        args = dict(kw, work=work) if work is not None else kw
+        out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+        value = wrap_result(self.name, self._obj, out)
+        trace = dict(rec)
+        trace.update({"fn": self.subject, f"code/{repo}": code_token(plain, repo, env.code[repo].commit),
+                      "uv.lock": env.lock, "platform": env.platform})
+        if not seal:
+            value.trace = trace  # type: ignore[misc]
+            return value
+        out_v = seal_entry(self, plain, value, trace, enc, "eval:base")
+        if work is not None and work.exists():
+            shutil.rmtree(work, ignore_errors=True)
+        return out_v
+
+
+def wrap_result(name: str, func: Callable, out: Any) -> Value:
+    cls = returns_class(func)
+    if cls is not None:
+        if not isinstance(out, cls):
+            raise TypeError(f"{name}: annotated -> {cls.__name__}, returned {type(out).__name__}")
+        return out
+    return out if isinstance(out, Value) else Pickled(out)
+
+
+class _AlreadySealed(Exception):
+    def __init__(self, subject: str) -> None:
+        self.subject = subject
+
+
+def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: str, provenance: str,
+               modules: Optional[Dict[str, str]] = None) -> Value:
+    """Seal an eval's result as a memo entry, or hand back the identical entry already sealed."""
+    from .rev import Ref
+
+    ledger = plain.ledger
+    vtext = ref_text(dotted(type(value)), value.hash)
+    try:
+        with ledger.transaction(by=f"eval:{fn.name}") as t:
+            pred_rows, canon = t._encode_preds(value)
+            subject = hash_text(canonical({"fn": fn.name, "keys": json.loads(enc), "trace": trace,
+                                           "preds": canon, "value": vtext}))
+            if t.base._held(subject, "db/value"):
+                raise _AlreadySealed(subject)
+            fsub = trace.get("fn", fn.subject)
+            if fsub not in t._fns and not t.base._held(fsub, "db/name"):
+                t._fns.add(fsub)
+                from .txn import _Op
+
+                for p, o in fn._rows(fsub, modules):
+                    t._ops.append(_Op(fsub, p, o, True))
+            t._seal(value, subject, trace, provenance, pred_rows,
+                    [("db/fn", "str:" + fn.name), ("db/keys", "json:" + enc)], None)
+    except _AlreadySealed as e:
+        return Ref(ledger.at(), e.subject).load()
+    return value
+
+
+def lookup(plain: "Rev", name: str, enc: str) -> Optional[Value]:
+    """The latest-sealed entry for ``(name, keys)`` whose trace holds at ``plain``; never runs."""
+    from .rev import Ref
+    from .trace import trace_matches
+
+    top = plain.ledger.at()
+    cands = []
+    for s in top._store.subjects(top.id, predicate="db/keys", obj="json:" + enc):
+        fnh = top._held(s, "db/fn")
+        val = top._held(s, "db/value")
+        if fnh and fnh[0].obj == "str:" + name and val:
+            cands.append((val[0].rev, val[0].ord, s))
+    for _r, _o, s in sorted(cands, reverse=True):
+        trace = {p[len("db/trace/"):]: h.obj.partition(":")[2]
+                 for _s, p, h in top._held_rows(subject=s) if p.startswith("db/trace/")}
+        if trace_matches(plain, trace):
+            return Ref(top, s).load()
+    return None
+
+
+def lookup_encoded(rev: "Rev", name: str, enc: str) -> Optional[Value]:
+    return lookup(rev._plain(), name, enc)
+
+
+def fn_holds(rev: "Rev", subject: str) -> bool:
+    """Does the ``fn`` item still name the code ``rev`` resolves to (memo only, nothing runs)."""
+    from .codec import show
+
+    top = rev.ledger.at()
+    mode = top._held(subject, "db/mode")
+    name = top._held(subject, "db/name")
+    if not mode or not name:
+        return False
+    nm = show(name[0].obj)
+    if show(mode[0].obj) == "sandbox":
+        from .sandbox import sandbox_subject_at
+
+        mods = json.loads(show(top._held(subject, "db/modules")[0].obj))
+        return sandbox_subject_at(rev, nm, mods) == subject
+    try:
+        return load_fn(rev, nm).subject == subject
+    except (ImportError, TypeError):
+        return False
