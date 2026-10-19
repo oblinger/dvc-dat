@@ -491,7 +491,7 @@ class Rev:
             if not subs:
                 raise KeyError(f"no subject matches at rev {self.id}")
             if len(subs) > 1:
-                raise Multiple(f"{len(subs)} subjects match at rev {self.id}: "
+                raise Multiple(f"{describe(s, kind, fn, where, preds)} matches {len(subs)}: "
                                + ", ".join(display_name(self.ledger, x) for x in subs[:6]))
             return Ref(plain, subs[0])
         return [Ref(plain, x) for x in subs]
@@ -516,7 +516,7 @@ class Rev:
         if not subs:
             raise KeyError(f"no sealed value matches at rev {self.id}")
         if len(subs) > 1:
-            raise Multiple(f"{len(subs)} values match at rev {self.id}: "
+            raise Multiple(f"{describe(s, kind, fn, where, preds)} matches {len(subs)}: "
                            + ", ".join(display_name(self.ledger, x) for x in subs[:6]))
         v = Ref(plain, subs[0]).load()
         self._record_value(v)
@@ -575,6 +575,19 @@ class Rev:
         if not isinstance(name, str):
             raise TypeError("eval takes a dotted name; a function object would resolve in this process")
         return self.load_fn(name)(memo=memo, **keys)
+
+
+def describe(s: Any, kind: Any, fn: Any, where: Optional[Dict[str, Any]], preds: Dict[str, Any]) -> str:
+    """A where clause as ``k=v`` words, for a refusal's message."""
+    parts = [f"{k}={v!r}" if not isinstance(v, str) else f"{k}={v}"
+             for k, v in list(preds.items()) + list((where or {}).items())]
+    if kind is not None:
+        parts.insert(0, f"kind={dotted(kind) if isinstance(kind, type) else kind}")
+    if fn is not None:
+        parts.insert(0, f"fn={fn}")
+    if s is not None:
+        parts.insert(0, f"s={s}")
+    return " ".join(parts) or "every subject"
 
 
 def type_ok(ledger: "Ledger", decl: str, text: str) -> bool:

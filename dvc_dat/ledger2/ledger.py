@@ -57,6 +57,7 @@ class Ledger:
     def __init__(self, path: Union[str, Path, None] = None, *, create: bool = False) -> None:
         self._values: Dict[Any, Any] = {}
         cfg: Optional[Path] = None
+        given: Any = path
         if path is None and create:
             if os.environ.get(ENV):
                 raise ValueError(f"Ledger(create=True) makes a project in the working directory, but {ENV} is "
@@ -71,9 +72,11 @@ class Ledger:
                 cfg.write_text(text + f"ledger: {DEFAULT}\n")
                 led = DEFAULT
             folder = _relative(cfg, led)
+            given = folder
         elif path is None:
             env = os.environ.get(ENV)
             if env:
+                given = env
                 folder = Path(env).expanduser()
             else:
                 cfg, searched = _walk_up(Path.cwd().resolve())
@@ -81,13 +84,14 @@ class Ledger:
                     raise LedgerError(f"no ledger: {ENV} unset and no {CONFIG} with a 'ledger:' key in "
                                       + ", ".join(str(s) for s in searched) + " (Ledger(create=True) makes one)")
                 folder = _relative(cfg, _read_config(cfg)["ledger"])
+                given = folder
         else:
             folder = Path(path).expanduser()
         folder = folder.resolve()
         if folder.exists() and not folder.is_dir():
             raise LedgerError(f"{folder}: a ledger is a folder (database and art store inside), not a file")
         if not (folder / "ledger.db").is_file() and not create:
-            raise LedgerError(f"no ledger at {folder} (Ledger(path, create=True) makes one)")
+            raise LedgerError(f"no ledger at {given}")
         self.path = folder
         self._store = Store(folder)
         if cfg is not None and path is None and not create:
