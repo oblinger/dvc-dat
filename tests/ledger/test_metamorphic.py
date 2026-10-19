@@ -6,9 +6,10 @@ import tempfile
 from pathlib import Path
 
 import hypothesis.strategies as st
+import pytest
 from hypothesis import given, settings
 
-from dvc_dat.ledger import Ledger
+from backends import BACKENDS, make
 
 SUBJECTS = ["a", "b", "c"]
 PREDS = ["x", "y", "z"]
@@ -20,9 +21,9 @@ history = st.lists(st.lists(quad, max_size=3), min_size=1, max_size=8)
 cards = st.dictionaries(st.sampled_from(PREDS), st.sampled_from(["many", "one"]))
 
 
-def fresh():
+def fresh(backend):
     d = tempfile.TemporaryDirectory()
-    return d, Ledger(Path(d.name) / "m", create=True)
+    return d, make(backend, Path(d.name) / "m")
 
 
 def write(L, txs):
@@ -58,10 +59,11 @@ def battery(rev):
     return out
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
 @SETTINGS
 @given(cardmap=cards, before=history, after=history)
-def test_a_read_at_n_is_unchanged_by_later_writes(cardmap, before, after):
-    d, L = fresh()
+def test_a_read_at_n_is_unchanged_by_later_writes(cardmap, before, after, backend):
+    d, L = fresh(backend)
     try:
         declare(L, cardmap)
         write(L, before)
@@ -79,11 +81,12 @@ distinct = st.lists(st.tuples(st.sampled_from(SUBJECTS), st.sampled_from(PREDS),
                     unique=True, min_size=1, max_size=12)
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
 @SETTINGS
 @given(triples=distinct, data=st.data())
-def test_since_window_is_the_log_and_partitions(triples, data):
+def test_since_window_is_the_log_and_partitions(triples, data, backend):
     """Add-only distinct triples under ``many``: a window's fold is exactly the log's rows in it."""
-    d, L = fresh()
+    d, L = fresh(backend)
     try:
         declare(L, {p: "many" for p in PREDS})
         start = L.at().id
@@ -108,12 +111,13 @@ DISJOINT = [[(True, "a", "x", "1"), (True, "a", "x", "2"), (False, "a", "x", "1"
             [(True, "c", "z", "3"), (True, "a", "y", "1"), (False, "c", "z", "3"), (True, "c", "z", "1")]]
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
 @SETTINGS
 @given(order=st.permutations(list(range(3))), cardmap=cards)
-def test_fold_is_invariant_under_reordering_distinct_transactions(order, cardmap):
+def test_fold_is_invariant_under_reordering_distinct_transactions(order, cardmap, backend):
     """Transactions on disjoint (s, p) pairs, adds and removes, any cardinality: any order, one state."""
     def run(seq):
-        d, L = fresh()
+        d, L = fresh(backend)
         try:
             declare(L, cardmap)
             write(L, [DISJOINT[i] for i in seq])
@@ -126,13 +130,14 @@ def test_fold_is_invariant_under_reordering_distinct_transactions(order, cardmap
     assert run(order) == run(range(3))
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
 @SETTINGS
 @given(order=st.permutations(list(range(4))))
-def test_fold_is_invariant_with_fixed_objects(order):
+def test_fold_is_invariant_with_fixed_objects(order, backend):
     txs = [[("a", "x", "1")], [("b", "y", "2"), ("b", "z", "3")], [("c", "x", "1")], [("a", "z", "2")]]
 
     def run(seq):
-        d, L = fresh()
+        d, L = fresh(backend)
         try:
             for i in seq:
                 with L.transaction(by="agent") as t:

@@ -7,10 +7,11 @@ import tempfile
 from pathlib import Path
 
 import hypothesis.strategies as st
+import pytest
 from hypothesis import HealthCheck, settings
 from hypothesis.stateful import RuleBasedStateMachine, initialize, invariant, precondition, rule
 
-from dvc_dat.ledger import Ledger
+from backends import database, make
 from model import Model
 
 SUBJECTS = ["a", "b", "c"]
@@ -74,10 +75,12 @@ def check_rev(L, model, R):
 
 
 class LedgerVsModel(RuleBasedStateMachine):
+    BACKEND = "sqlite"
+
     @initialize()
     def setup(self):
         self.dir = tempfile.TemporaryDirectory()
-        self.L = Ledger(Path(self.dir.name) / "m", create=True)
+        self.L = make(self.BACKEND, Path(self.dir.name) / "m")
         self.model = Model()
 
     def teardown(self):
@@ -112,7 +115,22 @@ class LedgerVsModel(RuleBasedStateMachine):
             assert got == self.model.subjects(R, p, after=a)
 
 
-LedgerVsModel.TestCase.settings = settings(max_examples=100, stateful_step_count=20, deadline=None,
-                                           derandomize=True, database=None,
-                                           suppress_health_check=[HealthCheck.too_slow])
+class PgLedgerVsModel(LedgerVsModel):
+    BACKEND = "pg"
+
+
+for _m in (LedgerVsModel, PgLedgerVsModel):
+    _m.TestCase.settings = settings(max_examples=100, stateful_step_count=20, deadline=None,
+                                    derandomize=True, database=None,
+                                    suppress_health_check=[HealthCheck.too_slow])
 TestLedgerVsModel = LedgerVsModel.TestCase
+
+
+@pytest.fixture
+def _pg_reachable():
+    database()
+
+
+@pytest.mark.usefixtures("_pg_reachable")
+class TestPgLedgerVsModel(PgLedgerVsModel.TestCase):
+    pass

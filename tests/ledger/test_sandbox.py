@@ -4,9 +4,10 @@ import subprocess
 import sys
 import textwrap
 
+import backends
 import pytest
 
-from dvc_dat.ledger import (ConfinedWrite, Ledger, NotEvaluated, UnmountedImport, UntracedRead, bump,
+from dvc_dat.ledger import (ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead, bump,
                              set_env_provider)
 from dvc_dat.ledger.sandbox import shutdown
 
@@ -86,7 +87,7 @@ def git(repo, *args):
 
 
 @pytest.fixture
-def sbx(tmp_path, monkeypatch):
+def sbx(tmp_path, monkeypatch, backend):
     repo = tmp_path / "sbx-repo"
     for rel, text in PKG.items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -99,7 +100,7 @@ def sbx(tmp_path, monkeypatch):
         del sys.modules[m]
     import sbx  # noqa: F401  (discovery sees the checkout)
     old = set_env_provider(None)
-    L = Ledger(tmp_path / "ledger", create=True)
+    L = backends.make(backend, tmp_path / "ledger")
     with L.transaction(by="t") as t:
         t.add("db/mount/sbx.stage", "db/root", "sbx/stage")
         t.add("db/mount/sbx.stage", "db/repo", "sbx-repo")
