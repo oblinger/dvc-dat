@@ -310,7 +310,7 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 #   8 <hash>   db/kind                 demo_game.game.Video
 #   8 <hash>   db/provenance           import:archive
 #   8 <hash>   db/preds                ["game","camera","span"]
-#   8 <hash>   db/trace/code/demo-game 0.0.0+<8 hex>
+#   8 <hash>   db/trace/code/demo-game +<8 hex>
 #   8 <hash>   db/trace/platform       darwin-arm64-py3.11
 #   8 <hash>   db/trace/uv.lock        sha256:<hash>
 #   8 <hash>   game                    G1
@@ -802,7 +802,7 @@ for item in sorted(cut_153.trace):
 
 # %%
 print(dict(sorted(wide_video.trace.items())))
-# {"code/demo-game": "0.0.0+<8 hex>",
+# {"code/demo-game": "+<8 hex>",
 #  "platform": "darwin-arm64-py3.11", "uv.lock": "sha256:<hash>"}
 
 # %% [markdown]
