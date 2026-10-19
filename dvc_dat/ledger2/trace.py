@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from .codec import canonical, parse_ref, ref_text, strip_hint
+from .codec import canonical, ref_text, strip_hint
 from .errors import AliasLoop, LedgerError
 from .value import Value, dotted
 

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import importlib
 import json
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from .codec import canonical, encode_plain, is_hash, parse_ref, ref_text, show, strip_hint, tag
 from .errors import AliasLoop, Multiple, Unindexed
@@ -746,10 +746,3 @@ class Ref:
         ledger._values[key] = v
         return v
 
-
-def iter_unique(xs: Iterable[str]) -> List[str]:
-    out: List[str] = []
-    for x in xs:
-        if x not in out:
-            out.append(x)
-    return out

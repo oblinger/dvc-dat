@@ -52,7 +52,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 from .codec import sha256
 from .env import Env, current_env
 from .errors import NotEvaluated, UnmountedImport, UntracedRead
-from .fn import Fn, fn_subject, mounts_at, mounts_hash, returns_class, seal_entry, wrap_result
+from .fn import Fn, fn_subject, mounts_at, mounts_hash, seal_entry, wrap_result
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -575,5 +575,3 @@ def _enc(keys: Dict[str, Any]) -> str:
 
     return canonical(encode_keys(keys))
 
-
-_ = returns_class
