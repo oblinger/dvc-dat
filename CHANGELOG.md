@@ -6,8 +6,25 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
-## Unreleased
+## 5.0.0 — 2026-10-18
 
+- **The ledger rebuilt to the value-space design (T534/T539); the 4.0 ledger
+  is removed** (`Ledger.open`, `assign`, `last`, `objects`, `SqliteLedger`,
+  the shelf and its artifact types). One constructor, `Ledger(path=None, *,
+  create=False)`: a path, or the nearest `.datconfig.yaml` `ledger:` key, and
+  nothing is made without `create=True`. Every fact is a quad
+  `(rev, subject, predicate, object)`; `L.transaction(by=…)` writes one
+  revision, `L.at(…)` returns a `Rev` every read goes through (`[]`, `get`,
+  `all`, `asserted`, `rows`, `values`/`value`/`refs`/`select`). Values
+  (`Value`, `Pickled`, `Table`, `Dat`, `@ledger_class(preds=…)`) are stored by
+  content via `t.add_value`, named by alias, read back by `Ref(rev, name)`.
+  Functions are `@ledger_fn`, resolved at a rev by `load_fn`; `rev.eval(name,
+  **keys)` answers from the memo or runs and seals (`memo=False` runs
+  regardless, `memo="get"` only looks). A function under a
+  `db/mount/<prefix>` runs sandboxed in a worker, its reads traced and its
+  writes confined; `bump` versions clocks. A new ledger's
+  `db/format` is `dvc-dat-ledger/1`. Docs: `doc/DAT Architecture.md`,
+  `doc/DAT Modules/ledger/`, the four `doc/DAT Demos/ledger-*` notebooks.
 - **Python 3.11 is the floor; 3.8–3.10 dropped.** `requires-python = ">=3.11"`;
   CI runs 3.11 and 3.14 (Dan, 2026-10-17).
 - The docs live in `doc/` (was `docs/`), the demo notebooks in `doc/DAT Demos/`
