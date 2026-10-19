@@ -6,6 +6,7 @@ the page's `# result` comments become asserts below them. The page's stand-ins (
 suite's pinned one (repo `testrepo`), so `code/demo-game` reads `code/testrepo`.
 """
 
+import backends
 import pytest
 
 from dvc_dat.ledger import Exists, Ledger, Ref, Rev, Value, attr, bump, ledger_class, ledger_fn  # noqa: F401
@@ -21,8 +22,8 @@ def cut_by_hand(raw):
 
 
 @pytest.fixture
-def L(tmp_path):
-    L = Ledger(tmp_path / "doc", create=True)        # ADAPTED: `Ledger(tmp, create=True)`
+def L(tmp_path, backend):
+    L = backends.make(backend, tmp_path / "doc")     # ADAPTED: `Ledger(tmp, create=True)`, per store
     with L.transaction(by="setup") as t:
         t.add("code/testrepo", "version", "0.2.2")
         t.add("code/testrepo", "commit", "abc1234")

@@ -1,7 +1,8 @@
 """``Ledger``: the store handle. One constructor (A49), ``at`` for views, ``transaction`` for writes.
 
-A ledger is a folder holding the database and the art store (A54.2).
-``Ledger(path)`` opens it; ``Ledger()`` finds it (``DAT_LEDGER``, else the
+A ledger is a folder holding the database and the art store (A54.2), or a
+Postgres DSN ``postgresql://…?art=<folder>`` (``pgstore``) wherever a path
+is accepted. ``Ledger(path)`` opens it; ``Ledger()`` finds it (``DAT_LEDGER``, else the
 nearest ``.datconfig.yaml`` with a ``ledger:`` key at or above the working
 directory, A37, A44); ``create=True`` is the one act that makes a ledger
 (``Ledger(path, create=True)``), or a project in the working directory
@@ -20,7 +21,8 @@ import yaml
 
 from .errors import LedgerError
 from .rev import Rev
-from .store import Store
+from .pgstore import PostgresStore, is_dsn
+from .store import SqliteStore, Store
 from .txn import Transaction
 
 ENV = "DAT_LEDGER"
@@ -58,6 +60,8 @@ class Ledger:
         self._values: Dict[Any, Any] = {}
         cfg: Optional[Path] = None
         given: Any = path
+        target: Union[str, Path]
+        base = Path.cwd()                   # where a DSN's relative art= resolves
         if path is None and create:
             if os.environ.get(ENV):
                 raise ValueError(f"Ledger(create=True) makes a project in the working directory, but {ENV} is "
@@ -71,34 +75,45 @@ class Ledger:
                     text += "\n"
                 cfg.write_text(text + f"ledger: {DEFAULT}\n")
                 led = DEFAULT
-            folder = _relative(cfg, led)
-            given = folder
+            base = cfg.parent
+            target = led if is_dsn(led) else _relative(cfg, led)
+            given = target
         elif path is None:
             env = os.environ.get(ENV)
             if env:
                 given = env
-                folder = Path(env).expanduser()
+                target = env if is_dsn(env) else Path(env).expanduser()
             else:
                 cfg, searched = _walk_up(Path.cwd().resolve())
                 if cfg is None:
                     raise LedgerError(f"no ledger: {ENV} unset and no {CONFIG} with a 'ledger:' key in "
                                       + ", ".join(str(s) for s in searched) + " (Ledger(create=True) makes one)")
-                folder = _relative(cfg, _read_config(cfg)["ledger"])
-                given = folder
+                led = _read_config(cfg)["ledger"]
+                base = cfg.parent
+                target = led if is_dsn(led) else _relative(cfg, led)
+                given = target
         else:
-            folder = Path(path).expanduser()
-        folder = folder.resolve()
-        if folder.exists() and not folder.is_dir():
-            raise LedgerError(f"{folder}: a ledger is a folder (database and art store inside), not a file")
-        if not (folder / "ledger.db").is_file() and not create:
-            raise LedgerError(f"no ledger at {given}")
-        self.path = folder
-        self._store = Store(folder)
+            target = path if is_dsn(path) else Path(path).expanduser()
+        self._store: Store
+        if isinstance(target, str):
+            store = PostgresStore(target, base=base, create=create)
+            self._store = store
+            self.path: Union[str, Path] = store.dsn
+            self._shown = store.redacted
+        else:
+            folder = target.resolve()
+            if folder.exists() and not folder.is_dir():
+                raise LedgerError(f"{folder}: a ledger is a folder (database and art store inside), not a file")
+            if not (folder / "ledger.db").is_file() and not create:
+                raise LedgerError(f"no ledger at {given}")
+            self.path = folder
+            self._shown = str(folder)
+            self._store = SqliteStore(folder)
         if cfg is not None and path is None and not create:
             self._assert_mounts(cfg)
 
     def __repr__(self) -> str:
-        return f"Ledger({str(self.path)!r})"
+        return f"Ledger({self._shown!r})"
 
     def _assert_mounts(self, cfg: Path) -> None:
         """``mounts:`` sugar: assert the rows when they differ from what the ledger holds (A47, A54.3)."""

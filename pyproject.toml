@@ -15,6 +15,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 excel = ["xlsxwriter"]
+pg = ["psycopg[binary]>=3.1"]
 
 [project.scripts]
 dat = "dvc_dat.do:cli_main"
@@ -31,6 +32,7 @@ dev = [
     "ipykernel>=6.29.5",
     "jupytext>=1.17.1",
     "nbconvert>=7.16.6",
+    "psycopg[binary]>=3.1",
     "pyarrow>=15",
     "pytest>=8.3.5",
     "xlsxwriter>=3.2.9",

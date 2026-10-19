@@ -6,6 +6,18 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 5.1.0 — 2026-10-19
+
+- **A Postgres store behind the same ledger API (T542).** `Ledger(dsn)`,
+  `DAT_LEDGER` or `.datconfig.yaml` `ledger:` naming
+  `postgresql://…?art=<folder>` opens a ledger whose quads live in
+  Postgres (one per schema; `options=-csearch_path%3D<schema>`) and whose
+  art store stays the folder `art` names. Same rows, fold and tests as
+  SQLite. Needs `pip install 'dvc_dat[pg]'` (psycopg 3). Differences:
+  Postgres text cannot hold NUL, so a row carrying `\x00` is refused.
+  The store interface is named (`Store`, `Writer`); the SQLite one is
+  `SqliteStore`.
+
 ## 5.0.0 — 2026-10-18
 
 - **The ledger rebuilt to the value-space design (T534/T539); the 4.0 ledger

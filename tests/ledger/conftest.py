@@ -1,4 +1,4 @@
-"""Fixtures for the ledger suite: a fresh ledger per test and a pinned environment.
+"""Fixtures for the ledger suite: a fresh ledger per test, once per store (``backends``), and a pinned environment.
 
 The environment provider (the test seam, A51) is pinned so ``eval`` is
 deterministic: one repo, ``testrepo``, at commit ``abc1234``, clean, its
@@ -14,7 +14,8 @@ HERE = Path(__file__).parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
-from dvc_dat.ledger import Code, Env, Ledger, set_env_provider  # noqa: E402
+import backends  # noqa: E402
+from dvc_dat.ledger import Code, Env, set_env_provider  # noqa: E402
 
 ENV = Env({"testrepo": Code(None, "abc1234", False, HERE)}, "sha256:lock-1", "test-platform")
 
@@ -45,9 +46,19 @@ def envbox():
     set_env_provider(old)
 
 
+@pytest.fixture(params=backends.BACKENDS)
+def backend(request):
+    """``sqlite`` or ``pg``: every test taking a ledger fixture runs once per store."""
+    return request.param
+
+
 @pytest.fixture
-def L(tmp_path):
-    return Ledger(tmp_path / "ledger", create=True)
+def L(tmp_path, backend):
+    return backends.make(backend, tmp_path / "ledger")
+
+
+def pytest_sessionfinish(session, exitstatus):
+    backends.drop()
 
 
 @pytest.fixture
