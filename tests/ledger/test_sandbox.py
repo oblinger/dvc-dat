@@ -192,7 +192,7 @@ PKG = {
         @ledger_fn
         def library_data(rev, *, game: str) -> dict:
             from importlib.resources import files
-            return {"n": len(files("jsonschema_specifications").joinpath("schemas").iterdir())}
+            return {"n": len(list(files("jsonschema_specifications").joinpath("schemas").iterdir()))}
     '''),
     "sbx/stage/eager.py": textwrap.dedent('''
         from pathlib import Path
