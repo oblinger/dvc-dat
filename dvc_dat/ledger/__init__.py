@@ -17,7 +17,7 @@ The environment is found by discovery; ``set_env_provider``, ``Env`` and
 """
 
 from .env import Code, Env, set_env_provider  # noqa: F401  (the test seam, importable by name)
-from .errors import (AliasLoop, ConfinedWrite, Exists, LedgerError, LockTimeout, Multiple, NotEvaluated, Undeclared, Unindexed,
+from .errors import (AliasLoop, ConfinedNetwork, ConfinedWrite, Exists, LedgerError, LockTimeout, Multiple, NotEvaluated, Undeclared, Unindexed,
                      UnmountedImport, UntracedRead)
 from .fn import Fn, ledger_fn
 from .helpers import bump
@@ -28,5 +28,5 @@ from .value import Dat, Pickled, Table, Value, ledger_class
 
 __all__ = ["Ledger", "Rev", "Ref", "Row", "Transaction", "Value", "Pickled", "Table", "Dat", "Fn",
            "ledger_fn", "ledger_class", "bump", "attr", "LedgerError", "Multiple", "NotEvaluated",
-           "UnmountedImport", "UntracedRead", "ConfinedWrite", "LockTimeout", "Unindexed", "Exists", "Undeclared",
+           "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "LockTimeout", "Unindexed", "Exists", "Undeclared",
            "AliasLoop"]

@@ -14,11 +14,18 @@ Worker side (``worker.py`` drives it): ``MountFinder``, first on
 ancestors empty namespace packages (their ``__init__`` never runs), records
 every module it loads against the innermost running eval, and refuses a
 module that would resolve inside a mounted repo's checkout but under no mount
-(``UnmountedImport``). An audit hook on ``open`` refuses, while a function
-body runs, a read outside the mounted roots, the art store (dats), the
-worker's scratch and the interpreter's own files (``UntracedRead``), and a
-write outside the scratch (where ``work`` folders live) and the art store
-(``ConfinedWrite``).
+(``UnmountedImport``). An audit hook refuses, while a function body (or its
+module's load) runs, a read (``open``, ``os.listdir``/``scandir``) outside
+the mounted roots, the art store (the dats) and the body's ``work`` folder
+(``UntracedRead``), except the import system's own reads of module files and,
+while a module from outside the mounts is being imported, its reads in the
+interpreter's folders (covered by ``uv.lock``); and a write anywhere but the running body's ``work`` folder, the dat being produced
+(``ConfinedWrite``): ``open``/``os.open`` for writing, every path-changing
+``os`` call (mkdir, rename, link, remove, chmod, ...), and through them
+``pathlib``, ``shutil``, ``tempfile`` and ``sqlite3``. The ledger's own
+writes inside a body (a nested eval's seal, a dat materialised into the art
+store) run ``unguarded``. The same hook refuses a host-name lookup or an internet
+send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
 Before each top-level call the mounted modules are purged from
 ``sys.modules``, so each run loads (and records) what it uses; a nested eval
 runs in-process and its loads count toward its own entry (Q37 (ii)).
@@ -41,6 +48,8 @@ import importlib.util
 import inspect
 import os
 import pickle
+import re
+import socket
 import struct
 import subprocess
 import sys
@@ -48,11 +57,12 @@ import tempfile
 import threading
 import traceback
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from .codec import sha256
 from .env import Env, current_env
-from .errors import ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
+from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .fn import Fn, drop_work, fn_subject, mounts_at, mounts_hash, seal_entry, wrap_result
 
 if TYPE_CHECKING:
@@ -376,11 +386,28 @@ class _State:
     mounts: List[Mount] = []
     frames: List[Set[str]] = []
     guard = False
-    reads: List[str] = []
-    writes: List[str] = []
+    reads: List[str] = []                           # the mounted roots and the art store (the dats)
+    importable: List[str] = []                      # sys.path and the mounts: where the import system reads
+    interpreter: List[str] = []                     # where an unmounted module's own import may read
+    works: List[Optional[str]] = []                 # the work folder of each running body, innermost last
+    store: str = ""                                 # the ledger's own database file (a folder ledger)
+    hosts: Set[str] = set()                         # the ledger's own endpoint, by name and by address
+    addrs: Set[Tuple[str, int]] = set()
 
 
 STATE = _State()
+
+
+@contextmanager
+def unguarded() -> Iterator[None]:
+    """The ledger's own machinery inside a body (a nested eval, a dat materialised into the art store):
+    its reads and writes are the view's, not the function's, so the open hook stands aside for it."""
+    old = STATE.guard
+    STATE.guard = False
+    try:
+        yield
+    finally:
+        STATE.guard = old
 
 
 class _Loader(importlib.machinery.SourceFileLoader):
@@ -428,37 +455,175 @@ class MountFinder(importlib.abc.MetaPathFinder):
         return None
 
 
-def _allowed_roots() -> Tuple[List[str], List[str]]:
-    import dvc_dat
+def _interpreter_roots() -> List[str]:
+    """The interpreter's own folders: the prefixes, the standard library and ``site-packages``."""
     import sysconfig
 
-    reads = {sys.prefix, sys.base_prefix, sys.exec_prefix, "/dev", str(Path(dvc_dat.__file__).parent)}
+    roots = {sys.prefix, sys.base_prefix, sys.exec_prefix}
     for k in ("stdlib", "platstdlib", "purelib", "platlib"):
         p = sysconfig.get_paths().get(k)
         if p:
-            reads.add(p)
-    return [os.path.realpath(r) for r in reads], []
+            roots.add(p)
+    return [os.path.realpath(r) for r in roots]
 
 
 def _under(p: str, roots: List[str]) -> bool:
     return any(p == r or p.startswith(r + os.sep) for r in roots)
 
 
+_NET_NAME = ("socket.getaddrinfo", "socket.gethostbyname", "socket.gethostbyaddr", "socket.getnameinfo")
+_NET_SEND = ("socket.connect", "socket.sendto", "socket.sendmsg")
+
+
+def _ledger_endpoints(path: Any) -> Tuple[Set[str], Set[Tuple[str, int]]]:
+    """The hosts and ``(address, port)`` pairs a Postgres ledger's DSN names (none for a folder ledger)."""
+    from urllib.parse import urlsplit
+
+    text = str(path)
+    if not text.startswith(("postgres://", "postgresql://")):
+        return set(), set()
+    netloc = re.split(r"[/?]", text.partition("://")[2], maxsplit=1)[0].rpartition("@")[2]
+    hosts, addrs = set(), set()
+    for part in netloc.split(","):
+        u = urlsplit("//" + part)
+        host, port = u.hostname or "localhost", u.port or 5432
+        hosts.add(host)
+        try:
+            for info in socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP):
+                addrs.add((str(info[4][0]), int(info[4][1])))
+        except OSError:
+            pass                                    # unresolvable now: the ledger itself will say so
+    return hosts, addrs
+
+
+def _network(event: str, args: Any) -> None:
+    if event in _NET_NAME:
+        host = args[0]
+        host = host[0] if event == "socket.getnameinfo" and isinstance(host, tuple) else host
+        if isinstance(host, bytes):
+            host = host.decode(errors="replace")
+        if host is not None and host not in STATE.hosts and not any(host == a for a, _p in STATE.addrs):
+            raise ConfinedNetwork(f"{host}: a sandboxed function does not use the network")
+        return
+    sock, addr = args[0], args[1]
+    if getattr(sock, "family", None) not in (socket.AF_INET, socket.AF_INET6) or not isinstance(addr, tuple):
+        return                                      # a local (AF_UNIX) socket is not the network
+    if (str(addr[0]), int(addr[1])) not in STATE.addrs:
+        raise ConfinedNetwork(f"{addr[0]}:{addr[1]}: a sandboxed function does not use the network")
+
+
+_OS_READS = ("os.listdir", "os.scandir", "os.listxattr", "os.getxattr")
+_DEV_NULL = [os.path.realpath(os.devnull)]
+_WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC
+# the path-changing os events: each written path's argument index, and its dir_fd's (None: takes none)
+_OS_WRITES: Dict[str, Tuple[Tuple[int, Optional[int]], ...]] = {
+    "os.mkdir": ((0, 2),), "os.rmdir": ((0, 1),), "os.remove": ((0, 1),),
+    "os.rename": ((0, 2), (1, 3)), "os.link": ((0, 2), (1, 3)), "os.symlink": ((1, 2),),
+    "os.chmod": ((0, 2),), "os.chown": ((0, 3),), "os.utime": ((0, 3),), "os.truncate": ((0, None),),
+    "os.chflags": ((0, None),), "os.lchflags": ((0, None),), "os.setxattr": ((0, None),),
+    "os.removexattr": ((0, None),),
+    "shutil.rmtree": ((0, 1),), "shutil.move": ((0, None), (1, None)), "shutil.copytree": ((1, None),),
+    "shutil.copyfile": ((1, None),),            # these four only name the target first; os.* events follow
+}
+
+
+def _fd_path(fd: int) -> Optional[str]:
+    """The path an open descriptor names, or ``None`` for one that is no file (a pipe, a socket)."""
+    try:
+        if sys.platform == "darwin":
+            import fcntl
+
+            return os.fsdecode(fcntl.fcntl(fd, fcntl.F_GETPATH, bytes(1024)).rstrip(b"\0")) or None
+        return os.readlink(f"/proc/self/fd/{fd}")
+    except (OSError, ValueError):
+        return None
+
+
+def _resolve(path: Any, dir_fd: Any = None) -> Optional[str]:
+    """The real path an audited argument names: a path (relative to ``dir_fd`` when one is given, else to
+    the working directory) or a descriptor; ``None`` when it names no file."""
+    if isinstance(path, int):
+        return _fd_path(path)
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        return None
+    text = os.fsdecode(os.fspath(path))
+    if isinstance(dir_fd, int) and dir_fd >= 0 and not os.path.isabs(text):
+        base = _fd_path(dir_fd)
+        if base is None:
+            raise ConfinedWrite(f"{text} under descriptor {dir_fd}: a sandboxed function writes only in its "
+                                "work folder")
+        text = os.path.join(base, text)
+    return os.path.realpath(text)
+
+
+def _writable() -> List[str]:
+    work = STATE.works[-1] if STATE.works else None
+    return ([work] if work else []) + _DEV_NULL
+
+
+def _check_write(p: Optional[str]) -> None:
+    if p is not None and not _under(p, _writable()):
+        raise ConfinedWrite(f"{p}: a sandboxed function writes only in its work folder")
+
+
 def _audit(event: str, args: Any) -> None:
-    if event != "open" or not STATE.guard:
+    if not STATE.guard:
+        return
+    if event in _NET_NAME or event in _NET_SEND:
+        _network(event, args)
+        return
+    if event in _OS_WRITES:
+        for i, d in _OS_WRITES[event]:
+            _check_write(_resolve(args[i], args[d] if d is not None and d < len(args) else None))
+        return
+    if event == "sqlite3.connect":
+        db = os.fsdecode(os.fspath(args[0])) if isinstance(args[0], (str, bytes, os.PathLike)) else ""
+        db = db[5:].partition("?")[0] if db.startswith("file:") else db
+        if db and db != ":memory:" and os.path.realpath(db) != STATE.store:
+            _check_write(os.path.realpath(db))
+        return
+    if event in _OS_READS:
+        _check_read(_resolve(args[0] if args and args[0] is not None else "."), sys._getframe(1))
+        return
+    if event != "open":
         return
     path, mode, flags = (list(args) + [None, None, None])[:3]
     if not isinstance(path, (str, bytes, os.PathLike)):
-        return
-    p = os.path.realpath(os.fsdecode(path))
+        return                                      # a descriptor, opened (and checked) already
+    p = os.path.realpath(os.fsdecode(os.fspath(path)))
     write = (isinstance(mode, str) and any(c in mode for c in "wax+")) or (
-        isinstance(flags, int) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT))
+        isinstance(flags, int) and flags & _WRITE_FLAGS)
     if write:
-        if not _under(p, STATE.writes):
-            raise ConfinedWrite(f"{p}: a sandboxed function writes only in its work folder")
+        _check_write(p)
         return
-    if not _under(p, STATE.reads + STATE.writes):
-        raise UntracedRead(f"{p}: outside the mounts, the dats and the scratch")
+    _check_read(p, sys._getframe(1))
+
+
+def _importing(frame: Any) -> Optional[str]:
+    """The module whose import is running at ``frame`` (the innermost module body the import system
+    called), or ``None`` outside any import."""
+    f = frame
+    while f is not None:
+        if f.f_code.co_name == "<module>" and f.f_back is not None \
+                and f.f_back.f_code.co_filename.startswith("<frozen importlib"):
+            return str(f.f_globals.get("__name__", ""))
+        f = f.f_back
+    return None
+
+
+def _check_read(p: Optional[str], caller: Any) -> None:
+    """Reads: the mounts, the dats, the running body's work folder; the import system's own reads of
+    module files; and, while a module from outside the mounts is being imported, the interpreter's
+    folders (that module's data, covered by ``uv.lock``). Else ``UntracedRead``."""
+    if p is None or _under(p, STATE.reads + _writable()):
+        return
+    if caller.f_code.co_filename.startswith("<frozen importlib") and _under(p, STATE.importable):
+        return
+    if _under(p, STATE.interpreter):
+        mod = _importing(caller)
+        if mod is not None and _mount_of(STATE.mounts, mod) is None:
+            return
+    raise UntracedRead(f"{p}: outside the mounts, the dats and the work folder")
 
 
 def install_worker(ledger: Any, mounts: List[Mount], scratch: Path) -> None:
@@ -467,11 +632,16 @@ def install_worker(ledger: Any, mounts: List[Mount], scratch: Path) -> None:
     if not any(isinstance(f, MountFinder) for f in sys.meta_path):
         sys.meta_path.insert(0, MountFinder())
         sys.addaudithook(_audit)
+        tempfile.gettempdir()                       # probed unconfined, so a default temp file in a body is
+                                                    # refused by name (ConfinedWrite), not "no usable dir"
     STATE.mounts = mounts
-    base_reads, _ = _allowed_roots()
-    art = os.path.realpath(ledger._store.art.root)
-    STATE.reads = base_reads + [os.path.realpath(m.path) for m in mounts] + [art]
-    STATE.writes = [os.path.realpath(scratch), art]
+    roots = [os.path.realpath(m.path) for m in mounts]
+    STATE.reads = roots + [os.path.realpath(ledger._store.art.root)]
+    STATE.interpreter = _interpreter_roots()
+    STATE.importable = roots + [os.path.realpath(p) for p in sys.path if p and os.path.isdir(p)]
+    store = getattr(ledger._store, "path", None)
+    STATE.store = os.path.realpath(store) if isinstance(store, Path) else ""
+    STATE.hosts, STATE.addrs = _ledger_endpoints(ledger.path)
 
 
 def purge_mounted() -> None:
@@ -484,46 +654,55 @@ def purge_mounted() -> None:
 def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> Any:
     from .rev import Rev
 
-    env = current_env()
-    mounts, rows = mounts_for(plain, env)
-    STATE.mounts = mounts
-    modname, attr_name = fn._info["modname"], fn._info["attr"]
-    STATE.frames.append(set())
     outer_guard = STATE.guard
-    work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None)) \
-        if fn._takes_work else None
+    STATE.guard = False                             # around the body, the ledger's own machinery runs
     try:
-        obj = getattr(importlib.import_module(modname), attr_name)
-        if not getattr(obj, "__ledger_fn__", False):
-            raise TypeError(f"{fn.name!r} is not a ledger function (mark it @ledger_fn)")
+        env = current_env()
+        mounts, rows = mounts_for(plain, env)
+        STATE.mounts = mounts
+        modname, attr_name = fn._info["modname"], fn._info["attr"]
+        work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None)) \
+            if fn._takes_work else None
+        STATE.frames.append(set())
+        STATE.works.append(os.path.realpath(work) if work is not None else None)
         rec: Dict[str, str] = {}
-        args = dict(kw, work=work) if work is not None else kw
-        STATE.guard = True
+        cwd = os.getcwd()
         try:
-            out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+            if work is not None:
+                os.chdir(work)                      # a relative path resolves in the dat being produced
+            STATE.guard = True                      # the module's own load is confined like the body
+            try:
+                obj = getattr(importlib.import_module(modname), attr_name)
+                if not getattr(obj, "__ledger_fn__", False):
+                    raise TypeError(f"{fn.name!r} is not a ledger function (mark it @ledger_fn)")
+                args = dict(kw, work=work) if work is not None else kw
+                out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+            finally:
+                STATE.guard = False
+                os.chdir(cwd)
         except BaseException:
             drop_work(work, None)
             raise
         finally:
-            STATE.guard = outer_guard
-        loaded = STATE.frames[-1]
+            loaded = STATE.frames.pop()
+            STATE.works.pop()
+        value = wrap_result(fn.name, obj, out)
+        mods = module_shas(plain, env, closure(mounts, [modname, *sorted(loaded)]))
+        fsub = fn_subject(fn.name, mods, mounts_hash(plain))
+        trace = dict(rec)
+        trace.update({"fn": fsub, "uv.lock": env.lock, "platform": env.platform})
+        salt = rows.get(fn._info["prefix"], {}).get("salt")
+        if salt is not None:
+            trace["salt"] = salt
+        if not seal:
+            value.trace = trace  # type: ignore[misc]
+            drop_work(work, value)
+            return value
+        sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", modules=mods)
+        drop_work(work, sealed)
+        return sealed
     finally:
-        STATE.frames.pop()
-    value = wrap_result(fn.name, obj, out)
-    mods = module_shas(plain, env, closure(mounts, [modname, *sorted(loaded)]))
-    fsub = fn_subject(fn.name, mods, mounts_hash(plain))
-    trace = dict(rec)
-    trace.update({"fn": fsub, "uv.lock": env.lock, "platform": env.platform})
-    salt = rows.get(fn._info["prefix"], {}).get("salt")
-    if salt is not None:
-        trace["salt"] = salt
-    if not seal:
-        value.trace = trace  # type: ignore[misc]
-        drop_work(work, value)
-        return value
-    sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", modules=mods)
-    drop_work(work, sealed)
-    return sealed
+        STATE.guard = outer_guard
 
 
 # -- the parent's view of a worker ---------------------------------------------------------------------

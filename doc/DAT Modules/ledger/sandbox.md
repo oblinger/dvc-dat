@@ -50,11 +50,53 @@ Worker side:
   raises `UnmountedImport("<module> from <importer>; mount it or move
   it")` for a module that would resolve inside a mounted repo's
   checkout under no mount.
-- The audit hook on `open`, active only while a function body runs:
-  a write outside the worker's scratch and the art store is
-  `ConfinedWrite`; a read outside those, the mounted roots, the
-  interpreter's folders, `/dev` and the dvc-dat package is
-  `UntracedRead`.
+- The audit hook, active only while a function body (or its module's
+  first load) runs. Writes go only into that body's `work` folder,
+  the dat being produced, and `/dev/null`; anywhere else, the worker's
+  scratch and the art store included, is `ConfinedWrite("<path>: a
+  sandboxed function writes only in its work folder")`. Checked:
+  `open` and `os.open` for writing (a mode with `w`, `a`, `x` or `+`,
+  or `O_WRONLY`, `O_RDWR`, `O_CREAT`, `O_TRUNC`); every path-changing
+  `os` call (`mkdir`, `rmdir`, `remove`, `rename`/`replace` and `link`
+  on both paths, `symlink`, `chmod`, `chown`, `utime`, `truncate`,
+  `chflags`, `setxattr`, `removexattr`), a `dir_fd` resolved to its
+  folder and a descriptor to its file; `sqlite3.connect` on any
+  database but the ledger's own; and through these `pathlib`,
+  `shutil` and `tempfile` (a default temp file lands in `$TMPDIR`, so
+  it is refused; pass `dir=work`). A function with no `work`
+  parameter writes nowhere. Reads go only into the mounted roots, the
+  art store (the dats) and that `work` folder; anywhere else, the
+  worker's scratch, the interpreter's folders, `site-packages`, the
+  dvc-dat package and the rest of a mounted repo included, is
+  `UntracedRead("<path>: outside the mounts, the dats and the work
+  folder")`. Checked: `open`/`os.open` for reading and the listings
+  `os.listdir`, `os.scandir`, `os.listxattr`, `os.getxattr`, and
+  through them `pathlib`, `shutil` and `glob`. The ledger's own reads
+  (`rev[...]`, `rev.load`, queries) are the view, not file opens.
+  Two reads stay open because their content is already in the trace:
+  the import system reading a module file (the finder decides what
+  imports; the mounted ones are in `fn`, the rest under `uv.lock`), and,
+  while a module from outside the mounts is being imported, that
+  import's reads in the interpreter's folders (a library loading its
+  bundled data, `uv.lock`). A library's data read after its import is
+  refused.
+- While a body with a `work` folder runs, the worker's current
+  directory is that folder, so a relative path lands in the dat being
+  produced.
+- `unguarded()`: the ledger's own machinery inside a body (a nested
+  `rev.eval`'s lookup and seal, a `Dat` materialised into the art
+  store on load) runs with the hook stood aside; a nested body is
+  confined again, to its own `work` folder.
+- The same hook on the network, active while a function body runs:
+  resolving a host name (`socket.getaddrinfo`, `gethostbyname`,
+  `gethostbyaddr`, `getnameinfo`) or sending to an internet address
+  (`socket.connect`, `sendto`, `sendmsg` on an `AF_INET`/`AF_INET6`
+  socket) is `ConfinedNetwork("<host or address:port>: a sandboxed
+  function does not use the network")`, raised before the call
+  reaches the system. Allowed: the ledger's own endpoint when it is
+  Postgres (the DSN's hosts, and their addresses at the port, resolved
+  when the worker installs), and local
+  `AF_UNIX` sockets and socket pairs, which are not the network.
 - `worker_main()`: the loop, one request and one reply until stdin
   closes; adopts the parent's `Env.code` through `set_env_provider`,
   purges the mounted modules, loads the function at the requested
@@ -77,8 +119,7 @@ Worker side:
 - Bulk data never crosses the pipe on a sealing call: the worker seals
   and returns the subject only.
 
-- Stubs, as built: no network refusal; no idle retirement; reads and
-  writes allowed more widely than the design's final form; a nested
+- Stubs, as built: no idle retirement; a nested
   eval under another mount runs in the same worker; a base-mode eval
   nested inside a worker is unsupported; repo files read under a mount
   are allowed and not recorded.

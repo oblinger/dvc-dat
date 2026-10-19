@@ -18,11 +18,15 @@ class UnmountedImport(LedgerError, ImportError):
 
 
 class UntracedRead(LedgerError, PermissionError):
-    """A sandboxed function opened a path outside the mounts, the dats and its scratch."""
+    """A sandboxed function read a path outside the mounts, the dats and its work folder."""
 
 
 class ConfinedWrite(LedgerError, PermissionError):
-    """A sandboxed function wrote outside its work folder (the worker's scratch) and the store."""
+    """A sandboxed function wrote outside its work folder, the dat being produced."""
+
+
+class ConfinedNetwork(LedgerError, PermissionError):
+    """A sandboxed function resolved a host name or opened a network connection."""
 
 
 class LockTimeout(LedgerError, TimeoutError):

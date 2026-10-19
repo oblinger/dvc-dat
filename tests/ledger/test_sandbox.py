@@ -7,9 +7,9 @@ import textwrap
 import backends
 import pytest
 
-from dvc_dat.ledger import (ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead, bump,
-                             set_env_provider)
-from dvc_dat.ledger.sandbox import shutdown
+from dvc_dat.ledger import (ConfinedNetwork, ConfinedWrite, LedgerError, NotEvaluated, UnmountedImport, UntracedRead,
+                             bump, set_env_provider)
+from dvc_dat.ledger.sandbox import _ledger_endpoints, shutdown
 
 PKG = {
     "pyproject.toml": '[project]\nname = "sbx-repo"\nversion = "0.1.0"\n',
@@ -77,6 +77,159 @@ PKG = {
         def scribble(rev, *, game: str) -> dict:
             Path("/tmp/ledger-sandbox-scribble.txt").write_text("x")
             return {}
+    '''),
+    "sbx/stage/writes.py": textwrap.dedent('''
+        import os
+        import shutil
+        import sqlite3
+        import tempfile
+        from pathlib import Path
+        from dvc_dat.ledger import ledger_fn
+
+        def _dirfd(d, w):
+            fd = os.open(d, os.O_RDONLY)
+            try:
+                os.mkdir("by-fd", dir_fd=fd)
+            finally:
+                os.close(fd)
+
+        def _src(w):
+            (w / "s").write_text("x")
+            return w / "s"
+
+        HOWS = {
+            "open": lambda d, w: open(d / "a", "w").write("x"),
+            "os.open": lambda d, w: os.close(os.open(d / "a", os.O_WRONLY | os.O_CREAT)),
+            "o_trunc": lambda d, w: os.close(os.open(d / "seed", os.O_RDONLY | os.O_TRUNC)),
+            "write_text": lambda d, w: (d / "a").write_text("x"),
+            "mkdir": lambda d, w: os.mkdir(d / "m"),
+            "makedirs": lambda d, w: os.makedirs(d / "m1" / "m2"),
+            "rename_out": lambda d, w: os.rename(_src(w), d / "r"),
+            "replace_out": lambda d, w: os.replace(_src(w), d / "r"),
+            "rename_in": lambda d, w: os.rename(d / "seed", w / "stolen"),
+            "link_in": lambda d, w: os.link(d / "seed", w / "hard"),
+            "symlink": lambda d, w: os.symlink(w, d / "sl"),
+            "remove": lambda d, w: os.remove(d / "seed"),
+            "rmdir": lambda d, w: os.rmdir(d / "empty"),
+            "chmod": lambda d, w: os.chmod(d / "seed", 0o600),
+            "utime": lambda d, w: os.utime(d / "seed"),
+            "truncate": lambda d, w: os.truncate(d / "seed", 0),
+            "copy": lambda d, w: shutil.copy(_src(w), d / "c"),
+            "copytree": lambda d, w: shutil.copytree(w, d / "t"),
+            "move": lambda d, w: shutil.move(_src(w), d / "mv"),
+            "rmtree": lambda d, w: shutil.rmtree(d / "tree"),
+            "mkstemp": lambda d, w: os.close(tempfile.mkstemp(dir=d)[0]),
+            "mkdtemp": lambda d, w: tempfile.mkdtemp(dir=d),
+            "named": lambda d, w: tempfile.NamedTemporaryFile(dir=d).close(),
+            "sqlite": lambda d, w: sqlite3.connect(d / "x.db").execute("CREATE TABLE t (x)"),
+            "dir_fd": _dirfd,
+        }
+
+        def seed(d):
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "seed").write_text("s")
+            (d / "empty").mkdir()
+            (d / "tree").mkdir()
+            (d / "tree" / "f").write_text("f")
+
+        @ledger_fn
+        def write(rev, *, how: str, where: str, work: Path) -> dict:
+            if where == "work":                     # every way, inside the dat being produced: all allowed
+                for name, act in HOWS.items():
+                    seed(work / name)
+                    (work / f"{name}-src").mkdir()
+                    act(work / name, work / f"{name}-src")
+                return {"n": len(HOWS)}
+            places = {"scratch": work.parent, "art": Path(rev.ledger._store.art.root),
+                      "mount": Path(__file__).parent}
+            d = places.get(where) or Path(where)
+            (work / "src").mkdir()
+            if how == "mkstemp-default":
+                os.close(tempfile.mkstemp()[0])
+            else:
+                HOWS[how](d, work / "src")
+            return {}
+    '''),
+    "sbx/stage/reads.py": textwrap.dedent('''
+        import glob
+        import os
+        import shutil
+        import sys
+        from pathlib import Path
+        import dvc_dat
+        import yaml
+        from dvc_dat.ledger import ledger_fn
+
+        HOWS = {
+            "open": lambda p: Path(p).read_text(),
+            "os.open": lambda p: os.close(os.open(p, os.O_RDONLY)),
+            "listdir": lambda p: os.listdir(Path(p).parent),
+            "scandir": lambda p: list(os.scandir(Path(p).parent)),
+            "iterdir": lambda p: list(Path(p).parent.iterdir()),
+            "glob": lambda p: glob.glob(str(Path(p).parent / "*")),
+            "walk": lambda p: list(os.walk(Path(p).parent)),
+            "copy": lambda p: shutil.copy(p, Path.cwd() / "copied"),
+        }
+
+        @ledger_fn
+        def read(rev, *, how: str, where: str, work: Path) -> dict:
+            places = {"stdlib": os.__file__, "site": yaml.__file__, "dvc_dat": dvc_dat.__file__,
+                      "prefix": os.path.join(sys.prefix, "pyvenv.cfg"), "repo": Path(__file__).parents[2] / "pyproject.toml",
+                      "scratch": work.parent / "nothing-here"}
+            out = HOWS[how](places.get(where) or where)
+            return {"n": len(out) if isinstance(out, list) else -1}
+
+        @ledger_fn
+        def allowed(rev, *, game: str, work: Path) -> dict:
+            (work / "mine.txt").write_text(game)
+            n = len(Path(__file__).read_text()) > 0 and sorted(os.listdir(Path(__file__).parent)) != []
+            art = Path(rev.ledger._store.art.root)
+            import colorsys                         # a stdlib import in the body: the import system reads
+            import jsonschema_specifications        # its import reads its own schemas (site-packages)
+            return {"n": bool(n), "mine": Path("mine.txt").read_text(), "art": art.is_dir() and bool(os.listdir(art)),
+                    "registry": len(jsonschema_specifications.REGISTRY) > 0, "h": colorsys.rgb_to_hsv(0, 0, 0)}
+
+        @ledger_fn
+        def library_data(rev, *, game: str) -> dict:
+            from importlib.resources import files
+            return {"n": len(list(files("jsonschema_specifications").joinpath("schemas").iterdir()))}
+    '''),
+    "sbx/stage/eager.py": textwrap.dedent('''
+        from pathlib import Path
+        from dvc_dat.ledger import ledger_fn
+
+        HOSTS = Path("/etc/hosts").read_text()     # at load: the module's own load is confined too
+
+        @ledger_fn
+        def f(rev, *, game: str) -> dict:
+            return {}
+    '''),
+    "sbx/stage/net.py": textwrap.dedent('''
+        import socket
+        from dvc_dat.ledger import ledger_fn
+
+        @ledger_fn
+        def resolve(rev, *, host: str) -> dict:
+            return {"n": len(socket.getaddrinfo(host, 80))}
+
+        @ledger_fn
+        def dial(rev, *, port: int) -> dict:
+            with socket.socket() as s:
+                s.connect(("127.0.0.1", port))
+            return {}
+
+        @ledger_fn
+        def datagram(rev, *, port: int) -> dict:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.sendto(b"x", ("127.0.0.1", port))
+            return {}
+
+        @ledger_fn
+        def pair(rev, *, text: str) -> dict:
+            a, b = socket.socketpair()
+            with a, b:
+                a.sendall(text.encode())
+                return {"echo": b.recv(64).decode()}
     '''),
 }
 
@@ -194,3 +347,88 @@ def test_load_fn_refuses_an_unmounted_import_at_load(sbx):
     with pytest.raises(UnmountedImport, match="sbx.other from sbx.stage.fns; mount it or move it"):
         L.at().load_fn("sbx.stage.fns.borrow")
     assert L.at().load_fn("sbx.stage.fns.snoop").mode == "sandbox"   # same module, no such import
+
+
+def test_network_refused(sbx):
+    import socket
+
+    L, _repo = sbx
+    assert issubclass(ConfinedNetwork, PermissionError) and issubclass(ConfinedNetwork, LedgerError)
+    with pytest.raises(ConfinedNetwork, match="example.com: a sandboxed function does not use the network"):
+        L.at().eval("sbx.stage.net.resolve", host="example.com")
+    with socket.socket() as srv:
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        srv.setblocking(False)
+        port = srv.getsockname()[1]
+        with pytest.raises(ConfinedNetwork, match=f"127.0.0.1:{port}"):
+            L.at().eval("sbx.stage.net.dial", port=port)
+        with pytest.raises(BlockingIOError):
+            srv.accept()                            # refused before the connect was made
+    with pytest.raises(ConfinedNetwork):
+        L.at().eval("sbx.stage.net.datagram", port=9)
+    assert L.at().eval("sbx.stage.net.pair", text="hi").obj == {"echo": "hi"}   # a local socket is not the network
+
+
+def test_the_ledgers_own_endpoint_is_allowed():
+    hosts, addrs = _ledger_endpoints("postgresql://u:pw@127.0.0.1:5433/db?art=/tmp/a")
+    assert hosts == {"127.0.0.1"} and addrs == {("127.0.0.1", 5433)}
+    hosts, addrs = _ledger_endpoints("postgresql://u@[::1],127.0.0.1:6000/db")
+    assert hosts == {"::1", "127.0.0.1"} and ("127.0.0.1", 6000) in addrs and ("::1", 5432) in addrs
+    assert _ledger_endpoints("/some/ledger/folder") == (set(), set())
+
+
+WRITE_HOWS = ["open", "os.open", "o_trunc", "write_text", "mkdir", "makedirs", "rename_out", "replace_out",
+              "rename_in", "link_in", "symlink", "remove", "rmdir", "chmod", "utime", "truncate", "copy",
+              "copytree", "move", "rmtree", "mkstemp", "mkdtemp", "named", "sqlite"]
+
+
+def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
+    L, repo = sbx
+    assert L.at().eval("sbx.stage.writes.write", how="all", where="work").obj == {"n": len(WRITE_HOWS) + 1}
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "seed").write_text("s")
+    (outside / "empty").mkdir()
+    (outside / "tree").mkdir()
+    (outside / "tree" / "f").write_text("f")
+    before = sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*"))
+    for how in WRITE_HOWS:
+        with pytest.raises(ConfinedWrite, match="a sandboxed function writes only in its work folder"):
+            L.at().eval("sbx.stage.writes.write", how=how, where=str(outside))
+    assert sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*")) == before
+    assert (outside / "seed").read_text() == "s"
+    for where in ("scratch", "art"):
+        for how in ("open", "mkdir", "mkstemp"):
+            with pytest.raises(ConfinedWrite):
+                L.at().eval("sbx.stage.writes.write", how=how, where=where)
+    with pytest.raises(ConfinedWrite):
+        L.at().eval("sbx.stage.writes.write", how="mkstemp-default", where="")
+    with pytest.raises(ConfinedWrite):                  # a path relative to a descriptor on a mount
+        L.at().eval("sbx.stage.writes.write", how="dir_fd", where="mount")
+    assert not (repo / "sbx/stage/by-fd").exists()
+
+
+READ_HOWS = ["open", "os.open", "listdir", "scandir", "iterdir", "copy"]
+SWALLOWED = ["glob", "walk"]            # they catch the OSError themselves: the folder reads as empty
+
+
+def test_reads_confined_to_the_mounts_the_dats_and_the_work_folder(sbx, tmp_path):
+    pytest.importorskip("jsonschema_specifications")
+    L, _repo = sbx
+    L.at().eval("sbx.stage.fns.folder", game="G1")           # something in the art store
+    v = L.at().eval("sbx.stage.reads.allowed", game="G1")
+    assert v.obj == {"n": True, "mine": "G1", "art": True, "registry": True, "h": (0.0, 0.0, 0.0)}
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "f.txt").write_text("x")
+    for where in ("stdlib", "site", "dvc_dat", "prefix", "repo", "scratch", str(outside / "f.txt")):
+        for how in READ_HOWS:
+            with pytest.raises(UntracedRead, match="outside the mounts, the dats and the work folder"):
+                L.at().eval("sbx.stage.reads.read", how=how, where=where)
+        for how in SWALLOWED:
+            assert L.at().eval("sbx.stage.reads.read", how=how, where=where).obj == {"n": 0}
+    with pytest.raises(UntracedRead):                       # a library's data, read after its import
+        L.at().eval("sbx.stage.reads.library_data", game="G1")
+    with pytest.raises(UntracedRead, match="/etc/hosts"):    # a mounted module's own load
+        L.at().eval("sbx.stage.eager.f", game="G1")

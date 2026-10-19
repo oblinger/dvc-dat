@@ -662,8 +662,8 @@ except UnmountedImport as e:
     print("UnmountedImport:", e)     # → … demo_game.shots
 
 # %% [markdown]
-# The second reads a file outside the mounts, the dats and the
-# worker's scratch.
+# The second reads a file outside the mounts, the dats and its
+# work folder.
 
 # %%
 try:
