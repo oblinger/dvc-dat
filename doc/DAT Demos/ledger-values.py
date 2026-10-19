@@ -281,8 +281,8 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 # `db/value` names the bytes by class and hash. `db/kind` is the
 # class. `db/provenance` is the caller's word. `db/preds` lists the
 # preds the kind declared when the value was stored. The
-# `db/trace/…` rows are the trace (Evaluation § What an entry
-# depends on: the trace): a hand seal records the environment it
+# `db/trace/…` rows are the trace (Ledger evaluation § Evaluation
+# is a lookup, a call and a trace): a hand seal records the environment it
 # runs in. Then one row per pred, and the alias.
 
 # %% [markdown]
@@ -407,7 +407,7 @@ del tele_video.preds["lens"]
 
 # %% [markdown]
 # A hand seal names its own provenance (`eval:` provenance is
-# written by evaluation alone; see Evaluation).
+# written by evaluation alone; see Ledger evaluation).
 
 # %%
 try:
@@ -778,38 +778,67 @@ except ConfinedWrite as e:
 # store.
 
 # %% [markdown]
-# ## Evaluation
+# ## Ledger evaluation
 #
-# `eval` calls a global or a sandboxed function and keeps the
-# result. A bare return is wrapped into a value (`Pickled`); a
-# `Value` is taken as is. Everything the function read through
-# `rev`, every value it loaded and the code it ran become the
-# trace. The result is sealed with `db/fn` and `db/keys` rows, so
-# the same question is answered from the ledger next time.
+# Evaluating a ledger function is a lookup of the function by name
+# followed by a call, with tracing: every read the run makes is
+# recorded, so the result carries its provenance, and the result is
+# kept, so the same question is answered from the ledger next time.
 
 # %% [markdown]
-# ### Asked twice, computed once
+# ### Evaluation is a lookup, a call and a trace
 
 # %%
 rev = L.at()
-manhattan_value = rev.eval("geometry.distance", a=(0, 0), b=(3, 4),
-                           metric="manhattan")
-print(manhattan_value.obj, manhattan_value.rev.id > rev.id)
-# → 7.0 True
+far_value = rev.eval("geometry.distance", a=(6, 8))
+print(far_value.obj, far_value.sealed)
+# → 10.0 True
+for item in sorted(far_value.trace):
+    print(item, "->", far_value.trace[item])
+# → code/geometry -> +<8 hex>
+# → fn -> db/fn/geometry.distance/<16 hex>
+# → platform -> darwin-arm64-py3.12
+# → uv.lock -> sha256:<hash>
 
 # %% [markdown]
-# `rev.eval` is `load_fn` and a call of the `Fn`. The miss ran the
-# body and sealed the result in a revision of its own.
+# `rev.eval(name, **keys)` is `rev.load_fn(name)` and then the
+# call, as in Ledger functions. What makes it more than a call is
+# the trace, recorded during the run, not declared, item by item:
+#
+# - `code/geometry` — `distance` is global, so the code it ran is
+#   known only as its repo's commit.
+# - `fn` — the code the name resolved to, its `Fn` subject: for a
+#   global function the commit, beside the hash of the module's
+#   source and what it imports from its repo (A39).
+# - `platform`, `uv.lock` — the environment, discovered.
+#
+# `distance` reads nothing through `rev`, so nothing else is in its
+# trace; a function that reads rows or loads values adds an item for
+# each (§ When an entry goes stale).
+
+# %% [markdown]
+# A hand seal has a trace too: with no `deps`, the environment
+# alone; with them, each dep by its bytes.
+
+# %%
+print(dict(sorted(wide_video.trace.items())))
+# → {'platform': 'darwin-arm64-py3.12', 'uv.lock': 'sha256:<hash>'}
+print(sorted(trimmed_video.trace))
+# → ['platform', 'ref:demo_game.game.Video:<hash>', 'uv.lock']
+
+# %% [markdown]
+# ### Evaluation is memoized
+#
+# Asked twice, computed once.
 
 # %%
 top_id = L.at().id
-again_value = L.at().eval("geometry.distance", a=(0, 0), b=(3, 4),
-                          metric="manhattan")
-print(again_value.subject == manhattan_value.subject)
+again_value = L.at().eval("geometry.distance", a=(6, 8))
+print(again_value.subject == far_value.subject)
 # → True: a hit
 print(L.at().id == top_id)
 # → True: nothing written
-print(again_value.rev.id == manhattan_value.rev.id)
+print(again_value.rev.id == far_value.rev.id)
 # → True: the seal's rev
 
 # %% [markdown]
@@ -823,12 +852,12 @@ print(again_value.rev.id == manhattan_value.rev.id)
 # `b` and `metric`, are part of the question.
 
 # %%
-entry_rev = hypotenuse_value.rev
+entry_rev = far_value.rev
 for row in entry_rev.rows(since=L.at(entry_rev.id - 1)):
     if row.predicate in ("db/fn", "db/keys"):
         print(row)
-# →   14 + <hash> db/fn   geometry.distance
-# →   14 + <hash> db/keys {"a":[3,4],"b":[0,0],"metric":"euclidean"}
+# →   17 + <hash> db/fn   geometry.distance
+# →   17 + <hash> db/keys {"a":[6,8],"b":[0,0],"metric":"euclidean"}
 
 # %% [markdown]
 # Memo entries are subjects like any other: `fn=` finds every
@@ -839,82 +868,30 @@ rev = L.at()
 for memo_ref in rev.refs(fn="geometry.distance"):
     print(memo_ref, rev[memo_ref.subject, "db/keys"])
 # → <8 hex> {'a': [3, 4], 'b': [0, 0], 'metric': 'euclidean'}
-# → <8 hex> {'a': [0, 0], 'b': [3, 4], 'metric': 'manhattan'}
+# → <8 hex> {'a': [6, 8], 'b': [0, 0], 'metric': 'euclidean'}
 print(len(rev.values(fn="geometry.distance")))
 # → 2, loaded
 
 # %% [markdown]
-# ### A bare return becomes a value
+# ### A bare return is boxed into a value
 
 # %%
-print(type(manhattan_value).__name__, manhattan_value.sealed)
-# → Pickled True
-print(L.at()[manhattan_value.trace["fn"], "db/returns"])
+print(type(far_value).__name__, far_value.obj)
+# → Pickled 10.0
+print(L.at()[far_value.trace["fn"], "db/returns"])
 # → float
 
 # %% [markdown]
-# `-> float` names no `Value` subclass, so the float was wrapped in
-# `Pickled` and sealed like any value; the annotation is kept as
-# `db/returns` on the function's `db/fn/…` subject. `Pickled`
-# declares no preds, so the entry is found by `db/fn` and `db/keys`
-# alone.
+# `distance` returns a plain `float`. `-> float` names no `Value`
+# subclass, so the float was boxed in `Pickled` and sealed like any
+# value; `.obj` unboxes it. The annotation is kept as `db/returns`
+# on the function's `db/fn/…` subject. `Pickled` declares no preds,
+# so the entry is found by `db/fn` and `db/keys` alone.
 
 # %% [markdown]
-# ### What an entry depends on: the trace
-
-# %%
-for item in sorted(manhattan_value.trace):
-    print(item, "->", manhattan_value.trace[item])
-# → code/geometry -> +<8 hex>
-# → fn -> db/fn/geometry.distance/<16 hex>
-# → platform -> darwin-arm64-py3.12
-# → uv.lock -> sha256:<hash>
-
-# %% [markdown]
-# The trace is recorded, not declared, item by item:
+# ### When an entry goes stale
 #
-# - `code/geometry` — `distance` is global, so the code it ran is
-#   known only as its repo's commit.
-# - `fn` — the code the name resolved to, its `Fn` subject: for a
-#   global function the commit, beside the hash of the module's
-#   source and what it imports from its repo (A39).
-# - `platform`, `uv.lock` — the environment, discovered.
-#
-# `distance` reads nothing through `rev`, so nothing else is in its
-# trace; a function that reads rows or loads values adds an item for
-# each (§ An alias names the current video).
-
-# %% [markdown]
-# A hand seal has a trace too: with no `deps`, the environment
-# alone; with them, each dep by its bytes.
-
-# %%
-print(dict(sorted(wide_video.trace.items())))
-# → {'platform': 'darwin-arm64-py3.12', 'uv.lock': 'sha256:<hash>'}
-print(sorted(trimmed_video.trace))
-# → ['platform', 'ref:demo_game.game.Video:<hash>', 'uv.lock']
-
-# %% [markdown]
-# ### memo=False and memo="get"
-#
-# `memo="get"` looks without running; `memo=False` runs without
-# sealing, and its bytes are what a memoised call would return.
-
-# %%
-rev = L.at()
-print(rev.eval("geometry.distance", a=(0, 0), b=(5, 12), memo="get"))
-# → None: never run
-dry_value = rev.eval("geometry.distance", a=(0, 0), b=(3, 4),
-                     metric="manhattan", memo=False)
-print(dry_value.sealed, dry_value.hash == manhattan_value.hash)
-# → False True
-print(L.at().id == rev.id)
-# → True: nothing written
-
-# %% [markdown]
-# ### An alias names the current video
-#
-# A function that cuts a clip out of a video named by its alias,
+# A function that cuts a clip out of the video an alias names,
 # written as a second module of the geometry repo and committed.
 
 # %%
@@ -948,15 +925,14 @@ for item in sorted(opening_clip.trace):
 
 # %% [markdown]
 # `-> Video` names a `Value` subclass, so the clip is sealed as it
-# was returned, a value like any other video. The load through
-# `video/G1` recorded the binding, the name to the bytes it resolved
-# to, beside the value item. Neither holds the subject (A35): what
-# `clip` depends on is the bytes the name gives, not the entry they
-# sit in.
+# was returned, no boxing. The load through `video/G1` recorded the
+# binding, the name to the bytes it resolved to, beside the value
+# item. Neither holds the subject (A35): what `clip` depends on is
+# the bytes the name gives, not the entry they sit in.
 
 # %% [markdown]
 # A new version of the video, stabilised, and `video/G1` re-pointed
-# at it. Notice the clip's entry no longer matches.
+# at it. Notice the same question now misses.
 
 # %%
 stable_video = Video(b"G1 stabilised, frames 600-9000")
@@ -964,10 +940,6 @@ stable_video.preds.update(game="G1", camera="wide", span=[600, 9000])
 with L.transaction(by="human:dan", why="stabilised") as t:
     t.add_value(stable_video, deps=[trimmed_video], alias="video/G1")
 rev = L.at()
-print(opening_clip.matches(rev))
-# → False
-
-# %%
 stable_clip = rev.eval("clips.clip", video="video/G1", start=0, end=8)
 print(stable_clip.subject != opening_clip.subject, stable_clip.frames)
 # → True b'G1 stabi'
@@ -976,10 +948,10 @@ print(sorted(opening_clip.diff(stable_clip)))
 #    'ref:demo_game.game.Video:<trimmed>', 'video/G1 db/alias']
 
 # %% [markdown]
-# `matches(rev)` re-reads every trace item at `rev`; the binding
-# moved, so the next `eval` misses and re-derives. `diff` names the
-# items that moved: the `video/G1` binding, and each side's value
-# item. The old clip stays, found by its hash.
+# The binding moved, so the old entry's trace no longer holds: the
+# `eval` missed and re-derived. `diff` names the items that moved:
+# the `video/G1` binding, and each side's value item. The old clip
+# stays, found by its hash.
 
 # %% [markdown]
 # ### Same bytes, different values
@@ -1010,8 +982,6 @@ with L.transaction(by="human:dan", why="span off by ten") as t:
 rev = L.at()
 print(restamped_video, stable_video)
 # → video/G1 <8 hex>
-print(stable_clip.matches(rev))
-# → True: identical bytes
 again_clip = rev.eval("clips.clip", video="video/G1", start=0, end=8)
 print(again_clip.subject == stable_clip.subject)
 # → True: a hit
@@ -1019,6 +989,34 @@ print(again_clip.subject == stable_clip.subject)
 # %% [markdown]
 # `video/G1` now names identical bytes, so the binding item is
 # unchanged and `clip` hits (A35, A21).
+
+# %% [markdown]
+# ### Checking an entry, and evaluating without keeping
+#
+# Whether an entry still holds can be asked without evaluating:
+# `matches(rev)` returns a bool, whether every item of the entry's
+# trace still reads the same at `rev`.
+
+# %%
+rev = L.at()
+print(opening_clip.matches(rev))
+# → False: video/G1 has moved on
+print(stable_clip.matches(rev))
+# → True: it names identical bytes
+
+# %% [markdown]
+# `memo="get"` looks the entry up without running; `memo=False`
+# runs without sealing, and its bytes are what a memoized call would
+# return.
+
+# %%
+print(rev.eval("geometry.distance", a=(5, 12), memo="get"))
+# → None: never run
+dry_value = rev.eval("geometry.distance", a=(6, 8), memo=False)
+print(dry_value.sealed, dry_value.hash == far_value.hash)
+# → False True
+print(L.at().id == rev.id)
+# → True: nothing written
 
 # %% [markdown]
 # ## Edge cases
