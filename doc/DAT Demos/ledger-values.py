@@ -115,13 +115,10 @@ print(rev["game/G1"])
 #  "court": "north"}
 
 # %% [markdown]
-# ## Values: large complex constants in the ledger
-#
-# A value is a thing you put in the ledger and get back, identified
-# by its content.
+# ## Values
 
 # %% [markdown]
-# ### A value is a class with encode and decode
+# ### Declaring a value class
 #
 # A value's class lives in `demo_game/game.py`: a `Value` subclass
 # defined in a cell has no dotted name for a later `load` to import.
@@ -149,39 +146,46 @@ print(rev["game/G1"])
 from demo_game.game import PlainVideo
 
 # %% [markdown]
-# ### Put it in, get a reference
+# ### Storing a value
 
 # %%
 video_value = PlainVideo(b"G1 wide camera, 9000 frames")
 with L.transaction(by="human:dan") as t:
-    video_ref_subject = t.add_value(video_value)
-print(video_ref_subject)             # 64 hex: from the content
+    video_subject = t.add_value(video_value)
+print(video_subject)                 # 64 hex: from the content
+
+# %% [markdown]
+# `add_value` returns the value's subject, a hash derived from its
+# content: a subject nobody typed.
+
+# %% [markdown]
+# ### Getting a reference
+
+# %%
 rev = L.at()
-plain_ref = Ref(rev, video_ref_subject)
+plain_ref = Ref(rev, video_subject)
 print(plain_ref, plain_ref.type)
 # <8 hex> <class 'demo_game.game.PlainVideo'>
 
 # %% [markdown]
-# `add_value` returns the value's subject, a hash derived from its
-# content: a name nobody typed. `Ref(rev, subject)` points at it
-# without fetching a byte, and prints as the hash's first eight
-# characters.
+# `Ref(rev, subject)` points at the value without fetching a byte,
+# and prints as the hash's first eight characters.
 
 # %% [markdown]
-# ### Load it back
+# ### Loading it back
 
 # %%
-loaded_video = rev.load(video_ref_subject)
+loaded_video = rev.load(video_subject)
 print(type(loaded_video).__name__, loaded_video.frames)
 # PlainVideo b'G1 wide camera, 9000 frames'
-print(loaded_video.same_as(video_value))   # True: the same bytes
+print(loaded_video.subject == video_subject)  # True: same hash
 
 # %% [markdown]
-# `load` decodes the bytes into the class they were put in as;
-# `same_as` compares two values by their bytes.
+# `load` decodes the bytes into the class they were put in as: the
+# same frames, the same hash.
 
 # %% [markdown]
-# ### A name for a value
+# ### Adding an alias
 #
 # An alias is a `db/alias` row naming the subject. `add_value(…,
 # alias="video/G1")` writes it in the same transaction; here it is
@@ -189,18 +193,18 @@ print(loaded_video.same_as(video_value))   # True: the same bytes
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("video/G1", "db/alias", video_ref_subject)
+    t.add("video/G1", "db/alias", video_subject)
 rev = L.at()
-named_video = rev.load("video/G1")
-print(named_video.same_as(video_value))   # True
-print(video_value)                        # video/G1: it has a name
+aliased_video = rev.load("video/G1")
+print(aliased_video.subject == video_subject)  # True
+print(video_value)                        # video/G1: it has an alias
 
 # %% [markdown]
-# A second name for the video. Notice it prints as the shorter one.
+# A second alias for the video. Notice it prints as the shorter one.
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("raw/G1/wide-camera", "db/alias", video_ref_subject)
+    t.add("raw/G1/wide-camera", "db/alias", video_subject)
 rev = L.at()
 camera_ref = Ref(rev, "raw/G1/wide-camera")
 print(camera_ref)            # video/G1: the shortest, as of the head
@@ -211,12 +215,12 @@ print(sorted(camera_ref.aliases))
 # %% [markdown]
 # A value or its `Ref` prints as the shortest alias naming it, else
 # the first eight characters of its hash. `Ref.aliases` lists every
-# name.
+# alias.
 
 # %% [markdown]
-# ### A name is a row of its own
+# ### An alias is a row of its own
 #
-# The name's own record, read with the bracket, beside the value it
+# The alias's own record, read with the bracket, beside the value it
 # names.
 
 # %%
@@ -225,7 +229,7 @@ print(rev["video/G1"])
 print(rev.load("video/G1"))          # video/G1: the value itself
 
 # %% [markdown]
-# `rev["video/G1"]` is literal: the name's own rows, its `db/alias`
+# `rev["video/G1"]` is literal: the alias's own rows, its `db/alias`
 # row's object the subject as a plain `str`. `load` follows the
 # row. A game carries its current cut the same way, shown once a
 # cut exists (Values computed by functions).
@@ -835,7 +839,11 @@ print(cut_154.same_as(cut_home_g6),
 # %% [markdown]
 # Two derivations, identical bytes: the 1.5.4 cut has the bytes of
 # the re-derived 1.5.3 cut (the stand-in cutter ignores its
-# version). Two memo entries, two subjects, one blob.
+# version). Two memo entries, two subjects, one blob. `same_as`
+# compares only the bytes hash, so two values from different
+# derivations, or with different preds, can be the same bytes;
+# here, for the first time, the same bytes are not the same
+# subject.
 
 # %% [markdown]
 # `thumb(rev, *, clip: Ref) -> dict` takes a cut as its key.
