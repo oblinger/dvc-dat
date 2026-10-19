@@ -111,3 +111,10 @@ def via_refs_rev(rev, *, game: str) -> dict:
 def maybe(rev, *, game: str) -> dict:
     hit = rev.eval("l2kinds.cut", game=game, memo="get")
     return {"had": hit is not None}
+
+
+@ledger_fn
+def scratchy(rev, *, game: str, work: Path) -> dict:
+    CALLS["work"] = work
+    (work / "tmp.txt").write_text(game)
+    return {"game": game}

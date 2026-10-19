@@ -24,6 +24,25 @@ PKG = {
             return {"area": util.square(side)}
     '''),
     "flat/util.py": "def square(x):\n    return x * x\n",
+    "sbx/stage/kinds.py": textwrap.dedent('''
+        from dvc_dat.ledger2 import Value, ledger_class, ledger_fn
+
+        @ledger_class(preds=("game",))
+        class Tagged(Value):
+            def __init__(self, data: bytes):
+                self.data = data
+            def encode(self) -> bytes:
+                return self.data
+            @classmethod
+            def decode(cls, data, store):
+                return cls(data)
+
+        @ledger_fn
+        def tagged(rev, *, game: str) -> Tagged:
+            v = Tagged(game.encode())
+            v.preds["game"] = game
+            return v
+    '''),
     "sbx/stage/helper.py": "def double(x):\n    return 2 * x\n",
     "sbx/stage/fns.py": textwrap.dedent('''
         import importlib
@@ -157,3 +176,20 @@ def test_a_mount_root_without_init_imports_namespace_style(sbx):
     assert v.obj == {"area": 9}
     assert sorted(L.at()[v.trace["fn"], "db/modules"]) == ["flat/calc.py", "flat/util.py"]
     assert L.at().eval("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # the package case
+
+
+def test_memo_false_keeps_preds_and_runs_on_a_dirty_tree(sbx):
+    L, repo = sbx
+    v = L.at().eval("sbx.stage.kinds.tagged", game="G1", memo=False)
+    assert not v.sealed and v.preds == {"game": "G1"} and v.trace["fn"].startswith("db/fn/")
+    (repo / "sbx/other.py").write_text("X = 3\n")              # dirty
+    assert L.at().eval("sbx.stage.fns.count", game="G1", memo=False).obj == {"n": 6}
+    with pytest.raises(NotEvaluated):
+        L.at().eval("sbx.stage.fns.count", game="G1")
+
+
+def test_load_fn_refuses_an_unmounted_import_at_load(sbx):
+    L, _repo = sbx
+    with pytest.raises(UnmountedImport, match="sbx.other from sbx.stage.fns; mount it or move it"):
+        L.at().load_fn("sbx.stage.fns.borrow")
+    assert L.at().load_fn("sbx.stage.fns.snoop").mode == "sandbox"   # same module, no such import

@@ -284,22 +284,41 @@ class Fn:
         from .txn import code_token
 
         env = current_env()
-        repo = self._check_code(plain, env, repo_of(env, self.module))
+        repo = repo_of(env, self.module)
+        if seal:                                    # memo=False simply runs (Eval § 2)
+            self._check_code(plain, env, repo)
         rec: Dict[str, str] = {}
         work = Path(tempfile.mkdtemp(prefix="ledger-work-")) if self._takes_work else None
         args = dict(kw, work=work) if work is not None else kw
-        out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
-        value = wrap_result(self.name, self._obj, out)
-        trace = dict(rec)
-        trace.update({"fn": self.subject, f"code/{repo}": code_token(plain, repo, env.code[repo].commit),
-                      "uv.lock": env.lock, "platform": env.platform})
-        if not seal:
-            value.trace = trace  # type: ignore[misc]
+        value = None
+        try:
+            out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+            value = wrap_result(self.name, self._obj, out)
+            trace = dict(rec)
+            trace.update({"fn": self.subject, "uv.lock": env.lock, "platform": env.platform})
+            if repo is not None:
+                trace[f"code/{repo}"] = code_token(plain, repo, env.code[repo].commit)
+            if not seal:
+                value.trace = trace  # type: ignore[misc]
+                return value
+            value = seal_entry(self, plain, value, trace, enc, "eval:base")
             return value
-        out_v = seal_entry(self, plain, value, trace, enc, "eval:base")
-        if work is not None and work.exists():
-            shutil.rmtree(work, ignore_errors=True)
-        return out_v
+        finally:
+            drop_work(work, value)
+
+
+def drop_work(work: Optional[Path], value: Any) -> None:
+    """Remove an eval's ``work`` folder once the call is done, sealed or not; an unsealed ``Dat`` that
+    still lives in it (``memo=False``) keeps it, since the folder is that value."""
+    from .value import Dat
+
+    if work is None or not work.exists():
+        return
+    if isinstance(value, Dat) and not value.sealed:
+        p = os.path.realpath(value.path)
+        if p == os.path.realpath(work) or p.startswith(os.path.realpath(work) + os.sep):
+            return
+    shutil.rmtree(work, ignore_errors=True)
 
 
 def wrap_result(name: str, func: Callable, out: Any) -> Value:

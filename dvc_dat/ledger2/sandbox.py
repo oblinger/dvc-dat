@@ -53,7 +53,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 from .codec import sha256
 from .env import Env, current_env
 from .errors import ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
-from .fn import Fn, fn_subject, mounts_at, mounts_hash, seal_entry, wrap_result
+from .fn import Fn, drop_work, fn_subject, mounts_at, mounts_hash, seal_entry, wrap_result
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -149,6 +149,75 @@ def _imports(path: Path, dotted: str, is_pkg: bool) -> Set[str]:
                 out.add(mod)
                 out.update(f"{mod}.{a.name}" for a in node.names)
     return out
+
+
+def _scoped_imports(path: Path, dotted: str, is_pkg: bool, func: Optional[str]) -> Set[str]:
+    """The imports a module runs on load (module and class bodies), plus those in the body of ``func``."""
+    try:
+        tree = ast.parse(path.read_text())
+    except (OSError, SyntaxError):
+        return set()
+    out: Set[str] = set()
+
+    def visit(node: Any) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node is tree and child.name == func:
+                    for n in ast.walk(child):
+                        if isinstance(n, (ast.Import, ast.ImportFrom)):
+                            out.update(_imports_of_node(n, dotted, is_pkg))
+                continue
+            if isinstance(child, (ast.Import, ast.ImportFrom)):
+                out.update(_imports_of_node(child, dotted, is_pkg))
+            visit(child)
+    visit(tree)
+    return out
+
+
+def _imports_of_node(node: Any, dotted: str, is_pkg: bool) -> Set[str]:
+    pkg = dotted if is_pkg else dotted.rpartition(".")[0]
+    out: Set[str] = set()
+    if isinstance(node, ast.Import):
+        for a in node.names:
+            parts = a.name.split(".")
+            out.update(".".join(parts[:i]) for i in range(1, len(parts) + 1))
+    else:
+        if node.level:
+            base = pkg.split(".")
+            base = base[: len(base) - (node.level - 1)] if node.level > 1 else base
+            mod = ".".join(base + ([node.module] if node.module else []))
+        else:
+            mod = node.module or ""
+        if mod:
+            out.add(mod)
+            out.update(f"{mod}.{a.name}" for a in node.names)
+    return out
+
+
+def check_mounted_imports(mounts: List[Mount], modname: str, func: str) -> None:
+    """At load (Module § load_fn): ``UnmountedImport`` when the function's module, or a mounted module it
+    reaches on load, imports a repo module under no mount. The worker's finder still checks at run time."""
+    todo: List[Tuple[str, Optional[str]]] = [(modname, func)]
+    seen: Set[str] = set()
+    while todo:
+        d, fname = todo.pop()
+        if d in seen:
+            continue
+        seen.add(d)
+        m = _mount_of(mounts, d)
+        f = m.file_of(d) if m is not None else None
+        if f is None:
+            continue
+        for imp in sorted(_scoped_imports(f[0], d, f[1], fname)):
+            if _mount_of(mounts, imp) is not None:
+                todo.append((imp, None))
+                continue
+            if any(mm.prefix.startswith(imp + ".") for mm in mounts):
+                continue
+            for mm in mounts:
+                base = mm.checkout.joinpath(*imp.split("."))
+                if base.with_suffix(".py").is_file() or (base / "__init__.py").is_file():
+                    raise UnmountedImport(f"{imp} from {d}; mount it or move it")
 
 
 def closure(mounts: List[Mount], start: List[str]) -> Dict[str, Tuple[Mount, Path]]:
@@ -254,6 +323,7 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
     sig, takes_work, returns, decorated = _signature(fdef, name)
     if not decorated:
         raise TypeError(f"{name!r} is not a ledger function (mark it @ledger_fn)")
+    check_mounted_imports(mounts, modname, attr_name)
     mods = module_shas(plain, env, closure(mounts, [modname]))
     rel = f[0].relative_to(m.checkout).as_posix()
     return Fn(name=name, module=f[0], sha=file_sha(m.checkout, rel, _commit_for(plain, m.repo, env)),
@@ -293,7 +363,8 @@ def _check_code(fn: Fn, plain: "Rev", env: Env) -> None:
 
 def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> Any:
     env = current_env()
-    _check_code(fn, plain, env)
+    if seal:                                        # memo=False simply runs (Eval § 2)
+        _check_code(fn, plain, env)
     if IN_WORKER:
         return run_here(fn, plain, kw, enc, seal)
     return _pool(plain, fn._info["prefix"]).call(fn, plain, kw, seal, env)
@@ -430,6 +501,9 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
         STATE.guard = True
         try:
             out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+        except BaseException:
+            drop_work(work, None)
+            raise
         finally:
             STATE.guard = outer_guard
         loaded = STATE.frames[-1]
@@ -445,8 +519,11 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
         trace["salt"] = salt
     if not seal:
         value.trace = trace  # type: ignore[misc]
+        drop_work(work, value)
         return value
-    return seal_entry(fn, plain, value, trace, enc, "eval:sandbox", modules=mods)
+    sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", modules=mods)
+    drop_work(work, sealed)
+    return sealed
 
 
 # -- the parent's view of a worker ---------------------------------------------------------------------
@@ -503,6 +580,8 @@ class Worker:
             if seal:
                 return Ref(plain.ledger.at(), resp["subject"]).load()
             v = pickle.loads(resp["value"])
+            top = plain.ledger.at()
+            v.__dict__["_preds"] = {k: _unship(top, x) for k, x in resp.get("preds", {}).items()}
             return v
         exc = None
         if resp.get("exc") is not None:
@@ -584,8 +663,8 @@ def worker_main() -> None:
             if req["seal"]:
                 send(proto_out, {"ok": True, "subject": value.subject})
             else:
-                value.__dict__.pop("_preds", None)
-                send(proto_out, {"ok": True, "value": pickle.dumps(value)})
+                preds = {k: _ship(v) for k, v in value.__dict__.pop("_preds", {}).items()}
+                send(proto_out, {"ok": True, "value": pickle.dumps(value), "preds": preds})
         except BaseException as e:  # noqa: BLE001 - every failure goes back to the parent
             try:
                 blob = pickle.dumps(e)
@@ -593,6 +672,28 @@ def worker_main() -> None:
                 blob = None
             send(proto_out, {"ok": False, "exc": blob, "type": type(e).__name__, "message": str(e),
                              "traceback": traceback.format_exc()})
+
+
+def _ship(v: Any) -> Any:
+    """A pred across the pipe: a sealed ``Value`` or a ``Ref`` by its subject (a Ref does not pickle)."""
+    from .rev import Ref
+    from .value import Value
+
+    if isinstance(v, (list, tuple)):
+        return [_ship(x) for x in v]
+    if isinstance(v, Ref) or (isinstance(v, Value) and v.sealed):
+        return ("__ref__", v.subject)
+    return v
+
+
+def _unship(top: "Rev", v: Any) -> Any:
+    from .rev import Ref
+
+    if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__":
+        return Ref(top, v[1])
+    if isinstance(v, list):
+        return [_unship(top, x) for x in v]
+    return v
 
 
 def _enc(keys: Dict[str, Any]) -> str:

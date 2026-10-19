@@ -751,6 +751,13 @@ class Ref:
             v = cls.decode(store.get(self._hash), store)
             if not isinstance(v, Value):
                 raise TypeError(f"{cls.__name__}.decode returned {type(v).__name__}, not a Value")
+            from .value import Dat
+
+            if isinstance(v, Dat):                      # the row wins; the folder is checked against it
+                kind = Dat.spec_kind(v.path)
+                if kind is not None and kind not in (self._cls, dotted(cls), cls.__name__):
+                    raise TypeError(f"{s[:12]}…: the db/value row names {self._cls}; the folder's _spec_ names "
+                                    f"dat.kind {kind}")
             rows = self._p._held_rows(subject=s)
             trace = {p[len("db/trace/"):]: show(h.obj) for _s, p, h in rows if p.startswith("db/trace/")}
             sealed_at = self._sealed_at()

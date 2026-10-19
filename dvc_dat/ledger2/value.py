@@ -214,6 +214,20 @@ class Dat(Value):
         return {sha256(v): v for v in self._files().values()}
 
     @staticmethod
+    def spec_kind(path: Path) -> Optional[str]:
+        """The ``dat.kind`` a folder's ``_spec_.yaml`` (or ``_spec_.json``) names, if any."""
+        for name in ("_spec_.yaml", "_spec_.json"):
+            p = Path(path) / name
+            if p.is_file():
+                import yaml
+
+                spec = yaml.safe_load(p.read_text()) or {}
+                dat = spec.get("dat") if isinstance(spec, dict) else None
+                kind = dat.get("kind") if isinstance(dat, dict) else None
+                return kind if isinstance(kind, str) else None
+        return None
+
+    @staticmethod
     def _materialise(data: bytes, store: "ArtStore") -> Path:
         manifest = json.loads(data.decode())
         dest = store.root / "dats" / sha256(data)[:16]
