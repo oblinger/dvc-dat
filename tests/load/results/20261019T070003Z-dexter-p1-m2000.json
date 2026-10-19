@@ -1,0 +1,132 @@
+{
+ "date": "20261019T070003Z",
+ "machine": {
+  "host": "dexter.local",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "machine": "x86_64",
+  "cpus": 12,
+  "python": "3.12.14",
+  "sqlite": "3.53.1"
+ },
+ "config": {
+  "ledger": "/Users/oblinger/t541-load/runs/ledger-p1",
+  "transactions": 2000,
+  "seed": 0,
+  "lock": 10.0,
+  "keys": 200,
+  "aliases": 8,
+  "shared": 6,
+  "mix": {
+   "seal": 30,
+   "shared": 5,
+   "alias": 10,
+   "salt": 3,
+   "eval": 27,
+   "read": 25
+  },
+  "fold_checks": true,
+  "processes": 1
+ },
+ "wall_s": 6.54,
+ "check_s": 1.895,
+ "timed_out": [],
+ "transactions_committed": 1294,
+ "tx_per_s": 197.86,
+ "ops_done": 2000,
+ "ops_per_s": 305.81,
+ "lock_timeouts": 0,
+ "ledger_errors": 0,
+ "latency": {
+  "all": {
+   "n": 2000,
+   "p50_ms": 2.165,
+   "p90_ms": 6.105,
+   "p99_ms": 23.932,
+   "max_ms": 128.083
+  },
+  "writes": {
+   "n": 963,
+   "p50_ms": 2.144,
+   "p90_ms": 2.555,
+   "p99_ms": 28.359,
+   "max_ms": 50.43
+  }
+ },
+ "per_process": [
+  {
+   "wid": 0,
+   "elapsed_s": 6.507,
+   "n": 2000,
+   "p50_ms": 2.165,
+   "p90_ms": 6.105,
+   "p99_ms": 23.932,
+   "max_ms": 128.083
+  }
+ ],
+ "ops": {
+  "seal": {
+   "ok": 600,
+   "n": 600,
+   "p50_ms": 2.286,
+   "p90_ms": 2.671,
+   "p99_ms": 28.359,
+   "max_ms": 46.463
+  },
+  "shared": {
+   "ok": 122,
+   "n": 122,
+   "p50_ms": 1.524,
+   "p90_ms": 1.846,
+   "p99_ms": 37.255,
+   "max_ms": 50.43
+  },
+  "alias": {
+   "ok": 191,
+   "n": 191,
+   "p50_ms": 0.949,
+   "p90_ms": 1.138,
+   "p99_ms": 34.037,
+   "max_ms": 37.864
+  },
+  "salt": {
+   "ok": 50,
+   "n": 50,
+   "p50_ms": 0.919,
+   "p90_ms": 1.16,
+   "p99_ms": 2.77,
+   "max_ms": 2.77
+  },
+  "eval": {
+   "misses": 331,
+   "ok": 532,
+   "hits": 201,
+   "n": 532,
+   "p50_ms": 5.52,
+   "p90_ms": 7.665,
+   "p99_ms": 28.59,
+   "max_ms": 128.083
+  },
+  "read": {
+   "ok": 505,
+   "n": 505,
+   "p50_ms": 1.073,
+   "p90_ms": 1.457,
+   "p99_ms": 1.632,
+   "max_ms": 2.267
+  }
+ },
+ "errors": [],
+ "invariants": {
+  "failures": [],
+  "counts": {},
+  "top": 1295,
+  "setup_top": 1,
+  "fold_digest": "6e20be07fce9fc8b83e9c3db6f3cb64f2167d534480b06517ab41b00fc9f195c",
+  "fold_handles": 4,
+  "checked": {
+   "committed": 963,
+   "evals": 532,
+   "memo_entries": 331
+  }
+ }
+}
