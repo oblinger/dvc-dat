@@ -319,10 +319,22 @@ print(rev.values(game="G1"))         # → [video/G1]
 print(rev.values(kind=Video))        # → [video/G1, video/G2]
 print(rev.values(camera="wide"))     # → [video/G1, video/G2]
 print(rev.value(game="G1", camera="wide"))      # → video/G1
+
+# %% [markdown]
+# `value` means exactly one. Notice it refuses when two match,
+# naming both, rather than picking one.
+
+# %%
 try:
     rev.value(kind=Video)            # two videos match
 except Multiple as e:
     print("Multiple:", e)            # → Multiple: <the two>
+
+# %% [markdown]
+# `refs` hands back the same values unloaded: a `Ref` shows its
+# preds and its revision without fetching a byte.
+
+# %%
 video_refs = rev.refs(kind=Video)
 print(video_refs)                    # → [video/G1, video/G2]
 print(type(video_refs[0]).__name__)  # → Ref: no bytes fetched
