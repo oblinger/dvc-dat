@@ -45,7 +45,8 @@ from dvc_dat.ledger import UnmountedImport
 # %%
 scratch_project_path = Path("scratch/values-demo").resolve()
 scratch_project_path.mkdir(parents=True)
-shutil.copytree("demo_game", scratch_project_path / "demo_game",
+shutil.copytree("demo_game/demo_game",
+                scratch_project_path / "demo_game",
                 ignore=shutil.ignore_patterns("__pycache__"))
 os.chdir(scratch_project_path)
 L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
