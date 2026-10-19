@@ -142,3 +142,25 @@ def test_pg_indexes_and_the_prefix_plan(dsn):
         "EXPLAIN SELECT rev FROM quads WHERE subject ~>=~ %s AND subject ~<~ %s", ("x/", "x/\U0010ffff")))
     conn.execute("RESET enable_seqscan")
     assert "quads_sp" in plan
+
+
+def test_pg_close_ends_the_server_backends(dsn):
+    import psycopg
+
+    L = Ledger(dsn, create=True)
+    th = [threading.Thread(target=lambda: L.at().id) for _ in range(3)]
+    for x in th:
+        x.start()
+    for x in th:
+        x.join()
+    pids = {c.info.backend_pid for c in L._store._readers}
+    assert len(pids) == 3
+    q = "SELECT count(*) FROM pg_stat_activity WHERE pid = ANY(%s)"
+    with psycopg.connect(backends.database(), autocommit=True) as admin:
+        assert admin.execute(q, (list(pids),)).fetchone()[0] == 3
+        L.close()
+        for _ in range(50):
+            if admin.execute(q, (list(pids),)).fetchone()[0] == 0:
+                break
+            time.sleep(0.1)
+        assert admin.execute(q, (list(pids),)).fetchone()[0] == 0

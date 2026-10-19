@@ -100,6 +100,9 @@ class PostgresStore(Store):
         self.art = ArtStore(art)
         self._pg = _psycopg()
         self._local = threading.local()
+        self._readers: List[Any] = []
+        self._readers_lock = threading.Lock()
+        self._gen = 0
         try:
             conn = self._connect(30.0, autocommit=True)
         except self._pg.Error as e:
@@ -138,9 +141,20 @@ class PostgresStore(Store):
         if over is not None:
             return over
         conn = getattr(self._local, "conn", None)
-        if conn is None or conn.closed or conn.broken:
+        if conn is None or conn.closed or conn.broken or getattr(self._local, "gen", None) != self._gen:
             conn = self._local.conn = self._connect(30.0, autocommit=True)
+            with self._readers_lock:
+                self._local.gen = self._gen
+                self._readers = [c for c in self._readers if not c.closed]
+                self._readers.append(conn)
         return conn
+
+    def close(self) -> None:
+        with self._readers_lock:
+            conns, self._readers = self._readers, []
+            self._gen += 1
+        for conn in conns:
+            conn.close()
 
     def read(self, sql: str, params: Sequence[Any] = ()) -> List[Tuple[Any, ...]]:
         try:

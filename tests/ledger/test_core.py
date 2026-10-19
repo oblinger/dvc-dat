@@ -274,3 +274,30 @@ def test_bump_code_writes_commit_and_refuses_no_checkout_or_dirty(L, envbox):
         with L.transaction(by="t") as t:
             bump(t, "code/testrepo")
     assert os.environ.get("X_NEVER") is None
+
+
+def test_close_closes_every_thread_reader_and_a_later_read_reopens(L):
+    import threading
+
+    with L.transaction(by="t") as t:
+        t.add("game/G1", "home", "A")
+    seen = []
+    th = [threading.Thread(target=lambda: seen.append(L.at().get("game/G1", "home"))) for _ in range(3)]
+    for x in th:
+        x.start()
+    for x in th:
+        x.join()
+    assert seen == ["A"] * 3
+    readers = list(L._store._readers)
+    assert len(readers) == 4
+    with L:
+        assert L.at().get("game/G1", "home") == "A"
+    assert L._store._readers == []
+    for c in readers:
+        with pytest.raises(Exception):
+            c.execute("SELECT 1")
+    assert L.at().get("game/G1", "home") == "A"
+    with L.transaction(by="t") as t:
+        t.add("game/G1", "away", "B")
+    assert L.at().get("game/G1", "away") == "B"
+    L.close()

@@ -25,6 +25,9 @@ the row's place within its transaction, `object` a tagged string
 - `Store.subjects(upto, *, predicate, obj, prefix, subject, after=0) ->
   [str]`: distinct subjects with an add row matching, ordered by first
   assertion.
+- `Store.close()`: closes every reader connection the store opened,
+  in every thread; a later read reopens one. `Ledger.close()` calls
+  it, and a `Ledger` is a context manager that does on exit.
 - `Store.top() -> int`, `Store.has_predicate(p, upto) -> bool`,
   `Store.index_names() -> [str]`; `SqliteStore.read(sql, params)`
   (`LedgerError` on a refused read).
@@ -102,6 +105,11 @@ hides the password.
   values (a generic plan cannot use a prefix range or partial index).
 - Postgres text cannot hold NUL: a row carrying `\x00` is refused
   (`LedgerError`); a read asking for one finds nothing.
+- Limitation: a sandbox worker reopens the ledger from `DAT_LEDGER`,
+  set to `Ledger.path`, the full DSN, so a password in the DSN rides
+  in the worker's environment (visible to its process and anything it
+  runs). Use a passwordless DSN (`~/.pgpass`, peer or trust auth) where
+  that matters.
 
 ## Measured
 
