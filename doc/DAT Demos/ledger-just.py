@@ -14,327 +14,552 @@
 # %% [markdown]
 # # Ledger: just
 #
-# What a human types, against what a program calls. Each section is
-# one recipe: a shell cell, one line naming the API call it is
-# sugar for, and a code cell making that call. Every recipe is one
-# call from the values and dats notebooks under a name a human
-# would type; no recipe hides a seal behind a verb that reads like
-# an edit.
-#
-# **The justfile does not exist.** These recipes are the proposal
-# for F447 Q4 (A): hand recipes in a project's justfile calling the
-# API, the project's policy as recipe lines, designed from these
-# use cases down. Running both cells of a pair does a write twice;
-# the pair is for reading side by side.
+# A person reaches the ledger from a shell, and the `just` recipes
+# are the verbs they type there. Each recipe is one API call under a
+# name a human would type, with what a program spells out each time
+# (who is acting, the confirmation, which ledger) supplied by the
+# recipe instead. No recipe hides a seal behind a verb that reads
+# like an edit. The recipes are a proposal for the just layer (F447
+# Q4: hand recipes in the project's justfile calling the API),
+# designed from these use cases down; the justfile does not exist
+# yet.
 #
 # Written to the ledger design of 2026-10-18 (Ledger Module, Values
-# § The three notebooks, F447 A39–A51). It runs once
-# `ledger2` is rebuilt to that design (T534); until then it is the
-# design, not a demo.
+# § The three notebooks, F447 A39–A53). It runs once `ledger2` is
+# rebuilt to that design (T534); until then it is the design, not a
+# demo. A shell cell and the code cell after it are one act written
+# two ways; each output is the one it gives run alone.
 
 # %%
-import os, shutil, subprocess, sys
+import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
 
 from dvc_dat.ledger import Ledger, Ref, bump
-
-scratch_ledger_path = Path("scratch/just-demo/ledger").resolve()
-L = Ledger(scratch_ledger_path, create=True)   # the one explicit act
-os.environ["DAT_LEDGER"] = str(scratch_ledger_path)  # for recipes
-USER = os.environ.get("USER", "dan")
-
-
-def moves(rev, subject):
-    """Each (rev id, predicate, object) on subject, in order."""
-    move_tuples = []
-    for i in range(1, rev.id + 1):
-        since = L.at(i - 1) if i > 1 else None
-        for p, o in L.at(i).all(subject, since=since):
-            move_tuples.append((i, p, o))
-    return move_tuples
-
-# %% [markdown]
-# ### A real code repository
-#
-# Every value function runs in a git checkout, the ledger records
-# which commit, and the notebook makes a tiny one of its own: the
-# `demo_game` package beside this notebook, copied into scratch.
+from dvc_dat.ledger import LedgerError, Multiple
 
 # %%
-demo_repo_path = Path("scratch/just-demo/demo-game").resolve()
-shutil.copytree("demo_game", demo_repo_path,
+scratch_project_path = Path("scratch/just-demo").resolve()
+shutil.copytree("demo_game", scratch_project_path,
                 ignore=shutil.ignore_patterns("__pycache__"))
+os.chdir(scratch_project_path)
+L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
+user_name = os.environ.get("USER", "dan")
+
+# demo repo
 
 
 def git(*args: str) -> str:
-    """Run git in the demo repository; return its stdout."""
+    """Run git in the scratch folder; return its stdout."""
     cmd = ["git", "-c", "user.name=demo",
            "-c", "user.email=demo@example.com", *args]
-    done = subprocess.run(cmd, cwd=demo_repo_path, check=True,
+    done = subprocess.run(cmd, cwd=scratch_project_path, check=True,
                           capture_output=True, text=True)
     return done.stdout.strip()
 
 
+spec_record = {"main": "demo_game.etl.model.fit",
+               "stage": "model", "game": "G1", "epochs": 8}
+Path("model-G1.yaml").write_text(yaml.safe_dump(spec_record))
+Path(".gitignore").write_text(".dat/\n")
 git("init", "-q")
 git("add", ".")
-git("commit", "-q", "-m", "demo-game 0.1.0")
-commit_sha = git("rev-parse", "HEAD")
-sys.path.insert(0, str(demo_repo_path))
-os.environ["PYTHONPATH"] = str(demo_repo_path)   # for recipes
+git("commit", "-q", "-m", "demo-game")
+sys.path.insert(0, str(scratch_project_path))
+os.environ["PYTHONPATH"] = str(scratch_project_path)  # for recipes
 
-# %% [markdown]
-# A shell cell is a process of its own: it opens this notebook's
-# ledger through `DAT_LEDGER`, which overrides `Ledger()`'s walk up
-# to `.datconfig.yaml` (A44), and, like the code cells, finds its
-# environment by git discovery over the modules it imports, here
-# the demo repository on `PYTHONPATH`. `moves` walks the revisions
-# one at a time: no read lists every object a subject's predicates
-# have held, and `why` and `history` need that list.
+# one game, its video, a 1.5.3 cut, a home correction, a 1.5.4 cut
 
-# %%
 from demo_game.game import Video, Cut
 
-with L.transaction(by="human:dan", why="seed") as t:
+with L.transaction(by="human:dan") as t:
     t.add("db", "version", "3.1.4")
-    t["code/demo-game"] = {"version": "0.1.0",
-                           "commit": commit_sha}
-    t["game/G1"] = {"home": "G4", "away": "G5", "court": "north"}
     t.add("db/pred/team", "db/cardinality", "many")
     t.add("db/pred/video", "db/type", "demo_game.game.Video")
+    t.add("db/pred/span", "db/type", "json")
+with L.transaction(by="human:dan") as t:                 # rev 2
+    bump(t, "code/demo-game", "minor",       # 0.0.0 -> 0.1.0
+         confirm=lambda old, new: True)
+with L.transaction(by="human:dan") as t:                 # rev 3
+    t["game/G1"] = {"home": "G4", "away": "G5", "court": "north"}
 video_value = Video(b"G1 wide camera, 9000 frames")
-video_value.preds.update(game="G1", camera="wide")
-with L.transaction(by="human:dan") as t:
+video_value.preds.update(game="G1", camera="wide", span=[0, 9000])
+with L.transaction(by="human:dan") as t:                 # rev 4
     t.add_value(video_value, alias="video/G1",
                 provenance="import:archive")
-cut_153 = L.at().eval("demo_game.game.cut", game="G1",
-                      version="1.5.3")
-with L.transaction(by="human:dan") as t:
-    t.add("game/G1", "db/alias", cut_153.subject)
-    t["game/G1", "home"] = "G6"          # a correction
-cut_154 = L.at().eval("demo_game.game.cut", game="G1",
-                      version="1.5.4")
-with L.transaction(by="human:dan") as t:
-    t.add("game/G1", "db/alias", cut_154.subject)
+cut_153_value = L.at().eval("demo_game.game.cut",       # rev 5
+                            game="G1", version="1.5.3")
+with L.transaction(by="human:dan") as t:                 # rev 6
+    t.add("game/G1", "db/alias", cut_153_value.subject)
+with L.transaction(by="human:dan", why="home was G6") as t:
+    t["game/G1", "home"] = "G6"                          # rev 7
+cut_154_value = L.at().eval("demo_game.game.cut",       # rev 8
+                            game="G1", version="1.5.4")
+with L.transaction(by="human:dan") as t:                 # rev 9
+    t.add("game/G1", "db/alias", cut_154_value.subject)
 
 # %% [markdown]
-# The values notebook's game, cut short and seeded through the API:
-# G1, its video, a 1.5.3 cut, a correction to the home team, and a
-# 1.5.4 cut that `game/G1` now names. Everything below is a recipe.
+# ## The ledger from a shell
 
 # %% [markdown]
-# ## `just bump code [minor|major]`
+# ### One recipe is one API call
 
 # %%
-# !just bump code
-# !echo yes | just bump code minor
+# !just values game=G1
+# → video/G1  game=G1 camera=wide span=[0, 9000]
+# → game/G1   game=G1 version=1.5.4 team=G6,G5 video=video/G1
+# → <8 hex>   game=G1 version=1.5.3 team=G4,G5 video=video/G1
 
 # %% [markdown]
-# Sugar for `bump` on the repo's own clock, `code/demo-game` (`code`
-# is the recipe's name for it), under `by=human:$USER`, then any
-# version-sync line the project adds (Q4 (A)); minor and major
-# print the move and wait for `yes`, which is `confirm=`.
+# Sugar for `L.at().values(game="G1")`, each value printed in its
+# alias form with its preds.
 
 # %%
-with L.transaction(by=f"human:{USER}") as t:
-    bump(t, "code/demo-game")                  # patch
-with L.transaction(by=f"human:{USER}") as t:
-    bump(t, "code/demo-game", "minor",
-         confirm=lambda old, new: True)        # the recipe asks
-print(t.rev["code/demo-game"])  # {"version": …, "commit": <commit>}
-print(t.rev["code/demo-game", "commit"] == commit_sha)   # True
+for game_value in L.at().values(game="G1"):
+    print(game_value, dict(game_value.preds))
+# → video/G1 {"game": "G1", "camera": "wide", "span": [0, 9000]}
+# → game/G1 {"game": "G1", "version": "1.5.4",
+#            "team": ["G6", "G5"], "video": video/G1}
+# → <8 hex> {"game": "G1", "version": "1.5.3",
+#            "team": ["G4", "G5"], "video": video/G1}
 
 # %% [markdown]
-# ## `just bump db minor`: a release
+# Every value of the game: the video and both cuts, the 1.5.4 cut
+# printed as `game/G1` because the game names it.
 
 # %%
-# !echo yes | just bump db minor
+# !just values span:='[0, 9000]'
+# → video/G1  game=G1 camera=wide span=[0, 9000]
 
 # %% [markdown]
-# Sugar for `bump(t, "db", "minor", confirm=…)` with `time=True`:
-# the ledger's own version, the name of this moment.
+# Sugar for `L.at().values(span=[0, 9000])`.
 
 # %%
-with L.transaction(by=f"human:{USER}", time=True,
-                   why="release") as t:
-    bump(t, "db", "minor", confirm=lambda old, new: True)
-release_version = t.rev["db", "version"]
-print(release_version,
-      L.at(release_version).id == t.rev.id)   # <version> True
+print(L.at().values(span=[0, 9000]))     # → [video/G1]
 
 # %% [markdown]
-# ## `just values kind=Cut game=G1`
+# `k:=v` is JSON, so `span:='[0, 9000]'` is the list a Python caller
+# writes and `epochs:=8` the number 8; `k=v` is always a string, so
+# `version=1.5` stays `"1.5"` (A17).
+
+# %% [markdown]
+# ### Finding the ledger
+
+# %%
+# !cat .datconfig.yaml
+# → ledger: .dat/ledger
+
+# %% [markdown]
+# Every recipe opens the ledger with `Ledger()`, which walks up from
+# the cwd to the nearest `.datconfig.yaml` and opens the ledger its
+# `ledger:` line names. Notice `DAT_LEDGER` wins over the walk, here
+# naming a ledger that does not exist.
+
+# %%
+# !DAT_LEDGER=../no-ledger just values game=G1
+# → LedgerError: no ledger at ../no-ledger
+
+# %% [markdown]
+# Sugar for `Ledger()` with `DAT_LEDGER` set in the environment.
+
+# %%
+os.environ["DAT_LEDGER"] = "../no-ledger"
+try:
+    Ledger()
+except LedgerError as e:
+    print("LedgerError:", e)  # → LedgerError: no ledger at ../no-ledger
+del os.environ["DAT_LEDGER"]
+
+# %% [markdown]
+# Set, `DAT_LEDGER` names the ledger and the walk never runs (A44.4):
+# a recipe run from a scratch folder, or a sandbox worker, reaches
+# the project's ledger this way.
+
+# %% [markdown]
+# ## Finding values
+
+# %% [markdown]
+# ### Only one kind
 
 # %%
 # !just values kind=Cut game=G1
-#   game/G1    game=G1 version=1.5.4 team=G6,G5 video=video/G1
-#   <8 hex>    game=G1 version=1.5.3 team=G4,G5 video=video/G1
+# → game/G1   game=G1 version=1.5.4 team=G6,G5 video=video/G1
+# → <8 hex>   game=G1 version=1.5.3 team=G4,G5 video=video/G1
 
 # %% [markdown]
-# Sugar for `rev.values(kind=…, **preds)` at the top, each value
-# printed in its alias form with its preds; the short `Cut` is
-# resolved against the `db/kind` rows, refused when ambiguous.
+# Sugar for `L.at().values(kind=Cut, game="G1")`.
 
 # %%
-for cut in L.at().values(kind=Cut, game="G1"):
-    print(cut, dict(cut.preds))
+for cut_value in L.at().values(kind=Cut, game="G1"):
+    print(cut_value, cut_value.preds["version"])
+# → game/G1 1.5.4
+# → <8 hex> 1.5.3
 
 # %% [markdown]
-# ## `just value game=G1 version=1.5.3`
+# The video is gone: `kind=` narrows to a class. The recipe matches
+# the short `Cut` against the `db/kind` rows and refuses it when two
+# kinds share it.
+
+# %% [markdown]
+# ### Exactly one value
 
 # %%
 # !just value game=G1 version=1.5.3
+# → <8 hex>   game=G1 version=1.5.3 team=G4,G5 video=video/G1
 
 # %% [markdown]
-# Sugar for `rev.value(**preds)`: exactly one, else the recipe
-# prints the `KeyError` or `Multiple`.
+# Sugar for `L.at().value(game="G1", version="1.5.3")`.
 
 # %%
 cut_value = L.at().value(game="G1", version="1.5.3")
 print(cut_value, dict(cut_value.preds))
+# → <8 hex> {"game": "G1", "version": "1.5.3",
+#            "team": ["G4", "G5"], "video": video/G1}
 
 # %% [markdown]
-# ## `just eval demo_game.game.cut game=G1 version=1.5.3`
+# Asked for one where three match, `value` refuses and names them
+# rather than picking one.
 
 # %%
-# !just eval demo_game.game.cut game=G1 version=1.5.3
-#   ran  <8 hex>    (the home correction made 1.5.3 stale)
+# !just value game=G1
+# → Multiple: game=G1 matches 3: video/G1, game/G1, <8 hex>
 
 # %% [markdown]
-# Sugar for `rev.eval(name, **keys)`, with `memo="get"` asked first
-# so the recipe can say hit or ran. `k=v` is a string key and
-# `k:=v` a JSON one, so `epochs:=8` is the key `8` a Python caller
-# writes, while `version=1.5` stays `"1.5"` (A17).
+# Sugar for `L.at().value(game="G1")`, the `Multiple` printed.
+
+# %%
+try:
+    L.at().value(game="G1")
+except Multiple as e:
+    print("Multiple:", e)
+# → Multiple: game=G1 matches 3: video/G1, game/G1, <8 hex>
+
+# %% [markdown]
+# ### What a subject has held
+
+# %%
+# !just history game/G1
+# → rev  by         predicate  object
+# →   3  human:dan  away       G5
+# →   3  human:dan  court      north
+# →   3  human:dan  home       G4
+# →   6  human:dan  db/alias   <the 1.5.3 cut, 8 hex>
+# →   7  human:dan  home       G6
+# →   9  human:dan  db/alias   <the 1.5.4 cut, 8 hex>
+
+# %% [markdown]
+# Sugar for `rev.asserted("game/G1", p)` on each predicate the game
+# holds, with each revision's `db/by`.
 
 # %%
 rev = L.at()
-keys_record = {"game": "G1", "version": "1.5.3"}
-hit_cut = rev.eval("demo_game.game.cut", memo="get", **keys_record)
-cut_value = hit_cut or rev.eval("demo_game.game.cut", **keys_record)
-print("hit" if hit_cut else "ran", cut_value)
+history_tuples = []
+for predicate in {p for p, _ in rev.all("game/G1")}:
+    for asserted_rev, obj, added in rev.asserted("game/G1",
+                                                 predicate):
+        history_tuples.append((asserted_rev.id, predicate, obj,
+                               added))
+for rev_id, predicate, obj, added in sorted(history_tuples):
+    by = rev[f"db/tx/{rev_id}", "db/by"]
+    print(rev_id, by, "+" if added else "-", predicate, obj)
+# → 3 human:dan + away G5
+# → 3 human:dan + court north
+# → 3 human:dan + home G4
+# → 6 human:dan + db/alias <the 1.5.3 cut, 64 hex>
+# → 7 human:dan + home G6
+# → 9 human:dan + db/alias <the 1.5.4 cut, 64 hex>
 
 # %% [markdown]
-# ## `just why <alias|hash>`
+# The game's own rows and its alias moves, in order: the home team
+# corrected at 7, the current cut moved at 9. No fold gives this;
+# `asserted` at two positions walks the history, removes included.
+
+# %% [markdown]
+# ### Why a value is what it is
 
 # %%
 # !just why game/G1
+# → game/G1: <8 hex>, matches the head
+# → trace: code/demo-game 0.1.0+<8 hex>, fn <8 hex>,
+# →   game/G1 away G5, game/G1 home G6, video/G1,
+# →   platform darwin-arm64-py3.11, uv.lock <8 hex>
+# → since <8 hex>, its last target: game/G1 home G4 -> G6
 
 # %% [markdown]
-# Sugar for `v.trace`, `v.matches(L.at())` and `v.diff(prev)`,
-# `prev` the value the alias named before; given a bare hash, the
-# recipe takes `against=<alias|hash>` instead.
+# Sugar for `v.trace`, `v.matches(rev)` and `v.diff(prev)`, `prev`
+# the alias's previous target from `rev.asserted(s, "db/alias")`.
 
 # %%
 rev = L.at()
 current_cut = rev.load("game/G1")
-print(dict(sorted(current_cut.trace.items())))
-print(current_cut.matches(rev))                # True
-alias_targets = [o for i, p, o in moves(rev, "game/G1")
-                 if p == "db/alias"]
-print(current_cut.diff(rev.load(alias_targets[-2])))
-# {"game/G1 home": ("G6", "G4")}
+for item in sorted(current_cut.trace):
+    print(item, "->", current_cut.trace[item])
+# → code/demo-game -> 0.1.0+<8 hex>
+# → fn -> db/fn/demo_game.game.cut/<hash>
+# → game/G1 away -> G5
+# → game/G1 home -> G6
+# → platform -> darwin-arm64-py3.11
+# → q:{"game":"G1","kind":"demo_game.game.Video"}
+#     -> ["ref:demo_game.game.Video:<hash>"]
+# → ref:demo_game.game.Video:<hash>
+#     -> ref:demo_game.game.Video:<hash>
+# → uv.lock -> sha256:<hash>
+print(current_cut.matches(rev))          # → True
+alias_moves = rev.asserted("game/G1", "db/alias")
+previous_subject = alias_moves[-2][1]
+print(current_cut.diff(rev.load(previous_subject)))
+# → {"game/G1 home": ("G6", "G4")}
 
 # %% [markdown]
-# ## `just history game/G1`
-
-# %%
-# !just history game/G1
-
-# %% [markdown]
-# Sugar for the `moves` walk with each revision's `db/by` beside
-# it: the game's own rows and its alias moves, in order. `asserted`
-# answers *when* only for a triple already known.
-
-# %%
-rev = L.at()
-for i, p, o in moves(rev, "game/G1"):
-    print(i, rev[f"db/tx/{i}", "db/by"], p, o)
+# Everything the cut read is in its trace; `matches` re-reads each
+# item at the head, and `diff` against the cut the game named before
+# names the one item that moved, the home team. Given a bare hash,
+# which has no previous target, the recipe takes `against=`.
 
 # %% [markdown]
-# ## `just annotate game/G1 texture=hardwood`
+# ## Writing
+
+# %% [markdown]
+# ### A fact beside a value
 
 # %%
 # !just annotate game/G1 texture=hardwood
+# → game/G1 texture=hardwood
 
 # %% [markdown]
-# Sugar for `t[s, p] = o`: a row on the named subject, literal
-# (A34), never a seal; on `game/G1` it is a fact about the game,
-# not about its cut.
+# Sugar for `t["game/G1", "texture"] = "hardwood"`.
 
 # %%
-with L.transaction(by=f"human:{USER}") as t:
+with L.transaction(by=f"human:{user_name}") as t:
     t["game/G1", "texture"] = "hardwood"
-print(L.at()["game/G1", "texture"])          # hardwood
+print(L.at()["game/G1", "texture"])          # → hardwood
 
 # %% [markdown]
+# A row on the named subject, literal (A34): on `game/G1` it is a
+# fact about the game, not about its cut, and it is never a seal.
 # There is no `just set <hash> game=G2`: a wrong pred on a sealed
-# value is a new seal and an alias move, made by `eval` or, in
+# value is a new seal and an alias move, made by `just eval` or, in
 # code, by `add_value`.
 
 # %% [markdown]
-# ## `just alias prod <hash>`
+# ### Giving a value a name
 
 # %%
-cut_subject = Ref(L.at(), "game/G1").subject
-# !just alias prod {cut_subject[:8]}
-#   prod: (none) -> game/G1
+# !just alias prod {cut_153_value.subject[:8]}
+# → prod: (none) -> <the 1.5.3 cut, 8 hex>
+# !just alias prod {cut_154_value.subject[:8]}
+# → prod: <the 1.5.3 cut, 8 hex> -> <the 1.5.4 cut, 8 hex>
 
 # %% [markdown]
-# Sugar for `rev.get("prod", "db/alias")`, printed as the old
-# target, then `t.add("prod", "db/alias", s)`; a short hash is
-# expanded with `refs(s="<prefix>*", one=True)`.
+# Sugar for `rev.get("prod", "db/alias")`, then
+# `t.add("prod", "db/alias", s)`.
 
 # %%
-rev = L.at()
-target_subject = rev.refs(s=f"{cut_subject[:8]}*",
-                          one=True).subject
-print(rev.get("prod", "db/alias"))           # old target, or None
-with L.transaction(by=f"human:{USER}") as t:
-    t.add("prod", "db/alias", target_subject)
-print(Ref(L.at(), "prod"))                   # prod: the shortest
+for named_cut_value in (cut_153_value, cut_154_value):
+    rev = L.at()
+    hash_prefix = named_cut_value.subject[:8]
+    target_ref = rev.refs(s=f"{hash_prefix}*", one=True)
+    print(rev.get("prod", "db/alias"))
+    with L.transaction(by=f"human:{user_name}") as t:
+        t.add("prod", "db/alias", target_ref.subject)
+# → None
+# → <the 1.5.3 cut, 64 hex>
+print(Ref(L.at(), "prod").subject == cut_154_value.subject)  # → True
 
 # %% [markdown]
-# ## `just index game`
+# The second move prints what `prod` named before it, so a wrong
+# move is undone by hand. A short hash is expanded with
+# `refs(s="<prefix>*", one=True)`, refused when two subjects share
+# the prefix.
+
+# %% [markdown]
+# ### A pred worth finding fast
 
 # %%
 # !just index game
+# → game: indexed; 3 subjects hold it
 
 # %% [markdown]
-# Sugar for `t.add("db/pred/game", "db/index", "true")`. The store
-# builds the index over existing rows itself (Q18), so there is no
-# back-fill to write; the recipe reports how many subjects hold the
-# pred.
+# Sugar for `t.add("db/pred/game", "db/index", "true")`.
 
 # %%
-with L.transaction(by=f"human:{USER}") as t:
+with L.transaction(by=f"human:{user_name}") as t:
     t.add("db/pred/game", "db/index", "true")
-print(len(L.at().refs(where={"game": None})))   # the video, cuts
+holder_subjects = {s for s, p, _ in L.at().all() if p == "game"}
+print(len(holder_subjects))          # → 3: the video and two cuts
 
 # %% [markdown]
-# ## `just run <spec> …`
-#
-# The dat constructor as a verb, written to the leans of Q36 (the
-# eval hands the function a `work` folder) and Q37 (the `fn` item
-# hashes the modules the run loaded), both still open on F447.
-
-# %%
-spec_record = {"main": "demo_game.etl.model.fit",
-               "stage": "model", "game": "G1", "epochs": 8}
-spec_path = scratch_ledger_path.parent / "model-G1.yaml"
-spec_path.write_text(yaml.safe_dump(spec_record))
-# !just run {spec_path} alias=model/prod
-#   ran  model/prod
+# The store builds the index over existing rows itself (Q18), so
+# there is nothing to back-fill; the count says how much the index
+# covers.
 
 # %% [markdown]
-# Sugar for `rev.eval("demo_game.etl.dat.dat", spec=…)` on the file's
-# contents, then, given `alias=`, `t.add(name, "db/alias", s)`:
-# handing the model to prod is an alias move; the seal is the
-# eval's own.
+# ## Versions and releases
+
+# %% [markdown]
+# ### Moving the code's version
 
 # %%
-model_dat = L.at().eval("demo_game.etl.dat.dat",
-                        spec=yaml.safe_load(spec_path.read_text()))
-with L.transaction(by=f"human:{USER}") as t:
+# !just bump code
+# → code/demo-game: 0.1.0 -> 0.1.1 at <8 hex>
+# !echo yes | just bump code minor
+# → code/demo-game: 0.1.1 -> 0.2.0? yes
+# → code/demo-game: 0.1.1 -> 0.2.0 at <8 hex>
+
+# %% [markdown]
+# Sugar for `bump(t, "code/demo-game", part, confirm=…)`.
+
+# %%
+with L.transaction(by=f"human:{user_name}") as t:
+    bump(t, "code/demo-game")                  # patch
+with L.transaction(by=f"human:{user_name}") as t:
+    bump(t, "code/demo-game", "minor",
+         confirm=lambda old, new: True)        # the recipe asks
+print(L.at()["code/demo-game"])
+# → {"version": "0.2.0", "commit": "<the demo commit>"}
+
+# %% [markdown]
+# `code` is the recipe's word for the repo the justfile sits in.
+# `bump` reads the commit from that checkout and writes it beside
+# the version; a minor or major move waits for `yes`, which is
+# `confirm=`. A project's own version-sync line follows in the
+# recipe (Q4 (A)).
+
+# %% [markdown]
+# ### A release
+
+# %%
+# !echo yes | just bump db minor
+# → db: 3.1.4 -> 3.2.0? yes
+# → db: 3.1.4 -> 3.2.0, a release
+
+# %% [markdown]
+# Sugar for `bump(t, "db", "minor", confirm=…)` with `time=True`.
+
+# %%
+with L.transaction(by=f"human:{user_name}", time=True,
+                   why="release") as t:
+    bump(t, "db", "minor", confirm=lambda old, new: True)
+release_version = t.rev["db", "version"]
+print(release_version,
+      L.at(release_version).id == t.rev.id)    # → 3.2.0 True
+
+# %% [markdown]
+# The ledger's own version names this moment: `L.at("3.2.0")` is
+# the revision, every code version and alias as they stood.
+
+# %% [markdown]
+# ### A name has no version
+
+# %% [markdown]
+# A bump of a name that points at a value is refused, naming the
+# alias.
+
+# %%
+# !just bump game/G1
+# → TypeError: game/G1 is an alias; seal a new value and re-point
+
+# %% [markdown]
+# Sugar for `bump(t, "game/G1")`, the `TypeError` printed.
+
+# %%
+try:
+    with L.transaction(by=f"human:{user_name}") as t:
+        bump(t, "game/G1")
+except TypeError as e:
+    print("TypeError:", e)
+# → TypeError: game/G1 is an alias; seal a new value and re-point
+
+# %% [markdown]
+# A value's version is a pred its constructor set; a new version is
+# a new value and an alias move.
+
+# %% [markdown]
+# ## Computing
+
+# %% [markdown]
+# ### Derived once, then found
+
+# %%
+# !just eval demo_game.game.cut game=G1 version=1.5.3
+# → ran  <8 hex>
+# !just eval demo_game.game.cut game=G1 version=1.5.3
+# → hit  <8 hex>
+
+# %% [markdown]
+# Sugar for `rev.eval(name, **keys)`, `memo="get"` asked first.
+
+# %%
+rev = L.at()
+keys_record = {"game": "G1", "version": "1.5.3"}
+hit_value = rev.eval("demo_game.game.cut", memo="get",
+                     **keys_record)
+cut_value = hit_value or rev.eval("demo_game.game.cut",
+                                  **keys_record)
+print("hit" if hit_value else "ran", cut_value)   # → ran <8 hex>
+
+# %% [markdown]
+# The 1.5.3 cut on the ledger read the old home team and the old
+# code version, so the first ask re-derives it and the second finds
+# it. The `memo="get"` look is how the recipe can say which.
+
+# %% [markdown]
+# ### Running a spec
+
+# %%
+# !cat model-G1.yaml
+# → epochs: 8
+# → game: G1
+# → main: demo_game.etl.model.fit
+# → stage: model
+
+# %%
+# !just run model-G1.yaml alias=model/prod
+# → ran  model/prod  game=G1 stage=model metrics.score=…
+
+# %% [markdown]
+# Sugar for `rev.eval("demo_game.etl.dat.dat", spec=…)`, then
+# `t.add("model/prod", "db/alias", s)`.
+
+# %%
+spec_from_file = yaml.safe_load(Path("model-G1.yaml").read_text())
+model_dat = L.at().eval("demo_game.etl.dat.dat", spec=spec_from_file)
+with L.transaction(by=f"human:{user_name}") as t:
     t.add("model/prod", "db/alias", model_dat.subject)
 print(Ref(L.at(), "model/prod"), model_dat.preds["metrics.score"])
+# → model/prod …
+
+# %% [markdown]
+# The dat constructor as a verb: the file's contents are the whole
+# question, and handing the model to prod is an alias move, the seal
+# being the eval's own. Written to the leans of Q36 (the eval hands
+# the function a `work` folder) and Q37 (the `fn` item hashes the
+# modules the run loaded), both still open on F447.
+
+# %% [markdown]
+# ## What the recipes hide
+#
+# What the Python notebooks spell out on every call, and where each
+# recipe gets it instead; this is the just layer's input (Q4).
+#
+# - **The ledger** — `Ledger()`: `DAT_LEDGER` if set, else the walk
+#   up to `.datconfig.yaml`.
+# - **`by=`** — `human:$USER` on every write.
+# - **`confirm=`** — a `yes` typed at the prompt, for a minor or
+#   major `bump`.
+# - **`time=True, why=`** — on `just bump db`, the release.
+# - **The repo** — `code` is `code/<the repo the justfile sits in>`.
+# - **The environment** — discovered from the checkout the recipe
+#   runs in, never passed.
+# - **Keys and preds** — `k=v` a string, `k:=v` JSON.
+# - **Kinds** — a short class name, matched against `db/kind`.
+# - **Hashes** — a prefix, expanded by `refs(s="<prefix>*",
+#   one=True)`.
+# - **Hit or ran** — `memo="get"` before `eval`.
+# - **Printing** — each value in its alias form with its preds; a
+#   moved alias with its old target.
+# - **Project policy** — a version-sync line after `just bump code`.
