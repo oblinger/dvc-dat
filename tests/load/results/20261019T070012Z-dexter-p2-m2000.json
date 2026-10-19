@@ -1,0 +1,141 @@
+{
+ "date": "20261019T070012Z",
+ "machine": {
+  "host": "dexter.local",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "machine": "x86_64",
+  "cpus": 12,
+  "python": "3.12.14",
+  "sqlite": "3.53.1"
+ },
+ "config": {
+  "ledger": "/Users/oblinger/t541-load/runs/ledger-p2",
+  "transactions": 2000,
+  "seed": 0,
+  "lock": 10.0,
+  "keys": 200,
+  "aliases": 8,
+  "shared": 6,
+  "mix": {
+   "seal": 30,
+   "shared": 5,
+   "alias": 10,
+   "salt": 3,
+   "eval": 27,
+   "read": 25
+  },
+  "fold_checks": true,
+  "processes": 2
+ },
+ "wall_s": 8.4,
+ "check_s": 4.404,
+ "timed_out": [],
+ "transactions_committed": 2422,
+ "tx_per_s": 288.32,
+ "ops_done": 4000,
+ "ops_per_s": 476.16,
+ "lock_timeouts": 0,
+ "ledger_errors": 0,
+ "latency": {
+  "all": {
+   "n": 4000,
+   "p50_ms": 2.37,
+   "p90_ms": 9.679,
+   "p99_ms": 13.866,
+   "max_ms": 185.248
+  },
+  "writes": {
+   "n": 1939,
+   "p50_ms": 2.339,
+   "p90_ms": 4.418,
+   "p99_ms": 13.215,
+   "max_ms": 185.248
+  }
+ },
+ "per_process": [
+  {
+   "wid": 0,
+   "elapsed_s": 8.373,
+   "n": 2000,
+   "p50_ms": 2.4,
+   "p90_ms": 9.711,
+   "p99_ms": 13.692,
+   "max_ms": 121.778
+  },
+  {
+   "wid": 1,
+   "elapsed_s": 8.239,
+   "n": 2000,
+   "p50_ms": 2.331,
+   "p90_ms": 9.655,
+   "p99_ms": 13.939,
+   "max_ms": 185.248
+  }
+ ],
+ "ops": {
+  "seal": {
+   "ok": 1196,
+   "n": 1196,
+   "p50_ms": 2.466,
+   "p90_ms": 4.944,
+   "p99_ms": 21.256,
+   "max_ms": 62.581
+  },
+  "shared": {
+   "ok": 238,
+   "n": 238,
+   "p50_ms": 1.615,
+   "p90_ms": 3.011,
+   "p99_ms": 10.151,
+   "max_ms": 10.955
+  },
+  "alias": {
+   "ok": 394,
+   "n": 394,
+   "p50_ms": 1.025,
+   "p90_ms": 3.981,
+   "p99_ms": 12.442,
+   "max_ms": 61.723
+  },
+  "salt": {
+   "ok": 111,
+   "n": 111,
+   "p50_ms": 1.012,
+   "p90_ms": 2.503,
+   "p99_ms": 20.911,
+   "max_ms": 185.248
+  },
+  "eval": {
+   "misses": 483,
+   "ok": 1044,
+   "hits": 561,
+   "n": 1044,
+   "p50_ms": 8.413,
+   "p90_ms": 11.829,
+   "p99_ms": 15.376,
+   "max_ms": 121.778
+  },
+  "read": {
+   "ok": 1017,
+   "n": 1017,
+   "p50_ms": 1.519,
+   "p90_ms": 2.22,
+   "p99_ms": 2.718,
+   "max_ms": 5.456
+  }
+ },
+ "errors": [],
+ "invariants": {
+  "failures": [],
+  "counts": {},
+  "top": 2423,
+  "setup_top": 1,
+  "fold_digest": "3d2651aaab593002d0f092f7ef13bfdb717c2594ccf248cf24aa70764a8bc86e",
+  "fold_handles": 4,
+  "checked": {
+   "committed": 1939,
+   "evals": 1044,
+   "memo_entries": 483
+  }
+ }
+}

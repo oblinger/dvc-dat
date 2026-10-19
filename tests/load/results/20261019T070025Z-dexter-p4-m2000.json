@@ -1,0 +1,159 @@
+{
+ "date": "20261019T070025Z",
+ "machine": {
+  "host": "dexter.local",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "machine": "x86_64",
+  "cpus": 12,
+  "python": "3.12.14",
+  "sqlite": "3.53.1"
+ },
+ "config": {
+  "ledger": "/Users/oblinger/t541-load/runs/ledger-p4",
+  "transactions": 2000,
+  "seed": 0,
+  "lock": 10.0,
+  "keys": 200,
+  "aliases": 8,
+  "shared": 6,
+  "mix": {
+   "seal": 30,
+   "shared": 5,
+   "alias": 10,
+   "salt": 3,
+   "eval": 27,
+   "read": 25
+  },
+  "fold_checks": true,
+  "processes": 4
+ },
+ "wall_s": 15.474,
+ "check_s": 13.471,
+ "timed_out": [],
+ "transactions_committed": 4443,
+ "tx_per_s": 287.13,
+ "ops_done": 8000,
+ "ops_per_s": 516.99,
+ "lock_timeouts": 0,
+ "ledger_errors": 0,
+ "latency": {
+  "all": {
+   "n": 8000,
+   "p50_ms": 3.596,
+   "p90_ms": 18.225,
+   "p99_ms": 37.081,
+   "max_ms": 653.643
+  },
+  "writes": {
+   "n": 3864,
+   "p50_ms": 2.734,
+   "p90_ms": 7.328,
+   "p99_ms": 58.371,
+   "max_ms": 653.643
+  }
+ },
+ "per_process": [
+  {
+   "wid": 0,
+   "elapsed_s": 14.646,
+   "n": 2000,
+   "p50_ms": 3.738,
+   "p90_ms": 17.936,
+   "p99_ms": 38.923,
+   "max_ms": 191.062
+  },
+  {
+   "wid": 1,
+   "elapsed_s": 15.031,
+   "n": 2000,
+   "p50_ms": 3.451,
+   "p90_ms": 18.221,
+   "p99_ms": 38.527,
+   "max_ms": 349.452
+  },
+  {
+   "wid": 2,
+   "elapsed_s": 15.44,
+   "n": 2000,
+   "p50_ms": 3.647,
+   "p90_ms": 19.102,
+   "p99_ms": 29.329,
+   "max_ms": 653.643
+  },
+  {
+   "wid": 3,
+   "elapsed_s": 14.841,
+   "n": 2000,
+   "p50_ms": 3.55,
+   "p90_ms": 17.651,
+   "p99_ms": 31.022,
+   "max_ms": 549.702
+  }
+ ],
+ "ops": {
+  "seal": {
+   "ok": 2398,
+   "n": 2398,
+   "p50_ms": 3.268,
+   "p90_ms": 7.628,
+   "p99_ms": 60.987,
+   "max_ms": 549.702
+  },
+  "shared": {
+   "ok": 449,
+   "n": 449,
+   "p50_ms": 2.189,
+   "p90_ms": 6.215,
+   "p99_ms": 57.778,
+   "max_ms": 193.201
+  },
+  "alias": {
+   "ok": 775,
+   "n": 775,
+   "p50_ms": 1.421,
+   "p90_ms": 5.148,
+   "p99_ms": 59.749,
+   "max_ms": 653.643
+  },
+  "salt": {
+   "ok": 242,
+   "n": 242,
+   "p50_ms": 1.351,
+   "p90_ms": 8.969,
+   "p99_ms": 36.252,
+   "max_ms": 349.452
+  },
+  "eval": {
+   "misses": 580,
+   "ok": 2122,
+   "hits": 1542,
+   "n": 2122,
+   "p50_ms": 14.952,
+   "p90_ms": 23.294,
+   "p99_ms": 29.667,
+   "max_ms": 192.899
+  },
+  "read": {
+   "ok": 2014,
+   "n": 2014,
+   "p50_ms": 2.739,
+   "p90_ms": 4.904,
+   "p99_ms": 7.036,
+   "max_ms": 8.191
+  }
+ },
+ "errors": [],
+ "invariants": {
+  "failures": [],
+  "counts": {},
+  "top": 4444,
+  "setup_top": 1,
+  "fold_digest": "6655558e49a442ceb135c40246e0b6700e7c3563859abfd255ec48a2b0d919b6",
+  "fold_handles": 4,
+  "checked": {
+   "committed": 3864,
+   "evals": 2122,
+   "memo_entries": 578
+  }
+ }
+}
