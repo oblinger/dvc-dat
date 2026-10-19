@@ -44,60 +44,37 @@ from pathlib import Path
 from dvc_dat.ledger import Ledger, Ref, bump
 from dvc_dat.ledger import AliasLoop, Exists, Multiple, Undeclared
 
+# %%
+scratch_project_path = Path("scratch/values-demo").resolve()
+scratch_project_path.mkdir(parents=True)
+shutil.copytree("demo_game", scratch_project_path / "demo_game",
+                ignore=shutil.ignore_patterns("__pycache__"))
+os.chdir(scratch_project_path)
+
 # %% [markdown]
-# ### Connecting the ledger to the code
-#
-# A value is a complex Python object, so to define one precisely
-# the ledger must know exactly which code produced it. It does that
-# by tying itself to git: a particular commit of a repository.
+# The project is this scratch folder.
 
 # %%
-# A demo repo for this notebook: the `demo_game` package beside it,
-# copied into scratch and made a git repository.
-demo_repo_path = Path("scratch/values-demo/demo-game").resolve()
-shutil.copytree("demo_game", demo_repo_path,
-                ignore=shutil.ignore_patterns("__pycache__"))
+L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
+
+# %%
+# demo repo
 
 
 def git(*args: str) -> str:
-    """Run git in the demo repository; return its stdout."""
+    """Run git in the scratch folder; return its stdout."""
     cmd = ["git", "-c", "user.name=demo",
            "-c", "user.email=demo@example.com", *args]
-    done = subprocess.run(cmd, cwd=demo_repo_path, check=True,
+    done = subprocess.run(cmd, cwd=scratch_project_path, check=True,
                           capture_output=True, text=True)
     return done.stdout.strip()
 
 
+Path(".gitignore").write_text(".dat/\n")
 git("init", "-q")
-
-# %% [markdown]
-# The ledger opens inside the repository, so the project is the
-# repository.
-
-# %%
-os.chdir(demo_repo_path)
-L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
-# .datconfig.yaml is committed: it is the project's config, as in
-# any repo. The ledger itself (.dat/) is ignored.
-(demo_repo_path / ".gitignore").write_text(".dat/\n")
 git("add", ".")
-git("commit", "-q", "-m", "demo-game 0.1.0")
-commit_sha = git("rev-parse", "HEAD")
-sys.path.insert(0, str(demo_repo_path))
-import demo_game                     # discovery sees it imported
-
-# %%
-with L.transaction(by="human:dan", why="the clock's start") as t:
-    bump(t, "code/demo-game", "minor",       # 0.0.0 -> 0.1.0
-         confirm=lambda old, new: True)
-rev = L.at()
-print(rev["code/demo-game"])
-# {"version": "0.1.0", "commit": "<the demo commit>"}
-print(rev["code/demo-game", "commit"] == commit_sha)   # True
-
-# %% [markdown]
-# `bump` wrote the commit itself, read from the checkout the ledger
-# sits in.
+git("commit", "-q", "-m", "demo-game")
+sys.path.insert(0, str(scratch_project_path))
 
 # %% [markdown]
 # The two games as plain rows written with the bracket, as the
@@ -329,26 +306,28 @@ stored_rev = wide_video.rev
 for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
     print(row)
 # rev subject  predicate               object
-#   9 <hash>   db/value                ref:demo_game.game.Video:<hash>
-#   9 <hash>   db/kind                 demo_game.game.Video
-#   9 <hash>   db/provenance           import:archive
-#   9 <hash>   db/preds                ["game","camera","span"]
-#   9 <hash>   db/trace/code/demo-game 0.1.0+<8 hex>
-#   9 <hash>   db/trace/platform       darwin-arm64-py3.11
-#   9 <hash>   db/trace/uv.lock        sha256:<hash>
-#   9 <hash>   game                    G1
-#   9 <hash>   camera                  wide
-#   9 <hash>   span                    [0, 9000]
-#   9 video/G1 db/alias                <hash>
-#   9 db/tx/9  db/by                   human:dan
+#   8 <hash>   db/value                ref:demo_game.game.Video:<hash>
+#   8 <hash>   db/kind                 demo_game.game.Video
+#   8 <hash>   db/provenance           import:archive
+#   8 <hash>   db/preds                ["game","camera","span"]
+#   8 <hash>   db/trace/code/demo-game 0.0.0+<8 hex>
+#   8 <hash>   db/trace/platform       darwin-arm64-py3.11
+#   8 <hash>   db/trace/uv.lock        sha256:<hash>
+#   8 <hash>   game                    G1
+#   8 <hash>   camera                  wide
+#   8 <hash>   span                    [0, 9000]
+#   8 video/G1 db/alias                <hash>
+#   8 db/tx/8  db/by                   human:dan
 
 # %% [markdown]
 # `db/value` names the bytes by class and hash. `db/kind` is the
 # class. `db/provenance` is the caller's word. `db/preds` lists the
 # preds the kind declared when the value was stored. The
 # `db/trace/…` rows are the trace, under Values computed by
-# functions § A value records what it read. Then one row per pred,
-# and the alias.
+# functions § A value records what it read: a hand seal records
+# whatever environment it runs in (`db/trace/code/…` is the code
+# the environment had; the functions section explains it). Then one
+# row per pred, and the alias.
 
 # %% [markdown]
 # ### Finding values by preds
@@ -395,11 +374,12 @@ print(rev.select(("game", "span"), kind=Video))
 # %% [markdown]
 # ### Sealing: a value is a constant
 #
-# Storing a value seals it. Its bytes, and the preds the seal
-# wrote, are fixed forever, and its subject is their hash. The rows
-# the seal wrote (`db/value`, `db/kind`, `db/preds`,
-# `db/provenance` and the pred rows) can never be added to or
-# changed. Rows that are not the seal's, annotations, can.
+# Values are immutable once they are sealed. During construction
+# everything is mutable; `add_value` is the act of sealing, and from
+# then on nothing changes: the bytes, the preds the seal wrote, and
+# the rows it wrote (`db/value`, `db/kind`, `db/preds`,
+# `db/provenance`) are fixed forever, and the subject is their
+# hash. Rows that are not the seal's, annotations, can be added.
 
 # %% [markdown]
 # On the object, a sealed value's `preds` is read-only.
@@ -413,7 +393,7 @@ except TypeError as e:
 
 # %% [markdown]
 # On the ledger, an `add` on a pred the seal wrote raises `Exists`
-# at commit and writes nothing.
+# as the transaction closes, and writes nothing.
 
 # %%
 try:
@@ -446,8 +426,8 @@ print(bad_video.sealed)              # False: nothing was written
 del bad_video.preds["team"]
 
 # %% [markdown]
-# A hand seal may name any provenance but one beginning `eval:`,
-# which `eval` alone writes.
+# A hand seal names its own provenance (`eval:` provenance is
+# written by evaluation alone, next section).
 
 # %%
 try:
@@ -470,9 +450,10 @@ except TypeError as e:
 # %% [markdown]
 # ## Revising a value
 #
-# A value cannot be revised, so revision happens at three levels,
-# and the level you pick is the level of what changed: a fact beside
-# the value, a wrong pred, or a new version.
+# A value is immutable, so you cannot revise the value itself.
+# Instead, revision happens at three levels, and the level you pick
+# is the level of what changed: a fact beside the value, a wrong
+# pred, or a new version.
 
 # %% [markdown]
 # ### Annotation: rows beside the value
@@ -557,6 +538,42 @@ print(longer_cut, fixed_cut)             # trim/G1 <8 hex>
 # it; the corrected trim stays, unnamed.
 
 # %% [markdown]
+# ## Values computed by functions
+
+# %% [markdown]
+# ### Connecting the ledger to the code
+#
+# A function runs in a checkout, and the ledger must know exactly
+# which code produced a value, so it ties itself to git: a
+# particular commit of a repository.
+
+# %%
+# A demo repo for this notebook: Setup copied the `demo_game`
+# package into the scratch folder and committed it there.
+commit_sha = git("rev-parse", "HEAD")
+import demo_game
+print(demo_game.__file__)
+# .../scratch/values-demo/demo_game/__init__.py: the copy
+
+# %% [markdown]
+# `demo_game` is imported from the copy, which exists so a code
+# change can be committed (§ Same bytes, different values).
+
+# %%
+with L.transaction(by="human:dan", why="the clock's start") as t:
+    bump(t, "code/demo-game", "minor",       # 0.0.0 -> 0.1.0
+         confirm=lambda old, new: True)
+rev = L.at()
+print(rev["code/demo-game"])
+# {"version": "0.1.0", "commit": "<the demo commit>"}
+print(rev["code/demo-game", "commit"] == commit_sha)   # True
+
+# %% [markdown]
+# `bump` wrote `version` and `commit`, the commit read from the
+# checkout the ledger sits in. The values sealed by hand above
+# carry `0.0.0`, the clock before its start.
+
+# %% [markdown]
 # `bump` moves clocks (`code/<repo>`, `db`), not aliases: an alias
 # moves by a new `db/alias` row, so on a subject holding one `bump`
 # raises, naming the alias.
@@ -567,9 +584,6 @@ try:
         bump(t, "trim/G1")
 except TypeError as e:
     print("TypeError:", e)
-
-# %% [markdown]
-# ## Values computed by functions
 
 # %% [markdown]
 # ### A function that computes a value
@@ -788,7 +802,7 @@ for item in sorted(cut_153.trace):
 
 # %%
 print(dict(sorted(wide_video.trace.items())))
-# {"code/demo-game": "0.1.0+<8 hex>",
+# {"code/demo-game": "0.0.0+<8 hex>",
 #  "platform": "darwin-arm64-py3.11", "uv.lock": "sha256:<hash>"}
 
 # %% [markdown]
@@ -964,7 +978,7 @@ print(hit_value.subject == latest_ref.subject)  # True: latest
 # its clock. Notice the cut misses though its bytes do not change.
 
 # %%
-game_path = demo_repo_path / "demo_game/game.py"
+game_path = scratch_project_path / "demo_game/game.py"
 game_path.write_text(game_path.read_text()
                      + "\n# tidied: no change in behaviour\n")
 git("commit", "-q", "-am", "tidy game")
