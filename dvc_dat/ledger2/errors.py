@@ -21,6 +21,10 @@ class UntracedRead(LedgerError, PermissionError):
     """A sandboxed function opened a path outside the mounts, the dats and its scratch."""
 
 
+class ConfinedWrite(LedgerError, PermissionError):
+    """A sandboxed function wrote outside its work folder (the worker's scratch) and the store."""
+
+
 class LockTimeout(LedgerError, TimeoutError):
     """A ``lock=`` body ran past its limit, or the lock was not had within it; nothing written."""
 

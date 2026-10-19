@@ -17,7 +17,8 @@ module that would resolve inside a mounted repo's checkout but under no mount
 (``UnmountedImport``). An audit hook on ``open`` refuses, while a function
 body runs, a read outside the mounted roots, the art store (dats), the
 worker's scratch and the interpreter's own files (``UntracedRead``), and a
-write outside the scratch (where ``work`` folders live) and the art store.
+write outside the scratch (where ``work`` folders live) and the art store
+(``ConfinedWrite``).
 Before each top-level call the mounted modules are purged from
 ``sys.modules``, so each run loads (and records) what it uses; a nested eval
 runs in-process and its loads count toward its own entry (Q37 (ii)).
@@ -51,7 +52,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from .codec import sha256
 from .env import Env, current_env
-from .errors import NotEvaluated, UnmountedImport, UntracedRead
+from .errors import ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .fn import Fn, fn_subject, mounts_at, mounts_hash, seal_entry, wrap_result
 
 if TYPE_CHECKING:
@@ -383,7 +384,7 @@ def _audit(event: str, args: Any) -> None:
         isinstance(flags, int) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT))
     if write:
         if not _under(p, STATE.writes):
-            raise UntracedRead(f"{p}: a sandboxed function writes only in its work folder")
+            raise ConfinedWrite(f"{p}: a sandboxed function writes only in its work folder")
         return
     if not _under(p, STATE.reads + STATE.writes):
         raise UntracedRead(f"{p}: outside the mounts, the dats and the scratch")

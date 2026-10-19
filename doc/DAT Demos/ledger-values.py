@@ -21,7 +21,7 @@ from pathlib import Path
 
 from dvc_dat.ledger2 import Ledger, Ref
 from dvc_dat.ledger2 import AliasLoop, Exists, Multiple, Undeclared
-from dvc_dat.ledger2 import UnmountedImport, UntracedRead
+from dvc_dat.ledger2 import ConfinedWrite, UnmountedImport
 
 scratch_path = Path("scratch/values-demo").resolve()
 scratch_ledger_path = scratch_path / "ledger"
@@ -761,14 +761,15 @@ except UnmountedImport as e:
 try:
     note_fn = rev.load_fn("plane.reach.note")
     note_fn(text="hello")
-except UntracedRead as e:
-    print("UntracedRead:", e)
-# → UntracedRead: /private/tmp/plane-note.txt: a sandboxed function
+except ConfinedWrite as e:
+    print("ConfinedWrite:", e)
+# → ConfinedWrite: /private/tmp/plane-note.txt: a sandboxed function
 #   writes only in its work folder
 
 # %% [markdown]
-# The refusal is raised as `UntracedRead`, the one error for both
-# directions. The sandbox confines writes to the worker's scratch
+# The refusal is raised as `ConfinedWrite`; a read outside the
+# allowed folders is `UntracedRead`. The sandbox confines writes
+# to the worker's scratch
 # and the store; reads are confined the same way, to the mounted folders,
 # the store and the worker's scratch. Open (Q36; lean): a function
 # that builds a folder declares a parameter `work: Path`, reserved

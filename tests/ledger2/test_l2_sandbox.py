@@ -6,7 +6,8 @@ import textwrap
 
 import pytest
 
-from dvc_dat.ledger2 import Ledger, NotEvaluated, UnmountedImport, UntracedRead, bump, set_env_provider
+from dvc_dat.ledger2 import (ConfinedWrite, Ledger, NotEvaluated, UnmountedImport, UntracedRead, bump,
+                             set_env_provider)
 from dvc_dat.ledger2.sandbox import shutdown
 
 PKG = {
@@ -127,8 +128,9 @@ def test_refusals(sbx):
         L.at().eval("sbx.stage.fns.borrow", game="G1")
     with pytest.raises(UntracedRead):
         L.at().eval("sbx.stage.fns.snoop", game="G1")
-    with pytest.raises(UntracedRead):
+    with pytest.raises(ConfinedWrite, match="writes only in its work folder") as e:
         L.at().eval("sbx.stage.fns.scribble", game="G1")
+    assert not isinstance(e.value, UntracedRead)
     old = L.at(1)
     (repo / "sbx/other.py").write_text("X = 2\n")
     git(repo, "commit", "-q", "-am", "elsewhere")
