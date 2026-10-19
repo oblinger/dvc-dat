@@ -1,6 +1,8 @@
 # ledger.store
 
-The backend is one SQLite table of quads and a folder of bytes by hash,
+`Store` is the interface the ledger reads and writes through, with two
+backends: `SqliteStore` (here) and `PostgresStore` (`pgstore`, below).
+The SQLite backend is one table of quads and a folder of bytes by hash,
 both inside the ledger folder (`ledger.db`, `art/`). Rows are only ever
 appended: `quads(rev, ord, subject, predicate, object, added)`, `ord`
 the row's place within its transaction, `object` a tagged string
@@ -10,8 +12,12 @@ the row's place within its transaction, `object` a tagged string
 
 ## Public surface
 
-- `Store(folder)`: creates `ledger.db` (WAL mode) and the schema if
-  absent; `LedgerError` when SQLite refuses. Reads go through one
+- `Store` (ABC): `top`, `rows`, `subjects`, `has_predicate`,
+  `writer`, `reading_through`, `index_names`, and `art` (an
+  `ArtStore`, a folder whatever the backend). `Writer` (ABC):
+  `next_rev`, `insert`, `create_index`.
+- `SqliteStore(folder)`: creates `ledger.db` (WAL mode) and the schema
+  if absent; `LedgerError` when SQLite refuses. Reads go through one
   connection per thread; each write opens its own.
 - `Store.rows(upto, *, subject, predicate, obj, prefix, after=0) ->
   [Row]`: rows with `after < rev <= upto` matching the columns given,
@@ -20,16 +26,18 @@ the row's place within its transaction, `object` a tagged string
   [str]`: distinct subjects with an add row matching, ordered by first
   assertion.
 - `Store.top() -> int`, `Store.has_predicate(p, upto) -> bool`,
-  `Store.read(sql, params)` (`LedgerError` on a refused read).
-- `Store.writer(timeout, *, locked)`: a context manager holding
-  `BEGIN IMMEDIATE`; commits on a clean exit, rolls back otherwise;
-  failing to get the lock is `LockTimeout` when `locked`, else
-  `LedgerError`.
-- `Store.reading_through(conn)`: reads in this thread go through an
-  open write transaction for the block (how a commit validates its own
+  `Store.index_names() -> [str]`; `SqliteStore.read(sql, params)`
+  (`LedgerError` on a refused read).
+- `Store.writer(timeout, *, locked)`: a context manager holding the
+  write lock (SQLite: `BEGIN IMMEDIATE`); commits on a clean exit,
+  rolls back otherwise; failing to get the lock is `LockTimeout` when
+  `locked`, else `LedgerError`.
+- `Store.reading_through(w)`: reads in this thread go through the open
+  write transaction `w` for the block (how a commit validates its own
   rows).
 - `Writer.next_rev() -> int`, `Writer.insert(rev, rows)`: rows get
-  `ord` 0, 1, … in the order given.
+  `ord` 0, 1, … in the order given. `Writer.create_index(p)`: the
+  `db/index` partial index.
 - `ArtStore(root)`: `put(data) -> hex` writes `sha256/<2>/<hex>` once,
   atomically by rename; `get(hex) -> bytes` (`FileNotFoundError` when
   absent); `path(hex) -> Path`.
@@ -47,6 +55,53 @@ the row's place within its transaction, `object` a tagged string
 - TODO: the module docstring names the two SQL indexes as "the index
   table a where clause reads"; it does not mention the partial
   per-predicate indexes the `db/index` rows build.
+- TODO: a `db/index` partial index on `(object, subject, rev)` repeats
+  what `(predicate, object, rev)` already serves for `predicate = p`;
+  neither planner was seen to prefer it.
+
+## Postgres
+
+`PostgresStore` (module `pgstore`, `pip install 'dvc_dat[pg]'` for
+psycopg 3) is the same table behind the same interface. A Postgres
+ledger is named by a DSN wherever a folder is accepted: `Ledger(dsn)`,
+`DAT_LEDGER`, or `ledger:` in `.datconfig.yaml`. The art store stays a
+folder, named by the DSN's `art` query parameter (stripped before
+libpq sees the DSN); a relative `art` resolves against the
+`.datconfig.yaml` naming it, else the working directory.
+
+```yaml
+ledger: postgresql://dat:pw@db.lab:5432/dat?art=/mnt/team/art
+```
+
+```python
+L = Ledger("postgresql://dat:pw@db.lab/dat?art=art", create=True)
+L = Ledger("postgresql://dat:pw@db.lab/dat?art=art")
+```
+
+One ledger per schema: the tables go in the first schema of the
+connection's `search_path`, which the DSN can set,
+`?options=-csearch_path%3Dteam&art=…`. `create=True` makes the tables
+(the database and schema must exist); without it a database with no
+`quads` table is `LedgerError("no ledger at …")`. `Ledger.path` is the
+DSN with `art` made absolute (what a sandbox worker reopens); `repr`
+hides the password.
+
+- Tables: `quads` as SQLite's (`rev BIGINT`, `added BOOLEAN`) and
+  `ledger_lock`, one row.
+- The write lock: `SELECT … FOR UPDATE` on that row, bounded by
+  `lock_timeout`; the transaction is READ COMMITTED, so `MAX(rev) + 1`
+  read after the lock is had is the next revision.
+- Prefix scans: `subject ~>=~ p AND subject ~<~ p || U+10FFFF`, the
+  `text_pattern_ops` byte-order operators, so a glob matches exactly
+  what it matches in SQLite whatever the database collation; the
+  indexes are `(subject text_pattern_ops, predicate, rev)` and
+  `(predicate, object text_pattern_ops, rev)`.
+- `db/index`: a partial index on `(object text_pattern_ops, subject,
+  rev) WHERE predicate = '<p>'`, same name as SQLite's.
+- Statements are never server-prepared, so each is planned with its
+  values (a generic plan cannot use a prefix range or partial index).
+- Postgres text cannot hold NUL: a row carrying `\x00` is refused
+  (`LedgerError`); a read asking for one finds nothing.
 
 ## Measured
 
