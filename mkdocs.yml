@@ -9,3 +9,12 @@ nav:
   - Command Line: cli.md
   - Ledger: ledger.md
 
+
+# The anchor pages that share doc/ with the site source (2026-10-19): never built into the site
+exclude_docs: |
+  DAT Track/
+  DAT Design/
+  DAT Archive/
+  DAT.md
+  DAT Hooks.md
+  .obsidian/
