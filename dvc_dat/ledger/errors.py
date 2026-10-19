@@ -18,7 +18,7 @@ class UnmountedImport(LedgerError, ImportError):
 
 
 class UntracedRead(LedgerError, PermissionError):
-    """A sandboxed function opened a path outside the mounts, the dats and its scratch."""
+    """A sandboxed function read a path outside the mounts, the dats and its work folder."""
 
 
 class ConfinedWrite(LedgerError, PermissionError):

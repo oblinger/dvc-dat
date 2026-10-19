@@ -64,9 +64,25 @@ Worker side:
   database but the ledger's own; and through these `pathlib`,
   `shutil` and `tempfile` (a default temp file lands in `$TMPDIR`, so
   it is refused; pass `dir=work`). A function with no `work`
-  parameter writes nowhere. A read outside the mounted roots, the art
-  store, the worker's scratch, the interpreter's folders, `/dev` and
-  the dvc-dat package is `UntracedRead`.
+  parameter writes nowhere. Reads go only into the mounted roots, the
+  art store (the dats) and that `work` folder; anywhere else, the
+  worker's scratch, the interpreter's folders, `site-packages`, the
+  dvc-dat package and the rest of a mounted repo included, is
+  `UntracedRead("<path>: outside the mounts, the dats and the work
+  folder")`. Checked: `open`/`os.open` for reading and the listings
+  `os.listdir`, `os.scandir`, `os.listxattr`, `os.getxattr`, and
+  through them `pathlib`, `shutil` and `glob`. The ledger's own reads
+  (`rev[...]`, `rev.load`, queries) are the view, not file opens.
+  Two reads stay open because their content is already in the trace:
+  the import system reading a module file (the finder decides what
+  imports; the mounted ones are in `fn`, the rest under `uv.lock`), and,
+  while a module from outside the mounts is being imported, that
+  import's reads in the interpreter's folders (a library loading its
+  bundled data, `uv.lock`). A library's data read after its import is
+  refused.
+- While a body with a `work` folder runs, the worker's current
+  directory is that folder, so a relative path lands in the dat being
+  produced.
 - `unguarded()`: the ledger's own machinery inside a body (a nested
   `rev.eval`'s lookup and seal, a `Dat` materialised into the art
   store on load) runs with the hook stood aside; a nested body is
@@ -103,8 +119,7 @@ Worker side:
 - Bulk data never crosses the pipe on a sealing call: the worker seals
   and returns the subject only.
 
-- Stubs, as built: no idle retirement; reads allowed more widely than
-  the design's final form; a nested
+- Stubs, as built: no idle retirement; a nested
   eval under another mount runs in the same worker; a base-mode eval
   nested inside a worker is unsupported; repo files read under a mount
   are allowed and not recorded.

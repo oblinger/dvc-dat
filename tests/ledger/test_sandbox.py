@@ -150,6 +150,60 @@ PKG = {
                 HOWS[how](d, work / "src")
             return {}
     '''),
+    "sbx/stage/reads.py": textwrap.dedent('''
+        import glob
+        import os
+        import shutil
+        import sys
+        from pathlib import Path
+        import dvc_dat
+        import yaml
+        from dvc_dat.ledger import ledger_fn
+
+        HOWS = {
+            "open": lambda p: Path(p).read_text(),
+            "os.open": lambda p: os.close(os.open(p, os.O_RDONLY)),
+            "listdir": lambda p: os.listdir(Path(p).parent),
+            "scandir": lambda p: list(os.scandir(Path(p).parent)),
+            "iterdir": lambda p: list(Path(p).parent.iterdir()),
+            "glob": lambda p: glob.glob(str(Path(p).parent / "*")),
+            "walk": lambda p: list(os.walk(Path(p).parent)),
+            "copy": lambda p: shutil.copy(p, Path.cwd() / "copied"),
+        }
+
+        @ledger_fn
+        def read(rev, *, how: str, where: str, work: Path) -> dict:
+            places = {"stdlib": os.__file__, "site": yaml.__file__, "dvc_dat": dvc_dat.__file__,
+                      "prefix": os.path.join(sys.prefix, "pyvenv.cfg"), "repo": Path(__file__).parents[2] / "pyproject.toml",
+                      "scratch": work.parent / "nothing-here"}
+            out = HOWS[how](places.get(where) or where)
+            return {"n": len(out) if isinstance(out, list) else -1}
+
+        @ledger_fn
+        def allowed(rev, *, game: str, work: Path) -> dict:
+            (work / "mine.txt").write_text(game)
+            n = len(Path(__file__).read_text()) > 0 and sorted(os.listdir(Path(__file__).parent)) != []
+            art = Path(rev.ledger._store.art.root)
+            import colorsys                         # a stdlib import in the body: the import system reads
+            import jsonschema_specifications        # its import reads its own schemas (site-packages)
+            return {"n": bool(n), "mine": Path("mine.txt").read_text(), "art": art.is_dir() and bool(os.listdir(art)),
+                    "registry": len(jsonschema_specifications.REGISTRY) > 0, "h": colorsys.rgb_to_hsv(0, 0, 0)}
+
+        @ledger_fn
+        def library_data(rev, *, game: str) -> dict:
+            from importlib.resources import files
+            return {"n": len(files("jsonschema_specifications").joinpath("schemas").iterdir())}
+    '''),
+    "sbx/stage/eager.py": textwrap.dedent('''
+        from pathlib import Path
+        from dvc_dat.ledger import ledger_fn
+
+        HOSTS = Path("/etc/hosts").read_text()     # at load: the module's own load is confined too
+
+        @ledger_fn
+        def f(rev, *, game: str) -> dict:
+            return {}
+    '''),
     "sbx/stage/net.py": textwrap.dedent('''
         import socket
         from dvc_dat.ledger import ledger_fn
@@ -353,3 +407,28 @@ def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
     with pytest.raises(ConfinedWrite):                  # a path relative to a descriptor on a mount
         L.at().eval("sbx.stage.writes.write", how="dir_fd", where="mount")
     assert not (repo / "sbx/stage/by-fd").exists()
+
+
+READ_HOWS = ["open", "os.open", "listdir", "scandir", "iterdir", "copy"]
+SWALLOWED = ["glob", "walk"]            # they catch the OSError themselves: the folder reads as empty
+
+
+def test_reads_confined_to_the_mounts_the_dats_and_the_work_folder(sbx, tmp_path):
+    pytest.importorskip("jsonschema_specifications")
+    L, _repo = sbx
+    L.at().eval("sbx.stage.fns.folder", game="G1")           # something in the art store
+    v = L.at().eval("sbx.stage.reads.allowed", game="G1")
+    assert v.obj == {"n": True, "mine": "G1", "art": True, "registry": True, "h": (0.0, 0.0, 0.0)}
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "f.txt").write_text("x")
+    for where in ("stdlib", "site", "dvc_dat", "prefix", "repo", "scratch", str(outside / "f.txt")):
+        for how in READ_HOWS:
+            with pytest.raises(UntracedRead, match="outside the mounts, the dats and the work folder"):
+                L.at().eval("sbx.stage.reads.read", how=how, where=where)
+        for how in SWALLOWED:
+            assert L.at().eval("sbx.stage.reads.read", how=how, where=where).obj == {"n": 0}
+    with pytest.raises(UntracedRead):                       # a library's data, read after its import
+        L.at().eval("sbx.stage.reads.library_data", game="G1")
+    with pytest.raises(UntracedRead, match="/etc/hosts"):    # a mounted module's own load
+        L.at().eval("sbx.stage.eager.f", game="G1")

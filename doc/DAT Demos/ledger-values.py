@@ -771,7 +771,7 @@ except ConfinedWrite as e:
 # allowed folders is `UntracedRead`. The sandbox confines writes
 # to the function's own work folder, the dat being produced (not
 # the worker's scratch, not the store); reads are confined to the
-# mounted folders, the store and the worker's scratch. Open (Q36; lean): a function
+# mounted folders, the store and that work folder. Open (Q36; lean): a function
 # that builds a folder declares a parameter `work: Path`, reserved
 # beside `memo` and never a key; the run binds it to a fresh folder
 # in the scratch, and the seal moves what was built there into the

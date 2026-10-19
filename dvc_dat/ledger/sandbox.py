@@ -14,10 +14,12 @@ Worker side (``worker.py`` drives it): ``MountFinder``, first on
 ancestors empty namespace packages (their ``__init__`` never runs), records
 every module it loads against the innermost running eval, and refuses a
 module that would resolve inside a mounted repo's checkout but under no mount
-(``UnmountedImport``). An audit hook on ``open`` refuses, while a function
-body runs, a read outside the mounted roots, the art store (dats), the
-worker's scratch and the interpreter's own files (``UntracedRead``), and a
-write anywhere but the running body's ``work`` folder, the dat being produced
+(``UnmountedImport``). An audit hook refuses, while a function body (or its
+module's load) runs, a read (``open``, ``os.listdir``/``scandir``) outside
+the mounted roots, the art store (the dats) and the body's ``work`` folder
+(``UntracedRead``), except the import system's own reads of module files and,
+while a module from outside the mounts is being imported, its reads in the
+interpreter's folders (covered by ``uv.lock``); and a write anywhere but the running body's ``work`` folder, the dat being produced
 (``ConfinedWrite``): ``open``/``os.open`` for writing, every path-changing
 ``os`` call (mkdir, rename, link, remove, chmod, ...), and through them
 ``pathlib``, ``shutil``, ``tempfile`` and ``sqlite3``. The ledger's own
@@ -384,7 +386,9 @@ class _State:
     mounts: List[Mount] = []
     frames: List[Set[str]] = []
     guard = False
-    reads: List[str] = []
+    reads: List[str] = []                           # the mounted roots and the art store (the dats)
+    importable: List[str] = []                      # sys.path and the mounts: where the import system reads
+    interpreter: List[str] = []                     # where an unmounted module's own import may read
     works: List[Optional[str]] = []                 # the work folder of each running body, innermost last
     store: str = ""                                 # the ledger's own database file (a folder ledger)
     hosts: Set[str] = set()                         # the ledger's own endpoint, by name and by address
@@ -451,16 +455,16 @@ class MountFinder(importlib.abc.MetaPathFinder):
         return None
 
 
-def _allowed_roots() -> Tuple[List[str], List[str]]:
-    import dvc_dat
+def _interpreter_roots() -> List[str]:
+    """The interpreter's own folders: the prefixes, the standard library and ``site-packages``."""
     import sysconfig
 
-    reads = {sys.prefix, sys.base_prefix, sys.exec_prefix, "/dev", str(Path(dvc_dat.__file__).parent)}
+    roots = {sys.prefix, sys.base_prefix, sys.exec_prefix}
     for k in ("stdlib", "platstdlib", "purelib", "platlib"):
         p = sysconfig.get_paths().get(k)
         if p:
-            reads.add(p)
-    return [os.path.realpath(r) for r in reads], []
+            roots.add(p)
+    return [os.path.realpath(r) for r in roots]
 
 
 def _under(p: str, roots: List[str]) -> bool:
@@ -508,6 +512,7 @@ def _network(event: str, args: Any) -> None:
         raise ConfinedNetwork(f"{addr[0]}:{addr[1]}: a sandboxed function does not use the network")
 
 
+_OS_READS = ("os.listdir", "os.scandir", "os.listxattr", "os.getxattr")
 _DEV_NULL = [os.path.realpath(os.devnull)]
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC
 # the path-changing os events: each written path's argument index, and its dir_fd's (None: takes none)
@@ -577,6 +582,9 @@ def _audit(event: str, args: Any) -> None:
         if db and db != ":memory:" and os.path.realpath(db) != STATE.store:
             _check_write(os.path.realpath(db))
         return
+    if event in _OS_READS:
+        _check_read(_resolve(args[0] if args and args[0] is not None else "."), sys._getframe(1))
+        return
     if event != "open":
         return
     path, mode, flags = (list(args) + [None, None, None])[:3]
@@ -588,8 +596,34 @@ def _audit(event: str, args: Any) -> None:
     if write:
         _check_write(p)
         return
-    if not _under(p, STATE.reads + _writable()):
-        raise UntracedRead(f"{p}: outside the mounts, the dats and the scratch")
+    _check_read(p, sys._getframe(1))
+
+
+def _importing(frame: Any) -> Optional[str]:
+    """The module whose import is running at ``frame`` (the innermost module body the import system
+    called), or ``None`` outside any import."""
+    f = frame
+    while f is not None:
+        if f.f_code.co_name == "<module>" and f.f_back is not None \
+                and f.f_back.f_code.co_filename.startswith("<frozen importlib"):
+            return str(f.f_globals.get("__name__", ""))
+        f = f.f_back
+    return None
+
+
+def _check_read(p: Optional[str], caller: Any) -> None:
+    """Reads: the mounts, the dats, the running body's work folder; the import system's own reads of
+    module files; and, while a module from outside the mounts is being imported, the interpreter's
+    folders (that module's data, covered by ``uv.lock``). Else ``UntracedRead``."""
+    if p is None or _under(p, STATE.reads + _writable()):
+        return
+    if caller.f_code.co_filename.startswith("<frozen importlib") and _under(p, STATE.importable):
+        return
+    if _under(p, STATE.interpreter):
+        mod = _importing(caller)
+        if mod is not None and _mount_of(STATE.mounts, mod) is None:
+            return
+    raise UntracedRead(f"{p}: outside the mounts, the dats and the work folder")
 
 
 def install_worker(ledger: Any, mounts: List[Mount], scratch: Path) -> None:
@@ -601,9 +635,10 @@ def install_worker(ledger: Any, mounts: List[Mount], scratch: Path) -> None:
         tempfile.gettempdir()                       # probed unconfined, so a default temp file in a body is
                                                     # refused by name (ConfinedWrite), not "no usable dir"
     STATE.mounts = mounts
-    base_reads, _ = _allowed_roots()
-    art = os.path.realpath(ledger._store.art.root)
-    STATE.reads = base_reads + [os.path.realpath(m.path) for m in mounts] + [art, os.path.realpath(scratch)]
+    roots = [os.path.realpath(m.path) for m in mounts]
+    STATE.reads = roots + [os.path.realpath(ledger._store.art.root)]
+    STATE.interpreter = _interpreter_roots()
+    STATE.importable = roots + [os.path.realpath(p) for p in sys.path if p and os.path.isdir(p)]
     store = getattr(ledger._store, "path", None)
     STATE.store = os.path.realpath(store) if isinstance(store, Path) else ""
     STATE.hosts, STATE.addrs = _ledger_endpoints(ledger.path)
@@ -631,7 +666,10 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
         STATE.frames.append(set())
         STATE.works.append(os.path.realpath(work) if work is not None else None)
         rec: Dict[str, str] = {}
+        cwd = os.getcwd()
         try:
+            if work is not None:
+                os.chdir(work)                      # a relative path resolves in the dat being produced
             STATE.guard = True                      # the module's own load is confined like the body
             try:
                 obj = getattr(importlib.import_module(modname), attr_name)
@@ -641,6 +679,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
                 out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
             finally:
                 STATE.guard = False
+                os.chdir(cwd)
         except BaseException:
             drop_work(work, None)
             raise

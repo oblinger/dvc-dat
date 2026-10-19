@@ -226,9 +226,9 @@ beside it. It runs in a worker started `python -I`, whose path holds the
 standard library and `site-packages`; a finder first on `sys.meta_path`
 serves the mounted prefixes from their roots. An import that would
 resolve inside a mounted repo's checkout but under no mount is
-`UnmountedImport`; a read outside the mounts, the art store, the
-worker's scratch, the interpreter's folders and the dvc-dat package is
-`UntracedRead`; a write anywhere but the running function's `work`
+`UnmountedImport`; a read outside the mounts, the art store and the
+function's `work` folder is `UntracedRead` (the import system's own
+reads of module files excepted); a write anywhere but the running function's `work`
 folder, the dat being produced, is `ConfinedWrite`; resolving a host name or opening a network
 connection, other than to a Postgres ledger's own endpoint, is
 `ConfinedNetwork`. An incomplete mount table is therefore a crash rather
@@ -395,9 +395,7 @@ ledger's. Nothing is created without `create=True`:
 
 ## Designed, not yet built
 
-- **Sandbox stubs.** No idle retirement of workers;
-  reads also allowed in the interpreter's folders and the dvc-dat
-  package; a nested eval
+- **Sandbox stubs.** No idle retirement of workers; a nested eval
   under another mount runs in the same worker; a base-mode eval nested
   inside a worker is unsupported; repo files read under a mount are
   allowed, not recorded; no old commit is ever checked out.
