@@ -50,11 +50,27 @@ Worker side:
   raises `UnmountedImport("<module> from <importer>; mount it or move
   it")` for a module that would resolve inside a mounted repo's
   checkout under no mount.
-- The audit hook on `open`, active only while a function body runs:
-  a write outside the worker's scratch and the art store is
-  `ConfinedWrite`; a read outside those, the mounted roots, the
-  interpreter's folders, `/dev` and the dvc-dat package is
-  `UntracedRead`.
+- The audit hook, active only while a function body (or its module's
+  first load) runs. Writes go only into that body's `work` folder,
+  the dat being produced, and `/dev/null`; anywhere else, the worker's
+  scratch and the art store included, is `ConfinedWrite("<path>: a
+  sandboxed function writes only in its work folder")`. Checked:
+  `open` and `os.open` for writing (a mode with `w`, `a`, `x` or `+`,
+  or `O_WRONLY`, `O_RDWR`, `O_CREAT`, `O_TRUNC`); every path-changing
+  `os` call (`mkdir`, `rmdir`, `remove`, `rename`/`replace` and `link`
+  on both paths, `symlink`, `chmod`, `chown`, `utime`, `truncate`,
+  `chflags`, `setxattr`, `removexattr`), a `dir_fd` resolved to its
+  folder and a descriptor to its file; `sqlite3.connect` on any
+  database but the ledger's own; and through these `pathlib`,
+  `shutil` and `tempfile` (a default temp file lands in `$TMPDIR`, so
+  it is refused; pass `dir=work`). A function with no `work`
+  parameter writes nowhere. A read outside the mounted roots, the art
+  store, the worker's scratch, the interpreter's folders, `/dev` and
+  the dvc-dat package is `UntracedRead`.
+- `unguarded()`: the ledger's own machinery inside a body (a nested
+  `rev.eval`'s lookup and seal, a `Dat` materialised into the art
+  store on load) runs with the hook stood aside; a nested body is
+  confined again, to its own `work` folder.
 - The same hook on the network, active while a function body runs:
   resolving a host name (`socket.getaddrinfo`, `gethostbyname`,
   `gethostbyaddr`, `getnameinfo`) or sending to an internet address
@@ -87,8 +103,8 @@ Worker side:
 - Bulk data never crosses the pipe on a sealing call: the worker seals
   and returns the subject only.
 
-- Stubs, as built: no idle retirement; reads and
-  writes allowed more widely than the design's final form; a nested
+- Stubs, as built: no idle retirement; reads allowed more widely than
+  the design's final form; a nested
   eval under another mount runs in the same worker; a base-mode eval
   nested inside a worker is unsupported; repo files read under a mount
   are allowed and not recorded.

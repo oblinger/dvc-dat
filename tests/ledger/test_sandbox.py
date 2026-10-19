@@ -78,6 +78,78 @@ PKG = {
             Path("/tmp/ledger-sandbox-scribble.txt").write_text("x")
             return {}
     '''),
+    "sbx/stage/writes.py": textwrap.dedent('''
+        import os
+        import shutil
+        import sqlite3
+        import tempfile
+        from pathlib import Path
+        from dvc_dat.ledger import ledger_fn
+
+        def _dirfd(d, w):
+            fd = os.open(d, os.O_RDONLY)
+            try:
+                os.mkdir("by-fd", dir_fd=fd)
+            finally:
+                os.close(fd)
+
+        def _src(w):
+            (w / "s").write_text("x")
+            return w / "s"
+
+        HOWS = {
+            "open": lambda d, w: open(d / "a", "w").write("x"),
+            "os.open": lambda d, w: os.close(os.open(d / "a", os.O_WRONLY | os.O_CREAT)),
+            "o_trunc": lambda d, w: os.close(os.open(d / "seed", os.O_RDONLY | os.O_TRUNC)),
+            "write_text": lambda d, w: (d / "a").write_text("x"),
+            "mkdir": lambda d, w: os.mkdir(d / "m"),
+            "makedirs": lambda d, w: os.makedirs(d / "m1" / "m2"),
+            "rename_out": lambda d, w: os.rename(_src(w), d / "r"),
+            "replace_out": lambda d, w: os.replace(_src(w), d / "r"),
+            "rename_in": lambda d, w: os.rename(d / "seed", w / "stolen"),
+            "link_in": lambda d, w: os.link(d / "seed", w / "hard"),
+            "symlink": lambda d, w: os.symlink(w, d / "sl"),
+            "remove": lambda d, w: os.remove(d / "seed"),
+            "rmdir": lambda d, w: os.rmdir(d / "empty"),
+            "chmod": lambda d, w: os.chmod(d / "seed", 0o600),
+            "utime": lambda d, w: os.utime(d / "seed"),
+            "truncate": lambda d, w: os.truncate(d / "seed", 0),
+            "copy": lambda d, w: shutil.copy(_src(w), d / "c"),
+            "copytree": lambda d, w: shutil.copytree(w, d / "t"),
+            "move": lambda d, w: shutil.move(_src(w), d / "mv"),
+            "rmtree": lambda d, w: shutil.rmtree(d / "tree"),
+            "mkstemp": lambda d, w: os.close(tempfile.mkstemp(dir=d)[0]),
+            "mkdtemp": lambda d, w: tempfile.mkdtemp(dir=d),
+            "named": lambda d, w: tempfile.NamedTemporaryFile(dir=d).close(),
+            "sqlite": lambda d, w: sqlite3.connect(d / "x.db").execute("CREATE TABLE t (x)"),
+            "dir_fd": _dirfd,
+        }
+
+        def seed(d):
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "seed").write_text("s")
+            (d / "empty").mkdir()
+            (d / "tree").mkdir()
+            (d / "tree" / "f").write_text("f")
+
+        @ledger_fn
+        def write(rev, *, how: str, where: str, work: Path) -> dict:
+            if where == "work":                     # every way, inside the dat being produced: all allowed
+                for name, act in HOWS.items():
+                    seed(work / name)
+                    (work / f"{name}-src").mkdir()
+                    act(work / name, work / f"{name}-src")
+                return {"n": len(HOWS)}
+            places = {"scratch": work.parent, "art": Path(rev.ledger._store.art.root),
+                      "mount": Path(__file__).parent}
+            d = places.get(where) or Path(where)
+            (work / "src").mkdir()
+            if how == "mkstemp-default":
+                os.close(tempfile.mkstemp()[0])
+            else:
+                HOWS[how](d, work / "src")
+            return {}
+    '''),
     "sbx/stage/net.py": textwrap.dedent('''
         import socket
         from dvc_dat.ledger import ledger_fn
@@ -250,3 +322,34 @@ def test_the_ledgers_own_endpoint_is_allowed():
     hosts, addrs = _ledger_endpoints("postgresql://u@[::1],127.0.0.1:6000/db")
     assert hosts == {"::1", "127.0.0.1"} and ("127.0.0.1", 6000) in addrs and ("::1", 5432) in addrs
     assert _ledger_endpoints("/some/ledger/folder") == (set(), set())
+
+
+WRITE_HOWS = ["open", "os.open", "o_trunc", "write_text", "mkdir", "makedirs", "rename_out", "replace_out",
+              "rename_in", "link_in", "symlink", "remove", "rmdir", "chmod", "utime", "truncate", "copy",
+              "copytree", "move", "rmtree", "mkstemp", "mkdtemp", "named", "sqlite"]
+
+
+def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
+    L, repo = sbx
+    assert L.at().eval("sbx.stage.writes.write", how="all", where="work").obj == {"n": len(WRITE_HOWS) + 1}
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "seed").write_text("s")
+    (outside / "empty").mkdir()
+    (outside / "tree").mkdir()
+    (outside / "tree" / "f").write_text("f")
+    before = sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*"))
+    for how in WRITE_HOWS:
+        with pytest.raises(ConfinedWrite, match="a sandboxed function writes only in its work folder"):
+            L.at().eval("sbx.stage.writes.write", how=how, where=str(outside))
+    assert sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*")) == before
+    assert (outside / "seed").read_text() == "s"
+    for where in ("scratch", "art"):
+        for how in ("open", "mkdir", "mkstemp"):
+            with pytest.raises(ConfinedWrite):
+                L.at().eval("sbx.stage.writes.write", how=how, where=where)
+    with pytest.raises(ConfinedWrite):
+        L.at().eval("sbx.stage.writes.write", how="mkstemp-default", where="")
+    with pytest.raises(ConfinedWrite):                  # a path relative to a descriptor on a mount
+        L.at().eval("sbx.stage.writes.write", how="dir_fd", where="mount")
+    assert not (repo / "sbx/stage/by-fd").exists()

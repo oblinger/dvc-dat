@@ -229,14 +229,17 @@ class Dat(Value):
 
     @staticmethod
     def _materialise(data: bytes, store: "ArtStore") -> Path:
+        from .sandbox import unguarded             # the store's own write, also inside a sandboxed body
+
         manifest = json.loads(data.decode())
         dest = store.root / "dats" / sha256(data)[:16]
-        for rel, h in manifest["files"].items():
-            p = dest / rel
-            if not p.exists():
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_bytes(store.get(h))
-        dest.mkdir(parents=True, exist_ok=True)
+        with unguarded():
+            for rel, h in manifest["files"].items():
+                p = dest / rel
+                if not p.exists():
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_bytes(store.get(h))
+            dest.mkdir(parents=True, exist_ok=True)
         return dest
 
     @classmethod

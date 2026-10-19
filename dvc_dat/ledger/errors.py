@@ -22,7 +22,7 @@ class UntracedRead(LedgerError, PermissionError):
 
 
 class ConfinedWrite(LedgerError, PermissionError):
-    """A sandboxed function wrote outside its work folder (the worker's scratch) and the store."""
+    """A sandboxed function wrote outside its work folder, the dat being produced."""
 
 
 class ConfinedNetwork(LedgerError, PermissionError):
