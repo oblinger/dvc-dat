@@ -526,18 +526,27 @@ except TypeError as e:
 # quoted where they are used.
 
 # %%
+from demo_game.game import cut
+
 rev = L.at()
-cut_fn = rev.load_fn("demo_game.game.cut")
-cut_153 = cut_fn(game="G1", version="1.5.3")
-print(type(cut_153).__name__, sorted(cut_153.preds["team"]))
-# Cut ["G4", "G5"]
-print(cut_153.preds["video"])        # video/G1
+plain_cut = cut(rev, game="G1", version="1.5.3")
+print(type(plain_cut))               # <class 'demo_game.game.Cut'>
+print(plain_cut.sealed)              # False
+print(plain_cut.preds)
+# {"game": "G1", "version": "1.5.3", "video": video/G1,
+#  "team": ["G4", "G5"]}
+print(L.at().id == rev.id)           # True: nothing written
+
+# %% [markdown]
+# Nothing was written: calling `cut` is an ordinary Python call.
 
 # %% [markdown]
 # `load_fn` resolves the name at `rev` to an `Fn`, called like the
-# function with only the keywords: `rev` is supplied.
+# function with only the keywords, `rev` supplied; that call is
+# `eval`, memoised and sealing.
 
 # %%
+cut_fn = rev.load_fn("demo_game.game.cut")
 print(cut_fn.mode, cut_fn.signature)
 # base (*, game: str, version: str)
 print(cut_fn.sha[:8], cut_fn.subject)
@@ -551,27 +560,27 @@ print(cut_fn.sha[:8], cut_fn.subject)
 # %% [markdown]
 # ### Evaluation and memoization
 #
-# `rev.eval` is `load_fn` and a call: the call above was an eval.
-# Its first call for a question runs the body and seals the result.
+# `rev.eval` is `load_fn` and a call. Its first call for a
+# question runs the body and seals the result.
 
 # %%
 rev = L.at()
-cut_g2 = rev.eval("demo_game.game.cut", game="G2", version="1.5.3")
-print(cut_g2.sealed, cut_g2.rev.id > rev.id)   # True True
-print(cut_153.sealed)                # True: the Fn call sealed too
+cut_153 = rev.eval("demo_game.game.cut", game="G1", version="1.5.3")
+print(cut_153.sealed, cut_153.rev.id > rev.id)  # True True
+print(cut_153.same_as(plain_cut))    # True: the same bytes
 
 # %% [markdown]
 # The miss ran the body and sealed the cut in a revision of its
-# own, which is `cut_g2.rev`. The preds are what the body put in
+# own, which is `cut_153.rev`. The preds are what the body put in
 # `c.preds`; the keys are one `db/keys` row, not preds.
 
 # %%
 top_id = L.at().id
-again_cut = L.at().eval("demo_game.game.cut", game="G2",
+again_cut = L.at().eval("demo_game.game.cut", game="G1",
                         version="1.5.3")
-print(again_cut.subject == cut_g2.subject)   # True: a hit
+print(again_cut.subject == cut_153.subject)  # True: a hit
 print(L.at().id == top_id)           # True: nothing written
-print(again_cut.rev.id == cut_g2.rev.id)   # True: the seal's rev
+print(again_cut.rev.id == cut_153.rev.id)   # True: the seal's rev
 
 # %% [markdown]
 # The second call is a memo hit: same function, same keys, every
@@ -596,18 +605,21 @@ print(L.at().id == rev.id)           # True: nothing written
 # code that ran, and `db/keys`, the question.
 
 # %%
-entry_rev = cut_g2.rev
+entry_rev = cut_153.rev
 for row in entry_rev.rows(since=L.at(entry_rev.id - 1)):
     if row.predicate in ("db/fn", "db/keys"):
         print(row)
 # <hash> db/fn   db/fn/demo_game.game.cut/<hash>
-# <hash> db/keys {"game": "G2", "version": "1.5.3"}
+# <hash> db/keys {"game": "G1", "version": "1.5.3"}
 
 # %% [markdown]
 # Memo entries are subjects like any other: `fn=` finds every
-# evaluation of a function.
+# evaluation of a function, here after a second question, G2.
 
 # %%
+cut_g2 = L.at().eval("demo_game.game.cut", game="G2",
+                     version="1.5.3")
+rev = L.at()
 for memo_ref in rev.refs(fn="demo_game.game.cut"):
     print(memo_ref, rev[memo_ref.subject, "db/keys"])
 # <8 hex> {"game": "G1", "version": "1.5.3"}
