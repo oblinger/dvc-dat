@@ -12,5 +12,5 @@ def pytest_collection_modifyitems(config, items):
         return
     skip = pytest.mark.skip(reason="load harness: run with -m load")
     for item in items:
-        if "load" in item.keywords:
+        if item.get_closest_marker("load"):
             item.add_marker(skip)
