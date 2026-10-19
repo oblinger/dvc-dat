@@ -6,6 +6,24 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 5.2.0 — 2026-10-19
+
+- **`Ledger.close()`; a `Ledger` is a context manager.** Closes every
+  reader connection the handle opened, in every thread (`Store.close()`
+  on both stores); a later read reopens. Postgres handles no longer hold
+  their connections until process exit.
+- **Fix: `lock=` on Postgres.** The alarm interrupting a read in the
+  body left that thread's reader connection mid-statement, so every
+  later read failed ("another command is already in progress") and
+  load workers died; the interrupted connection is now dropped. The
+  base revision is read before the body's clock starts, and a failure
+  there releases the lock.
+- **Load numbers for Postgres and a floor (R0017).** The load harness
+  takes a Postgres DSN; `tests/load/test_threshold.py` (`DAT_LOAD=1`)
+  fails on any invariant failure or 4-process tx/s under half the
+  recorded value; numbers in `doc/DAT Modules/ledger/store.md`
+  § Measured.
+
 ## 5.1.0 — 2026-10-19
 
 - **A Postgres store behind the same ledger API (T542).** `Ledger(dsn)`,

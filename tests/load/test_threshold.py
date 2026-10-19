@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PROCESSES, OPS, KEYS = 4, 2000, 200
 
 #: host -> store -> tx/s floor: half the 4-process tx/s recorded there (store.md § Measured).
-FLOORS = {"dexter": {"sqlite": 143.0, "pg": None}}
+FLOORS = {"dexter": {"sqlite": 143.0, "pg": 63.0}}
 
 pytestmark = pytest.mark.skipif(os.environ.get("DAT_LOAD") != "1", reason="load floor: set DAT_LOAD=1")
 
