@@ -128,6 +128,10 @@ class Store(ABC):
     def index_names(self) -> List[str]:
         """The names of the indexes on the quad table."""
 
+    @abstractmethod
+    def close(self) -> None:
+        """Close every reader connection this store opened, in every thread; a later read reopens one."""
+
 
 class SqliteStore(Store):
     """One SQLite file. Reads on a per-thread connection; each write on a connection of its own."""
@@ -137,6 +141,9 @@ class SqliteStore(Store):
         self.path = self.folder / "ledger.db"
         self.art = ArtStore(self.folder / "art")
         self._local = threading.local()
+        self._readers: List[sqlite3.Connection] = []
+        self._readers_lock = threading.Lock()
+        self._gen = 0
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             conn = self._connect(30.0)
@@ -166,9 +173,19 @@ class SqliteStore(Store):
         if over is not None:
             return over
         conn = getattr(self._local, "conn", None)
-        if conn is None:
+        if conn is None or getattr(self._local, "gen", None) != self._gen:
             conn = self._local.conn = self._connect(30.0)
+            with self._readers_lock:
+                self._local.gen = self._gen
+                self._readers.append(conn)
         return conn
+
+    def close(self) -> None:
+        with self._readers_lock:
+            conns, self._readers = self._readers, []
+            self._gen += 1
+        for conn in conns:
+            conn.close()
 
     def read(self, sql: str, params: Sequence[Any] = ()) -> List[Tuple[Any, ...]]:
         try:

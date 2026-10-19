@@ -64,9 +64,34 @@ def pin_env() -> None:
     set_env_provider(lambda: env)
 
 
-def setup(path: Path) -> int:
+def is_dsn(target: Any) -> bool:
+    return isinstance(target, str) and target.startswith(("postgresql://", "postgres://"))
+
+
+def make_schema(dsn: str) -> None:
+    """A Postgres ledger's schema (the DSN's ``search_path``) made when absent: ``create=True`` wants it."""
+    from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
+
+    import psycopg
+
+    parts = urlsplit(dsn)
+    query = parse_qsl(parts.query, keep_blank_values=True)
+    opts = " ".join(v for k, v in query if k == "options")
+    schema = next((o.split("=", 1)[1] for o in opts.split() if o.startswith("-csearch_path=")), None)
+    if not schema:
+        return
+    url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode([(k, v) for k, v in query
+                                                                          if k not in ("art", "options")]), ""))
+    with psycopg.connect(url, autocommit=True) as c:
+        c.execute(f'CREATE SCHEMA IF NOT EXISTS "{unquote(schema)}"')
+
+
+def setup(path: Any) -> int:
     """Make (or reopen) the ledger and write the rows the workload assumes; the top after."""
     from dvc_dat.ledger import Ledger
+
+    if is_dsn(path):
+        make_schema(path)
 
     L = Ledger(path, create=True)
     rev = L.at()
@@ -276,7 +301,7 @@ def check(path: Path, setup_top: int, recs: List[Dict[str, Any]], ctx: Any, work
                      rev=rev_of_tag[f["by"]])
 
     # no duplicate subject
-    for s, n in store.read("SELECT subject, COUNT(*) FROM quads WHERE predicate = 'db/value' AND added = 1 "
+    for s, n in store.read("SELECT subject, COUNT(*) FROM quads WHERE predicate = 'db/value' AND added "
                            "GROUP BY subject HAVING COUNT(*) > 1"):
         fail("no-dup", why="a subject with several db/value rows", subject=s, count=n)
     seals = Counter(c["subject"] for c in committed if c["op"] == "seal")
@@ -335,7 +360,7 @@ def check(path: Path, setup_top: int, recs: List[Dict[str, Any]], ctx: Any, work
             fail("alias", why="alias does not end at its last re-point", name=name, want=c, got=got)
 
     # art
-    for (o,) in store.read("SELECT object FROM quads WHERE predicate = 'db/value' AND added = 1"):
+    for (o,) in store.read("SELECT object FROM quads WHERE predicate = 'db/value' AND added"):
         h = parse_ref(o)[1]
         try:
             data = store.art.get(h)
@@ -397,16 +422,25 @@ def lat(xs: List[float]) -> Dict[str, Any]:
             "max_ms": round(max(xs) * 1000, 3) if xs else None}
 
 
-def machine() -> Dict[str, Any]:
+def machine(ledger: Any = None) -> Dict[str, Any]:
     import sqlite3
 
-    return {"host": platform.node(), "platform": platform.platform(), "machine": platform.machine(),
-            "cpus": os.cpu_count(), "python": platform.python_version(), "sqlite": sqlite3.sqlite_version}
+    m = {"host": platform.node(), "platform": platform.platform(), "machine": platform.machine(),
+         "cpus": os.cpu_count(), "python": platform.python_version(), "sqlite": sqlite3.sqlite_version}
+    if is_dsn(ledger):
+        from dvc_dat.ledger import Ledger
+
+        m["store"] = "pg"
+        with Ledger(ledger) as L:
+            m["postgres"] = L._store.read("SHOW server_version")[0][0]
+    else:
+        m["store"] = "sqlite"
+    return m
 
 
 def run(args: argparse.Namespace) -> Dict[str, Any]:
     pin_env()
-    path = Path(args.ledger).expanduser().resolve()
+    path: Any = args.ledger if is_dsn(args.ledger) else Path(args.ledger).expanduser().resolve()
     results = Path(args.results).expanduser().resolve()
     results.mkdir(parents=True, exist_ok=True)
     stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -467,7 +501,7 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
     lock_timeouts = sum(r["counts"].get(op, {}).get("lock_timeout", 0) for r in recs for op in OPS)
     ledger_errors = sum(r["counts"].get(op, {}).get("ledger_error", 0) for r in recs for op in OPS)
     res = {
-        "date": stamp, "machine": machine(), "config": {**cfg, "processes": args.processes},
+        "date": stamp, "machine": machine(path), "config": {**cfg, "processes": args.processes},
         "wall_s": round(wall, 3), "check_s": round(check_s, 3), "timed_out": timed_out,
         "transactions_committed": txs, "tx_per_s": round(txs / wall, 2) if wall else None,
         "ops_done": n_ops, "ops_per_s": round(n_ops / wall, 2) if wall else None,
@@ -477,7 +511,8 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
                          **lat([x for op in OPS for x in r["lat"][op]])} for r in recs],
         "ops": ops, "errors": errors, "invariants": inv,
     }
-    out = results / f"{stamp}-{platform.node().split('.')[0]}-p{args.processes}-m{args.transactions}.json"
+    store = "-pg" if is_dsn(path) else ""
+    out = results / f"{stamp}-{platform.node().split('.')[0]}{store}-p{args.processes}-m{args.transactions}.json"
     out.write_text(json.dumps(res, indent=1))
     for f in workdir.iterdir():
         f.unlink()
@@ -493,7 +528,7 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
 def summary(res: Dict[str, Any]) -> str:
     inv = res["invariants"]
     bad = ",".join(f"{k}={v}" for k, v in sorted(inv["counts"].items())) or "none"
-    return (f"{res['date']} {res['machine']['host']} p={res['config']['processes']} "
+    return (f"{res['date']} {res['machine']['host']} {res['machine']['store']} p={res['config']['processes']} "
             f"m={res['config']['transactions']} wall={res['wall_s']}s tx={res['transactions_committed']} "
             f"tx/s={res['tx_per_s']} ops/s={res['ops_per_s']} p50={res['latency']['all']['p50_ms']}ms "
             f"p99={res['latency']['all']['p99_ms']}ms write-p99={res['latency']['writes']['p99_ms']}ms "
@@ -505,7 +540,8 @@ def parse(argv: Optional[List[str]] = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="python -m tests.load", description=__doc__.split("\n")[0])
     ap.add_argument("--processes", type=int, default=2)
     ap.add_argument("--transactions", type=int, default=200, help="operations per process")
-    ap.add_argument("--ledger", required=True, help="the ledger folder (made if absent)")
+    ap.add_argument("--ledger", required=True, help="the ledger folder, or a Postgres DSN (made if absent; "
+                    "a DSN's search_path schema is created when missing)")
     ap.add_argument("--results", default=str(LOAD_DIR / "results"))
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--lock", type=float, default=10.0, help="lock= seconds for alias and salt transactions")

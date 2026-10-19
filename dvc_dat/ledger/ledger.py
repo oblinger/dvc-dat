@@ -115,6 +115,16 @@ class Ledger:
     def __repr__(self) -> str:
         return f"Ledger({self._shown!r})"
 
+    def close(self) -> None:
+        """Close the handle's database connections (every thread's); a later read or write reopens."""
+        self._store.close()
+
+    def __enter__(self) -> "Ledger":
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
+
     def _assert_mounts(self, cfg: Path) -> None:
         """``mounts:`` sugar: assert the rows when they differ from what the ledger holds (A47, A54.3)."""
         mounts = _read_config(cfg).get("mounts") or {}

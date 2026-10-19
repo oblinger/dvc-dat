@@ -142,3 +142,43 @@ def test_pg_indexes_and_the_prefix_plan(dsn):
         "EXPLAIN SELECT rev FROM quads WHERE subject ~>=~ %s AND subject ~<~ %s", ("x/", "x/\U0010ffff")))
     conn.execute("RESET enable_seqscan")
     assert "quads_sp" in plan
+
+
+def test_pg_close_ends_the_server_backends(dsn):
+    import psycopg
+
+    L = Ledger(dsn, create=True)
+    th = [threading.Thread(target=lambda: L.at().id) for _ in range(3)]
+    for x in th:
+        x.start()
+    for x in th:
+        x.join()
+    pids = {c.info.backend_pid for c in L._store._readers}
+    assert len(pids) == 3
+    q = "SELECT count(*) FROM pg_stat_activity WHERE pid = ANY(%s)"
+    with psycopg.connect(backends.database(), autocommit=True) as admin:
+        assert admin.execute(q, (list(pids),)).fetchone()[0] == 3
+        L.close()
+        for _ in range(50):
+            if admin.execute(q, (list(pids),)).fetchone()[0] == 0:
+                break
+            time.sleep(0.1)
+        assert admin.execute(q, (list(pids),)).fetchone()[0] == 0
+
+
+def test_pg_lock_alarm_mid_read_leaves_the_reader_usable(dsn):
+    """``lock=`` interrupting a read in the body: LockTimeout, nothing written, and the next read works
+    (an interrupted psycopg connection left "another command is already in progress")."""
+    L = Ledger(dsn, create=True)
+    with L.transaction(by="t") as t:
+        t.add("game/G1", "home", "A")
+    for _ in range(3):
+        with pytest.raises(LockTimeout):
+            with L.transaction(by="slow", lock=0.2) as t:
+                t.add("game/G1", "away", "B")
+                L._store.read("SELECT pg_sleep(2)")
+        assert L.at().get("game/G1", "home") == "A"
+        assert L.at().get("game/G1", "away") is None
+    with L.transaction(by="t", lock=5) as t:
+        t.add("game/G1", "away", "C")
+    assert L.at().get("game/G1", "away") == "C"

@@ -1,0 +1,197 @@
+{
+ "date": "20261019T184524Z",
+ "machine": {
+  "host": "dexter.local",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "machine": "x86_64",
+  "cpus": 12,
+  "python": "3.12.14",
+  "sqlite": "3.53.1",
+  "store": "pg",
+  "postgres": "17.11 (Homebrew)"
+ },
+ "config": {
+  "ledger": "postgresql://postgres@localhost:5544/postgres?options=-csearch_path%3Dload_p8&art=/Users/oblinger/t541-load/runs/load_p8-art",
+  "transactions": 2000,
+  "seed": 0,
+  "lock": 10.0,
+  "keys": 200,
+  "aliases": 8,
+  "shared": 6,
+  "mix": {
+   "seal": 30,
+   "shared": 5,
+   "alias": 10,
+   "salt": 3,
+   "eval": 27,
+   "read": 25
+  },
+  "fold_checks": true,
+  "processes": 8
+ },
+ "wall_s": 60.304,
+ "check_s": 59.335,
+ "timed_out": [],
+ "transactions_committed": 8306,
+ "tx_per_s": 137.73,
+ "ops_done": 16000,
+ "ops_per_s": 265.32,
+ "lock_timeouts": 0,
+ "ledger_errors": 0,
+ "latency": {
+  "all": {
+   "n": 16000,
+   "p50_ms": 28.393,
+   "p90_ms": 46.604,
+   "p99_ms": 67.83,
+   "max_ms": 406.468
+  },
+  "writes": {
+   "n": 7701,
+   "p50_ms": 38.045,
+   "p90_ms": 49.071,
+   "p99_ms": 75.419,
+   "max_ms": 406.468
+  }
+ },
+ "per_process": [
+  {
+   "wid": 0,
+   "elapsed_s": 60.115,
+   "n": 2000,
+   "p50_ms": 28.747,
+   "p90_ms": 46.527,
+   "p99_ms": 63.633,
+   "max_ms": 406.468
+  },
+  {
+   "wid": 1,
+   "elapsed_s": 59.675,
+   "n": 2000,
+   "p50_ms": 28.337,
+   "p90_ms": 46.569,
+   "p99_ms": 66.849,
+   "max_ms": 287.069
+  },
+  {
+   "wid": 2,
+   "elapsed_s": 60.239,
+   "n": 2000,
+   "p50_ms": 29.041,
+   "p90_ms": 46.576,
+   "p99_ms": 71.036,
+   "max_ms": 378.252
+  },
+  {
+   "wid": 3,
+   "elapsed_s": 59.787,
+   "n": 2000,
+   "p50_ms": 27.869,
+   "p90_ms": 47.131,
+   "p99_ms": 70.339,
+   "max_ms": 368.035
+  },
+  {
+   "wid": 4,
+   "elapsed_s": 60.047,
+   "n": 2000,
+   "p50_ms": 28.588,
+   "p90_ms": 47.044,
+   "p99_ms": 67.949,
+   "max_ms": 225.957
+  },
+  {
+   "wid": 5,
+   "elapsed_s": 59.428,
+   "n": 2000,
+   "p50_ms": 28.139,
+   "p90_ms": 46.004,
+   "p99_ms": 67.247,
+   "max_ms": 307.96
+  },
+  {
+   "wid": 6,
+   "elapsed_s": 59.934,
+   "n": 2000,
+   "p50_ms": 28.577,
+   "p90_ms": 46.443,
+   "p99_ms": 73.869,
+   "max_ms": 198.363
+  },
+  {
+   "wid": 7,
+   "elapsed_s": 59.304,
+   "n": 2000,
+   "p50_ms": 27.985,
+   "p90_ms": 46.297,
+   "p99_ms": 65.199,
+   "max_ms": 218.04
+  }
+ ],
+ "ops": {
+  "seal": {
+   "ok": 4840,
+   "n": 4840,
+   "p50_ms": 40.304,
+   "p90_ms": 50.535,
+   "p99_ms": 81.708,
+   "max_ms": 406.468
+  },
+  "shared": {
+   "ok": 832,
+   "n": 832,
+   "p50_ms": 38.417,
+   "p90_ms": 47.784,
+   "p99_ms": 74.363,
+   "max_ms": 368.035
+  },
+  "alias": {
+   "ok": 1546,
+   "n": 1546,
+   "p50_ms": 32.35,
+   "p90_ms": 42.276,
+   "p99_ms": 62.618,
+   "max_ms": 106.482
+  },
+  "salt": {
+   "ok": 483,
+   "n": 483,
+   "p50_ms": 30.717,
+   "p90_ms": 40.453,
+   "p99_ms": 53.123,
+   "max_ms": 62.688
+  },
+  "eval": {
+   "misses": 606,
+   "ok": 4280,
+   "hits": 3674,
+   "n": 4280,
+   "p50_ms": 24.419,
+   "p90_ms": 46.083,
+   "p99_ms": 63.897,
+   "max_ms": 218.04
+  },
+  "read": {
+   "ok": 4019,
+   "n": 4019,
+   "p50_ms": 13.804,
+   "p90_ms": 17.592,
+   "p99_ms": 27.83,
+   "max_ms": 176.508
+  }
+ },
+ "errors": [],
+ "invariants": {
+  "failures": [],
+  "counts": {},
+  "top": 8307,
+  "setup_top": 1,
+  "fold_digest": "d3c36a384ef1331750bc03b6162e32c1bf0029931beea834f6012673c2dc6572",
+  "fold_handles": 4,
+  "checked": {
+   "committed": 7701,
+   "evals": 4280,
+   "memo_entries": 600
+  }
+ }
+}

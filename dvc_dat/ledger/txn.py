@@ -159,9 +159,15 @@ class Transaction:
             if left <= 0:
                 self._cm.__exit__(LockTimeout, LockTimeout(), None)
                 raise LockTimeout(f"write lock had only after {self._lock}s")
+            try:
+                self._base = self._ledger.at()      # under the lock, before the body's clock starts
+            except BaseException as e:
+                self._cm.__exit__(type(e), e, e.__traceback__)
+                raise
             self._t0 = _time.monotonic()
             self._arm(left)
-        self._base = self._ledger.at()
+        else:
+            self._base = self._ledger.at()
         self._state = "open"
         return self
 

@@ -25,6 +25,9 @@ the row's place within its transaction, `object` a tagged string
 - `Store.subjects(upto, *, predicate, obj, prefix, subject, after=0) ->
   [str]`: distinct subjects with an add row matching, ordered by first
   assertion.
+- `Store.close()`: closes every reader connection the store opened,
+  in every thread; a later read reopens one. `Ledger.close()` calls
+  it, and a `Ledger` is a context manager that does on exit.
 - `Store.top() -> int`, `Store.has_predicate(p, upto) -> bool`,
   `Store.index_names() -> [str]`; `SqliteStore.read(sql, params)`
   (`LedgerError` on a refused read).
@@ -102,6 +105,11 @@ hides the password.
   values (a generic plan cannot use a prefix range or partial index).
 - Postgres text cannot hold NUL: a row carrying `\x00` is refused
   (`LedgerError`); a read asking for one finds nothing.
+- Limitation: a sandbox worker reopens the ledger from `DAT_LEDGER`,
+  set to `Ledger.path`, the full DSN, so a password in the DSN rides
+  in the worker's environment (visible to its process and anything it
+  runs). Use a passwordless DSN (`~/.pgpass`, peer or trust auth) where
+  that matters.
 
 ## Measured
 
@@ -140,6 +148,53 @@ is per operation (all kinds), and for writes alone.
   (`LockTimeout`), each counted; none left a row or its tag.
 - Results: `tests/load/results/*.json`, one line each in
   `summary.txt`.
+
+Postgres, same machine and parameters: Dexter, PostgreSQL 17.11
+(Homebrew, native, default config: `shared_buffers` 128MB,
+`synchronous_commit` on, `fsync` on, `max_connections` 100) on
+localhost, 2026-10-19, dvc-dat branch `r0017-pg-load` at 2f74f52.
+Fresh schema per row (`--ledger
+'postgresql://postgres@localhost:5544/postgres?options=-csearch_path%3D<schema>&art=<folder>'`).
+`lock=` bounds the `FOR UPDATE` wait (`lock_timeout`) and the body.
+
+| Processes | `lock=` | Wall s | Transactions | tx/s | ops/s | p50 ms | p99 ms | write p50 ms | write p99 ms | Memo hits / misses | LockTimeout | Invariant failures |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 10 s | 28.8 | 1294 | 45 | 69 | 15.2 | 29.8 | 16.1 | 29.0 | 201 / 331 | 0 | none |
+| 2 | 10 s | 32.2 | 2437 | 76 | 124 | 16.1 | 35.7 | 17.7 | 38.6 | 546 / 498 | 0 | none |
+| 4 | 10 s | 35.0 | 4444 | 127 | 229 | 17.4 | 35.4 | 19.6 | 31.6 | 1542 / 580 | 0 | none |
+| 8 | 10 s | 60.3 | 8306 | 138 | 265 | 28.4 | 67.8 | 38.0 | 75.4 | 3674 / 606 | 0 | none |
+| 16 | 10 s | 124.2 | 16151 | 130 | 258 | 47.1 | 138.2 | 96.8 | 155.8 | 7909 / 611 | 0 | none |
+| 8 | 0.02 s | 54.2 | 7016 | 130 | 295 | 24.7 | 57.9 | 34.1 | 72.0 | 3675 / 605 | 1286 | none |
+
+- Postgres is slower than SQLite on one machine at every process
+  count: 45 vs 198 tx/s at 1 process, 127 vs 287 at 4, 138 vs 278 at
+  8. Its p50 at 1 process is 15.2 ms (SQLite 2.2 ms). It scales further
+  (flat from 8, not from 2) and its p99 is lower at 8 and 16.
+- Misses exceed memo entries as in SQLite (580 / 576, 606 / 600,
+  611 / 600).
+- `lock=0.02`: 1286 of 2029 locked transactions timed out (SQLite: 108);
+  a 20 ms bound is below Postgres's p50 here. None left a row or its
+  tag.
+- A first run of this matrix (before 2f74f52) lost 5 of 8 workers in
+  the `lock=0.02` row: the alarm interrupting a read left the thread's
+  connection mid-statement and every later read failed. Fixed in
+  2f74f52; `test_pg_lock_alarm_mid_read_leaves_the_reader_usable`.
+  The 4-process row of that run gave 107 tx/s: run-to-run spread is
+  that wide.
+
+**The floor.** `tests/load/test_threshold.py`, run with `DAT_LOAD=1`
+(Postgres also needs `DAT_LOAD_PG`, a server URL; it makes and drops
+its own schema): 4 processes x 2000 operations, 200 keys. It fails on
+any invariant failure, worker error or timeout, and when tx/s falls
+below half the 4-process value recorded on the machine running it:
+
+| Host | Store | Recorded tx/s (4 processes) | Floor tx/s |
+| --- | --- | --- | --- |
+| dexter | SQLite | 287 | 143 |
+| dexter | Postgres | 127 | 63 |
+
+On a host with no recorded floor only the invariants are checked. A
+floor, not a target: it catches a regression of 2x, not drift.
 
 ## Left to other modules
 
