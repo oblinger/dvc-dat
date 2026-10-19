@@ -77,14 +77,6 @@ Worker side:
 - Bulk data never crosses the pipe on a sealing call: the worker seals
   and returns the subject only.
 
-- TODO: with `memo=False` the worker returns the unsealed value with
-  its `_preds` dropped (`worker_main`), so a sandboxed
-  `eval(…, memo=False)` hands back empty `preds` where base mode keeps
-  them. Checked 2026-10-18 against a mounted kind setting
-  `v.preds["game"]`: `{}` with `memo=False`, `{"game": "G1"}` sealed.
-- TODO: the design's `load_fn` raises `UnmountedImport` for a module
-  importing outside the mounts; the code walks only mounted modules at
-  load and raises it at run time, in the worker.
 - Stubs, as built: no network refusal; no idle retirement; reads and
   writes allowed more widely than the design's final form; a nested
   eval under another mount runs in the same worker; a base-mode eval

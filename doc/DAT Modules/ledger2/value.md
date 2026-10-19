@@ -58,10 +58,6 @@ as is decorating a non-`Value` class. Writes nothing.
 - `Dat` is not `dvc_dat.Dat`: it checks no `_spec_.yaml` and hashes
   every file in the folder.
 
-- TODO: the design (SVP447 Ledger Module § Ref `type`) says a `Dat`'s
-  folder `_spec_` names its kind and is checked against the row at
-  load; the code does no such check.
-
 ## Left to other modules
 
 Sealing is [txn](txn.md)'s and an eval's [fn](fn.md)'s; loading and

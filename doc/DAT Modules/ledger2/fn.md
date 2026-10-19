@@ -82,14 +82,6 @@ world hands back the value already sealed. Part of the
   `epochs=8` and `epochs="8"` are two questions.
 - Two entries for one `(fn, keys)` coexist; the newest matching wins.
 
-- TODO: `Fn.__call__`'s docstring says `memo=False` runs and seals
-  nothing; the code also refuses it (`NotEvaluated`) on a dirty
-  checkout or a HEAD other than the rev's commit, in both modes, since
-  the code check runs before the mode split.
-- TODO: with `memo=False` in base mode, a `work` folder is not removed
-  (the removal follows the seal only); the returned value's `trace` is
-  filled although it is unsealed.
-
 ## Left to other modules
 
 Sandbox resolution and running are [sandbox](sandbox.md)'s; the trace
