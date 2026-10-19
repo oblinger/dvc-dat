@@ -25,6 +25,10 @@ class ConfinedWrite(LedgerError, PermissionError):
     """A sandboxed function wrote outside its work folder (the worker's scratch) and the store."""
 
 
+class ConfinedNetwork(LedgerError, PermissionError):
+    """A sandboxed function resolved a host name or opened a network connection."""
+
+
 class LockTimeout(LedgerError, TimeoutError):
     """A ``lock=`` body ran past its limit, or the lock was not had within it; nothing written."""
 

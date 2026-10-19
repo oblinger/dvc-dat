@@ -55,6 +55,16 @@ Worker side:
   `ConfinedWrite`; a read outside those, the mounted roots, the
   interpreter's folders, `/dev` and the dvc-dat package is
   `UntracedRead`.
+- The same hook on the network, active while a function body runs:
+  resolving a host name (`socket.getaddrinfo`, `gethostbyname`,
+  `gethostbyaddr`, `getnameinfo`) or sending to an internet address
+  (`socket.connect`, `sendto`, `sendmsg` on an `AF_INET`/`AF_INET6`
+  socket) is `ConfinedNetwork("<host or address:port>: a sandboxed
+  function does not use the network")`, raised before the call
+  reaches the system. Allowed: the ledger's own endpoint when it is
+  Postgres (the DSN's hosts, and their addresses at the port, resolved
+  when the worker installs), and local
+  `AF_UNIX` sockets and socket pairs, which are not the network.
 - `worker_main()`: the loop, one request and one reply until stdin
   closes; adopts the parent's `Env.code` through `set_env_provider`,
   purges the mounted modules, loads the function at the requested
@@ -77,7 +87,7 @@ Worker side:
 - Bulk data never crosses the pipe on a sealing call: the worker seals
   and returns the subject only.
 
-- Stubs, as built: no network refusal; no idle retirement; reads and
+- Stubs, as built: no idle retirement; reads and
   writes allowed more widely than the design's final form; a nested
   eval under another mount runs in the same worker; a base-mode eval
   nested inside a worker is unsupported; repo files read under a mount

@@ -7,9 +7,9 @@ import textwrap
 import backends
 import pytest
 
-from dvc_dat.ledger import (ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead, bump,
-                             set_env_provider)
-from dvc_dat.ledger.sandbox import shutdown
+from dvc_dat.ledger import (ConfinedNetwork, ConfinedWrite, LedgerError, NotEvaluated, UnmountedImport, UntracedRead,
+                             bump, set_env_provider)
+from dvc_dat.ledger.sandbox import _ledger_endpoints, shutdown
 
 PKG = {
     "pyproject.toml": '[project]\nname = "sbx-repo"\nversion = "0.1.0"\n',
@@ -77,6 +77,33 @@ PKG = {
         def scribble(rev, *, game: str) -> dict:
             Path("/tmp/ledger-sandbox-scribble.txt").write_text("x")
             return {}
+    '''),
+    "sbx/stage/net.py": textwrap.dedent('''
+        import socket
+        from dvc_dat.ledger import ledger_fn
+
+        @ledger_fn
+        def resolve(rev, *, host: str) -> dict:
+            return {"n": len(socket.getaddrinfo(host, 80))}
+
+        @ledger_fn
+        def dial(rev, *, port: int) -> dict:
+            with socket.socket() as s:
+                s.connect(("127.0.0.1", port))
+            return {}
+
+        @ledger_fn
+        def datagram(rev, *, port: int) -> dict:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.sendto(b"x", ("127.0.0.1", port))
+            return {}
+
+        @ledger_fn
+        def pair(rev, *, text: str) -> dict:
+            a, b = socket.socketpair()
+            with a, b:
+                a.sendall(text.encode())
+                return {"echo": b.recv(64).decode()}
     '''),
 }
 
@@ -194,3 +221,32 @@ def test_load_fn_refuses_an_unmounted_import_at_load(sbx):
     with pytest.raises(UnmountedImport, match="sbx.other from sbx.stage.fns; mount it or move it"):
         L.at().load_fn("sbx.stage.fns.borrow")
     assert L.at().load_fn("sbx.stage.fns.snoop").mode == "sandbox"   # same module, no such import
+
+
+def test_network_refused(sbx):
+    import socket
+
+    L, _repo = sbx
+    assert issubclass(ConfinedNetwork, PermissionError) and issubclass(ConfinedNetwork, LedgerError)
+    with pytest.raises(ConfinedNetwork, match="example.com: a sandboxed function does not use the network"):
+        L.at().eval("sbx.stage.net.resolve", host="example.com")
+    with socket.socket() as srv:
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        srv.setblocking(False)
+        port = srv.getsockname()[1]
+        with pytest.raises(ConfinedNetwork, match=f"127.0.0.1:{port}"):
+            L.at().eval("sbx.stage.net.dial", port=port)
+        with pytest.raises(BlockingIOError):
+            srv.accept()                            # refused before the connect was made
+    with pytest.raises(ConfinedNetwork):
+        L.at().eval("sbx.stage.net.datagram", port=9)
+    assert L.at().eval("sbx.stage.net.pair", text="hi").obj == {"echo": "hi"}   # a local socket is not the network
+
+
+def test_the_ledgers_own_endpoint_is_allowed():
+    hosts, addrs = _ledger_endpoints("postgresql://u:pw@127.0.0.1:5433/db?art=/tmp/a")
+    assert hosts == {"127.0.0.1"} and addrs == {("127.0.0.1", 5433)}
+    hosts, addrs = _ledger_endpoints("postgresql://u@[::1],127.0.0.1:6000/db")
+    assert hosts == {"::1", "127.0.0.1"} and ("127.0.0.1", 6000) in addrs and ("::1", 5432) in addrs
+    assert _ledger_endpoints("/some/ledger/folder") == (set(), set())

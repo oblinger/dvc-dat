@@ -18,7 +18,8 @@ module that would resolve inside a mounted repo's checkout but under no mount
 body runs, a read outside the mounted roots, the art store (dats), the
 worker's scratch and the interpreter's own files (``UntracedRead``), and a
 write outside the scratch (where ``work`` folders live) and the art store
-(``ConfinedWrite``).
+(``ConfinedWrite``). The same hook refuses a host-name lookup or an internet
+send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
 Before each top-level call the mounted modules are purged from
 ``sys.modules``, so each run loads (and records) what it uses; a nested eval
 runs in-process and its loads count toward its own entry (Q37 (ii)).
@@ -41,6 +42,8 @@ import importlib.util
 import inspect
 import os
 import pickle
+import re
+import socket
 import struct
 import subprocess
 import sys
@@ -52,7 +55,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from .codec import sha256
 from .env import Env, current_env
-from .errors import ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
+from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .fn import Fn, drop_work, fn_subject, mounts_at, mounts_hash, seal_entry, wrap_result
 
 if TYPE_CHECKING:
@@ -378,6 +381,8 @@ class _State:
     guard = False
     reads: List[str] = []
     writes: List[str] = []
+    hosts: Set[str] = set()                         # the ledger's own endpoint, by name and by address
+    addrs: Set[Tuple[str, int]] = set()
 
 
 STATE = _State()
@@ -444,8 +449,54 @@ def _under(p: str, roots: List[str]) -> bool:
     return any(p == r or p.startswith(r + os.sep) for r in roots)
 
 
+_NET_NAME = ("socket.getaddrinfo", "socket.gethostbyname", "socket.gethostbyaddr", "socket.getnameinfo")
+_NET_SEND = ("socket.connect", "socket.sendto", "socket.sendmsg")
+
+
+def _ledger_endpoints(path: Any) -> Tuple[Set[str], Set[Tuple[str, int]]]:
+    """The hosts and ``(address, port)`` pairs a Postgres ledger's DSN names (none for a folder ledger)."""
+    from urllib.parse import urlsplit
+
+    text = str(path)
+    if not text.startswith(("postgres://", "postgresql://")):
+        return set(), set()
+    netloc = re.split(r"[/?]", text.partition("://")[2], maxsplit=1)[0].rpartition("@")[2]
+    hosts, addrs = set(), set()
+    for part in netloc.split(","):
+        u = urlsplit("//" + part)
+        host, port = u.hostname or "localhost", u.port or 5432
+        hosts.add(host)
+        try:
+            for info in socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP):
+                addrs.add((str(info[4][0]), int(info[4][1])))
+        except OSError:
+            pass                                    # unresolvable now: the ledger itself will say so
+    return hosts, addrs
+
+
+def _network(event: str, args: Any) -> None:
+    if event in _NET_NAME:
+        host = args[0]
+        host = host[0] if event == "socket.getnameinfo" and isinstance(host, tuple) else host
+        if isinstance(host, bytes):
+            host = host.decode(errors="replace")
+        if host is not None and host not in STATE.hosts and not any(host == a for a, _p in STATE.addrs):
+            raise ConfinedNetwork(f"{host}: a sandboxed function does not use the network")
+        return
+    sock, addr = args[0], args[1]
+    if getattr(sock, "family", None) not in (socket.AF_INET, socket.AF_INET6) or not isinstance(addr, tuple):
+        return                                      # a local (AF_UNIX) socket is not the network
+    if (str(addr[0]), int(addr[1])) not in STATE.addrs:
+        raise ConfinedNetwork(f"{addr[0]}:{addr[1]}: a sandboxed function does not use the network")
+
+
 def _audit(event: str, args: Any) -> None:
-    if event != "open" or not STATE.guard:
+    if not STATE.guard:
+        return
+    if event in _NET_NAME or event in _NET_SEND:
+        _network(event, args)
+        return
+    if event != "open":
         return
     path, mode, flags = (list(args) + [None, None, None])[:3]
     if not isinstance(path, (str, bytes, os.PathLike)):
@@ -472,6 +523,7 @@ def install_worker(ledger: Any, mounts: List[Mount], scratch: Path) -> None:
     art = os.path.realpath(ledger._store.art.root)
     STATE.reads = base_reads + [os.path.realpath(m.path) for m in mounts] + [art]
     STATE.writes = [os.path.realpath(scratch), art]
+    STATE.hosts, STATE.addrs = _ledger_endpoints(ledger.path)
 
 
 def purge_mounted() -> None:

@@ -229,7 +229,9 @@ resolve inside a mounted repo's checkout but under no mount is
 `UnmountedImport`; a read outside the mounts, the art store, the
 worker's scratch, the interpreter's folders and the dvc-dat package is
 `UntracedRead`; a write outside the scratch and the art store is
-`ConfinedWrite`. An incomplete mount table is therefore a crash rather
+`ConfinedWrite`; resolving a host name or opening a network
+connection, other than to a Postgres ledger's own endpoint, is
+`ConfinedNetwork`. An incomplete mount table is therefore a crash rather
 than a silently wider trace. There is one worker per mount, kept warm,
 and the mounted modules are purged before each top-level call so every
 run loads, and records, what it uses.
@@ -393,7 +395,7 @@ ledger's. Nothing is created without `create=True`:
 
 ## Designed, not yet built
 
-- **Sandbox stubs.** No network refusal; no idle retirement of workers;
+- **Sandbox stubs.** No idle retirement of workers;
   reads also allowed in the interpreter's folders and the dvc-dat
   package, writes in the whole scratch and the art store; a nested eval
   under another mount runs in the same worker; a base-mode eval nested

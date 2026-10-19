@@ -17,6 +17,7 @@ anything. Part of the [architecture](../../DAT%20Architecture.md).
 | `UnmountedImport` | `ImportError` | a sandboxed run imported a mounted repo's module outside every mount |
 | `UntracedRead` | `PermissionError` | a sandboxed body read outside its allowed roots |
 | `ConfinedWrite` | `PermissionError` | a sandboxed body wrote outside its scratch and the art store |
+| `ConfinedNetwork` | `PermissionError` | a sandboxed body resolved a host name or connected to the network |
 | `LockTimeout` | `TimeoutError` | a `lock=` body ran past its limit, or the lock was not had in time |
 | `Unindexed` | `LookupError` | a where clause or select key named a dotted predicate neither declared nor on any row |
 | `Exists` | `ValueError` | an `add`, `remove` or bracket write on a sealed subject's own predicate (at commit) |
