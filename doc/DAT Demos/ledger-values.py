@@ -269,7 +269,6 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 # →    7 + <hash>   db/kind               demo_game.game.Video
 # →    7 + <hash>   db/provenance         import:archive
 # →    7 + <hash>   db/preds              ["game","camera","span"]
-# →    7 + <hash>   db/trace/code/dvc-dat +<8 hex>
 # →    7 + <hash>   db/trace/platform     darwin-arm64-py3.12
 # →    7 + <hash>   db/trace/uv.lock      sha256:<hash>
 # →    7 + <hash>   game                  G1
@@ -284,8 +283,7 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 # preds the kind declared when the value was stored. The
 # `db/trace/…` rows are the trace (Evaluation § What an entry
 # depends on: the trace): a hand seal records the environment it
-# runs in, here the dvc-dat checkout the stand-in `demo_game` sits
-# in. Then one row per pred, and the alias.
+# runs in. Then one row per pred, and the alias.
 
 # %% [markdown]
 # ### Finding values by preds
@@ -655,7 +653,6 @@ print(hypotenuse_value.trace["code/geometry"] == "+" + git("rev-parse", "HEAD")[
 # %%
 plane_path = scratch_repo_path / "plane"
 plane_path.mkdir()
-(plane_path / "__init__.py").write_text("")
 (plane_path / "units.py").write_text('SCALE = 0.5             # metres per unit\n')
 measure_source = '''\
 """`plane.measure`: a length in metres."""
@@ -688,8 +685,7 @@ print(rev["db/mount/plane"])
 # on the ledger: a dotted prefix (`plane`), the folder it resolves
 # to (`db/root`, relative to the repo's checkout) and the repo
 # (`db/repo`). Every name under the prefix now resolves inside that
-# folder: `plane.measure` is `plane/measure.py`. A mounted folder is
-# a package, so it holds an `__init__.py`. A `.datconfig.yaml`
+# folder: `plane.measure` is `plane/measure.py`. A `.datconfig.yaml`
 # `mounts:` entry is sugar for these rows.
 
 # %% [markdown]
@@ -703,16 +699,14 @@ segment_value = length_fn(a=(0, 0), b=(3, 4))
 print(segment_value.obj, sorted(segment_value.trace))
 # → 2.5 ['fn', 'platform', 'uv.lock']
 print(L.at()[segment_value.trace["fn"], "db/modules"])
-# → {'plane/__init__.py': '<hash>', 'plane/measure.py': '<hash>',
-#    'plane/units.py': '<hash>'}
+# → {'plane/measure.py': '<hash>', 'plane/units.py': '<hash>'}
 
 # %% [markdown]
 # Loaded and called like the global function, it ran in a worker
 # whose path holds the standard library, `site-packages` and the
 # mounted folders, nothing else. The run pulled in `units.py`
 # through the import, and `db/modules` records each source file
-# loaded, the package's `__init__.py` too, with its checksum: that
-# is the function's version. The
+# loaded with its checksum: that is the function's version. The
 # trace carries no `code/geometry` item.
 
 # %% [markdown]
@@ -895,11 +889,9 @@ for item in sorted(manhattan_value.trace):
 
 # %%
 print(dict(sorted(wide_video.trace.items())))
-# → {'code/dvc-dat': '+<8 hex>', 'platform': 'darwin-arm64-py3.12',
-#    'uv.lock': 'sha256:<hash>'}
+# → {'platform': 'darwin-arm64-py3.12', 'uv.lock': 'sha256:<hash>'}
 print(sorted(trimmed_video.trace))
-# → ['code/dvc-dat', 'platform', 'ref:demo_game.game.Video:<hash>',
-#    'uv.lock']
+# → ['platform', 'ref:demo_game.game.Video:<hash>', 'uv.lock']
 
 # %% [markdown]
 # ### memo=False and memo="get"
