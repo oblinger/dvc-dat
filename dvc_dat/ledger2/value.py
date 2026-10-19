@@ -33,7 +33,7 @@ class FrozenPreds(dict):
     """A sealed value's preds: a dict that refuses every change (``TypeError``)."""
 
     def _refuse(self, *a: Any, **k: Any) -> None:
-        raise TypeError("a sealed value's preds are read-only: a different pred is a new seal")
+        raise TypeError("cannot modify a sealed value's preds")
 
     __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _refuse  # type: ignore
 
@@ -66,7 +66,7 @@ class Value:
     @preds.setter
     def preds(self, value: Any) -> None:
         if self.sealed:
-            raise TypeError("a sealed value's preds are read-only")
+            raise TypeError("cannot modify a sealed value's preds")
         self.__dict__["_preds"] = dict(value)
 
     def encode(self) -> bytes:
