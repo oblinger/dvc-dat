@@ -164,3 +164,21 @@ def test_pg_close_ends_the_server_backends(dsn):
                 break
             time.sleep(0.1)
         assert admin.execute(q, (list(pids),)).fetchone()[0] == 0
+
+
+def test_pg_lock_alarm_mid_read_leaves_the_reader_usable(dsn):
+    """``lock=`` interrupting a read in the body: LockTimeout, nothing written, and the next read works
+    (an interrupted psycopg connection left "another command is already in progress")."""
+    L = Ledger(dsn, create=True)
+    with L.transaction(by="t") as t:
+        t.add("game/G1", "home", "A")
+    for _ in range(3):
+        with pytest.raises(LockTimeout):
+            with L.transaction(by="slow", lock=0.2) as t:
+                t.add("game/G1", "away", "B")
+                L._store.read("SELECT pg_sleep(2)")
+        assert L.at().get("game/G1", "home") == "A"
+        assert L.at().get("game/G1", "away") is None
+    with L.transaction(by="t", lock=5) as t:
+        t.add("game/G1", "away", "C")
+    assert L.at().get("game/G1", "away") == "C"

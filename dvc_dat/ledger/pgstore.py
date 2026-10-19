@@ -157,10 +157,18 @@ class PostgresStore(Store):
             conn.close()
 
     def read(self, sql: str, params: Sequence[Any] = ()) -> List[Tuple[Any, ...]]:
+        conn = self._reader()
         try:
-            return list(self._reader().execute(sql, tuple(params)).fetchall())
+            return list(conn.execute(sql, tuple(params)).fetchall())
         except self._pg.Error as e:
             raise LedgerError(f"Postgres ledger {self.redacted} refused a read: {e}") from e
+        except BaseException:
+            # interrupted mid-statement (a ``lock=`` alarm): the connection still awaits its result
+            # and refuses the next one ("another command is already in progress"); drop it, and the
+            # next read opens a fresh one. A writer's connection is its transaction's to close.
+            if conn is not getattr(self._local, "override", None):
+                conn.close()
+            raise
 
     def top(self) -> int:
         return int(self.read("SELECT COALESCE(MAX(rev), 0) FROM quads")[0][0])
