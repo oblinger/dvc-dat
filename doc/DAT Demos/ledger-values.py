@@ -14,13 +14,14 @@
 # %% [markdown]
 # # Ledger: values
 #
-# The value space on its own, through one worked example: a game.
-# `game/G1` is a plain subject, the game's identity. Its raw video
-# is a value, put in by hand. Cutting is a ledger function: it reads
-# the game's rows and the video, and its cut is a new value. The
-# game's current cut is an alias row on `game/G1` itself. Every
-# value is found by its preds, and every one can say why it would
-# no longer be the answer.
+# A ledger value is a large or complex Python object stored in the
+# ledger by its content, so it can be referred to, loaded back and
+# depended on exactly. The ledger holds its bytes once, and a row
+# that points at them; the object's hash is its subject. Once
+# stored, a value never changes: a different object is a different
+# value. Everything else here is built on that: names that point
+# at values, preds that say what a value is, and functions whose
+# results are values.
 #
 # Written to the ledger design of 2026-10-18 (Ledger Module, Values
 # § The worked example, F447 A39–A51). It runs once
@@ -33,6 +34,7 @@
 
 # %%
 import importlib
+import os
 import shutil
 import subprocess
 import sys
@@ -42,17 +44,16 @@ from pathlib import Path
 from dvc_dat.ledger import Ledger, Ref, bump
 from dvc_dat.ledger import AliasLoop, Exists, Multiple, Undeclared
 
-scratch_ledger_path = Path("scratch/values-demo/ledger").resolve()
-L = Ledger(scratch_ledger_path, create=True)   # made, then opened
-
 # %% [markdown]
-# ### A real code repository
+# ### Connecting the ledger to the code
 #
-# Every ledger function runs in a git checkout, the ledger records
-# which commit, and the notebook makes a tiny one of its own: the
-# `demo_game` package beside this notebook, copied into scratch.
+# A value is a complex Python object, so to define one precisely
+# the ledger must know exactly which code produced it. It does that
+# by tying itself to git: a particular commit of a repository.
 
 # %%
+# A demo repo for this notebook: the `demo_game` package beside it,
+# copied into scratch and made a git repository.
 demo_repo_path = Path("scratch/values-demo/demo-game").resolve()
 shutil.copytree("demo_game", demo_repo_path,
                 ignore=shutil.ignore_patterns("__pycache__"))
@@ -68,20 +69,42 @@ def git(*args: str) -> str:
 
 
 git("init", "-q")
+
+# %% [markdown]
+# The ledger opens inside the repository, so the project is the
+# repository.
+
+# %%
+os.chdir(demo_repo_path)
+L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
+# .datconfig.yaml is committed: it is the project's config, as in
+# any repo. The ledger itself (.dat/) is ignored.
+(demo_repo_path / ".gitignore").write_text(".dat/\n")
 git("add", ".")
 git("commit", "-q", "-m", "demo-game 0.1.0")
 commit_sha = git("rev-parse", "HEAD")
 sys.path.insert(0, str(demo_repo_path))
+import demo_game                     # discovery sees it imported
+
+# %%
+with L.transaction(by="human:dan", why="the clock's start") as t:
+    bump(t, "code/demo-game", "minor",       # 0.0.0 -> 0.1.0
+         confirm=lambda old, new: True)
+rev = L.at()
+print(rev["code/demo-game"])
+# {"version": "0.1.0", "commit": "<the demo commit>"}
+print(rev["code/demo-game", "commit"] == commit_sha)   # True
+
+# %% [markdown]
+# `bump` wrote the commit itself, read from the checkout the ledger
+# sits in.
 
 # %% [markdown]
 # The two games as plain rows written with the bracket, as the
-# triples notebook taught, and the code clock `eval` checks against
-# the commit it discovers.
+# triples notebook taught.
 
 # %%
 with L.transaction(by="human:dan", why="season opener") as t:
-    t["code/demo-game"] = {"version": "0.1.0",
-                           "commit": commit_sha}
     t["game/G1"] = {"home": "G4", "away": "G5",
                     "date": "2026-10-11", "court": "north"}
     t["game/G2"] = {"home": "G1", "away": "G3",
@@ -98,7 +121,7 @@ print(rev["game/G1"])
 # by its content.
 
 # %% [markdown]
-# ### A class
+# ### A value is a class with encode and decode
 #
 # A value's class lives in `demo_game/game.py`: a `Value` subclass
 # defined in a cell has no dotted name for a later `load` to import.
@@ -158,7 +181,7 @@ print(loaded_video.same_as(video_value))   # True: the same bytes
 # `same_as` compares two values by their bytes.
 
 # %% [markdown]
-# ### A name: alias
+# ### A name for a value
 #
 # An alias is a `db/alias` row naming the subject. `add_value(…,
 # alias="video/G1")` writes it in the same transaction; here it is
@@ -191,7 +214,7 @@ print(sorted(camera_ref.aliases))
 # name.
 
 # %% [markdown]
-# ### The game record carries its alias
+# ### A name is a row of its own
 #
 # The name's own record, read with the bracket, beside the value it
 # names.
@@ -205,13 +228,13 @@ print(rev.load("video/G1"))          # video/G1: the value itself
 # `rev["video/G1"]` is literal: the name's own rows, its `db/alias`
 # row's object the subject as a plain `str`. `load` follows the
 # row. A game carries its current cut the same way, shown once a
-# cut exists (Ledger evaluation).
+# cut exists (Values computed by functions).
 
 # %% [markdown]
 # ## Predicates: what a value is found by, and why it is frozen
 
 # %% [markdown]
-# ### Declaring a kind's preds
+# ### A kind declares its preds
 #
 # ```python
 # @ledger_class(preds=("game", "camera", "span"))
@@ -229,8 +252,8 @@ print(rev.load("video/G1"))          # video/G1: the value itself
 from demo_game.game import Video, Cut, Still
 
 # %% [markdown]
-# Three pred declarations the values below rely on; Topics § A many
-# pred says what each one does.
+# Three pred declarations the values below rely on; Edge cases §
+# A pred with many values says what each one does.
 
 # %%
 with L.transaction(by="human:dan") as t:
@@ -239,7 +262,7 @@ with L.transaction(by="human:dan") as t:
     t.add("db/pred/span", "db/type", "json")
 
 # %% [markdown]
-# ### Preds on the object, then the seal
+# ### Preds are set, then sealed
 
 # %%
 wide_video = Video(b"G1 wide camera, 9000 frames")
@@ -279,7 +302,7 @@ with L.transaction(by="human:dan") as t:
                 provenance="import:archive")
 
 # %% [markdown]
-# ### What the ledger holds
+# ### What a sealed value looks like on the ledger
 #
 # The G1 seal's revision as rows, unfolded. Notice everything the
 # seal wrote on the new subject, and the alias row on `video/G1`.
@@ -289,25 +312,26 @@ seal_rev = wide_video.rev
 for row in seal_rev.rows(since=L.at(seal_rev.id - 1)):
     print(row)
 # rev subject  predicate               object
-#   6 <hash>   db/value                ref:demo_game.game.Video:<hash>
-#   6 <hash>   db/kind                 demo_game.game.Video
-#   6 <hash>   db/provenance           import:archive
-#   6 <hash>   db/preds                ["game","camera","span"]
-#   6 <hash>   db/trace/code/demo-game 0.1.0+<8 hex>
-#   6 <hash>   db/trace/platform       darwin-arm64-py3.11
-#   6 <hash>   db/trace/uv.lock        sha256:<hash>
-#   6 <hash>   game                    G1
-#   6 <hash>   camera                  wide
-#   6 <hash>   span                    [0, 9000]
-#   6 video/G1 db/alias                <hash>
-#   6 db/tx/6  db/by                   human:dan
+#   7 <hash>   db/value                ref:demo_game.game.Video:<hash>
+#   7 <hash>   db/kind                 demo_game.game.Video
+#   7 <hash>   db/provenance           import:archive
+#   7 <hash>   db/preds                ["game","camera","span"]
+#   7 <hash>   db/trace/code/demo-game 0.1.0+<8 hex>
+#   7 <hash>   db/trace/platform       darwin-arm64-py3.11
+#   7 <hash>   db/trace/uv.lock        sha256:<hash>
+#   7 <hash>   game                    G1
+#   7 <hash>   camera                  wide
+#   7 <hash>   span                    [0, 9000]
+#   7 video/G1 db/alias                <hash>
+#   7 db/tx/7  db/by                   human:dan
 
 # %% [markdown]
 # `db/value` names the bytes by class and hash. `db/kind` is the
 # class. `db/provenance` is the caller's word. `db/preds` lists the
 # preds the kind declared at this seal, the ones now frozen. The
-# `db/trace/…` rows are the trace, under Ledger evaluation §
-# Provenance. Then one row per pred, and the alias.
+# `db/trace/…` rows are the trace, under Values computed by
+# functions § A value records what it read. Then one row per pred,
+# and the alias.
 
 # %% [markdown]
 # ### Finding values by preds
@@ -352,7 +376,7 @@ print(rev.select(("game", "span"), kind=Video))
 # projects chosen preds to tuples.
 
 # %% [markdown]
-# ### Frozen: Exists
+# ### A sealed pred cannot change
 #
 # A pred the seal wrote cannot be edited in place: an `add` on it
 # raises `Exists` at commit and writes nothing.
@@ -423,7 +447,7 @@ print(rev.refs(kind=Cut, team="G6"))            # [<8 hex>]
 # hash since no alias names it now.
 
 # %% [markdown]
-# ### A new version: seal, then re-point
+# ### A new version is a new value
 
 # %%
 longer_cut = Cut(wide_video.frames[:14])        # a longer trim
@@ -452,7 +476,7 @@ except TypeError as e:
     print("TypeError:", e)
 
 # %% [markdown]
-# ### What a hand seal refuses
+# ### What a seal refuses
 #
 # A pred the kind did not declare is refused at the seal.
 
@@ -497,10 +521,10 @@ except TypeError as e:
     print("TypeError:", e)
 
 # %% [markdown]
-# ## Ledger evaluation
+# ## Values computed by functions
 
 # %% [markdown]
-# ### A ledger function
+# ### A function that computes a value
 #
 # Cutting, in `demo_game/game.py`:
 #
@@ -558,7 +582,7 @@ print(cut_fn.sha[:8], cut_fn.subject)
 # module's source, `subject` the one name for that resolution.
 
 # %% [markdown]
-# ### Evaluation and memoization
+# ### Asked twice, computed once
 #
 # `rev.eval` is `load_fn` and a call. Its first call for a
 # question runs the body and seals the result.
@@ -627,7 +651,7 @@ for memo_ref in rev.refs(fn="demo_game.game.cut"):
 print(len(rev.values(fn="demo_game.game.cut")))    # 2, loaded
 
 # %% [markdown]
-# ### The game record carries its alias
+# ### A game names its current cut
 #
 # Each game's current cut becomes an alias row on the game itself.
 
@@ -678,7 +702,7 @@ print(cut_153)                       # game/G1: it has a name now
 # `subject` the cut's hash, `preds` the cut's, read without a load.
 
 # %% [markdown]
-# ### Provenance: the trace
+# ### A value records what it read
 #
 # The cut's trace rows first, as stored.
 
@@ -800,7 +824,7 @@ print(sorted(poster_value.diff(poster_g6_value)))
 # the game/G1 db/alias binding, and each side's value item
 
 # %% [markdown]
-# ### Identity
+# ### Same bytes, different values
 
 # %%
 rev = L.at()
@@ -910,10 +934,10 @@ print(sorted(cut_154.diff(recut)))       # ["code/demo-game", "fn"]
 # land as a new subject on the old blob.
 
 # %% [markdown]
-# ## Topics
+# ## Edge cases
 
 # %% [markdown]
-# ### A many pred
+# ### A pred with many values
 #
 # The three declarations from Predicates, as the values carry them.
 
@@ -943,7 +967,7 @@ except TypeError as e:
     print("TypeError:", e)           # camera: a one pred, not json
 
 # %% [markdown]
-# ### A renamed class: `db/moved`
+# ### A renamed class still loads
 #
 # `Still` was `demo_game.legacy.Frame`; values sealed before the
 # move keep the old dotted name in their `db/kind` row. One
@@ -971,7 +995,7 @@ print(rev[frame_ref.subject, "db/kind"])  # demo_game.legacy.Frame
 print(frame_ref.type)                  # <class 'demo_game.game.Still'>
 
 # %% [markdown]
-# ### `AliasLoop`
+# ### An alias chain has a limit
 #
 # An alias may name another alias, and `Ref` follows at most 8
 # hops; a ninth, like a cycle, is `AliasLoop`.
@@ -989,7 +1013,7 @@ except AliasLoop as e:
     print("AliasLoop:", e)
 
 # %% [markdown]
-# ### `Exists` on remove
+# ### A sealed pred cannot be removed
 #
 # A `remove` of a frozen pred is refused like an `add` (A38).
 
@@ -1001,7 +1025,7 @@ except Exists as e:
     print("Exists:", e)
 
 # %% [markdown]
-# ### A `ref:` row
+# ### A row can point at a value
 #
 # A `Ref` may be any row's object. `add` stores it as
 # `ref:<class>:<hash>:<subject>`, the subject a hint; every pattern
@@ -1015,7 +1039,7 @@ pick_ref = L.at()["review/G1", "cut"]
 print(pick_ref, pick_ref.subject == cut_154.subject)  # game/G1 True
 
 # %% [markdown]
-# ### The two doors are one
+# ### A hand seal and an eval write the same rows
 #
 # A hand seal and `eval` (calling the `Fn` that `load_fn` hands back
 # is `eval`) write the same rows, so every read above treats a value
