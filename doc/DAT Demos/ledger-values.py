@@ -19,7 +19,7 @@
 # depended on exactly. The ledger holds its bytes once, and a row
 # that points at them; the object's hash is its subject. Once
 # stored, a value never changes: a different object is a different
-# value. Everything else here is built on that: names that point
+# value. Everything else here is built on that: aliases that point
 # at values, preds that say what a value is, and functions whose
 # results are values.
 #
@@ -28,9 +28,6 @@
 # `ledger2` is rebuilt to that design (T534); until then it is the
 # design, not a demo. Revision numbers in the comments count from
 # 1, the first transaction on this ledger.
-
-# %% [markdown]
-# ## Setup
 
 # %%
 import importlib
@@ -51,14 +48,8 @@ scratch_project_path.mkdir(parents=True)
 shutil.copytree("demo_game", scratch_project_path / "demo_game",
                 ignore=shutil.ignore_patterns("__pycache__"))
 os.chdir(scratch_project_path)
-
-# %% [markdown]
-# The project is this scratch folder.
-
-# %%
 L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
 
-# %%
 # demo repo
 
 
@@ -76,21 +67,6 @@ git("init", "-q")
 git("add", ".")
 git("commit", "-q", "-m", "demo-game")
 sys.path.insert(0, str(scratch_project_path))
-
-# %% [markdown]
-# The two games as plain rows written with the bracket, as the
-# triples notebook taught.
-
-# %%
-with L.transaction(by="human:dan", why="season opener") as t:
-    t["game/G1"] = {"home": "G4", "away": "G5",
-                    "date": "2026-10-11", "court": "north"}
-    t["game/G2"] = {"home": "G1", "away": "G3",
-                    "date": "2026-10-12", "court": "east"}
-rev = L.at()
-print(rev["game/G1"])
-# {"home": "G4", "away": "G5", "date": "2026-10-11",
-#  "court": "north"}
 
 # %% [markdown]
 # ## Values
@@ -234,7 +210,11 @@ print(video_value)          # raw/G1/wide-camera: video/G1 moved
 # A value never changes; an alias moves.
 
 # %% [markdown]
-# ## Predicates: what a value is found by
+# ## Value predicates
+#
+# Preds are the attributes a value is found by: string-valued rows
+# beside its bytes, declared by its kind, set during construction
+# and frozen by the seal.
 
 # %% [markdown]
 # ### A kind declares its preds
@@ -265,7 +245,7 @@ with L.transaction(by="human:dan") as t:
     t.add("db/pred/span", "db/type", "json")
 
 # %% [markdown]
-# ### Preds are set, then stored
+# ### Preds are assigned during construction
 
 # %%
 wide_video = Video(b"G1 wide camera, 9000 frames")
@@ -307,18 +287,18 @@ stored_rev = wide_video.rev
 for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
     print(row)
 # rev subject  predicate               object
-#   8 <hash>   db/value                ref:demo_game.game.Video:<hash>
-#   8 <hash>   db/kind                 demo_game.game.Video
-#   8 <hash>   db/provenance           import:archive
-#   8 <hash>   db/preds                ["game","camera","span"]
-#   8 <hash>   db/trace/code/demo-game +<8 hex>
-#   8 <hash>   db/trace/platform       darwin-arm64-py3.11
-#   8 <hash>   db/trace/uv.lock        sha256:<hash>
-#   8 <hash>   game                    G1
-#   8 <hash>   camera                  wide
-#   8 <hash>   span                    [0, 9000]
-#   8 video/G1 db/alias                <hash>
-#   8 db/tx/8  db/by                   human:dan
+#   7 <hash>   db/value                ref:demo_game.game.Video:<hash>
+#   7 <hash>   db/kind                 demo_game.game.Video
+#   7 <hash>   db/provenance           import:archive
+#   7 <hash>   db/preds                ["game","camera","span"]
+#   7 <hash>   db/trace/code/demo-game +<8 hex>
+#   7 <hash>   db/trace/platform       darwin-arm64-py3.11
+#   7 <hash>   db/trace/uv.lock        sha256:<hash>
+#   7 <hash>   game                    G1
+#   7 <hash>   camera                  wide
+#   7 <hash>   span                    [0, 9000]
+#   7 video/G1 db/alias                <hash>
+#   7 db/tx/7  db/by                   human:dan
 
 # %% [markdown]
 # `db/value` names the bytes by class and hash. `db/kind` is the
@@ -335,37 +315,33 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 
 # %%
 rev = L.at()
-print(rev.values(game="G1"))         # [video/G1]
-print(rev.values(kind=Video))        # video/G1 and video/G2
-print(rev.values(camera="wide"))     # video/G1 and video/G2
+print(rev.values(game="G1"))         # → [video/G1]
+print(rev.values(kind=Video))        # → [video/G1, video/G2]
+print(rev.values(camera="wide"))     # → [video/G1, video/G2]
+print(rev.value(game="G1", camera="wide"))      # → video/G1
+try:
+    rev.value(kind=Video)            # two videos match
+except Multiple as e:
+    print("Multiple:", e)            # → Multiple: <the two>
+video_refs = rev.refs(kind=Video)
+print(video_refs)                    # → [video/G1, video/G2]
+print(type(video_refs[0]).__name__)  # → Ref: no bytes fetched
+[g1_ref] = rev.refs(game="G1")
+print(g1_ref)                        # → video/G1
+print(g1_ref.preds)
+# → {"game": "G1", "camera": "wide", "span": [0, 9000]}
+print(g1_ref.sealed_at)              # → Rev(7)
+print(max(video_refs, key=lambda r: r.sealed_at.id))  # → video/G2
+print(rev.select(("game", "span"), kind=Video))
+# → [("G1", [0, 9000]), ("G2", [0, 8400])]
 
 # %% [markdown]
 # `values` is the main way into the value table: a where clause
 # over preds, the matches loaded, in no promised order. A bare
 # keyword names a pred, whoever wrote it; `kind=` narrows to a
 # class. The plain videos carry no preds, so no clause finds them.
-
-# %% [markdown]
-# `value` is exactly one, or it raises: two videos match
-# `kind=Video`.
-
-# %%
-print(rev.value(game="G1").hash == wide_video.hash)    # True
-try:
-    rev.value(kind=Video)
-except Multiple as e:
-    print("Multiple:", e)
-
-# %%
-video_refs = rev.refs(kind=Video)
-print([(video_ref, video_ref.preds["span"])
-       for video_ref in video_refs])
-# (video/G1, [0, 9000]) and (video/G2, [0, 8400])
-print(max(video_refs, key=lambda r: r.sealed_at.id))   # video/G2
-print(rev.select(("game", "span"), kind=Video))
-# ("G1", [0, 9000]) and ("G2", [0, 8400])
-
-# %% [markdown]
+# `value` is exactly one, or it raises `Multiple`.
+#
 # `refs` says who matched without loading: `Ref.preds` and
 # `Ref.sealed_at`, the revision of the `db/value` row, come with
 # the rows, so refs can be filtered and sorted before any bytes
@@ -373,7 +349,7 @@ print(rev.select(("game", "span"), kind=Video))
 # projects chosen preds to tuples.
 
 # %% [markdown]
-# ### Sealing: a value is a constant
+# ### Sealing a value
 #
 # Values are immutable once they are sealed. During construction
 # everything is mutable; `add_value` is the act of sealing, and from
@@ -554,7 +530,7 @@ print(longer_cut, fixed_cut)             # trim/G1 <8 hex>
 # particular commit of a repository.
 
 # %%
-# A demo repo for this notebook: Setup copied the `demo_game`
+# A demo repo for this notebook: the setup cell copied `demo_game`
 # package into the scratch folder and committed it there.
 commit_sha = git("rev-parse", "HEAD")
 import demo_game
@@ -594,7 +570,20 @@ except TypeError as e:
 # %% [markdown]
 # ### Defining a function
 #
-# Cutting, in `demo_game/game.py`:
+# Two games as plain rows, from the triples notebook.
+
+# %%
+with L.transaction(by="human:dan", why="season opener") as t:
+    t["game/G1"] = {"home": "G4", "away": "G5",
+                    "date": "2026-10-11", "court": "north"}
+    t["game/G2"] = {"home": "G1", "away": "G3",
+                    "date": "2026-10-12", "court": "east"}
+print(L.at()["game/G1"])
+# {"home": "G4", "away": "G5", "date": "2026-10-11",
+#  "court": "north"}
+
+# %% [markdown]
+# Cutting, in `demo_game/game.py`, reads them:
 #
 # ```python
 # @ledger_fn
@@ -1103,7 +1092,8 @@ print(hit_value.subject == latest_ref.subject)  # True: latest
 # %% [markdown]
 # ### A pred with many values
 #
-# The three declarations from Predicates, as the values carry them.
+# The three declarations from Value predicates, as the values
+# carry them.
 
 # %%
 rev = L.at()
