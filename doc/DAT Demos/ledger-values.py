@@ -235,7 +235,28 @@ print(rev.load("video/G1"))          # video/G1: the value itself
 # cut exists (Values computed by functions).
 
 # %% [markdown]
-# ## Predicates: what a value is found by, and why it is frozen
+# ### A new version is a new value
+#
+# A second plain video for G1, a different clip.
+
+# %%
+retake_video = PlainVideo(b"G1 wide camera, retake, 9100 frames")
+with L.transaction(by="human:dan") as t:
+    retake_subject = t.add_value(retake_video)
+with L.transaction(by="human:dan", why="the retake") as t:
+    t.add("video/G1", "db/alias", retake_subject)
+rev = L.at()
+print(rev.load("video/G1").frames)
+# b'G1 wide camera, retake, 9100 frames'
+print(rev.load(video_subject).frames)
+# b'G1 wide camera, 9000 frames': the old one, by its subject
+print(video_value)          # raw/G1/wide-camera: video/G1 moved
+
+# %% [markdown]
+# A value never changes; an alias moves.
+
+# %% [markdown]
+# ## Predicates: what a value is found by
 
 # %% [markdown]
 # ### A kind declares its preds
@@ -266,7 +287,7 @@ with L.transaction(by="human:dan") as t:
     t.add("db/pred/span", "db/type", "json")
 
 # %% [markdown]
-# ### Preds are set, then sealed
+# ### Preds are set, then stored
 
 # %%
 wide_video = Video(b"G1 wide camera, 9000 frames")
@@ -275,25 +296,16 @@ with L.transaction(by="human:dan") as t:
     t.add_value(wide_video, alias="video/G1",
                 provenance="import:archive")
 print(wide_video)                    # video/G1
-print(wide_video.subject[:8], wide_video.sealed)   # <8 hex> True
+print(wide_video.subject[:8])        # <8 hex>
 print(wide_video.preds)
 # {"game": "G1", "camera": "wide", "span": [0, 9000]}
 
 # %% [markdown]
-# Preds are set on the object before the seal, by whoever builds
-# it; `add_value` takes no `preds=`. The seal fixes `subject` and
-# `rev` and freezes `preds`. The preds are in the subject's hash, so
-# the same frames make a new subject; `video/G1` now names it, an
+# Preds are set on the object before it is stored, by whoever builds
+# it; `add_value` takes no `preds=`. Storing fixes `subject` and
+# `rev`. The preds are in the subject's hash, so frames already on
+# the ledger make a new subject here; `video/G1` moves to it, an
 # alias being one row whose latest add wins.
-
-# %% [markdown]
-# Notice that once sealed, `preds` is read-only.
-
-# %%
-try:
-    wide_video.preds["camera"] = "tele"
-except TypeError as e:
-    print("TypeError:", e)
 
 # %% [markdown]
 # G2's video the same way, for the second game.
@@ -306,33 +318,34 @@ with L.transaction(by="human:dan") as t:
                 provenance="import:archive")
 
 # %% [markdown]
-# ### What a sealed value looks like on the ledger
+# ### What a value looks like on the ledger
 #
-# The G1 seal's revision as rows, unfolded. Notice everything the
-# seal wrote on the new subject, and the alias row on `video/G1`.
+# The revision that stored G1's video, as rows, unfolded. Notice
+# everything written on the new subject, and the alias row on
+# `video/G1`.
 
 # %%
-seal_rev = wide_video.rev
-for row in seal_rev.rows(since=L.at(seal_rev.id - 1)):
+stored_rev = wide_video.rev
+for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
     print(row)
 # rev subject  predicate               object
-#   7 <hash>   db/value                ref:demo_game.game.Video:<hash>
-#   7 <hash>   db/kind                 demo_game.game.Video
-#   7 <hash>   db/provenance           import:archive
-#   7 <hash>   db/preds                ["game","camera","span"]
-#   7 <hash>   db/trace/code/demo-game 0.1.0+<8 hex>
-#   7 <hash>   db/trace/platform       darwin-arm64-py3.11
-#   7 <hash>   db/trace/uv.lock        sha256:<hash>
-#   7 <hash>   game                    G1
-#   7 <hash>   camera                  wide
-#   7 <hash>   span                    [0, 9000]
-#   7 video/G1 db/alias                <hash>
-#   7 db/tx/7  db/by                   human:dan
+#   9 <hash>   db/value                ref:demo_game.game.Video:<hash>
+#   9 <hash>   db/kind                 demo_game.game.Video
+#   9 <hash>   db/provenance           import:archive
+#   9 <hash>   db/preds                ["game","camera","span"]
+#   9 <hash>   db/trace/code/demo-game 0.1.0+<8 hex>
+#   9 <hash>   db/trace/platform       darwin-arm64-py3.11
+#   9 <hash>   db/trace/uv.lock        sha256:<hash>
+#   9 <hash>   game                    G1
+#   9 <hash>   camera                  wide
+#   9 <hash>   span                    [0, 9000]
+#   9 video/G1 db/alias                <hash>
+#   9 db/tx/9  db/by                   human:dan
 
 # %% [markdown]
 # `db/value` names the bytes by class and hash. `db/kind` is the
 # class. `db/provenance` is the caller's word. `db/preds` lists the
-# preds the kind declared at this seal, the ones now frozen. The
+# preds the kind declared when the value was stored. The
 # `db/trace/…` rows are the trace, under Values computed by
 # functions § A value records what it read. Then one row per pred,
 # and the alias.
@@ -350,7 +363,7 @@ print(rev.values(camera="wide"))     # video/G1 and video/G2
 # `values` is the main way into the value table: a where clause
 # over preds, the matches loaded, in no promised order. A bare
 # keyword names a pred, whoever wrote it; `kind=` narrows to a
-# class. The plain video carries no preds, so no clause finds it.
+# class. The plain videos carry no preds, so no clause finds them.
 
 # %% [markdown]
 # `value` is exactly one, or it raises: two videos match
@@ -380,10 +393,27 @@ print(rev.select(("game", "span"), kind=Video))
 # projects chosen preds to tuples.
 
 # %% [markdown]
-# ### A sealed pred cannot change
+# ### Sealing: a value is a constant
 #
-# A pred the seal wrote cannot be edited in place: an `add` on it
-# raises `Exists` at commit and writes nothing.
+# Storing a value seals it. Its bytes, and the preds the seal
+# wrote, are fixed forever, and its subject is their hash. The rows
+# the seal wrote (`db/value`, `db/kind`, `db/preds`,
+# `db/provenance` and the pred rows) can never be added to or
+# changed. Rows that are not the seal's, annotations, can.
+
+# %% [markdown]
+# On the object, a sealed value's `preds` is read-only.
+
+# %%
+print(wide_video.sealed)             # True
+try:
+    wide_video.preds["camera"] = "tele"
+except TypeError as e:
+    print("TypeError:", e)
+
+# %% [markdown]
+# On the ledger, an `add` on a pred the seal wrote raises `Exists`
+# at commit and writes nothing.
 
 # %%
 try:
@@ -391,93 +421,6 @@ try:
         t.add(wide_video.subject, "camera", "tele")
 except Exists as e:
     print("Exists:", e)
-
-# %% [markdown]
-# ### Annotation versus correction
-#
-# A new pred on every game's video: annotation.
-
-# %%
-with L.transaction(by="human:dan", why="court survey") as t:
-    for video_ref in L.at().refs(kind=Video):
-        t.add(video_ref.subject, "texture", "hardwood")
-rev = L.at()
-print(Ref(rev, "video/G1").preds["texture"])    # hardwood
-print(len(rev.values(kind=Video, texture="hardwood")))   # 2
-
-# %% [markdown]
-# `texture` is not one of the preds the seals froze (each `db/preds`
-# row lists what the kind declared at its seal), so it is
-# annotation: allowed on a sealed value in any later transaction,
-# and part of the one view of its preds.
-
-# %% [markdown]
-# A wrong pred is corrected by a new seal. A hand trim of G1's
-# video, sealed and named in one transaction. Notice the typo in
-# `team`.
-
-# %%
-trim_cut = Cut(wide_video.frames[:12])          # trimmed by hand
-trim_cut.preds.update(game="G1",
-                      team=["G4", "G6"],          # G6: a typo
-                      video=wide_video)
-with L.transaction(by="human:dan") as t:
-    wrong_subject = t.add_value(trim_cut, deps=[wide_video],
-                                alias="trim/G1",
-                                provenance="human:dan")
-print(sorted(Ref(L.at(), "trim/G1").preds["team"]))  # G4, G6
-
-# %% [markdown]
-# The trim left `version` unset, so `version` is frozen absent. The
-# fix is a new seal with the right preds, re-pointed.
-
-# %%
-fixed_cut = Cut(trim_cut.clip)                  # the same bytes
-fixed_cut.preds.update(game="G1", team=["G4", "G5"],
-                       video=trim_cut.preds["video"])
-with L.transaction(by="human:dan", why="team typo") as t:
-    right_subject = t.add_value(fixed_cut, deps=[wide_video],
-                                alias="trim/G1",
-                                provenance="human:dan")
-rev = L.at()
-print(right_subject != wrong_subject,
-      fixed_cut.hash == trim_cut.hash)                # True True
-print(sorted(Ref(rev, "trim/G1").preds["team"]))  # G4, G5
-print(rev.refs(kind=Cut, team="G6"))            # [<8 hex>]
-
-# %% [markdown]
-# The same bytes make a new subject, sharing one blob. The wrong
-# one stays, immutable, still found by `team="G6"`, printed by its
-# hash since no alias names it now.
-
-# %% [markdown]
-# ### A new version is a new value
-
-# %%
-longer_cut = Cut(wide_video.frames[:14])        # a longer trim
-longer_cut.preds.update(game="G1", version="2",
-                        team=["G4", "G5"], video=wide_video)
-with L.transaction(by="human:dan") as t:
-    t.add_value(longer_cut, deps=[wide_video])
-print(longer_cut)                        # <8 hex>: no alias yet
-with L.transaction(by="human:dan", why="longer trim") as t:
-    t.add("trim/G1", "db/alias", longer_cut.subject)
-print(longer_cut, fixed_cut)             # trim/G1 <8 hex>
-
-# %% [markdown]
-# A value's `version` is a pred its constructor sets; a new version
-# is a new value and the alias moved to it.
-
-# %% [markdown]
-# `bump` moves clocks (`code/<repo>`, `db`); on a name holding a
-# `db/alias` row it raises, naming the alias.
-
-# %%
-try:
-    with L.transaction(by="human:dan") as t:
-        bump(t, "trim/G1")
-except TypeError as e:
-    print("TypeError:", e)
 
 # %% [markdown]
 # ### What a seal refuses
@@ -521,6 +464,107 @@ except ValueError as e:
 try:
     with L.transaction(by="human:dan") as t:
         t.add("video/G1-tele", "note", bad_video)
+except TypeError as e:
+    print("TypeError:", e)
+
+# %% [markdown]
+# ## Revising a value
+#
+# A value cannot be revised, so revision happens at three levels,
+# and the level you pick is the level of what changed: a fact beside
+# the value, a wrong pred, or a new version.
+
+# %% [markdown]
+# ### Annotation: rows beside the value
+#
+# A new pred on every game's video.
+
+# %%
+with L.transaction(by="human:dan", why="court survey") as t:
+    for video_ref in L.at().refs(kind=Video):
+        t.add(video_ref.subject, "texture", "hardwood")
+rev = L.at()
+print(Ref(rev, "video/G1").preds["texture"])    # hardwood
+print(len(rev.values(kind=Video, texture="hardwood")))   # 2
+print(rev[wide_video.subject, "db/preds"])
+# ["game", "camera", "span"]: the seal's own, unchanged
+
+# %% [markdown]
+# `texture` is not a pred the seal wrote, so it is annotation:
+# allowed on a sealed value in any later transaction, and part of
+# the one view of its preds that `Ref.preds` reads. The seal's rows
+# are untouched; its `db/preds` row still lists only its own.
+
+# %% [markdown]
+# ### Correction: re-seal and re-point
+#
+# A hand trim of G1's video, sealed and named in one transaction.
+# Notice the typo in `team`.
+
+# %%
+trim_cut = Cut(wide_video.frames[:12])          # trimmed by hand
+trim_cut.preds.update(game="G1",
+                      team=["G4", "G6"],          # G6: a typo
+                      video=wide_video)
+with L.transaction(by="human:dan") as t:
+    wrong_subject = t.add_value(trim_cut, deps=[wide_video],
+                                alias="trim/G1",
+                                provenance="human:dan")
+print(sorted(Ref(L.at(), "trim/G1").preds["team"]))  # G4, G6
+
+# %% [markdown]
+# `team` is a pred the seal wrote, so it cannot be edited. The fix
+# is a new seal with the same bytes and deps and the right preds,
+# the alias re-pointed to it.
+
+# %%
+fixed_cut = Cut(trim_cut.clip)                  # the same bytes
+fixed_cut.preds.update(game="G1", team=["G4", "G5"],
+                       video=trim_cut.preds["video"])
+with L.transaction(by="human:dan", why="team typo") as t:
+    right_subject = t.add_value(fixed_cut, deps=[wide_video],
+                                alias="trim/G1",
+                                provenance="human:dan")
+rev = L.at()
+print(right_subject != wrong_subject,
+      fixed_cut.hash == trim_cut.hash)                # True True
+print(sorted(Ref(rev, "trim/G1").preds["team"]))  # G4, G5
+print(rev.refs(kind=Cut, team="G6"))            # [<8 hex>]
+
+# %% [markdown]
+# The same bytes make a new subject, sharing one blob. The wrong
+# one stays with its history, immutable, still found by
+# `team="G6"`, printed by its hash since no alias names it now.
+
+# %% [markdown]
+# ### A new version: a new value with new preds
+#
+# A longer trim, its `version` a pred like any other.
+
+# %%
+longer_cut = Cut(wide_video.frames[:14])        # a longer trim
+longer_cut.preds.update(game="G1", version="1.1",
+                        team=["G4", "G5"], video=wide_video)
+with L.transaction(by="human:dan") as t:
+    t.add_value(longer_cut, deps=[wide_video])
+print(longer_cut)                        # <8 hex>: no alias yet
+with L.transaction(by="human:dan", why="longer trim") as t:
+    t.add("trim/G1", "db/alias", longer_cut.subject)
+print(longer_cut, fixed_cut)             # trim/G1 <8 hex>
+
+# %% [markdown]
+# The new version is sealed as a new value, then the alias moves to
+# it; the corrected trim stays, unnamed.
+
+# %% [markdown]
+# `bump` moves clocks (`code/<repo>`, `db`), not aliases: an alias
+# moves by a new `db/alias` row, so on a subject holding one `bump`
+# raises, naming the alias.
+
+# %%
+try:
+    with L.transaction(by="human:dan") as t:
+        bump(t, "trim/G1")
 except TypeError as e:
     print("TypeError:", e)
 
