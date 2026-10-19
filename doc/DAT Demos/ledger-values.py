@@ -527,19 +527,18 @@ print(longer_cut, fixed_cut)             # trim/G1 <8 hex>
 # it; the corrected trim stays, unnamed.
 
 # %% [markdown]
-# ## Ledger functions
+# ## Global functions
 #
-# We leave values for a moment. A ledger function is an ordinary
-# Python function marked `@ledger_fn`: it takes the revision first
-# and keywords after, and returns a value. The ledger can find it
-# by its dotted name.
+# We leave values for a moment. A global function is one that is
+# simply in the code you are running: an ordinary Python function
+# marked `@ledger_fn`, found by its dotted name, run in this
+# process. It takes the revision first and keywords after, and
+# returns a value. The ledger cannot control such code; it can only
+# record which code it was, so it ties the function to the
+# repository it lives in, a particular commit.
 
 # %% [markdown]
 # ### Connecting the ledger to the code
-#
-# A function runs in a checkout, and the ledger must know exactly
-# which code produced a value, so it ties itself to git: a
-# particular commit of a repository.
 
 # %%
 # A demo repo for this notebook: the setup cell copied `demo_game`
@@ -626,7 +625,6 @@ print(L.at()["game/G1"])
 from demo_game.game import cut
 
 rev = L.at()
-cut_fn = rev.load_fn("demo_game.game.cut")   # an Fn, by name
 plain_cut = cut(rev, game="G1", version="1.5.3")
 print(type(plain_cut))               # <class 'demo_game.game.Cut'>
 print(plain_cut.sealed)              # False
@@ -636,36 +634,34 @@ print(plain_cut.preds)
 print(L.at().id == rev.id)           # True: nothing written
 
 # %% [markdown]
-# `load_fn` finds the function by its dotted name at `rev` and
-# hands back an `Fn`. The function itself, imported, is called like
-# any Python function: an unsealed `Cut`, nothing written.
+# Imported, the function is called like any Python function: an
+# unsealed `Cut`, nothing written.
 
 # %%
+cut_fn = rev.load_fn("demo_game.game.cut")   # an Fn, by name
+print(cut_fn.mode)                   # base
 print(cut_fn.signature)              # (*, game: str, version: str)
 print(cut_fn.sha[:8], cut_fn.subject)
 # <8 hex> db/fn/demo_game.game.cut/<hash>
 
 # %% [markdown]
-# The `Fn` says which code a name resolves to at this rev:
-# `signature` is the keywords it takes, `sha` the hash of its
-# module's source, `subject` the one name for that resolution.
+# `load_fn` finds the function by its dotted name at `rev` and
+# hands back an `Fn`, which says which code the name resolves to:
+# `mode` is `base` for a global function, `signature` the keywords
+# it takes, `sha` the hash of its module's source, `subject` the
+# one name for that resolution.
 
 # %% [markdown]
-# ### Two kinds of function: in the code, or mounted
+# ## Sandboxed functions
 #
-# A function that is simply in the running code is found by name
-# and run in this process; the ledger can only record which commit
-# it was. A function under a mount is loaded from the mounted
-# source at the revision asked for and run in a sandbox, its
-# imports traced and its writes confined, so the ledger controls
-# it.
-
-# %%
-print(cut_fn.mode, cut_fn.mount)     # base None
+# A sandboxed function is one the ledger controls: its source is
+# mounted, loaded from the mounted tree at the revision asked for,
+# and run in a sandbox where every import is traced and every write
+# is confined. So its code needs no clock: what ran is recorded
+# exactly.
 
 # %% [markdown]
-# A mount is rows on the ledger: a dotted prefix, the root it
-# resolves under, and the repo that root is in.
+# ### Mounting a source tree
 
 # %%
 with L.transaction(by="human:dan", why="mount the etl") as t:
@@ -674,17 +670,37 @@ with L.transaction(by="human:dan", why="mount the etl") as t:
 rev = L.at()
 print(rev["db/mount/demo_game.etl"])
 # {"db/root": "demo_game/etl", "db/repo": "demo-game"}
+
+# %% [markdown]
+# A mount is rows on the ledger: a dotted prefix, the root it
+# resolves under, and the repo that root is in. The environment
+# provider maps the repo name to a checkout, here the scratch
+# folder, and `db/root` is relative to it. A `.datconfig.yaml`
+# `mounts:` entry is sugar for these rows.
+
+# %% [markdown]
+# ### A function under a mount
+
+# %%
 detect_fn = rev.load_fn("demo_game.etl.detect.detections")
 print(detect_fn.mode, detect_fn.mount)   # sandbox demo_game.etl
 print(detect_fn.module)
 # .../scratch/values-demo/demo_game/etl/detect.py
+from demo_game.etl.detect import detections
+plain_detections = detections(rev, game="G1")
+print(plain_detections.sealed)       # False: a plain call still works
 
 # %% [markdown]
 # Every `demo_game.etl` name now resolves through the mount, read
 # at the revision asked for, and runs in a worker whose path holds
 # the standard library, `site-packages` and the mounted roots,
-# nothing else. `demo_game.game` is under no mount, so `cut` stays
+# nothing else; one worker per `fn` subject, kept warm. Imported
+# and called directly, the function is plain Python again, outside
+# the sandbox. `demo_game.game` is under no mount, so `cut` stays
 # `base`.
+
+# %% [markdown]
+# ### What the sandbox refuses
 #
 # `demo_game.etl.stray.borrow` imports `demo_game.shots`, which is
 # in the repo but under no mount. Running it (`rev.eval`, the next
@@ -699,18 +715,28 @@ except UnmountedImport as e:
 
 # %% [markdown]
 # Nothing is sealed: an incomplete mount table is a crash, never a
-# silently wider trace. This difference, which code the ledger can
-# see, matters in the next section.
+# silently wider trace. A read of a file outside the mounted roots,
+# the dat folders and the worker's scratch is refused the same way,
+# as `UntracedRead`.
+
+# %% [markdown]
+# ### Where a sandboxed function writes
+#
+# Open (Q36; lean): a function that builds a folder declares a
+# parameter `work: Path`, reserved beside `memo` and never a key;
+# the eval binds it to a fresh scratch folder, and the seal moves
+# what was built there into the store. No `work` parameter, no
+# writes.
 
 # %% [markdown]
 # ## Evaluation
 #
-# `eval` calls a ledger function and keeps the result. A bare
-# return is wrapped into a value (`Pickled`); a `Value` is taken as
-# is. Everything the function read through `rev`, every value it
-# loaded and the code it ran become the trace. The result is sealed
-# with `db/fn` and `db/keys` rows, so the same question is answered
-# from the ledger next time.
+# `eval` calls a global or a sandboxed function and keeps the
+# result. A bare return is wrapped into a value (`Pickled`); a
+# `Value` is taken as is. Everything the function read through
+# `rev`, every value it loaded and the code it ran become the
+# trace. The result is sealed with `db/fn` and `db/keys` rows, so
+# the same question is answered from the ledger next time.
 
 # %% [markdown]
 # ### Asked twice, computed once
@@ -819,10 +845,13 @@ for item in sorted(cut_153.trace):
 # %% [markdown]
 # The trace is recorded, not declared, item by item:
 #
-# - `code/demo-game` — `cut` is base, so the code it ran is known
+# - `code/demo-game` — `cut` is global, so the code it ran is known
 #   only as the repo's version and commit.
-# - `fn` — the code the name resolved to, its `Fn` subject, which
-#   hashes the module's source (in base mode too, A39).
+# - `fn` — the code the name resolved to, its `Fn` subject. For a
+#   global function like `cut` that is the commit, beside the hash
+#   of the module's source (A39). For a sandboxed one it is the
+#   modules actually loaded during the run, hashed after it (Q37,
+#   open; lean).
 # - `game/G1 away`, `game/G1 home` — the two game rows read by
 #   name.
 # - `q:{…}` — the `value` query, holding what it answered, so a
@@ -1008,7 +1037,7 @@ print(recut.subject != cut_home_g6.subject,
 print(sorted(cut_home_g6.diff(recut)))   # ["code/demo-game", "fn"]
 
 # %% [markdown]
-# `cut` is base, so its trace holds the repo's version and commit,
+# `cut` is global, so its trace holds the repo's version and commit,
 # and `fn` hashes the module's source: an edit anywhere in
 # `game.py` moves both. The eval re-runs, and the identical bytes
 # land as a new subject on the old blob.
