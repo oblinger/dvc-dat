@@ -38,9 +38,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from dvc_dat.ledger import Ledger, Ref, bump
-from dvc_dat.ledger import NotEvaluated, Unindexed
-from dvc_dat.ledger import UnmountedImport, UntracedRead
+from dvc_dat.ledger2 import Ledger, Ref, bump
+from dvc_dat.ledger2 import NotEvaluated, Unindexed
+from dvc_dat.ledger2 import UnmountedImport, UntracedRead
 
 scratch_project_path = Path("scratch/dats-demo").resolve()
 shutil.copytree("demo_game", scratch_project_path,
@@ -231,7 +231,8 @@ print(L.at()[spec_dat.subject, "db/keys"])
 # %%
 module_paths = L.at()[spec_dat.trace["fn"], "db/modules"]
 print(sorted(module_paths))
-# → ["demo_game/etl/dat.py", "demo_game/etl/detect.py"]
+# → ["demo_game/etl/__init__.py", "demo_game/etl/dat.py",
+#    "demo_game/etl/detect.py"]: the package's __init__ runs too
 
 # %% [markdown]
 # The `fn` item hashes the modules the run loaded (Q37, open;
@@ -520,7 +521,8 @@ with L.transaction(by="human:dan", why="train longer") as t:
 rev = L.at()
 for game in ("G1", "G2"):
     rev.eval("demo_game.etl.model.train", game=game)
-print(len(L.at().refs(kind=StageDat, since=rev)))   # → 2
+print(len(L.at().refs(kind=StageDat, since=rev)))   # → 3: two
+#   models, and G2's tracks, re-derived since track.py moved
 
 # %% [markdown]
 # Two new models and nothing below them, since only `train` read
@@ -614,10 +616,12 @@ with L.transaction(by="human:dan", why="G3 plays normie") as t:
     t["game/G3", "gameset"] = "normie"
 rev = L.at()
 rev.eval("demo_game.etl.model.train", game="G3")  # re-derived
+rev = L.at()                                  # after its seal
 print(scores_table.matches(rev))              # → False
 rescored_table = rev.eval("demo_game.etl.report.scores",
                           gameset="normie")
-print(list(scores_table.diff(rescored_table)))   # → [the q: item]
+print(list(scores_table.diff(rescored_table)))
+# → [the q: item, the fifth model's ref: item]: values loads each
 
 # %% [markdown]
 # ### The config file is sugar for rows

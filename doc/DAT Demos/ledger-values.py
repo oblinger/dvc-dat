@@ -38,9 +38,9 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from dvc_dat.ledger import Ledger, Ref, bump
-from dvc_dat.ledger import AliasLoop, Exists, Multiple, Undeclared
-from dvc_dat.ledger import UnmountedImport
+from dvc_dat.ledger2 import Ledger, Ref, bump
+from dvc_dat.ledger2 import AliasLoop, Exists, Multiple, Undeclared
+from dvc_dat.ledger2 import UnmountedImport
 
 # %%
 scratch_project_path = Path("scratch/values-demo").resolve()
@@ -48,6 +48,7 @@ scratch_project_path.mkdir(parents=True)
 shutil.copytree("demo_game/demo_game",
                 scratch_project_path / "demo_game",
                 ignore=shutil.ignore_patterns("__pycache__"))
+shutil.copy("demo_game/pyproject.toml", scratch_project_path)  # names the repo demo-game
 os.chdir(scratch_project_path)
 L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
 
@@ -688,7 +689,10 @@ print(detect_fn.mode, detect_fn.mount)   # sandbox demo_game.etl
 print(detect_fn.module)
 # .../scratch/values-demo/demo_game/etl/detect.py
 from demo_game.etl.detect import detections
-plain_detections = detections(rev, game="G1")
+plain_work = Path("plain-detections")            # a plain call
+plain_work.mkdir()                                #   names its own
+plain_detections = detections(rev, game="G1",     #   folder: work
+                              work=plain_work)    #   is a parameter
 print(plain_detections.sealed)       # False: a plain call still works
 
 # %% [markdown]

@@ -37,8 +37,8 @@
 import os, time
 from pathlib import Path
 
-from dvc_dat.ledger import Ledger, bump
-from dvc_dat.ledger import LockTimeout
+from dvc_dat.ledger2 import Ledger, bump
+from dvc_dat.ledger2 import LockTimeout
 
 scratch_ledger_path = Path("scratch/triples-demo/ledger").resolve()
 L = Ledger(scratch_ledger_path, create=True)   # made, then opened

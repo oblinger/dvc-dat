@@ -4,7 +4,7 @@ Kept so the values notebook can seal under the old dotted name and
 then record the move as `(db/kind/demo_game.legacy.Frame, db/moved,
 demo_game.game.Still)`; a real rename deletes this module.
 """
-from dvc_dat.ledger import Value, ledger_class
+from dvc_dat.ledger2 import Value, ledger_class
 
 
 @ledger_class(preds=("game",))

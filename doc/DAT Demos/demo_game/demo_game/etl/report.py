@@ -1,7 +1,7 @@
 """`demo_game.etl.report`: one parquet `Table` over a game set."""
 import pyarrow as pa
 
-from dvc_dat.ledger import Table, ledger_fn
+from dvc_dat.ledger2 import Table, ledger_fn
 from demo_game.etl.dat import StageDat
 
 

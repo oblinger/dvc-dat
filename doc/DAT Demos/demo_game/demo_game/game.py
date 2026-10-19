@@ -9,7 +9,7 @@ rebuilt to it (T534).
 import random
 import time
 
-from dvc_dat.ledger import Ref, Value, ledger_class, ledger_fn
+from dvc_dat.ledger2 import Ref, Value, ledger_class, ledger_fn
 
 
 class PlainVideo(Value):

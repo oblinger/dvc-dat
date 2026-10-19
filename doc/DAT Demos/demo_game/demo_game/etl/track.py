@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from dvc_dat.ledger import ledger_fn
+from dvc_dat.ledger2 import ledger_fn
 from demo_game.etl.dat import StageDat, build
 
 SPEC = {"main": "demo_game.etl.track.link", "stage": "track"}

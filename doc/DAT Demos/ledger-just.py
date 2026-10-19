@@ -39,8 +39,8 @@ from pathlib import Path
 
 import yaml
 
-from dvc_dat.ledger import Ledger, Ref, bump
-from dvc_dat.ledger import LedgerError, Multiple
+from dvc_dat.ledger2 import Ledger, Ref, bump
+from dvc_dat.ledger2 import LedgerError, Multiple
 
 # %%
 scratch_project_path = Path("scratch/just-demo").resolve()
@@ -111,8 +111,8 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # %%
 # !just values game=G1
 # → video/G1  game=G1 camera=wide span=[0, 9000]
-# → game/G1   game=G1 version=1.5.4 team=G6,G5 video=video/G1
-# → <8 hex>   game=G1 version=1.5.3 team=G4,G5 video=video/G1
+# → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
+# → game/G1   game=G1 version=1.5.4 video=video/G1 team=G6,G5
 
 # %% [markdown]
 # Sugar for `L.at().values(game="G1")`, each value printed in its
@@ -122,10 +122,10 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 for game_value in L.at().values(game="G1"):
     print(game_value, dict(game_value.preds))
 # → video/G1 {"game": "G1", "camera": "wide", "span": [0, 9000]}
-# → game/G1 {"game": "G1", "version": "1.5.4",
-#            "team": ["G6", "G5"], "video": video/G1}
 # → <8 hex> {"game": "G1", "version": "1.5.3",
-#            "team": ["G4", "G5"], "video": video/G1}
+#            "video": video/G1, "team": ["G4", "G5"]}
+# → game/G1 {"game": "G1", "version": "1.5.4",
+#            "video": video/G1, "team": ["G6", "G5"]}
 
 # %% [markdown]
 # Every value of the game: the video and both cuts, the 1.5.4 cut
@@ -187,8 +187,8 @@ del os.environ["DAT_LEDGER"]
 
 # %%
 # !just values kind=Cut game=G1
-# → game/G1   game=G1 version=1.5.4 team=G6,G5 video=video/G1
-# → <8 hex>   game=G1 version=1.5.3 team=G4,G5 video=video/G1
+# → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
+# → game/G1   game=G1 version=1.5.4 video=video/G1 team=G6,G5
 
 # %% [markdown]
 # Sugar for `L.at().values(kind=Cut, game="G1")`.
@@ -196,8 +196,8 @@ del os.environ["DAT_LEDGER"]
 # %%
 for cut_value in L.at().values(kind=Cut, game="G1"):
     print(cut_value, cut_value.preds["version"])
-# → game/G1 1.5.4
 # → <8 hex> 1.5.3
+# → game/G1 1.5.4
 
 # %% [markdown]
 # The video is gone: `kind=` narrows to a class. The recipe matches
@@ -209,7 +209,7 @@ for cut_value in L.at().values(kind=Cut, game="G1"):
 
 # %%
 # !just value game=G1 version=1.5.3
-# → <8 hex>   game=G1 version=1.5.3 team=G4,G5 video=video/G1
+# → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
 
 # %% [markdown]
 # Sugar for `L.at().value(game="G1", version="1.5.3")`.
@@ -218,7 +218,7 @@ for cut_value in L.at().values(kind=Cut, game="G1"):
 cut_value = L.at().value(game="G1", version="1.5.3")
 print(cut_value, dict(cut_value.preds))
 # → <8 hex> {"game": "G1", "version": "1.5.3",
-#            "team": ["G4", "G5"], "video": video/G1}
+#            "video": video/G1, "team": ["G4", "G5"]}
 
 # %% [markdown]
 # Asked for one where three match, `value` refuses and names them
@@ -226,7 +226,7 @@ print(cut_value, dict(cut_value.preds))
 
 # %%
 # !just value game=G1
-# → Multiple: game=G1 matches 3: video/G1, game/G1, <8 hex>
+# → Multiple: game=G1 matches 3: video/G1, <8 hex>, game/G1
 
 # %% [markdown]
 # Sugar for `L.at().value(game="G1")`, the `Multiple` printed.
@@ -236,7 +236,7 @@ try:
     L.at().value(game="G1")
 except Multiple as e:
     print("Multiple:", e)
-# → Multiple: game=G1 matches 3: video/G1, game/G1, <8 hex>
+# → Multiple: game=G1 matches 3: video/G1, <8 hex>, game/G1
 
 # %% [markdown]
 # ### What a subject has held
@@ -244,31 +244,27 @@ except Multiple as e:
 # %%
 # !just history game/G1
 # → rev  by         predicate  object
+# →   3  human:dan  home       G4
 # →   3  human:dan  away       G5
 # →   3  human:dan  court      north
-# →   3  human:dan  home       G4
 # →   6  human:dan  db/alias   <the 1.5.3 cut, 8 hex>
 # →   7  human:dan  home       G6
 # →   9  human:dan  db/alias   <the 1.5.4 cut, 8 hex>
 
 # %% [markdown]
-# Sugar for `rev.asserted("game/G1", p)` on each predicate the game
-# holds, with each revision's `db/by`.
+# Sugar for `rev.rows()` filtered to the subject, with each
+# revision's `db/by`.
 
 # %%
 rev = L.at()
-history_tuples = []
-for predicate in {p for p, _ in rev.all("game/G1")}:
-    for asserted_rev, obj, added in rev.asserted("game/G1",
-                                                 predicate):
-        history_tuples.append((asserted_rev.id, predicate, obj,
-                               added))
-for rev_id, predicate, obj, added in sorted(history_tuples):
-    by = rev[f"db/tx/{rev_id}", "db/by"]
-    print(rev_id, by, "+" if added else "-", predicate, obj)
+for row in rev.rows():
+    if row.subject == "game/G1":
+        by = rev[row.rev.tx, "db/by"]
+        print(row.rev.id, by, "+" if row.added else "-",
+              row.predicate, row.object)
+# → 3 human:dan + home G4
 # → 3 human:dan + away G5
 # → 3 human:dan + court north
-# → 3 human:dan + home G4
 # → 6 human:dan + db/alias <the 1.5.3 cut, 64 hex>
 # → 7 human:dan + home G6
 # → 9 human:dan + db/alias <the 1.5.4 cut, 64 hex>
@@ -276,7 +272,7 @@ for rev_id, predicate, obj, added in sorted(history_tuples):
 # %% [markdown]
 # The game's own rows and its alias moves, in order: the home team
 # corrected at 7, the current cut moved at 9. No fold gives this;
-# `asserted` at two positions walks the history, removes included.
+# `rows()` is the ledger unfolded, removes included.
 
 # %% [markdown]
 # ### Why a value is what it is
@@ -389,8 +385,8 @@ print(Ref(L.at(), "prod").subject == cut_154_value.subject)  # → True
 # %%
 with L.transaction(by=f"human:{user_name}") as t:
     t.add("db/pred/game", "db/index", "true")
-holder_subjects = {s for s, p, _ in L.at().all() if p == "game"}
-print(len(holder_subjects))          # → 3: the video and two cuts
+holder_refs = L.at().refs(where={"game": None})   # has a game row
+print(len(holder_refs))              # → 3: the video and two cuts
 
 # %% [markdown]
 # The store builds the index over existing rows itself (Q18), so
@@ -420,7 +416,7 @@ with L.transaction(by=f"human:{user_name}") as t:
     bump(t, "code/demo-game", "minor",
          confirm=lambda old, new: True)        # the recipe asks
 print(L.at()["code/demo-game"])
-# → {"version": "0.2.0", "commit": "<the demo commit>"}
+# → {"commit": "<the demo commit>", "version": "0.2.0"}
 
 # %% [markdown]
 # `code` is the recipe's word for the repo the justfile sits in.
