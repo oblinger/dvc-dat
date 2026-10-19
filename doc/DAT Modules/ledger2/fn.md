@@ -1,0 +1,98 @@
+# ledger2.fn
+
+A value function is a plain Python function marked `@ledger_fn`; an
+`Fn` is that function resolved at a revision, and calling an `Fn` is
+`eval`. Resolution decides the mode: a name under a mounted prefix
+(`db/mount/<prefix>` rows as of the revision) is a sandboxed function,
+loaded from the mounted tree and run in a worker
+([sandbox](sandbox.md)); any other name is a base function, resolved in
+this process. `eval` is a memo: the same question asked of an unchanged
+world hands back the value already sealed. Part of the
+[architecture](../../DAT%20Architecture.md).
+
+## Public surface
+
+- `ledger_fn(func) -> func`: marks `func` (`__ledger_fn__ = True`) and
+  returns it unchanged, still a plain callable. No return annotation is
+  `TypeError` at decoration; a non-callable `TypeError`. Writes nothing.
+- `load_fn(rev, name) -> Fn` (also `Rev.load_fn`): `name` a dotted
+  `str` (else `TypeError`); the longest mounted prefix wins. Base mode:
+  the name must import in this process (`ImportError`), be marked
+  (`TypeError`), have a source file (`ImportError`), and take the `Rev`
+  as its first positional parameter (`TypeError`); a parameter named
+  `memo` is `TypeError`.
+- `Fn`: a frozen dataclass with `name`, `module` (the source file),
+  `sha` (sha256 of that file), `mode` (`"base"` or `"sandbox"`),
+  `mount` (the prefix or `None`), `signature` (the keys, without the
+  `Rev` and `work`), `env` (an `Env`; `mounts` the mount-table hash in
+  sandbox mode), `subject` (`db/fn/<name>/<16 hex>`).
+- `Fn.__call__(*, memo=True, **keys) -> Value | None`:
+  - `memo=True`: a hit, else run, seal, return; `memo=False`: run, seal
+    nothing; `memo="get"`: a hit or `None`, never runs; anything else
+    `ValueError`.
+  - Keys bind to the signature with defaults applied (`TypeError` from
+    `inspect` on a bad key); `memo` or `work` given as a key is
+    `TypeError`.
+  - A miss runs only when the function's checkout is clean and its HEAD
+    agrees with the rev's `code/<repo>` commit (any commit when the rev
+    has no such row); code outside any checkout, a dirty checkout or
+    another HEAD is `NotEvaluated`.
+  - A result not an instance of a `Value`-subclass annotation is
+    `TypeError`; with any other annotation a non-`Value` result is
+    wrapped in `Pickled`.
+- `encode_keys(kw) -> dict`: `db/keys` content; a top-level
+  `Value`/`Ref` becomes `ref:<class>:<hash>`, nested one `TypeError`,
+  an unsealed `Value` `ValueError`, a non-JSON value `TypeError`.
+- `lookup(rev, name, enc) -> Value | None`: the memo lookup.
+- `mounts_at(rev) -> {prefix: {"root", "repo", "salt"}}`,
+  `mounts_hash(rev) -> str | None`, `fn_subject(name, modules, mounts)`,
+  `fn_holds(rev, subject) -> bool`, `seal_entry(…)`, `wrap_result(…)`,
+  `base_closure(…)`, `resolve_in_process(name)`, `signature_of(…)`:
+  the machinery the other modules call.
+
+## The memo
+
+- Lookup: every entry at the top whose `db/keys` row is the canonical
+  JSON of the bound keys and whose `db/fn` row is the dotted name,
+  newest seal first; the first whose trace holds at the asked revision
+  ([trace](trace.md)) is restored by `Ref.load`.
+- Base run: the body gets a recording `Rev`; a function declaring
+  `work` gets a fresh `ledger-work-*` temp folder, removed after the
+  seal. The trace is the recorded reads plus `fn`, `code/<repo>` (the
+  function's own repo), `uv.lock` and `platform`.
+- Seal: one transaction `by="eval:<name>"`, subject = hash of
+  `{fn, keys, trace, preds, value}`; writes the `db/fn/<name>/<hash>`
+  rows (`db/name`, `db/module`, `db/sha`, `db/modules`, `db/mounts`,
+  `db/mode`, `db/returns`) if absent, then the seal with `db/fn`,
+  `db/keys` and `db/provenance eval:base|eval:sandbox`. A subject
+  already sealed writes no revision and returns that entry.
+- A call made from inside a value function records
+  `eval:<name>{keys}` → the result's `ref:` (or `<none>` for a
+  `memo="get"` miss) in the caller's trace.
+- The base `fn` subject hashes `relpath -> sha256` of the module's
+  static import closure within its checkout (the module file alone
+  outside any checkout); `fn_holds` re-resolves the name at the asked
+  revision and compares subjects.
+
+## Invariants
+
+- `@ledger_fn` never changes the function; a plain call runs the body
+  with whatever `Rev` it is given, records nothing and seals nothing.
+- `db/keys` is canonical JSON: sorted keys, compact, defaults bound, so
+  `epochs=8` and `epochs="8"` are two questions.
+- Two entries for one `(fn, keys)` coexist; the newest matching wins.
+
+- TODO: `Fn.__call__`'s docstring says `memo=False` runs and seals
+  nothing; the code also refuses it (`NotEvaluated`) on a dirty
+  checkout or a HEAD other than the rev's commit, in both modes, since
+  the code check runs before the mode split.
+- TODO: with `memo=False` in base mode, a `work` folder is not removed
+  (the removal follows the seal only); the returned value's `trace` is
+  filled although it is unsealed.
+
+## Left to other modules
+
+Sandbox resolution and running are [sandbox](sandbox.md)'s; the trace
+items and their hit test are [trace](trace.md)'s; repos and commits
+come from [env](env.md); the seal rows are written by [txn](txn.md)'s
+`_seal`.
