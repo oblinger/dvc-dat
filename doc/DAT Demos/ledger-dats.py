@@ -76,6 +76,10 @@ sys.path.insert(0, str(scratch_project_path))
 # makes one in a folder you hand it:
 #
 # ```python
+# SPEC_PREDS = ("game", "stage", "bins")
+# METRICS = ("count", "score")
+#
+#
 # @ledger_class(preds=SPEC_PREDS + ("gameset",)
 #               + tuple(f"metrics.{m}" for m in METRICS))
 # class StageDat(Dat):
