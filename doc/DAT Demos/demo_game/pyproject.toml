@@ -1,0 +1,4 @@
+# The demo-game stand-in project: its checkout's repo name, as discovery reads it.
+[project]
+name = "demo-game"
+version = "0.1.0"

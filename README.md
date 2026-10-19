@@ -76,5 +76,7 @@ with a `py:percent` script (jupytext) and executed with its outputs kept; `just 
   `merge_dicts` recipe, and the command-line main.
 - [`demo-dats`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-dats.ipynb) — dats, dependencies and versions: seal, hash, `dat.dependencies` two deep.
 - [`demo-etl`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-etl.ipynb) — datasets built on datasets: gamey → binning → trial → metrics.
-- [`demo-ledger`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-ledger.ipynb) — the ledger API: transactions, reads at a rev, artifacts, a dat by `Ref`.
-- [`demo-ledger-walkthrough`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-ledger-walkthrough.ipynb) — the ledger's rows exactly as stored.
+- The ledger's four notebooks, `doc/DAT Demos/ledger-*.py` (run by `tests/ledger/test_notebooks.py`):
+  [`ledger-triples`](doc/DAT%20Demos/ledger-triples.py), [`ledger-values`](doc/DAT%20Demos/ledger-values.py),
+  [`ledger-dats`](doc/DAT%20Demos/ledger-dats.py), [`ledger-just`](doc/DAT%20Demos/ledger-just.py).
+  See [The ledger](doc/ledger.md).

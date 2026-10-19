@@ -1,89 +1,93 @@
-"""Values to row strings and back: every object says its own kind.
+"""Row objects to tagged strings and back.
 
-``str:<text>``, ``json:<sorted document>``, ``blob:sha256:<hex>`` for a
-document past :data:`BLOB_BYTES`, and a ``Ref`` as ``dat:<name>``,
-``art:<type>:<hash or name>`` or ``node:<subject>``. A row with no ``word:``
-prefix, or one this module does not know, is ``ValueError``.
+The third position of a row is stored as one of three tagged strings:
+
+``str:<text>``
+    a ``str``.
+``json:<canonical document>``
+    a ``dict`` or ``list``.
+``ref:<dotted class>:<hex sha256>[:<subject>]``
+    a sealed value: the class that decodes it and the hash of its bytes; the
+    subject is an optional hint, written only on a row ``add`` made from a
+    ``Ref`` (A28). In ``db/value``, typed preds, ``db/keys`` and traces it is
+    omitted, so a dependency is its bytes, not its entry (A21).
+
+A bare ``int``, ``float``, ``bool`` or ``None`` is refused by ``add`` (Q5 (A)).
 """
 
 from __future__ import annotations
 
 import hashlib
-import json as _json
-from typing import Any, Callable, Optional, Tuple, Type
+import json
+import re
+from typing import Any, Optional, Tuple
 
-from ..core import Dat
-from .ref import Ref
-from .shelf import is_hash
-from .types import ART_TYPES, Artifact, Node, canonical_json
-
-#: A JSON document longer than this many bytes is spilled to the shelf as ``blob:`` (the row's index edge).
-BLOB_BYTES = 2048
-
-PREFIXES = ("str", "json", "blob", "dat", "art", "node")
+_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
-def encode_value(value: Any) -> Tuple[str, Optional[bytes]]:
-    """``(row string, blob bytes to put or None)`` for a value; ``ValueError`` for anything not a Value."""
-    if isinstance(value, str):
-        return "str:" + value, None
-    if isinstance(value, (dict, list)):
-        doc = canonical_json(value)
-        data = doc.encode()
-        if len(data) > BLOB_BYTES:
-            return "blob:sha256:" + hashlib.sha256(data).hexdigest(), data
-        return "json:" + doc, None
-    if isinstance(value, Ref):
-        if value.kind == "node":
-            return "node:" + value.name, None
-        if value.kind == "art":
-            return f"art:{value.type.token}:{value.hash or value.name}", None
-        return "dat:" + value.name, None
-    raise ValueError(
-        f"a ledger object is a str, a JSON dict or list, or a Ref; not {type(value).__name__} ({value!r}): "
-        "say what it means (str(n), an ISO day)")
+def canonical(doc: Any) -> str:
+    """One text per JSON document: sorted keys, compact, unicode kept."""
+    return json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-Fetch = Callable[[str], bytes]
-Size = Callable[[str], Optional[int]]
+def sha256(data: bytes) -> str:
+    """The hex sha256 of ``data``."""
+    return hashlib.sha256(data).hexdigest()
 
 
-def decode_text(text: Any, fetch: Optional[Fetch] = None, size: Optional[Size] = None) -> Any:
-    """The Python value a row string encodes. ``fetch`` reads a blob's bytes; ``size`` fills an artifact's size."""
-    if not isinstance(text, str):
-        raise ValueError(f"a row's object is a str, not {type(text).__name__}")
-    prefix, sep, rest = text.partition(":")
-    if not sep or prefix not in PREFIXES:
-        raise ValueError(f"row object {text[:60]!r} has no known prefix ({', '.join(p + ':' for p in PREFIXES)})")
-    if prefix == "str":
-        return rest
-    if prefix == "json":
+def hash_text(text: str, n: int = 64) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()[:n]
+
+
+def is_hash(s: str) -> bool:
+    return bool(_HEX.match(s))
+
+
+def ref_text(cls: str, h: str, subject: Optional[str] = None) -> str:
+    return f"ref:{cls}:{h}" + (f":{subject}" if subject else "")
+
+
+def parse_ref(text: str) -> Tuple[str, str, Optional[str]]:
+    """``(class, hash, subject or None)`` of a ``ref:`` string."""
+    body = text[4:]
+    cls, sep, rest = body.partition(":")
+    h, sep2, subj = rest.partition(":")
+    if not sep or not is_hash(h):
+        raise ValueError(f"row object {text[:80]!r}: a ref is ref:<class>:<sha256 hex>[:<subject>]")
+    return cls, h, (subj or None)
+
+
+def strip_hint(text: str) -> str:
+    """A ``ref:`` text without its subject hint: what a trace, a key or a where clause compares."""
+    if not text.startswith("ref:"):
+        return text
+    cls, h, _s = parse_ref(text)
+    return ref_text(cls, h)
+
+
+def tag(text: str) -> str:
+    return text.partition(":")[0]
+
+
+def encode_plain(obj: Any) -> Optional[str]:
+    """The tagged string of a ``str`` or JSON document; ``None`` when ``obj`` is neither."""
+    if isinstance(obj, str):
+        return "str:" + obj
+    if isinstance(obj, (dict, list)):
         try:
-            return _json.loads(rest)
-        except ValueError as e:
-            raise ValueError(f"row object {text[:60]!r} is not JSON: {e}") from None
-    if prefix == "blob":
-        if not is_hash(rest):
-            raise ValueError(f"row object {text[:60]!r}: a blob is blob:sha256:<hex>")
-        if fetch is None:
-            raise FileNotFoundError(f"{text}: no ledger to fetch the blob through")
-        return _json.loads(fetch(rest).decode())
-    if not rest:
-        raise ValueError(f"row object {text!r} names nothing")
-    if prefix == "node":
-        return Ref(rest, type=Node)
-    if prefix == "dat":
-        return Ref(rest, type=Dat)
-    token, sep, key = rest.partition(":")
-    atype = ART_TYPES.get(token)
-    if not sep or atype is None or not key:
-        raise ValueError(f"row object {text[:60]!r}: an artifact is art:<type>:<hash>, type one of {sorted(ART_TYPES)}")
-    return _art_ref(atype, key, size)
+            return "json:" + canonical(obj)
+        except (TypeError, ValueError) as e:
+            raise TypeError(f"not a JSON document: {e}") from None
+    return None
 
 
-def _art_ref(atype: Type[Artifact], key: str, size: Optional[Size]) -> Ref:
-    if key.startswith("sha256:"):
-        if not is_hash(key):
-            raise ValueError(f"art:{atype.token}:{key[:30]}…: malformed hash")
-        return Ref(key, hash=key, type=atype, size=size(key) if size else None)
-    return Ref(key, type=atype, size=size(key) if size else None)
+def refuse_scalar(obj: Any) -> None:
+    if obj is None or isinstance(obj, (bool, int, float)):
+        raise TypeError(f"a ledger object is a str, a JSON dict or list, or a Ref; not {type(obj).__name__} "
+                        f"({obj!r}): a number is its string (Q5), say {str(obj)!r}")
+
+
+def show(text: str) -> str:
+    """A stored object as one line of text: a str as is, JSON canonical, a ref as its tag text."""
+    t, _, rest = text.partition(":")
+    return text if t == "ref" else rest

@@ -23,7 +23,7 @@
 #
 # The kinds are `demo_kinds/etl.py`; the dat mechanics (seal, hash, dependencies) are
 # `demo-dats`'s. This is the bare bones: each stage is made by hand with its kind's `make`, and
-# the game set and its version are rows on the ledger (`demo-ledger`).
+# the game set and its version are rows on the ledger (`ledger-triples`).
 
 # %%
 # a fresh ledger and dat store in throwaway folders, and the four kinds
@@ -31,12 +31,11 @@ import os, tempfile
 from pathlib import Path
 
 from dvc_dat import Dat, DatManager
-from dvc_dat.ledger import Ledger, Ref
+from dvc_dat.ledger import Ledger
 from demo_kinds.etl import Gamey, Binning, Trial, Metrics
 
 ledger_path = Path(tempfile.mkdtemp(prefix="demo-etl-"))
-os.environ["DAT_LEDGER"] = str(ledger_path)
-L = Ledger.open()
+L = Ledger(ledger_path / "ledger", create=True)
 dat_store_path = Path(tempfile.mkdtemp(prefix="demo-etl-dats-"))
 Dat.manager = DatManager(dat_folders=[str(dat_store_path / "dats")], art_folder=str(dat_store_path / "art"))
 
@@ -56,16 +55,18 @@ print(f"same seed, same list: {Gamey.make('gamey/G3-again', n=200, seed=3).value
 
 # %%
 # the normie game set: assertions on the ledger, as NORM is made
-L.add("gameset/normie", "contains", Ref("gamey/G1"), by="dan")
-L.add("gameset/normie", "contains", Ref("gamey/G2"), by="dan")
-L.add("gameset/normie", "contains", Ref("gamey/G3"), by="dan")
-normie = [r.name for r in L.objects("gameset/normie", "contains")]
+with L.transaction(by="human:dan") as t:
+    t.add("db/pred/contains", "db/cardinality", "many")   # a set, not one value
+    for g in ("G1", "G2", "G3"):
+        t.add("gameset/normie", "contains", f"gamey/{g}")
+normie = L.at().all("gameset/normie", "contains")
 print(f"{normie=}")
 
 # %%
-# a version on the set: a bump is an assign
-L.assign("gameset/normie", "version", "0.1.0", by="dan")
-print(f"{L.last('gameset/normie', 'version')=}")
+# a version on the set: one more row
+with L.transaction(by="human:dan") as t:
+    t.add("gameset/normie", "version", "0.1.0")
+print(f"{L.at().get('gameset/normie', 'version')=}")
 
 # %% [markdown]
 # ## A binning over the set
@@ -118,8 +119,6 @@ for d in (m, r, b):
 # %%
 # clean up
 import shutil
-L.close(); Ledger.default = None
-del os.environ["DAT_LEDGER"]
 Dat.manager = None
 for p in (dat_store_path, ledger_path):
     shutil.rmtree(p)

@@ -97,16 +97,17 @@ print(f"new dat, new hash: {a2.get_results()['dat']['sha256'] != result['sha256'
 # ## Versions
 
 # %%
-# a version is a predicate on the dat, kept on the ledger; a bump is an assign
+# a version is a predicate on the dat, kept on the ledger; a new version is a new add
 from dvc_dat.ledger import Ledger
 
 ledger_path = Path(tempfile.mkdtemp(prefix="demo-dats-ledger-"))
-os.environ["DAT_LEDGER"] = str(ledger_path)
-L = Ledger.open()
-L.assign("demo/c", "version", "1.0.0", by="dan")
-L.assign("demo/c", "version", "1.0.1", by="dan")
-print(f"{L.last('demo/c', 'version')=}")
-print("history:", [(e.rev, e.object, e.added) for e in L.history("demo/c", "version")])
+L = Ledger(ledger_path / "ledger", create=True)
+with L.transaction(by="human:dan") as t:
+    t.add("demo/c", "version", "1.0.0")
+with L.transaction(by="human:dan") as t:
+    t.add("demo/c", "version", "1.0.1")
+print(f"{L.at().get('demo/c', 'version')=}")
+print("history:", [(r.id, o, added) for r, o, added in L.at().asserted("demo/c", "version")])
 
 # %% [markdown]
 # Nothing in the folder changed: the version is a fact about the dat, recorded beside it, with
@@ -115,8 +116,6 @@ print("history:", [(e.rev, e.object, e.added) for e in L.history("demo/c", "vers
 # %%
 # clean up
 import shutil
-L.close(); Ledger.default = None
-del os.environ["DAT_LEDGER"]
 Dat.manager = None
 for p in (dat_store_path, ledger_path):
     shutil.rmtree(p)

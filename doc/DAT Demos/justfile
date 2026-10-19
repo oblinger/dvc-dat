@@ -1,0 +1,59 @@
+# The ledger-just notebook's recipes: each a thin wrapper over one dvc-dat ledger call.
+# A stand-in for a project's own justfile (F447 Q4 (A)); every recipe runs in the
+# directory it is invoked from, so `Ledger()` walks up from there (or reads DAT_LEDGER).
+# Keys and preds: `k=v` is a string, `k:=v` is JSON.
+
+set positional-arguments
+
+python := env_var_or_default("PYTHON", "python3")
+recipes := justfile_directory() / "ledger_recipes.py"
+
+# the values matching k=v / k:=v preds (kind=<short class name> narrows)
+[no-cd]
+values *args:
+    @{{python}} "{{recipes}}" values "$@"
+
+# exactly one value matching the preds
+[no-cd]
+value *args:
+    @{{python}} "{{recipes}}" value "$@"
+
+# every row a subject has held, with each revision's db/by
+[no-cd]
+history subject:
+    @{{python}} "{{recipes}}" history "$@"
+
+# a value's trace, whether it holds at the head, and what moved since the alias's last target
+[no-cd]
+why name *args:
+    @{{python}} "{{recipes}}" why "$@"
+
+# a row on a subject: t[s, p] = o
+[no-cd]
+annotate subject *args:
+    @{{python}} "{{recipes}}" annotate "$@"
+
+# point a name at a value (a hash prefix is expanded)
+[no-cd]
+alias name target:
+    @{{python}} "{{recipes}}" alias "$@"
+
+# declare a pred indexed
+[no-cd]
+index pred:
+    @{{python}} "{{recipes}}" index "$@"
+
+# bump a clock: `code` is this checkout's code/<repo>; minor and major ask for `yes`
+[no-cd]
+bump subject part="patch":
+    @{{python}} "{{recipes}}" bump "$@"
+
+# evaluate a ledger function, saying hit or ran
+[no-cd]
+eval name *args:
+    @{{python}} "{{recipes}}" eval "$@"
+
+# the dat constructor on a spec file; alias=<name> points a name at the result
+[no-cd]
+run spec *args:
+    @{{python}} "{{recipes}}" run "$@"

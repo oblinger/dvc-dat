@@ -1,24 +1,32 @@
-"""``dvc_dat.ledger``: the ledger, one append-only table of events under a rev.
+"""``dvc_dat.ledger``: the ledger, rebuilt to the value-space design (SVP447 Ledger Module).
 
-A dat is space, the ledger is time. Everything the ledger commits to is
-re-exported here; anything else in ``dvc_dat.ledger.*`` is not a surface,
-except :class:`~dvc_dat.ledger.sql.SqlLedger` for a backend to subclass.
+One logical store: every fact is a quad ``(rev, subject, predicate, object)``;
+every read is a function of a ``Rev``; every write is a ``Transaction``;
+everything held or handed back is a ``Value``; a sealed computation is a memo
+entry findable by ``eval``. SQLite backend; ``eval`` in base mode (in this
+process) or sandbox mode (under a ``db/mount/<prefix>``, in a worker).
 
-    from dvc_dat.ledger import Ledger, Ref
-    L = Ledger.open()                       # a profile, DAT_LEDGER, or ledger.profile.yaml
-    with L.transaction(by="dan") as tx:
-        tx.assign("game/G7", "court", "hs-wood-2")
-        tx.add("gameset", "NORM", Ref("game/G7"))
-    L.get_spec("game/G7", rev=tx.rev)
+    from dvc_dat.ledger import Ledger, Ref, ledger_fn, ledger_class, bump, attr
+    L = Ledger()                         # the nearest .datconfig.yaml
+    rev = L.at()
+    with L.transaction(by="human:dan") as t:
+        bump(t, "code/demo-game")
+
+The environment is found by discovery; ``set_env_provider``, ``Env`` and
+``Code`` are the test suite's seam only (A51), importable by name.
 """
 
-from .codec import BLOB_BYTES
-from .core import Batch, Ledger
-from .errors import LedgerError
-from .ref import Event, Ref, Rev, Value
-from .shelf import LocalShelf, Shelf
-from .sql import SqlLedger, SqliteLedger
-from .types import Artifact, Node, ckpt, file, json, video
+from .env import Code, Env, set_env_provider  # noqa: F401  (the test seam, importable by name)
+from .errors import (AliasLoop, ConfinedWrite, Exists, LedgerError, LockTimeout, Multiple, NotEvaluated, Undeclared, Unindexed,
+                     UnmountedImport, UntracedRead)
+from .fn import Fn, ledger_fn
+from .helpers import bump
+from .ledger import Ledger
+from .rev import Ref, Rev, Row
+from .txn import Transaction, attr
+from .value import Dat, Pickled, Table, Value, ledger_class
 
-__all__ = ["Ledger", "Ref", "Event", "Batch", "Rev", "Value", "Node", "Artifact", "LedgerError", "BLOB_BYTES",
-           "SqlLedger", "SqliteLedger", "Shelf", "LocalShelf", "json", "file", "ckpt", "video"]
+__all__ = ["Ledger", "Rev", "Ref", "Row", "Transaction", "Value", "Pickled", "Table", "Dat", "Fn",
+           "ledger_fn", "ledger_class", "bump", "attr", "LedgerError", "Multiple", "NotEvaluated",
+           "UnmountedImport", "UntracedRead", "ConfinedWrite", "LockTimeout", "Unindexed", "Exists", "Undeclared",
+           "AliasLoop"]

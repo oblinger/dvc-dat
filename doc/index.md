@@ -31,6 +31,9 @@ result = do("catalog.experiment", epochs=200)
 
 ## Core Concepts
 
+- **[Architecture](DAT%20Architecture.md)** — the dat and the ledger, how
+  they meet, storage and concurrency; one page per module in
+  [`DAT Modules/`](DAT%20Modules/)
 - **[Concepts](concepts.md)** — the fork rule, the two kinds of name,
   configuration on first use, `dat.base`, the `{}` grammar, validation
 - **[Spec Format](spec-format.md)** — `_spec_.yaml` / `_result_.yaml` reference
@@ -50,5 +53,9 @@ outputs kept (`just demo` re-syncs and re-runs them; the tests run every one):
   `dat.base`, `do()` and a fork, `Dat.load`, `merge_dicts`, the command-line main
 - **[`demo-dats`](DAT%20Demos/demo-dats.ipynb)** — dats, dependencies and versions
 - **[`demo-etl`](DAT%20Demos/demo-etl.ipynb)** — datasets built on datasets, each seal over the stage below
-- **[`demo-ledger`](DAT%20Demos/demo-ledger.ipynb)** — the ledger API, end to end
-- **[`demo-ledger-walkthrough`](DAT%20Demos/demo-ledger-walkthrough.ipynb)** — the ledger's rows exactly as stored
+- **[`ledger-triples`](DAT%20Demos/ledger-triples.py)** — the ledger as a quad store: transactions, reads as of a revision
+- **[`ledger-values`](DAT%20Demos/ledger-values.py)** — values, preds, ledger functions, `eval`, the sandbox
+- **[`ledger-dats`](DAT%20Demos/ledger-dats.py)** — a dat as a value
+- **[`ledger-just`](DAT%20Demos/ledger-just.py)** — the human's verbs, one ledger call per recipe
+
+The ledger: [The ledger](ledger.md).

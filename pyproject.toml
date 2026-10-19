@@ -27,9 +27,11 @@ version = {attr = "dvc_dat.__init__.__version__"}
 
 [dependency-groups]
 dev = [
+    "hypothesis>=6.100",
     "ipykernel>=6.29.5",
     "jupytext>=1.17.1",
     "nbconvert>=7.16.6",
+    "pyarrow>=15",
     "pytest>=8.3.5",
     "xlsxwriter>=3.2.9",
 ]
