@@ -1,4 +1,4 @@
-# ledger2.sandbox
+# ledger.sandbox
 
 A function under a mount runs where the code it can reach is bounded:
 in a `python -I` worker whose only importable repository code is the
@@ -25,7 +25,7 @@ Parent side:
   (no checkout, a dirty one, or a HEAD other than the rev's
   `code/<repo>` commit is `NotEvaluated`), then calls the worker for
   the mount, or runs in-process when already inside a worker.
-- `Worker(ledger_path)`: one `python -I -m dvc_dat.ledger2.worker`
+- `Worker(ledger_path)`: one `python -I -m dvc_dat.ledger.worker`
   process with its own scratch folder as cwd, environment limited to
   `PATH`, `HOME`, `TMPDIR`, `LANG`, `CUDA_VISIBLE_DEVICES`, plus
   `DAT_LEDGER` and `DAT_SCRATCH`. `call(…)` sends one request and

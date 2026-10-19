@@ -1,4 +1,4 @@
-# ledger2.ledger
+# ledger.ledger
 
 A ledger is a folder holding one SQLite database and an art store, and
 `Ledger` is the handle on it. It does three things: find or open (or,

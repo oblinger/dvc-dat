@@ -1,6 +1,6 @@
-# ledger2.worker
+# ledger.worker
 
-The sandbox worker is started as `python -I -m dvc_dat.ledger2.worker`,
+The sandbox worker is started as `python -I -m dvc_dat.ledger.worker`,
 and this module is that entry point: it calls
 [`sandbox.worker_main()`](sandbox.md) and nothing else. Keeping it a
 separate module lets `-m` name the worker without importing the parent

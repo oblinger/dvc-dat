@@ -1,4 +1,4 @@
-# ledger2.codec
+# ledger.codec
 
 A row's third position is stored as one tagged string, so a row reads
 back without a schema: `str:<text>`, `json:<canonical document>`, or

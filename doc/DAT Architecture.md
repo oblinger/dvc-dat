@@ -5,10 +5,9 @@ own recipe: a spec, the files a run wrote, and a result, sealed under a
 content hash. The **ledger** is the history around it: every fact a row
 stamped with a revision, every read the state as of one revision, and
 every value the ledger holds stored by its content. The dat half ships
-as `dvc_dat`. The ledger below is the 2026-10-18 design as built in
-`dvc_dat.ledger2` (branch `ledger2`); the shipped `dvc_dat.ledger` is
-still the 4.0 ledger of [The ledger](ledger.md), and `ledger2` becomes
-`dvc_dat.ledger` in 5.0.0. Each component has a page under
+as `dvc_dat`, the ledger as `dvc_dat.ledger`: the 2026-10-18 design,
+shipped in 5.0.0, which replaced the 4.0 ledger. Each component has a
+page under
 [`DAT Modules/`](DAT%20Modules/); the table in [Components](#components)
 links them.
 
@@ -105,7 +104,7 @@ namespace and one index. Detail: [Concepts](concepts.md),
 rev  subject     predicate   object
   1  game/G1     home        G4
   1  game/G1     court       north
-  1  db          db/format   dvc-dat-ledger2/1
+  1  db          db/format   dvc-dat-ledger/1
   1  db/tx/1     db/by       human:dan
   2  game/G1     court       south
   2  game/G1     officials   kim
@@ -114,7 +113,7 @@ rev  subject     predicate   object
 ```
 
 ```python
-from dvc_dat.ledger2 import Ledger
+from dvc_dat.ledger import Ledger
 
 ledger = Ledger()                    # DAT_LEDGER, else the
                                      #   nearest .datconfig.yaml
@@ -133,7 +132,7 @@ One `with` block is one **revision**: every row it adds lands together
 on exit, in body order, followed by its own `db/tx/<rev>` rows (`db/by`,
 `db/time` when `time=True`, and any keyword given `transaction()`),
 which a body that wrote nothing still writes. A ledger's first
-transaction also writes `(db, db/format, dvc-dat-ledger2/1)`. An
+transaction also writes `(db, db/format, dvc-dat-ledger/1)`. An
 exception in the body writes nothing, and a verb used outside the block
 is `RuntimeError`. Rows are never updated or deleted; `remove` appends a
 remove row. A read is always made through a `Rev`, a frozen view, so a
@@ -376,28 +375,24 @@ ledger's. Nothing is created without `create=True`:
 
 | component | what it owns |
 | --- | --- |
-| [`ledger`](DAT%20Modules/ledger2/ledger.md) | `Ledger`: finding, opening, creating; `at`, `transaction` |
-| [`rev`](DAT%20Modules/ledger2/rev.md) | `Rev`: every read; `Ref`, `Row` |
-| [`txn`](DAT%20Modules/ledger2/txn.md) | `Transaction`: writes, seals, the commit's checks; `attr` |
-| [`value`](DAT%20Modules/ledger2/value.md) | `Value`, `Pickled`, `Table`, `Dat`, `ledger_class` |
-| [`fn`](DAT%20Modules/ledger2/fn.md) | `ledger_fn`, `Fn`, `load_fn`, `eval`, the memo lookup |
-| [`trace`](DAT%20Modules/ledger2/trace.md) | trace item names; whether an item still holds |
-| [`env`](DAT%20Modules/ledger2/env.md) | discovery: repos, commits, `uv.lock`, platform |
-| [`sandbox`](DAT%20Modules/ledger2/sandbox.md) | mounts, the worker, the finder, the open hook |
-| [`worker`](DAT%20Modules/ledger2/worker.md) | the worker's `-m` entry point |
-| [`store`](DAT%20Modules/ledger2/store.md) | SQLite quads and the art store |
-| [`fold`](DAT%20Modules/ledger2/fold.md) | rows to held objects, by cardinality |
-| [`codec`](DAT%20Modules/ledger2/codec.md) | tagged row objects, hashes |
-| [`helpers`](DAT%20Modules/ledger2/helpers.md) | `bump` |
-| [`errors`](DAT%20Modules/ledger2/errors.md) | the exceptions |
+| [`ledger`](DAT%20Modules/ledger/ledger.md) | `Ledger`: finding, opening, creating; `at`, `transaction` |
+| [`rev`](DAT%20Modules/ledger/rev.md) | `Rev`: every read; `Ref`, `Row` |
+| [`txn`](DAT%20Modules/ledger/txn.md) | `Transaction`: writes, seals, the commit's checks; `attr` |
+| [`value`](DAT%20Modules/ledger/value.md) | `Value`, `Pickled`, `Table`, `Dat`, `ledger_class` |
+| [`fn`](DAT%20Modules/ledger/fn.md) | `ledger_fn`, `Fn`, `load_fn`, `eval`, the memo lookup |
+| [`trace`](DAT%20Modules/ledger/trace.md) | trace item names; whether an item still holds |
+| [`env`](DAT%20Modules/ledger/env.md) | discovery: repos, commits, `uv.lock`, platform |
+| [`sandbox`](DAT%20Modules/ledger/sandbox.md) | mounts, the worker, the finder, the open hook |
+| [`worker`](DAT%20Modules/ledger/worker.md) | the worker's `-m` entry point |
+| [`store`](DAT%20Modules/ledger/store.md) | SQLite quads and the art store |
+| [`fold`](DAT%20Modules/ledger/fold.md) | rows to held objects, by cardinality |
+| [`codec`](DAT%20Modules/ledger/codec.md) | tagged row objects, hashes |
+| [`helpers`](DAT%20Modules/ledger/helpers.md) | `bump` |
+| [`errors`](DAT%20Modules/ledger/errors.md) | the exceptions |
 | [`dat`](DAT%20Modules/dat.md) | `Dat`, `DatManager`, `DatContainer`, `Do` |
 
 ## Designed, not yet built
 
-- **Promotion.** `dvc_dat.ledger2` is the T534 rebuild, awaiting
-  verification; it becomes `dvc_dat.ledger` in 5.0.0. The four
-  `ledger-*` notebooks are its acceptance tests and run against it
-  (`tests/ledger2/test_l2_notebooks.py`).
 - **Sandbox stubs.** No network refusal; no idle retirement of workers;
   reads also allowed in the interpreter's folders and the dvc-dat
   package, writes in the whole scratch and the art store; a nested eval

@@ -1,4 +1,4 @@
-# ledger2.env
+# ledger.env
 
 The environment a function runs in is found, never declared: which
 repositories the process is running, at which commit, whether their

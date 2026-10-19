@@ -1,4 +1,4 @@
-# ledger2.rev
+# ledger.rev
 
 Every read of the ledger is made through a `Rev`, a frozen view as of
 one revision. Row reads (`[]`, `get`, `all`, `in`) fold the rows at or

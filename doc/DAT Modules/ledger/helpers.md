@@ -1,4 +1,4 @@
-# ledger2.helpers
+# ledger.helpers
 
 A clock is a subject whose `version` only goes up, and `bump` is the
 helper that moves one inside a transaction. On `code/<repo>` it also

@@ -1,4 +1,4 @@
-# ledger2.fold
+# ledger.fold
 
 The fold turns the rows on one `(subject, predicate)` into what they
 hold, by the predicate's cardinality, and it is the one place that

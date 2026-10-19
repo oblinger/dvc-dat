@@ -1,4 +1,4 @@
-# ledger2.fn
+# ledger.fn
 
 A value function is a plain Python function marked `@ledger_fn`; an
 `Fn` is that function resolved at a revision, and calling an `Fn` is

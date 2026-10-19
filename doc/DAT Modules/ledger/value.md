@@ -1,4 +1,4 @@
-# ledger2.value
+# ledger.value
 
 A `Value` is the object itself with its provenance on it: what `eval`
 returns, what `add_value` stores and what `Ref.load` restores. A

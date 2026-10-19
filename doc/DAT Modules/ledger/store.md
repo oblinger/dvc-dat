@@ -1,4 +1,4 @@
-# ledger2.store
+# ledger.store
 
 The backend is one SQLite table of quads and a folder of bytes by hash,
 both inside the ledger folder (`ledger.db`, `art/`). Rows are only ever

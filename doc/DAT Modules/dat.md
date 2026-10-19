@@ -10,7 +10,7 @@ The code is `dvc_dat/core.py` (`Dat`, `DatContainer`, `DatManager`) and
 `dvc_dat/do.py` (`Do`), exported as `from dvc_dat import Dat,
 DatContainer, DatManager, Do`. Part of the
 [architecture](../DAT%20Architecture.md); the ledger's own folder value
-is a different class, [`ledger2.Dat`](ledger2/value.md).
+is a different class, [`ledger.Dat`](ledger/value.md).
 
 ## Public surface
 
@@ -97,7 +97,7 @@ Module functions: `merge_dicts`, `expand`, `expand_spec`.
 ## Left to other modules
 
 The ledger (history, values, `eval`) is
-[`dvc_dat.ledger2`](../DAT%20Architecture.md#the-ledger-facts-read-as-of-a-moment);
+[`dvc_dat.ledger`](../DAT%20Architecture.md#the-ledger-facts-read-as-of-a-moment);
 the command line is `dvc_dat.do.cli_main` and `bin/dat`
 ([Command Line](../cli.md)); tabulating dats into DataFrames and Excel
 is `dvc_dat/dat_tools.py`; the spec format is

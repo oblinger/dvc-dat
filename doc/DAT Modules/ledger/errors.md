@@ -1,4 +1,4 @@
-# ledger2.errors
+# ledger.errors
 
 Every exception the ledger raises is a `LedgerError` and also the
 builtin it most resembles, so a caller can catch either the ledger's

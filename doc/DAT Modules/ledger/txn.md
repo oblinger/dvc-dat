@@ -1,4 +1,4 @@
-# ledger2.txn
+# ledger.txn
 
 A transaction is the write set of one `with L.transaction(...)`, and it
 becomes exactly one revision on exit. `add` and `remove` append rows
@@ -58,7 +58,7 @@ sequences (integer steps) and attributes, `KeyError` at the first
 missing step, `TypeError` for an empty path. `code_token(rev, repo,
 env_commit)` is the `code/<repo>` trace value: `<version>+<commit8>`
 from the rows, else `+<env commit8>`. `FORMAT` is
-`"dvc-dat-ledger2/1"`; `SEAL_PREDICATES` the seal's own predicates.
+`"dvc-dat-ledger/1"`; `SEAL_PREDICATES` the seal's own predicates.
 
 ## The seal
 
