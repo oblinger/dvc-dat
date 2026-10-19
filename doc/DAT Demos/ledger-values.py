@@ -21,7 +21,7 @@ from pathlib import Path
 
 from dvc_dat.ledger2 import Ledger, Ref
 from dvc_dat.ledger2 import AliasLoop, Exists, Multiple, Undeclared
-from dvc_dat.ledger2 import UnmountedImport
+from dvc_dat.ledger2 import UnmountedImport, UntracedRead
 
 scratch_path = Path("scratch/values-demo").resolve()
 scratch_ledger_path = scratch_path / "ledger"
@@ -537,8 +537,10 @@ print(trimmed_video, wide_video)
 # ### Global functions
 #
 # A global function is one that is simply in the code you are
-# running: marked `@ledger_fn`, found by its dotted name, run in
-# this process. The ledger cannot control such code; it can only
+# running, found by its dotted name and run in this process. It
+# runs inside the ledger's own Python environment, so everything
+# there, every module and every global, is available to it: that is
+# its advantage. The ledger cannot control such code; it can only
 # record which code it was.
 
 # %% [markdown]
@@ -576,10 +578,12 @@ import math
 
 from dvc_dat.ledger2 import ledger_fn
 
+ORIGIN = (0, 0)
+
 
 @ledger_fn
-def distance(rev, a, b, *, metric="euclidean") -> float:
-    """The distance between points `a` and `b`."""
+def distance(rev, a, b=ORIGIN, *, metric="euclidean") -> float:
+    """The distance between points `a` and `b`, by default the origin."""
     if metric == "manhattan":
         return float(sum(abs(p - q) for p, q in zip(a, b)))
     return math.dist(a, b)                 # Pythagoras
@@ -591,11 +595,11 @@ print(git("log", "--oneline"))
 # → <7 hex> geometry: distance
 
 # %% [markdown]
-# `@ledger_fn` declares `distance` a ledger function, its return
-# annotation required, and leaves it a plain function: nothing is
-# wrapped and no row is written on import. `a` and `b` are
-# positional, `metric` keyword-only with a default; the ledger takes
-# any signature whose first parameter is the revision.
+# `@ledger_fn` marks `distance` as a ledger function and leaves it a
+# plain function: nothing is wrapped and no row is written on
+# import; the return annotation is required. `a` is positional, `b`
+# defaults to the module's `ORIGIN`, and `metric` is keyword-only:
+# any signature works whose first parameter is the revision.
 
 # %% [markdown]
 # #### Loading and calling it
@@ -606,18 +610,18 @@ distance_fn = rev.load_fn("geometry.distance")
 print(distance_fn.mode)
 # → base
 print(distance_fn.signature)
-# → (a, b, *, metric='euclidean')
+# → (a, b=(0, 0), *, metric='euclidean')
 print(distance_fn.subject)
 # → db/fn/geometry.distance/<16 hex>
 
 # %% [markdown]
-# `load_fn` finds the function by its dotted name at `rev` and
-# hands back an `Fn`, which says which code the name resolves to:
-# `mode` is `base` for a global function, `signature` the keywords
-# it takes, `subject` the one name for that resolution.
+# The ledger finds the function by its dotted name at `rev` and
+# hands back an `Fn` saying which code the name resolves to: `mode`
+# is `base` for a global function, `signature` the keywords it
+# takes, `subject` the one name for that resolution.
 
 # %%
-hypotenuse_value = distance_fn(a=(0, 0), b=(3, 4))
+hypotenuse_value = distance_fn(a=(3, 4))
 print(hypotenuse_value, hypotenuse_value.obj)
 # → <8 hex> 5.0
 print(hypotenuse_value.sealed, hypotenuse_value.rev.id > rev.id)
@@ -635,99 +639,148 @@ print(hypotenuse_value.trace["code/geometry"] == "+" + git("rev-parse", "HEAD")[
 # ### Sandboxed functions
 #
 # A sandboxed function is one the ledger controls: its source is
-# mounted, loaded from the mounted tree at the revision asked for,
-# and run in a sandbox where every import is traced and every write
-# is confined. So what ran is recorded exactly, module by module.
+# mounted into an isolated Python run where every import is traced
+# and every write is confined, so its version is a checksum over the
+# source files the run loaded, with no reference to the host Python
+# environment or to a git commit. This is what gives precise
+# provenance and reproducibility; the price is the global function's
+# advantage, since nothing outside what is mounted is available.
 
 # %% [markdown]
 # #### Mounting a source tree
 #
-# The geometry repo again, mounted whole under the prefix `geo`. A
-# mounted root is a package, so it gets an `__init__.py`; `paths.py`
-# is for the refusal below.
+# A folder `plane/` in the same geometry repo: `measure.py`, whose
+# one import of its own is `units.py` beside it.
 
 # %%
-paths_source = '''\
-"""`paths`: a function that reaches geometry by its global name."""
+plane_path = scratch_repo_path / "plane"
+plane_path.mkdir()
+(plane_path / "__init__.py").write_text("")
+(plane_path / "units.py").write_text('SCALE = 0.5             # metres per unit\n')
+measure_source = '''\
+"""`plane.measure`: a length in metres."""
+import math
+
 from dvc_dat.ledger2 import ledger_fn
+
+from .units import SCALE                   # the one import of its own
 
 
 @ledger_fn
-def path_length(rev, points) -> float:
-    """The length of the polyline through `points`."""
-    from geometry import distance       # the repo's own top-level name
-    return sum(distance(rev, a, b) for a, b in zip(points, points[1:]))
+def length(rev, a, b) -> float:
+    """The length of the segment from `a` to `b`, in metres."""
+    return math.dist(a, b) * SCALE
 '''
-(scratch_repo_path / "__init__.py").write_text("")
-(scratch_repo_path / "paths.py").write_text(paths_source)
-git("add", "__init__.py", "paths.py")
-git("commit", "-m", "geometry: a package, and paths")
+(plane_path / "measure.py").write_text(measure_source)
+git("add", "plane")
+git("commit", "-m", "plane: measure, units")
 
-with L.transaction(by="human:dan", why="mount geometry") as t:
-    t.add("db/mount/geo", "db/root", ".")
-    t.add("db/mount/geo", "db/repo", "geometry")
+with L.transaction(by="human:dan", why="mount plane") as t:
+    # plane.measure is loaded from plane/measure.py in the geometry repo
+    t.add("db/mount/plane", "db/root", "plane")
+    t.add("db/mount/plane", "db/repo", "geometry")
 rev = L.at()
-print(rev["db/mount/geo"])
-# → {'db/root': '.', 'db/repo': 'geometry'}
+print(rev["db/mount/plane"])
+# → {'db/root': 'plane', 'db/repo': 'geometry'}
 
 # %% [markdown]
-# A mount is rows on the ledger: a dotted prefix, the root it
-# resolves under, and the repo that root is in. The environment
-# maps the repo name to a checkout, here the scratch repo, and
-# `db/root` is relative to it. A `.datconfig.yaml` `mounts:` entry
-# is sugar for these rows.
+# Mounting says where a function's source is read from. It is rows
+# on the ledger: a dotted prefix (`plane`), the folder it resolves
+# to (`db/root`, relative to the repo's checkout) and the repo
+# (`db/repo`). Every name under the prefix now resolves inside that
+# folder: `plane.measure` is `plane/measure.py`. A mounted folder is
+# a package, so it holds an `__init__.py`. A `.datconfig.yaml`
+# `mounts:` entry is sugar for these rows.
 
 # %% [markdown]
 # #### A function under a mount
 
 # %%
-geo_distance_fn = rev.load_fn("geo.geometry.distance")
-print(geo_distance_fn.mode, geo_distance_fn.mount)
-# → sandbox geo
-print(rev.load_fn("geometry.distance").mode)
-# → base: outside the prefix, still global
-sandboxed_value = geo_distance_fn(a=(0, 0), b=(3, 4))
-print(sandboxed_value.obj, sorted(sandboxed_value.trace))
-# → 5.0 ['fn', 'platform', 'uv.lock']
+length_fn = rev.load_fn("plane.measure.length")
+print(length_fn.mode, length_fn.mount)
+# → sandbox plane
+segment_value = length_fn(a=(0, 0), b=(3, 4))
+print(segment_value.obj, sorted(segment_value.trace))
+# → 2.5 ['fn', 'platform', 'uv.lock']
+print(L.at()[segment_value.trace["fn"], "db/modules"])
+# → {'plane/__init__.py': '<hash>', 'plane/measure.py': '<hash>',
+#    'plane/units.py': '<hash>'}
 
 # %% [markdown]
-# The same file, named under the prefix, is a sandboxed function: it
-# was read from the mounted tree and run in a worker whose path
-# holds the standard library, `site-packages` and the mounted roots,
-# nothing else; one worker per mount, kept warm. Its trace carries
-# no `code/geometry` item: its `fn` item hashes the modules that
-# actually ran, which is exact without a commit.
+# Loaded and called like the global function, it ran in a worker
+# whose path holds the standard library, `site-packages` and the
+# mounted folders, nothing else. The run pulled in `units.py`
+# through the import, and `db/modules` records each source file
+# loaded, the package's `__init__.py` too, with its checksum: that
+# is the function's version. The
+# trace carries no `code/geometry` item.
 
 # %% [markdown]
 # #### What the sandbox refuses
 #
-# `geo.paths.path_length` imports `geometry`, the repo's top-level
-# name, which is in the repo but under no mount: inside the sandbox
-# that code is reachable only as `geo.geometry`. Running it is
-# refused.
+# A function under the mount that imports `geometry` by its global
+# name.
 
 # %%
+reach_source = '''\
+"""`plane.reach`: two functions the sandbox refuses."""
+from pathlib import Path
+
+from dvc_dat.ledger2 import ledger_fn
+
+
+@ledger_fn
+def from_origin(rev, p) -> float:
+    from geometry import distance       # geometry.py, outside plane/
+    return distance(rev, p)
+
+
+@ledger_fn
+def note(rev, text) -> int:
+    return Path("/tmp/plane-note.txt").write_text(text)   # outside its folder
+'''
+(plane_path / "reach.py").write_text(reach_source)
+git("add", "plane/reach.py")
+git("commit", "-m", "plane: reach")
+
 try:
-    geo_paths_fn = rev.load_fn("geo.paths.path_length")
-    geo_paths_fn(points=[(0, 0), (3, 4), (3, 0)])
+    from_origin_fn = rev.load_fn("plane.reach.from_origin")
+    from_origin_fn(p=(3, 4))
 except UnmountedImport as e:
     print("UnmountedImport:", e)
-# → UnmountedImport: geometry from geo.paths; mount it or move it
+# → UnmountedImport: geometry from plane.reach; mount it or move it
 
 # %% [markdown]
-# Nothing is sealed: an incomplete mount table is a crash, never a
-# silently wider trace. A read of a file outside the mounted roots,
-# the dat folders and the worker's scratch is refused the same way,
-# as `UntracedRead`.
+# The sandbox looks up every import that is not under a mount in
+# the mounted repo's checkout; `geometry.py` is there, outside
+# `plane/`, so the import is refused by name rather than silently
+# reaching code the trace would not record. A module found nowhere
+# is simply not there: a plain `ModuleNotFoundError`. Nothing is
+# sealed.
 
 # %% [markdown]
 # #### Where a sandboxed function writes
 #
-# Open (Q36; lean): a function that builds a folder, a plot of a
-# path say, declares a parameter `work: Path`, reserved beside
-# `memo` and never a key; the eval binds it to a fresh scratch
-# folder, and the seal moves what was built there into the store.
-# No `work` parameter, no writes.
+# A write outside the function's own folder is refused.
+
+# %%
+try:
+    note_fn = rev.load_fn("plane.reach.note")
+    note_fn(text="hello")
+except UntracedRead as e:
+    print("UntracedRead:", e)
+# → UntracedRead: /private/tmp/plane-note.txt: a sandboxed function
+#   writes only in its work folder
+
+# %% [markdown]
+# The refusal is raised as `UntracedRead`, the one error for both
+# directions. The sandbox confines writes to the worker's scratch
+# and the store; reads are confined the same way, to the mounted folders,
+# the store and the worker's scratch. Open (Q36; lean): a function
+# that builds a folder declares a parameter `work: Path`, reserved
+# beside `memo` and never a key; the run binds it to a fresh folder
+# in the scratch, and the seal moves what was built there into the
+# store.
 
 # %% [markdown]
 # ## Evaluation
@@ -771,8 +824,8 @@ print(again_value.rev.id == manhattan_value.rev.id)
 
 # %% [markdown]
 # A memo entry is the seal's rows plus two of its own: `db/fn`, the
-# code that ran, and `db/keys`, the question. Notice the default
-# `metric` is part of the question.
+# code that ran, and `db/keys`, the question. Notice the defaults,
+# `b` and `metric`, are part of the question.
 
 # %%
 entry_rev = hypotenuse_value.rev
@@ -780,7 +833,7 @@ for row in entry_rev.rows(since=L.at(entry_rev.id - 1)):
     if row.predicate in ("db/fn", "db/keys"):
         print(row)
 # →   14 + <hash> db/fn   geometry.distance
-# →   14 + <hash> db/keys {"a":[0,0],"b":[3,4],"metric":"euclidean"}
+# →   14 + <hash> db/keys {"a":[3,4],"b":[0,0],"metric":"euclidean"}
 
 # %% [markdown]
 # Memo entries are subjects like any other: `fn=` finds every
@@ -790,7 +843,7 @@ for row in entry_rev.rows(since=L.at(entry_rev.id - 1)):
 rev = L.at()
 for memo_ref in rev.refs(fn="geometry.distance"):
     print(memo_ref, rev[memo_ref.subject, "db/keys"])
-# → <8 hex> {'a': [0, 0], 'b': [3, 4], 'metric': 'euclidean'}
+# → <8 hex> {'a': [3, 4], 'b': [0, 0], 'metric': 'euclidean'}
 # → <8 hex> {'a': [0, 0], 'b': [3, 4], 'metric': 'manhattan'}
 print(len(rev.values(fn="geometry.distance")))
 # → 2, loaded
