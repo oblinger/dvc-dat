@@ -332,7 +332,13 @@ class MountFinder(importlib.abc.MetaPathFinder):
         if m is not None:
             f = m.file_of(fullname)
             if f is None:
-                return None
+                d = m.path.joinpath(*fullname[len(m.prefix):].lstrip(".").split(".")) \
+                    if fullname != m.prefix else m.path
+                if not d.is_dir():
+                    return None
+                spec = importlib.machinery.ModuleSpec(fullname, None, is_package=True)
+                spec.submodule_search_locations = [str(d)]    # a root with no __init__.py: a namespace
+                return spec
             loader = _Loader(fullname, str(f[0]))
             return importlib.util.spec_from_file_location(
                 fullname, str(f[0]), loader=loader,

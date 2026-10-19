@@ -14,6 +14,15 @@ PKG = {
     "sbx/__init__.py": "",
     "sbx/other.py": "X = 1\n",
     "sbx/stage/__init__.py": "",
+    "flat/calc.py": textwrap.dedent('''
+        from dvc_dat.ledger2 import ledger_fn
+        from flatpkg import util
+
+        @ledger_fn
+        def area(rev, *, side: int) -> dict:
+            return {"area": util.square(side)}
+    '''),
+    "flat/util.py": "def square(x):\n    return x * x\n",
     "sbx/stage/helper.py": "def double(x):\n    return 2 * x\n",
     "sbx/stage/fns.py": textwrap.dedent('''
         import importlib
@@ -74,6 +83,8 @@ def sbx(tmp_path, monkeypatch):
     with L.transaction(by="t") as t:
         t.add("db/mount/sbx.stage", "db/root", "sbx/stage")
         t.add("db/mount/sbx.stage", "db/repo", "sbx-repo")
+        t.add("db/mount/flatpkg", "db/root", "flat")          # a plain folder, no __init__.py
+        t.add("db/mount/flatpkg", "db/repo", "sbx-repo")
         t["game/G1"] = {"n": "3"}
         bump(t, "code/sbx-repo")
     yield L, repo
@@ -134,3 +145,13 @@ def test_salt_item(sbx):
     with L.transaction(by="t") as t:
         t.add("db/mount/sbx.stage", "db/salt", "v3")
     assert not v.matches(L.at())
+
+
+def test_a_mount_root_without_init_imports_namespace_style(sbx):
+    L, _repo = sbx
+    f = L.at().load_fn("flatpkg.calc.area")
+    assert f.mode == "sandbox" and f.mount == "flatpkg"
+    v = L.at().eval("flatpkg.calc.area", side=3)
+    assert v.obj == {"area": 9}
+    assert sorted(L.at()[v.trace["fn"], "db/modules"]) == ["flat/calc.py", "flat/util.py"]
+    assert L.at().eval("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # the package case

@@ -1,8 +1,9 @@
 """The environment a function runs in, found by discovery; ``set_env_provider`` is the test seam (A51).
 
 Discovery: git over the folder of each module the process imported, skipping
-the standard library, ``site-packages`` and dvc-dat itself (the ledger's own
-library is infrastructure, like ``site-packages``). A checkout is a repo; its
+the standard library, ``site-packages`` and the dvc-dat checkout itself, its
+demo folders included (A56: the ledger's own repo is infrastructure, like
+``site-packages``; a demo repository is its own nested checkout). A checkout is a repo; its
 name is ``[project].name`` of the ``pyproject.toml`` at its root, normalised
 (``dvc_dat`` -> ``dvc-dat``), else the checkout folder's name. ``Code`` holds
 the commit at HEAD, whether tracked files are modified (``dirty``), and the
@@ -51,6 +52,8 @@ class Env:
 
 
 Provider = Callable[[], Env]
+#: The ledger's own repo: discovery never reports it (A56), whatever folder of it a module sits in.
+SELF = "dvc-dat"
 _provider: Optional[Provider] = None
 
 
@@ -138,7 +141,10 @@ def discover() -> Env:
         folders.add(d)
     code: Dict[str, Code] = {}
     for top in sorted({t for t in (_toplevel(d) for d in folders) if t}):
-        code[repo_name(Path(top))] = code_at(top)
+        name = repo_name(Path(top))
+        if name == SELF:
+            continue            # dvc-dat itself, its demos included (A56)
+        code[name] = code_at(top)
     return Env(code, lock_hash(), platform_tag())
 
 
