@@ -357,7 +357,7 @@ print(rev.values(camera="wide"))     # video/G1 and video/G2
 # `kind=Video`.
 
 # %%
-print(rev.value(game="G1").same_as(wide_video))    # True
+print(rev.value(game="G1").hash == wide_video.hash)    # True
 try:
     rev.value(kind=Video)
 except Multiple as e:
@@ -441,7 +441,7 @@ with L.transaction(by="human:dan", why="team typo") as t:
                                 provenance="human:dan")
 rev = L.at()
 print(right_subject != wrong_subject,
-      fixed_cut.same_as(trim_cut))                # True True
+      fixed_cut.hash == trim_cut.hash)                # True True
 print(sorted(Ref(rev, "trim/G1").preds["team"]))  # G4, G5
 print(rev.refs(kind=Cut, team="G6"))            # [<8 hex>]
 
@@ -595,7 +595,7 @@ print(cut_fn.sha[:8], cut_fn.subject)
 rev = L.at()
 cut_153 = rev.eval("demo_game.game.cut", game="G1", version="1.5.3")
 print(cut_153.sealed, cut_153.rev.id > rev.id)  # True True
-print(cut_153.same_as(plain_cut))    # True: the same bytes
+print(cut_153.hash == plain_cut.hash)    # True: the same bytes
 
 # %% [markdown]
 # The miss ran the body and sealed the cut in a revision of its
@@ -625,7 +625,7 @@ print(rev.eval("demo_game.game.cut", game="G1", version="1.5.4",
                memo="get"))          # None: never run
 dry_cut = rev.eval("demo_game.game.cut", game="G1", version="1.5.3",
                    memo=False)
-print(dry_cut.sealed, dry_cut.same_as(cut_153))  # False True
+print(dry_cut.sealed, dry_cut.hash == cut_153.hash)  # False True
 print(L.at().id == rev.id)           # True: nothing written
 
 # %% [markdown]
@@ -675,7 +675,7 @@ print(rev["game/G1"])
 
 # %%
 current_cut = rev.load("game/G1")
-print(current_cut.same_as(cut_153),
+print(current_cut.hash == cut_153.hash,
       current_cut.subject == cut_153.subject)     # True True
 cut_video_ref = current_cut.preds["video"]
 print(type(cut_video_ref).__name__, cut_video_ref.type)
