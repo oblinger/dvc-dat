@@ -427,7 +427,7 @@ del bad_video.preds["team"]
 
 # %% [markdown]
 # A hand seal names its own provenance (`eval:` provenance is
-# written by evaluation alone, next section).
+# written by evaluation alone; see Values computed by functions).
 
 # %%
 try:
