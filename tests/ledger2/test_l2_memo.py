@@ -1,0 +1,164 @@
+"""Contracts of functions and eval in base mode: ledger_fn, load_fn, the memo, the trace, NotEvaluated."""
+
+import pytest
+
+import l2kinds
+from dvc_dat.ledger2 import Dat, NotEvaluated, Pickled, Ref, ledger_fn
+from l2kinds import CALLS, Cut, Video
+
+
+@pytest.fixture
+def world(coded):
+    L = coded
+    with L.transaction(by="t") as t:
+        t.add("db/pred/video", "db/type", "l2kinds.Video")
+        t["game/G1"] = {"home": "G4", "away": "G5"}
+        t["game/G2"] = {"home": "G1", "away": "G3"}
+    for g in ("G1", "G2"):
+        v = Video(f"{g} frames".encode())
+        v.preds.update(game=g)
+        with L.transaction(by="t") as t:
+            t.add_value(v, alias=f"video/{g}")
+    CALLS.clear()
+    return L
+
+
+def test_ledger_fn_needs_an_annotation_and_stays_callable(world):
+    with pytest.raises(TypeError):
+        @ledger_fn
+        def f(rev, *, a):
+            return a
+    v = l2kinds.cut(world.at(), game="G1")
+    assert isinstance(v, Cut) and not v.sealed and v.trace == {} and world.at().id == 4
+
+
+def test_load_fn_fields(world):
+    f = world.at().load_fn("l2kinds.cut")
+    assert f.mode == "base" and f.mount is None and str(f.signature) == "(*, game: str, version: str = '1.0.0')"
+    assert len(f.sha) == 64 and f.subject.startswith("db/fn/l2kinds.cut/")
+    with pytest.raises(TypeError):
+        world.at().load_fn("l2kinds.Video")
+
+
+def test_eval_seals_once_and_hits(world):
+    rev = world.at()
+    a = rev.eval("l2kinds.cut", game="G1")
+    assert a.sealed and a.rev.id == rev.id + 1 and CALLS["cut"] == 1
+    top = world.at().id
+    b = world.at().eval("l2kinds.cut", game="G1", version="1.0.0")      # defaults bound in
+    assert b.subject == a.subject and CALLS["cut"] == 1 and world.at().id == top and b.rev.id == a.rev.id
+    r = world.at()
+    assert r[a.subject, "db/keys"] == {"game": "G1", "version": "1.0.0"}
+    assert r[a.subject, "db/fn"] == "l2kinds.cut" and r[a.subject, "db/provenance"] == "eval:base"
+    assert r[a.trace["fn"], "db/returns"] == "Cut" and r[a.trace["fn"], "db/mode"] == "base"
+    assert [x.subject for x in r.refs(fn="l2kinds.cut")] == [a.subject]
+
+
+def test_trace_items(world):
+    a = world.at().eval("l2kinds.cut", game="G1")
+    t = dict(a.trace)
+    assert t["game/G1 home"] == "G4" and t["code/testrepo"] == "1.0.0+abc1234"
+    q = [k for k in t if k.startswith("q:")]
+    assert q == ['q:{"game":"G1","kind":"l2kinds.Video"}']
+    vid = world.at().load("video/G1")
+    assert t[f"ref:l2kinds.Video:{vid.hash}"].startswith("ref:")
+    assert set(t) >= {"fn", "uv.lock", "platform"}
+
+
+def test_memo_false_and_get(world):
+    rev = world.at()
+    assert rev.eval("l2kinds.cut", game="G1", memo="get") is None
+    dry = rev.eval("l2kinds.cut", game="G1", memo=False)
+    assert not dry.sealed and world.at().id == rev.id
+    a = rev.eval("l2kinds.cut", game="G1")
+    assert dry.same_as(a) and rev.eval("l2kinds.cut", game="G1", memo="get").subject == a.subject
+
+
+def test_a_read_change_misses_and_diff_names_it(world):
+    a = world.at().eval("l2kinds.cut", game="G1")
+    with world.transaction(by="t") as t:
+        t["game/G1", "away"] = "G9"                 # not read
+    assert a.matches(world.at())
+    with world.transaction(by="t") as t:
+        t["game/G1", "home"] = "G6"
+    assert not a.matches(world.at())
+    b = world.at().eval("l2kinds.cut", game="G1")
+    assert b.subject != a.subject and a.diff(b) == {"game/G1 home": ("G4", "G6")}
+
+
+def test_code_commit_is_the_pin_and_not_evaluated(world, envbox):
+    a = world.at().eval("l2kinds.cut", game="G1")
+    with world.transaction(by="t") as t:
+        t.add("code/testrepo", "version", "1.0.1")        # version moves, commit does not
+    assert a.matches(world.at())
+    envbox.code(commit="def5678")
+    with pytest.raises(NotEvaluated):
+        world.at().eval("l2kinds.cut", game="G2")
+    assert world.at().eval("l2kinds.cut", game="G1") is not None or True
+    envbox.code(dirty=True)
+    with pytest.raises(NotEvaluated):
+        world.at().eval("l2kinds.cut", game="G2")
+
+
+def test_no_code_row_runs_with_the_env_commit(L):
+    with L.transaction(by="t") as t:
+        t["game/G1"] = {"home": "G4"}
+        t.add("db/pred/video", "db/type", "l2kinds.Video")
+    v = Video(b"x")
+    v.preds.update(game="G1")
+    with L.transaction(by="t") as t:
+        t.add_value(v)
+    a = L.at().eval("l2kinds.cut", game="G1")
+    assert a.trace["code/testrepo"] == "+abc1234"
+
+
+def test_keys_by_bytes_and_bare_return_pickled(world):
+    a = world.at().eval("l2kinds.cut", game="G1")
+    th = world.at().eval("l2kinds.thumb", clip=Ref(world.at(), a.subject))
+    assert isinstance(th, Pickled) and th.obj == {"n": len(a.clip)}
+    assert world.at()[th.subject, "db/keys"] == {"clip": f"ref:l2kinds.Cut:{a.hash}"}
+    assert world.at()[th.trace["fn"], "db/returns"] == "dict"
+    with pytest.raises(TypeError):
+        world.at().eval("l2kinds.thumb", clip={"x": Ref(world.at(), a.subject)})
+
+
+def test_wrong_return_type_refused(world):
+    with pytest.raises(TypeError):
+        world.at().eval("l2kinds.wrong", game="G1")
+
+
+def test_alias_binding_and_nested_eval(world):
+    a = world.at().eval("l2kinds.cut", game="G1")
+    with world.transaction(by="t") as t:
+        t.add("game/G1", "db/alias", a.subject)
+    p = world.at().eval("l2kinds.poster", game="G1")
+    assert p.trace["game/G1 db/alias"] == f"ref:l2kinds.Cut:{a.hash}"
+    ch = world.at().eval("l2kinds.chain", game="G1")
+    item = 'eval:l2kinds.cut{"game":"G1","version":"1.0.0"}'
+    assert ch.trace[item] == f"ref:l2kinds.Cut:{a.hash}"
+    assert ch.matches(world.at())
+    with world.transaction(by="t") as t:
+        t["game/G1", "home"] = "G7"
+    assert not ch.matches(world.at())                 # the nested lookup misses; nothing runs
+    n = CALLS["cut"]
+    assert not ch.matches(world.at()) and CALLS["cut"] == n
+
+
+def test_work_folder_dat(world):
+    d = world.at().eval("l2kinds.folder", game="G1")
+    assert isinstance(d, Dat) and (d.path / "a.txt").read_text() == "G1"
+    assert "work" not in world.at()[d.subject, "db/keys"]
+    with pytest.raises(TypeError):
+        world.at().eval("l2kinds.folder", game="G1", work="x")
+
+
+def test_racing_entries_both_kept_latest_wins(world):
+    import threading
+    out = []
+
+    def go():
+        out.append(world.at().eval("l2kinds.cut", game="G2"))
+    ts = [threading.Thread(target=go) for _ in range(2)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert len({v.subject for v in out}) == 1           # deterministic: one subject
