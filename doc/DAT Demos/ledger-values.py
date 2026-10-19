@@ -43,6 +43,7 @@ from pathlib import Path
 
 from dvc_dat.ledger import Ledger, Ref, bump
 from dvc_dat.ledger import AliasLoop, Exists, Multiple, Undeclared
+from dvc_dat.ledger import UnmountedImport
 
 # %%
 scratch_project_path = Path("scratch/values-demo").resolve()
@@ -209,7 +210,7 @@ print(rev.load("video/G1"))          # video/G1: the value itself
 # `rev["video/G1"]` is literal: the alias's own rows, its `db/alias`
 # row's object the subject as a plain `str`. `load` follows the
 # row. A game carries its current cut the same way, shown once a
-# cut exists (Values computed by functions).
+# cut exists (Evaluation § A game names its current cut).
 
 # %% [markdown]
 # ### A new version is a new value
@@ -323,11 +324,11 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 # `db/value` names the bytes by class and hash. `db/kind` is the
 # class. `db/provenance` is the caller's word. `db/preds` lists the
 # preds the kind declared when the value was stored. The
-# `db/trace/…` rows are the trace, under Values computed by
-# functions § A value records what it read: a hand seal records
-# whatever environment it runs in (`db/trace/code/…` is the code
-# the environment had; the functions section explains it). Then one
-# row per pred, and the alias.
+# `db/trace/…` rows are the trace (Evaluation § What an entry
+# depends on: the trace): a hand seal records whatever environment
+# it runs in (`db/trace/code/…` is the code the environment had;
+# Ledger functions explains it). Then one row per pred, and the
+# alias.
 
 # %% [markdown]
 # ### Finding values by preds
@@ -427,7 +428,7 @@ del bad_video.preds["team"]
 
 # %% [markdown]
 # A hand seal names its own provenance (`eval:` provenance is
-# written by evaluation alone; see Values computed by functions).
+# written by evaluation alone; see Evaluation).
 
 # %%
 try:
@@ -538,7 +539,12 @@ print(longer_cut, fixed_cut)             # trim/G1 <8 hex>
 # it; the corrected trim stays, unnamed.
 
 # %% [markdown]
-# ## Values computed by functions
+# ## Ledger functions
+#
+# We leave values for a moment. A ledger function is an ordinary
+# Python function marked `@ledger_fn`: it takes the revision first
+# and keywords after, and returns a value. The ledger can find it
+# by its dotted name.
 
 # %% [markdown]
 # ### Connecting the ledger to the code
@@ -557,7 +563,7 @@ print(demo_game.__file__)
 
 # %% [markdown]
 # `demo_game` is imported from the copy, which exists so a code
-# change can be committed (§ Same bytes, different values).
+# change can be committed (Evaluation § When a result goes stale).
 
 # %%
 with L.transaction(by="human:dan", why="the clock's start") as t:
@@ -586,7 +592,7 @@ except TypeError as e:
     print("TypeError:", e)
 
 # %% [markdown]
-# ### A function that computes a value
+# ### Defining a function
 #
 # Cutting, in `demo_game/game.py`:
 #
@@ -604,17 +610,22 @@ except TypeError as e:
 #     return c
 # ```
 #
-# `@ledger_fn` marks a ledger function, its return annotation
-# required, and writes no row on import. The body reads the game's
-# rows through `rev`, loads the video, sets the cut's `preds` and
-# returns it. `cut_video` ignores the version, so two versions of a
-# cut can be byte-identical. The module's other functions are
-# quoted where they are used.
+# `@ledger_fn` declares `cut` a ledger function, its return
+# annotation required, and leaves it a plain function: nothing is
+# wrapped and no row is written on import. The body reads the
+# game's rows through `rev`, loads the video, sets the cut's
+# `preds` and returns it. `cut_video` ignores the version, so two
+# versions of a cut can be byte-identical. The module's other
+# functions are quoted where they are used.
+
+# %% [markdown]
+# ### Loading and calling it
 
 # %%
 from demo_game.game import cut
 
 rev = L.at()
+cut_fn = rev.load_fn("demo_game.game.cut")   # an Fn, by name
 plain_cut = cut(rev, game="G1", version="1.5.3")
 print(type(plain_cut))               # <class 'demo_game.game.Cut'>
 print(plain_cut.sealed)              # False
@@ -624,17 +635,12 @@ print(plain_cut.preds)
 print(L.at().id == rev.id)           # True: nothing written
 
 # %% [markdown]
-# Nothing was written: calling `cut` is an ordinary Python call.
-
-# %% [markdown]
-# `load_fn` resolves the name at `rev` to an `Fn`, called like the
-# function with only the keywords, `rev` supplied; that call is
-# `eval`, memoised and sealing.
+# `load_fn` finds the function by its dotted name at `rev` and
+# hands back an `Fn`. The function itself, imported, is called like
+# any Python function: an unsealed `Cut`, nothing written.
 
 # %%
-cut_fn = rev.load_fn("demo_game.game.cut")
-print(cut_fn.mode, cut_fn.signature)
-# base (*, game: str, version: str)
+print(cut_fn.signature)              # (*, game: str, version: str)
 print(cut_fn.sha[:8], cut_fn.subject)
 # <8 hex> db/fn/demo_game.game.cut/<hash>
 
@@ -644,10 +650,69 @@ print(cut_fn.sha[:8], cut_fn.subject)
 # module's source, `subject` the one name for that resolution.
 
 # %% [markdown]
-# ### Asked twice, computed once
+# ### Two kinds of function: in the code, or mounted
 #
-# `rev.eval` is `load_fn` and a call. Its first call for a
-# question runs the body and seals the result.
+# A function that is simply in the running code is found by name
+# and run in this process; the ledger can only record which commit
+# it was. A function under a mount is loaded from the mounted
+# source at the revision asked for and run in a sandbox, its
+# imports traced and its writes confined, so the ledger controls
+# it.
+
+# %%
+print(cut_fn.mode, cut_fn.mount)     # base None
+
+# %% [markdown]
+# A mount is rows on the ledger: a dotted prefix, the root it
+# resolves under, and the repo that root is in.
+
+# %%
+with L.transaction(by="human:dan", why="mount the etl") as t:
+    t.add("db/mount/demo_game.etl", "db/root", "demo_game/etl")
+    t.add("db/mount/demo_game.etl", "db/repo", "demo-game")
+rev = L.at()
+print(rev["db/mount/demo_game.etl"])
+# {"db/root": "demo_game/etl", "db/repo": "demo-game"}
+detect_fn = rev.load_fn("demo_game.etl.detect.detections")
+print(detect_fn.mode, detect_fn.mount)   # sandbox demo_game.etl
+print(detect_fn.module)
+# .../scratch/values-demo/demo_game/etl/detect.py
+
+# %% [markdown]
+# Every `demo_game.etl` name now resolves through the mount, read
+# at the revision asked for, and runs in a worker whose path holds
+# the standard library, `site-packages` and the mounted roots,
+# nothing else. `demo_game.game` is under no mount, so `cut` stays
+# `base`.
+#
+# `demo_game.etl.stray.borrow` imports `demo_game.shots`, which is
+# in the repo but under no mount. Running it (`rev.eval`, the next
+# section) is refused.
+
+# %%
+try:
+    rev.eval("demo_game.etl.stray.borrow", game="G1")
+except UnmountedImport as e:
+    print("UnmountedImport:", e)
+# demo_game.shots from demo_game.etl.stray; mount it or move it
+
+# %% [markdown]
+# Nothing is sealed: an incomplete mount table is a crash, never a
+# silently wider trace. This difference, which code the ledger can
+# see, matters in the next section.
+
+# %% [markdown]
+# ## Evaluation
+#
+# `eval` calls a ledger function and keeps the result. A bare
+# return is wrapped into a value (`Pickled`); a `Value` is taken as
+# is. Everything the function read through `rev`, every value it
+# loaded and the code it ran become the trace. The result is sealed
+# with `db/fn` and `db/keys` rows, so the same question is answered
+# from the ledger next time.
+
+# %% [markdown]
+# ### Asked twice, computed once
 
 # %%
 rev = L.at()
@@ -656,9 +721,10 @@ print(cut_153.sealed, cut_153.rev.id > rev.id)  # True True
 print(cut_153.hash == plain_cut.hash)    # True: the same bytes
 
 # %% [markdown]
-# The miss ran the body and sealed the cut in a revision of its
-# own, which is `cut_153.rev`. The preds are what the body put in
-# `c.preds`; the keys are one `db/keys` row, not preds.
+# `rev.eval` is `load_fn` and a call of the `Fn`. The miss ran the
+# body and sealed the cut in a revision of its own, which is
+# `cut_153.rev`. The preds are what the body put in `c.preds`; the
+# keys are one `db/keys` row, not preds.
 
 # %%
 top_id = L.at().id
@@ -672,19 +738,6 @@ print(again_cut.rev.id == cut_153.rev.id)   # True: the seal's rev
 # The second call is a memo hit: same function, same keys, every
 # trace item unchanged. It writes nothing, and the value it hands
 # back carries the revision it was sealed in.
-
-# %% [markdown]
-# `memo="get"` looks without running; `memo=False` runs without
-# sealing, and its bytes are what a memoised call would return.
-
-# %%
-rev = L.at()
-print(rev.eval("demo_game.game.cut", game="G1", version="1.5.4",
-               memo="get"))          # None: never run
-dry_cut = rev.eval("demo_game.game.cut", game="G1", version="1.5.3",
-                   memo=False)
-print(dry_cut.sealed, dry_cut.hash == cut_153.hash)  # False True
-print(L.at().id == rev.id)           # True: nothing written
 
 # %% [markdown]
 # A memo entry is the seal's rows plus two of its own: `db/fn`, the
@@ -711,6 +764,94 @@ for memo_ref in rev.refs(fn="demo_game.game.cut"):
 # <8 hex> {"game": "G1", "version": "1.5.3"}
 # <8 hex> {"game": "G2", "version": "1.5.3"}
 print(len(rev.values(fn="demo_game.game.cut")))    # 2, loaded
+
+# %% [markdown]
+# ### A bare return becomes a value
+#
+# ```python
+# @ledger_fn
+# def thumb(rev, *, clip: Ref) -> dict:
+#     """Downstream of one cut, keyed by the cut itself."""
+#     c = clip.load()
+#     return {"bytes": len(c.clip), "head": c.clip[:4].hex()}
+# ```
+
+# %%
+rev = L.at()
+thumb_value = rev.eval("demo_game.game.thumb",
+                       clip=Ref(rev, cut_153.subject))
+print(type(thumb_value).__name__, thumb_value.sealed)  # Pickled True
+print(L.at()[thumb_value.trace["fn"], "db/returns"])   # dict
+
+# %% [markdown]
+# `-> dict` names no `Value` subclass, so the dict was wrapped in
+# `Pickled` and sealed like any value; the annotation is kept as
+# `db/returns` on the function's `db/fn/…` subject. `Pickled`
+# declares no preds, so the entry is found by `db/fn` and `db/keys`
+# alone.
+
+# %% [markdown]
+# ### What an entry depends on: the trace
+#
+# The cut's trace rows first, as stored.
+
+# %%
+entry_rev = cut_153.rev
+for row in entry_rev.rows(since=L.at(entry_rev.id - 1)):
+    if row.predicate.startswith("db/trace/"):
+        print(row)
+# one db/trace/<item> row per item below
+
+# %%
+for item in sorted(cut_153.trace):
+    print(item, "->", cut_153.trace[item])
+# code/demo-game -> 0.1.0+<8 hex>
+# fn -> db/fn/demo_game.game.cut/<hash>
+# game/G1 away -> G5
+# game/G1 home -> G4
+# platform -> darwin-arm64-py3.11
+# q:{"game":"G1","kind":"demo_game.game.Video"}
+#     -> ["ref:demo_game.game.Video:<hash>"]
+# ref:demo_game.game.Video:<hash> -> ref:demo_game.game.Video:<hash>
+# uv.lock -> sha256:<hash>
+
+# %% [markdown]
+# The trace is recorded, not declared, item by item:
+#
+# - `code/demo-game` — `cut` is base, so the code it ran is known
+#   only as the repo's version and commit.
+# - `fn` — the code the name resolved to, its `Fn` subject, which
+#   hashes the module's source (in base mode too, A39).
+# - `game/G1 away`, `game/G1 home` — the two game rows read by
+#   name.
+# - `q:{…}` — the `value` query, holding what it answered, so a
+#   second G1 video later is a miss rather than a stale hit (A41).
+# - `ref:…Video:<hash>` — the video, by its bytes.
+# - `platform`, `uv.lock` — the environment, discovered.
+
+# %% [markdown]
+# A hand seal has a trace too: with no `deps`, the environment
+# alone.
+
+# %%
+print(dict(sorted(wide_video.trace.items())))
+# {"code/demo-game": "+<8 hex>",
+#  "platform": "darwin-arm64-py3.11", "uv.lock": "sha256:<hash>"}
+
+# %% [markdown]
+# ### memo=False and memo="get"
+#
+# `memo="get"` looks without running; `memo=False` runs without
+# sealing, and its bytes are what a memoised call would return.
+
+# %%
+rev = L.at()
+print(rev.eval("demo_game.game.cut", game="G1", version="1.5.4",
+               memo="get"))          # None: never run
+dry_cut = rev.eval("demo_game.game.cut", game="G1", version="1.5.3",
+                   memo=False)
+print(dry_cut.sealed, dry_cut.hash == cut_153.hash)  # False True
+print(L.at().id == rev.id)           # True: nothing written
 
 # %% [markdown]
 # ### A game names its current cut
@@ -764,48 +905,8 @@ print(cut_153)                       # game/G1: it has a name now
 # `subject` the cut's hash, `preds` the cut's, read without a load.
 
 # %% [markdown]
-# ### A value records what it read
+# ### When a result goes stale
 #
-# The cut's trace rows first, as stored.
-
-# %%
-entry_rev = cut_153.rev
-for row in entry_rev.rows(since=L.at(entry_rev.id - 1)):
-    if row.predicate.startswith("db/trace/"):
-        print(row)
-# one db/trace/<item> row per item below
-
-# %%
-for item in sorted(cut_153.trace):
-    print(item, "->", cut_153.trace[item])
-# code/demo-game -> 0.1.0+<8 hex>
-# fn -> db/fn/demo_game.game.cut/<hash>
-# game/G1 away -> G5
-# game/G1 home -> G4
-# platform -> darwin-arm64-py3.11
-# q:{"game":"G1","kind":"demo_game.game.Video"}
-#     -> ["ref:demo_game.game.Video:<hash>"]
-# ref:demo_game.game.Video:<hash> -> ref:demo_game.game.Video:<hash>
-# uv.lock -> sha256:<hash>
-
-# %% [markdown]
-# The trace is recorded, not declared: `fn`, the code the name
-# resolved to (in base mode too, beside `code/demo-game`, A39); the
-# two game rows read by name; the `value` query as a `q:` item
-# holding what it answered, so a second G1 video later is a miss
-# rather than a stale hit (A41); the video by its bytes; and the
-# environment, discovered.
-
-# %% [markdown]
-# A hand seal has a trace too: with no `deps`, the environment
-# alone.
-
-# %%
-print(dict(sorted(wide_video.trace.items())))
-# {"code/demo-game": "+<8 hex>",
-#  "platform": "darwin-arm64-py3.11", "uv.lock": "sha256:<hash>"}
-
-# %% [markdown]
 # The game's own rows are corrected with the bracket, literal on
 # `game/G1` though it holds an alias row (A34): one row, or the
 # whole record. The record form ranges over user rows only, so the
@@ -886,6 +987,32 @@ print(sorted(poster_value.diff(poster_g6_value)))
 # the game/G1 db/alias binding, and each side's value item
 
 # %% [markdown]
+# A code change is a commit in the demo repository, then a bump of
+# its clock. Notice the cut misses though its bytes do not change.
+
+# %%
+game_path = scratch_project_path / "demo_game/game.py"
+game_path.write_text(game_path.read_text()
+                     + "\n# tidied: no change in behaviour\n")
+git("commit", "-q", "-am", "tidy game")
+import demo_game.game
+importlib.reload(demo_game.game)
+with L.transaction(by="human:dan", why="tidy game") as t:
+    bump(t, "code/demo-game")            # 0.1.1, the new commit
+rev = L.at()
+print(cut_home_g6.matches(rev))          # False
+recut = rev.eval("demo_game.game.cut", game="G1", version="1.5.3")
+print(recut.subject != cut_home_g6.subject,
+      recut.hash == cut_home_g6.hash)             # True True
+print(sorted(cut_home_g6.diff(recut)))   # ["code/demo-game", "fn"]
+
+# %% [markdown]
+# `cut` is base, so its trace holds the repo's version and commit,
+# and `fn` hashes the module's source: an edit anywhere in
+# `game.py` moves both. The eval re-runs, and the identical bytes
+# land as a new subject on the old blob.
+
+# %% [markdown]
 # ### Same bytes, different values
 
 # %%
@@ -899,12 +1026,11 @@ print(cut_154.same_as(cut_home_g6),
 # the re-derived 1.5.3 cut (the stand-in cutter ignores its
 # version). Two memo entries, two subjects, one blob. `same_as`
 # compares only the bytes hash, so two values from different
-# derivations, or with different preds, can be the same bytes;
-# here, for the first time, the same bytes are not the same
-# subject.
+# derivations, or with different preds, can be the same bytes.
 
 # %% [markdown]
-# `thumb(rev, *, clip: Ref) -> dict` takes a cut as its key.
+# `thumb`, from § A bare return becomes a value, takes a cut as its
+# key.
 
 # %%
 rev = L.at()
@@ -915,28 +1041,26 @@ thumb4_value = rev.eval("demo_game.game.thumb",
                         clip=Ref(rev, cut_154.subject))
 print(thumb4_value.subject == thumb3_value.subject,
       L.at().id == top_id)                        # True True
-print(type(thumb3_value).__name__)       # Pickled: -> dict
-print(L.at()[thumb3_value.trace["fn"], "db/returns"])  # dict
 
 # %% [markdown]
 # A `Value` or `Ref` enters keys and traces by its bytes,
 # `ref:<class>:<hash>`, never by the entry it came from. So `thumb`
-# keyed by the 1.5.4 cut hits the entry made for the 1.5.3 cut. A
-# function annotated with a plain type returns `Pickled`, and the
-# annotation is kept on its `db/fn/...` subject.
+# keyed by the 1.5.4 cut hits the entry made for the 1.5.3 cut.
 
 # %% [markdown]
 # A name works the same way: point `game/G1` at the 1.5.4 cut and
 # `poster`'s entry from the 1.5.3 cut holds.
 
 # %%
+rev = L.at()
+poster_now_value = rev.eval("demo_game.game.poster", game="G1")
 with L.transaction(by="human:dan", why="cutter 1.5.4") as t:
     t.add("game/G1", "db/alias", cut_154.subject)
 rev = L.at()
 print(cut_154, cut_home_g6)              # game/G1 <8 hex>
-print(poster_g6_value.matches(rev))      # True: identical bytes
+print(poster_now_value.matches(rev))     # True: identical bytes
 again_poster = rev.eval("demo_game.game.poster", game="G1")
-print(again_poster.subject == poster_g6_value.subject)  # a hit
+print(again_poster.subject == poster_now_value.subject)  # a hit
 
 # %% [markdown]
 # `game/G1` now names identical bytes, so the binding item is
@@ -972,32 +1096,6 @@ print(hit_value.subject == latest_ref.subject)  # True: latest
 # both ran. The answers differ, and both are kept (A20): `refs`
 # lists the pair, which is the evidence nondeterminism leaves, and
 # `eval` returns the latest-sealed entry whose trace matches.
-
-# %% [markdown]
-# A code change is a commit in the demo repository, then a bump of
-# its clock. Notice the cut misses though its bytes do not change.
-
-# %%
-game_path = scratch_project_path / "demo_game/game.py"
-game_path.write_text(game_path.read_text()
-                     + "\n# tidied: no change in behaviour\n")
-git("commit", "-q", "-am", "tidy game")
-import demo_game.game
-importlib.reload(demo_game.game)
-with L.transaction(by="human:dan", why="tidy game") as t:
-    bump(t, "code/demo-game")            # 0.1.1, the new commit
-rev = L.at()
-print(cut_154.matches(rev))              # False
-recut = rev.eval("demo_game.game.cut", game="G1", version="1.5.4")
-print(recut.subject != cut_154.subject,
-      recut.same_as(cut_154))                     # True True
-print(sorted(cut_154.diff(recut)))       # ["code/demo-game", "fn"]
-
-# %% [markdown]
-# In base mode the trace holds the repo's version and commit, and
-# `fn` hashes the module's source, so an edit anywhere in
-# `game.py` moves both: the eval re-runs, and the identical bytes
-# land as a new subject on the old blob.
 
 # %% [markdown]
 # ## Edge cases
