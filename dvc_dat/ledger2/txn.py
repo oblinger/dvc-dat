@@ -504,8 +504,10 @@ class Transaction:
                   provenance: Optional[str] = None) -> str:
         """Seal ``value`` into the immutable subject ``<hash of (trace, preds, bytes)>``; return the subject.
 
-        Nothing about ``value`` changes until the transaction commits; a refused seal leaves it unsealed
-        with its preds a plain dict (A43).
+        On this line the seal freezes ``preds`` (read-only), and sets ``sealed``, ``subject`` and
+        ``trace``; only ``rev`` waits for the commit. A seal refused here, or a transaction abandoned
+        later (a body exception, a refusal at commit), leaves the value unsealed with its preds a plain
+        dict (A43).
         """
         self._open("add_value")
         if not isinstance(value, Value):
