@@ -55,8 +55,9 @@ as is decorating a non-`Value` class. Writes nothing.
   whose two `encode()` calls differ.
 - A subclass's `__init__` need not call `super().__init__`; the
   provenance fields are class-level defaults.
-- `Dat` is not `dvc_dat.Dat`: it checks no `_spec_.yaml` and hashes
-  every file in the folder.
+- `Dat` is not `dvc_dat.Dat`: it hashes every file in the folder;
+  on load, a `_spec_` naming a `dat.kind` other than the row's class
+  is a `TypeError` (leg 8).
 
 ## Left to other modules
 
