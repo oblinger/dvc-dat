@@ -177,9 +177,28 @@ def load_fn(rev: "Rev", name: str) -> "Fn":
     sha = sha256(Path(src).read_bytes())
     sig, takes_work = signature_of(name, obj)
     env = current_env()
+    modules = base_closure(modname, Path(src), env)
     return Fn(name=name, module=Path(src), sha=sha, mode="base", mount=None, signature=sig, env=env,
-              subject=fn_subject(name, {modname: sha}, None), _rev=rev, _obj=obj, _takes_work=takes_work,
-              _modules={modname: sha}, _returns=returns_text(obj))
+              subject=fn_subject(name, modules, None), _rev=rev, _obj=obj, _takes_work=takes_work,
+              _modules=modules, _returns=returns_text(obj))
+
+
+def base_closure(modname: str, src: Path, env: Env) -> Dict[str, str]:
+    """The base-mode ``fn`` hash input: the static import closure within the function's checkout (Q37 (iii)),
+    ``relpath -> sha256``; outside any checkout, the module file alone."""
+    from .sandbox import static_closure
+
+    parts = modname.split(".")
+    root = src.parent if src.name != "__init__.py" else src.parent.parent
+    for _ in parts[1:]:
+        root = root.parent
+    repo = repo_of(env, src)
+    code = env.code.get(repo) if repo else None
+    within = code.path if code is not None and code.path is not None else root
+    out = {}
+    for _d, f in static_closure(root, modname, within).items():
+        out[Path(os.path.realpath(f)).relative_to(os.path.realpath(within)).as_posix()] = sha256(f.read_bytes())
+    return dict(sorted(out.items())) or {modname: sha256(src.read_bytes())}
 
 
 @dataclass(frozen=True)

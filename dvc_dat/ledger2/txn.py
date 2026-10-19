@@ -33,6 +33,9 @@ if TYPE_CHECKING:
     from .ledger import Ledger
     from .rev import Rev
 
+#: What ``(db, db/format)`` says: the software format, written by a ledger's first transaction.
+FORMAT = "dvc-dat-ledger2/1"
+
 #: A sealed subject's own predicates (besides its preds, named by its ``db/preds`` row).
 SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys"})
 
@@ -118,6 +121,9 @@ class Transaction:
         self._pending: Dict[int, Tuple[Value, str]] = {}
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
         self._fns: set = set()
+        self._frozen: List[Tuple[Value, Dict[str, Any]]] = []
+        self._to_store: List[Value] = []
+        self._created: List[Any] = []
         self._cm: Any = None
         self._w: Any = None
         self._timer: Any = None
@@ -188,11 +194,11 @@ class Transaction:
         self._disarm()
         if et is None and self._lock is not None and _time.monotonic() - self._t0 > self._lock:
             ev = LockTimeout(f"lock={self._lock}: the body ran past its limit; nothing written")
-            self._state = "abandoned"
+            self._abandon()
             self._cm.__exit__(LockTimeout, ev, None)
             raise ev
         if et is not None:
-            self._state = "abandoned"
+            self._abandon()
             if self._cm is not None:
                 self._cm.__exit__(et, ev, tb)
             return False
@@ -209,12 +215,45 @@ class Transaction:
                 with self._ledger._store.writer(30.0, locked=False) as w:
                     rev = self._write(w)
         except BaseException:
-            self._state = "abandoned"
+            self._abandon()
             raise
         self._rev = self._ledger.at(rev)
         self._finish()
         self._state = "committed"
         return False
+
+    def _abandon(self) -> None:
+        """Nothing was written: unseal every value this body froze (A43) and drop bytes it stored."""
+        from .value import _EMPTY
+
+        self._state = "abandoned"
+        for value, old in self._frozen:
+            value.sealed = False
+            value.subject = None
+            value.trace = _EMPTY
+            value.__dict__["_preds"] = old
+            value.__dict__.pop("_hash", None)
+        for path in self._created:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        self._created = []
+
+    def _store_all(self) -> None:
+        """The bytes of every seal, written at commit so bytes and rows land together (or neither)."""
+        art = self._ledger._store.art
+        for v in self._to_store:
+            blobs = list(v._parts().values()) + [v.encode()]
+            for data in blobs:
+                from .codec import sha256 as _sha
+
+                path = art.path(_sha(data))
+                if not path.exists():
+                    art.put(data)
+                    self._created.append(path)
+            if _sha(blobs[-1]) != v.hash:
+                raise ValueError(f"{type(v).__name__}.encode is not deterministic: two calls gave two hashes")
 
     def _finish(self) -> None:
         from .rev import Ref
@@ -246,14 +285,22 @@ class Transaction:
             o = "str:" + txs if op.o == "str:" + self.tx else op.o
             rows.append((s, op.p, o, op.added))
             kept.append(op)
+        if rev == 1:
+            rows.append(("db", "db/format", "str:" + FORMAT, True))
         rows.append((txs, "db/by", "str:" + self._by, True))
         if self._time:
             stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             rows.append((txs, "db/time", "str:" + stamp, True))
         rows.extend((txs, k, o, True) for k, o in self._preds)
+        self._store_all()
         w.insert(rev, rows)
         with store.reading_through(w.conn):
             self._validate(Rev(self._ledger, rev), kept)
+        for op in kept:
+            if op.added and op.p == "db/index" and op.s.startswith("db/pred/") and op.o == "str:true":
+                pred = op.s[len("db/pred/"):].replace("'", "''")
+                w.conn.execute(f'CREATE INDEX IF NOT EXISTS "pred_{hash_text(pred, 16)}" ON quads '
+                               f"(object, subject, rev) WHERE predicate = '{pred}'")
         return rev
 
     def _validate(self, R: "Rev", ops: List[_Op]) -> None:
@@ -277,6 +324,9 @@ class Transaction:
                     raise Exists(f"{op.s[:12]}… is sealed: {op.p!r} is one of its own predicates, written once "
                                  f"({verb} refused); annotate with another predicate, or seal anew and re-point")
             if op.p == "db/alias" and op.added:
+                if R._held(op.s, "db/value"):
+                    raise TypeError(f"{op.s[:16]!r} holds its own db/value: a name is never a sealed subject; "
+                                    "alias another name")
                 target = show(op.o)
                 if Ref(R, target).hash is None:
                     raise TypeError(f"{op.s!r} db/alias {target!r}: an alias names a value, and {target!r} holds "
@@ -477,21 +527,29 @@ class Transaction:
         vtext = ref_text(dotted(type(value)), value.hash)
         subject = hash_text(canonical({"trace": trace, "preds": canon, "value": vtext}))
         self._seal(value, subject, trace, provenance, pred_rows, [], alias)
+        self._freeze(value, subject, trace)
         return subject
 
-    def _store_value(self, v: Value) -> str:
-        art = self._ledger._store.art
-        for data in v._parts().values():
-            art.put(data)
-        h = art.put(v.encode())
-        if h != v.hash:
-            raise ValueError(f"{type(v).__name__}.encode is not deterministic: two calls gave two hashes")
-        return h
+    def _freeze(self, value: Value, subject: str, trace: Dict[str, str]) -> None:
+        """The seal fixes subject, trace and preds now; the revision is assigned at commit (Q25 (D))."""
+        from types import MappingProxyType
+        from .value import FrozenPreds
+
+        h = value.hash
+        self._frozen.append((value, dict(value.preds)))
+        value.__dict__["_preds"] = FrozenPreds(value.preds)
+        value.subject = subject
+        value.trace = MappingProxyType(dict(trace))
+        value.sealed = True
+        value.__dict__["_hash"] = h
+        value.__dict__["_ledger"] = self._ledger
 
     def _seal(self, value: Value, subject: str, trace: Dict[str, str], provenance: str,
               pred_rows: List[Tuple[str, str]], extra: List[Tuple[str, str]], alias: Optional[str]) -> None:
-        h = self._store_value(value)
+        h = value.hash
         already = any(s == subject for _v, s in self._pending.values())
+        if not already:
+            self._to_store.append(value)
         self._pending[id(value)] = (value, subject)
         self._finalize.append((value, subject, dict(trace), None))
         if not already and not self.base._held(subject, "db/value"):

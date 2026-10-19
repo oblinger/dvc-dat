@@ -123,3 +123,14 @@ def test_refusals(sbx):
     git(repo, "commit", "-q", "-am", "elsewhere")
     with pytest.raises(NotEvaluated):
         old.eval("sbx.stage.fns.count", game="G1")
+
+
+def test_salt_item(sbx):
+    L, _repo = sbx
+    with L.transaction(by="t") as t:
+        t.add("db/mount/sbx.stage", "db/salt", "v2")
+    v = L.at().eval("sbx.stage.fns.count", game="G1")
+    assert v.trace["salt"] == "v2" and v.matches(L.at())
+    with L.transaction(by="t") as t:
+        t.add("db/mount/sbx.stage", "db/salt", "v3")
+    assert not v.matches(L.at())

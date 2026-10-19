@@ -21,6 +21,8 @@ Items (Module § Value ``Trace``):
 ``eval:<name>{keys}``
     a nested eval: holds iff the nested lookup at the rev, never running,
     yields an entry with the recorded hash (A42, A45).
+``salt``
+    the ``db/salt`` of the mount a sandboxed function ran under, when set.
 ``q:{...}``
     a ``refs``/``values``/``value``/``select`` query (the whole query as
     canonical JSON, ``kind`` dotted, A41, A47) -> the sorted ``ref:`` list it
@@ -131,6 +133,12 @@ def _requery(rev: "Rev", body: Dict[str, Any]) -> str:
                 return token(rev.asserted(*args))
             if call == "rows":
                 return token(len(rev.rows(since=since)))
+            if call == "preds":
+                return token(dict(Ref(rev, args[0])._preds()))
+            if call == "aliases":
+                return token(sorted(Ref(rev, args[0])._p._aliases_of(Ref(rev, args[0]).subject or "")))
+            if call == "sealed_at":
+                return token(Ref(rev, args[0])._sealed_at())
         except KeyError:
             return NONE
         raise ValueError(f"unknown recorded call {call!r}")
@@ -158,9 +166,30 @@ class _RefText(str):
     _is_ref = True
 
 
-def present(rev: "Rev", item: str, recorded: str, env: Any) -> bool:
+def salt_at(rev: "Rev", fn_subject: Optional[str]) -> str:
+    """The ``salt`` of the mount the function named by an ``fn`` subject resolves under, at ``rev``."""
+    from .codec import show
+    from .fn import mounts_at
+
+    if not fn_subject:
+        return NONE
+    name = rev.ledger.at()._held(fn_subject, "db/name")
+    if not name:
+        return NONE
+    nm = show(name[0].obj)
+    best = None
+    for prefix, info in mounts_at(rev).items():
+        if nm.startswith(prefix + ".") and (best is None or len(prefix) > len(best[0])):
+            best = (prefix, info)
+    return best[1].get("salt", NONE) if best else NONE
+
+
+def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict[str, str]] = None) -> bool:
     """Does the recorded item still hold at ``rev``."""
     from .rev import Ref
+
+    if item == "salt":
+        return salt_at(rev, (trace or {}).get("fn")) == recorded
 
     if item == "fn":
         from .fn import fn_holds
@@ -185,7 +214,9 @@ def present(rev: "Rev", item: str, recorded: str, env: Any) -> bool:
 
         i = item.index("{")
         hit = lookup_encoded(rev, item[5:i], item[i:])
-        return hit is not None and ref_text(dotted(type(hit)), hit.hash) == recorded
+        if hit is None:
+            return recorded == NONE          # no entry then, and still none
+        return ref_text(dotted(type(hit)), hit.hash) == recorded
     if item.startswith("q:"):
         return _requery(rev, json.loads(item[2:])) == recorded
     if item.endswith(" db/alias"):
@@ -217,6 +248,7 @@ def trace_matches(rev: "Rev", trace: Dict[str, str]) -> bool:
             cache.append(current_env())
         return cache[0]
     try:
-        return all(present(plain, k, v, env) for k, v in sorted(trace.items(), key=lambda kv: kv[0] == "fn"))
+        return all(present(plain, k, v, env, trace)
+                   for k, v in sorted(trace.items(), key=lambda kv: kv[0] == "fn"))
     except (LedgerError, ImportError):
         return False

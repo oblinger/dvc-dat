@@ -3,7 +3,8 @@ resolves a class by its dotted name, ``load_fn`` a function by its)."""
 
 from pathlib import Path
 
-from dvc_dat.ledger2 import Dat, Value, ledger_class, ledger_fn
+import l2helper
+from dvc_dat.ledger2 import Dat, Ref, Value, ledger_class, ledger_fn
 
 CALLS = {}
 
@@ -88,3 +89,25 @@ def folder(rev, *, game: str, work: Path) -> Dat:
 @ledger_fn
 def wrong(rev, *, game: str) -> Cut:
     return {"not": "a cut"}
+
+
+@ledger_fn
+def via_ref(rev, *, name: str) -> dict:
+    return {"n": l2helper.twice(len(Ref(rev, name).load().data))}
+
+
+@ledger_fn
+def via_ref_preds(rev, *, name: str) -> dict:
+    return {"game": Ref(rev, name).preds.get("game")}
+
+
+@ledger_fn
+def via_refs_rev(rev, *, game: str) -> dict:
+    r = rev.refs(game=game)[0]
+    return {"note": r.rev.get(r.subject, "note")}
+
+
+@ledger_fn
+def maybe(rev, *, game: str) -> dict:
+    hit = rev.eval("l2kinds.cut", game=game, memo="get")
+    return {"had": hit is not None}

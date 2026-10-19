@@ -493,8 +493,8 @@ class Rev:
             if len(subs) > 1:
                 raise Multiple(f"{describe(s, kind, fn, where, preds)} matches {len(subs)}: "
                                + ", ".join(display_name(self.ledger, x) for x in subs[:6]))
-            return Ref(plain, subs[0])
-        return [Ref(plain, x) for x in subs]
+            return Ref(self, subs[0])
+        return [Ref(self, x) for x in subs]
 
     def values(self, *, s: Any = None, kind: Any = None, fn: Any = None, where: Optional[Dict[str, Any]] = None,
                since: Optional["Rev"] = None, **preds: Any) -> List[Value]:
@@ -559,10 +559,7 @@ class Rev:
 
     def load(self, subject: str) -> Value:
         """``Ref(rev, subject).load()``: an alias resolves; reading through one records the binding (A35)."""
-        r = Ref(self._plain(), subject)
-        v = r.load()
-        self._record_value(v, subject)
-        return v
+        return Ref(self, subject).load()
 
     def load_fn(self, name: str) -> "Fn":
         """The revision function a dotted name resolves to here: through the mounts (sandbox) or in process."""
@@ -570,7 +567,7 @@ class Rev:
 
         return load_fn(self, name)
 
-    def eval(self, name: str, *, memo: Any = True, **keys: Any) -> Optional[Value]:
+    def eval(self, name: str, /, *, memo: Any = True, **keys: Any) -> Optional[Value]:
         """``load_fn(name)(memo=memo, **keys)``: memoised evaluation (see ``Fn.__call__``)."""
         if not isinstance(name, str):
             raise TypeError("eval takes a dotted name; a function object would resolve in this process")
@@ -607,33 +604,41 @@ def type_ok(ledger: "Ledger", decl: str, text: str) -> bool:
 
 
 class Ref:
-    """A reference to one value at one moment: ``Ref(rev, name)``, the alias chain resolved when made (Q30)."""
+    """A reference to one value at one moment: ``Ref(rev, name)``, the alias chain resolved when made (Q30).
 
-    __slots__ = ("rev", "name", "_subject", "_cls", "_hash", "_lazy")
+    Made from the recording ``Rev`` a value function's body holds, it keeps the recorder: resolving an
+    alias records ``<name> db/alias``, ``load`` the ``ref:`` item, and ``preds``, ``aliases``,
+    ``sealed_at`` and ``ref.rev[...]`` record like any other read (Eval § 5.3).
+    """
+
+    __slots__ = ("rev", "name", "_subject", "_cls", "_hash", "_lazy", "_p")
 
     def __init__(self, rev: Rev, name: str) -> None:
         if not isinstance(rev, Rev):
             raise TypeError(f"Ref(rev, name): rev is a Rev, not {type(rev).__name__}")
         if not isinstance(name, str) or not name:
             raise TypeError(f"Ref(rev, name): name is a non-empty str, not {name!r}")
-        rev = rev._plain()
+        plain = rev._plain()
         subject = name
         for _hop in range(ALIAS_HOPS + 1):
-            held = rev._held(subject, "db/alias")
+            held = plain._held(subject, "db/alias")
             if not held:
                 break
             subject = show(held[0].obj)
         else:
             raise AliasLoop(f"{name!r}: the db/alias chain runs past {ALIAS_HOPS} hops (or loops) at rev {rev.id}")
         cls = h = None
-        held = rev._held(subject, "db/value")
+        held = plain._held(subject, "db/value")
         if held:
             cls, h, _s = parse_ref(held[0].obj)
         self._init(rev, name, subject, cls, h, False)
+        if subject != name:
+            rev._record(f"{name} db/alias", ref_text(cls, h) if h else NONE_TOKEN)
 
     def _init(self, rev: Rev, name: str, subject: Optional[str], cls: Optional[str], h: Optional[str],
               lazy: bool) -> None:
         object.__setattr__(self, "rev", rev)
+        object.__setattr__(self, "_p", rev._plain())
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "_subject", subject)
         object.__setattr__(self, "_cls", cls)
@@ -656,10 +661,11 @@ class Ref:
         """The value's subject: ``name`` with its alias chain resolved; for a hint-less row ref, the latest
         entry holding these bytes as of ``rev``."""
         if self._lazy:
+            p = self._p
             text = ref_text(self._cls, self._hash)
             best = None
-            for s in self.rev._store.subjects(self.rev.id, predicate="db/value", obj=text):
-                held = self.rev._held(s, "db/value")
+            for s in p._store.subjects(p.id, predicate="db/value", obj=text):
+                held = p._held(s, "db/value")
                 if held and strip_hint(held[0].obj) == text and (best is None or held[0].rev >= best[1]):
                     best = (s, held[0].rev)
             object.__setattr__(self, "_subject", best[0] if best else None)
@@ -675,47 +681,57 @@ class Ref:
     @property
     def type(self) -> Optional[type]:
         """The ``Value`` subclass that decodes the bytes (``db/moved`` followed); ``None`` with no value."""
-        return None if self._cls is None else class_named(self.rev.ledger, self._cls)
+        return None if self._cls is None else class_named(self._p.ledger, self._cls)
 
     def _text(self) -> str:
         return ref_text(self._cls, self._hash) if self._hash else f"ref:?:{self.subject}"
 
-    @property
-    def preds(self) -> FrozenPreds:
-        """The subject's non-``db/`` rows at ``rev``, annotations included; one view (A24); unchecked."""
+    def _preds(self) -> FrozenPreds:
         s = self.subject
         if s is None:
             return FrozenPreds()
-        return FrozenPreds({p: o for p, o in self.rev._record_of(s).items() if not p.startswith("db/")})
+        return FrozenPreds({p: o for p, o in self._p._record_of(s).items() if not p.startswith("db/")})
+
+    @property
+    def preds(self) -> FrozenPreds:
+        """The subject's non-``db/`` rows at ``rev``, annotations included; one view (A24); unchecked."""
+        out = self._preds()
+        self.rev._record_call("preds", (self.name,), None, dict(out))
+        return out
 
     @property
     def aliases(self) -> List[str]:
         """Every ``db/alias`` name pointing at the subject as of ``rev`` (A25)."""
         s = self.subject
-        return [] if s is None else self.rev._aliases_of(s)
+        out = [] if s is None else self._p._aliases_of(s)
+        self.rev._record_call("aliases", (self.name,), None, sorted(out))
+        return out
+
+    def _sealed_at(self) -> Optional[Rev]:
+        s = self.subject
+        held = self._p._held(s, "db/value") if s else []
+        return self._p.ledger.at(held[0].rev) if held else None
 
     @property
     def sealed_at(self) -> Optional[Rev]:
         """The revision of the subject's ``db/value`` row; ``None`` with no value (A41)."""
-        s = self.subject
-        held = self.rev._held(s, "db/value") if s else []
-        return self.rev.ledger.at(held[0].rev) if held else None
+        out = self._sealed_at()
+        self.rev._record_call("sealed_at", (self.name,), None, out)
+        return out
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Ref):
-            return False
-        if self._hash is not None or other._hash is not None:
-            return self._hash == other._hash and self._cls == other._cls
-        return self.subject == other.subject
+        """Equal by subject: a subject hashes its trace and preds too; same bytes is ``a.hash == b.hash``."""
+        return isinstance(other, Ref) and self.subject == other.subject and \
+            (self.subject is not None or self._text() == other._text())
 
     def __hash__(self) -> int:
-        return hash(self._hash) if self._hash is not None else hash(self.subject)
+        return hash(self.subject if self.subject is not None else self._text())
 
     def __repr__(self) -> str:
         s = self.subject
         if s is None:
             return f"ref:{self._cls}:{(self._hash or '')[:8]}"
-        return display_name(self.rev.ledger, s)
+        return display_name(self._p.ledger, s)
 
     def __reduce__(self) -> Any:
         raise TypeError("a Ref is bound to an open ledger and does not pickle")
@@ -725,24 +741,23 @@ class Ref:
         s = self.subject
         if self._hash is None or s is None:
             raise KeyError(f"{self.name!r} has no value at rev {self.rev.id}")
-        ledger = self.rev.ledger
+        ledger = self._p.ledger
         key = (s, self.rev.id, self.name)
-        cached = ledger._values.get(key)
-        if cached is not None:
-            return cached
-        store = ledger._store.art
-        cls = self.type
-        assert cls is not None
-        v = cls.decode(store.get(self._hash), store)
-        if not isinstance(v, Value):
-            raise TypeError(f"{cls.__name__}.decode returned {type(v).__name__}, not a Value")
-        rows = self.rev._held_rows(subject=s)
-        trace = {p[len("db/trace/"):]: show(h.obj) for _s, p, h in rows if p.startswith("db/trace/")}
-        sealed_at = self.sealed_at
-        assert sealed_at is not None
-        v._provenance(subject=s, rev=sealed_at, trace=trace, preds=self.preds,
-                      loaded_as=self.name if self.name != s else None)
-        v.__dict__["_hash"] = self._hash
-        ledger._values[key] = v
+        v = ledger._values.get(key)
+        if v is None:
+            store = ledger._store.art
+            cls = self.type
+            assert cls is not None
+            v = cls.decode(store.get(self._hash), store)
+            if not isinstance(v, Value):
+                raise TypeError(f"{cls.__name__}.decode returned {type(v).__name__}, not a Value")
+            rows = self._p._held_rows(subject=s)
+            trace = {p[len("db/trace/"):]: show(h.obj) for _s, p, h in rows if p.startswith("db/trace/")}
+            sealed_at = self._sealed_at()
+            assert sealed_at is not None
+            v._provenance(subject=s, rev=sealed_at, trace=trace, preds=self._preds(),
+                          loaded_as=self.name if self.name != s else None)
+            v.__dict__["_hash"] = self._hash
+            ledger._values[key] = v
+        self.rev._record_value(v, self.name)
         return v
-

@@ -126,10 +126,11 @@ class Value:
         self.__dict__["_loaded_as"] = loaded_as
 
     def __repr__(self) -> str:
-        if self.sealed and self.subject and self.rev is not None:
+        ledger = self.rev.ledger if self.rev is not None else self.__dict__.get("_ledger")
+        if self.sealed and self.subject and ledger is not None:
             from .rev import display_name
 
-            return display_name(self.rev.ledger, self.subject)
+            return display_name(ledger, self.subject)
         return f"<{type(self).__name__} unsealed>"
 
 

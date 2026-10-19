@@ -14,6 +14,9 @@ the cardinality ``db/pred/<p> db/cardinality`` declares as of R:
 """
 
 
+FORMAT = "dvc-dat-ledger2/1"   # (db, db/format), written by the first transaction
+
+
 def fixed_one(p):
     return p.startswith("db/") or p in ("version", "commit")
 
@@ -28,7 +31,11 @@ class Model:
         self.top += 1
         for i, (added, s, p, o) in enumerate(ops):
             self.rows.append((self.top, i, s, p, o, added))
-        self.rows.append((self.top, len(ops), f"db/tx/{self.top}", "db/by", by, True))
+        n = len(ops)
+        if self.top == 1:
+            self.rows.append((1, n, "db", "db/format", FORMAT, True))
+            n += 1
+        self.rows.append((self.top, n, f"db/tx/{self.top}", "db/by", by, True))
         return self.top
 
     def _state(self, R, after, card_of):

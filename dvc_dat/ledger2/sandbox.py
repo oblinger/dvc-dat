@@ -169,6 +169,25 @@ def closure(mounts: List[Mount], start: List[str]) -> Dict[str, Tuple[Mount, Pat
     return seen
 
 
+def static_closure(root: Path, start: str, within: Path) -> Dict[str, Path]:
+    """Base mode (Q37 (iii)): every module under ``within`` reachable from ``start`` by import statements,
+    resolving a dotted name under ``root`` (the ``sys.path`` entry the start module was imported from)."""
+    within = Path(os.path.realpath(within))
+    seen: Dict[str, Path] = {}
+    todo = [start]
+    while todo:
+        d = todo.pop()
+        if d in seen:
+            continue
+        base = Path(root).joinpath(*d.split("."))
+        f, pkg = (base / "__init__.py", True) if (base / "__init__.py").is_file() else (base.with_suffix(".py"), False)
+        if not f.is_file() or not os.path.realpath(f).startswith(str(within) + os.sep):
+            continue
+        seen[d] = f
+        todo.extend(_imports(f, d, pkg))
+    return seen
+
+
 def module_shas(rev: "Rev", env: Env, mods: Dict[str, Tuple[Mount, Path]]) -> Dict[str, str]:
     out = {}
     for _d, (m, path) in mods.items():
@@ -416,7 +435,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
     trace.update({"fn": fsub, "uv.lock": env.lock, "platform": env.platform})
     salt = rows.get(fn._info["prefix"], {}).get("salt")
     if salt is not None:
-        trace[f"db/mount/{fn._info['prefix']} db/salt"] = salt
+        trace["salt"] = salt
     if not seal:
         value.trace = trace  # type: ignore[misc]
         return value
