@@ -12,6 +12,20 @@ import time
 from dvc_dat.ledger import Ref, Value, ledger_class, ledger_fn
 
 
+class PlainVideo(Value):
+    """A game's raw video, as imported: no decorator, so no preds."""
+
+    def __init__(self, frames: bytes):
+        self.frames = frames
+
+    def encode(self) -> bytes:
+        return self.frames
+
+    @classmethod
+    def decode(cls, data: bytes, store) -> "PlainVideo":
+        return cls(data)
+
+
 @ledger_class(preds=("game", "camera", "span"))
 class Video(Value):
     """A game's raw video, as imported."""
