@@ -12,26 +12,7 @@
 # ---
 
 # %% [markdown]
-# # Ledger: triples
-#
-# The ledger as a quad store and nothing else. Every fact is a row
-# `(rev, subject, predicate, object)`, every write is one
-# transaction, every read is a function of one revision. No `eval`
-# and no value functions here: the running example is plain
-# metadata about games (`game/G1`: teams, date, court, officials)
-# and a few clock subjects (`code/demo-game`, `schema/tape`).
-#
-# Written to the ledger design of 2026-10-18 (Ledger Module, API,
-# Versions; F447 A37–A51). It runs once `ledger2` is rebuilt
-# to that design (T534); until then it is the design, not a demo.
-# Revision numbers in the comments count from 1, the first
-# transaction on the project's ledger.
-
-# %% [markdown]
-# ## Setup
-#
-# Imports are what this notebook uses. `ledger_fn` and
-# `ledger_class` belong to the values notebook.
+# #### Setup
 
 # %%
 import os, time
@@ -41,10 +22,25 @@ from dvc_dat.ledger2 import Ledger, bump
 from dvc_dat.ledger2 import LockTimeout
 
 scratch_ledger_path = Path("scratch/triples-demo/ledger").resolve()
+
+# %% [markdown]
+# # Ledger: triples
+#
+# The ledger as a quad store and nothing else. Every fact is a row
+# `(rev, subject, predicate, object)`, every write is one
+# transaction, every read is a function of one revision. No `eval`
+# and no value functions here: the running example is plain
+# metadata about games (`game/G1`: teams, date, court, officials)
+# and a few clock subjects (`code/demo-game`, `schema/tape`).
+
+# %% [markdown]
+# ## One constructor
+
+# %%
 L = Ledger(scratch_ledger_path, create=True)   # made, then opened
 
 # %% [markdown]
-# One constructor. `Ledger(path)` opens what is there and raises
+# `Ledger(path)` opens what is there and raises
 # `LedgerError` when nothing is; `create=True` is the one explicit
 # act that makes a ledger, so an empty one never appears by accident.
 

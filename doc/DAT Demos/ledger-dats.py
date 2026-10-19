@@ -12,22 +12,7 @@
 # ---
 
 # %% [markdown]
-# # Ledger: dats
-#
-# A dat is a folder: a spec saying what to build, the files built
-# from it, and a result saying how the build went. On the ledger a
-# dat is a value like any other. Its files go to the art store
-# once, by their hashes; the dat's bytes are the manifest naming
-# them, so its subject is fixed by its content; and its preds are
-# its spec keys and its result metrics under one namespace, so dats
-# are found the way every value is found. A dat that is computed is
-# the result of a ledger function: built once per question, and
-# built again only where something it read has moved.
-#
-# Written to the ledger design of 2026-10-18 (Ledger Module, Values
-# ideas 10 and 12, Versions § 4, F447 A39–A53). It runs once
-# `ledger2` is rebuilt to that design (T534); until then it is the
-# design, not a demo.
+# #### Setup
 
 # %%
 import importlib
@@ -65,6 +50,19 @@ git("init", "-q")
 git("add", ".")
 git("commit", "-q", "-m", "demo-game")
 sys.path.insert(0, str(scratch_project_path))
+
+# %% [markdown]
+# # Ledger: dats
+#
+# A dat is a folder: a spec saying what to build, the files built
+# from it, and a result saying how the build went. On the ledger a
+# dat is a value like any other. Its files go to the art store
+# once, by their hashes; the dat's bytes are the manifest naming
+# them, so its subject is fixed by its content; and its preds are
+# its spec keys and its result metrics under one namespace, so dats
+# are found the way every value is found. A dat that is computed is
+# the result of a ledger function: built once per question, and
+# built again only where something it read has moved.
 
 # %% [markdown]
 # ## A dat is a value

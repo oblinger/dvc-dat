@@ -12,23 +12,7 @@
 # ---
 
 # %% [markdown]
-# # Ledger: just
-#
-# A person reaches the ledger from a shell, and the `just` recipes
-# are the verbs they type there. Each recipe is one API call under a
-# name a human would type, with what a program spells out each time
-# (who is acting, the confirmation, which ledger) supplied by the
-# recipe instead. No recipe hides a seal behind a verb that reads
-# like an edit. The recipes are a proposal for the just layer (F447
-# Q4: hand recipes in the project's justfile calling the API),
-# designed from these use cases down; the justfile does not exist
-# yet.
-#
-# Written to the ledger design of 2026-10-18 (Ledger Module, Values
-# § The three notebooks, F447 A39–A53). It runs once `ledger2` is
-# rebuilt to that design (T534); until then it is the design, not a
-# demo. A shell cell and the code cell after it are one act written
-# two ways; each output is the one it gives run alone.
+# #### Setup
 
 # %%
 import os
@@ -101,6 +85,22 @@ cut_154_value = L.at().eval("demo_game.game.cut",       # rev 8
                             game="G1", version="1.5.4")
 with L.transaction(by="human:dan") as t:                 # rev 9
     t.add("game/G1", "db/alias", cut_154_value.subject)
+
+# %% [markdown]
+# # Ledger: just
+#
+# A person reaches the ledger from a shell, and the `just` recipes
+# are the verbs they type there. Each recipe is one API call under a
+# name a human would type, with what a program spells out each time
+# (who is acting, the confirmation, which ledger) supplied by the
+# recipe instead. No recipe hides a seal behind a verb that reads
+# like an edit. The recipes are a proposal for the just layer (F447
+# Q4: hand recipes in the project's justfile calling the API),
+# designed from these use cases down; the `justfile` beside this
+# notebook holds them.
+#
+# A shell cell and the code cell after it are one act written
+# two ways; each output is the one it gives run alone.
 
 # %% [markdown]
 # ## The ledger from a shell

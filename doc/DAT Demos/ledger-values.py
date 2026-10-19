@@ -12,22 +12,7 @@
 # ---
 
 # %% [markdown]
-# # Ledger: values
-#
-# A ledger value is a large or complex Python object stored in the
-# ledger by its content, so it can be referred to, loaded back and
-# depended on exactly. The ledger holds its bytes once, and a row
-# that points at them; the object's hash is its subject. Once
-# stored, a value never changes: a different object is a different
-# value. Everything else here is built on that: aliases that point
-# at values, preds that say what a value is, and functions whose
-# results are values.
-#
-# Written to the ledger design of 2026-10-18 (Ledger Module, Values
-# § The worked example, F447 A39–A51). It runs once
-# `ledger2` is rebuilt to that design (T534); until then it is the
-# design, not a demo. Revision numbers in the comments count from
-# 1, the first transaction on this ledger.
+# #### Setup
 
 # %%
 import importlib
@@ -69,6 +54,18 @@ git("init", "-q")
 git("add", ".")
 git("commit", "-q", "-m", "demo-game")
 sys.path.insert(0, str(scratch_project_path))
+
+# %% [markdown]
+# # Ledger: values
+#
+# A ledger value is a large or complex Python object stored in the
+# ledger by its content, so it can be referred to, loaded back and
+# depended on exactly. The ledger holds its bytes once, and a row
+# that points at them; the object's hash is its subject. Once
+# stored, a value never changes: a different object is a different
+# value. Everything else here is built on that: aliases that point
+# at values, preds that say what a value is, and functions whose
+# results are values.
 
 # %% [markdown]
 # ## Values
