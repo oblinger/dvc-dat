@@ -14,76 +14,74 @@
 # %% [markdown]
 # # Ledger: dats
 #
-# A `Dat` is a `Value`: a folder, encoded as its content manifest.
-# A dat constructor, `dat(spec, …)`, builds one from its spec and
-# runs it, and its preds merge spec keys with result metrics under
-# one namespace. An ETL pipeline is then a set of value functions
-# and nothing else: three stages, each a dat built on the one
-# before, re-derived only where its trace moved. A game set is a
-# pred, "the latest model for every game of a set" is a query over
-# refs, and a release is a bump of the ledger's own version that
-# pins every code subject at once.
+# A dat is a folder: a spec saying what to build, the files built
+# from it, and a result saying how the build went. On the ledger a
+# dat is a value like any other. Its files go to the art store
+# once, by their hashes; the dat's bytes are the manifest naming
+# them, so its subject is fixed by its content; and its preds are
+# its spec keys and its result metrics under one namespace, so dats
+# are found the way every value is found. A dat that is computed is
+# the result of a ledger function: built once per question, and
+# built again only where something it read has moved.
 #
 # Written to the ledger design of 2026-10-18 (Ledger Module, Values
-# ideas 10 and 12, Versions § 4, F447 A39–A51). It runs once
+# ideas 10 and 12, Versions § 4, F447 A39–A53). It runs once
 # `ledger2` is rebuilt to that design (T534); until then it is the
 # design, not a demo.
 
-# %% [markdown]
-# Two questions are still open on F447, and this notebook is
-# written to their leans. Q36 (A): a function that produces a dat
-# declares `work: Path`, and the eval binds it to a fresh scratch
-# folder. Q37 (A): the one `fn` trace item hashes the modules the
-# run actually loaded, not the static import closure.
-
 # %%
-import importlib, json, shutil, subprocess, sys
+import importlib
+import json
+import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 from dvc_dat.ledger import Ledger, Ref, bump
 from dvc_dat.ledger import NotEvaluated, Unindexed
 from dvc_dat.ledger import UnmountedImport, UntracedRead
 
-scratch_ledger_path = Path("scratch/dats-demo/ledger").resolve()
-L = Ledger(scratch_ledger_path, create=True)   # the one explicit act
-
-# %% [markdown]
-# ### A real code repository
-#
-# Every value function runs in a git checkout, the ledger records
-# which commit, and the notebook makes a tiny one of its own: the
-# `demo_game` package beside this notebook, copied into scratch.
-# Discovery finds it from the imported module's folder, and a
-# mount's root resolves against it (A40).
-
-# %%
-demo_repo_path = Path("scratch/dats-demo/demo-game").resolve()
-shutil.copytree("demo_game", demo_repo_path,
+scratch_project_path = Path("scratch/dats-demo").resolve()
+shutil.copytree("demo_game", scratch_project_path,
                 ignore=shutil.ignore_patterns("__pycache__"))
+os.chdir(scratch_project_path)
+L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
+
+# demo repo
 
 
 def git(*args: str) -> str:
-    """Run git in the demo repository; return its stdout."""
+    """Run git in the scratch folder; return its stdout."""
     cmd = ["git", "-c", "user.name=demo",
            "-c", "user.email=demo@example.com", *args]
-    done = subprocess.run(cmd, cwd=demo_repo_path, check=True,
+    done = subprocess.run(cmd, cwd=scratch_project_path, check=True,
                           capture_output=True, text=True)
     return done.stdout.strip()
 
 
+Path(".gitignore").write_text(".dat/\nby-hand/\n")
 git("init", "-q")
 git("add", ".")
-git("commit", "-q", "-m", "demo-game 0.1.0")
-commit_sha = git("rev-parse", "HEAD")
-sys.path.insert(0, str(demo_repo_path))
+git("commit", "-q", "-m", "demo-game")
+sys.path.insert(0, str(scratch_project_path))
 
 # %% [markdown]
-# ## The module: `demo_game.etl`
+# ## A dat is a value
+
+# %% [markdown]
+# ### A dat is a folder with a spec and a result
 #
-# The kind and the stages live in `demo_game/etl/`, one module
-# per stage. From `dat.py`, the constructor:
+# The kind lives in `demo_game/etl/dat.py`, with `build`, which
+# makes one in a folder you hand it:
 #
 # ```python
+# @ledger_class(preds=SPEC_PREDS + ("gameset",)
+#               + tuple(f"metrics.{m}" for m in METRICS))
+# class StageDat(Dat):
+#     """One stage's dat: `_spec_.yaml`, `_result_.yaml`, its files."""
+#
+#
 # def build(rev, spec: dict, work: Path, **kwargs) -> StageDat:
 #     """Build a dat from its spec in `work`: the constructor's body."""
 #     module, name = spec["main"].rsplit(".", 1)
@@ -97,20 +95,188 @@ sys.path.insert(0, str(demo_repo_path))
 #     for m in METRICS:
 #         d.preds[f"metrics.{m}"] = attr(result, f"metrics.{m}")
 #     return d
+# ```
 #
+# `Dat` is the shipped folder `Value`: it encodes as its content
+# manifest, and the files the manifest names go to the art store.
+# `StageDat` adds only its preds: the spec keys `game`, `stage`,
+# `bins`, then `gameset` and `metrics.count`, `metrics.score`.
+# `build` runs the function the spec's `main` names in `work`, then
+# writes the spec and the result beside what it made.
+
+# %%
+from demo_game.etl.dat import StageDat, build
+
+# %% [markdown]
+# ### Storing a dat by hand
 #
+# The first stage, detection, reads the game's court. The four
+# games:
+
+# %%
+with L.transaction(by="human:dan", why="four games") as t:
+    for game, court in [("G1", "north"), ("G2", "east"),
+                        ("G3", "south"), ("G4", "west")]:
+        t[f"game/{game}"] = {"court": court}
+
+# %%
+rev = L.at()
+detect_spec_record = {"main": "demo_game.etl.detect.find",
+                      "stage": "detect", "game": "G1", "bins": 16}
+work_path = Path("by-hand/detect-G1").resolve()
+work_path.mkdir(parents=True)
+hand_dat = build(rev, detect_spec_record, work_path)
+print(sorted(file_path.name for file_path in work_path.iterdir()))
+# → ["_result_.yaml", "_spec_.yaml", "boxes.json"]
+with L.transaction(by="human:dan") as t:
+    t.add_value(hand_dat, alias="detect/G1", provenance="human:dan")
+print(hand_dat, hand_dat.sealed)     # → detect/G1 True
+
+# %% [markdown]
+# `build` made the dat in a folder of yours; `add_value` sealed it.
+# The three files went to the art store by their hashes, the
+# manifest naming them is the value's bytes, and the subject is
+# the hash of those bytes with what they depend on. A hand seal
+# records what it is told: here no `deps`, so the environment
+# alone, and not the court `find` read.
+
+# %% [markdown]
+# ### Loading it back
+
+# %%
+rev = L.at()
+loaded_dat = rev.load("detect/G1")
+print(type(loaded_dat).__name__, loaded_dat)  # → StageDat detect/G1
+print(sorted(file_path.name
+             for file_path in loaded_dat.path.iterdir()))
+# → ["_result_.yaml", "_spec_.yaml", "boxes.json"]
+print(loaded_dat.path != work_path)  # → True: from the manifest
+
+# %% [markdown]
+# `load` decodes the manifest into a folder of its own, fetched
+# from the art store; the folder it was built in is not needed
+# again.
+
+# %% [markdown]
+# ### Its preds come from its spec and its result
+
+# %%
+print(dict(sorted(loaded_dat.preds.items())))
+# → {"bins": "16", "game": "G1", "metrics.count": "40",
+#    "metrics.score": "0.494", "stage": "detect"}
+print(repr(loaded_dat.spec["bins"]),
+      repr(loaded_dat.preds["bins"]))          # → 16 '16'
+print(rev.values(kind=StageDat, game="G1"))    # → [detect/G1]
+
+# %% [markdown]
+# A dat keeps `_spec_` and `_result_` apart on disk; its preds merge
+# the two under one namespace, spec keys bare and result metrics
+# dotted, so `values(game="G1")` and `preds["metrics.score"]` are
+# one view. Preds are strings; the spec inside the folder keeps its
+# numbers.
+
+# %% [markdown]
+# ## The dat constructor
+
+# %% [markdown]
+# ### dat(spec, …) is a ledger function
+#
+# From `dat.py`:
+#
+# ```python
 # @ledger_fn
 # def dat(rev, *, spec: dict, work: Path, **kwargs) -> StageDat:
 #     """The dat constructor: `spec` the question, `work` the folder."""
 #     return build(rev, spec, work, **kwargs)
 # ```
 #
-# `StageDat` is a `Dat` whose `@ledger_class` names its preds: the
-# spec keys `game`, `stage`, `bins`, then `gameset` and
-# `metrics.count`, `metrics.score`. A stage is a value function
-# that builds its dat with its spec fixed, so its key is the game
-# alone; its `main` reaches the stage below by a nested `eval`,
-# never by an import. From `track.py`:
+# `demo_game.etl` is mounted, so `dat` runs in the sandbox; the
+# code clock starts with it.
+
+# %%
+with L.transaction(by="human:dan", why="mount the etl") as t:
+    t.add("db/mount/demo_game.etl", "db/root", "demo_game/etl")
+    t.add("db/mount/demo_game.etl", "db/repo", "demo-game")
+with L.transaction(by="human:dan", why="the clock's start") as t:
+    bump(t, "code/demo-game", "minor",       # 0.0.0 -> 0.1.0
+         confirm=lambda old, new: True)
+rev = L.at()
+dat_fn = rev.load_fn("demo_game.etl.dat.dat")
+print(dat_fn.mode, dat_fn.mount)     # → sandbox demo_game.etl
+
+# %%
+spec_dat = rev.eval("demo_game.etl.dat.dat",
+                    spec=detect_spec_record)
+print(spec_dat, spec_dat.sealed)     # → <8 hex> True
+print(dict(sorted(spec_dat.preds.items())))
+# → {"bins": "16", "game": "G1", "metrics.count": "40",
+#    "metrics.score": "0.494", "stage": "detect"}
+print(L.at()[spec_dat.subject, "db/keys"])
+# → {"spec": {"bins": 16, "game": "G1",
+#             "main": "demo_game.etl.detect.find",
+#             "stage": "detect"}}
+
+# %% [markdown]
+# The spec is the whole question: one key, a JSON object (A38), in
+# the one `db/keys` row, numbers kept native. `work` is not a key
+# (Q36, open; lean): the eval bound it to a fresh scratch folder,
+# the function built the dat there, and the seal moved the folder
+# into the art store by its manifest, as `add_value` did by hand.
+# The preds are the same as the hand-built dat's.
+
+# %% [markdown]
+# `dat` imports the stage its spec's `main` names at run time, so
+# which code ran is known only after the run.
+
+# %%
+module_paths = L.at()[spec_dat.trace["fn"], "db/modules"]
+print(sorted(module_paths))
+# → ["demo_game/etl/dat.py", "demo_game/etl/detect.py"]
+
+# %% [markdown]
+# The `fn` item hashes the modules the run loaded (Q37, open;
+# lean): this entry's code is `dat.py` and `detect.py`. An edit to
+# `detect.py` misses it, and a spec naming another stage is
+# another `fn` subject.
+
+# %% [markdown]
+# ### Asked twice, computed once
+
+# %%
+top_id = L.at().id
+again_dat = L.at().eval("demo_game.etl.dat.dat",
+                        spec=detect_spec_record)
+print(again_dat.subject == spec_dat.subject)   # → True: a hit
+print(L.at().id == top_id)           # → True: nothing written
+
+# %% [markdown]
+# The same spec is the same question, and every trace item holds:
+# a memo hit, nothing run, nothing written. Asked another way, the
+# stage function `detections`, which fixes the spec but the game:
+
+# %%
+detections_dat = rev.eval("demo_game.etl.detect.detections",
+                          game="G1")
+print(detections_dat.same_as(spec_dat),
+      detections_dat.subject != spec_dat.subject)   # → True True
+detections_ref = Ref(L.at(), detections_dat.subject)
+print(detections_ref.preds["metrics.count"])        # → 40
+
+# %% [markdown]
+# Another function is another question, so it ran; the spec it
+# built is the same, so the bytes are. `same_as` compares only the
+# bytes hash: two memo entries, two subjects, one blob in the art
+# store.
+
+# %% [markdown]
+# ## An ETL chain
+
+# %% [markdown]
+# ### Three functions, each depending on the last
+#
+# Detection, tracking, a model: each stage a function that builds
+# its dat with its spec fixed, so its key is the game alone. From
+# `track.py`:
 #
 # ```python
 # @ledger_fn
@@ -127,7 +293,8 @@ sys.path.insert(0, str(demo_repo_path))
 #     return {"metrics": {"count": len(runs), "score": score}}
 # ```
 #
-# And from `model.py`, the one stage that reads the ledger by name:
+# From `model.py`, the one stage that also reads the ledger by
+# name:
 #
 # ```python
 # @ledger_fn
@@ -139,232 +306,92 @@ sys.path.insert(0, str(demo_repo_path))
 #     d.preds["gameset"] = rev[f"game/{game}", "gameset"]  # traced
 #     return d
 # ```
+#
+# `fit`, the model's `main`, evaluates `tracks` the same way. The
+# config and each game's set, which `train` reads:
 
 # %%
-from demo_game.etl.dat import StageDat, build
-
-# %% [markdown]
-# ## The ledger: games, a config, a mount
-
-# %%
-with L.transaction(by="human:dan", why="dats demo") as t:
-    t.add("db", "version", "3.1.4")
-    t["code/demo-game"] = {"version": "0.1.0",
-                           "commit": commit_sha}
-    t["code/dvc-dat"] = {"version": "5.0.0", "commit": "a1b2c3d4"}
-    t.add("db/mount/demo_game.etl", "db/root", "demo_game/etl")
-    t.add("db/mount/demo_game.etl", "db/repo", "demo-game")
+with L.transaction(by="human:dan", why="training") as t:
     t["cfg/train"] = {"epochs": "8"}
-    for g, court, gameset in [("G1", "north", "normie"),
-                              ("G2", "east", "normie"),
-                              ("G3", "south", "pro"),
-                              ("G4", "west", "pro")]:
-        t[f"game/{g}"] = {"court": court, "gameset": gameset}
-rev = L.at()
-tracks_fn = rev.load_fn("demo_game.etl.track.tracks")
-print(tracks_fn.mode, tracks_fn.mount)  # sandbox demo_game.etl
-print(tracks_fn.module)  # <demo_repo_path>/demo_game/etl/track.py
-
-# %% [markdown]
-# The mount row names its repo, and discovery finds the `demo-game`
-# checkout; `db/root` is relative to it. Every `demo_game.etl` name
-# now runs in the sandbox, whose trace pins the code a run loaded
-# rather than the whole repo's `code/demo-game`.
-#
-# In a real checkout a file at its root does this setup:
-#
-# ```yaml
-# ledger: /data/ledgers/demo-game
-# mounts:
-#   demo_game.etl: demo_game/etl
-# ```
-#
-# That is the whole of `.datconfig.yaml`. `Ledger()`, with no path,
-# finds it: it walks up from the cwd to the nearest `.datconfig.yaml`
-# with a `ledger:` key and opens the ledger it names. `mounts:` is
-# sugar that `Ledger()` asserts as the `db/root` and `db/repo` rows
-# when they are missing, the repo being the checkout the file sits
-# in. `DAT_LEDGER`, when set, overrides the walk: it is how a sandbox
-# worker in a scratch cwd finds its parent's ledger (A44).
-
-# %% [markdown]
-# ## The dat constructor
-
-# %%
-detect_spec_record = {"main": "demo_game.etl.detect.find",
-                      "stage": "detect", "game": "G1", "bins": 16}
-spec_dat = rev.eval("demo_game.etl.dat.dat",
-                    spec=detect_spec_record)
-print(dict(sorted(spec_dat.preds.items())))
-# {"bins": "16", "game": "G1", "metrics.count": "40",
-#  "metrics.score": "…", "stage": "detect"}
-print(sorted(file_path.name for file_path in spec_dat.path.iterdir()))
-# ["_result_.yaml", "_spec_.yaml", "boxes.json"]
-print(L.at()[spec_dat.subject, "db/keys"])  # the question, one row
-# {"spec": {"bins": 16, "game": "G1",
-#           "main": "demo_game.etl.detect.find",
-#           "stage": "detect"}}
-
-# %% [markdown]
-# The spec is the whole question: one key, a JSON object (A38), in
-# the one `db/keys` row, numbers kept native. `work` is not a key:
-# the eval bound it to a fresh scratch folder, the function built
-# the dat there, and the seal moved the folder into the art store
-# by its manifest (Q36). The preds are a different thing, the
-# handles the value is found by: spec keys and result metrics under
-# one namespace, numbers as strings.
-
-# %% [markdown]
-# `dat` imports the stage named by the spec's `main` key, at run
-# time. Under Q37's lean the `fn` item hashes the modules the run
-# loaded, so this entry's code is `dat.py` and `detect.py`: an edit
-# to `detect.py` misses it, and a spec naming another stage points
-# at another `fn` subject.
-
-# %%
-module_paths = L.at()[spec_dat.trace["fn"], "db/modules"]
-print(sorted(module_paths))
-# ["demo_game/etl/dat.py", "demo_game/etl/detect.py"]
-
-# %%
-detections_dat = rev.eval("demo_game.etl.detect.detections",
-                          game="G1")
-print(detections_dat.same_as(spec_dat),
-      detections_dat.subject != spec_dat.subject)   # True True
-print(Ref(L.at(), detections_dat.subject).preds["metrics.count"])  # 40
-
-# %% [markdown]
-# The stage function and the constructor given the same spec make
-# the same bytes: two memo entries, two subjects, one blob in the
-# art store.
-
-# %% [markdown]
-# ## An ETL chain
+    for game, gameset in [("G1", "normie"), ("G2", "normie"),
+                          ("G3", "pro"), ("G4", "pro")]:
+        t[f"game/{game}", "gameset"] = gameset
 
 # %%
 rev = L.at()
 model_dat = rev.eval("demo_game.etl.model.train", game="G1")
-print(model_dat, model_dat.preds["stage"], model_dat.preds["gameset"])
-# <8 hex> model normie
+print(model_dat, model_dat.preds["stage"],
+      model_dat.preds["gameset"])    # → <8 hex> model normie
 for item in sorted(model_dat.trace):
     print(item, "->", model_dat.trace[item])
-# cfg/train epochs -> 8
-# eval:demo_game.etl.track.tracks{"game":"G1"}
-#     -> ref:demo_game.etl.dat.StageDat:<hash>
-# fn -> db/fn/demo_game.etl.model.train/<hash>
-# game/G1 gameset -> normie
-# platform -> darwin-arm64-py3.11
-# uv.lock -> sha256:<hash>
-for g in ("G2", "G3"):
-    rev.eval("demo_game.etl.model.train", game=g)
-print(L.at().select(("stage", "metrics.count"), kind=StageDat,
-                    game="G1"))
-# two ("detect", "40"), one track, one model: no promised order
+# → cfg/train epochs -> 8
+#   eval:demo_game.etl.track.tracks{"game":"G1"}
+#       -> ref:demo_game.etl.dat.StageDat:<hash>
+#   fn -> db/fn/demo_game.etl.model.train/<hash>
+#   game/G1 gameset -> normie
+#   platform -> darwin-arm64-py3.11
+#   uv.lock -> sha256:<hash>
 
 # %% [markdown]
 # `train` missed; its `fit` evaluated `tracks`, which evaluated
-# `detections` (a hit: the stage function sealed it above), and
-# each miss sealed its own dat. The model's trace holds its own
-# code (`fn`: `model.py` and `dat.py`, since the modules a nested
-# eval loads are that entry's), the two rows it read by name, and
-# the stage below as a nested eval keyed by its result's bytes.
+# `detections` (a hit: sealed above), and each miss sealed its own
+# dat. A stage depends on the one below by a nested `eval`, never
+# by an import and never by a `deps=` list: the eval records it.
+# The model's trace holds its own code (`fn`: `model.py` and
+# `dat.py`, since the modules a nested eval loads are that
+# entry's), the two rows it read by name, and the stage below as a
+# nested eval, held by its result's bytes.
 
 # %%
-rev = L.at()
-tracks_g3_dat = rev.eval("demo_game.etl.track.tracks",
-                         game="G3")                # a hit
-fit_spec_record = {"main": "demo_game.etl.model.fit",
-                   "stage": "model", "game": "G3", "epochs": 20}
-work_path = Path("scratch/dats-demo/by-hand").resolve()
-work_path.mkdir(parents=True, exist_ok=True)
-hand_dat = build(rev, fit_spec_record, work_path)
-hand_dat.preds["gameset"] = "pro"
-with L.transaction(by="human:dan", why="a long run by hand") as t:
-    t.add_value(hand_dat, deps=[tracks_g3_dat],
-                provenance="human:dan")
-print(dict(sorted(hand_dat.trace.items())))
-# {"code/demo-game": "0.1.0+<8 hex>",
-#  "platform": "darwin-arm64-py3.11",
-#  "ref:demo_game.etl.dat.StageDat:<hash>": "ref:…StageDat:<hash>",
-#  "uv.lock": "sha256:<hash>"}
+for game in ("G2", "G3"):
+    rev.eval("demo_game.etl.model.train", game=game)
+print(L.at().select(("stage", "metrics.count"), kind=StageDat,
+                    game="G1"))
+# → [("detect", "40"), ("detect", "40"), ("detect", "40"),
+#    ("track", "12"), ("model", "12")]: in no promised order
 
 # %% [markdown]
-# The same stage run by hand and sealed with `add_value`: its trace
-# is declared, the `deps` handed over plus the environment, not
-# recorded. It is trusted, not proven, and its provenance says so.
+# G1's dats: three detections (by hand, by the constructor, by the
+# stage function), its tracks, its model.
 
 # %% [markdown]
-# A consumer that needs proof (the fingerprint gate) asks for an
-# `eval:` value, and the hand run drops out.
-
-# %%
-rev = L.at()
-print(len(rev.refs(kind=StageDat, stage="model", game="G3")))  # 2
-proof_refs = rev.refs(kind=StageDat, stage="model", game="G3",
-                      where={"db/provenance": "eval:sandbox"})
-print(len(proof_refs))                                         # 1
-
-# %% [markdown]
-# ## What the sandbox refuses
+# ### Only what moved is recomputed
 #
-# `demo_game.etl.stray` holds two functions that reach past the
-# mount. The first imports `demo_game.shots`, which is in the repo
-# but under no mount.
-
-# %%
-try:
-    rev.eval("demo_game.etl.stray.borrow", game="G1")
-except UnmountedImport as e:
-    print("UnmountedImport:", e)
-
-# %% [markdown]
-# The second reads a file outside the mounts, the dats and the
-# worker's scratch.
-
-# %%
-try:
-    rev.eval("demo_game.etl.stray.snoop", game="G1")
-except UntracedRead as e:
-    print("UntracedRead:", e)         # /etc/hosts
-
-# %% [markdown]
-# Each refusal comes back from the worker with its traceback, and
-# nothing is sealed: an incomplete mount table is a crash, never a
-# silently wider trace.
-
-# %% [markdown]
-# ## A code bump re-derives only where the trace moved
+# A code change: an edit to `track.py` that changes no behaviour.
 
 # %%
 rev = L.at()
 tracks_dat = rev.eval("demo_game.etl.track.tracks",
                       game="G1")                   # a hit
 pre_bump_rev = rev
-
-track_path = demo_repo_path / "demo_game/etl/track.py"
+track_path = scratch_project_path / "demo_game/etl/track.py"
 track_path.write_text(track_path.read_text()
                       + "\n# tidied: no change in behaviour\n")
+
+# %% [markdown]
+# Notice `bump` refuses while the edit is uncommitted: there is no
+# commit for it to pin, and nothing is written.
+
+# %%
 try:
     with L.transaction(by="human:dan", why="tidy track") as t:
         bump(t, "code/demo-game")
 except ValueError as e:
-    print("ValueError:", e)       # a dirty checkout: nothing written
+    print("ValueError:", e)          # → ValueError: <a dirty tree>
 
 # %% [markdown]
-# The edit is not committed yet, so there is no commit for `bump`
-# to pin. Commit it, re-import, and bump.
+# Commit it, re-import, and bump.
 
 # %%
 git("commit", "-q", "-am", "tidy track")
-commit_sha = git("rev-parse", "HEAD")
 import demo_game.etl.track
 importlib.reload(demo_game.etl.track)    # sandbox workers import anew
 with L.transaction(by="human:dan", why="tidy track") as t:
     bump(t, "code/demo-game")            # 0.1.1, the new commit
 rev = L.at()
 print(detections_dat.matches(rev),
-      tracks_dat.matches(rev))                  # True False
-print(model_dat.matches(rev))                   # False, for now
+      tracks_dat.matches(rev))                  # → True False
+print(model_dat.matches(rev))                   # → False, for now
 
 # %% [markdown]
 # A sandbox trace pins the modules a stage loaded, not the repo's
@@ -377,13 +404,13 @@ print(model_dat.matches(rev))                   # False, for now
 model_hit_dat = rev.eval("demo_game.etl.model.train", game="G1")
 retracked_dat = rev.eval("demo_game.etl.track.tracks",
                          game="G1")                # a hit
-print(retracked_dat.subject != tracks_dat.subject)  # True: re-derived
-print(retracked_dat.same_as(tracks_dat))  # True: the same bytes
-print(model_hit_dat.subject == model_dat.subject)  # True: the model hit
-print(model_dat.matches(L.at()))        # True, now
+print(retracked_dat.subject != tracks_dat.subject)  # → True
+print(retracked_dat.same_as(tracks_dat))     # → True: same bytes
+print(model_hit_dat.subject == model_dat.subject)   # → True: a hit
+print(model_dat.matches(L.at()))             # → True, now
 print(tracks_dat.diff(retracked_dat))
-# {"fn": ("db/fn/demo_game.etl.track.tracks/<a>",
-#         "db/fn/demo_game.etl.track.tracks/<b>")}
+# → {"fn": ("db/fn/demo_game.etl.track.tracks/<a>",
+#           "db/fn/demo_game.etl.track.tracks/<b>")}
 
 # %% [markdown]
 # Asking for the model re-derived the tracks (their code moved) and
@@ -393,113 +420,160 @@ print(tracks_dat.diff(retracked_dat))
 # came from: that is the cutoff.
 
 # %% [markdown]
-# ## A game set is a pred
+# ### A consumer that wants proof
+#
+# G3's model again, a long run done by hand and sealed with
+# `add_value`.
 
 # %%
 rev = L.at()
+tracks_g3_dat = rev.eval("demo_game.etl.track.tracks",
+                         game="G3")    # re-derived: track.py moved
+fit_spec_record = {"main": "demo_game.etl.model.fit",
+                   "stage": "model", "game": "G3", "epochs": 20}
+work_path = Path("by-hand/model-G3").resolve()
+work_path.mkdir(parents=True)
+hand_model_dat = build(rev, fit_spec_record, work_path)
+hand_model_dat.preds["gameset"] = "pro"
+with L.transaction(by="human:dan", why="a long run by hand") as t:
+    t.add_value(hand_model_dat, deps=[tracks_g3_dat],
+                provenance="human:dan")
+print(dict(sorted(hand_model_dat.trace.items())))
+# → {"code/demo-game": "0.1.1+<8 hex>",
+#    "platform": "darwin-arm64-py3.11",
+#    "ref:demo_game.etl.dat.StageDat:<hash>":
+#        "ref:demo_game.etl.dat.StageDat:<hash>",
+#    "uv.lock": "sha256:<hash>"}
+
+# %% [markdown]
+# Its trace is declared, the `deps` handed over plus the
+# environment, not recorded. It is trusted, not proven, and its
+# provenance says so. A consumer that needs proof (the fingerprint
+# gate) asks for an `eval:` value, and the hand run drops out.
+
+# %%
+rev = L.at()
+model_refs = rev.refs(kind=StageDat, stage="model", game="G3")
+print(len(model_refs))                         # → 2
+proof_refs = rev.refs(kind=StageDat, stage="model", game="G3",
+                      where={"db/provenance": "eval:sandbox"})
+print(len(proof_refs))                         # → 1
+
+# %% [markdown]
+# ### The game set is a pred
+
+# %%
 print(rev.refs(kind=StageDat, stage="model", gameset="normie"))
-# [<8 hex>, <8 hex>]: G1 and G2
+# → [<8 hex>, <8 hex>]: G1 and G2
 print(rev.select(("game", "metrics.score"), kind=StageDat,
                  stage="model", gameset="pro"))
-# ("G3", …) twice: the eval and the hand run
+# → [("G3", "0.958"), ("G3", "0.983")]: the eval and the hand run
 
 # %% [markdown]
 # `gameset` is read from the game's own row by `train` and set on
 # each model, so it is in the trace too: moving a game to another
-# set makes its model stale (the table below shows it). A dotted
-# predicate that no row carries and no declaration names is a
-# typo, and says so.
+# set makes its model stale (Edge cases § A table over a set). A
+# dotted predicate that no row carries and no declaration names is
+# a typo; notice the query refuses it rather than finding nothing.
 
 # %%
 try:
     rev.values(where={"metrics.scroe": "0.9"})
 except Unindexed as e:
-    print("Unindexed:", e)
+    print("Unindexed:", e)           # → Unindexed: metrics.scroe
 
 # %% [markdown]
-# ## A release pins every code subject
+# ## Releases and old revisions
+
+# %% [markdown]
+# ### A release pins every clock
 
 # %%
 with L.transaction(by="human:dan", time=True,
                    why="October release") as t:
-    bump(t, "db", "minor", confirm=lambda old, new: True)
-release_rev = L.at("3.2.0")
+    bump(t, "db", "minor",                   # 0.0.0 -> 0.1.0
+         confirm=lambda old, new: True)
+release_rev = L.at("0.1.0")
 print(release_rev.id == t.rev.id,
-      release_rev["db", "version"])               # True 3.2.0
-print(release_rev["code/demo-game", "version"],
-      release_rev["code/dvc-dat", "version"])       # 0.1.1 5.0.0
-print(release_rev["cfg/train", "epochs"])           # 8
-print(sorted({s for s, p, o
-              in release_rev.all(since=pre_bump_rev)}))
+      release_rev["db", "version"])          # → True 0.1.0
+print(release_rev["code/demo-game", "version"])     # → 0.1.1
+print(release_rev["cfg/train", "epochs"])           # → 8
+print(sorted({row.subject
+              for row in release_rev.rows(since=pre_bump_rev)}))
+# → the bump, the re-derived tracks, the hand run, the release
+#   and their db/tx/<n> subjects
 
 # %% [markdown]
 # A release is a bump of `db`'s own `version`: one revision, named
-# `3.2.0`, at which every code subject, config row and alias reads
-# one way. `L.at("3.2.0")` is that moment by its name. The last line
-# lists the subjects written since the code bump: the bump, the
-# release, the re-derived tracks and their transactions.
+# `0.1.0`, at which every code clock, config row and alias reads
+# one way. `L.at("0.1.0")` is that moment by its name.
+
+# %% [markdown]
+# ### Running at an old revision
+#
+# A change after the release: longer training, and the normie
+# games retrained.
 
 # %%
 with L.transaction(by="human:dan", why="train longer") as t:
     t["cfg/train", "epochs"] = "12"
 rev = L.at()
-for g in ("G1", "G2"):
-    rev.eval("demo_game.etl.model.train", game=g)
-print(len(L.at().refs(kind=StageDat, since=rev)))   # 2
+for game in ("G1", "G2"):
+    rev.eval("demo_game.etl.model.train", game=game)
+print(len(L.at().refs(kind=StageDat, since=rev)))   # → 2
 
 # %% [markdown]
-# A change after the release: two new models, one per normie game,
-# and nothing below them, since only `train` read `cfg/train`.
+# Two new models and nothing below them, since only `train` read
+# `cfg/train`. Asked at the release, then at the head:
+
+# %%
+release_rev = L.at("0.1.0")
+old_model_dat = release_rev.eval("demo_game.etl.model.train",
+                                 game="G1")
+print(old_model_dat.subject == model_dat.subject)  # → True: 8
+now_model_dat = L.at().eval("demo_game.etl.model.train",
+                            game="G1")
+print(now_model_dat.subject == old_model_dat.subject)  # → False
+print(old_model_dat.diff(now_model_dat))
+# → {"cfg/train epochs": ("8", "12")}
 
 # %% [markdown]
-# ## A table over the set
+# The memo lookup is over every entry, at the top, and each
+# candidate's trace is matched against the revision asked at. At
+# `0.1.0` the config said 8 epochs, so the model sealed under that
+# binding is the hit, and nothing runs.
 #
-# `demo_game.etl.report.scores(rev, *, gameset) -> Table` queries
-# the set's models with `values` and returns their scores as a parquet
-# `Table`, the shipped tabular `Value`.
+# G4 was never trained, and `pre_bump_rev` says `code/demo-game` is
+# the first commit while the checkout is at the second. Notice a
+# miss there refuses to run.
 
 # %%
-rev = L.at()
-scores_table = rev.eval("demo_game.etl.report.scores",
-                        gameset="normie")
-print(type(scores_table).__name__)       # Table
-q_items = [k for k in scores_table.trace if k.startswith("q:")]
-print(q_items)
-# ['q:{"gameset":"normie","kind":"demo_game.etl.dat.StageDat",
-#     "stage":"model"}']
-print(len(json.loads(scores_table.trace[q_items[0]])))   # 4 models
+try:
+    pre_bump_rev.eval("demo_game.etl.model.train", game="G4")
+except NotEvaluated as e:
+    print("NotEvaluated:", e)        # → NotEvaluated: code/demo-game
 
 # %% [markdown]
-# The query inside the function is a trace item, `q:` and its where
-# clause, holding the refs it answered (A41). Moving G3 into the set
-# makes G3's model stale, its retrain is a fifth normie model, and
-# the table's query now answers differently: a miss, not a stale
-# hit.
-
-# %%
-with L.transaction(by="human:dan", why="G3 plays normie") as t:
-    t["game/G3", "gameset"] = "normie"
-rev = L.at()
-rev.eval("demo_game.etl.model.train", game="G3")  # re-derived
-print(scores_table.matches(rev))              # False
-print(list(scores_table.diff(rev.eval("demo_game.etl.report.scores",
-                                      gameset="normie"))))
-# the q: item
+# A revision can be read forever; it can be run only by an
+# environment whose code matches its `code/<repo>` row. A miss at a
+# revision this environment cannot run raises instead of sealing a
+# result with false provenance.
 
 # %% [markdown]
-# ## The latest model for every game of a set
+# ### The latest model for every game in a set
 
 # %%
 rev = L.at()
 latest_refs = {}
 for model_ref in rev.refs(kind=StageDat, stage="model",
                           gameset="normie"):
-    g = model_ref.preds["game"]
-    if (g not in latest_refs
-            or model_ref.sealed_at.id > latest_refs[g].sealed_at.id):
-        latest_refs[g] = model_ref
-print({g: model_ref.preds["metrics.score"]
-       for g, model_ref in latest_refs.items()})
+    game = model_ref.preds["game"]
+    if (game not in latest_refs
+            or model_ref.sealed_at.id > latest_refs[game].sealed_at.id):
+        latest_refs[game] = model_ref
+print({game: model_ref.preds["metrics.score"]
+       for game, model_ref in latest_refs.items()})
+# → {"G1": "0.95", "G2": "0.922"}: the 12-epoch models
 
 # %% [markdown]
 # Nothing is loaded: `Ref.preds` and `Ref.sealed_at` come with the
@@ -508,38 +582,90 @@ print({g: model_ref.preds["metrics.score"]
 # strings.
 
 # %% [markdown]
-# ## Running at an old revision
+# ## Edge cases
+
+# %% [markdown]
+# ### A table over a set
+#
+# `demo_game.etl.report.scores(rev, *, gameset) -> Table` queries
+# the set's models with `values` and returns their scores as a
+# parquet `Table`, the shipped tabular `Value`.
 
 # %%
-release_rev = L.at("3.2.0")
-old_model_dat = release_rev.eval("demo_game.etl.model.train",
-                                 game="G1")
-print(old_model_dat.subject == model_dat.subject)  # True: epochs 8
-now_model_dat = L.at().eval("demo_game.etl.model.train",
-                            game="G1")
-print(now_model_dat.subject == old_model_dat.subject)  # False: 12
-print(old_model_dat.diff(now_model_dat))
-# {"cfg/train epochs": ("8", "12")}
+rev = L.at()
+scores_table = rev.eval("demo_game.etl.report.scores",
+                        gameset="normie")
+print(type(scores_table).__name__)       # → Table
+q_items = [k for k in scores_table.trace if k.startswith("q:")]
+print(q_items)
+# → ['q:{"gameset":"normie","kind":"demo_game.etl.dat.StageDat",
+#      "stage":"model"}']
+print(len(json.loads(scores_table.trace[q_items[0]])))   # → 4
 
 # %% [markdown]
-# The memo lookup is over every entry, at the top, and each
-# candidate's trace is matched against the revision asked at. At
-# `3.2.0` the config said 8 epochs, so the model sealed under that
-# binding is the hit, and nothing runs.
+# The query inside the function is a trace item, `q:` and its where
+# clause, holding the refs it answered (A41): four models, two per
+# normie game. Moving G3 into the set makes G3's model stale, its
+# retrain is a fifth normie model, and the table's query now
+# answers differently: a miss, not a stale hit.
+
+# %%
+with L.transaction(by="human:dan", why="G3 plays normie") as t:
+    t["game/G3", "gameset"] = "normie"
+rev = L.at()
+rev.eval("demo_game.etl.model.train", game="G3")  # re-derived
+print(scores_table.matches(rev))              # → False
+rescored_table = rev.eval("demo_game.etl.report.scores",
+                          gameset="normie")
+print(list(scores_table.diff(rescored_table)))   # → [the q: item]
 
 # %% [markdown]
-# G4 was never trained, and `pre_bump_rev` says `code/demo-game`
-# is the first commit while the checkout is at the second, so a
-# miss there will not run.
+# ### The config file is sugar for rows
+
+# %%
+print(Path(".datconfig.yaml").read_text())   # → ledger: .dat/ledger
+
+# %% [markdown]
+# `Ledger(create=True)` wrote it. `Ledger()`, with no path, walks up
+# from the cwd to the nearest `.datconfig.yaml` with a `ledger:` key
+# and opens the ledger it names; `DAT_LEDGER`, when set, overrides
+# the walk, which is how a sandbox worker in a scratch cwd finds its
+# parent's ledger (A44). A `mounts:` key is sugar for the mount
+# rows this notebook wrote by hand:
+#
+# ```yaml
+# ledger: .dat/ledger
+# mounts:
+#   demo_game.etl: demo_game/etl
+# ```
+#
+# `Ledger()` asserts the `db/root` and `db/repo` rows when they are
+# missing, the repo being the checkout the file sits in.
+
+# %% [markdown]
+# ### What the sandbox refuses
+#
+# `demo_game.etl.stray` holds two functions that reach past the
+# mount. The first imports `demo_game.shots`, which is in the repo
+# but under no mount.
 
 # %%
 try:
-    pre_bump_rev.eval("demo_game.etl.model.train", game="G4")
-except NotEvaluated as e:
-    print("NotEvaluated:", e)
+    rev.eval("demo_game.etl.stray.borrow", game="G1")
+except UnmountedImport as e:
+    print("UnmountedImport:", e)     # → … demo_game.shots
 
 # %% [markdown]
-# A revision can be read forever; it can be run only by an
-# environment whose code matches its `code/<repo>` row. A miss at a
-# revision this environment cannot run raises instead of sealing a
-# result with false provenance.
+# The second reads a file outside the mounts, the dats and the
+# worker's scratch.
+
+# %%
+try:
+    rev.eval("demo_game.etl.stray.snoop", game="G1")
+except UntracedRead as e:
+    print("UntracedRead:", e)        # → UntracedRead: /etc/hosts
+
+# %% [markdown]
+# Each refusal comes back from the worker with its traceback, and
+# nothing is sealed: an incomplete mount table is a crash, never a
+# silently wider trace.
