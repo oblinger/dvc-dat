@@ -393,7 +393,7 @@ class _Loader(importlib.machinery.SourceFileLoader):
 def _importer() -> str:
     for fr in inspect.stack()[2:]:
         name = fr.frame.f_globals.get("__name__", "")
-        if not name.startswith(("importlib", "dvc_dat.ledger2.sandbox")) and name != "<frozen importlib._bootstrap>":
+        if not name.startswith(("importlib", "dvc_dat.ledger.sandbox")) and name != "<frozen importlib._bootstrap>":
             return name
     return "?"
 
@@ -561,7 +561,7 @@ class Worker:
         env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "TMPDIR", "LANG", "CUDA_VISIBLE_DEVICES")}
         env["DAT_LEDGER"] = str(ledger_path)
         env["DAT_SCRATCH"] = str(self.scratch)
-        self.proc = subprocess.Popen([sys.executable, "-I", "-m", "dvc_dat.ledger2.worker"], stdin=subprocess.PIPE,
+        self.proc = subprocess.Popen([sys.executable, "-I", "-m", "dvc_dat.ledger.worker"], stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, cwd=str(self.scratch), env=env)
         self.lock = threading.Lock()
 

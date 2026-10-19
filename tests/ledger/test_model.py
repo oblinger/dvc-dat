@@ -10,7 +10,7 @@ import hypothesis.strategies as st
 from hypothesis import HealthCheck, settings
 from hypothesis.stateful import RuleBasedStateMachine, initialize, invariant, precondition, rule
 
-from dvc_dat.ledger2 import Ledger
+from dvc_dat.ledger import Ledger
 from model import Model
 
 SUBJECTS = ["a", "b", "c"]

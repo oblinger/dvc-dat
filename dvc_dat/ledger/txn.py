@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from .rev import Rev
 
 #: What ``(db, db/format)`` says: the software format, written by a ledger's first transaction.
-FORMAT = "dvc-dat-ledger2/1"
+FORMAT = "dvc-dat-ledger/1"
 
 #: A sealed subject's own predicates (besides its preds, named by its ``db/preds`` row).
 SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys"})

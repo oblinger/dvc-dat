@@ -3,6 +3,5 @@
 Mounted as one prefix (`db/mount/demo_game.etl`), one module per
 stage, so an edit to one stage moves only that stage's code in the
 trace.
-Written to the ledger design of 2026-10-18; runs once `ledger2` is
-rebuilt to it (T534).
+Written to the ledger design of 2026-10-18 (T534).
 """

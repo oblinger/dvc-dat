@@ -4,7 +4,7 @@ import io
 
 import pandas as pd
 
-from dvc_dat.ledger2 import Value
+from dvc_dat.ledger import Value
 
 
 class Shots(Value):

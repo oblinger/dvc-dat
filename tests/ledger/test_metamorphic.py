@@ -8,7 +8,7 @@ from pathlib import Path
 import hypothesis.strategies as st
 from hypothesis import given, settings
 
-from dvc_dat.ledger2 import Ledger
+from dvc_dat.ledger import Ledger
 
 SUBJECTS = ["a", "b", "c"]
 PREDS = ["x", "y", "z"]

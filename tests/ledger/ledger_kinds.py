@@ -1,10 +1,10 @@
-"""Value kinds and value functions the ledger2 tests seal and evaluate (module level: ``Ref.type``
+"""Value kinds and value functions the ledger tests seal and evaluate (module level: ``Ref.type``
 resolves a class by its dotted name, ``load_fn`` a function by its)."""
 
 from pathlib import Path
 
-import l2helper
-from dvc_dat.ledger2 import Dat, Ref, Value, ledger_class, ledger_fn
+import ledger_helper
+from dvc_dat.ledger import Dat, Ref, Value, ledger_class, ledger_fn
 
 CALLS = {}
 
@@ -76,7 +76,7 @@ def poster(rev, *, game: str) -> dict:
 @ledger_fn
 def chain(rev, *, game: str) -> dict:
     _count("chain")
-    return {"thumb": rev.eval("l2kinds.cut", game=game).hash[:8]}
+    return {"thumb": rev.eval("ledger_kinds.cut", game=game).hash[:8]}
 
 
 @ledger_fn
@@ -93,7 +93,7 @@ def wrong(rev, *, game: str) -> Cut:
 
 @ledger_fn
 def via_ref(rev, *, name: str) -> dict:
-    return {"n": l2helper.twice(len(Ref(rev, name).load().data))}
+    return {"n": ledger_helper.twice(len(Ref(rev, name).load().data))}
 
 
 @ledger_fn
@@ -109,7 +109,7 @@ def via_refs_rev(rev, *, game: str) -> dict:
 
 @ledger_fn
 def maybe(rev, *, game: str) -> dict:
-    hit = rev.eval("l2kinds.cut", game=game, memo="get")
+    hit = rev.eval("ledger_kinds.cut", game=game, memo="get")
     return {"had": hit is not None}
 
 

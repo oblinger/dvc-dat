@@ -1,4 +1,4 @@
-"""Fixtures for the ledger2 suite: a fresh ledger per test and a pinned environment.
+"""Fixtures for the ledger suite: a fresh ledger per test and a pinned environment.
 
 The environment provider (the test seam, A51) is pinned so ``eval`` is
 deterministic: one repo, ``testrepo``, at commit ``abc1234``, clean, its
@@ -14,7 +14,7 @@ HERE = Path(__file__).parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
-from dvc_dat.ledger2 import Code, Env, Ledger, set_env_provider  # noqa: E402
+from dvc_dat.ledger import Code, Env, Ledger, set_env_provider  # noqa: E402
 
 ENV = Env({"testrepo": Code(None, "abc1234", False, HERE)}, "sha256:lock-1", "test-platform")
 

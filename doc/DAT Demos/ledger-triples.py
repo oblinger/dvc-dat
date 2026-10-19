@@ -18,8 +18,8 @@
 import os, time
 from pathlib import Path
 
-from dvc_dat.ledger2 import Ledger, bump
-from dvc_dat.ledger2 import LockTimeout
+from dvc_dat.ledger import Ledger, bump
+from dvc_dat.ledger import LockTimeout
 
 scratch_ledger_path = Path("scratch/triples-demo/ledger").resolve()
 
@@ -150,7 +150,7 @@ for r in rows:
 #   1  game/G1            away            G5
 #   1  game/G1            date            2026-10-11
 #   1  game/G1            court           north
-#   1  db                 db/format       dvc-dat-ledger2/1
+#   1  db                 db/format       dvc-dat-ledger/1
 #   1  db/tx/1            db/by           human:dan
 #   1  db/tx/1            db/time         2026-10-18T15:52:07Z
 #   1  db/tx/1            why             season opener

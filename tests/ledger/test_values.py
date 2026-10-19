@@ -2,8 +2,8 @@
 
 import pytest
 
-from dvc_dat.ledger2 import AliasLoop, Exists, Multiple, Pickled, Ref, Undeclared, Value, ledger_class
-from l2kinds import Cut, Plain, Video
+from dvc_dat.ledger import AliasLoop, Exists, Multiple, Pickled, Ref, Undeclared, Value, ledger_class
+from ledger_kinds import Cut, Plain, Video
 
 
 def seal(L, v, **kw):
@@ -16,7 +16,7 @@ def seal(L, v, **kw):
 def decl(L):
     with L.transaction(by="t") as t:
         t.add("db/pred/team", "db/cardinality", "many")
-        t.add("db/pred/video", "db/type", "l2kinds.Video")
+        t.add("db/pred/video", "db/type", "ledger_kinds.Video")
         t.add("db/pred/span", "db/type", "json")
     return L
 
@@ -29,7 +29,7 @@ def test_add_value_returns_a_content_subject_and_loads_back(L):
     assert r.type is Plain and r.hash == v.hash and repr(r) == s[:8]
     back = L.at().load(s)
     assert back.data == b"abc" and back.subject == s and back is L.at().load(s)
-    assert L.at()[s, "db/kind"] == "l2kinds.Plain" and L.at()[s, "db/provenance"] == "seal"
+    assert L.at()[s, "db/kind"] == "ledger_kinds.Plain" and L.at()[s, "db/provenance"] == "seal"
 
 
 def test_idempotent_same_bytes_deps_preds(L):
@@ -159,7 +159,7 @@ def test_value_values_refs_select_kind(L):
         rev.value(kind=Video)
     with pytest.raises(KeyError):
         rev.value(game="G9")
-    assert rev.select(("game",), kind="l2kinds.Video") == [("G1",), ("G2",)]
+    assert rev.select(("game",), kind="ledger_kinds.Video") == [("G1",), ("G2",)]
     refs = rev.refs(camera="wide")
     assert max(refs, key=lambda r: r.sealed_at.id).subject == refs[1].subject
 
@@ -168,7 +168,7 @@ def test_kind_follows_db_moved(L):
     v = Plain(b"1")
     seal(L, v)
     with L.transaction(by="t") as t:
-        t.add("db/kind/l2kinds.Plain", "db/moved", "l2kinds.Cut")
+        t.add("db/kind/ledger_kinds.Plain", "db/moved", "ledger_kinds.Cut")
     rev = L.at()
     assert len(rev.refs(kind=Cut)) == 1 and Ref(rev, v.subject).type is Cut
 
@@ -180,7 +180,7 @@ def test_deps_trace_and_alias_binding(L):
     out = Pickled({"a": 1})
     seal(L, out, deps=[loaded])
     t = out.trace
-    key = f"ref:l2kinds.Plain:{raw.hash}"
+    key = f"ref:ledger_kinds.Plain:{raw.hash}"
     assert t[key] == key and t["data/raw db/alias"] == key
     assert t["code/testrepo"] == "+abc1234" and t["uv.lock"] == "sha256:lock-1"
 

@@ -2,9 +2,9 @@
 
 import pytest
 
-import dvc_dat.ledger2 as ledger2
-from dvc_dat.ledger2 import Ref
-from l2kinds import CALLS, Plain, Video
+import dvc_dat.ledger as ledger
+from dvc_dat.ledger import Ref
+from ledger_kinds import CALLS, Plain, Video
 
 
 def seal(L, v, **kw):
@@ -17,15 +17,15 @@ def test_1_a_ref_made_in_a_body_keeps_the_recorder(coded):
     L = coded
     a = Plain(b"aaa")
     seal(L, a, alias="model/x")
-    v = L.at().eval("l2kinds.via_ref", name="model/x")
-    assert v.trace["model/x db/alias"] == f"ref:l2kinds.Plain:{a.hash}"
-    assert v.trace[f"ref:l2kinds.Plain:{a.hash}"]
+    v = L.at().eval("ledger_kinds.via_ref", name="model/x")
+    assert v.trace["model/x db/alias"] == f"ref:ledger_kinds.Plain:{a.hash}"
+    assert v.trace[f"ref:ledger_kinds.Plain:{a.hash}"]
     b = Plain(b"bbbbb")
     seal(L, b)
     with L.transaction(by="t") as t:
         t.add("model/x", "db/alias", b.subject)
-    assert L.at().eval("l2kinds.via_ref", name="model/x", memo="get") is None   # no stale hit
-    assert L.at().eval("l2kinds.via_ref", name="model/x").obj == {"n": 10}
+    assert L.at().eval("ledger_kinds.via_ref", name="model/x", memo="get") is None   # no stale hit
+    assert L.at().eval("ledger_kinds.via_ref", name="model/x").obj == {"n": 10}
 
 
 def test_1_ref_preds_and_ref_rev_reads_are_traced(coded):
@@ -33,12 +33,12 @@ def test_1_ref_preds_and_ref_rev_reads_are_traced(coded):
     v = Video(b"v")
     v.preds["game"] = "G1"
     seal(L, v, alias="vid")
-    p = L.at().eval("l2kinds.via_ref_preds", name="vid")
+    p = L.at().eval("ledger_kinds.via_ref_preds", name="vid")
     assert any(k.startswith('q:{"__call__":"preds"') for k in p.trace)
     with L.transaction(by="t") as t:
         t.add(v.subject, "note", "hi")
     assert not p.matches(L.at())                       # an annotation moved the preds read
-    r = L.at().eval("l2kinds.via_refs_rev", game="G1")
+    r = L.at().eval("ledger_kinds.via_refs_rev", game="G1")
     assert r.obj == {"note": "hi"} and f"{v.subject} note" in r.trace
 
 
@@ -90,7 +90,7 @@ def test_5_db_format_and_db_index(L):
         t.add("db/pred/home", "db/index", "true")
         t.add("db/pred/home", "db/doc", "the home team")
     rev = L.at()
-    assert rev["db", "db/format"] == "dvc-dat-ledger2/1"
+    assert rev["db", "db/format"] == "dvc-dat-ledger/1"
     names = [r[0] for r in L._store.read("SELECT name FROM sqlite_master WHERE type = 'index'")]
     assert any(n.startswith("pred_") for n in names)
     assert rev["db/pred/home"] == {"db/index": "true", "db/doc": "the home team"}
@@ -111,24 +111,24 @@ def test_6_verbs_outside_with_raise(L):
 
 def test_7_a_recorded_miss_holds_while_still_missing(coded):
     L = coded
-    m = L.at().eval("l2kinds.maybe", game="G1")
-    assert m.trace['eval:l2kinds.cut{"game":"G1","version":"1.0.0"}'] == "<none>"
+    m = L.at().eval("ledger_kinds.maybe", game="G1")
+    assert m.trace['eval:ledger_kinds.cut{"game":"G1","version":"1.0.0"}'] == "<none>"
     n = CALLS.get("maybe", 0)
-    assert L.at().eval("l2kinds.maybe", game="G1").subject == m.subject and CALLS.get("maybe", 0) == n
+    assert L.at().eval("ledger_kinds.maybe", game="G1").subject == m.subject and CALLS.get("maybe", 0) == n
 
 
 def test_8_base_fn_hashes_the_static_closure(coded):
-    f = coded.at().load_fn("l2kinds.via_ref")
-    assert set(f._modules) == {"l2kinds.py", "l2helper.py"}
+    f = coded.at().load_fn("ledger_kinds.via_ref")
+    assert set(f._modules) == {"ledger_kinds.py", "ledger_helper.py"}
     v = Plain(b"x")
     seal(coded, v, alias="n")
-    e = coded.at().eval("l2kinds.via_ref", name="n")
-    assert sorted(coded.at()[e.trace["fn"], "db/modules"]) == ["l2helper.py", "l2kinds.py"]
+    e = coded.at().eval("ledger_kinds.via_ref", name="n")
+    assert sorted(coded.at()[e.trace["fn"], "db/modules"]) == ["ledger_helper.py", "ledger_kinds.py"]
 
 
 def test_9_salt_item_is_named_salt():
-    """Covered with a real mount in test_l2_sandbox.test_salt_item (needs a worker)."""
-    from test_l2_sandbox import test_salt_item  # noqa: F401
+    """Covered with a real mount in test_sandbox.test_salt_item (needs a worker)."""
+    from test_sandbox import test_salt_item  # noqa: F401
 
 
 def test_10_refs_equal_by_subject_not_bytes(L):
@@ -142,5 +142,5 @@ def test_10_refs_equal_by_subject_not_bytes(L):
 
 
 def test_11_the_test_seam_is_not_in_all():
-    assert not {"set_env_provider", "Env", "Code"} & set(ledger2.__all__)
-    from dvc_dat.ledger2 import Code, Env, set_env_provider  # noqa: F401  importable by name
+    assert not {"set_env_provider", "Env", "Code"} & set(ledger.__all__)
+    from dvc_dat.ledger import Code, Env, set_env_provider  # noqa: F401  importable by name

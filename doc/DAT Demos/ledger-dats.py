@@ -23,9 +23,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from dvc_dat.ledger2 import Ledger, Ref, bump
-from dvc_dat.ledger2 import NotEvaluated, Unindexed
-from dvc_dat.ledger2 import UnmountedImport, UntracedRead
+from dvc_dat.ledger import Ledger, Ref, bump
+from dvc_dat.ledger import NotEvaluated, Unindexed
+from dvc_dat.ledger import UnmountedImport, UntracedRead
 
 scratch_project_path = Path("scratch/dats-demo").resolve()
 shutil.copytree("demo_game", scratch_project_path,

@@ -3,13 +3,12 @@
 A `Value` subclass lives in a module, never in a notebook cell: the
 `db/value` row names its class by dotted name (`Ref.type`), and a
 class defined in a cell has no name a later `load` can import.
-Written to the ledger design of 2026-10-18; runs once `ledger2` is
-rebuilt to it (T534).
+Written to the ledger design of 2026-10-18 (T534).
 """
 import random
 import time
 
-from dvc_dat.ledger2 import Ref, Value, ledger_class, ledger_fn
+from dvc_dat.ledger import Ref, Value, ledger_class, ledger_fn
 
 
 class PlainVideo(Value):

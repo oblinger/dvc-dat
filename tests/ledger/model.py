@@ -14,7 +14,7 @@ the cardinality ``db/pred/<p> db/cardinality`` declares as of R:
 """
 
 
-FORMAT = "dvc-dat-ledger2/1"   # (db, db/format), written by the first transaction
+FORMAT = "dvc-dat-ledger/1"   # (db, db/format), written by the first transaction
 
 
 def fixed_one(p):

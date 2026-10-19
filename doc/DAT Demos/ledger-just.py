@@ -23,8 +23,8 @@ from pathlib import Path
 
 import yaml
 
-from dvc_dat.ledger2 import Ledger, Ref, bump
-from dvc_dat.ledger2 import LedgerError, Multiple
+from dvc_dat.ledger import Ledger, Ref, bump
+from dvc_dat.ledger import LedgerError, Multiple
 
 # %%
 scratch_project_path = Path("scratch/just-demo").resolve()

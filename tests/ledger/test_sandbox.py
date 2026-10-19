@@ -6,9 +6,9 @@ import textwrap
 
 import pytest
 
-from dvc_dat.ledger2 import (ConfinedWrite, Ledger, NotEvaluated, UnmountedImport, UntracedRead, bump,
+from dvc_dat.ledger import (ConfinedWrite, Ledger, NotEvaluated, UnmountedImport, UntracedRead, bump,
                              set_env_provider)
-from dvc_dat.ledger2.sandbox import shutdown
+from dvc_dat.ledger.sandbox import shutdown
 
 PKG = {
     "pyproject.toml": '[project]\nname = "sbx-repo"\nversion = "0.1.0"\n',
@@ -16,7 +16,7 @@ PKG = {
     "sbx/other.py": "X = 1\n",
     "sbx/stage/__init__.py": "",
     "flat/calc.py": textwrap.dedent('''
-        from dvc_dat.ledger2 import ledger_fn
+        from dvc_dat.ledger import ledger_fn
         from flatpkg import util
 
         @ledger_fn
@@ -25,7 +25,7 @@ PKG = {
     '''),
     "flat/util.py": "def square(x):\n    return x * x\n",
     "sbx/stage/kinds.py": textwrap.dedent('''
-        from dvc_dat.ledger2 import Value, ledger_class, ledger_fn
+        from dvc_dat.ledger import Value, ledger_class, ledger_fn
 
         @ledger_class(preds=("game",))
         class Tagged(Value):
@@ -47,7 +47,7 @@ PKG = {
     "sbx/stage/fns.py": textwrap.dedent('''
         import importlib
         from pathlib import Path
-        from dvc_dat.ledger2 import Dat, ledger_fn
+        from dvc_dat.ledger import Dat, ledger_fn
 
         @ledger_fn
         def count(rev, *, game: str) -> dict:

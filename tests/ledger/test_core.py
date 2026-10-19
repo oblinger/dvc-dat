@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from dvc_dat.ledger2 import Ledger, LedgerError, LockTimeout, Ref, Rev, Row, bump
+from dvc_dat.ledger import Ledger, LedgerError, LockTimeout, Ref, Rev, Row, bump
 
 
 def write(L, *ops, by="t"):
@@ -190,7 +190,7 @@ def test_select_and_refs_on_plain_subjects(L):
 
 
 def test_unindexed_dotted_typo(L):
-    from dvc_dat.ledger2 import Unindexed
+    from dvc_dat.ledger import Unindexed
     rev = write(L, ("s", "metrics.score", "1"))
     assert rev.refs(where={"metrics.score": "1"})
     with pytest.raises(Unindexed):

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from dvc_dat.ledger2 import Ledger, LedgerError, bump   # dvc_dat.ledger once promoted
+from dvc_dat.ledger import Ledger, LedgerError, bump
 
 BY = f"human:{os.environ.get('USER', 'dan')}"
 
@@ -172,7 +172,7 @@ def confirm(subject):
 
 def bump_recipe(args):
     import_checkout()
-    from dvc_dat.ledger2.env import repo_name
+    from dvc_dat.ledger.env import repo_name
     subject, part = args[0], (args[1] if len(args) > 1 else "patch")
     if subject == "code":
         subject = f"code/{repo_name(checkout())}"

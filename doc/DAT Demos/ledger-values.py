@@ -19,9 +19,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from dvc_dat.ledger2 import Ledger, Ref
-from dvc_dat.ledger2 import AliasLoop, Exists, Multiple, Undeclared
-from dvc_dat.ledger2 import ConfinedWrite, UnmountedImport
+from dvc_dat.ledger import Ledger, Ref
+from dvc_dat.ledger import AliasLoop, Exists, Multiple, Undeclared
+from dvc_dat.ledger import ConfinedWrite, UnmountedImport
 
 scratch_path = Path("scratch/values-demo").resolve()
 scratch_ledger_path = scratch_path / "ledger"
@@ -574,7 +574,7 @@ geometry_source = '''\
 """`geometry`: any Python function can be a ledger function."""
 import math
 
-from dvc_dat.ledger2 import ledger_fn
+from dvc_dat.ledger import ledger_fn
 
 ORIGIN = (0, 0)
 
@@ -658,7 +658,7 @@ measure_source = '''\
 """`plane.measure`: a length in metres."""
 import math
 
-from dvc_dat.ledger2 import ledger_fn
+from dvc_dat.ledger import ledger_fn
 
 from .units import SCALE                   # the one import of its own
 
@@ -720,7 +720,7 @@ reach_source = '''\
 """`plane.reach`: two functions the sandbox refuses."""
 from pathlib import Path
 
-from dvc_dat.ledger2 import ledger_fn
+from dvc_dat.ledger import ledger_fn
 
 
 @ledger_fn
@@ -897,7 +897,7 @@ print(L.at()[far_value.trace["fn"], "db/returns"])
 # %%
 clips_source = '''\
 """`clips`: a ledger function that returns a Video."""
-from dvc_dat.ledger2 import ledger_fn
+from dvc_dat.ledger import ledger_fn
 from demo_game.game import Video
 
 

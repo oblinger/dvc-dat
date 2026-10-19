@@ -3,7 +3,7 @@
 import subprocess
 import sys
 
-from dvc_dat.ledger2.env import discover
+from dvc_dat.ledger.env import discover
 
 
 def git(repo, *args):
