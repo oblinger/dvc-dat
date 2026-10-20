@@ -35,7 +35,9 @@ on a refusal. Part of the [architecture](../../DAT%20Architecture.md).
   held object.
 - `v.seal(t, *, deps=(), alias=None, provenance=None) -> str`
   (`Value.seal`; `t.add_value` is gone, 6.0.0): seal `v` in this
-  transaction and return its subject (64 hex). Refused on the line:
+  transaction and return its subject (64 hex). A value sealed earlier
+  by `v.seal()` is saved in the state it was sealed in
+  ([value](value.md)). Refused on the line:
   not a `Value` or already sealed (`TypeError`, `ValueError`); a
   provenance beginning `eval:` (`ValueError`); a pred name the kind did
   not declare (`Undeclared`); a list under a `one` pred not typed

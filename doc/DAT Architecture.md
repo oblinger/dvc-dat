@@ -179,6 +179,17 @@ one row per pred, one per member for a `many` pred.
 `v.seal(t)` joins one already open, so several values and their
 annotations land as one revision.
 
+**Sealing and saving are separate.** `v.seal()` with no ledger fixes
+the value's identity now: the preds freeze, and the bytes' hash, the
+deps, the provenance, the environment and the time are recorded; it
+writes nothing anywhere. `v.seal(keep=True)` also copies the bytes into
+this machine's kept cache, so the source may change. A later
+`v.seal(t)` saves that sealed state: the trace is the environment of
+the seal, not of the save, and a changed byte in a value not kept is
+`SealBroken`. A run whose output is not saved at once therefore keeps
+its provenance. Values kept and never saved are listed by `just
+sealed` and dropped by `just sealed purge`.
+
 **A sealed value never changes.** Its own rows are frozen: a later
 `add` or `remove` on one is `Exists`, raised at commit. Any other row on
 its subject is annotation. A wrong pred is fixed by sealing a corrected

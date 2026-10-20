@@ -4,6 +4,10 @@
 test *ARGS:
     uv run python -m pytest -q {{ARGS}}
 
+# values sealed with v.seal(keep=True) and never saved: the listing, or `purge [older=14d]`
+sealed *ARGS:
+    uv run python -m dvc_dat.ledger.kept {{ARGS}}
+
 # the demo notebooks (doc/DAT Demos): each .ipynb is paired by jupytext with a
 # py:percent script beside it (edit either); sync the pairs, then execute each
 # notebook in place with its outputs kept. tests/test_demo_notebooks.py runs

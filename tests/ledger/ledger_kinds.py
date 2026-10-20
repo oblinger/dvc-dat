@@ -118,3 +118,10 @@ def scratchy(rev, *, game: str, work: Path) -> dict:
     CALLS["work"] = work
     (work / "tmp.txt").write_text(game)
     return {"game": game}
+
+
+@ledger_fn
+def sealed_early(rev, *, game: str) -> Cut:
+    c = Cut(game.encode())
+    c.seal()
+    return c

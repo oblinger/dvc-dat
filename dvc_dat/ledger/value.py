@@ -53,7 +53,10 @@ class Value:
     subject: Optional[str] = None
     rev: Optional["Rev"] = None
     trace: Mapping[str, str] = _EMPTY
+    #: Identity fixed: by ``v.seal()`` (saved nowhere yet, ``subject`` ``None``) or by a save.
     sealed: bool = False
+    #: When the seal happened (UTC, ``YYYY-MM-DDTHH:MM:SSZ``).
+    sealed_at: Optional[str] = None
 
     @property
     def preds(self) -> Dict[str, Any]:
@@ -85,26 +88,108 @@ class Value:
     def _after_seal(self, store: "ArtStore") -> None:
         """Hook run once the value is sealed (a ``Dat`` moves to its stored folder)."""
 
-    def seal(self, to: Any, *, deps: Iterable[Any] = (), alias: Optional[str] = None,
+    def seal(self, to: Any = None, *, keep: bool = False, deps: Iterable[Any] = (), alias: Optional[str] = None,
              provenance: Optional[str] = None, by: Optional[str] = None) -> str:
-        """Seal into the subject ``<hash of (trace, preds, bytes)>``; return the subject.
+        """Fix the value's identity; with a transaction or a ledger, save it too.
 
-        ``to`` a ``Transaction`` joins it: the value lands with that transaction's revision, or not
-        at all. ``to`` a ``Ledger`` opens and commits a one-value transaction of its own, written
-        ``by`` (default: the provenance, else ``seal``). ``deps`` declare what the value was made
-        from; ``alias`` names it; ``provenance`` says how it was made (``eval:`` is eval's alone).
+        ``v.seal()`` writes nothing: it freezes ``preds``, records the bytes' hash, ``deps``,
+        ``provenance``, the environment and the time, and returns the hash. With ``keep=True`` it
+        also copies the bytes into this machine's kept cache (``kept``), so the source may change.
+        ``to`` a ``Transaction`` saves into it: the subject is ``<hash of (trace, preds, bytes)>``
+        and lands with that revision or not at all. ``to`` a ``Ledger`` opens and commits a
+        one-value transaction of its own, written ``by`` (default: the provenance, else ``seal``).
+        Saving a value sealed earlier saves the state it was sealed in (its deps, provenance and
+        environment), and refuses with ``SealBroken`` when its bytes changed since, unless kept.
         """
         from .ledger import Ledger
         from .txn import Transaction
 
+        if to is None:
+            if alias is not None or by is not None:
+                raise TypeError("alias= and by= name a ledger write; v.seal() writes none (v.seal(t, alias=...))")
+            return self._seal_here(keep, tuple(deps), provenance)
+        if keep:
+            raise TypeError("keep= is v.seal()'s; a save stores the bytes in the art store")
         if isinstance(to, Transaction):
             if by is not None:
                 raise TypeError("by= names the writer of a transaction seal opens; this one is open already")
             return to._seal_value(self, deps=tuple(deps), alias=alias, provenance=provenance)
         if isinstance(to, Ledger):
-            with to.transaction(by=by or provenance or "seal") as t:
+            local = self.__dict__.get("_local")
+            with to.transaction(by=by or provenance or (local and local["provenance"]) or "seal") as t:
                 return t._seal_value(self, deps=tuple(deps), alias=alias, provenance=provenance)
-        raise TypeError(f"seal takes a Transaction or a Ledger, not {type(to).__name__}")
+        raise TypeError(f"seal takes a Transaction or a Ledger, or nothing, not {type(to).__name__}")
+
+    def _seal_here(self, keep: bool, deps: tuple, provenance: Optional[str]) -> str:
+        from .env import current_env
+        from .errors import Undeclared
+        from .fn import Fn
+        from .kept import Kept
+        from .rev import Ref
+        from .txn import check_provenance
+
+        if self.subject is not None:
+            raise ValueError(f"{self!r} is saved already; a different value is a new object")
+        if self.sealed:
+            raise ValueError(f"{self!r} is sealed already (at {self.sealed_at}); a different value is a new object")
+        provenance = check_provenance(provenance)
+        declared = type(self)._ledger_preds
+        extra = [k for k in self.preds if k not in declared]
+        if extra:
+            raise Undeclared(f"{', '.join(map(repr, extra))}: not a pred of {dotted(type(self))} "
+                             f"(@ledger_class(preds={declared!r}))")
+        for d in deps:
+            if isinstance(d, Value) and not d.sealed:
+                raise ValueError(f"dep {d!r} is unsealed: seal it first")
+            if not isinstance(d, (Value, Ref, Fn)):
+                raise TypeError(f"a dep is a Value, a Ref or an Fn, not {type(d).__name__}")
+        stamp = _now()
+        data = self.encode()
+        h = sha256(data)
+        kept = Kept().put(dotted(type(self)), data, self._parts().values(), stamp) if keep else None
+        self.__dict__["_local"] = {"hash": h, "deps": deps, "provenance": provenance, "env": current_env(),
+                                   "kept": kept}
+        self.__dict__["_preds"] = FrozenPreds(self.preds)
+        self.__dict__["_hash"] = h
+        self.sealed_at = stamp
+        self.sealed = True
+        return h
+
+    def _kept(self) -> Optional[Dict[str, Any]]:
+        """The kept entry of a ``v.seal(keep=True)``; ``None`` when the bytes were not kept, or were purged
+        and the source still hashes to the sealed bytes; ``SealBroken`` when purged and the source changed."""
+        local = self.__dict__.get("_local")
+        if not (local and local["kept"]):
+            return None
+        from .kept import Kept
+
+        try:
+            return Kept().entry(local["kept"])
+        except KeyError:
+            if sha256(self.encode()) == local["hash"]:
+                return None
+            from .errors import SealBroken
+
+            raise SealBroken(f"{type(self).__name__} sealed at {self.sealed_at}: its kept bytes were purged and "
+                             "the source changed since; seal a new value") from None
+
+    def _stored_bytes(self) -> bytes:
+        """The encoding a save stores: the kept bytes when ``v.seal(keep=True)`` kept them, else ``encode()``."""
+        e = self._kept()
+        if e is not None:
+            from .kept import Kept
+
+            return Kept().get(e["hash"])
+        return self.encode()
+
+    def _stored_parts(self) -> Dict[str, bytes]:
+        e = self._kept()
+        if e is not None:
+            from .kept import Kept
+
+            k = Kept()
+            return {h: k.get(h) for h in e["parts"]}
+        return self._parts()
 
     @property
     def hash(self) -> str:
@@ -152,7 +237,13 @@ class Value:
             from .rev import display_name
 
             return display_name(ledger, self.subject)
-        return f"<{type(self).__name__} unsealed>"
+        return f"<{type(self).__name__} {'sealed, saved nowhere' if self.sealed else 'unsealed'}>"
+
+
+def _now() -> str:
+    import datetime as _dt
+
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def dotted(cls: type) -> str:
@@ -270,4 +361,4 @@ class Dat(Value):
         return obj
 
     def _after_seal(self, store: "ArtStore") -> None:
-        self.path = self._materialise(self.encode(), store)
+        self.path = self._materialise(self._stored_bytes(), store)

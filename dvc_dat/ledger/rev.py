@@ -252,8 +252,8 @@ class Rev:
         if isinstance(o, Ref):
             return o._text()
         if isinstance(o, Value):
-            if not o.sealed:
-                raise ValueError("an unsealed Value is in no row")
+            if o.subject is None:
+                raise ValueError("an unsaved Value is in no row")
             return ref_text(dotted(type(o)), o.hash)
         plain = encode_plain(o)
         if plain is None:

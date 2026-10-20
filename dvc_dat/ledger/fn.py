@@ -95,8 +95,8 @@ def encode_keys(kw: Dict[str, Any]) -> Dict[str, Any]:
                 raise TypeError(f"key {k!r}: {v.name!r} holds no value")
             out[k] = v._text()
         elif isinstance(v, Value):
-            if not v.sealed:
-                raise ValueError(f"key {k!r}: an unsealed {type(v).__name__}; seal it first")
+            if v.subject is None:
+                raise ValueError(f"key {k!r}: an unsaved {type(v).__name__}; seal it first")
             out[k] = ref_text(dotted(type(v)), v.hash)
         else:
             out[k] = nested(v, k)
@@ -314,7 +314,7 @@ def drop_work(work: Optional[Path], value: Any) -> None:
 
     if work is None or not work.exists():
         return
-    if isinstance(value, Dat) and not value.sealed:
+    if isinstance(value, Dat) and value.subject is None:
         p = os.path.realpath(value.path)
         if p == os.path.realpath(work) or p.startswith(os.path.realpath(work) + os.sep):
             return
@@ -341,6 +341,9 @@ def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: s
     from .rev import Ref
 
     ledger = plain.ledger
+    if value.sealed and value.subject is None:
+        raise TypeError(f"{fn.name} returned a {type(value).__name__} sealed by v.seal(); eval seals its own "
+                        "result, so return it unsealed")
     vtext = ref_text(dotted(type(value)), value.hash)
     try:
         with ledger.transaction(by=f"eval:{fn.name}") as t:

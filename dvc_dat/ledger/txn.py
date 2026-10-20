@@ -24,8 +24,8 @@ import time as _time
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, show, strip_hint, tag
-from .errors import Exists, LockTimeout, Undeclared
+from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, sha256, show, strip_hint, tag
+from .errors import Exists, LockTimeout, SealBroken, Undeclared
 from .value import Value, dotted
 
 if TYPE_CHECKING:
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 FORMAT = "dvc-dat-ledger/1"
 
 #: A sealed subject's own predicates (besides its preds, named by its ``db/preds`` row).
-SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys"})
+SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys", "db/sealed-at"})
 
 
 def is_seal_predicate(p: str, frozen: Sequence[str]) -> bool:
@@ -81,6 +81,17 @@ def _name(x: Any, what: str) -> str:
     return x
 
 
+def check_provenance(provenance: Optional[str]) -> str:
+    """A hand seal's provenance: a non-empty str, ``seal`` by default, never ``eval:``."""
+    if provenance is None:
+        return "seal"
+    if not isinstance(provenance, str) or not provenance:
+        raise TypeError(f"provenance is a str, not {provenance!r}")
+    if provenance.startswith("eval:"):
+        raise ValueError(f"provenance {provenance!r}: eval: provenance is written by eval alone")
+    return provenance
+
+
 def code_token(rev: "Rev", repo: str, env_commit: Optional[str]) -> str:
     """The ``code/<repo>`` trace item: ``<version>+<commit 8>`` from the rows, else ``+<env commit 8>`` (A53)."""
     v = rev.get(f"code/{repo}", "version")
@@ -121,7 +132,8 @@ class Transaction:
         self._pending: Dict[int, Tuple[Value, str]] = {}
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
         self._fns: set = set()
-        self._frozen: List[Tuple[Value, Dict[str, Any]]] = []
+        #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
+        self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
         self._to_store: List[Value] = []
         self._created: List[Any] = []
         self._cm: Any = None
@@ -234,9 +246,13 @@ class Transaction:
 
         self._state = "abandoned"
         for value, old in self._frozen:
-            value.sealed = False
             value.subject = None
             value.trace = _EMPTY
+            value.__dict__.pop("_ledger", None)
+            if old is None:
+                continue            # sealed by v.seal() before this body: sealed still, saved nowhere
+            value.sealed = False
+            value.sealed_at = None
             value.__dict__["_preds"] = old
             value.__dict__.pop("_hash", None)
         for path in self._created:
@@ -250,7 +266,7 @@ class Transaction:
         """The bytes of every seal, written at commit so bytes and rows land together (or neither)."""
         art = self._ledger._store.art
         for v in self._to_store:
-            blobs = list(v._parts().values()) + [v.encode()]
+            blobs = list(v._stored_parts().values()) + [v._stored_bytes()]
             for data in blobs:
                 from .codec import sha256 as _sha
 
@@ -266,11 +282,23 @@ class Transaction:
 
         top = self._rev
         art = self._ledger._store.art
+        kept = []
         for value, subject, trace, loaded_as in self._finalize:
             r = Ref(top, subject)
             sealed_at = r.sealed_at or top
+            stamp, h = value.sealed_at, value.hash        # the hash of the bytes stored, not of the live object
             value._provenance(subject=subject, rev=sealed_at, trace=trace, preds=r.preds)
+            value.sealed_at = stamp
+            value.__dict__["_hash"] = h
             value._after_seal(art)
+            local = value.__dict__.pop("_local", None)
+            if local and local["kept"]:
+                kept.append(local["kept"])
+        if kept:
+            from .kept import Kept
+
+            for entry in kept:
+                Kept().drop(entry)
 
     def _write(self, w: Any) -> int:
         from .rev import Rev
@@ -410,8 +438,8 @@ class Transaction:
             if v.hash is None:
                 raise TypeError(f"{what}: {v.name!r} holds no value")
             return ref_text(v._cls, v.hash)
-        if not v.sealed and id(v) not in self._pending:
-            raise ValueError(f"{what}: an unsealed {type(v).__name__}; seal it first (a typed pred is an edge "
+        if v.subject is None and id(v) not in self._pending:
+            raise ValueError(f"{what}: an unsaved {type(v).__name__}; save it first (a typed pred is an edge "
                              "to a sealed value)")
         return ref_text(dotted(type(v)), v.hash)
 
@@ -481,6 +509,8 @@ class Transaction:
                     subj = self._pending[id(d)][1]
                 elif not d.sealed:
                     raise ValueError(f"dep {d!r} is unsealed: seal it first")
+                elif subj is None:
+                    raise ValueError(f"dep {d!r} is sealed but saved nowhere: save it first (v.seal(t))")
                 text = ref_text(dotted(type(d)), h)
                 name = d.__dict__.get("_loaded_as")
             else:
@@ -495,10 +525,10 @@ class Transaction:
             if name:
                 trace[f"{name} db/alias"] = text
 
-    def _env_items(self, trace: Dict[str, str], repos: Optional[Sequence[str]] = None) -> None:
+    def _env_items(self, trace: Dict[str, str], repos: Optional[Sequence[str]] = None, env: Any = None) -> None:
         from .env import current_env
 
-        env = current_env()
+        env = env if env is not None else current_env()
         for repo in (env.code if repos is None else repos):
             trace[f"code/{repo}"] = code_token(self.base, repo, env.code[repo].commit if repo in env.code else None)
         trace["uv.lock"] = env.lock
@@ -516,23 +546,30 @@ class Transaction:
         self._open("seal")
         if not isinstance(value, Value):
             raise TypeError(f"seal takes a Value, not {type(value).__name__} (wrap it: Pickled(obj))")
-        if value.sealed:
+        if value.subject is not None:
             raise ValueError(f"{value!r} is sealed already; a different value is a new object")
-        if provenance is None:
-            provenance = "seal"
-        if not isinstance(provenance, str) or not provenance:
-            raise TypeError(f"provenance is a str, not {provenance!r}")
-        if provenance.startswith("eval:"):
-            raise ValueError(f"provenance {provenance!r}: eval: provenance is written by eval alone")
+        local = value.__dict__.get("_local")
+        env = None
+        extra: List[Tuple[str, str]] = []
+        if local is not None:
+            if deps or provenance is not None:
+                raise TypeError(f"deps and provenance were fixed by v.seal() at {value.sealed_at}; "
+                                "save with v.seal(t) alone")
+            if not local["kept"] and sha256(value.encode()) != local["hash"]:
+                raise SealBroken(f"{type(value).__name__} sealed at {value.sealed_at}: its bytes changed since; "
+                                 "seal a new value (or seal with keep=True to keep the bytes)")
+            deps, provenance, env = local["deps"], local["provenance"], local["env"]
+            extra.append(("db/sealed-at", "str:" + str(value.sealed_at)))
+        provenance = check_provenance(provenance)
         if alias is not None:
             _name(alias, "alias")
         pred_rows, canon = self._encode_preds(value)
         trace: Dict[str, str] = {}
         self._dep_items(deps, trace)
-        self._env_items(trace)
+        self._env_items(trace, env=env)
         vtext = ref_text(dotted(type(value)), value.hash)
         subject = hash_text(canonical({"trace": trace, "preds": canon, "value": vtext}))
-        self._seal(value, subject, trace, provenance, pred_rows, [], alias)
+        self._seal(value, subject, trace, provenance, pred_rows, extra, alias)
         self._freeze(value, subject, trace)
         return subject
 
@@ -542,8 +579,12 @@ class Transaction:
         from .value import FrozenPreds
 
         h = value.hash
-        self._frozen.append((value, dict(value.preds)))
-        value.__dict__["_preds"] = FrozenPreds(value.preds)
+        if value.sealed:
+            self._frozen.append((value, None))
+        else:
+            self._frozen.append((value, dict(value.preds)))
+            value.__dict__["_preds"] = FrozenPreds(value.preds)
+            value.sealed_at = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         value.subject = subject
         value.trace = MappingProxyType(dict(trace))
         value.sealed = True

@@ -860,7 +860,7 @@ def _ship(v: Any) -> Any:
 
     if isinstance(v, (list, tuple)):
         return [_ship(x) for x in v]
-    if isinstance(v, Ref) or (isinstance(v, Value) and v.sealed):
+    if isinstance(v, Ref) or (isinstance(v, Value) and v.subject is not None):
         return ("__ref__", v.subject)
     return v
 

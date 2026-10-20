@@ -6,6 +6,21 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 6.1.0 — 2026-10-20
+
+- **`v.seal()` seals without a ledger; `v.seal(t)` saves it later.**
+  With no target the seal freezes the preds and records the bytes'
+  hash, deps, provenance, environment and time (`sealed_at`), writing
+  nothing; `subject` stays `None`. A later `v.seal(t)` or `v.seal(L)`
+  saves that state (the trace carries the seal's environment, a
+  `db/sealed-at` row the time) and refuses with `SealBroken` when the
+  bytes changed. `v.seal(keep=True)` copies the bytes into the kept
+  cache (`$DAT_KEPT`, else `~/.cache/dvc-dat/kept`), so the source may
+  change; `just sealed` lists what is kept and never saved, `just
+  sealed purge [older=14d]` drops it (T543 Q4 (D)).
+- `sealed` now means identity fixed; "in the ledger" is `subject is not
+  None`. Every check that meant the latter reads `subject`.
+
 ## 6.0.0 — 2026-10-20
 
 - **`v.seal(t)` replaces `t.add_value(v)`; `t.add_value` is gone.**
