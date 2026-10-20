@@ -350,6 +350,14 @@ def _hash_dat(folder: Union[str, Path], results: Dict[str, Any]) -> str:
     return "sha256:" + hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
 
 
+#: The git attribute a repo sets on paths that are not code (``doc/** dat-noncode``
+#: in its ``.gitattributes``): a change under them leaves the checkout clean.
+NONCODE_ATTR = "dat-noncode"
+#: The pathspec of a checkout's code: the whole tree from its top, less what
+#: ``.gitattributes`` marks ``dat-noncode``.  Every dirty check uses it.
+CODE_PATHSPEC = (":/", f":(top,exclude,attr:{NONCODE_ATTR})")
+
+
 def _git(folder: str, *args: str) -> Optional[str]:
     try:
         out = subprocess.run(["git", "-C", folder, *args], capture_output=True,
@@ -362,7 +370,8 @@ def _git(folder: str, *args: str) -> Optional[str]:
 def _code_of(fn: Callable) -> Optional[Dict[str, Any]]:
     """`{branch, commit, dirty}` of the git checkout holding `fn`'s source, or None
     when it has no source file or the file is not in a checkout.  `branch` is None
-    on a detached HEAD; `dirty` counts tracked files only."""
+    on a detached HEAD; `dirty` counts tracked files only, and none whose path
+    the repo's `.gitattributes` marks `dat-noncode`."""
     try:
         source = inspect.getsourcefile(inspect.unwrap(fn))
     except TypeError:
@@ -374,7 +383,7 @@ def _code_of(fn: Callable) -> Optional[Dict[str, Any]]:
     if not commit:
         return None
     branch = _git(folder, "rev-parse", "--abbrev-ref", "HEAD")
-    status = _git(folder, "status", "--porcelain", "--untracked-files=no")
+    status = _git(folder, "status", "--porcelain", "--untracked-files=no", "--", *CODE_PATHSPEC)
     return {"branch": None if branch in (None, "HEAD") else branch,
             "commit": commit, "dirty": bool(status)}
 

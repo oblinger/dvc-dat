@@ -44,7 +44,8 @@ is a different class, [`ledger.Dat`](ledger/value.md).
   `referenceable`, or `None` when nothing is stored.
 - `recording(dat)` (context manager), `record_dependency(name,
   sha256=None)` (`RuntimeError` when nothing records), `roots(deps)`,
-  `code_of(fn) -> {branch, commit, dirty} | None`.
+  `code_of(fn) -> {branch, commit, dirty} | None`; `dirty` skips paths
+  the repo's `.gitattributes` marks `dat-noncode` (`CODE_PATHSPEC`).
 - `execute(dat)`: run `fn(dat, *args, **kwargs)` for `dat.do`, inside
   `recording(dat)`, in a fresh `run/` sub-dat with `run/work/` as cwd;
   a sealed dat `RuntimeError`; a non-callable `dat.do` `TypeError`; a
