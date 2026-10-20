@@ -25,3 +25,6 @@ __pycache__
 /doc/.obsidian/
 
 /.claude/settings.local.json
+# grout (HA F471)
+.obsidian/
+doc/*Track/

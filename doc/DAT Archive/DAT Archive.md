@@ -2,9 +2,9 @@
 description: "retired DAT pages, kept for reference"
 ---
 
-| -[[DAT Archive]]- | : retired DAT pages, kept for reference<br>→ [DAT](ha://DAT) → [DAT Archive](ha://p/DAT%20Archive) |
-| ----------------- | -------------------------------------------------------------------------------------------------- |
-| ...               | [DAT Interface](ha://DAT%20Interface),                                                             |
+| -[[DAT Archive]]- | : retired DAT pages, kept for reference<br>→ [[doc/DAT]] → [DAT Archive](ha://p/DAT%20Archive) |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| ...               | [[DAT Interface]],                                                                             |
 
 # DAT Archive
 Pages retired from DAT, still indexed so their links resolve.
