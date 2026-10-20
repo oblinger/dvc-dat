@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 FORMAT = "dvc-dat-ledger/1"
 
 #: A sealed subject's own predicates (besides its preds, named by its ``db/preds`` row).
-SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys"})
+SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys", "db/sealed-at"})
 
 
 def is_seal_predicate(p: str, frozen: Sequence[str]) -> bool:
@@ -282,18 +282,23 @@ class Transaction:
 
         top = self._rev
         art = self._ledger._store.art
+        kept = []
         for value, subject, trace, loaded_as in self._finalize:
             r = Ref(top, subject)
             sealed_at = r.sealed_at or top
-            stamp = value.sealed_at
+            stamp, h = value.sealed_at, value.hash        # the hash of the bytes stored, not of the live object
             value._provenance(subject=subject, rev=sealed_at, trace=trace, preds=r.preds)
             value.sealed_at = stamp
+            value.__dict__["_hash"] = h
             value._after_seal(art)
             local = value.__dict__.pop("_local", None)
             if local and local["kept"]:
-                from .kept import Kept
+                kept.append(local["kept"])
+        if kept:
+            from .kept import Kept
 
-                Kept().drop(local["kept"])
+            for entry in kept:
+                Kept().drop(entry)
 
     def _write(self, w: Any) -> int:
         from .rev import Rev

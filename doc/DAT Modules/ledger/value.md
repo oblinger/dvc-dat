@@ -59,8 +59,11 @@ three forms.
 - `keep=True` also copies the bytes, by hash, into the kept cache
   (`$DAT_KEPT`, else `~/.cache/dvc-dat/kept`; module `ledger.kept`), so
   the folder or object may change afterwards. `just sealed` lists what
-  is kept and never saved; `just sealed purge [older=14d]` drops it. A
-  save drops its entry at commit.
+  is kept and never saved; `just sealed purge [older=14d]` drops it. Each
+  keep is its own entry (equal bytes share blobs), dropped by its save at
+  commit; `purge` also collects blobs no entry names. If the kept bytes
+  were purged, a save takes the source when it still hashes to the
+  seal, else `SealBroken`.
 - `to` a `Transaction` saves into it (the value lands with that
   revision or not at all; `by=` is `TypeError`); `to` a `Ledger` opens
   and commits a one-value transaction of its own, written `by`
@@ -74,6 +77,10 @@ three forms.
   is `SealBroken`. An abandoned save leaves the value sealed, saved
   nowhere. A dep sealed but saved nowhere is `ValueError` until it is
   saved first, earlier in the same transaction or before.
+- After a save, `hash` is the stored bytes' hash, whatever the live
+  object holds; `db/sealed-at` is one of the subject's frozen rows. An
+  `eval` whose function returns a value sealed by `v.seal()` is
+  `TypeError`: eval seals its own result.
 
 `ledger_class(*, preds=()) -> decorator`: sets the kind's declared pred
 names; a name that is empty, not a `str` or starts `db/` is `TypeError`,

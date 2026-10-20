@@ -4,7 +4,7 @@ import pytest
 
 from dvc_dat.ledger import Dat, Ref, SealBroken
 from dvc_dat.ledger.kept import Kept, age
-from ledger_kinds import Plain
+from ledger_kinds import Cut, Plain, Video
 
 
 @pytest.fixture(autouse=True)
@@ -105,3 +105,65 @@ def test_purge_drops_what_was_kept_and_never_saved(L):
     assert len(rows) == 1 and rows[0]["bytes"] == 3
     assert Kept().purge(age("1d")) == []
     assert len(Kept().purge(age("0m"))) == 1 and Kept().listing() == []
+
+
+def test_a_kept_value_keeps_the_hash_of_its_stored_bytes(L):
+    with L.transaction(by="t") as t:
+        t.add("db/pred/video", "db/type", "ledger_kinds.Video")
+    a = Video(b"a")
+    a.seal(keep=True)
+    a.frames = b"mutated"
+    a.seal(L)
+    assert a.hash == Ref(L.at(), a.subject).hash
+    b = Cut(b"b")
+    b.preds["video"] = a
+    b.seal(L)
+    assert L.at()[b.subject, "video"].load().frames == b"a"
+
+
+def test_two_equal_kept_values_each_save(L):
+    a, b = Plain(b"x"), Plain(b"x")
+    a.seal(keep=True)
+    b.seal(keep=True, provenance="human:b")
+    assert len(Kept().listing()) == 2
+    a.seal(L)
+    b.seal(L)
+    assert Kept().listing() == []
+
+
+def test_a_bad_entry_file_neither_breaks_a_save_nor_the_listing(L, kept_root):
+    v = Plain(b"x")
+    v.seal(keep=True)
+    (kept_root / "sealed" / "junk.json").write_text("{trunc")
+    assert v.seal(L)
+    assert [e["kind"] for e in Kept().listing()] == ["<unreadable>"]
+    Kept().purge(age("0m"))
+    assert Kept().listing() == []
+
+
+def test_purged_bytes_fall_back_to_the_source_only_when_unchanged(L):
+    v = Plain(b"x")
+    v.seal(keep=True)
+    w = Plain(b"y")
+    w.seal(keep=True)
+    w.data = b"changed"
+    Kept().purge(age("0m"))
+    assert v.seal(L)
+    with pytest.raises(SealBroken, match="purged"):
+        w.seal(L)
+
+
+def test_sealed_at_is_frozen(L):
+    from dvc_dat.ledger import Exists
+
+    v = Plain(b"x")
+    v.seal()
+    s = v.seal(L)
+    with pytest.raises(Exists):
+        with L.transaction(by="t") as t:
+            t.remove(s, "db/sealed-at", v.sealed_at)
+
+
+def test_eval_refuses_a_result_sealed_early(coded):
+    with pytest.raises(TypeError, match="eval seals its own"):
+        coded.at().eval("ledger_kinds.sealed_early", game="G1")

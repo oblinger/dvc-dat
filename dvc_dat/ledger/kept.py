@@ -4,7 +4,7 @@
 folder or object it came from cannot break the seal; ``v.seal(t)`` saves from these bytes
 and drops the entry at commit. What stays is sealed and never saved: ``listing`` shows it,
 ``purge`` removes it. The root is ``$DAT_KEPT``, else ``~/.cache/dvc-dat/kept``. Layout:
-``blobs/<sha256>`` (one file per distinct blob) and ``sealed/<hash>.json`` (one per value).
+``blobs/<sha256>`` (one file per distinct blob) and ``sealed/<entry>.json`` (one per keep).
 
     just sealed                       # the listing (python -m dvc_dat.ledger.kept)
     just sealed purge [older=14d]     # drop values sealed more than 14 days ago, never saved
@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -29,35 +30,38 @@ def root() -> Path:
 
 
 class Kept:
-    """One kept cache folder."""
+    """One kept cache folder. Each ``v.seal(keep=True)`` is its own entry, so two values with equal
+    bytes keep two entries over one set of blobs, and saving one leaves the other saveable."""
 
     def __init__(self, path: Optional[Path] = None) -> None:
         self.root = Path(path) if path is not None else root()
 
-    def _entry_path(self, h: str) -> Path:
-        return self.root / "sealed" / f"{h}.json"
+    def _entry_path(self, entry: str) -> Path:
+        return self.root / "sealed" / f"{entry}.json"
 
     def _blob_path(self, h: str) -> Path:
         return self.root / "blobs" / h
 
+    @staticmethod
+    def _write(path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+        tmp.write_bytes(data)
+        os.replace(tmp, path)
+
     def put(self, kind: str, data: bytes, parts: Iterable[bytes], sealed_at: str) -> str:
-        """Keep ``data`` (the encoding) and its ``parts``; return the encoding's hash."""
-        h = sha256(data)
+        """Keep ``data`` (the encoding) and its ``parts``; return the new entry's id."""
         names = []
         for blob in [*parts, data]:
             b = sha256(blob)
-            p = self._blob_path(b)
-            if not p.exists():
-                p.parent.mkdir(parents=True, exist_ok=True)
-                tmp = p.with_name(p.name + ".tmp")
-                tmp.write_bytes(blob)
-                os.replace(tmp, p)
+            if not self._blob_path(b).exists():
+                self._write(self._blob_path(b), blob)
             names.append(b)
-        e = self._entry_path(h)
-        e.parent.mkdir(parents=True, exist_ok=True)
-        e.write_text(json.dumps({"kind": kind, "sealed_at": sealed_at, "parts": names[:-1],
-                                 "bytes": sum(self._blob_path(n).stat().st_size for n in names)}, indent=1))
-        return h
+        entry = f"{sealed_at.replace(':', '')}-{uuid.uuid4().hex[:12]}"
+        self._write(self._entry_path(entry), json.dumps(
+            {"hash": names[-1], "kind": kind, "sealed_at": sealed_at, "parts": names[:-1],
+             "bytes": sum(self._blob_path(n).stat().st_size for n in names)}, indent=1).encode())
+        return entry
 
     def get(self, h: str) -> bytes:
         """One blob by hash; ``KeyError`` when the cache does not hold it (purged)."""
@@ -66,39 +70,49 @@ class Kept:
             raise KeyError(f"{h[:12]}…: not in the kept cache {self.root} (purged?)")
         return p.read_bytes()
 
-    def entry(self, h: str) -> Dict[str, Any]:
-        p = self._entry_path(h)
-        if not p.is_file():
-            raise KeyError(f"{h[:12]}…: no kept value in {self.root} (purged?)")
-        return json.loads(p.read_text())
+    def entry(self, entry: str) -> Dict[str, Any]:
+        p = self._entry_path(entry)
+        try:
+            return json.loads(p.read_text())
+        except (OSError, ValueError):
+            raise KeyError(f"{entry}: no readable kept entry in {self.root} (purged?)") from None
 
     def listing(self) -> List[Dict[str, Any]]:
-        """Every kept value, oldest first: ``hash``, ``kind``, ``sealed_at``, ``bytes``."""
+        """Every kept entry, oldest first: ``entry``, ``hash``, ``kind``, ``sealed_at``, ``bytes``; an
+        unreadable entry file is listed with ``kind`` ``<unreadable>`` rather than stopping the listing."""
         folder = self.root / "sealed"
-        out = [{"hash": p.stem, **json.loads(p.read_text())} for p in folder.glob("*.json")] if folder.is_dir() else []
+        out = []
+        for p in (sorted(folder.glob("*.json")) if folder.is_dir() else []):
+            try:
+                out.append({"entry": p.stem, **json.loads(p.read_text())})
+            except (OSError, ValueError):
+                out.append({"entry": p.stem, "hash": "", "kind": "<unreadable>", "sealed_at": "", "parts": [],
+                            "bytes": 0})
         return sorted(out, key=lambda e: e["sealed_at"])
 
-    def drop(self, h: str) -> None:
-        """Forget one value and every blob no other kept value names."""
-        e = self._entry_path(h)
-        if not e.is_file():
-            return
-        e.unlink()
-        live = set()
-        for other in self.listing():
-            live.update(other["parts"])
-            live.add(other["hash"])
-        folder = self.root / "blobs"
-        for p in (folder.iterdir() if folder.is_dir() else []):
-            if p.name not in live:
-                p.unlink()
+    def drop(self, entry: str) -> None:
+        """Forget one entry; its blobs stay until ``purge`` collects what no entry names."""
+        try:
+            self._entry_path(entry).unlink()
+        except FileNotFoundError:
+            pass
 
     def purge(self, older: _dt.timedelta) -> List[str]:
-        """Drop every value sealed more than ``older`` ago; return their hashes."""
+        """Drop every entry sealed more than ``older`` ago (and every unreadable one), then every blob
+        no entry names and older than an hour (a concurrent ``put`` may not have written its entry yet)."""
         cut = (_dt.datetime.now(_dt.timezone.utc) - older).strftime("%Y-%m-%dT%H:%M:%SZ")
-        gone = [e["hash"] for e in self.listing() if e["sealed_at"] <= cut]
-        for h in gone:
-            self.drop(h)
+        gone = [e["entry"] for e in self.listing() if e["sealed_at"] <= cut]
+        for entry in gone:
+            self.drop(entry)
+        live = set()
+        for e in self.listing():
+            live.update(e["parts"])
+            live.add(e["hash"])
+        settled = _dt.datetime.now().timestamp() - 3600
+        folder = self.root / "blobs"
+        for p in (folder.iterdir() if folder.is_dir() else []):
+            if p.name not in live and not p.name.endswith(".tmp") and p.stat().st_mtime < settled:
+                p.unlink(missing_ok=True)
         return gone
 
 
@@ -116,7 +130,7 @@ def main(argv: List[str]) -> int:
     if not argv:
         rows = k.listing()
         for e in rows:
-            print(f"{e['hash'][:12]}  {e['sealed_at']}  {e['bytes']:>12,}  {e['kind']}")
+            print(f"{e['hash'][:12]:12}  {e['sealed_at']:20}  {e['bytes']:>12,}  {e['kind']}")
         print(f"{len(rows)} kept, sealed and never saved, in {k.root}")
         return 0
     if argv[0] == "purge" and len(argv) <= 2:

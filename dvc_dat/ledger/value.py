@@ -155,22 +155,40 @@ class Value:
         self.sealed = True
         return h
 
+    def _kept(self) -> Optional[Dict[str, Any]]:
+        """The kept entry of a ``v.seal(keep=True)``; ``None`` when the bytes were not kept, or were purged
+        and the source still hashes to the sealed bytes; ``SealBroken`` when purged and the source changed."""
+        local = self.__dict__.get("_local")
+        if not (local and local["kept"]):
+            return None
+        from .kept import Kept
+
+        try:
+            return Kept().entry(local["kept"])
+        except KeyError:
+            if sha256(self.encode()) == local["hash"]:
+                return None
+            from .errors import SealBroken
+
+            raise SealBroken(f"{type(self).__name__} sealed at {self.sealed_at}: its kept bytes were purged and "
+                             "the source changed since; seal a new value") from None
+
     def _stored_bytes(self) -> bytes:
         """The encoding a save stores: the kept bytes when ``v.seal(keep=True)`` kept them, else ``encode()``."""
-        local = self.__dict__.get("_local")
-        if local and local["kept"]:
+        e = self._kept()
+        if e is not None:
             from .kept import Kept
 
-            return Kept().get(local["kept"])
+            return Kept().get(e["hash"])
         return self.encode()
 
     def _stored_parts(self) -> Dict[str, bytes]:
-        local = self.__dict__.get("_local")
-        if local and local["kept"]:
+        e = self._kept()
+        if e is not None:
             from .kept import Kept
 
             k = Kept()
-            return {h: k.get(h) for h in k.entry(local["kept"])["parts"]}
+            return {h: k.get(h) for h in e["parts"]}
         return self._parts()
 
     @property
@@ -219,7 +237,7 @@ class Value:
             from .rev import display_name
 
             return display_name(ledger, self.subject)
-        return f"<{type(self).__name__} unsealed>"
+        return f"<{type(self).__name__} {'sealed, saved nowhere' if self.sealed else 'unsealed'}>"
 
 
 def _now() -> str:
