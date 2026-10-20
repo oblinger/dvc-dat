@@ -47,3 +47,7 @@ class Undeclared(LedgerError, TypeError):
 
 class AliasLoop(LedgerError, LookupError):
     """Making a ``Ref`` met a ``db/alias`` cycle or a chain longer than 8 hops."""
+
+
+class SealBroken(LedgerError, ValueError):
+    """Saving a value sealed by ``v.seal()``: its bytes are no longer the bytes it was sealed with."""
