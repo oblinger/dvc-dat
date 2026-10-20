@@ -33,8 +33,9 @@ anything. Part of the [architecture](../../DAT%20Architecture.md).
 - TODO: `NotEvaluated`'s docstring names "a miss at a revision this
   environment cannot run, or a mount whose repo has no checkout here";
   the code also raises it for code outside any git checkout, a dirty
-  checkout, and a HEAD other than the rev's `code/<repo>` commit, and
-  for `memo=False` runs as well as misses.
+  checkout, and (sandbox mode only, since 6.2.0) a HEAD other than the
+  rev's `code/<repo>` commit, and for `memo=False` runs as well as
+  misses.
 - TODO: `UnmountedImport`'s docstring says "a repo module outside every
   mount"; the finder raises it only for modules of a repo that has a
   mount. A module from an unmounted repo is not refused: it fails as

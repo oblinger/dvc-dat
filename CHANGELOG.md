@@ -6,6 +6,47 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 6.2.0 — 2026-10-20
+
+- **A `Dat` streams.** `Value._parts()` yields `(sha256, source)`, the
+  source a `Path` or a zero-arg opener; a `Dat` hashes each file in
+  1 MiB blocks and caches the per-file hashes (keyed by size, mtime,
+  inode), so no file is held in memory whole. `ArtStore.put_path(source,
+  h)` hardlinks a part on the same filesystem, else streams a checked
+  copy to a temp name and renames; `get_to(h, dest)` places one back the
+  same way; `exists(h)`; `put(bytes)` stays for small values. A save
+  stores one value and one part at a time, checking only the encoding
+  (the manifest) for determinism; `v.seal(keep=True)` streams the parts
+  into the kept cache as copies (an in-place write to the source cannot
+  reach them), and the save hardlinks the kept blobs into the art
+  store. Measured: a 2 GB three-file folder seals with `keep=True` and
+  saves to a SQLite ledger with 3.8 MB of RSS growth
+  (`tests/ledger/test_stream.py`, `DAT_SLOW=1`). The files of a saved
+  or loaded `Dat` share inodes with the store: seal a new folder, never
+  edit one in place (sv-pipe T543 § 3.1).
+- **`decode(data, store, *, name=None)`.** `Ref.load` passes the alias
+  it was made by to a `decode` that accepts `name=`; a `Dat` loaded by
+  a name materialises under `art/dats/<name>/` (replaced when the alias
+  now names other content), by its subject under `art/dats/<16 hex>/`.
+- **`Dat.kind_ok(kind)`**, a classmethod: the load's `_spec_` kind
+  check asks it (default: the class's dotted or bare name), so a
+  subclass can accept another library's `dat.kind`.
+- **`DAT_WORK`** names where an eval's `work` folders are made (default
+  `~/.cache/dvc-dat/work`), so a GB-scale result is built on the
+  filesystem it is saved to.
+- **Every transaction is stamped `db/time`.** `time=` is gone: passing
+  it is `TypeError` naming the change. Callers drop the keyword
+  (sv-pipe: `svp/dat/gamesets.py`, `svp/just.py`,
+  `scripts/gameset_migrate.py`, `tests/test_ledger.py`).
+- **A `code/<repo>` commit row no longer gates a base eval** (sv-pipe
+  T543 Q7 (C)). The row pins what the version means; a clean checkout
+  at any commit evaluates, its trace token is `<row version>+<the
+  environment's commit8>`, and the hit test compares the environment's
+  commit, as it did with no row, so an entry holds at the commit it ran
+  at. Fix in `code_token`: a hand seal at a later commit recorded the
+  row's commit (false provenance). A sandboxed eval keeps the gate (its
+  `fn` hashes modules at the row's commit).
+
 ## 6.1.0 — 2026-10-20
 
 - **`v.seal()` seals without a ledger; `v.seal(t)` saves it later.**

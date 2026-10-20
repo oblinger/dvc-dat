@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from .codec import sha256
+from .store import Part, place
 
 
 def root() -> Path:
@@ -49,26 +50,36 @@ class Kept:
         tmp.write_bytes(data)
         os.replace(tmp, path)
 
-    def put(self, kind: str, data: bytes, parts: Iterable[bytes], sealed_at: str) -> str:
-        """Keep ``data`` (the encoding) and its ``parts``; return the new entry's id."""
+    def put(self, kind: str, data: bytes, parts: Iterable[Part], sealed_at: str) -> str:
+        """Keep ``data`` (the encoding) and its ``parts`` (``(sha256, source)``); return the new entry's id.
+
+        Each part is copied into ``blobs/`` in 1 MiB blocks and checked against its hash, never read
+        whole; it is copied, not linked, so a later in-place write to the source cannot reach it.
+        """
         names = []
-        for blob in [*parts, data]:
-            b = sha256(blob)
-            if not self._blob_path(b).exists():
-                self._write(self._blob_path(b), blob)
-            names.append(b)
+        for h, source in parts:
+            place(source, self._blob_path(h), h, link=False)
+            names.append(h)
+        b = sha256(data)
+        if not self._blob_path(b).exists():
+            self._write(self._blob_path(b), data)
+        names.append(b)
         entry = f"{sealed_at.replace(':', '')}-{uuid.uuid4().hex[:12]}"
         self._write(self._entry_path(entry), json.dumps(
             {"hash": names[-1], "kind": kind, "sealed_at": sealed_at, "parts": names[:-1],
-             "bytes": sum(self._blob_path(n).stat().st_size for n in names)}, indent=1).encode())
+             "bytes": sum(self._blob_path(n).stat().st_size for n in dict.fromkeys(names))}, indent=1).encode())
         return entry
 
     def get(self, h: str) -> bytes:
         """One blob by hash; ``KeyError`` when the cache does not hold it (purged)."""
+        return self.blob(h).read_bytes()
+
+    def blob(self, h: str) -> Path:
+        """The file holding one blob; ``KeyError`` when the cache does not hold it (purged)."""
         p = self._blob_path(h)
         if not p.is_file():
             raise KeyError(f"{h[:12]}…: not in the kept cache {self.root} (purged?)")
-        return p.read_bytes()
+        return p
 
     def entry(self, entry: str) -> Dict[str, Any]:
         p = self._entry_path(entry)

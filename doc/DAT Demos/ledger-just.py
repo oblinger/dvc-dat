@@ -434,10 +434,10 @@ print(L.at()["code/demo-game"])
 # → db: 3.1.4 -> 3.2.0, a release
 
 # %% [markdown]
-# Sugar for `bump(t, "db", "minor", confirm=…)` with `time=True`.
+# Sugar for `bump(t, "db", "minor", confirm=…)` with `why="release"`.
 
 # %%
-with L.transaction(by=f"human:{user_name}", time=True,
+with L.transaction(by=f"human:{user_name}",
                    why="release") as t:
     bump(t, "db", "minor", confirm=lambda old, new: True)
 release_version = t.rev["db", "version"]
@@ -547,7 +547,7 @@ print(Ref(L.at(), "model/prod"), model_dat.preds["metrics.score"])
 # - **`by=`** — `human:$USER` on every write.
 # - **`confirm=`** — a `yes` typed at the prompt, for a minor or
 #   major `bump`.
-# - **`time=True, why=`** — on `just bump db`, the release.
+# - **`why=`** — on `just bump db`, the release.
 # - **The repo** — `code` is `code/<the repo the justfile sits in>`.
 # - **The environment** — discovered from the checkout the recipe
 #   runs in, never passed.

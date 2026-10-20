@@ -86,18 +86,22 @@ def test_a_read_change_misses_and_diff_names_it(world):
     assert b.subject != a.subject and a.diff(b) == {"game/G1 home": ("G4", "G6")}
 
 
-def test_code_commit_is_the_pin_and_not_evaluated(world, envbox):
+def test_code_commit_pins_the_version_and_the_env_commit_decides(world, envbox):
     a = world.at().eval("ledger_kinds.cut", game="G1")
+    assert a.trace["code/testrepo"] == "1.0.0+abc1234"
     with world.transaction(by="t") as t:
         t.add("code/testrepo", "version", "1.0.1")        # version moves, commit does not
     assert a.matches(world.at())
-    envbox.code(commit="def5678")
-    with pytest.raises(NotEvaluated):
-        world.at().eval("ledger_kinds.cut", game="G2")
-    assert world.at().eval("ledger_kinds.cut", game="G1") is not None or True
+    envbox.code(commit="def5678")                          # a later commit: the row no longer gates (Q7 (C))
+    assert not a.matches(world.at())                       # a hit holds at the commit it ran at
+    b = world.at().eval("ledger_kinds.cut", game="G2")
+    assert b.trace["code/testrepo"] == "1.0.1+def5678"     # the row's version, the environment's commit
+    assert world.at().eval("ledger_kinds.cut", game="G2", memo="get").subject == b.subject
+    envbox.code(commit="abc1234")
+    assert world.at().eval("ledger_kinds.cut", game="G1", memo="get").subject == a.subject
     envbox.code(dirty=True)
     with pytest.raises(NotEvaluated):
-        world.at().eval("ledger_kinds.cut", game="G2")
+        world.at().eval("ledger_kinds.cut", game="G3")
 
 
 def test_no_code_row_runs_with_the_env_commit(L):

@@ -41,9 +41,19 @@ the row's place within its transaction, `object` a tagged string
 - `Writer.next_rev() -> int`, `Writer.insert(rev, rows)`: rows get
   `ord` 0, 1, … in the order given. `Writer.create_index(p)`: the
   `db/index` partial index.
-- `ArtStore(root)`: `put(data) -> hex` writes `sha256/<2>/<hex>` once,
-  atomically by rename; `get(hex) -> bytes` (`FileNotFoundError` when
-  absent); `path(hex) -> Path`.
+- `ArtStore(root)`: `put(data) -> hex` writes small bytes held in
+  memory to `sha256/<2>/<hex>` once, atomically by rename;
+  `put_path(source, hex) -> bool` stores a part without reading it
+  whole: a `Path` is hardlinked when on the same filesystem, else (and
+  an opener always) streamed in 1 MiB blocks to a temp name, checked
+  against `hex` (`ValueError` when the source changed since it was
+  hashed) and renamed; `True` when written by this call.
+  `get(hex) -> bytes` and `get_to(hex, dest)` (the same hardlink-else-
+  stream placement, into `dest`) are `FileNotFoundError` when absent;
+  `exists(hex) -> bool`; `path(hex) -> Path`.
+- `file_sha(path) -> hex`, `place(source, dest, hex, *, link=True)`:
+  the 1 MiB-block hash and the write-once placement the art store and
+  the kept cache share. `Part = (hex, source)`.
 
 ## Invariants
 

@@ -93,27 +93,24 @@ def check_provenance(provenance: Optional[str]) -> str:
 
 
 def code_token(rev: "Rev", repo: str, env_commit: Optional[str]) -> str:
-    """The ``code/<repo>`` trace item: ``<version>+<commit 8>`` from the rows, else ``+<env commit 8>`` (A53)."""
+    """The ``code/<repo>`` trace item: ``<version row>+<env commit 8>``, ``+<env commit 8>`` with no
+    version row (A53). The commit is always the environment's: the commit the code ran at, whatever
+    commit the ``code/<repo>`` row pins its version to (6.2.0)."""
     v = rev.get(f"code/{repo}", "version")
-    c = rev.get(f"code/{repo}", "commit")
-    if v is None and c is None:
-        return "+" + (env_commit or "")[:8]
-    return f"{v or ''}+{(c or '')[:8]}"
+    return f"{v or ''}+{(env_commit or '')[:8]}"
 
 
 class Transaction:
     """The write set open under one ``with L.transaction(...)``."""
 
-    def __init__(self, ledger: "Ledger", by: str, lock: Optional[float], time: bool,
-                 preds: Dict[str, Any]) -> None:
+    def __init__(self, ledger: "Ledger", by: str, lock: Optional[float], preds: Dict[str, Any]) -> None:
         self._ledger = ledger
         self._by = _name(by, "by")
         if lock is not None and (isinstance(lock, bool) or not isinstance(lock, (int, float)) or lock <= 0):
             raise TypeError(f"lock is a positive number of seconds, not {lock!r}")
-        if not isinstance(time, bool):
-            raise TypeError("time=True stamps the wall clock; no value may be passed in")
+        if "time" in preds:
+            raise TypeError("time= is gone (6.2.0): every transaction is stamped db/time; drop the keyword")
         self._lock = lock
-        self._time = time
         #: A placeholder for ``db/tx/<rev>``, rewritten at commit.
         self.tx = f"db/tx/pending-{uuid.uuid4().hex[:12]}"
         self._preds: List[Tuple[str, str]] = []
@@ -263,19 +260,22 @@ class Transaction:
         self._created = []
 
     def _store_all(self) -> None:
-        """The bytes of every seal, written at commit so bytes and rows land together (or neither)."""
+        """The bytes of every seal, written at commit so bytes and rows land together (or neither).
+
+        One value at a time, one part at a time: each part is hardlinked or streamed into the art
+        store (``put_path``), never read whole; the encoding (a manifest, for a ``Dat``) is checked
+        against the sealed hash before anything of the value is written."""
         art = self._ledger._store.art
         for v in self._to_store:
-            blobs = list(v._stored_parts().values()) + [v._stored_bytes()]
-            for data in blobs:
-                from .codec import sha256 as _sha
-
-                path = art.path(_sha(data))
-                if not path.exists():
-                    art.put(data)
-                    self._created.append(path)
-            if _sha(blobs[-1]) != v.hash:
+            data = v._stored_bytes()
+            if sha256(data) != v.hash:
                 raise ValueError(f"{type(v).__name__}.encode is not deterministic: two calls gave two hashes")
+            for h, source in v._stored_parts():
+                if art.put_path(source, h):
+                    self._created.append(art.path(h))
+            if not art.exists(v.hash):
+                art.put(data)
+                self._created.append(art.path(v.hash))
 
     def _finish(self) -> None:
         from .rev import Ref
@@ -322,9 +322,8 @@ class Transaction:
         if rev == 1:
             rows.append(("db", "db/format", "str:" + FORMAT, True))
         rows.append((txs, "db/by", "str:" + self._by, True))
-        if self._time:
-            stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            rows.append((txs, "db/time", "str:" + stamp, True))
+        stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        rows.append((txs, "db/time", "str:" + stamp, True))
         rows.extend((txs, k, o, True) for k, o in self._preds)
         self._store_all()
         w.insert(rev, rows)

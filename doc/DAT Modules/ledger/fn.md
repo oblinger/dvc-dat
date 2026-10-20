@@ -33,10 +33,14 @@ world hands back the value already sealed. Part of the
   - Keys bind to the signature with defaults applied (`TypeError` from
     `inspect` on a bad key); `memo` or `work` given as a key is
     `TypeError`.
-  - A miss runs only when the function's checkout is clean and its HEAD
-    agrees with the rev's `code/<repo>` commit (any commit when the rev
-    has no such row); code outside any checkout, a dirty checkout or
-    another HEAD is `NotEvaluated`.
+  - A miss runs only when the function's code is in a git checkout and
+    the checkout is clean; code outside any checkout or a dirty checkout
+    is `NotEvaluated`. A `code/<repo>` `commit` row does not gate a base
+    eval (6.2.0, T543 Q7 (C)): it pins what the version means, and the
+    entry's `code/<repo>` item records the commit the code ran at, so a
+    hit holds only at that commit ([trace](trace.md)). A sandboxed eval
+    keeps the gate ([sandbox](sandbox.md)): it hashes its modules at the
+    row's commit.
   - A result not an instance of a `Value`-subclass annotation is
     `TypeError`; with any other annotation a non-`Value` result is
     wrapped in `Pickled`.
@@ -57,8 +61,10 @@ world hands back the value already sealed. Part of the
   newest seal first; the first whose trace holds at the asked revision
   ([trace](trace.md)) is restored by `Ref.load`.
 - Base run: the body gets a recording `Rev`; a function declaring
-  `work` gets a fresh `ledger-work-*` temp folder, removed after the
-  seal. The trace is the recorded reads plus `fn`, `code/<repo>` (the
+  `work` gets a fresh `ledger-work-*` folder under `work_root()`
+  (`$DAT_WORK`, else `~/.cache/dvc-dat/work`), removed after the seal;
+  a GB-scale result built there should sit on the filesystem it is
+  saved to, so set `DAT_WORK` beside the ledger's art store. The trace is the recorded reads plus `fn`, `code/<repo>` (the
   function's own repo), `uv.lock` and `platform`.
 - Seal: one transaction `by="eval:<name>"`, subject = hash of
   `{fn, keys, trace, preds, value}`; writes the `db/fn/<name>/<hash>`

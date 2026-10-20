@@ -125,3 +125,36 @@ def sealed_early(rev, *, game: str) -> Cut:
     c = Cut(game.encode())
     c.seal()
     return c
+
+
+class Dat2(Dat):
+    """A ``Dat`` that also loads folders whose ``_spec_`` names one of ``kinds`` (the ``kind_ok`` hook)."""
+
+    kinds: tuple = ()
+
+    @classmethod
+    def kind_ok(cls, kind: str) -> bool:
+        return kind in cls.kinds or super().kind_ok(kind)
+
+
+class Blobby(Value):
+    """A value whose one part comes from an opener: the encoding names the part's hash."""
+
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    def encode(self) -> bytes:
+        from dvc_dat.ledger.codec import sha256
+
+        return sha256(self.data).encode()
+
+    def _parts(self):
+        import io
+
+        from dvc_dat.ledger.codec import sha256
+
+        return [(sha256(self.data), lambda: io.BytesIO(self.data))]
+
+    @classmethod
+    def decode(cls, data: bytes, store) -> "Blobby":
+        return cls(store.get(data.decode()))

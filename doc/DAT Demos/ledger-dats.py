@@ -492,7 +492,7 @@ except Unindexed as e:
 # ### A release pins every clock
 
 # %%
-with L.transaction(by="human:dan", time=True,
+with L.transaction(by="human:dan",
                    why="October release") as t:
     bump(t, "db", "minor",                   # 0.0.0 -> 0.1.0
          confirm=lambda old, new: True)

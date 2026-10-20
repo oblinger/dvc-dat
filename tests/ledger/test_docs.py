@@ -75,7 +75,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev.select(("game", "version"), fn="ledger_kinds.cut") == [("G1", "1.0.0")]   # tuples
     assert rev.all(since=L.at(1))            # every row in (1, rev.id]
 
-    with L.transaction(by="human:dan", time=True, why="T531") as t:
+    with L.transaction(by="human:dan", why="T531") as t:
         assert bump(t, "code/testrepo", "patch") == "0.2.3"     # 0.2.2 -> 0.2.3, and commit from the checkout
         t["env/prod", "rev"] = "413"         # add, on a one pred
         t.add(t.tx, "checked", "G1,G4,G5")

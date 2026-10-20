@@ -7,9 +7,9 @@ Items (Module § Value ``Trace``):
     name resolves at the rev to the same subject (base: the module's source;
     sandbox: the recorded modules re-hashed at the rev's commit, A38, Q37).
 ``code/<repo>``
-    ``<version>+<commit 8>``; holds when the commit agrees with the rev's
-    ``code/<repo>`` row (or, no row, the environment's), the version being
-    informational (Q1: the commit is the pin).
+    ``<version>+<commit 8>``; holds when the commit agrees with the
+    environment's, whatever commit a ``code/<repo>`` row pins (6.2.0, T543
+    Q7 (C)), the version being informational (Q1: the commit is the pin).
 ``uv.lock``, ``platform``
     the environment, now.
 ``<subject> <predicate>``
@@ -201,12 +201,9 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
         return env().platform == recorded
     if item.startswith("ref:"):
         return True
-    if item.startswith("code/"):
-        repo = item[len("code/"):]
-        c = rev.get(item, "commit")
-        if c is None:
-            code = env().code.get(repo)
-            c = code.commit if code is not None else None
+    if item.startswith("code/"):                # the environment's commit, row or no row (6.2.0)
+        code = env().code.get(item[len("code/"):])
+        c = code.commit if code is not None else None
         want = recorded.rpartition("+")[2]
         return bool(c) and bool(want) and (c.startswith(want) or want.startswith(c))
     if item.startswith("eval:"):

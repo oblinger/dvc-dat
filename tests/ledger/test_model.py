@@ -92,7 +92,7 @@ class LedgerVsModel(RuleBasedStateMachine):
         with self.L.transaction(by="agent") as t:
             for added, s, p, o in quads:
                 (t.add if added else t.remove)(s, p, o)
-        rid = self.model.commit("agent", quads)
+        rid = self.model.commit("agent", quads, t.rev[t.rev.tx, "db/time"])
         assert t.rev.id == rid
 
     @invariant()
