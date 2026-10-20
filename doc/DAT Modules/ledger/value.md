@@ -13,7 +13,14 @@ Part of the [architecture](../../DAT%20Architecture.md).
 `Value`:
 
 - `encode() -> bytes`, `decode(data, store) -> Value` (classmethod):
-  `NotImplementedError` unless a subclass defines them.
+  `NotImplementedError` unless a subclass defines them. A `decode` that
+  also accepts `name=` (keyword, or `**kwargs`) is passed the name the
+  value is loaded by (an alias), `None` when loaded by its subject.
+- `_parts() -> Iterable[(sha256, source)]`: further bytes `decode`
+  fetches from the store, default none; `source` is a `Path` or a
+  zero-arg opener returning a binary stream. A save streams each part
+  into the art store one at a time ([store](store.md) `put_path`); no
+  part is ever held in memory whole.
 - `preds`: a `dict` while unsealed (assignable as a whole); a
   `FrozenPreds` once sealed, whose every mutator is `TypeError`.
 - `subject: str | None`, `rev: Rev | None`, `trace: Mapping[str, str]`
@@ -38,10 +45,19 @@ Subclasses:
 - `Table(table)`: a `pyarrow.Table` or pandas `DataFrame` as parquet;
   decodes to `pyarrow`.
 - `Dat(path)`: a folder; encodes as `{"files": {relpath: sha256}}`
-  (canonical JSON, `__pycache__` folders skipped); the files go to the
-  art store as parts; `decode` materialises the folder under
-  `art/dats/<first 16 hex of the manifest hash>/` and returns a `Dat`
-  there; after the seal `path` moves to that stored folder.
+  (canonical JSON, `__pycache__` folders skipped). Each file is hashed
+  in 1 MiB blocks; the per-file hashes are cached on the object, keyed
+  by each file's (size, mtime, inode), so `encode`, `_parts` and a
+  save walk the folder but hash a changed file only. The files are the
+  parts, `(sha256, path)`: a save hardlinks them into the art store
+  (same filesystem) or streams a copy. `decode(data, store, *,
+  name=None)` materialises the folder under `art/dats/<name>/` when
+  loaded by a name, else `art/dats/<first 16 hex of the manifest
+  hash>/`, placing each file by `ArtStore.get_to` (a hardlink where
+  possible); a named folder holding other content (the alias was
+  re-pointed) is replaced. After the seal `path` moves to the hash
+  folder. `Dat.kind_ok(kind) -> bool` (classmethod) is the load's kind
+  hook, below.
 
 `seal(to=None, *, keep=False, deps=(), alias=None, provenance=None, by=None) -> str`:
 three forms.
@@ -58,7 +74,11 @@ three forms.
   seal is `ValueError`.
 - `keep=True` also copies the bytes, by hash, into the kept cache
   (`$DAT_KEPT`, else `~/.cache/dvc-dat/kept`; module `ledger.kept`), so
-  the folder or object may change afterwards. `just sealed` lists what
+  the folder or object may change afterwards. Parts are streamed in
+  1 MiB blocks and checked against their hash; they are copied, never
+  linked, so an in-place write to the source cannot reach the kept
+  copy. A save of a kept value hardlinks the kept blobs into the art
+  store. `just sealed` lists what
   is kept and never saved; `just sealed purge [older=14d]` drops it. Each
   keep is its own entry (equal bytes share blobs), dropped by its save at
   commit; `purge` also collects blobs no entry names. If the kept bytes
@@ -98,8 +118,18 @@ as is decorating a non-`Value` class. Writes nothing.
 - A subclass's `__init__` need not call `super().__init__`; the
   provenance fields are class-level defaults.
 - `Dat` is not `dvc_dat.Dat`: it hashes every file in the folder;
-  on load, a `_spec_` naming a `dat.kind` other than the row's class
-  is a `TypeError` (leg 8).
+  on load, a `_spec_` naming a `dat.kind` that is neither the row's
+  class nor accepted by the loaded class's `kind_ok` is a `TypeError`
+  (leg 8). `kind_ok`'s default accepts the class's dotted or bare
+  name; a subclass widens it (a hybrid kind loading another library's
+  folders).
+- Memory is bounded by the manifest, not the folder: a 2 GB, three-file
+  `Dat` seals with `keep=True` and saves with under 4 MB of RSS growth
+  (`tests/ledger/test_stream.py`, `DAT_SLOW=1`).
+- The files of a saved or loaded `Dat` are hardlinks into the art store
+  where the filesystem allows, and so are a saved, unkept source
+  folder's: an in-place write to either reaches the store. Write a new
+  folder and seal it; never edit one in place.
 
 ## Left to other modules
 

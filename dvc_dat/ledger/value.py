@@ -18,13 +18,13 @@ import os
 import pickle
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterable, Mapping, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple
 
 from .codec import canonical, sha256
 
 if TYPE_CHECKING:
     from .rev import Rev
-    from .store import ArtStore
+    from .store import ArtStore, Part
 
 _EMPTY: Mapping[str, str] = MappingProxyType({})
 
@@ -78,12 +78,15 @@ class Value:
 
     @classmethod
     def decode(cls, data: bytes, store: "ArtStore") -> "Value":
-        """The object from its bytes."""
+        """The object from its bytes. A subclass whose ``decode`` also accepts ``name=`` is passed the
+        name it is loaded by (an alias), or ``None`` when loaded by its subject."""
         raise NotImplementedError(f"{cls.__name__} does not say how it decodes")
 
-    def _parts(self) -> Dict[str, bytes]:
-        """Further bytes, by hash, that ``decode`` will fetch from the store (a folder's files)."""
-        return {}
+    def _parts(self) -> Iterable["Part"]:
+        """Further bytes that ``decode`` will fetch from the store (a folder's files), as
+        ``(sha256, source)``: a ``Path``, or a zero-arg opener returning a binary stream. Streamed into
+        the store one at a time; never held in memory whole."""
+        return ()
 
     def _after_seal(self, store: "ArtStore") -> None:
         """Hook run once the value is sealed (a ``Dat`` moves to its stored folder)."""
@@ -146,7 +149,8 @@ class Value:
         stamp = _now()
         data = self.encode()
         h = sha256(data)
-        kept = Kept().put(dotted(type(self)), data, self._parts().values(), stamp) if keep else None
+        kept = Kept().put(dotted(type(self)), data, self._parts(), stamp) if keep else None
+        self._forget()              # the hash is fixed: a later check (SealBroken) hashes the source anew
         self.__dict__["_local"] = {"hash": h, "deps": deps, "provenance": provenance, "env": current_env(),
                                    "kept": kept}
         self.__dict__["_preds"] = FrozenPreds(self.preds)
@@ -182,14 +186,18 @@ class Value:
             return Kept().get(e["hash"])
         return self.encode()
 
-    def _stored_parts(self) -> Dict[str, bytes]:
+    def _stored_parts(self) -> Iterable["Part"]:
+        """The parts a save stores: the kept blobs when kept, else ``_parts()``."""
         e = self._kept()
         if e is not None:
             from .kept import Kept
 
             k = Kept()
-            return {h: k.get(h) for h in e["parts"]}
+            return [(h, k.blob(h)) for h in e["parts"]]
         return self._parts()
+
+    def _forget(self) -> None:
+        """Drop whatever the subclass cached while encoding (a ``Dat``'s per-file hashes)."""
 
     @property
     def hash(self) -> str:
@@ -250,6 +258,18 @@ def dotted(cls: type) -> str:
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
+def takes_name(cls: type) -> bool:
+    """Does ``cls.decode`` accept ``name=`` (a keyword named ``name``, or ``**kwargs``)?"""
+    import inspect
+
+    try:
+        params = inspect.signature(cls.decode).parameters.values()       # type: ignore[attr-defined]
+    except (TypeError, ValueError):
+        return False
+    return any(q.kind is q.VAR_KEYWORD or (q.name == "name" and q.kind in (q.KEYWORD_ONLY, q.POSITIONAL_OR_KEYWORD))
+               for q in params)
+
+
 def ledger_class(*, preds: Iterable[str] = ()):
     """Class decorator: the pred names a ``Value`` subclass's values may carry (Q22); writes nothing."""
     names = tuple(preds)
@@ -305,25 +325,57 @@ class Table(Value):
 
 
 class Dat(Value):
-    """A folder: encodes as its content manifest, ``{"files": {relpath: sha256}}``; the files go to the store."""
+    """A folder: encodes as its content manifest, ``{"files": {relpath: sha256}}``; the files go to the store.
+
+    Each file is hashed in 1 MiB blocks and never held in memory; the per-file hashes are cached
+    on the object, keyed by each file's (size, mtime, inode), so ``encode``, ``_parts`` and a save
+    walk the folder but hash a file once. The files of a saved or loaded ``Dat`` are hardlinks
+    into the art store where the filesystem allows: write a new folder, never edit one in place.
+    """
 
     def __init__(self, path: Any) -> None:
         self.path = Path(path)
 
-    def _files(self) -> Dict[str, bytes]:
-        out = {}
+    def _walk(self) -> Iterator[Tuple[str, Path]]:
+        """``(relpath, path)`` of every file in the value, in sorted order (``__pycache__`` skipped)."""
         for root, dirs, names in os.walk(self.path):
             dirs[:] = sorted(d for d in dirs if d != "__pycache__")
             for n in sorted(names):
                 p = Path(root, n)
-                out[p.relative_to(self.path).as_posix()] = p.read_bytes()
-        return out
+                yield p.relative_to(self.path).as_posix(), p
+
+    def _manifest(self) -> Dict[str, str]:
+        """``{relpath: sha256}`` of the folder, rehashing only files whose (size, mtime, inode) moved."""
+        from .store import file_sha
+
+        cache = self.__dict__.get("_shas") or {}
+        new: Dict[str, Tuple[tuple, str]] = {}
+        for rel, p in self._walk():
+            st = p.stat()
+            sig = (st.st_size, st.st_mtime_ns, st.st_ino, st.st_dev)
+            hit = cache.get(rel)
+            new[rel] = (sig, hit[1] if hit is not None and hit[0] == sig else file_sha(p))
+        self.__dict__["_shas"] = new
+        return {rel: h for rel, (_sig, h) in sorted(new.items())}
+
+    def _forget(self) -> None:
+        self.__dict__.pop("_shas", None)
 
     def encode(self) -> bytes:
-        return canonical({"files": {k: sha256(v) for k, v in sorted(self._files().items())}}).encode()
+        return canonical({"files": self._manifest()}).encode()
 
-    def _parts(self) -> Dict[str, bytes]:
-        return {sha256(v): v for v in self._files().values()}
+    def _parts(self) -> List["Part"]:
+        seen: Dict[str, Path] = {}
+        manifest = self._manifest()
+        for rel, p in self._walk():
+            seen.setdefault(manifest[rel], p)
+        return list(seen.items())
+
+    @classmethod
+    def kind_ok(cls, kind: str) -> bool:
+        """Does a folder whose ``_spec_`` names ``dat.kind`` ``kind`` load as this class (beside the
+        class its ``db/value`` row names)? Default: the class's dotted name or its bare name."""
+        return kind in (dotted(cls), cls.__name__)
 
     @staticmethod
     def spec_kind(path: Path) -> Optional[str]:
@@ -340,25 +392,63 @@ class Dat(Value):
         return None
 
     @staticmethod
-    def _materialise(data: bytes, store: "ArtStore") -> Path:
+    def _materialise(data: bytes, store: "ArtStore", name: Optional[str] = None) -> Path:
+        """The folder of a manifest, under ``<store root>/dats/``: at ``<name>`` when a name is given,
+        else at the manifest hash's first 16 hex. Files are placed by ``store.get_to`` (hardlinks on
+        the same filesystem); a named folder holding other content is replaced."""
         from .sandbox import unguarded             # the store's own write, also inside a sandboxed body
 
         manifest = json.loads(data.decode())
-        dest = store.root / "dats" / sha256(data)[:16]
+        files: Dict[str, str] = manifest["files"]
+        if name is not None:
+            parts = Path(name).parts
+            if not parts or Path(name).is_absolute() or any(x in ("..", ".", "") for x in parts):
+                raise ValueError(f"a Dat loaded as {name!r}: a name is a relative path without . or ..")
+            dest = store.root / "dats" / Path(*parts)
+        else:
+            dest = store.root / "dats" / sha256(data)[:16]
         with unguarded():
-            for rel, h in manifest["files"].items():
+            if name is not None and dest.exists() and not _holds(dest, files, store):
+                import shutil
+
+                old = dest.with_name(f"{dest.name}.old-{os.getpid()}-{id(data):x}")
+                dest.rename(old)
+                shutil.rmtree(old, ignore_errors=True)
+            for rel, h in files.items():
                 p = dest / rel
                 if not p.exists():
-                    p.parent.mkdir(parents=True, exist_ok=True)
-                    p.write_bytes(store.get(h))
+                    store.get_to(h, p)
             dest.mkdir(parents=True, exist_ok=True)
         return dest
 
     @classmethod
-    def decode(cls, data: bytes, store: "ArtStore") -> "Dat":
+    def decode(cls, data: bytes, store: "ArtStore", *, name: Optional[str] = None) -> "Dat":
         obj = cls.__new__(cls)
-        obj.path = cls._materialise(data, store)
+        obj.path = cls._materialise(data, store, name)
         return obj
 
     def _after_seal(self, store: "ArtStore") -> None:
-        self.path = self._materialise(self._stored_bytes(), store)
+        self._forget()
+        self.path = self._materialise(store.get(self.hash), store)       # the manifest as stored
+
+
+def _holds(dest: Path, files: Mapping[str, str], store: "ArtStore") -> bool:
+    """Does the folder hold exactly these files with these hashes (a linked file is checked by inode)?"""
+    from .store import file_sha
+
+    found = set()
+    for root, _dirs, names in os.walk(dest):
+        for n in names:
+            found.add(Path(root, n).relative_to(dest).as_posix())
+    if found != set(files):
+        return False
+    for rel, h in files.items():
+        p, blob = dest / rel, store.path(h)
+        try:
+            if os.path.samefile(p, blob):
+                continue
+        except OSError:
+            pass
+        if file_sha(p) != h:
+            return False
+    return True

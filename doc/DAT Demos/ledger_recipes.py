@@ -178,7 +178,7 @@ def bump_recipe(args):
         subject = f"code/{repo_name(checkout())}"
     L = Ledger()
     old = L.at().get(subject, "version", default="0.0.0")
-    extra = {"time": True, "why": "release"} if subject == "db" else {}
+    extra = {"why": "release"} if subject == "db" else {}
     with L.transaction(by=BY, **extra) as t:
         new = bump(t, subject, part, confirm=None if part == "patch" else confirm(subject))
     commit = t.rev.get(subject, "commit")

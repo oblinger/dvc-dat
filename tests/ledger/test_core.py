@@ -76,7 +76,7 @@ def test_mounts_sugar_asserted_once_on_walk_up(tmp_path, monkeypatch):
 # -- transactions ---------------------------------------------------------------------------------
 
 def test_one_transaction_one_revision_and_tx_rows_last(L):
-    with L.transaction(by="human:dan", why="w", time=True) as t:
+    with L.transaction(by="human:dan", why="w") as t:
         t.add("s", "p", "1")
         t.add(t.tx, "checked", "yes")
     rev = t.rev
@@ -85,6 +85,14 @@ def test_one_transaction_one_revision_and_tx_rows_last(L):
     assert rows[:2] == [("s", "p"), ("db/tx/1", "checked")]
     assert rows[2:5] == [("db", "db/format"), ("db/tx/1", "db/by"), ("db/tx/1", "db/time")]
     assert rev[rev.tx, "why"] == "w"
+
+
+def test_every_transaction_is_stamped_and_time_is_refused(L):
+    with L.transaction(by="t") as t:
+        t.add("s", "p", "1")
+    assert len(t.rev[t.rev.tx, "db/time"]) == 20                 # UTC, YYYY-MM-DDTHH:MM:SSZ
+    with pytest.raises(TypeError, match="time= is gone"):
+        L.transaction(by="t", time=True)
 
 
 def test_an_exception_writes_nothing(L):

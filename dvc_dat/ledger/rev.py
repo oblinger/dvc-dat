@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequenc
 from .codec import canonical, encode_plain, is_hash, parse_ref, ref_text, show, strip_hint, tag
 from .errors import AliasLoop, Multiple, Unindexed
 from .fold import Held, fold
-from .value import FrozenPreds, Value, dotted
+from .value import FrozenPreds, Value, dotted, takes_name
 
 if TYPE_CHECKING:
     from .fn import Fn
@@ -751,22 +751,23 @@ class Ref:
             store = ledger._store.art
             cls = self.type
             assert cls is not None
-            v = cls.decode(store.get(self._hash), store)
+            loaded_as = self.name if self.name != s else None
+            data = store.get(self._hash)
+            v = cls.decode(data, store, name=loaded_as) if takes_name(cls) else cls.decode(data, store)
             if not isinstance(v, Value):
                 raise TypeError(f"{cls.__name__}.decode returned {type(v).__name__}, not a Value")
             from .value import Dat
 
             if isinstance(v, Dat):                      # the row wins; the folder is checked against it
                 kind = Dat.spec_kind(v.path)
-                if kind is not None and kind not in (self._cls, dotted(cls), cls.__name__):
+                if kind is not None and kind != self._cls and not type(v).kind_ok(kind):
                     raise TypeError(f"{s[:12]}…: the db/value row names {self._cls}; the folder's _spec_ names "
                                     f"dat.kind {kind}")
             rows = self._p._held_rows(subject=s)
             trace = {p[len("db/trace/"):]: show(h.obj) for _s, p, h in rows if p.startswith("db/trace/")}
             sealed_at = self._sealed_at()
             assert sealed_at is not None
-            v._provenance(subject=s, rev=sealed_at, trace=trace, preds=self._preds(),
-                          loaded_as=self.name if self.name != s else None)
+            v._provenance(subject=s, rev=sealed_at, trace=trace, preds=self._preds(), loaded_as=loaded_as)
             v.__dict__["_hash"] = self._hash
             ledger._values[key] = v
         self.rev._record_value(v, self.name)

@@ -15,8 +15,9 @@ on a refusal. Part of the [architecture](../../DAT%20Architecture.md).
 `Transaction` (made by `Ledger.transaction`):
 
 - Constructor checks: `by` a non-empty `str`; `lock` a positive number
-  of seconds or `None`; `time` a `bool`; each extra keyword a `str` or
-  JSON document, never `db/…`, never a bare scalar; else `TypeError`.
+  of seconds or `None`; each extra keyword a `str` or JSON document,
+  never `db/…`, never a bare scalar; else `TypeError`. `time=` is
+  `TypeError` (gone in 6.2.0: every transaction is stamped).
 - `tx: str`: a placeholder subject, rewritten to `db/tx/<rev>` at
   commit wherever it appears as a subject or a `str` object.
 - `base: Rev`: the top when the block was entered; under `lock=` the
@@ -59,8 +60,11 @@ on a refusal. Part of the [architecture](../../DAT%20Architecture.md).
 Module functions: `attr(obj, path)` walks a dotted path over mappings,
 sequences (integer steps) and attributes, `KeyError` at the first
 missing step, `TypeError` for an empty path. `code_token(rev, repo,
-env_commit)` is the `code/<repo>` trace value: `<version>+<commit8>`
-from the rows, else `+<env commit8>`. `FORMAT` is
+env_commit)` is the `code/<repo>` trace value: `<version>+<env
+commit8>`, the version from the `code/<repo>` row (empty when there is
+none) and the commit always the environment's, the one the code ran at
+(6.2.0; 6.1.0 took the row's commit, so a seal at a later commit
+recorded the release's). `FORMAT` is
 `"dvc-dat-ledger/1"`; `SEAL_PREDICATES` the seal's own predicates.
 
 ## The seal
@@ -95,8 +99,14 @@ object mismatching its predicate's `db/type` (declarations in the same
 transaction included), and for a pred holding a list or `Value` under a
 `one` predicate with no `db/type`. A `(db/pred/<p>, db/index, true)`
 row builds a partial SQL index on `<p>` in the same commit. Then the
-seals' bytes go to the art store, the rows are inserted in body order,
-then `(db, db/format, …)` on revision 1, then the `db/tx/<rev>` rows.
+seals' bytes go to the art store, one value and one part at a time: the
+encoding is checked against the sealed hash first (`ValueError`, "not
+deterministic", nothing of the value written), then each part is
+hardlinked or streamed in (`ArtStore.put_path`), then the encoding
+itself. The rows are inserted in body order, then `(db, db/format, …)`
+on revision 1, then the `db/tx/<rev>` rows: `db/by`, `db/time` (UTC
+`YYYY-MM-DDTHH:MM:SSZ`, on every transaction since 6.2.0) and the
+keywords.
 
 ## Invariants
 

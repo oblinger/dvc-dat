@@ -30,8 +30,8 @@ construction. Part of the [architecture](../../DAT%20Architecture.md).
   string a revision (`KeyError` outside `0..top`); `"M.m.p"` the latest
   revision that set `(db, version, M.m.p)` (`KeyError` if none); a
   `bool` or anything else `TypeError`.
-- `Ledger.transaction(*, by, lock=None, time=False, **preds) ->
-  Transaction`: a write set, one revision on exit; used only as
+- `Ledger.transaction(*, by, lock=None, **preds) -> Transaction`: a
+  write set, one revision on exit, stamped `db/time`; used only as
   `with … as t:` (see [txn](txn.md)).
 - Module constants `ENV = "DAT_LEDGER"`, `CONFIG = ".datconfig.yaml"`.
 

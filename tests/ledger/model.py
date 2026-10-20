@@ -2,7 +2,7 @@
 
 A history is a list of rows ``(rev, ord, s, p, o, added)`` with ``o`` a plain
 string; within a revision the body's rows come first, in body order, then the
-transaction's own ``db/tx/<rev> db/by`` row (A50). Every read is a function of
+transaction's own ``db/tx/<rev> db/by`` and ``db/time`` rows (A50). Every read is a function of
 the rows at or before a revision R (and after ``since``), folded per (s, p) by
 the cardinality ``db/pred/<p> db/cardinality`` declares as of R:
 
@@ -26,8 +26,8 @@ class Model:
         self.rows = []
         self.top = 0
 
-    def commit(self, by, ops):
-        """``ops``: ``(added, s, p, o)``; the revision ends with ``db/tx/<rev> db/by``."""
+    def commit(self, by, ops, time):
+        """``ops``: ``(added, s, p, o)``; the revision ends with ``db/tx/<rev> db/by`` and ``db/time``."""
         self.top += 1
         for i, (added, s, p, o) in enumerate(ops):
             self.rows.append((self.top, i, s, p, o, added))
@@ -36,6 +36,7 @@ class Model:
             self.rows.append((1, n, "db", "db/format", FORMAT, True))
             n += 1
         self.rows.append((self.top, n, f"db/tx/{self.top}", "db/by", by, True))
+        self.rows.append((self.top, n + 1, f"db/tx/{self.top}", "db/time", time, True))
         return self.top
 
     def _state(self, R, after, card_of):

@@ -69,7 +69,11 @@ trace (see [trace](trace.md)). Part of the
 - `load() -> Value`: decode by `type`, restore `subject`, `rev` (the
   sealing revision), `trace`, `preds`; cached per `(subject, rev,
   name)`; no value `KeyError`; a `decode` returning a non-`Value`
-  `TypeError`.
+  `TypeError`. A `decode` accepting `name=` is passed the alias the
+  `Ref` was made by (`None` by subject), so a `Dat` lands under
+  `art/dats/<name>/`. A `Dat` whose folder's `_spec_` names a
+  `dat.kind` other than the row's class is `TypeError` unless the
+  loaded class's `kind_ok(kind)` accepts it ([value](value.md)).
 - Equal and hashed by subject; byte identity is `a.hash == b.hash`.
 - `repr`: the shortest alias at the head, ties lexicographic, else the
   hash's first 8.

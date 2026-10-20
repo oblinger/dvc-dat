@@ -45,9 +45,15 @@ the dat manager's `dvc_dat.Dat`: it hashes every file in the folder
 (`__pycache__` skipped) and reads no `_spec_.yaml`. From there:
 
 - **The dat constructor is a value function.** A function marked
-  `@ledger_fn` declares `work: Path`; `eval` binds a fresh folder, the
-  body writes the dat there and returns `Dat(work)`, and the seal moves
-  the files into the art store and points `Dat.path` at the stored copy.
+  `@ledger_fn` declares `work: Path`; `eval` binds a fresh folder under
+  `$DAT_WORK` (default `~/.cache/dvc-dat/work`), the body writes the
+  dat there and returns `Dat(work)`, and the seal moves the files into
+  the art store and points `Dat.path` at the stored copy.
+- **A dat streams.** Its files are its parts, `(sha256, path)`, hashed
+  in 1 MiB blocks and hardlinked into the art store (a streamed copy
+  across filesystems); no file is ever held in memory whole, so a
+  GB-scale folder seals and saves in memory bounded by its manifest.
+  A load by an alias lands the folder at `art/dats/<alias>/`.
 - **An ETL pipeline is a set of value functions.** Each stage evaluates
   the stage below it and returns a dat; a change upstream re-derives
   only the stages whose trace moved.
@@ -130,7 +136,7 @@ rev.rows()                           # the ledger as stored
 
 One `with` block is one **revision**: every row it adds lands together
 on exit, in body order, followed by its own `db/tx/<rev>` rows (`db/by`,
-`db/time` when `time=True`, and any keyword given `transaction()`),
+`db/time`, and any keyword given `transaction()`),
 which a body that wrote nothing still writes. A ledger's first
 transaction also writes `(db, db/format, dvc-dat-ledger/1)`. An
 exception in the body writes nothing, and a verb used outside the block
@@ -275,17 +281,21 @@ canonical JSON) match exactly, newest seal first, each candidate's trace
 checked against the revision asked at. A hit is restored; a miss runs,
 records the trace and seals in a transaction `by="eval:<name>"`, under
 a subject hashing fn, keys, trace, preds and the `db/value` text. A miss
-runs only when the function's checkout is clean and its HEAD is the
-rev's `code/<repo>` commit (or the rev has no such row); otherwise
-`NotEvaluated`. The **trace** says what the world was:
+runs only when the function's code is in a clean git checkout; otherwise
+`NotEvaluated`. A `code/<repo>` `commit` row pins what a version means;
+it gates only a sandboxed eval, whose `fn` hashes modules at that
+commit. A base eval runs at any clean commit and its entry holds at the
+commit it ran at (T543 Q7 (C), 6.2.0). The **trace** says what the
+world was:
 
 - `fn`: the `db/fn/<name>/<hash>` subject of the code that ran. Base
   mode hashes the static import closure; a sandbox run hashes the static
   closure plus every mounted module loaded during the run, at the rev's
   commit, and the mount rows.
 - `code/<repo>`: base mode only, the function's own repo,
-  `<version>+<commit8>` (`+<commit8>` before any `code/<repo>` row);
-  it holds on the commit alone.
+  `<version>+<commit8>`: the version from the `code/<repo>` row (empty
+  before any), the commit the environment ran at; it holds while the
+  environment is at that commit, whatever the row says.
 - every row read by name (`<subject> <predicate>`), every alias read
   through (`<name> db/alias`), every value loaded (named by its bytes,
   so identical inputs are the same input), every query (`q:{…}` → the
@@ -346,7 +356,11 @@ in the transaction that commits it. A release is a bump of `db`'s own
   chosen to run as index range scans on both.
 - **The art store** holds bytes by `sha256`, write-once: a pickle, a
   parquet table, or a dat folder's files plus its manifest. The same
-  bytes are stored once however many subjects point at them. The
+  bytes are stored once however many subjects point at them. A value's
+  parts enter by `put_path` (a hardlink on the same filesystem, else a
+  streamed copy checked against the hash) and leave by `get_to`, so a
+  stored dat's files and its materialised folder share inodes: a
+  folder is sealed anew, never edited in place. The
   ledger's store and the dat manager's `art/` are separate folders keyed
   the same way.
 - **The mirror** is designed, not built: one durable shelf per cloud
@@ -413,8 +427,8 @@ ledger's. Nothing is created without `create=True`:
   inside a worker is unsupported; repo files read under a mount are
   allowed, not recorded; no old commit is ever checked out.
 - **Q36, open, built as its lean:** a function that builds a dat
-  declares `work: Path`, the eval binds a fresh folder, and the seal
-  moves the files into the art store.
+  declares `work: Path`, the eval binds a fresh folder (under
+  `$DAT_WORK`), and the seal moves the files into the art store.
 - **Q37, open, built as its lean:** the `fn` item hashes the static
   closure plus the modules loaded during the run (sandbox), the static
   closure alone (base).

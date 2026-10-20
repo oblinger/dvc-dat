@@ -273,11 +273,7 @@ class Fn:
         if code.dirty:
             raise NotEvaluated(f"{self.name}: the checkout of {repo} has uncommitted changes; a result would "
                                "carry false provenance")
-        c = plain.get(f"code/{repo}", "commit")
-        if c is not None and not (code.commit and (code.commit.startswith(c) or c.startswith(code.commit))):
-            raise NotEvaluated(f"{self.name}: rev {plain.id} binds code/{repo} to commit {c[:8]}; this "
-                               f"environment is at {(code.commit or '?')[:8]}; a miss there cannot run here")
-        return repo
+        return repo         # a code/<repo> commit row pins a version, not where evals may run (6.2.0)
 
     def _run_base(self, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> Value:
         from .rev import Rev
@@ -288,7 +284,7 @@ class Fn:
         if seal:                                    # memo=False simply runs (Eval § 2)
             self._check_code(plain, env, repo)
         rec: Dict[str, str] = {}
-        work = Path(tempfile.mkdtemp(prefix="ledger-work-")) if self._takes_work else None
+        work = work_folder() if self._takes_work else None
         args = dict(kw, work=work) if work is not None else kw
         value = None
         try:
@@ -305,6 +301,19 @@ class Fn:
             return value
         finally:
             drop_work(work, value)
+
+
+def work_root() -> Path:
+    """Where an eval's ``work`` folders are made: ``$DAT_WORK``, else ``~/.cache/dvc-dat/work``."""
+    env = os.environ.get("DAT_WORK")
+    return Path(env) if env else Path.home() / ".cache" / "dvc-dat" / "work"
+
+
+def work_folder() -> Path:
+    """A fresh ``ledger-work-*`` folder under ``work_root()``."""
+    root = work_root()
+    root.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix="ledger-work-", dir=root))
 
 
 def drop_work(work: Optional[Path], value: Any) -> None:

@@ -8,7 +8,10 @@ transaction), ``reading_through`` (reads routed through that transaction) and
 backend. ``SqliteStore`` is below; ``PostgresStore`` is in ``pgstore``.
 
 A SQLite ledger is a folder: ``ledger.db`` and ``art/`` (bytes by hash,
-and ``art/dats/`` where a ``Dat`` is materialised) inside it (A54).
+and ``art/dats/`` where a ``Dat`` is materialised) inside it (A54). A large
+value's parts enter the art store by ``put_path`` (a hardlink on the same
+filesystem, else a streamed copy) and leave by ``get_to``; no part's bytes
+are ever held in memory whole.
 
 ``quads(rev, ord, subject, predicate, object, added)``: ``rev`` the revision,
 ``ord`` the row's place within its transaction, ``object`` the tagged string
@@ -20,12 +23,15 @@ Revisions come from ``MAX(rev) + 1`` under SQLite's write lock.
 
 from __future__ import annotations
 
+import hashlib
+import os
 import sqlite3
 import threading
+import uuid
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, ContextManager, Iterator, List, Optional, Sequence, Tuple
+from typing import IO, Any, Callable, ContextManager, Iterator, List, Optional, Sequence, Tuple, Union
 
 from .codec import hash_text, sha256
 from .errors import LedgerError, LockTimeout
@@ -41,6 +47,70 @@ SCHEMA = (
 )
 
 
+#: Where a part's bytes come from: a file, or a zero-arg opener returning a binary stream.
+Source = Union[Path, Callable[[], IO[bytes]]]
+#: A value's further bytes: ``(sha256 hex, source)``.
+Part = Tuple[str, Source]
+
+#: The block a part is hashed and copied in.
+BLOCK = 1 << 20
+
+
+def file_sha(path: Path) -> str:
+    """The hex sha256 of a file, read in 1 MiB blocks."""
+    d = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(BLOCK), b""):
+            d.update(block)
+    return d.hexdigest()
+
+
+def _copy(src: IO[bytes], dest: Path, h: str) -> None:
+    """Stream ``src`` into ``dest`` block by block; ``ValueError`` when the bytes do not hash to ``h``."""
+    d = hashlib.sha256()
+    with open(dest, "wb") as out:
+        for block in iter(lambda: src.read(BLOCK), b""):
+            d.update(block)
+            out.write(block)
+    if d.hexdigest() != h:
+        dest.unlink(missing_ok=True)
+        raise ValueError(f"a part named {h[:12]}… hashes to {d.hexdigest()[:12]}…: its source changed since it "
+                         "was hashed")
+
+
+def place(source: Source, dest: Path, h: str, *, link: bool = True) -> bool:
+    """Put the bytes of ``source`` (sha256 ``h``) at ``dest``, write-once; ``True`` when written here.
+
+    A ``Path`` is hardlinked when ``link`` and the filesystem allows it, else copied in blocks (and
+    checked against ``h``); an opener is always copied. The bytes land at a temp name and are renamed
+    into place, so a reader never sees a partial file.
+    """
+    if dest.exists():
+        return False
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(f"{dest.name}.tmp-{uuid.uuid4().hex[:8]}")
+    try:
+        if isinstance(source, (str, os.PathLike)):
+            linked = False
+            if link:
+                try:
+                    os.link(source, tmp)
+                    linked = True
+                except OSError:
+                    pass
+            if not linked:
+                with open(source, "rb") as f:
+                    _copy(f, tmp, h)
+        else:
+            with source() as f:
+                _copy(f, tmp, h)
+        os.replace(tmp, dest)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return True
+
+
 class ArtStore:
     """Bytes by ``sha256:<hex>``, write-once, in a folder."""
 
@@ -50,7 +120,11 @@ class ArtStore:
     def path(self, h: str) -> Path:
         return self.root / "sha256" / h[:2] / h
 
+    def exists(self, h: str) -> bool:
+        return self.path(h).exists()
+
     def put(self, data: bytes) -> str:
+        """Store small bytes held in memory (an encoding, a manifest); return their hash."""
         h = sha256(data)
         p = self.path(h)
         if not p.exists():
@@ -60,11 +134,23 @@ class ArtStore:
             tmp.replace(p)
         return h
 
+    def put_path(self, source: Source, h: str) -> bool:
+        """Store a part by its hash ``h`` without reading it into memory: a hardlink to the file on the
+        same filesystem, else a streamed copy to a temp name and a rename; ``True`` when written here."""
+        return place(source, self.path(h), h)
+
     def get(self, h: str) -> bytes:
         p = self.path(h)
         if not p.exists():
             raise FileNotFoundError(f"art store {self.root}: no bytes for {h}")
         return p.read_bytes()
+
+    def get_to(self, h: str, dest: Path) -> None:
+        """Put the bytes of ``h`` at ``dest`` (a hardlink on the same filesystem, else a streamed copy)."""
+        p = self.path(h)
+        if not p.exists():
+            raise FileNotFoundError(f"art store {self.root}: no bytes for {h}")
+        place(p, Path(dest), h)
 
 
 def index_name(pred: str) -> str:

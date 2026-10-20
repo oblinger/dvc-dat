@@ -79,7 +79,7 @@ L = Ledger()                              # the project's ledger
 # ## One transaction is one revision
 
 # %%
-with L.transaction(by="human:dan", time=True,
+with L.transaction(by="human:dan",
                    why="season opener") as t:
     t.add("game/G1", "home", "G4")
     t.add("game/G1", "away", "G5")
@@ -94,9 +94,9 @@ print(sorted(p for p, o in rev1.all(rev1.tx)))
 print(rev1.get(rev1.tx, "why"))      # season opener
 
 # %% [markdown]
-# `time=True` asks for the wall-clock stamp; without it a revision
-# carries no time, only its number and `by`. The stamp is a row like
-# any other, so `asserted` and `since=` work on it too.
+# Every revision carries the wall-clock stamp `db/time` (UTC) beside
+# `by`. The stamp is a row like any other, so `asserted` and `since=`
+# work on it too.
 
 # %% [markdown]
 # `by` is required, once per transaction. Every other keyword is a
@@ -659,7 +659,7 @@ import demo_game                       # discovery sees it imported
 # %%
 with L.transaction(by="human:dan") as t:
     t.add("code/demo-game", "version", "0.1.0")  # the clock's start
-with L.transaction(by="human:dan", lock=10, time=True,
+with L.transaction(by="human:dan", lock=10,
                    why="T531 re-baseline") as t:
     new = bump(t, "code/demo-game")       # patch: 0.1.0 -> 0.1.1
     t.add(t.tx, "checked", "G1,G4,G5")
@@ -677,11 +677,11 @@ print(new, rev["code/demo-game"])
 # %%
 print(sorted(rev[rev.tx]))
 # ['checked', 'db/by', 'db/time', 'why']
-print(rev[rev.tx, "db/time"])            # UTC, since time=True
+print(rev[rev.tx, "db/time"])            # UTC, on every revision
 
 # %% [markdown]
 # `t.tx` is a placeholder for `db/tx/<rev>`, rewritten at commit:
-# provenance decided inside the body lands beside `by`, `time=True`
+# provenance decided inside the body lands beside `by`, `db/time`
 # and the keywords given up front.
 
 # %% [markdown]
