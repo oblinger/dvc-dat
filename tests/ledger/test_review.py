@@ -9,7 +9,7 @@ from ledger_kinds import CALLS, Plain, Video
 
 def seal(L, v, **kw):
     with L.transaction(by="t") as t:
-        s = t.add_value(v, **kw)
+        s = v.seal(t, **kw)
     return s
 
 
@@ -50,11 +50,11 @@ def test_2_an_alias_row_on_a_sealed_subject_is_refused(L):
     assert L.at().load(a).data == b"a"
 
 
-def test_3_preds_freeze_at_add_value_and_unfreeze_on_refusal(L):
+def test_3_preds_freeze_at_seal_and_unfreeze_on_refusal(L):
     v = Video(b"v")
     v.preds["game"] = "G1"
     with L.transaction(by="t") as t:
-        s = t.add_value(v)
+        s = v.seal(t)
         assert v.sealed and v.subject == s and v.rev is None
         with pytest.raises(TypeError):
             v.preds["game"] = "G2"
@@ -63,7 +63,7 @@ def test_3_preds_freeze_at_add_value_and_unfreeze_on_refusal(L):
     w.preds["game"] = "G1"
     with pytest.raises(TypeError):
         with L.transaction(by="t") as t:
-            t.add_value(w)
+            w.seal(t)
             t.add("x", "db/alias", "nothing")              # refused at commit
     assert not w.sealed and w.subject is None and isinstance(w.preds, dict)
     w.preds["game"] = "G3"                                # mutable again
@@ -74,12 +74,12 @@ def test_4_a_refused_commit_leaves_no_bytes(L):
     v = Plain(b"never stored")
     with pytest.raises(TypeError):
         with L.transaction(by="t") as t:
-            t.add_value(v)
+            v.seal(t)
             t.add("x", "db/alias", "nothing")
     assert not art.path(Plain(b"never stored").hash).exists()
     with pytest.raises(RuntimeError):
         with L.transaction(by="t") as t:
-            t.add_value(Plain(b"body raised"))
+            Plain(b"body raised").seal(t)
             raise RuntimeError
     assert not art.path(Plain(b"body raised").hash).exists()
 

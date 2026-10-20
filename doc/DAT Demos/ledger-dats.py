@@ -131,11 +131,11 @@ hand_dat = build(rev, detect_spec_record, work_path)
 print(sorted(file_path.name for file_path in work_path.iterdir()))
 # → ["_result_.yaml", "_spec_.yaml", "boxes.json"]
 with L.transaction(by="human:dan") as t:
-    t.add_value(hand_dat, alias="detect/G1", provenance="human:dan")
+    hand_dat.seal(t, alias="detect/G1", provenance="human:dan")
 print(hand_dat, hand_dat.sealed)     # → detect/G1 True
 
 # %% [markdown]
-# `build` made the dat in a folder of yours; `add_value` sealed it.
+# `build` made the dat in a folder of yours; `v.seal(t)` sealed it.
 # The three files went to the art store by their hashes, the
 # manifest naming them is the value's bytes, and the subject is
 # the hash of those bytes with what they depend on. A hand seal
@@ -223,7 +223,7 @@ print(L.at()[spec_dat.subject, "db/keys"])
 # the one `db/keys` row, numbers kept native. `work` is not a key
 # (Q36, open; lean): the eval bound it to a fresh scratch folder,
 # the function built the dat there, and the seal moved the folder
-# into the art store by its manifest, as `add_value` did by hand.
+# into the art store by its manifest, as `v.seal(t)` did by hand.
 # The preds are the same as the hand-built dat's.
 
 # %% [markdown]
@@ -426,7 +426,7 @@ print(tracks_dat.diff(retracked_dat))
 # ### A consumer that wants proof
 #
 # G3's model again, a long run done by hand and sealed with
-# `add_value`.
+# `v.seal(t)`.
 
 # %%
 rev = L.at()
@@ -439,8 +439,8 @@ work_path.mkdir(parents=True)
 hand_model_dat = build(rev, fit_spec_record, work_path)
 hand_model_dat.preds["gameset"] = "pro"
 with L.transaction(by="human:dan", why="a long run by hand") as t:
-    t.add_value(hand_model_dat, deps=[tracks_g3_dat],
-                provenance="human:dan")
+    hand_model_dat.seal(t, deps=[tracks_g3_dat],
+                        provenance="human:dan")
 print(dict(sorted(hand_model_dat.trace.items())))
 # → {"code/demo-game": "0.1.1+<8 hex>",
 #    "platform": "darwin-arm64-py3.11",

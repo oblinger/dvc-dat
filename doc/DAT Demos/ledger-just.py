@@ -73,8 +73,8 @@ with L.transaction(by="human:dan") as t:                 # rev 3
 video_value = Video(b"G1 wide camera, 9000 frames")
 video_value.preds.update(game="G1", camera="wide", span=[0, 9000])
 with L.transaction(by="human:dan") as t:                 # rev 4
-    t.add_value(video_value, alias="video/G1",
-                provenance="import:archive")
+    video_value.seal(t, alias="video/G1",
+                     provenance="import:archive")
 cut_153_value = L.at().eval("demo_game.game.cut",       # rev 5
                             game="G1", version="1.5.3")
 with L.transaction(by="human:dan") as t:                 # rev 6
@@ -339,7 +339,7 @@ print(L.at()["game/G1", "texture"])          # → hardwood
 # fact about the game, not about its cut, and it is never a seal.
 # There is no `just set <hash> game=G2`: a wrong pred on a sealed
 # value is a new seal and an alias move, made by `just eval` or, in
-# code, by `add_value`.
+# code, by `v.seal(t)`.
 
 # %% [markdown]
 # ### Giving a value a name

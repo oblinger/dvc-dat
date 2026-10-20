@@ -6,6 +6,16 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 6.0.0 — 2026-10-20
+
+- **`v.seal(t)` replaces `t.add_value(v)`; `t.add_value` is gone.**
+  Same arguments (`deps`, `alias`, `provenance`), same subject, same
+  refusals. `v.seal(L)` given a ledger opens and commits a one-value
+  transaction of its own (`by=` names the writer; default the
+  provenance, else `seal`); `v.seal(t)` joins a transaction already
+  open. Breaking: every `add_value` caller moves (Dan 2026-10-20,
+  sv-pipe T543 Q4).
+
 ## 5.2.0 — 2026-10-19
 
 - **`Ledger.close()`; a `Ledger` is a context manager.** Closes every

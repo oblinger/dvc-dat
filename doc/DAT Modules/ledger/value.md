@@ -1,7 +1,7 @@
 # ledger.value
 
 A `Value` is the object itself with its provenance on it: what `eval`
-returns, what `add_value` stores and what `Ref.load` restores. A
+returns, what `v.seal` stores and what `Ref.load` restores. A
 subclass says how it becomes bytes (`encode`) and back (`decode`), and
 `@ledger_class(preds=…)` names the preds its values may carry. Until
 the seal, `preds` is a plain dict filled by whoever builds the value;
@@ -40,6 +40,14 @@ Subclasses:
   `art/dats/<first 16 hex of the manifest hash>/` and returns a `Dat`
   there; after the seal `path` moves to that stored folder.
 
+`seal(to, *, deps=(), alias=None, provenance=None, by=None) -> str`:
+seals the value into its subject and returns it. `to` a `Transaction`
+joins it (the value lands with that revision or not at all; `by=` is
+`TypeError`); `to` a `Ledger` opens and commits a one-value
+transaction of its own, written `by` (default the provenance, else
+`seal`); anything else is `TypeError`. The refusals are the
+transaction's ([txn](txn.md)).
+
 `ledger_class(*, preds=()) -> decorator`: sets the kind's declared pred
 names; a name that is empty, not a `str` or starts `db/` is `TypeError`,
 as is decorating a non-`Value` class. Writes nothing.
@@ -51,7 +59,7 @@ as is decorating a non-`Value` class. Writes nothing.
 
 - A sealed value's preds cannot change in place; a different value is a
   new object and a new seal.
-- `hash` is a function of `encode()` alone; `add_value` refuses a class
+- `hash` is a function of `encode()` alone; the seal refuses a class
   whose two `encode()` calls differ.
 - A subclass's `__init__` need not call `super().__init__`; the
   provenance fields are class-level defaults.

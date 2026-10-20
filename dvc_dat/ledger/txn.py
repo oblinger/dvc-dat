@@ -1,6 +1,6 @@
 """``Transaction``: the write set of one ``with L.transaction(...)``, one revision on exit.
 
-``add`` and ``remove`` append rows and read nothing; ``add_value`` seals a
+``add`` and ``remove`` append rows and read nothing; ``v.seal(t)`` seals a
 ``Value`` into an immutable subject and the bracket (``t[s, p] = o``,
 ``t[s] = {...}``, ``del``) is a read-then-write helper over ``add``/``remove``;
 those two read through ``t.base``. Everything that must see the transaction's
@@ -356,7 +356,7 @@ class Transaction:
 
         if isinstance(o, Value):
             raise TypeError(f"add takes a str, a JSON document or a Ref, not a {type(o).__name__}: bytes enter "
-                            "the ledger by t.add_value(value) alone")
+                            "the ledger by v.seal(t) alone")
         if isinstance(o, Ref):
             if o.hash is None:
                 raise TypeError(f"a Ref row object names a sealed value; {o.name!r} holds none")
@@ -373,7 +373,7 @@ class Transaction:
         _name(subject, "subject")
         _name(predicate, "predicate")
         if predicate == "db/value":
-            raise TypeError("db/value rows are written by t.add_value alone")
+            raise TypeError("db/value rows are written by v.seal alone")
         o = self._encode(object)
         if predicate == "db/alias" and tag(o) != "str":
             raise TypeError("a db/alias row's object is the subject it names, a str")
@@ -504,18 +504,18 @@ class Transaction:
         trace["uv.lock"] = env.lock
         trace["platform"] = env.platform
 
-    def add_value(self, value: Value, *, deps: Sequence[Any] = (), alias: Optional[str] = None,
-                  provenance: Optional[str] = None) -> str:
-        """Seal ``value`` into the immutable subject ``<hash of (trace, preds, bytes)>``; return the subject.
+    def _seal_value(self, value: Value, *, deps: Sequence[Any] = (), alias: Optional[str] = None,
+                    provenance: Optional[str] = None) -> str:
+        """``value.seal(t)``: seal into the immutable subject ``<hash of (trace, preds, bytes)>``; return it.
 
         On this line the seal freezes ``preds`` (read-only), and sets ``sealed``, ``subject`` and
         ``trace``; only ``rev`` waits for the commit. A seal refused here, or a transaction abandoned
         later (a body exception, a refusal at commit), leaves the value unsealed with its preds a plain
         dict (A43).
         """
-        self._open("add_value")
+        self._open("seal")
         if not isinstance(value, Value):
-            raise TypeError(f"add_value takes a Value, not {type(value).__name__} (wrap it: Pickled(obj))")
+            raise TypeError(f"seal takes a Value, not {type(value).__name__} (wrap it: Pickled(obj))")
         if value.sealed:
             raise ValueError(f"{value!r} is sealed already; a different value is a new object")
         if provenance is None:
