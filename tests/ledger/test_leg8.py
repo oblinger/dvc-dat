@@ -36,8 +36,8 @@ def test_a_dat_spec_kind_is_checked_against_the_row(L, tmp_path):
     bad.mkdir()
     (bad / "_spec_.yaml").write_text(yaml.safe_dump({"dat": {"kind": "elsewhere.Other"}}))
     with L.transaction(by="t") as t:
-        sg = t.add_value(Dat(good))
-        sb = t.add_value(Dat(bad))
+        sg = Dat(good).seal(t)
+        sb = Dat(bad).seal(t)
     assert (L.at().load(sg).path / "_spec_.yaml").is_file()
     with pytest.raises(TypeError, match="elsewhere.Other"):
         L.at().load(sb)

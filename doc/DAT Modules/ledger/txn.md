@@ -2,8 +2,8 @@
 
 A transaction is the write set of one `with L.transaction(...)`, and it
 becomes exactly one revision on exit. `add` and `remove` append rows
-and read nothing; `add_value` seals a `Value` into an immutable
-subject; the bracket (`t[s, p] = o`, `t[s] = {…}`, `del`) is a
+and read nothing; `v.seal(t)` seals a `Value` into an immutable
+subject in this transaction (`Value.seal`, [value](value.md)); the bracket (`t[s, p] = o`, `t[s] = {…}`, `del`) is a
 read-then-write helper over `add`/`remove` through `t.base`. Whatever
 must see the transaction's own rows is checked at commit, inside the
 write lock, against the state the new revision would have: the rows are
@@ -27,14 +27,15 @@ on a refusal. Part of the [architecture](../../DAT%20Architecture.md).
   past the limit (`LockTimeout`, nothing written).
 - `add(s, p, o) -> None`: one row. `o` is a `str`, a JSON `dict`/`list`,
   or a `Ref` to a sealed value; a `Value` is `TypeError` naming
-  `add_value`; a bare number, bool or `None` `TypeError`;
+  `seal`; a bare number, bool or `None` `TypeError`;
   `p == "db/value"` `TypeError`; a `db/alias` object not a `str`
   `TypeError`. Outside the block `RuntimeError`.
 - `remove(s, p, o) -> None`: one remove row: out of the set on a
   `many` predicate, the tombstone on a `one` predicate when `o` is the
   held object.
-- `add_value(value, *, deps=(), alias=None, provenance=None) -> str`:
-  seal `value` and return its subject (64 hex). Refused on the line:
+- `v.seal(t, *, deps=(), alias=None, provenance=None) -> str`
+  (`Value.seal`; `t.add_value` is gone, 6.0.0): seal `v` in this
+  transaction and return its subject (64 hex). Refused on the line:
   not a `Value` or already sealed (`TypeError`, `ValueError`); a
   provenance beginning `eval:` (`ValueError`); a pred name the kind did
   not declare (`Undeclared`); a list under a `one` pred not typed
@@ -71,7 +72,7 @@ from the rows, else `+<env commit8>`. `FORMAT` is
   `db/fn/<name>/<hash>` rows are written if absent), then
   `code/<repo>` for every repo discovery reports, `uv.lock` and
   `platform`.
-- On `add_value`'s line: `preds` becomes a `FrozenPreds`, `sealed`,
+- On the seal's line: `preds` becomes a `FrozenPreds`, `sealed`,
   `subject` and `trace` are set. At commit: `rev` is set, `preds`
   becomes the subject's non-`db/` rows as loaded (a typed pred a
   `Ref`), and `_after_seal` runs (a `Dat` moves to its stored folder).
@@ -102,13 +103,13 @@ then `(db, db/format, …)` on revision 1, then the `db/tx/<rev>` rows.
   (`preds` a plain dict again) and unlinks the bytes this transaction
   stored.
 - `add`, `remove` and their checks read nothing during the body; only
-  `add_value`, the bracket and `bump` read, through `base`.
-- A `db/value` row is written by `add_value` (or an eval's seal) alone.
+  the seal, the bracket and `bump` read, through `base`.
+- A `db/value` row is written by `v.seal` (or an eval's seal) alone.
 
 - TODO: the module docstring says rows land "in body order, then the
   transaction's own `db/tx/<rev>` rows"; on a ledger's first
   transaction the code writes `(db, db/format, …)` between them.
-- TODO: whether a pred is `many` is read at `add_value` from `base`
+- TODO: whether a pred is `many` is read at the seal from `base`
   plus the body's earlier rows, so a cardinality declared later in the
   same body is not seen by the seal.
 

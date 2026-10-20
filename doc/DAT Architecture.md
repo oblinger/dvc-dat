@@ -154,9 +154,8 @@ releases.
 ```python
 video_value = Video(read_mp4("G1.mp4"))  # a Value subclass
 video_value.preds.update(game="G1", camera="wide")
-with ledger.transaction(by="human:dan") as t:
-    video_subject = t.add_value(video_value, alias="video/G1",
-                                provenance="import:camera")
+video_subject = video_value.seal(ledger, alias="video/G1",
+                                 provenance="import:camera")
 rev = ledger.at()
 rev.load("video/G1")                     # through the alias
 rev.values(kind=Video, game="G1")        # found by preds
@@ -166,16 +165,19 @@ A **value** is a large or complex object kept by its bytes. Its class
 says how it becomes bytes and back (`encode`, `decode`), and
 `@ledger_class(preds=…)` on the class names the **preds** its values may
 carry: the string attributes a value is found by, set on `v.preds` by
-whoever built it. `add_value` **seals** the value into a subject whose
+whoever built it. `v.seal(…)` **seals** the value into a subject whose
 name is a 64-hex hash of the trace, the preds and the `db/value` text
 (the class and the bytes' hash), never typed by anyone. The seal happens
-on `add_value`'s line: `preds` becomes read-only and `sealed`, `subject`
+on the seal's line: `preds` becomes read-only and `sealed`, `subject`
 and `trace` are set; `rev` is set at commit, when the bytes go to the
 art store just before the rows. A refusal at commit or an exception in
 the body unseals every value the transaction froze and removes the bytes
 it stored. The rows are the subject's machinery (`db/value`, `db/kind`,
 `db/provenance`, `db/preds`, one `db/trace/<item>` per trace item) and
 one row per pred, one per member for a `many` pred.
+`v.seal(ledger)` commits a one-value transaction of its own;
+`v.seal(t)` joins one already open, so several values and their
+annotations land as one revision.
 
 **A sealed value never changes.** Its own rows are frozen: a later
 `add` or `remove` on one is `Exists`, raised at commit. Any other row on
@@ -285,11 +287,11 @@ next ask re-derives it. `matches` and `diff` consult the memo and never
 run anything. `memo=False` runs without sealing; `memo="get"` looks up
 and never runs.
 
-A hand seal (`add_value(deps=[…])`) has a **declared** trace, trusted
+A hand seal (`v.seal(t, deps=[…])`) has a **declared** trace, trusted
 and not proven: its items are the deps given, plus `code/<repo>` for
 every repo discovery reports, `uv.lock` and `platform`. An eval's is
 **recorded**, and its provenance, `eval:sandbox` or `eval:base`, says
-so; `add_value` refuses a provenance beginning `eval:`. A consumer that
+so; `seal` refuses a provenance beginning `eval:`. A consumer that
 needs proof asks for an `eval:` value.
 
 ### The ledger describes itself under `db/`

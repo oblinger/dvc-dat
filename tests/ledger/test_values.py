@@ -1,4 +1,4 @@
-"""Contracts of values: add_value, preds, aliases, Ref, the seal's refusals, typed and many preds."""
+"""Contracts of values: seal, preds, aliases, Ref, the seal's refusals, typed and many preds."""
 
 import pytest
 
@@ -8,7 +8,7 @@ from ledger_kinds import Cut, Plain, Video
 
 def seal(L, v, **kw):
     with L.transaction(by="t") as t:
-        s = t.add_value(v, **kw)
+        s = v.seal(t, **kw)
     return s
 
 
@@ -21,7 +21,7 @@ def decl(L):
     return L
 
 
-def test_add_value_returns_a_content_subject_and_loads_back(L):
+def test_seal_returns_a_content_subject_and_loads_back(L):
     v = Plain(b"abc")
     s = seal(L, v)
     assert len(s) == 64 and v.sealed and v.subject == s and v.rev.id == 1
@@ -88,7 +88,7 @@ def test_exists_on_frozen_preds_absent_ones_too_annotation_allowed(L):
 
 
 def test_add_refuses_a_value(L):
-    with pytest.raises(TypeError, match="add_value"):
+    with pytest.raises(TypeError, match="seal"):
         with L.transaction(by="t") as t:
             t.add("x", "y", Plain(b"1"))
 
@@ -197,3 +197,28 @@ def test_ledger_class_rejects_non_values():
     with pytest.raises(TypeError):
         ledger_class(preds=("a",))(dict)
     assert issubclass(Value, object)
+
+
+def test_seal_on_a_ledger_commits_its_own_transaction(L):
+    top = L.at().id
+    s = Plain(b"alone").seal(L, alias="note/alone", provenance="human:dan")
+    now = L.at()
+    assert now.id == top + 1
+    assert Ref(now, "note/alone").subject == s
+    assert now[now.tx, "db/by"] == "human:dan"
+
+
+def test_seal_on_a_transaction_joins_it(L):
+    top = L.at().id
+    with L.transaction(by="t") as t:
+        a = Plain(b"one").seal(t)
+        b = Plain(b"two").seal(t)
+    assert L.at().id == top + 1 and a != b
+
+
+def test_seal_refuses_by_on_an_open_transaction_and_a_bad_target(L):
+    with pytest.raises(TypeError, match="open already"):
+        with L.transaction(by="t") as t:
+            Plain(b"x").seal(t, by="someone")
+    with pytest.raises(TypeError, match="Transaction or a Ledger"):
+        Plain(b"x").seal("ledger")

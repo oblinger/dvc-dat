@@ -2,7 +2,7 @@
 
 Each worker process opens its own ``Ledger`` handle and runs a seeded mix of operations:
 
-``seal``    a unique ``Blob`` sealed by ``add_value``, plus a ``made`` row (a many pred) naming it
+``seal``    a unique ``Blob`` sealed by ``v.seal(t)``, plus a ``made`` row (a many pred) naming it
 ``shared``  one of a few ``Blob``s every worker seals: the same subject raced across processes
 ``alias``   an ``alias/<k>`` re-pointed at one of this worker's seals, under ``lock=``
 ``salt``    ``load/config salt`` changed, under ``lock=``: every memo entry's trace reads it
@@ -157,7 +157,7 @@ def worker(cfg: Dict[str, Any], wid: int, ready: Any, start: Any, out: str) -> N
                 v = Blob(data)
                 v.preds.update(owner=owner, seq=seq)
                 with L.transaction(by=by) as t:
-                    subject = t.add_value(v)
+                    subject = v.seal(t)
                     t.add(f"load/w{wid}", "made", subject)
                 r = {"op": op, "i": i, "by": by, "rev": t.rev.id, "subject": subject, "data": data.decode()}
                 rec["committed"].append(r)

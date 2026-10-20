@@ -54,7 +54,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
         t["game/G1"] = {"home": "G4", "away": "G5"}
         raw0 = Video(read_mp4("G1.mp4"))
         raw0.preds.update(game="G1")
-        t.add_value(raw0)
+        raw0.seal(t)
     rev = L.at()
     m = rev.eval("ledger_kinds.cut", game="G1")   # memoised  ADAPTED: ledger_kinds.cut for demo_game.identity.train
     assert m.trace and m.rev and m.sealed    # the model itself, with its provenance on it
@@ -95,7 +95,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
     raw = Video(read_mp4("G2.mp4"))
     raw.preds.update(game="G2", camera="wide")
     with L.transaction(by="human:dan") as t:
-        t.add_value(raw, provenance="import:alg2")
+        raw.seal(t, provenance="import:alg2")
     cut = L.at().eval("ledger_kinds.cut", game="G2", version="1.5.3")
     with L.transaction(by="human:dan") as t:
         t.add("game/G2", "db/alias", cut.subject)
@@ -115,7 +115,7 @@ def test_all_block(L):
         t.add("model/shot", "version", "1.0.0")
     v = Video(b"w")
     with L.transaction(by="setup") as t:
-        t.add_value(v, alias="model/shot")
+        v.seal(t, alias="model/shot")
     rev = L.at()
     assert ("code/testrepo", "version", "0.2.2") in rev.all()   # list of rows: (subject, predicate, object)
     assert rev.all("code/testrepo") == [("version", "0.2.2"), ("commit", "abc1234")]
@@ -127,13 +127,13 @@ def test_all_block(L):
     assert rev["code/testrepo"] == {"version": "0.2.2", "commit": "abc1234"}   # the record
 
 
-def test_add_value_block(L):
-    """§ Transaction `add_value`: Dan cuts game G1 by hand. ADAPTED: `Cut` is ``ledger_kinds.Cut`` (module level,
+def test_seal_block(L):
+    """§ Value `seal`: Dan cuts game G1 by hand. ADAPTED: `Cut` is ``ledger_kinds.Cut`` (module level,
     so `load` can import it; it also declares `team`), `Video` ``ledger_kinds.Video``."""
     raw0 = Video(read_mp4("G1.mp4"))
     raw0.preds.update(game="G1")
     with L.transaction(by="setup") as t:
-        t.add_value(raw0)
+        raw0.seal(t)
 
     rev = L.at()
     raw: Video = rev.value(kind=Video, game="G1")  # loaded
@@ -142,9 +142,9 @@ def test_add_value_block(L):
                    video=raw)                     #   a typed pred (Q35)
 
     with L.transaction(by="human:dan") as t:
-        subj: str = t.add_value(v, deps=[raw],
-                                alias="game/G1",  # seal, then re-point
-                                provenance="human:dan")
+        subj: str = v.seal(t, deps=[raw],
+                           alias="game/G1",  # seal, then re-point
+                           provenance="human:dan")
         t.add(subj, "note", "cut by hand")        # any further row
     assert (v.sealed, v.subject) == (True, subj)
     with pytest.raises(TypeError):
@@ -174,7 +174,7 @@ def test_putting_an_artifact_in_block(L):
     raw = Video(read_mp4("G1.mp4"))
     raw.preds.update(game="G1", camera="wide")
     with L.transaction(by="human:dan") as t:
-        t.add_value(raw, provenance="import:alg2")
+        raw.seal(t, provenance="import:alg2")
     rows = {r.predicate for r in L.at().rows(since=L.at(L.at().id - 1)) if r.subject == raw.subject}
     assert {"db/value", "db/kind", "db/provenance", "db/preds", "game", "camera"} <= rows
     assert any(p.startswith("db/trace/") for p in rows)
@@ -193,10 +193,10 @@ def test_new_pred_later_block(L):
     raw.preds.update(game="G1")
     hand = Cut(b"clip")
     with L.transaction(by="t") as t:
-        t.add_value(raw)
+        raw.seal(t)
     hand.preds.update(game="G2", version="1.5.4", video=raw)    # wrong game
     with L.transaction(by="t") as t:
-        t.add_value(hand, alias="game/G1")
+        hand.seal(t, alias="game/G1")
     rev = L.at()
 
     with L.transaction(by="human:dan") as t:        # allowed: gameset
@@ -212,7 +212,7 @@ def test_new_pred_later_block(L):
     video = c.preds["video"]             # a Ref (Q35): allowed as is
     fixed.preds.update(game="G1", version="1.5.4", video=video)
     with L.transaction(by="human:dan") as t:
-        t.add_value(fixed, deps=[video], alias="game/G1")
+        fixed.seal(t, deps=[video], alias="game/G1")
     now = L.at()
     assert fixed.subject != c.subject and Ref(now, "game/G1").subject == fixed.subject
     assert [r.subject for r in now.refs(kind=Cut, game="G2")] == [c.subject]   # still found by game="G2"

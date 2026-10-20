@@ -18,7 +18,7 @@ def world(coded):
         v = Video(f"{g} frames".encode())
         v.preds.update(game=g)
         with L.transaction(by="t") as t:
-            t.add_value(v, alias=f"video/{g}")
+            v.seal(t, alias=f"video/{g}")
     CALLS.clear()
     return L
 
@@ -107,7 +107,7 @@ def test_no_code_row_runs_with_the_env_commit(L):
     v = Video(b"x")
     v.preds.update(game="G1")
     with L.transaction(by="t") as t:
-        t.add_value(v)
+        v.seal(t)
     a = L.at().eval("ledger_kinds.cut", game="G1")
     assert a.trace["code/testrepo"] == "+abc1234"
 

@@ -78,12 +78,12 @@ from demo_game.game import PlainVideo
 # %%
 video_value = PlainVideo(b"G1 wide camera, 9000 frames")
 with L.transaction(by="human:dan") as t:
-    video_subject = t.add_value(video_value)
+    video_subject = video_value.seal(t)
 print(video_subject)
 # → 64 hex: from the content
 
 # %% [markdown]
-# `add_value` returns the value's subject, a hash derived from its
+# `v.seal(t)` returns the value's subject, a hash derived from its
 # content: a subject nobody typed.
 
 # %% [markdown]
@@ -116,8 +116,8 @@ print(loaded_video.subject == video_subject)
 # %% [markdown]
 # ### Adding an alias
 #
-# An alias is a `db/alias` row naming the subject. `add_value(…,
-# alias="video/G1")` writes it in the same transaction; here it is
+# An alias is a `db/alias` row naming the subject. `v.seal(t, …,
+                                                           # alias="video/G1")` writes it in the same transaction; here it is
 # added later, by hand.
 
 # %%
@@ -175,7 +175,7 @@ print(rev.load("video/G1"))
 # %%
 retake_video = PlainVideo(b"G1 wide camera, retake, 9100 frames")
 with L.transaction(by="human:dan") as t:
-    retake_subject = t.add_value(retake_video)
+    retake_subject = retake_video.seal(t)
 with L.transaction(by="human:dan", why="the retake") as t:
     t.add("video/G1", "db/alias", retake_subject)
 rev = L.at()
@@ -228,8 +228,8 @@ with L.transaction(by="human:dan") as t:
 wide_video = Video(b"G1 wide camera, 9000 frames")
 wide_video.preds.update(game="G1", camera="wide", span=[0, 9000])
 with L.transaction(by="human:dan") as t:
-    t.add_value(wide_video, alias="video/G1",
-                provenance="import:archive")
+    wide_video.seal(t, alias="video/G1",
+                    provenance="import:archive")
 print(wide_video)
 # → video/G1
 print(wide_video.subject[:8])
@@ -239,7 +239,7 @@ print(wide_video.preds)
 
 # %% [markdown]
 # Preds are set on the object before it is stored, by whoever builds
-# it; `add_value` takes no `preds=`. Storing fixes `subject` and
+# it; `v.seal(t)` takes no `preds=`. Storing fixes `subject` and
 # `rev`. The preds are in the subject's hash, so frames already on
 # the ledger make a new subject here; `video/G1` moves to it, an
 # alias being one row whose latest add wins.
@@ -251,8 +251,8 @@ print(wide_video.preds)
 g2_video = Video(b"G2 wide camera, 8400 frames")
 g2_video.preds.update(game="G2", camera="wide", span=[0, 8400])
 with L.transaction(by="human:dan") as t:
-    t.add_value(g2_video, alias="video/G2",
-                provenance="import:archive")
+    g2_video.seal(t, alias="video/G2",
+                  provenance="import:archive")
 
 # %% [markdown]
 # ### What a value looks like on the ledger
@@ -347,7 +347,7 @@ print(rev.select(("game", "span"), kind=Video))
 # ### Sealing a value
 #
 # Values are immutable once they are sealed. During construction
-# everything is mutable; `add_value` is the act of sealing, and from
+# everything is mutable; `v.seal(t)` is the act of sealing, and from
 # then on nothing changes: the bytes, the preds the seal wrote, and
 # the rows it wrote (`db/value`, `db/kind`, `db/preds`,
 # `db/provenance`) are fixed forever, and the subject is their
@@ -389,7 +389,7 @@ tele_video = Video(b"G1 tele camera, 9000 frames")
 tele_video.preds.update(game="G1", camera="tele", lens="85mm")
 try:
     with L.transaction(by="human:dan") as t:
-        t.add_value(tele_video)
+        tele_video.seal(t)
 except Undeclared as e:
     print("Undeclared:", e)
 # → Undeclared: 'lens': not a pred of demo_game.game.Video
@@ -412,15 +412,15 @@ del tele_video.preds["lens"]
 # %%
 try:
     with L.transaction(by="human:dan") as t:
-        t.add_value(tele_video, provenance="eval:sandbox")
+        tele_video.seal(t, provenance="eval:sandbox")
 except ValueError as e:
     print("ValueError:", e)
 # → ValueError: provenance 'eval:sandbox': eval: provenance is written
 #   by eval alone
 
 # %% [markdown]
-# Bytes enter the ledger by `add_value` alone: `add` refuses a
-# `Value` and names `add_value`.
+# Bytes enter the ledger by `v.seal(t)` alone: `add` refuses a
+# `Value` and names `v.seal(t)`.
 
 # %%
 try:
@@ -429,7 +429,7 @@ try:
 except TypeError as e:
     print("TypeError:", e)
 # → TypeError: add takes a str, a JSON document or a Ref, not a Video:
-#   bytes enter the ledger by t.add_value(value) alone
+#   bytes enter the ledger by value.seal(t) alone
 
 # %% [markdown]
 # ## Revising a value
@@ -471,8 +471,8 @@ print(rev[wide_video.subject, "db/preds"])
 # %%
 tele_video.preds["camera"] = "tlee"              # a typo
 with L.transaction(by="human:dan") as t:
-    wrong_subject = t.add_value(tele_video, alias="video/G1-tele",
-                                provenance="import:archive")
+    wrong_subject = tele_video.seal(t, alias="video/G1-tele",
+                                    provenance="import:archive")
 print(Ref(L.at(), "video/G1-tele").preds["camera"])
 # → tlee
 
@@ -485,8 +485,8 @@ print(Ref(L.at(), "video/G1-tele").preds["camera"])
 fixed_video = Video(tele_video.frames)           # the same bytes
 fixed_video.preds.update(game="G1", camera="tele", span=[0, 9000])
 with L.transaction(by="human:dan", why="camera typo") as t:
-    right_subject = t.add_value(fixed_video, alias="video/G1-tele",
-                                provenance="import:archive")
+    right_subject = fixed_video.seal(t, alias="video/G1-tele",
+                                     provenance="import:archive")
 rev = L.at()
 print(right_subject != wrong_subject,
       fixed_video.hash == tele_video.hash)
@@ -510,7 +510,7 @@ print(rev.refs(kind=Video, camera="tlee"))
 trimmed_video = Video(b"G1 wide camera, frames 600-9000")
 trimmed_video.preds.update(game="G1", camera="wide", span=[600, 9000])
 with L.transaction(by="human:dan") as t:
-    t.add_value(trimmed_video, deps=[wide_video])
+    trimmed_video.seal(t, deps=[wide_video])
 print(trimmed_video)
 # → <8 hex>: no alias yet
 with L.transaction(by="human:dan", why="warm-up trimmed") as t:
@@ -938,7 +938,7 @@ for item in sorted(opening_clip.trace):
 stable_video = Video(b"G1 stabilised, frames 600-9000")
 stable_video.preds.update(game="G1", camera="wide", span=[600, 9000])
 with L.transaction(by="human:dan", why="stabilised") as t:
-    t.add_value(stable_video, deps=[trimmed_video], alias="video/G1")
+    stable_video.seal(t, deps=[trimmed_video], alias="video/G1")
 rev = L.at()
 stable_clip = rev.eval("clips.clip", video="video/G1", start=0, end=8)
 print(stable_clip.subject != opening_clip.subject, stable_clip.frames)
@@ -978,7 +978,7 @@ print(shifted_value.obj, shifted_value.same_as(hypotenuse_value),
 restamped_video = Video(stable_video.frames)     # the same bytes
 restamped_video.preds.update(game="G1", camera="wide", span=[600, 8990])
 with L.transaction(by="human:dan", why="span off by ten") as t:
-    t.add_value(restamped_video, deps=[trimmed_video], alias="video/G1")
+    restamped_video.seal(t, deps=[trimmed_video], alias="video/G1")
 rev = L.at()
 print(restamped_video, stable_video)
 # → video/G1 <8 hex>
@@ -1055,7 +1055,7 @@ two_camera_video = Video(b"G1 both cameras, 9000 frames")
 two_camera_video.preds["camera"] = ["tele", "wide"]
 try:
     with L.transaction(by="human:dan") as t:
-        t.add_value(two_camera_video)
+        two_camera_video.seal(t)
 except TypeError as e:
     print("TypeError:", e)
 # → TypeError: pred 'camera': a list under a one pred; declare

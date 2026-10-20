@@ -3,7 +3,7 @@
 A subclass says how it becomes bytes (``encode``) and back (``decode``) and,
 with ``@ledger_class(preds=...)``, which pred names its values may carry.
 ``preds`` is a plain dict while the value is unsealed, filled by whoever builds
-it; the seal (``Transaction.add_value`` or an ``eval``) freezes it into a
+it; the seal (``v.seal(t)`` or an ``eval``) freezes it into a
 read-only mapping and fixes ``subject``, ``rev`` and ``trace`` (Q25 (D)). A
 subclass's own ``__init__`` need not call ``super().__init__``. Shipped
 subclasses: ``Pickled`` (any pickleable object), ``Table`` (parquet), ``Dat``
@@ -84,6 +84,27 @@ class Value:
 
     def _after_seal(self, store: "ArtStore") -> None:
         """Hook run once the value is sealed (a ``Dat`` moves to its stored folder)."""
+
+    def seal(self, to: Any, *, deps: Iterable[Any] = (), alias: Optional[str] = None,
+             provenance: Optional[str] = None, by: Optional[str] = None) -> str:
+        """Seal into the subject ``<hash of (trace, preds, bytes)>``; return the subject.
+
+        ``to`` a ``Transaction`` joins it: the value lands with that transaction's revision, or not
+        at all. ``to`` a ``Ledger`` opens and commits a one-value transaction of its own, written
+        ``by`` (default: the provenance, else ``seal``). ``deps`` declare what the value was made
+        from; ``alias`` names it; ``provenance`` says how it was made (``eval:`` is eval's alone).
+        """
+        from .ledger import Ledger
+        from .txn import Transaction
+
+        if isinstance(to, Transaction):
+            if by is not None:
+                raise TypeError("by= names the writer of a transaction seal opens; this one is open already")
+            return to._seal_value(self, deps=tuple(deps), alias=alias, provenance=provenance)
+        if isinstance(to, Ledger):
+            with to.transaction(by=by or provenance or "seal") as t:
+                return t._seal_value(self, deps=tuple(deps), alias=alias, provenance=provenance)
+        raise TypeError(f"seal takes a Transaction or a Ledger, not {type(to).__name__}")
 
     @property
     def hash(self) -> str:
