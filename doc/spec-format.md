@@ -288,7 +288,9 @@ Arguments are **not** recorded here. They are in the spec.
 Every `execute` makes `run/` inside the dat, a dat of its own with a minimal
 `_spec_.yaml` and a `_result_.yaml` holding the execution — when, how long,
 where, and which code: the branch, commit and dirty flag (tracked files) of
-the git checkout holding the source of the function `dat.do` names. Code
+the git checkout holding the source of the function `dat.do` names. A path
+the repo's `.gitattributes` marks `dat-noncode` (`doc/** dat-noncode`) is not
+code: a change there leaves the flag clear (6.2.1). Code
 outside a checkout records no `code`; a detached HEAD records `branch:
 null`. `content` is the `dat.sha256` the run sealed, written after the
 seal. `run/work/` is the run's scratch and its working directory. A run that

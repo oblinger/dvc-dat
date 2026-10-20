@@ -6,7 +6,8 @@ demo folders included (A56: the ledger's own repo is infrastructure, like
 ``site-packages``; a demo repository is its own nested checkout). A checkout is a repo; its
 name is ``[project].name`` of the ``pyproject.toml`` at its root, normalised
 (``dvc_dat`` -> ``dvc-dat``), else the checkout folder's name. ``Code`` holds
-the commit at HEAD, whether tracked files are modified (``dirty``), and the
+the commit at HEAD, whether tracked files are modified (``dirty``: none whose
+path the repo's ``.gitattributes`` marks ``dat-noncode``, as ``core._code_of``), and the
 checkout ``path`` a mount's ``db/root`` resolves under. The commit is read on
 every call, never cached: a notebook commits mid-session.
 """
@@ -23,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
+from ..core import CODE_PATHSPEC
 from .codec import sha256
 
 try:
@@ -113,7 +115,7 @@ def repo_name(top: Path) -> str:
 
 def code_at(top: str) -> Code:
     commit = _git(top, "rev-parse", "HEAD")
-    dirty = bool(_git(top, "status", "--porcelain", "--untracked-files=no"))
+    dirty = bool(_git(top, "status", "--porcelain", "--untracked-files=no", "--", *CODE_PATHSPEC))
     return Code(None, commit, dirty, Path(top))
 
 

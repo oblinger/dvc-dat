@@ -14,7 +14,8 @@ mid-session is seen. Part of the
 
 - `Code(version, commit, dirty=False, path=None)`: one repo as the
   environment has it; `version` is always `None` from discovery;
-  `dirty` means tracked files are modified (untracked ignored); `path`
+  `dirty` means tracked files are modified (untracked ignored, and any
+  path `.gitattributes` marks `dat-noncode`, as `code_of`, 6.2.1); `path`
   the checkout root a mount's `db/root` resolves under.
 - `Env(code, lock, platform, mounts=None)`: `code` maps repo name to
   `Code`; `lock` is `sha256:<hex>` of the `uv.lock` found beside the

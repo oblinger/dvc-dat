@@ -6,6 +6,17 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 6.2.1 — 2026-10-20
+
+- **A repo marks what is not code.** The dirty flag of `dat.code`
+  (`_code_of`) and of the ledger's discovered `Code` reads `git status`
+  over `CODE_PATHSPEC` — the whole tree less every path the repo's
+  `.gitattributes` gives the `dat-noncode` attribute. With `doc/**
+  dat-noncode`, an edit under `doc/` leaves the checkout clean, so a
+  tool that rewrites docs no longer caps a run at `sealed` or refuses a
+  `referenceable` demand; an edit to code still reads dirty. A repo with
+  no such attribute reads as before (sv-pipe T560).
+
 ## 6.2.0 — 2026-10-20
 
 - **A `Dat` streams.** `Value._parts()` yields `(sha256, source)`, the

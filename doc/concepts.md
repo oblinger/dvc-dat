@@ -76,8 +76,8 @@ run wrote, and `_result_.yaml`. The run that made it is a **sub-dat**,
 `run/` inside the dat, made fresh by every `execute` (a rolling dat's is
 replaced each time it runs). Its results hold the execution: `dat.run_at`,
 `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` (the branch, commit and
-dirty flag of the git checkout holding the code's source; nothing outside a
-checkout) and `dat.content`, the `dat.sha256` the run sealed. Its `work/` is
+dirty flag of the git checkout holding the code's source, blind to paths its
+`.gitattributes` marks `dat-noncode`; nothing outside a checkout) and `dat.content`, the `dat.sha256` the run sealed. Its `work/` is
 the run's scratch, and the working directory while the code runs: a file the
 code writes without naming a place lands there. `dat.run` is the sub-dat
 (`None` for a dat filled by hand).
