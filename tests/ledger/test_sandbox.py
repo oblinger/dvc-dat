@@ -338,7 +338,7 @@ def test_refusals(sbx):
         L.at().eval("sbx.stage.fns.borrow", game="G1")
     with pytest.raises(UntracedRead):
         L.at().eval("sbx.stage.fns.snoop", game="G1")
-    with pytest.raises(ConfinedWrite, match="writes only in its work folder") as e:
+    with pytest.raises(ConfinedWrite, match="writes only in its path folder") as e:
         L.at().eval("sbx.stage.fns.scribble", game="G1")
     assert not isinstance(e.value, UntracedRead)
     old = L.at(1)
@@ -474,7 +474,7 @@ def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
     (outside / "tree" / "f").write_text("f")
     before = sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*"))
     for how in WRITE_HOWS:
-        with pytest.raises(ConfinedWrite, match="a sandboxed function writes only in its work folder"):
+        with pytest.raises(ConfinedWrite, match="a sandboxed function writes only in its path folder"):
             L.at().eval("sbx.stage.writes.write", how=how, where=str(outside))
     assert sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*")) == before
     assert (outside / "seed").read_text() == "s"
@@ -504,7 +504,7 @@ def test_reads_confined_to_the_mounts_the_dats_and_the_work_folder(sbx, tmp_path
     (outside / "f.txt").write_text("x")
     for where in ("stdlib", "site", "dvc_dat", "prefix", "repo", "scratch", str(outside / "f.txt")):
         for how in READ_HOWS:
-            with pytest.raises(UntracedRead, match="outside the mounts, the dats and the work folder"):
+            with pytest.raises(UntracedRead, match="outside the mounts, the dats and the path folder"):
                 L.at().eval("sbx.stage.reads.read", how=how, where=where)
         for how in SWALLOWED:
             assert L.at().eval("sbx.stage.reads.read", how=how, where=where).obj == {"n": 0}

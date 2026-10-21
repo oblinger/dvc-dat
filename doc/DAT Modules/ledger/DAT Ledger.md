@@ -114,7 +114,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 
 
 ## Ref Interface
-One value at one moment, named without fetching a byte. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is the subject's shortest alias, else the hash's first 8 hex. Made from a recording `Rev`, it records its reads into the trace like the `Rev` would.
+One value at one moment, named without fetching a byte. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is the value's name (the alias naming it written latest), else the hash's first 8 hex. Made from a recording `Rev`, it records its reads into the trace like the `Rev` would.
 
 | Ref | |
 | --- | --- |
@@ -384,7 +384,7 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
     The mounted prefix the name resolved under; `None` in base mode. ^mount
 
 **signature**`: inspect.Signature`
-    The keys the function takes, without the leading `Rev` and without `work`. ^signature
+    The keys the function takes, without the leading `Rev` and without `path`. ^signature
 
 **env**`: Env`
     The environment the function resolved in: repos and commits, platform. ^env
@@ -392,8 +392,8 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
 **subject**`: str`
     `db/fn/<name>/<16 hex>`, hashing the code that runs ([Evaluation and the trace](#evaluation-and-the-trace)). ^fn-subject
 
-**__call__**`(*, memo=True, clean=False, **keys) -> Value | None`
-    `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. Keys bind to the signature with defaults applied; `memo`, `clean` or `work` given as a key is `TypeError`. A base-mode run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
+**__call__**`(*, memo=True, clean=False, path=None, kwargs=None, **keys) -> Value | None`
+    `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. The control options are exactly `memo`, `clean`, `path` and `kwargs`, never keys and never hashed. Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. A base-mode run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
 
 
 
@@ -412,7 +412,7 @@ The package's other exports: two decorators, two helpers, and the exceptions. Ev
 | [NotClean](#^notclean) | `clean=True`, and the code is not a clean version |
 | [UnmountedImport](#^unmountedimport) | A sandboxed import outside every mount |
 | [UntracedRead](#^untracedread) | A sandboxed read outside the allowed places |
-| [ConfinedWrite](#^confinedwrite) | A sandboxed write outside the work folder |
+| [ConfinedWrite](#^confinedwrite) | A sandboxed write outside the path folder |
 | [ConfinedNetwork](#^confinednetwork) | A sandboxed network use |
 | [LockTimeout](#^locktimeout) | A lock= body past its limit |
 | [Unindexed](#^unindexed) | A query on an unknown dotted predicate |
@@ -449,10 +449,10 @@ The package's other exports: two decorators, two helpers, and the exceptions. Ev
     A sandboxed body imported a module of a mounted repo that lies under no mount. ^unmountedimport
 
 **UntracedRead**`(LedgerError, PermissionError)`
-    A sandboxed body read outside the mounts, the art store and its `work` folder. ^untracedread
+    A sandboxed body read outside the mounts, the art store and its `path` folder. ^untracedread
 
 **ConfinedWrite**`(LedgerError, PermissionError)`
-    A sandboxed body wrote outside its `work` folder, the dat being produced. ^confinedwrite
+    A sandboxed body wrote outside its `path` folder, the dat being produced. ^confinedwrite
 
 **ConfinedNetwork**`(LedgerError, PermissionError)`
     A sandboxed body resolved a host name or opened a network connection other than to a Postgres ledger's own endpoint. ^confinednetwork
@@ -543,7 +543,7 @@ def cut(rev, *, game: str, version: str) -> Cut:
     return out
 ```
 
-A function that declares `work: Path` is given a fresh folder under `$DAT_WORK` (default `~/.cache/dvc-dat/work`); it writes a dat there and returns `Dat(work)`, and the seal moves the files into the art store.
+A function that declares `path: Path` is given a fresh folder under `$DAT_WORK` (default `~/.cache/dvc-dat/work`); it writes a dat there and returns `Dat(path)`, and the seal moves the files into the art store. The result's name is the call's `path=` (relative to the data folder, `<art store>/dats`), else the parameter's default as a path template expanded with the keys, else `anonymous/Dat{unique}`; its folder at the name is a view, hardlinks into the store, rebuilt as a new folder when the name moves. A value has one name, an alias not bound into its hash, settable as `Value(name=...)` or by assigning `v.name`; a name names one value; a value prints as its name, else a hash prefix.
 
 A base-mode function is whatever the running process imports. Its `fn` subject hashes the function module's static import closure within its checkout, and its `code/<repo>` trace item names the checkout's commit. The checkout is found by git discovery over the folders of the imported modules, skipping the standard library, `site-packages` and the dvc-dat checkout; a checkout is named by its `pyproject.toml` `[project].name`.
 

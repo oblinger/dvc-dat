@@ -36,7 +36,9 @@ on a refusal. Part of the [architecture](../../DAT%20Architecture.md).
   held object.
 - `v.seal(t, *, deps=(), alias=None, provenance=None) -> str`
   (`Value.seal`): seal `v` in this
-  transaction and return its subject (64 hex). A value sealed earlier
+  transaction and return its subject (64 hex). `alias` (else the
+  value's pending `name`) names it: its other names are retracted,
+  and a `Dat`'s folder is placed at the name. A value sealed earlier
   by `v.seal()` is saved in the state it was sealed in
   ([value](value.md)). Refused on the line:
   not a `Value` or already sealed (`TypeError`, `ValueError`); a

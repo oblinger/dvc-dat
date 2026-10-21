@@ -24,15 +24,32 @@ world hands back the value already sealed. Part of the
 - `Fn`: a frozen dataclass with `name`, `module` (the source file),
   `sha` (sha256 of that file), `mode` (`"base"` or `"sandbox"`),
   `mount` (the prefix or `None`), `signature` (the keys, without the
-  `Rev` and `work`), `env` (an `Env`; `mounts` the mount-table hash in
+  `Rev` and `path`), `env` (an `Env`; `mounts` the mount-table hash in
   sandbox mode), `subject` (`db/fn/<name>/<16 hex>`).
-- `Fn.__call__(*, memo=True, clean=False, **keys) -> Value | None`:
+- `Fn.__call__(*, memo=True, clean=False, path=None, kwargs=None,
+  **keys) -> Value | None`. The control options are exactly `memo`,
+  `clean`, `path` and `kwargs` (Q41): never keys, never hashed.
   - `memo=True`: a hit, else run, seal, return; `memo=False`: run, seal
     nothing; `memo="get"`: a hit or `None`, never runs; anything else
     `ValueError`.
   - Keys bind to the signature with defaults applied (`TypeError` from
-    `inspect` on a bad key); `memo`, `clean` or `work` given as a key
-    is `TypeError`.
+    `inspect` on a bad key). `kwargs={...}` is the whole key set, for
+    a function that declares a key named like a control option (a
+    function may; it is then called through `kwargs=`); inline keys
+    beside it are `TypeError`. A declared `path` is the folder the
+    function builds, never a key (`TypeError` in `kwargs=`).
+  - `path=` (Q36, A70): relative (to the data folder,
+    `<art store>/dats`), it is the result's name: the value's one
+    alias, the name moved off any value it named and any other name
+    of this value retracted, and a `Dat`'s folder rebuilt at
+    `<data folder>/<path>` as a view (hardlinks into the store, a new
+    folder, never edited in place). A hit asked for under a new name
+    takes it. Absolute: the folder is made there and nothing is
+    named. With no `path=`, a miss of a function declaring `path`
+    that returns a `Dat` is named by that parameter's default, the
+    path template, expanded with the keys (`{unique}` counts up to a
+    free name), else `anonymous/Dat{unique}`. `memo=False`: the name
+    is set on the unsaved object.
   - Base mode: a miss runs only when the function's code is in a git
     checkout and the checkout is clean; code outside any checkout or a
     dirty checkout is `NotEvaluated` (there is no byte record of what
@@ -67,7 +84,7 @@ world hands back the value already sealed. Part of the
   newest seal first; the first whose trace holds at the asked revision
   ([trace](trace.md)) is restored by `Ref.load`.
 - Base run: the body gets a recording `Rev`; a function declaring
-  `work` gets a fresh `ledger-work-*` folder under `work_root()`
+  `path` gets a fresh `ledger-work-*` folder under `work_root()`
   (`$DAT_WORK`, else `~/.cache/dvc-dat/work`), removed after the seal;
   a GB-scale result built there should sit on the filesystem it is
   saved to, so set `DAT_WORK` beside the ledger's art store. The trace is the recorded reads plus `fn`, `code/<repo>` (the

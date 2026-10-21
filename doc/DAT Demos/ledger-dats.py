@@ -666,7 +666,7 @@ except UnmountedImport as e:
 
 # %% [markdown]
 # The second reads a file outside the mounts, the dats and its
-# work folder.
+# path folder.
 
 # %%
 try:

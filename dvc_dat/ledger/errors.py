@@ -24,11 +24,11 @@ class UnmountedImport(LedgerError, ImportError):
 
 
 class UntracedRead(LedgerError, PermissionError):
-    """A sandboxed function read a path outside the mounts, the dats and its work folder."""
+    """A sandboxed function read a path outside the mounts, the dats and its path folder."""
 
 
 class ConfinedWrite(LedgerError, PermissionError):
-    """A sandboxed function wrote outside its work folder, the dat being produced."""
+    """A sandboxed function wrote outside its path folder, the dat being produced."""
 
 
 class ConfinedNetwork(LedgerError, PermissionError):

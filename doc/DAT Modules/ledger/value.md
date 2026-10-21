@@ -36,8 +36,17 @@ Part of the [architecture](../../DAT%20Architecture.md).
   `None` where one lacks the item.
 - `same_as(other) -> bool`: equal `hash`; `False` for `None`.
 - `Trace`: the `Mapping[str, str]` type of `trace`.
-- `repr`: a sealed value prints as its shortest alias at the head,
-  else the hash's first 8; unsealed `<Kind unsealed>`.
+- `name: str | None` (Q36): the value's one name, an alias relative
+  to the data folder and not part of its identity. Saved: the alias
+  naming it at the head, written latest. Unsaved: the name a save
+  gives it (`Value(name=...)`, `Pickled(obj, name=...)`,
+  `Dat(path, name=...)`, or assigned). Assigning it on a saved value
+  moves the name in a revision of its own (`by="name"`): the other
+  names of the value are retracted and the name leaves any value it
+  named; a `Dat`'s folder is rebuilt at the new name. A name is a
+  relative path without `.` or `..` (`ValueError`).
+- `repr`: a saved value prints as its name, else the hash's first 8;
+  unsealed `<Kind unsealed>`.
 
 Subclasses:
 

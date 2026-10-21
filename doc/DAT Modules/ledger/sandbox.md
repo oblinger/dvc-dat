@@ -62,10 +62,10 @@ Child side:
   it")` for a module that would resolve inside a mounted repo's
   checkout under no mount.
 - The audit hook, active only while a function body (or its module's
-  first load) runs. Writes go only into that body's `work` folder,
+  first load) runs. Writes go only into that body's `path` folder,
   the dat being produced, and `/dev/null`; anywhere else, the worker's
   scratch and the art store included, is `ConfinedWrite("<path>: a
-  sandboxed function writes only in its work folder")`. Checked:
+  sandboxed function writes only in its path folder")`. Checked:
   `open` and `os.open` for writing (a mode with `w`, `a`, `x` or `+`,
   or `O_WRONLY`, `O_RDWR`, `O_CREAT`, `O_TRUNC`); every path-changing
   `os` call (`mkdir`, `rmdir`, `remove`, `rename`/`replace` and `link`
@@ -74,9 +74,9 @@ Child side:
   folder and a descriptor to its file; `sqlite3.connect` on any
   database but the ledger's own; and through these `pathlib`,
   `shutil` and `tempfile` (a default temp file lands in `$TMPDIR`, so
-  it is refused; pass `dir=work`). A function with no `work`
+  it is refused; pass `dir=path`). A function with no `path`
   parameter writes nowhere. Reads go only into the mounted roots, the
-  art store (the dats) and that `work` folder; anywhere else, the
+  art store (the dats) and that `path` folder; anywhere else, the
   worker's scratch, the interpreter's folders, `site-packages`, the
   dvc-dat package and the rest of a mounted repo included, is
   `UntracedRead("<path>: outside the mounts, the dats and the work
@@ -91,13 +91,13 @@ Child side:
   interpreter's folders (a library loading its bundled data, which
   its `RECORD` covers). A library's data read after its import is
   refused.
-- While a body with a `work` folder runs, the worker's current
+- While a body with a `path` folder runs, the worker's current
   directory is that folder, so a relative path lands in the dat being
   produced.
 - `unguarded()`: the ledger's own machinery inside a body (a nested
   `rev.eval`'s lookup and seal, a `Dat` materialised into the art
   store on load) runs with the hook stood aside; a nested body is
-  confined again, to its own `work` folder.
+  confined again, to its own `path` folder.
 - The same hook on the network, active while a function body runs:
   resolving a host name (`socket.getaddrinfo`, `gethostbyname`,
   `gethostbyaddr`, `getnameinfo`) or sending to an internet address

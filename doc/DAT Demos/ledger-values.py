@@ -763,7 +763,7 @@ try:
 except ConfinedWrite as e:
     print("ConfinedWrite:", e)
 # → ConfinedWrite: /private/tmp/plane-note.txt: a sandboxed function
-#   writes only in its work folder
+#   writes only in its path folder
 
 # %% [markdown]
 # The refusal is raised as `ConfinedWrite`; a read outside the

@@ -20,11 +20,11 @@ ancestors empty namespace packages (their ``__init__`` never runs), and refuses
 a module that would resolve inside a mounted repo's checkout but under no mount
 (``UnmountedImport``). An audit hook refuses, while a function body (or its
 module's load) runs, a read (``open``, ``os.listdir``/``scandir``) outside
-the mounted roots, the art store (the dats) and the body's ``work`` folder
+the mounted roots, the art store (the dats) and the body's ``path`` folder
 (``UntracedRead``), except the import system's own reads of module files and,
 while a module from outside the mounts is being imported, its reads in the
 interpreter's folders (its bundled data); and a write anywhere but the running
-body's ``work`` folder, the dat being produced
+body's ``path`` folder, the dat being produced
 (``ConfinedWrite``): ``open``/``os.open`` for writing, every path-changing
 ``os`` call (mkdir, rename, link, remove, chmod, ...), and through them
 ``pathlib``, ``shutil``, ``tempfile`` and ``sqlite3``. The ledger's own
@@ -495,7 +495,7 @@ class _State:
     reads: List[str] = []                           # the mounted roots and the art store (the dats)
     importable: List[str] = []                      # sys.path and the mounts: where the import system reads
     interpreter: List[str] = []                     # where an unmounted module's own import may read
-    works: List[Optional[str]] = []                 # the work folder of each running body, innermost last
+    works: List[Optional[str]] = []                 # the path folder of each running body, innermost last
     store: str = ""                                 # the ledger's own database file (a folder ledger)
     hosts: Set[str] = set()                         # the ledger's own endpoint, by name and by address
     addrs: Set[Tuple[str, int]] = set()
@@ -650,7 +650,7 @@ def _resolve(path: Any, dir_fd: Any = None) -> Optional[str]:
         base = _fd_path(dir_fd)
         if base is None:
             raise ConfinedWrite(f"{text} under descriptor {dir_fd}: a sandboxed function writes only in its "
-                                "work folder")
+                                "path folder")
         text = os.path.join(base, text)
     return os.path.realpath(text)
 
@@ -662,7 +662,7 @@ def _writable() -> List[str]:
 
 def _check_write(p: Optional[str]) -> None:
     if p is not None and not _under(p, _writable()):
-        raise ConfinedWrite(f"{p}: a sandboxed function writes only in its work folder")
+        raise ConfinedWrite(f"{p}: a sandboxed function writes only in its path folder")
 
 
 def _audit(event: str, args: Any) -> None:
@@ -711,7 +711,7 @@ def _importing(frame: Any) -> Optional[str]:
 
 
 def _check_read(p: Optional[str], caller: Any) -> None:
-    """Reads: the mounts, the dats, the running body's work folder; the import system's own reads of
+    """Reads: the mounts, the dats, the running body's path folder; the import system's own reads of
     module files; and, while a module from outside the mounts is being imported, the interpreter's
     folders (that module's data; the module itself is in ``fn``). Else ``UntracedRead``."""
     if p is None or _under(p, STATE.reads + _writable()):
@@ -722,7 +722,7 @@ def _check_read(p: Optional[str], caller: Any) -> None:
         mod = _importing(caller)
         if mod is not None and _mount_of(STATE.mounts, mod) is None:
             return
-    raise UntracedRead(f"{p}: outside the mounts, the dats and the work folder")
+    raise UntracedRead(f"{p}: outside the mounts, the dats and the path folder")
 
 
 def install_worker(ledger: Any, mounts: List[Mount]) -> None:
