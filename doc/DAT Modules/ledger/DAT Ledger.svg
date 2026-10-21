@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 800" width="1600" height="800" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#37474f"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1600" height="800" fill="#ffffff"/>
+
+  <!-- nodes: column A handle and storage, B reads and writes, C values, D functions -->
+  <g stroke="#37474f" stroke-width="2">
+    <rect x="40" y="90" width="300" height="120" rx="10" fill="#eceff1"/>
+    <rect x="40" y="360" width="300" height="120" rx="10" fill="#fff8e1"/>
+    <rect x="40" y="630" width="300" height="120" rx="10" fill="#fff8e1"/>
+    <rect x="440" y="90" width="320" height="120" rx="10" fill="#e3f2fd"/>
+    <rect x="440" y="360" width="320" height="120" rx="10" fill="#ffebee"/>
+    <rect x="440" y="630" width="320" height="120" rx="10" fill="#eceff1"/>
+    <rect x="860" y="90" width="300" height="120" rx="10" fill="#e3f2fd"/>
+    <rect x="860" y="360" width="300" height="120" rx="10" fill="#e8f5e9"/>
+    <rect x="1260" y="90" width="300" height="120" rx="10" fill="#f3e5f5"/>
+    <rect x="1260" y="360" width="300" height="120" rx="10" fill="#f3e5f5"/>
+  </g>
+
+  <g fill="#263238" text-anchor="middle">
+    <text x="190" y="136" font-size="24" font-weight="bold">Ledger</text>
+    <text x="190" y="162" font-size="15" fill="#607d8b">class · a folder or a DSN</text>
+    <text x="190" y="190" font-size="15">at · transaction · close</text>
+
+    <text x="190" y="406" font-size="24" font-weight="bold">Store</text>
+    <text x="190" y="432" font-size="15" fill="#607d8b">SqliteStore · PostgresStore</text>
+    <text x="190" y="460" font-size="15">quads, append-only; read by Rev</text>
+
+    <text x="190" y="676" font-size="24" font-weight="bold">ArtStore</text>
+    <text x="190" y="702" font-size="15" fill="#607d8b">class · bytes by sha256</text>
+    <text x="190" y="730" font-size="15">write-once, hardlinked parts</text>
+
+    <text x="600" y="136" font-size="24" font-weight="bold">Rev</text>
+    <text x="600" y="162" font-size="15" fill="#607d8b">class · frozen view at one revision</text>
+    <text x="600" y="190" font-size="15">[ ] · get · all · refs · values · select</text>
+
+    <text x="600" y="406" font-size="24" font-weight="bold">Transaction</text>
+    <text x="600" y="432" font-size="15" fill="#607d8b">class · one revision on exit</text>
+    <text x="600" y="460" font-size="15">add · remove · t[s, p] = o · del</text>
+
+    <text x="600" y="676" font-size="24" font-weight="bold">Kept cache</text>
+    <text x="600" y="702" font-size="15" fill="#607d8b">folder · $DAT_KEPT</text>
+    <text x="600" y="730" font-size="15">seal records of unsaved seals</text>
+
+    <text x="1010" y="136" font-size="24" font-weight="bold">Ref</text>
+    <text x="1010" y="162" font-size="15" fill="#607d8b">class · a value at a revision</text>
+    <text x="1010" y="190" font-size="15">subject · hash · preds · load</text>
+
+    <text x="1010" y="406" font-size="24" font-weight="bold">Value</text>
+    <text x="1010" y="432" font-size="15" fill="#607d8b">class · Pickled · Table · Dat</text>
+    <text x="1010" y="460" font-size="15">encode · decode · seal · trace</text>
+
+    <text x="1410" y="136" font-size="24" font-weight="bold">Fn</text>
+    <text x="1410" y="162" font-size="15" fill="#607d8b">class · a @ledger_fn at a revision</text>
+    <text x="1410" y="190" font-size="15">calling it is eval, memoised</text>
+
+    <text x="1410" y="406" font-size="24" font-weight="bold">Worker</text>
+    <text x="1410" y="432" font-size="15" fill="#607d8b">process · python -I, one per mount</text>
+    <text x="1410" y="460" font-size="15">runs a sandboxed body, confined</text>
+  </g>
+
+  <!-- topic annotations -->
+  <g font-size="15" font-style="italic" fill="#2e7d32" text-anchor="middle">
+    <text x="600" y="236">governed by The fold</text>
+    <text x="1010" y="506">governed by Sealing and saving</text>
+    <text x="1410" y="236">governed by Evaluation and the trace</text>
+  </g>
+
+  <!-- primary flow: solid -->
+  <g stroke="#37474f" stroke-width="2.5" fill="none" marker-end="url(#arrow)">
+    <line x1="340" y1="150" x2="436" y2="150"/>
+    <line x1="300" y1="210" x2="470" y2="356"/>
+    <line x1="760" y1="150" x2="856" y2="150"/>
+    <path d="M600,90 V40 H1410 V86"/>
+    <line x1="1010" y1="210" x2="1010" y2="356"/>
+    <line x1="1268" y1="210" x2="1150" y2="358"/>
+    <line x1="1410" y1="250" x2="1410" y2="356"/>
+    <line x1="860" y1="420" x2="764" y2="420"/>
+    <line x1="440" y1="420" x2="344" y2="420"/>
+    <line x1="480" y1="480" x2="320" y2="628"/>
+  </g>
+
+  <!-- contains / local seal: dotted -->
+  <g stroke="#37474f" stroke-width="2" stroke-dasharray="6,6" fill="none" marker-end="url(#arrow)">
+    <line x1="190" y1="210" x2="190" y2="356"/>
+    <line x1="190" y1="480" x2="190" y2="626"/>
+    <line x1="900" y1="480" x2="740" y2="626"/>
+  </g>
+
+  <!-- edge labels -->
+  <g font-size="16" fill="#37474f">
+    <text x="388" y="140" text-anchor="middle">at()</text>
+    <text x="392" y="262">transaction()</text>
+    <text x="808" y="140" text-anchor="middle">refs()</text>
+    <text x="1005" y="30" text-anchor="middle">load_fn() · eval()</text>
+    <text x="1022" y="290">load()</text>
+    <text x="1222" y="300">returns, sealed</text>
+    <text x="1422" y="300">sandbox mode</text>
+    <text x="812" y="408" text-anchor="middle">seal(t)</text>
+    <text x="392" y="408" text-anchor="middle">rows</text>
+    <text x="408" y="570">bytes</text>
+    <text x="202" y="290">owns</text>
+    <text x="202" y="560">art/</text>
+    <text x="842" y="570">seal()</text>
+  </g>
+</svg>
