@@ -6,6 +6,11 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.18.1 — 2026-10-21
+
+- **A sandboxed body's first traced read works in a fresh worker.** With dvc-dat installed editable, a body whose first read was `rev.all` (or any read that first imports `dvc_dat.ledger.trace`) failed with `ModuleNotFoundError`: the read guard refused the import system's listing of the editable source folder. The worker now imports `trace` before the guard goes up.
+- **`demo-etl` is the ETL chain on the ledger.** A dataset per game, a game set as rows, a binning per game, a cumulative binning built recursively, and a podium; each section changes one thing (a game added, a game replaced, a game's data, one stage's code) and counts what ran. The hand-made gamey/trial/metrics kinds it replaces (`demo_kinds/etl.py`) are removed.
+
 ## 2.18.0 — 2026-10-21
 
 - **Renumbered: 3.0.0 through 6.3.0 were all the ledger build-out of 2.x.** Those releases were cut as four majors in two weeks while one refactor reshaped the ledger; none made DAT a different thing. Their tags are renamed below and point at the same commits; no history was rewritten. Each commit's own `__version__` and changelog text still say the old number. A lock that pins an old tag with its commit (`rev=v6.3.0#<sha>`) still installs, because the installer fetches by commit. The changelog sections 5.1.0, 5.2.0 and 6.0.0 were never tagged.
