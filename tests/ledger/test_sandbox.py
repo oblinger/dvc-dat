@@ -78,6 +78,11 @@ PKG = {
             return {"pid": os.getpid(), "calls": helper.CALLS}
 
         @ledger_fn
+        def die(rev, *, game: str) -> dict:
+            import os
+            os._exit(3)
+
+        @ledger_fn
         def libs(rev, *, game: str) -> dict:
             import colorsys
             import xlsxwriter
@@ -392,7 +397,10 @@ def test_each_call_is_a_fresh_process(sbx):
     a = L.at().eval("sbx.stage.fns.pid", game="G1", memo=False).obj
     b = L.at().eval("sbx.stage.fns.pid", game="G1", memo=False).obj
     assert a["calls"] == b["calls"] == 1 and a["pid"] != b["pid"]
-    assert len({sandbox._server().proc.pid}) == 1 and sandbox._server().alive()
+    assert sandbox._server().alive()
+    with pytest.raises(RuntimeError, match=r"ended \(exit code 3\) before it replied"):
+        L.at().eval("sbx.stage.fns.die", game="G1")
+    assert L.at().eval("sbx.stage.fns.pid", game="G1", memo=False).obj["calls"] == 1   # the server lives on
 
 
 def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):

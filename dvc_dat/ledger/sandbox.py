@@ -949,7 +949,8 @@ def worker_main() -> None:
         _pid, status = os.waitpid(pid, 0)
         if resp is None:
             resp = {"ok": False, "exc": None, "type": "WorkerDied",
-                    "message": f"the sandboxed call's process ended (status {status}) before it replied",
+                    "message": f"the sandboxed call's process ended (exit code "
+                               f"{os.waitstatus_to_exitcode(status)}) before it replied",
                     "traceback": ""}
         send(proto_out, resp)
 

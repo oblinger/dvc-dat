@@ -35,7 +35,7 @@ Parent side:
   sealed entry (loaded in the parent) or, unsealed, the unpickled
   value; an exception in the child is re-raised in the parent with
   `worker_traceback` set; a child that dies before replying is a
-  `RuntimeError` naming its exit status.
+  `RuntimeError` naming its exit code.
 - `shutdown()`: stops every server; registered at exit.
 - `sandbox_subject_at(rev, name, modules) -> str | None`: the `fn`
   subject the recorded modules hash to now: a mounted file at the
