@@ -302,6 +302,7 @@ print(detections_ref.preds["metrics.count"])        # → 40
 # name:
 #
 # ```python
+# @command(args="game=…", help="train the model on one game's tracks")
 # @ledger_fn
 # def train(rev, *, game: str, path: Path) -> StageDat:
 #     epochs = int(rev["cfg/train", "epochs"])            # traced
@@ -312,7 +313,8 @@ print(detections_ref.preds["metrics.count"])        # → 40
 #     return d
 # ```
 #
-# `fit`, the model's `main`, evaluates `tracks` the same way. The
+# `fit`, the model's `main`, evaluates `tracks` the same way.
+# `@command` only lets a shell type `just train` (ledger-just). The
 # config and each game's set, which `train` reads:
 
 # %%

@@ -369,3 +369,133 @@ class TestImportRoot:
         code, out, err = run_x("mypkg.job.run", cwd=notes,
                                env=_env(DAT_RUN=f"{sys.executable} -m dvc_dat"))
         assert (code, out) == (0, "42"), err
+
+
+def make_ledger_project(root: Path, hand: str = "", targets: bool = True) -> None:
+    """A project with a ledger: `ledger:` in the config, a main mounting a module of
+    ledger functions at `fns`, and a justfile importing the generated commands."""
+    from dvc_dat.ledger import Ledger
+    (root / ".datconfig.yaml").write_text(
+        f"ledger: .dat/ledger\nrun: {sys.executable} -m ledger_main\n")
+    Ledger(root / ".dat" / "ledger", create=True)
+    targets_line = "import? '.dat/targets.just'\n" if targets else ""
+    (root / "justfile").write_text(f"import '{RECIPES}'\n{targets_line}{hand}")
+    (root / "proj_fns.py").write_text(
+        "from dvc_dat.just import command\n"
+        "from dvc_dat.ledger import ledger_fn\n"
+        "\n"
+        "@command(args='n=…', help='double n')\n"
+        "@ledger_fn\n"
+        "def double(rev, *, n: int) -> int:\n"
+        "    return n * 2\n"
+        "\n"
+        "@command(args='', help='a name the justfile already has')\n"
+        "@ledger_fn\n"
+        "def hand(rev) -> int:\n"
+        "    return 0\n"
+        "\n"
+        "def plain(n=1):\n"
+        "    return n\n"
+    )
+    (root / "ledger_main.py").write_text(
+        "import sys\n"
+        "from dvc_dat import Dat\n"
+        "Dat.do.mount(module='proj_fns', at='fns')\n"
+        "if __name__ == '__main__':\n"
+        "    sys.exit(Dat.cli_main())\n"
+    )
+    (root / ".gitignore").write_text(".dat/\n")
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "project"]):
+        subprocess.run(git + args, cwd=str(root), check=True, capture_output=True)
+
+
+@needs_just
+class TestLedgerRun:
+    """With `ledger:` in the config, `just run` evaluates through the ledger (F447 Q40 (A))."""
+
+    def test_a_function_runs_then_hits(self, tmp_path):
+        make_ledger_project(tmp_path)
+        code, out, err = run_x("proj_fns.double", "n=3", cwd=tmp_path)
+        assert code == 0 and out.startswith("ran  "), err
+        code, out, err = run_x("proj_fns.double", "n=3", cwd=tmp_path)
+        assert code == 0 and out.startswith("hit  "), err
+
+    def test_a_mounted_name_is_the_same_function(self, tmp_path):
+        make_ledger_project(tmp_path)
+        run_x("proj_fns.double", "n=3", cwd=tmp_path)
+        code, out, err = run_x("fns.double", "n=3", cwd=tmp_path)
+        assert code == 0 and out.startswith("hit  "), err
+
+    def test_a_spec_file_names_its_function_in_main(self, tmp_path):
+        make_ledger_project(tmp_path)
+        (tmp_path / "d.yaml").write_text("main: proj_fns.double\nn: 3\n")
+        assert run_x("proj_fns.double", "n=3", cwd=tmp_path)[0] == 0
+        code, out, err = run_x("d.yaml", cwd=tmp_path)
+        assert code == 0 and out.startswith("hit  "), err
+        code, out, err = run_x("d.yaml", "n=4", cwd=tmp_path)        # the line's key wins
+        assert code == 0 and out.startswith("ran  "), err
+
+    def test_alias_names_the_result(self, tmp_path):
+        make_ledger_project(tmp_path)
+        code, out, err = run_x("proj_fns.double", "n=5", "alias=ten", cwd=tmp_path)
+        assert code == 0 and out.split()[:2] == ["ran", "ten"], err
+        from dvc_dat.ledger import Ledger
+        assert Ledger(tmp_path / ".dat" / "ledger").at().load("ten").obj == 10
+
+    def test_a_plain_function_is_refused(self, tmp_path):
+        make_ledger_project(tmp_path)
+        code, _, err = run_x("fns.plain", cwd=tmp_path)
+        assert code == 1 and "not a ledger function" in err
+
+    def test_dry_run_shows_the_eval(self, tmp_path):
+        make_ledger_project(tmp_path)
+        code, out, _ = run_x("proj_fns.double", "n=3", "--dry-run", cwd=tmp_path)
+        assert (code, out) == (0, "rev.eval('proj_fns.double', n=3)")
+
+
+@needs_just
+class TestTargets:
+    """`.dat/targets.just`: one recipe per mounted `@command` (A64, A65, A67)."""
+
+    def test_run_writes_the_commands_and_skips_a_hand_recipe(self, tmp_path):
+        make_ledger_project(tmp_path, hand="hand:\n    @echo hand\n")
+        code, _, err = run_x("proj_fns.double", "n=2", cwd=tmp_path)
+        assert code == 0, err
+        text = (tmp_path / ".dat" / "targets.just").read_text()
+        assert "double *args:" in text and "hand *args:" not in text
+        assert "1 command(s)" in err and "fns.hand (hand is a recipe in the justfile)" in err
+        done = subprocess.run(["just", "double", "n=2"], cwd=str(tmp_path), capture_output=True,
+                              text=True, env=_env())
+        assert done.returncode == 0 and done.stdout.startswith("hit  "), done.stderr
+        listing = subprocess.run(["just", "--list"], cwd=str(tmp_path), capture_output=True,
+                                 text=True, env=_env()).stdout
+        assert "double *args" in listing and "# n=…  double n" in listing
+
+    def test_a_fresh_file_is_not_rewritten(self, tmp_path):
+        make_ledger_project(tmp_path)
+        run_x("proj_fns.double", "n=2", cwd=tmp_path)
+        _, _, err = run_x("proj_fns.double", "n=2", cwd=tmp_path)
+        assert "targets:" not in err
+
+    def test_no_import_no_file(self, tmp_path):
+        make_ledger_project(tmp_path, targets=False)
+        code, _, err = run_x("proj_fns.double", "n=2", cwd=tmp_path)
+        assert code == 0, err
+        assert not (tmp_path / ".dat" / "targets.just").exists()
+
+
+class TestCommand:
+    def test_budgets(self):
+        from dvc_dat.just import ARGS_MAX, HELP_MAX, command
+        command(args="a" * ARGS_MAX, help="h" * HELP_MAX + "\n" + "h" * HELP_MAX)
+        for args, help in [("a" * (ARGS_MAX + 1), "h"), ("", "h" * (HELP_MAX + 1)),
+                           ("", "one\ntwo\nthree"), ("", "")]:
+            with pytest.raises(ValueError):
+                command(args=args, help=help)
+
+    def test_a_spec_is_a_command_by_its_key(self):
+        from dvc_dat.just import declared
+        assert declared({"main": "m.f", "command": True}) == {"args": "", "help": ""}
+        assert declared({"main": "m.f", "command": {"help": "h"}}) == {"args": "", "help": "h"}
+        assert declared({"main": "m.f"}) is None

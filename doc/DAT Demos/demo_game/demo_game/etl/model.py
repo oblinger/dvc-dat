@@ -2,10 +2,12 @@
 import json
 from pathlib import Path
 
+from dvc_dat.just import command
 from dvc_dat.ledger import ledger_fn
 from demo_game.etl.dat import StageDat, build
 
 
+@command(args="game=…", help="train the model on one game's tracks")
 @ledger_fn
 def train(rev, *, game: str, path: Path) -> StageDat:
     epochs = int(rev["cfg/train", "epochs"])            # traced
