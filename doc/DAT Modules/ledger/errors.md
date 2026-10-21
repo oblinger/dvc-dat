@@ -13,8 +13,8 @@ anything. Part of the [architecture](../../DAT%20Architecture.md).
 | --- | --- | --- |
 | `LedgerError` | `Exception` | no ledger found or opened; the backend refused |
 | `Multiple` | `LookupError` | `value`, `refs(one=True)`, `select(one=True)` matched several |
-| `NotEvaluated` | `RuntimeError` | a miss the environment cannot run (see below) |
-| `UnmountedImport` | `ImportError` | a sandboxed run imported a mounted repo's module outside every mount |
+| `NotEvaluated` | `RuntimeError` | a miss or `memo=False` run the environment will not run: code outside any git checkout, a dirty checkout, a repo with no checkout here, or (sandboxed) a HEAD other than the rev's `code/<repo>` commit |
+| `UnmountedImport` | `ImportError` | a sandboxed run imported a module of a mounted repo outside that repo's mounts; a module of an unmounted repo is not refused (an ordinary `ModuleNotFoundError`, or, reached through `site-packages`, loaded with nothing recorded) |
 | `UntracedRead` | `PermissionError` | a sandboxed body read outside the mounts, the dats and its `work` folder |
 | `ConfinedWrite` | `PermissionError` | a sandboxed body wrote outside its `work` folder (the dat being produced) |
 | `ConfinedNetwork` | `PermissionError` | a sandboxed body resolved a host name or connected to the network |
@@ -29,18 +29,6 @@ anything. Part of the [architecture](../../DAT%20Architecture.md).
 - Each class subclasses both `LedgerError` and its builtin, so
   `except KeyError` does not catch `Multiple` but `except LookupError`
   does.
-
-- TODO: `NotEvaluated`'s docstring names "a miss at a revision this
-  environment cannot run, or a mount whose repo has no checkout here";
-  the code also raises it for code outside any git checkout, a dirty
-  checkout, and (sandbox mode only, since 6.2.0) a HEAD other than the
-  rev's `code/<repo>` commit, and for `memo=False` runs as well as
-  misses.
-- TODO: `UnmountedImport`'s docstring says "a repo module outside every
-  mount"; the finder raises it only for modules of a repo that has a
-  mount. A module from an unmounted repo is not refused: it fails as
-  an ordinary `ModuleNotFoundError`, or, when `site-packages` reaches
-  it (an editable install), loads with nothing recorded.
 
 ## Left to other modules
 

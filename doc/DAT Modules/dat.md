@@ -22,7 +22,7 @@ is a different class, [`ledger.Dat`](ledger/value.md).
   a dat folder, is `TypeError`/`ValueError`. Reads nothing from disk.
 - `DatManager.load_dat_config(start=None, *, do=None) -> DatManager`:
   from the nearest `.datconfig.yaml` walking up from `start`, then
-  `.datconfig.override.yaml`, then `DAT_FOLDERS` / `DAT_ART_FOLDER`; an
+  `.datconfig.override.yaml`, then `DAT_FOLDERS` (one folder, not split) / `DAT_ART_FOLDER`; an
   unknown key `ValueError`; `manager:` names a subclass to build.
 - `create(spec=None, *, path=None) -> Dat`: resolve `dat.base`,
   validate, place, expand every `{}` once, write `_spec_.yaml`; an

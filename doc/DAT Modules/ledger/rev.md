@@ -99,10 +99,9 @@ Module functions used elsewhere: `class_named(ledger, dotted)`,
 - A `Ref` made from a recording `Rev` keeps the recorder: alias
   resolution, `load`, `preds`, `aliases` and `sealed_at` are traced.
 
-- TODO: inside a value function, `rows()` is traced as the number of
-  rows it returned, not a token of the rows themselves; the docstring
-  of [trace](trace.md) says "a token of its result". Equivalent while
-  the store is append-only, but not what the text says.
+- Inside a value function, `rows()` is traced as the number of rows it
+  returned, not a token of the rows; equivalent while the store is
+  append-only.
 
 ## Left to other modules
 

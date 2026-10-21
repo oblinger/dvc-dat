@@ -36,7 +36,7 @@ world hands back the value already sealed. Part of the
   - A miss runs only when the function's code is in a git checkout and
     the checkout is clean; code outside any checkout or a dirty checkout
     is `NotEvaluated`. A `code/<repo>` `commit` row does not gate a base
-    eval (6.2.0, T543 Q7 (C)): it pins what the version means, and the
+    eval: it pins what the version means, and the
     entry's `code/<repo>` item records the commit the code ran at, so a
     hit holds only at that commit ([trace](trace.md)). A sandboxed eval
     keeps the gate ([sandbox](sandbox.md)): it hashes its modules at the

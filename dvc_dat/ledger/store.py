@@ -17,7 +17,8 @@ are ever held in memory whole.
 ``ord`` the row's place within its transaction, ``object`` the tagged string
 (``codec``), ``added`` 0 for a ``remove`` row. Nothing is ever updated or
 deleted. Two SQL indexes, ``(subject, predicate, rev)`` and
-``(predicate, object, rev)``, are the index table a where clause reads.
+``(predicate, object, rev)``, are the index table a where clause reads; a
+``(db/pred/<p>, db/index, true)`` row adds a partial index on ``<p>``.
 Revisions come from ``MAX(rev) + 1`` under SQLite's write lock.
 """
 

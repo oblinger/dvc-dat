@@ -8,7 +8,8 @@ own rows is checked at commit, inside the write lock, against the state the
 new revision would have (the rows are inserted, read back through the open
 write transaction, and rolled back on a refusal): ``Exists`` (a write on a
 sealed subject's own predicates), the ``db/alias`` target check (A18, A45)
-and the ``db/type`` check (A36, A44). Rows land in body order, then the
+and the ``db/type`` check (A36, A44). Rows land in body order, then
+``(db, db/format, …)`` on a ledger's first transaction, then the
 transaction's own ``db/tx/<rev>`` rows (A50).
 """
 

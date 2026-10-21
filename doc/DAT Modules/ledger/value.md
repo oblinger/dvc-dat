@@ -140,8 +140,8 @@ as is decorating a non-`Value` class. Writes nothing.
   provenance fields are class-level defaults.
 - `Dat` is not `dvc_dat.Dat`: it hashes every file in the folder;
   on load, a `_spec_` naming a `dat.kind` that is neither the row's
-  class nor accepted by the loaded class's `kind_ok` is a `TypeError`
-  (leg 8). `kind_ok`'s default accepts the class's dotted or bare
+  class nor accepted by the loaded class's `kind_ok` is a `TypeError`.
+  `kind_ok`'s default accepts the class's dotted or bare
   name; a subclass widens it (a hybrid kind loading another library's
   folders).
 - Memory is bounded by the manifest, not the folder: a 2 GB, three-file

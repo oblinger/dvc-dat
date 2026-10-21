@@ -242,16 +242,15 @@ put in `dat.get_results()`, plus what it used. When, where, how long and
 which code are the run's, not the dat's: they are in the run sub-dat (see
 below). `dependencies` maps every dat and artifact the run loaded
 through its manager to its hash: an artifact's `sha256`, a dat's
-`dat.sha256`, or `unsealed` for a dat still open. A dat's key is its name, an
-artifact's its name or, with none, its URN
-under its dat folder (its absolute path outside every folder); a run that
-loaded nothing records `{}`. A dat sealed outside its own run records
+`dat.sha256`, or `unsealed` for a dat still open. A dat's key is its name
+under its dat folder (its absolute path outside every folder); an artifact's
+is its name or, with none, its URN. A run that loaded nothing records `{}`. A dat sealed outside its own run records
 `$MANUAL: manual`. At the seal an entry that another entry already depends on is
 dropped.
 
 `_result_.yaml` is written only by `dat.save()`: `create` writes no results
-file, and a run leaves its record in memory until the dat is saved. A dat is
-stamps `dat.standing` at every save — `rolling`, `open`, `sealed` or
+file, and a run leaves its record in memory until the dat is saved. Every
+save stamps `dat.standing` — `rolling`, `open`, `sealed` or
 `referenceable`, what that save earned (see [Standing](concepts.md#standing)).
 In the spec, `dat.standing` is a demand, `rolling` or `referenceable`.
 `dat.sha256` is the hash of the content saved, stamped by every save: the
@@ -290,7 +289,7 @@ Every `execute` makes `run/` inside the dat, a dat of its own with a minimal
 where, and which code: the branch, commit and dirty flag (tracked files) of
 the git checkout holding the source of the function `dat.do` names. A path
 the repo's `.gitattributes` marks `dat-noncode` (`doc/** dat-noncode`) is not
-code: a change there leaves the flag clear (6.2.1). Code
+code: a change there leaves the flag clear. Code
 outside a checkout records no `code`; a detached HEAD records `branch:
 null`. `content` is the `dat.sha256` the run sealed, written after the
 seal. `run/work/` is the run's scratch and its working directory. A run that
