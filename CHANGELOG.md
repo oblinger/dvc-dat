@@ -4,9 +4,27 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Versioning
 
-[Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
+[Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
-## 6.3.0 — 2026-10-20
+## 2.18.0 — 2026-10-21
+
+- **Renumbered: 3.0.0 through 6.3.0 were all the ledger build-out of 2.x.** Those releases were cut as four majors in two weeks while one refactor reshaped the ledger; none made DAT a different thing. Their tags are renamed below and point at the same commits; no history was rewritten. Each commit's own `__version__` and changelog text still say the old number. A lock that pins an old tag with its commit (`rev=v6.3.0#<sha>`) still installs, because the installer fetches by commit. The changelog sections 5.1.0, 5.2.0 and 6.0.0 were never tagged.
+
+| Published tag | Now |
+|---|---|
+| v3.0.0 | v2.18.0-rc.1 |
+| v3.0.1 | v2.18.0-rc.2 |
+| v4.0.0 | v2.18.0-rc.3 |
+| v5.0.0 | v2.18.0-rc.4 |
+| v6.1.0 | v2.18.0-rc.5 |
+| v6.2.0 | v2.18.0-rc.6 |
+| v6.2.1 | v2.18.0-rc.7 |
+| v6.3.0 | v2.18.0-rc.8 |
+
+- **The ledger demo follows 2.18's API.** `doc/DAT Demos/ledger-just.py` runs first, then lists, then updates, with one sentence per verb, and seals values with `v.seal(t)`.
+- **Docs match the code.** `load_artifact`, `DAT_FOLDERS`, the spec-format's dependency keys, and the ledger module pages were corrected against the source; version-history notes left the module pages and docstrings.
+
+## 2.18.0-rc.8 (published as 6.3.0) — 2026-10-20
 
 - **A seal persists.** Every `v.seal()`, kept or not, writes a seal
   record, `sealed/<entry>.json` in the kept folder (`$DAT_KEPT`, else
@@ -42,7 +60,7 @@ Every user-visible change to `dvc_dat`, newest first.
   the same directory (device and inode); a folder moved or replaced
   since is loaded afresh.
 
-## 6.2.1 — 2026-10-20
+## 2.18.0-rc.7 (published as 6.2.1) — 2026-10-20
 
 - **A repo marks what is not code.** The dirty flag of `dat.code`
   (`_code_of`) and of the ledger's discovered `Code` reads `git status`
@@ -53,7 +71,7 @@ Every user-visible change to `dvc_dat`, newest first.
   `referenceable` demand; an edit to code still reads dirty. A repo with
   no such attribute reads as before (sv-pipe T560).
 
-## 6.2.0 — 2026-10-20
+## 2.18.0-rc.6 (published as 6.2.0) — 2026-10-20
 
 - **A `Dat` streams.** `Value._parts()` yields `(sha256, source)`, the
   source a `Path` or a zero-arg opener; a `Dat` hashes each file in
@@ -94,7 +112,7 @@ Every user-visible change to `dvc_dat`, newest first.
   row's commit (false provenance). A sandboxed eval keeps the gate (its
   `fn` hashes modules at the row's commit).
 
-## 6.1.0 — 2026-10-20
+## 2.18.0-rc.5 (published as 6.1.0) — 2026-10-20
 
 - **`v.seal()` seals without a ledger; `v.seal(t)` saves it later.**
   With no target the seal freezes the preds and records the bytes'
@@ -109,7 +127,7 @@ Every user-visible change to `dvc_dat`, newest first.
 - `sealed` now means identity fixed; "in the ledger" is `subject is not
   None`. Every check that meant the latter reads `subject`.
 
-## 6.0.0 — 2026-10-20
+## 6.0.0 (never tagged; within 2.18.0-rc) — 2026-10-20
 
 - **`v.seal(t)` replaces `t.add_value(v)`; `t.add_value` is gone.**
   Same arguments (`deps`, `alias`, `provenance`), same subject, same
@@ -119,7 +137,7 @@ Every user-visible change to `dvc_dat`, newest first.
   open. Breaking: every `add_value` caller moves (Dan 2026-10-20,
   sv-pipe T543 Q4).
 
-## 5.2.0 — 2026-10-19
+## 5.2.0 (never tagged; within 2.18.0-rc) — 2026-10-19
 
 - **`Ledger.close()`; a `Ledger` is a context manager.** Closes every
   reader connection the handle opened, in every thread (`Store.close()`
@@ -137,7 +155,7 @@ Every user-visible change to `dvc_dat`, newest first.
   recorded value; numbers in `doc/DAT Modules/ledger/store.md`
   § Measured.
 
-## 5.1.0 — 2026-10-19
+## 5.1.0 (never tagged; within 2.18.0-rc) — 2026-10-19
 
 - **A Postgres store behind the same ledger API (T542).** `Ledger(dsn)`,
   `DAT_LEDGER` or `.datconfig.yaml` `ledger:` naming
@@ -149,7 +167,7 @@ Every user-visible change to `dvc_dat`, newest first.
   The store interface is named (`Store`, `Writer`); the SQLite one is
   `SqliteStore`.
 
-## 5.0.0 — 2026-10-18
+## 2.18.0-rc.4 (published as 5.0.0) — 2026-10-18
 
 - **The ledger rebuilt to the value-space design (T534/T539); the 4.0 ledger
   is removed** (`Ledger.open`, `assign`, `last`, `objects`, `SqliteLedger`,
@@ -173,7 +191,7 @@ Every user-visible change to `dvc_dat`, newest first.
 - The docs live in `doc/` (was `docs/`), the demo notebooks in `doc/DAT Demos/`
   (was `examples/`), each a jupytext pair; a `justfile` (`test`, `demo`, `docs`).
 
-## 4.0.0 — 2026-10-16
+## 2.18.0-rc.3 (published as 4.0.0) — 2026-10-16
 
 - **Ledger: a transaction is stamped with a UTC timestamp, not a day.** The
   row is `tx/<rev> time`, ISO 8601 to the microsecond; `Ledger.time(rev)`
@@ -183,14 +201,14 @@ Every user-visible change to `dvc_dat`, newest first.
   Dan, reading SVP's ledger demo: a day threw away when a write happened for
   nothing.
 
-## 3.0.1 — 2026-10-06
+## 2.18.0-rc.2 (published as 3.0.1) — 2026-10-06
 
 - Fix: `_hash_dat` given a `pathlib.Path` hashed `run/` in (the top-level
   check compared a `Path` with `os.walk`'s `str`) and returned a wrong hash
   with no error; found by SVP's first verify on a real box. `verify()` and
   the saves always passed a `str` and were right.
 
-## 3.0.0 — 2026-10-06
+## 2.18.0-rc.1 (published as 3.0.0) — 2026-10-06
 
 **A dat is its functional content; the run that made it is a sub-dat
 inside it, outside the hash** (Dan, 2026-10-06, DAT F030 / SVP F358: "the

@@ -597,6 +597,6 @@ One writer at a time: a transaction takes the write lock only at commit, and its
 
 # BRIEF
 
-- Written from `dvc_dat/ledger/*.py` at v6.3.0. Every name here must exist in the code; re-read the code, not this page, before changing a signature.
+- Written from `dvc_dat/ledger/*.py` at v2.18.0. Every name here must exist in the code; re-read the code, not this page, before changing a signature.
 - The per-file pages beside this one are the internals and the full refusal lists; this page is the caller's interface. When a public signature changes, change both.
 - The figure is hand-written SVG; edit it directly.
