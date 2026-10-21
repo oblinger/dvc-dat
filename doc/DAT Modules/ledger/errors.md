@@ -16,8 +16,8 @@ anything. Part of the [architecture](../../DAT%20Architecture.md).
 | `NotEvaluated` | `RuntimeError` | a call the environment will not run: a repo with no checkout here, or (base mode, a miss) code outside any git checkout or a dirty checkout |
 | `NotClean` | `NotEvaluated` | a `clean=True` call whose checkout is dirty, or not at the commit the rev's `code/<repo>` row names, or whose rev names none |
 | `UnmountedImport` | `ImportError` | a sandboxed run imported a module of a mounted repo outside that repo's mounts; a module of an unmounted repo is not refused (an ordinary `ModuleNotFoundError`, or, reached through `site-packages`, loaded with nothing recorded) |
-| `UntracedRead` | `PermissionError` | a sandboxed body read outside the mounts, the dats and its `work` folder |
-| `ConfinedWrite` | `PermissionError` | a sandboxed body wrote outside its `work` folder (the dat being produced) |
+| `UntracedRead` | `PermissionError` | a sandboxed body read outside the mounts, the dats and its `path` folder |
+| `ConfinedWrite` | `PermissionError` | a sandboxed body wrote outside its `path` folder (the dat being produced) |
 | `ConfinedNetwork` | `PermissionError` | a sandboxed body resolved a host name or connected to the network |
 | `LockTimeout` | `TimeoutError` | a `lock=` body ran past its limit, or the lock was not had in time |
 | `Unindexed` | `LookupError` | a where clause or select key named a dotted predicate neither declared nor on any row |

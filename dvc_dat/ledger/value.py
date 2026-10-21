@@ -58,6 +58,55 @@ class Value:
     #: When the seal happened (UTC, ``YYYY-MM-DDTHH:MM:SSZ``).
     sealed_at: Optional[str] = None
 
+    def __init__(self, *, name: Optional[str] = None) -> None:
+        if name is not None:
+            self.name = name
+
+    @property
+    def name(self) -> Optional[str]:
+        """The value's one name (Q36): an alias, relative to the data folder, not part of its identity.
+
+        Saved: the alias naming it at the head (the latest written), else ``None``. Unsaved: the name a
+        save will give it. Setting it on a saved value moves its name in a revision of its own (a name
+        names one value; a value has one name), and a ``Dat``'s folder is rebuilt at the new name."""
+        if self.subject is not None:
+            ledger = self.rev.ledger if self.rev is not None else self.__dict__.get("_ledger")
+            if ledger is not None:
+                from .rev import name_of
+
+                return name_of(ledger.at(), self.subject)
+        return self.__dict__.get("_name")
+
+    @name.setter
+    def name(self, value: Optional[str]) -> None:
+        if value is not None:
+            check_name(value)
+        if self.subject is None:
+            self.__dict__["_name"] = value
+            return
+        ledger = self.rev.ledger if self.rev is not None else self.__dict__.get("_ledger")
+        if ledger is None:
+            raise ValueError(f"{self!r}: saved, but its ledger is not known here")
+        self._rename(ledger, value)
+
+    def _rename(self, ledger: Any, name: Optional[str]) -> None:
+        """Make ``name`` this saved value's one name (``None``: unname it); a ``Dat`` moves to its folder."""
+        from .rev import name_of
+
+        head = ledger.at()
+        assert self.subject is not None
+        others = [n for n in head._aliases_of(self.subject) if n != name]
+        owns = name is None or (name_of(head, self.subject) == name
+                                and any(h.obj == "str:" + self.subject for h in head._held(name, "db/alias")))
+        if others or not owns:
+            with ledger.transaction(by="name") as t:
+                t._name_value(self.subject, name)
+        if name is not None:
+            self._at_name(ledger._store.art, name)
+
+    def _at_name(self, store: "ArtStore", name: str) -> None:
+        """Hook: a named value's place on disk (a ``Dat``'s folder at its name)."""
+
     @property
     def preds(self) -> Dict[str, Any]:
         """A plain dict until sealed; a read-only mapping after."""
@@ -88,8 +137,8 @@ class Value:
         the store one at a time; never held in memory whole."""
         return ()
 
-    def _after_seal(self, store: "ArtStore") -> None:
-        """Hook run once the value is sealed (a ``Dat`` moves to its stored folder)."""
+    def _after_seal(self, store: "ArtStore", name: Optional[str] = None) -> None:
+        """Hook run once the value is sealed (a ``Dat`` moves to its stored folder, at its name if named)."""
 
     def seal(self, to: Any = None, *, keep: bool = False, deps: Iterable[Any] = (), alias: Optional[str] = None,
              provenance: Optional[str] = None, by: Optional[str] = None) -> str:
@@ -272,6 +321,7 @@ class Value:
         self.sealed = True
         self.__dict__["_preds"] = FrozenPreds(preds)
         self.__dict__["_loaded_as"] = loaded_as
+        self.__dict__.pop("_name", None)            # saved: the name is the ledger's now
 
     def __repr__(self) -> str:
         ledger = self.rev.ledger if self.rev is not None else self.__dict__.get("_ledger")
@@ -286,6 +336,16 @@ def _now() -> str:
     import datetime as _dt
 
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def check_name(name: Any) -> str:
+    """A name is a non-empty relative path without ``.`` or ``..`` parts (an absolute path names nothing)."""
+    if not isinstance(name, str) or not name:
+        raise TypeError(f"a name is a non-empty str, not {name!r}")
+    parts = Path(name).parts
+    if Path(name).is_absolute() or any(x in ("..", ".", "") for x in parts):
+        raise ValueError(f"{name!r}: a name is a relative path (to the data folder) without . or ..")
+    return name
 
 
 def dotted(cls: type) -> str:
@@ -322,8 +382,9 @@ def ledger_class(*, preds: Iterable[str] = ()):
 class Pickled(Value):
     """Any pickleable object; ``obj`` is the object. Declares no preds (A16)."""
 
-    def __init__(self, obj: Any) -> None:
+    def __init__(self, obj: Any, *, name: Optional[str] = None) -> None:
         self.obj = obj
+        super().__init__(name=name)
 
     def encode(self) -> bytes:
         return pickle.dumps(self.obj, protocol=4)
@@ -339,8 +400,9 @@ class Pickled(Value):
 class Table(Value):
     """A table stored as parquet: a ``pyarrow.Table`` or a pandas ``DataFrame`` (decodes to pyarrow)."""
 
-    def __init__(self, table: Any) -> None:
+    def __init__(self, table: Any, *, name: Optional[str] = None) -> None:
         self.table = table
+        super().__init__(name=name)
 
     def encode(self) -> bytes:
         import pyarrow as pa
@@ -367,8 +429,9 @@ class Dat(Value):
     into the art store where the filesystem allows: write a new folder, never edit one in place.
     """
 
-    def __init__(self, path: Any) -> None:
+    def __init__(self, path: Any, *, name: Optional[str] = None) -> None:
         self.path = Path(path)
+        super().__init__(name=name)
 
     def _walk(self) -> Iterator[Tuple[str, Path]]:
         """``(relpath, path)`` of every file in the value, in sorted order (``__pycache__`` skipped)."""
@@ -473,18 +536,18 @@ class Dat(Value):
 
     @staticmethod
     def _materialise(data: bytes, store: "ArtStore", name: Optional[str] = None) -> Path:
-        """The folder of a manifest, under ``<store root>/dats/``: at ``<name>`` when a name is given,
-        else at the manifest hash's first 16 hex. Files are placed by ``store.get_to`` (hardlinks on
-        the same filesystem); a named folder holding other content is replaced."""
+        """The folder of a manifest, under ``<store root>/dats/`` (the data folder): at ``<name>`` when a
+        name is given (an absolute path: there), else at the manifest hash's first 16 hex. Files are
+        placed by ``store.get_to`` (hardlinks on the same filesystem); a named folder holding other
+        content is replaced by a new folder, never edited in place."""
         from .sandbox import unguarded             # the store's own write, also inside a sandboxed body
 
         manifest = json.loads(data.decode())
         files: Dict[str, str] = manifest["files"]
-        if name is not None:
-            parts = Path(name).parts
-            if not parts or Path(name).is_absolute() or any(x in ("..", ".", "") for x in parts):
-                raise ValueError(f"a Dat loaded as {name!r}: a name is a relative path without . or ..")
-            dest = store.root / "dats" / Path(*parts)
+        if name is not None and os.path.isabs(name):
+            dest = Path(name)
+        elif name is not None:
+            dest = store.root / "dats" / Path(*Path(check_name(name)).parts)
         else:
             dest = store.root / "dats" / sha256(data)[:16]
         with unguarded():
@@ -507,9 +570,13 @@ class Dat(Value):
         obj.path = cls._materialise(data, store, name)
         return obj
 
-    def _after_seal(self, store: "ArtStore") -> None:
+    def _after_seal(self, store: "ArtStore", name: Optional[str] = None) -> None:
         self._forget()
-        self.path = self._materialise(store.get(self.hash), store)       # the manifest as stored
+        self.path = self._materialise(store.get(self.hash), store, name)   # the manifest as stored
+
+    def _at_name(self, store: "ArtStore", name: str) -> None:
+        self._forget()
+        self.path = self._materialise(store.get(self.hash), store, name)
 
 
 def _holds(dest: Path, files: Mapping[str, str], store: "ArtStore") -> bool:

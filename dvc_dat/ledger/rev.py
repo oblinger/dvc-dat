@@ -103,11 +103,21 @@ def kind_names(ledger: "Ledger", kind: Any, rev: "Rev") -> List[str]:
     return names
 
 
+def name_of(rev: "Rev", subject: str) -> Optional[str]:
+    """A value's one name at ``rev`` (Q36): the ``db/alias`` naming it written latest; ``None`` if none."""
+    best = None
+    for n in rev._aliases_of(subject):
+        h = rev._held(n, "db/alias")[0]
+        if best is None or (h.rev, h.ord) > best[0]:
+            best = ((h.rev, h.ord), n)
+    return best[1] if best else None
+
+
 def display_name(ledger: "Ledger", subject: str) -> str:
-    """The shortest ``db/alias`` naming ``subject`` at the head, ties lexicographic; else the hash's 8 (A25)."""
-    names = ledger.at()._aliases_of(subject)
-    if names:
-        return min(names, key=lambda n: (len(n), n))
+    """A value prints as its name at the head, else the hash's first 8 (Q36, superseding A25)."""
+    name = name_of(ledger.at(), subject)
+    if name is not None:
+        return name
     return subject[:8] if is_hash(subject) else subject
 
 

@@ -723,8 +723,10 @@ class DatManager:
         `anonymous/Dat{unique}`; `dat.target_exists` says what happens when the
         folder is already there.  Every `{}` in the spec is expanded here, once,
         with the same values the folder got, and the expanded spec is what is
-        written: a spec on disk is a record, never a template.  `dat.kind` is
-        written as the class's dotted `module.qualname`.
+        written, except `dat.name`: the spec stores the path template as given
+        (`path`, else the spec's own), never the path it expanded to (F447
+        Q36); the folder's path is the dat's name.  `dat.kind` is written as
+        the class's dotted `module.qualname`.
         """
         spec = self._spec_of(spec)
         dat_class = self._class_of(spec["dat"].get("kind"))
@@ -734,6 +736,7 @@ class DatManager:
         if path is None:
             path = Dat.get(spec, DAT_NAME, None) or _DEFAULT_PATH_TEMPLATE
         path = str(path)
+        template = path
         target_exists = Dat.get(spec, DAT_TARGET_EXISTS, "error")
         if target_exists == "overwrite" and path.lower() == "{cwd}":
             target_exists = "error"  # never wipe the working directory
@@ -743,9 +746,12 @@ class DatManager:
             return self.load(expanded_path)
 
         path = self._resolve_path(expanded_path)
+        own = Dat.get(spec, DAT_NAME, None)
         spec = self.expand_spec(spec, names)
+        if own is not None:
+            Dat.set(spec, DAT_NAME, own)            # the template, never its expansion (Q36)
         if _within(os.path.realpath(path), self._dat_folders[0]):
-            Dat.set(spec, DAT_NAME, self._get_path_name(path))
+            Dat.set(spec, DAT_NAME, template if "{" in template else self._get_path_name(path))
             if self._artifact_folder(self._get_path_name(path)) is not None:
                 raise FileExistsError(f"Dat.create: {self._get_path_name(path)!r} is an "
                                       "artifact's name; dats and artifacts share one namespace")

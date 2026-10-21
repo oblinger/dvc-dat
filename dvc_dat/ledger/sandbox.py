@@ -20,11 +20,11 @@ ancestors empty namespace packages (their ``__init__`` never runs), and refuses
 a module that would resolve inside a mounted repo's checkout but under no mount
 (``UnmountedImport``). An audit hook refuses, while a function body (or its
 module's load) runs, a read (``open``, ``os.listdir``/``scandir``) outside
-the mounted roots, the art store (the dats) and the body's ``work`` folder
+the mounted roots, the art store (the dats) and the body's ``path`` folder
 (``UntracedRead``), except the import system's own reads of module files and,
 while a module from outside the mounts is being imported, its reads in the
 interpreter's folders (its bundled data); and a write anywhere but the running
-body's ``work`` folder, the dat being produced
+body's ``path`` folder, the dat being produced
 (``ConfinedWrite``): ``open``/``os.open`` for writing, every path-changing
 ``os`` call (mkdir, rename, link, remove, chmod, ...), and through them
 ``pathlib``, ``shutil``, ``tempfile`` and ``sqlite3``. The ledger's own
@@ -73,7 +73,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tupl
 from .codec import sha256
 from .env import Env, current_env
 from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
-from .fn import Fn, drop_work, fn_subject, mounts_at, mounts_hash, seal_entry, wrap_result
+from .fn import Fn, drop_work, fn_subject, mounts_at, mounts_hash, path_template, seal_entry, wrap_result
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -386,7 +386,7 @@ def third_party_now(key: str) -> str:
     return "<missing>"
 
 
-def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, bool, str, bool]:
+def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, bool, Optional[str], str, bool]:
     a = fdef.args
     params = []
     pos = a.posonlyargs + a.args
@@ -413,12 +413,13 @@ def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, boo
     if not params or params[0].kind is not inspect.Parameter.POSITIONAL_OR_KEYWORD:
         raise TypeError(f"{name!r}: a revision function takes the Rev as its first parameter")
     rest = params[1:]
-    takes_work = any(p.name == "work" for p in rest)
-    keep = [p for p in rest if p.name != "work"]
+    folder = next((p for p in rest if p.name == "path"), None)
+    keep = [p for p in rest if p.name != "path"]
+    template = path_template(folder.default) if folder is not None else None
     decorated = any((isinstance(d, ast.Name) and d.id == "ledger_fn")
                     or (isinstance(d, ast.Attribute) and d.attr == "ledger_fn") for d in fdef.decorator_list)
     returns = ast.unparse(fdef.returns) if fdef.returns is not None else ""
-    return inspect.Signature(keep), takes_work, returns, decorated
+    return inspect.Signature(keep), folder is not None, template, returns, decorated
 
 
 def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Fn:
@@ -440,7 +441,7 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
     fdef = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == attr_name), None)
     if fdef is None:
         raise ImportError(f"{name!r}: no function {attr_name!r} in {f[0]}")
-    sig, takes_work, returns, decorated = _signature(fdef, name)
+    sig, takes_path, template, returns, decorated = _signature(fdef, name)
     if not decorated:
         raise TypeError(f"{name!r} is not a ledger function (mark it @ledger_fn)")
     check_mounted_imports(mounts, modname, attr_name)
@@ -448,8 +449,8 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
     rel = f[0].relative_to(m.checkout).as_posix()
     return Fn(name=name, module=f[0], sha=file_sha(m.checkout, rel, _commit_for(plain, m.repo, env)),
               mode="sandbox", mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain)),
-              subject=fn_subject(name, mods, mounts_hash(plain)), _rev=rev, _takes_work=takes_work,
-              _modules=mods, _returns=returns,
+              subject=fn_subject(name, mods, mounts_hash(plain)), _rev=rev, _takes_path=takes_path,
+              _template=template, _modules=mods, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
 
 
@@ -494,7 +495,7 @@ class _State:
     reads: List[str] = []                           # the mounted roots and the art store (the dats)
     importable: List[str] = []                      # sys.path and the mounts: where the import system reads
     interpreter: List[str] = []                     # where an unmounted module's own import may read
-    works: List[Optional[str]] = []                 # the work folder of each running body, innermost last
+    works: List[Optional[str]] = []                 # the path folder of each running body, innermost last
     store: str = ""                                 # the ledger's own database file (a folder ledger)
     hosts: Set[str] = set()                         # the ledger's own endpoint, by name and by address
     addrs: Set[Tuple[str, int]] = set()
@@ -649,7 +650,7 @@ def _resolve(path: Any, dir_fd: Any = None) -> Optional[str]:
         base = _fd_path(dir_fd)
         if base is None:
             raise ConfinedWrite(f"{text} under descriptor {dir_fd}: a sandboxed function writes only in its "
-                                "work folder")
+                                "path folder")
         text = os.path.join(base, text)
     return os.path.realpath(text)
 
@@ -661,7 +662,7 @@ def _writable() -> List[str]:
 
 def _check_write(p: Optional[str]) -> None:
     if p is not None and not _under(p, _writable()):
-        raise ConfinedWrite(f"{p}: a sandboxed function writes only in its work folder")
+        raise ConfinedWrite(f"{p}: a sandboxed function writes only in its path folder")
 
 
 def _audit(event: str, args: Any) -> None:
@@ -710,7 +711,7 @@ def _importing(frame: Any) -> Optional[str]:
 
 
 def _check_read(p: Optional[str], caller: Any) -> None:
-    """Reads: the mounts, the dats, the running body's work folder; the import system's own reads of
+    """Reads: the mounts, the dats, the running body's path folder; the import system's own reads of
     module files; and, while a module from outside the mounts is being imported, the interpreter's
     folders (that module's data; the module itself is in ``fn``). Else ``UntracedRead``."""
     if p is None or _under(p, STATE.reads + _writable()):
@@ -721,7 +722,7 @@ def _check_read(p: Optional[str], caller: Any) -> None:
         mod = _importing(caller)
         if mod is not None and _mount_of(STATE.mounts, mod) is None:
             return
-    raise UntracedRead(f"{p}: outside the mounts, the dats and the work folder")
+    raise UntracedRead(f"{p}: outside the mounts, the dats and the path folder")
 
 
 def install_worker(ledger: Any, mounts: List[Mount]) -> None:
@@ -755,7 +756,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
         STATE.mounts = mounts
         modname, attr_name = fn._info["modname"], fn._info["attr"]
         work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None)) \
-            if fn._takes_work else None
+            if fn._takes_path else None
         STATE.frames.append(_Frame())
         STATE.works.append(os.path.realpath(work) if work is not None else None)
         rec: Dict[str, str] = {}
@@ -768,7 +769,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
                 obj = getattr(importlib.import_module(modname), attr_name)
                 if not getattr(obj, "__ledger_fn__", False):
                     raise TypeError(f"{fn.name!r} is not a ledger function (mark it @ledger_fn)")
-                args = dict(kw, work=work) if work is not None else kw
+                args = dict(kw, path=work) if work is not None else kw
                 out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
             finally:
                 STATE.guard = False

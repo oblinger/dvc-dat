@@ -1,4 +1,4 @@
-"""Leg 8: memo=False runs regardless and leaves no work folder; a Dat's _spec_ is checked on load."""
+"""Leg 8: memo=False runs regardless and leaves no path folder; a Dat's _spec_ is checked on load."""
 
 import pytest
 import yaml

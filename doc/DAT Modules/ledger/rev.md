@@ -51,8 +51,9 @@ trace (see [trace](trace.md)). Part of the
   `keys` not a non-empty tuple `TypeError`.
 - `load(subject) -> Value`: `Ref(self, subject).load()`.
 - `load_fn(name) -> Fn`: see [fn](fn.md).
-- `eval(name, /, *, memo=True, **keys) -> Value | None`:
-  `load_fn(name)(memo=memo, **keys)`; a non-`str` name `TypeError`.
+- `eval(name, /, *, memo=True, clean=False, path=None, kwargs=None,
+  **keys) -> Value | None`: `load_fn(name)(...)` with the same
+  control options; a non-`str` name `TypeError`.
 
 `Ref(rev, name)`: one value at one moment, frozen, unpicklable.
 
@@ -77,8 +78,8 @@ trace (see [trace](trace.md)). Part of the
   `dat.kind` other than the row's class is `TypeError` unless the
   loaded class's `kind_ok(kind)` accepts it ([value](value.md)).
 - Equal and hashed by subject; byte identity is `a.hash == b.hash`.
-- `repr`: the shortest alias at the head, ties lexicographic, else the
-  hash's first 8.
+- `repr`: the value's name at the head (the alias naming it written
+  latest), else the hash's first 8.
 
 `Row(rev, subject, predicate, object, added)`: a named tuple, `rev` a
 `Rev`, `object` decoded, `added` false on a remove; `str()` is one

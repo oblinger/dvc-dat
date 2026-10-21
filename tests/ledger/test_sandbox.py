@@ -66,9 +66,9 @@ PKG = {
             return sorted(rev.all(s, "contains"))
 
         @ledger_fn
-        def folder(rev, *, game: str, work: Path) -> Dat:
-            (work / "f.txt").write_text(game)
-            return Dat(work)
+        def folder(rev, *, game: str, path: Path) -> Dat:
+            (path / "f.txt").write_text(game)
+            return Dat(path)
 
         @ledger_fn
         def pid(rev, *, game: str) -> dict:
@@ -157,21 +157,21 @@ PKG = {
             (d / "tree" / "f").write_text("f")
 
         @ledger_fn
-        def write(rev, *, how: str, where: str, work: Path) -> dict:
+        def write(rev, *, how: str, where: str, path: Path) -> dict:
             if where == "work":                     # every way, inside the dat being produced: all allowed
                 for name, act in HOWS.items():
-                    seed(work / name)
-                    (work / f"{name}-src").mkdir()
-                    act(work / name, work / f"{name}-src")
+                    seed(path / name)
+                    (path / f"{name}-src").mkdir()
+                    act(path / name, path / f"{name}-src")
                 return {"n": len(HOWS)}
-            places = {"scratch": work.parent, "art": Path(rev.ledger._store.art.root),
+            places = {"scratch": path.parent, "art": Path(rev.ledger._store.art.root),
                       "mount": Path(__file__).parent}
             d = places.get(where) or Path(where)
-            (work / "src").mkdir()
+            (path / "src").mkdir()
             if how == "mkstemp-default":
                 os.close(tempfile.mkstemp()[0])
             else:
-                HOWS[how](d, work / "src")
+                HOWS[how](d, path / "src")
             return {}
     '''),
     "sbx/stage/reads.py": textwrap.dedent('''
@@ -196,16 +196,16 @@ PKG = {
         }
 
         @ledger_fn
-        def read(rev, *, how: str, where: str, work: Path) -> dict:
+        def read(rev, *, how: str, where: str, path: Path) -> dict:
             places = {"stdlib": os.__file__, "site": yaml.__file__, "dvc_dat": dvc_dat.__file__,
                       "prefix": os.path.join(sys.prefix, "pyvenv.cfg"), "repo": Path(__file__).parents[2] / "pyproject.toml",
-                      "scratch": work.parent / "nothing-here"}
+                      "scratch": path.parent / "nothing-here"}
             out = HOWS[how](places.get(where) or where)
             return {"n": len(out) if isinstance(out, list) else -1}
 
         @ledger_fn
-        def allowed(rev, *, game: str, work: Path) -> dict:
-            (work / "mine.txt").write_text(game)
+        def allowed(rev, *, game: str, path: Path) -> dict:
+            (path / "mine.txt").write_text(game)
             n = len(Path(__file__).read_text()) > 0 and sorted(os.listdir(Path(__file__).parent)) != []
             art = Path(rev.ledger._store.art.root)
             import colorsys                         # a stdlib import in the body: the import system reads
@@ -316,7 +316,9 @@ def test_nested_eval_in_process_and_work_folder(sbx):
     assert v.obj == {"inner": {"n": 6}}
     assert any(k.startswith("eval:sbx.stage.fns.count") for k in v.trace)
     d = L.at().eval("sbx.stage.fns.folder", game="G1")
-    assert (d.path / "f.txt").read_text() == "G1"
+    assert (d.path / "f.txt").read_text() == "G1" and d.name == "anonymous/Dat"
+    e = L.at().eval("sbx.stage.fns.folder", game="G1", path="games/G1")      # a hit, renamed
+    assert e.subject == d.subject and e.name == "games/G1" and (e.path / "f.txt").read_text() == "G1"
 
 
 def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):
@@ -336,7 +338,7 @@ def test_refusals(sbx):
         L.at().eval("sbx.stage.fns.borrow", game="G1")
     with pytest.raises(UntracedRead):
         L.at().eval("sbx.stage.fns.snoop", game="G1")
-    with pytest.raises(ConfinedWrite, match="writes only in its work folder") as e:
+    with pytest.raises(ConfinedWrite, match="writes only in its path folder") as e:
         L.at().eval("sbx.stage.fns.scribble", game="G1")
     assert not isinstance(e.value, UntracedRead)
     old = L.at(1)
@@ -472,7 +474,7 @@ def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
     (outside / "tree" / "f").write_text("f")
     before = sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*"))
     for how in WRITE_HOWS:
-        with pytest.raises(ConfinedWrite, match="a sandboxed function writes only in its work folder"):
+        with pytest.raises(ConfinedWrite, match="a sandboxed function writes only in its path folder"):
             L.at().eval("sbx.stage.writes.write", how=how, where=str(outside))
     assert sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*")) == before
     assert (outside / "seed").read_text() == "s"
@@ -502,7 +504,7 @@ def test_reads_confined_to_the_mounts_the_dats_and_the_work_folder(sbx, tmp_path
     (outside / "f.txt").write_text("x")
     for where in ("stdlib", "site", "dvc_dat", "prefix", "repo", "scratch", str(outside / "f.txt")):
         for how in READ_HOWS:
-            with pytest.raises(UntracedRead, match="outside the mounts, the dats and the work folder"):
+            with pytest.raises(UntracedRead, match="outside the mounts, the dats and the path folder"):
                 L.at().eval("sbx.stage.reads.read", how=how, where=where)
         for how in SWALLOWED:
             assert L.at().eval("sbx.stage.reads.read", how=how, where=where).obj == {"n": 0}

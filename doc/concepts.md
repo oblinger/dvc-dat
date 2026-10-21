@@ -135,7 +135,7 @@ from dvc_dat import Dat
 
 do, merge_dicts = Dat.do, Dat.merge_dicts
 
-# d's dat.name is the folder it landed in; increment lands beside it
+# d's dat.name is its path template; increment lands beside it
 spec = merge_dicts(d.get_spec(),
                    {"dat": {"target_exists": "increment"},
                     "run_template": {"lr": 0.01}})

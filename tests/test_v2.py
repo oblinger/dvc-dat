@@ -265,7 +265,8 @@ class TestGetSpec:
         template = {"dat": {"do": "v2_echo", "name": f"{V2}/parent{{unique}}"}}
         do(template, 1)
         parent = Dat.load(f"{V2}/parent")
-        assert parent.get_spec()["dat"]["name"] == f"{V2}/parent"
+        assert parent.get_spec()["dat"]["name"] == f"{V2}/parent{{unique}}"   # the template (Q36)
+        assert parent.get_path_name() == f"{V2}/parent"                      # its expansion, the folder
         do(parent, 2)
         child = Dat.load(f"{V2}/parent_2")
         assert child.get_spec()["dat"]["args"] == [2]
