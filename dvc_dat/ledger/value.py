@@ -95,9 +95,11 @@ class Value:
              provenance: Optional[str] = None, by: Optional[str] = None) -> str:
         """Fix the value's identity; with a transaction or a ledger, save it too.
 
-        ``v.seal()`` writes nothing: it freezes ``preds``, records the bytes' hash, ``deps``,
-        ``provenance``, the environment and the time, and returns the hash. With ``keep=True`` it
-        also copies the bytes into this machine's kept cache (``kept``), so the source may change.
+        ``v.seal()`` writes to no ledger: it freezes ``preds``, fixes the bytes' hash, ``deps``,
+        ``provenance``, the environment and the time, writes them as a seal record in this machine's
+        kept folder (``kept``; a later process reopens a sealed ``Dat`` from it with
+        ``Dat.sealed_at_path``), and returns the hash. With ``keep=True`` it also copies the bytes
+        into the kept cache, so the source may change.
         ``to`` a ``Transaction`` saves into it: the subject is ``<hash of (trace, preds, bytes)>``
         and lands with that revision or not at all. ``to`` a ``Ledger`` opens and commits a
         one-value transaction of its own, written ``by`` (default: the provenance, else ``seal``).
@@ -127,8 +129,9 @@ class Value:
         from .env import current_env
         from .errors import Undeclared
         from .fn import Fn
-        from .kept import Kept
+        from .kept import Kept, SealedFn, SealedRef, env_record, preds_record, ref_record
         from .rev import Ref
+        from .sandbox import unguarded
         from .txn import check_provenance
 
         if self.subject is not None:
@@ -144,20 +147,47 @@ class Value:
         for d in deps:
             if isinstance(d, Value) and not d.sealed:
                 raise ValueError(f"dep {d!r} is unsealed: seal it first")
-            if not isinstance(d, (Value, Ref, Fn)):
+            if not isinstance(d, (Value, Ref, Fn, SealedRef, SealedFn)):
                 raise TypeError(f"a dep is a Value, a Ref or an Fn, not {type(d).__name__}")
         stamp = _now()
+        env = current_env()
+        record: Dict[str, Any] = {"preds": preds_record(self.preds), "deps": [ref_record(d) for d in deps]}
         data = self.encode()
         h = sha256(data)
-        kept = Kept().put(dotted(type(self)), data, self._parts(), stamp) if keep else None
+        record.update(hash=h, kind=dotted(type(self)), sealed_at=stamp, path=self._seal_path(),
+                      provenance=provenance, env=env_record(env), bytes=self._seal_bytes(data))
+        with unguarded():                       # the ledger's own write, also inside a sandboxed body
+            entry = Kept().seal(record, data if keep else None, self._parts() if keep else ())
         self._forget()              # the hash is fixed: a later check (SealBroken) hashes the source anew
-        self.__dict__["_local"] = {"hash": h, "deps": deps, "provenance": provenance, "env": current_env(),
-                                   "kept": kept}
+        self.__dict__["_local"] = {"hash": h, "deps": deps, "provenance": provenance, "env": env,
+                                   "kept": keep, "entry": entry}
         self.__dict__["_preds"] = FrozenPreds(self.preds)
         self.__dict__["_hash"] = h
         self.sealed_at = stamp
         self.sealed = True
         return h
+
+    def _seal_path(self) -> Optional[str]:
+        """The folder a seal record names (a ``Dat``'s); ``None`` for a value held in memory."""
+        return None
+
+    def _seal_bytes(self, data: bytes) -> int:
+        """The size a seal record lists: of the encoding, for a value held in memory."""
+        return len(data)
+
+    def _reopen(self, record: Dict[str, Any], name: Optional[str]) -> None:
+        """Make this object the value a seal record describes, sealed as the sealing process left it."""
+        from .kept import env_from, preds_from, ref_from
+
+        self.__dict__["_preds"] = FrozenPreds(preds_from(record["preds"]))
+        self.__dict__["_local"] = {"hash": record["hash"], "deps": tuple(ref_from(d) for d in record["deps"]),
+                                   "provenance": record["provenance"], "env": env_from(record["env"]),
+                                   "kept": bool(record["kept"]), "entry": record["entry"]}
+        self.__dict__["_hash"] = record["hash"]
+        if name is not None:
+            self.__dict__["_loaded_as"] = name
+        self.sealed_at = record["sealed_at"]
+        self.sealed = True
 
     def _kept(self) -> Optional[Dict[str, Any]]:
         """The kept entry of a ``v.seal(keep=True)``; ``None`` when the bytes were not kept, or were purged
@@ -168,7 +198,7 @@ class Value:
         from .kept import Kept
 
         try:
-            return Kept().entry(local["kept"])
+            return Kept().entry(local["entry"])
         except KeyError:
             if sha256(self.encode()) == local["hash"]:
                 return None
@@ -198,6 +228,10 @@ class Value:
 
     def _forget(self) -> None:
         """Drop whatever the subclass cached while encoding (a ``Dat``'s per-file hashes)."""
+
+    def _present(self) -> bool:
+        """Is a loaded value still what it was loaded as? (A ``Dat`` checks its folder is still there.)"""
+        return True
 
     @property
     def hash(self) -> str:
@@ -360,6 +394,52 @@ class Dat(Value):
 
     def _forget(self) -> None:
         self.__dict__.pop("_shas", None)
+
+    def _seal_path(self) -> Optional[str]:
+        return str(self.path.resolve())
+
+    def _seal_bytes(self, data: bytes) -> int:
+        return sum(sig[0] for sig, _h in (self.__dict__.get("_shas") or {}).values())
+
+    @classmethod
+    def sealed_at_path(cls, path: Any, *, name: Optional[str] = None) -> Optional["Dat"]:
+        """The ``Dat`` sealed last at the folder ``path`` by ``v.seal()`` in any process and not saved
+        since, reopened from its seal record (``kept``); ``None`` when no record names the folder.
+
+        ``v.seal(t)`` on it saves it exactly as the sealing process would have: the same subject (its
+        deps, provenance, environment and time are the record's), ``SealBroken`` when a byte of the
+        folder changed since unless kept, the kept bytes when kept. ``name`` is the alias it will be
+        saved under: a value sealed with it as a dep before it is saved binds the dep through that
+        name at its own save, which refuses until the name holds these bytes.
+        """
+        import importlib
+
+        from .kept import Kept
+
+        record = Kept().for_path(path)
+        if record is None:
+            return None
+        mod, _, attr = record["kind"].rpartition(".")
+        try:
+            kind = getattr(importlib.import_module(mod), attr)
+        except (ImportError, AttributeError, ValueError):
+            raise ImportError(f"{path}: sealed as {record['kind']}, which does not import") from None
+        if not (isinstance(kind, type) and issubclass(kind, cls)):
+            raise TypeError(f"{path}: sealed as {record['kind']}, not a {cls.__name__}")
+        obj = kind.__new__(kind)
+        obj.path = Path(record["path"])
+        obj._reopen(record, name)
+        return obj
+
+    def _present(self) -> bool:
+        """Is the folder this value was loaded into still there, the same folder (a stat)?"""
+        import stat
+
+        try:
+            st = self.path.stat()
+        except OSError:
+            return False
+        return stat.S_ISDIR(st.st_mode) and self.__dict__.get("_dir_id") in (None, (st.st_dev, st.st_ino))
 
     def encode(self) -> bytes:
         return canonical({"files": self._manifest()}).encode()

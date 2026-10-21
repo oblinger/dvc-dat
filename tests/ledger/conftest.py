@@ -46,6 +46,13 @@ def envbox():
     set_env_provider(old)
 
 
+@pytest.fixture(autouse=True)
+def kept_folder(tmp_path, monkeypatch):
+    """Every ``v.seal()`` writes a seal record: into the test's own folder, never ~/.cache."""
+    monkeypatch.setenv("DAT_KEPT", str(tmp_path / "kept"))
+    return tmp_path / "kept"
+
+
 @pytest.fixture(params=backends.BACKENDS)
 def backend(request):
     """``sqlite`` or ``pg``: every test taking a ledger fixture runs once per store."""

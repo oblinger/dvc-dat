@@ -188,13 +188,16 @@ annotations land as one revision.
 **Sealing and saving are separate.** `v.seal()` with no ledger fixes
 the value's identity now: the preds freeze, and the bytes' hash, the
 deps, the provenance, the environment and the time are recorded; it
-writes nothing anywhere. `v.seal(keep=True)` also copies the bytes into
-this machine's kept cache, so the source may change. A later
-`v.seal(t)` saves that sealed state: the trace is the environment of
-the seal, not of the save, and a changed byte in a value not kept is
-`SealBroken`. A run whose output is not saved at once therefore keeps
-its provenance. Values kept and never saved are listed by `just
-sealed` and dropped by `just sealed purge`.
+writes to no ledger, only a seal record in this machine's kept folder.
+`v.seal(keep=True)` also copies the bytes into the kept cache, so the
+source may change. A later `v.seal(t)` saves that sealed state: the
+trace is the environment of the seal, not of the save, and a changed
+byte in a value not kept is `SealBroken`. The record makes this hold
+across processes: `Dat.sealed_at_path(path)` reopens a folder's seal
+in a later process, and its save is the save the sealing process would
+have made. A run whose output is not saved at once therefore keeps its
+provenance. Seals never saved are listed by `just sealed` and dropped
+by `just sealed purge`.
 
 **A sealed value never changes.** Its own rows are frozen: a later
 `add` or `remove` on one is `Exists`, raised at commit. Any other row on

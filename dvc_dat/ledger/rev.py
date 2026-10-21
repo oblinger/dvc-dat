@@ -740,13 +740,16 @@ class Ref:
         raise TypeError("a Ref is bound to an open ledger and does not pickle")
 
     def load(self) -> Value:
-        """Fetch the bytes, decode them by ``type``, restore provenance and preds: the same Value every time."""
+        """Fetch the bytes, decode them by ``type``, restore provenance and preds: the same Value every time
+        while it is still there (a ``Dat`` whose folder was moved or replaced since is loaded afresh)."""
         s = self.subject
         if self._hash is None or s is None:
             raise KeyError(f"{self.name!r} has no value at rev {self.rev.id}")
         ledger = self._p.ledger
         key = (s, self.rev.id, self.name)
         v = ledger._values.get(key)
+        if v is not None and not v._present():
+            v = None
         if v is None:
             store = ledger._store.art
             cls = self.type
@@ -763,6 +766,8 @@ class Ref:
                 if kind is not None and kind != self._cls and not type(v).kind_ok(kind):
                     raise TypeError(f"{s[:12]}…: the db/value row names {self._cls}; the folder's _spec_ names "
                                     f"dat.kind {kind}")
+                st = v.path.stat()
+                v.__dict__["_dir_id"] = (st.st_dev, st.st_ino)
             rows = self._p._held_rows(subject=s)
             trace = {p[len("db/trace/"):]: show(h.obj) for _s, p, h in rows if p.startswith("db/trace/")}
             sealed_at = self._sealed_at()

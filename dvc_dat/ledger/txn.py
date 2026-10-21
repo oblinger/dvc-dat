@@ -282,7 +282,7 @@ class Transaction:
 
         top = self._rev
         art = self._ledger._store.art
-        kept = []
+        records = []
         for value, subject, trace, loaded_as in self._finalize:
             r = Ref(top, subject)
             sealed_at = r.sealed_at or top
@@ -292,13 +292,15 @@ class Transaction:
             value.__dict__["_hash"] = h
             value._after_seal(art)
             local = value.__dict__.pop("_local", None)
-            if local and local["kept"]:
-                kept.append(local["kept"])
-        if kept:
+            if local and local.get("entry"):
+                records.append(local["entry"])
+        if records:
             from .kept import Kept
+            from .sandbox import unguarded
 
-            for entry in kept:
-                Kept().drop(entry)
+            with unguarded():
+                for entry in records:
+                    Kept().drop(entry)          # saved: the seal record (and its kept bytes' claim) goes
 
     def _write(self, w: Any) -> int:
         from .rev import Rev
@@ -431,8 +433,15 @@ class Transaction:
     # -- sealing --------------------------------------------------------------
 
     def _value_text(self, v: Any, what: str) -> str:
+        from .kept import SealedRef
         from .rev import Ref
 
+        if isinstance(v, SealedRef):
+            if v.hash is None:
+                raise TypeError(f"{what}: {v!r} held no value when sealed")
+            if v.subject is None:
+                self._by_name(v, v.hash, what)
+            return v.text
         if isinstance(v, Ref):
             if v.hash is None:
                 raise TypeError(f"{what}: {v.name!r} holds no value")
@@ -444,6 +453,7 @@ class Transaction:
 
     def _encode_preds(self, value: Value) -> Tuple[List[Tuple[str, str]], Dict[str, Any]]:
         """The pred rows of a seal and the canonical form that enters the subject hash (A23, A30)."""
+        from .kept import SealedRef
         from .rev import Ref
 
         declared = type(value)._ledger_preds
@@ -455,7 +465,7 @@ class Transaction:
         canon: Dict[str, Any] = {}
 
         def scalar(k: str, v: Any) -> str:
-            if isinstance(v, (Value, Ref)):
+            if isinstance(v, (Value, Ref, SealedRef)):
                 return self._value_text(v, f"pred {k!r}")
             if isinstance(v, str):
                 return "str:" + v
@@ -487,18 +497,40 @@ class Transaction:
                 canon[k] = text
         return rows, canon
 
+    def _by_name(self, d: Any, h: str, what: str) -> str:
+        """The subject of a dep sealed before it was saved, found by the name it was to be saved under."""
+        from .rev import Ref
+
+        name = d.name if hasattr(d, "text") else d.__dict__.get("_loaded_as")
+        if name is None:
+            raise ValueError(f"{what} {d!r} is sealed but saved nowhere: save it first (v.seal(t))")
+        held = Ref(self._ledger.at(), name)
+        if held.hash is None:
+            raise ValueError(f"{what} {name!r} is sealed but saved nowhere: save it first (v.seal(t))")
+        if held.hash != h:
+            raise ValueError(f"{what} {name!r} is {held.hash[:12]}… on the ledger; it was sealed against "
+                             f"{h[:12]}…")
+        assert held.subject is not None
+        return held.subject
+
     def _dep_items(self, deps: Sequence[Any], trace: Dict[str, str]) -> None:
         from .fn import Fn
+        from .kept import SealedFn, SealedRef
         from .rev import Ref
 
         pending = {s: v.hash for v, s in self._pending.values()}
         for d in deps:
-            if isinstance(d, Fn):
+            if isinstance(d, (Fn, SealedFn)):
                 self._ensure_fn(d)
                 trace["fn"] = d.subject
                 continue
             name = None
-            if isinstance(d, Ref):
+            if isinstance(d, SealedRef):
+                h, text, name = d.hash, d.text, d.name
+                if h is None:
+                    raise ValueError(f"dep {d!r} has no sealed value")
+                subj = d.subject if d.subject is not None else self._by_name(d, h, "dep")
+            elif isinstance(d, Ref):
                 subj, h, text = d.subject, d.hash, (d._text() if d.hash else None)
                 if d.name and d.name != subj:
                     name = d.name
@@ -509,7 +541,7 @@ class Transaction:
                 elif not d.sealed:
                     raise ValueError(f"dep {d!r} is unsealed: seal it first")
                 elif subj is None:
-                    raise ValueError(f"dep {d!r} is sealed but saved nowhere: save it first (v.seal(t))")
+                    subj = self._by_name(d, h, "dep")
                 text = ref_text(dotted(type(d)), h)
                 name = d.__dict__.get("_loaded_as")
             else:
