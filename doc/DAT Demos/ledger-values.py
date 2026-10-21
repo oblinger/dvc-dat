@@ -768,13 +768,13 @@ except ConfinedWrite as e:
 # %% [markdown]
 # The refusal is raised as `ConfinedWrite`; a read outside the
 # allowed folders is `UntracedRead`. The sandbox confines writes
-# to the function's own work folder, the dat being produced (not
-# the worker's scratch, not the store); reads are confined to the
-# mounted folders, the store and that work folder. Open (Q36; lean): a function
-# that builds a folder declares a parameter `work: Path`, reserved
-# beside `memo` and never a key; the run binds it to a fresh folder
-# in the scratch, and the seal moves what was built there into the
-# store.
+# to the function's own folder, the dat being produced (not the
+# worker's scratch, not the store); reads are confined to the
+# mounted folders, the store and that folder. A function that
+# builds a folder declares a parameter `path: Path` (Q36), never a
+# key: the run binds it to a fresh folder in the scratch, the seal
+# moves what was built there into the store, and the call's
+# `path=` (a control option, never hashed) names the result.
 
 # %% [markdown]
 # ## Ledger evaluation

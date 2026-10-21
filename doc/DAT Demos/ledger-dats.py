@@ -84,15 +84,15 @@ sys.path.insert(0, str(scratch_project_path))
 #     """One stage's dat: `_spec_.yaml`, `_result_.yaml`, its files."""
 #
 #
-# def build(rev, spec: dict, work: Path, **kwargs) -> StageDat:
-#     """Build a dat from its spec in `work`: the constructor's body."""
+# def build(rev, spec: dict, path: Path, **kwargs) -> StageDat:
+#     """Build a dat from its spec in `path`: the constructor's body."""
 #     module, name = spec["main"].rsplit(".", 1)
 #     main = getattr(importlib.import_module(module), name)
 #     args = {k: v for k, v in spec.items() if k != "main"}
-#     result = main(rev, work, **args, **kwargs)
-#     (work / "_spec_.yaml").write_text(yaml.safe_dump(spec))
-#     (work / "_result_.yaml").write_text(yaml.safe_dump(result))
-#     d = StageDat(work)
+#     result = main(rev, path, **args, **kwargs)
+#     (path / "_spec_.yaml").write_text(yaml.safe_dump(spec))
+#     (path / "_result_.yaml").write_text(yaml.safe_dump(result))
+#     d = StageDat(path)
 #     d.preds.update({k: spec[k] for k in SPEC_PREDS if k in spec})
 #     for m in METRICS:
 #         d.preds[f"metrics.{m}"] = attr(result, f"metrics.{m}")
@@ -103,7 +103,7 @@ sys.path.insert(0, str(scratch_project_path))
 # manifest, and the files the manifest names go to the art store.
 # `StageDat` adds only its preds: the spec keys `game`, `stage`,
 # `bins`, then `gameset` and `metrics.count`, `metrics.score`.
-# `build` runs the function the spec's `main` names in `work`, then
+# `build` runs the function the spec's `main` names in `path`, then
 # writes the spec and the result beside what it made.
 
 # %%
@@ -187,9 +187,9 @@ print(rev.values(kind=StageDat, game="G1"))    # → [detect/G1]
 #
 # ```python
 # @ledger_fn
-# def dat(rev, *, spec: dict, work: Path, **kwargs) -> StageDat:
-#     """The dat constructor: `spec` the question, `work` the folder."""
-#     return build(rev, spec, work, **kwargs)
+# def dat(rev, *, spec: dict, path: Path, **kwargs) -> StageDat:
+#     """The dat constructor: `spec` the question, `path` the folder."""
+#     return build(rev, spec, path, **kwargs)
 # ```
 #
 # `demo_game.etl` is mounted, so `dat` runs in the sandbox; the
@@ -220,10 +220,12 @@ print(L.at()[spec_dat.subject, "db/keys"])
 
 # %% [markdown]
 # The spec is the whole question: one key, a JSON object (A38), in
-# the one `db/keys` row, numbers kept native. `work` is not a key
-# (Q36, open; lean): the eval bound it to a fresh scratch folder,
-# the function built the dat there, and the seal moved the folder
-# into the art store by its manifest, as `v.seal(t)` did by hand.
+# the one `db/keys` row, numbers kept native. `path` is not a key
+# (Q36): the eval bound it to a fresh scratch folder, the function
+# built the dat there, and the seal moved the folder into the art
+# store by its manifest, as `v.seal(t)` did by hand. With no
+# `path=` on the call the result is named `anonymous/Dat{unique}`;
+# `path="games/G1"` would name it and rebuild its folder there.
 # The preds are the same as the hand-built dat's.
 
 # %% [markdown]
@@ -283,15 +285,15 @@ print(detections_ref.preds["metrics.count"])        # → 40
 #
 # ```python
 # @ledger_fn
-# def tracks(rev, *, game: str, work: Path) -> StageDat:
-#     return build(rev, {**SPEC, "game": game}, work)
+# def tracks(rev, *, game: str, path: Path) -> StageDat:
+#     return build(rev, {**SPEC, "game": game}, path)
 #
 #
-# def link(rev, work, *, game, **_):
+# def link(rev, path, *, game, **_):
 #     dets = rev.eval("demo_game.etl.detect.detections", game=game)
 #     boxes = json.loads((dets.path / "boxes.json").read_text())
 #     runs = [b for a, b in zip(boxes, boxes[1:]) if a <= b]
-#     (work / "tracks.json").write_text(json.dumps(runs))
+#     (path / "tracks.json").write_text(json.dumps(runs))
 #     score = round(len(runs) / len(boxes), 3)
 #     return {"metrics": {"count": len(runs), "score": score}}
 # ```
@@ -301,11 +303,11 @@ print(detections_ref.preds["metrics.count"])        # → 40
 #
 # ```python
 # @ledger_fn
-# def train(rev, *, game: str, work: Path) -> StageDat:
+# def train(rev, *, game: str, path: Path) -> StageDat:
 #     epochs = int(rev["cfg/train", "epochs"])            # traced
 #     d = build(rev, {"main": "demo_game.etl.model.fit",
 #                     "stage": "model", "game": game,
-#                     "epochs": epochs}, work)
+#                     "epochs": epochs}, path)
 #     d.preds["gameset"] = rev[f"game/{game}", "gameset"]  # traced
 #     return d
 # ```

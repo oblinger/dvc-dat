@@ -10,13 +10,13 @@ SPEC = {"main": "demo_game.etl.detect.find", "stage": "detect",
 
 
 @ledger_fn
-def detections(rev, *, game: str, work: Path) -> StageDat:
-    return build(rev, {**SPEC, "game": game}, work)
+def detections(rev, *, game: str, path: Path) -> StageDat:
+    return build(rev, {**SPEC, "game": game}, path)
 
 
-def find(rev, work, *, game, bins, **_):
+def find(rev, path, *, game, bins, **_):
     seed = sum(map(ord, rev[f"game/{game}", "court"]))   # traced
     boxes = [(seed * (i + 7)) % bins for i in range(40)]
-    (work / "boxes.json").write_text(json.dumps(boxes))
+    (path / "boxes.json").write_text(json.dumps(boxes))
     score = round(sum(boxes) / (bins * len(boxes)), 3)
     return {"metrics": {"count": len(boxes), "score": score}}

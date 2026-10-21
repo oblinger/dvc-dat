@@ -86,8 +86,9 @@ Module functions: `merge_dicts`, `expand`, `expand_spec`.
 
 ## Invariants
 
-- The spec on disk is a record, never a template: every `{}` is
-  expanded once at create, and call-site arguments go into a new spec.
+- The spec on disk is a record: every `{}` is expanded once at create,
+  except `dat.name`, which keeps the path template (never the path it
+  expanded to), and call-site arguments go into a new spec.
 - A sealed (or referenceable) dat is never rewritten: `save` and
   `execute` refuse it.
 - `dat.sha256` hashes the folder without `run/`; a run is not content.

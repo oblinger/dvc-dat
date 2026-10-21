@@ -99,8 +99,10 @@ dat.get_spec()["parameters"]["learning_rate"]   # 0.01
 Any string value in a **template** may carry `{…}` references. They are
 expanded **once, when the dat is created** — with the same `now` and `unique`
 the folder got — and the expanded spec is what `_spec_.yaml` holds. A spec on
-disk is a record, never a template: `get_spec()` is the file, `dat.name` is
-the folder the dat actually landed in, and `{now}` is the moment it was made.
+disk is a record: `get_spec()` is the file and `{now}` is the moment it was
+made. The one exception is `dat.name`, which keeps the path template as
+given, never the path it expanded to; the folder the dat landed in is its
+name (`get_path_name()`).
 A reference inside a longer string must resolve to a string or a number; a
 reference that is the whole value may be any data YAML can hold, and is
 inlined. A reference to anything else — a class, an object — is a
@@ -212,9 +214,10 @@ spec = merge_dicts(do.load("configs.bb.base"), {"gameset": "G7"})
 Dat.create(spec=spec)
 ```
 
-A created dat's spec carries the folder it landed in as `dat.name`, so a
-variation of an existing dat `d` asks to land beside it — without
-`increment` the create raises `FileExistsError`:
+A created dat's spec carries its path template as `dat.name` (a constant
+path is its own template), so a variation of an existing dat `d` asks to
+land beside it — without `increment` the create raises
+`FileExistsError`:
 
 ```python
 from dvc_dat import Dat

@@ -181,9 +181,8 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 #
 # The dat constructor as a verb: the file's contents are the whole
 # question, and handing the model to prod is an alias move, the seal
-# being the eval's own. Written to the leans of Q36 (the eval hands
-# the function a `work` folder) and Q37 (the `fn` item hashes the
-# modules the run loaded), both still open on F447.
+# being the eval's own. Q36: the eval hands the function its folder
+# as `path`; Q37: the `fn` item hashes the modules the run loaded.
 
 # %% [markdown]
 # ## Listing values by predicate
