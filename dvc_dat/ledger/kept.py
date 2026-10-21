@@ -60,8 +60,9 @@ class Kept:
         """Write the record of one ``v.seal()``; with ``data`` (``keep=True``) keep the encoding and its
         ``parts`` (``(sha256, source)``) too. Returns the new entry's id.
 
-        Each part is copied into ``blobs/`` in 1 MiB blocks and checked against its hash, never read
-        whole; it is copied, not linked, so a later in-place write to the source cannot reach it.
+        Each part is cloned into ``blobs/`` copy-on-write where the filesystem can (APFS ``clonefile``,
+        Linux reflink: no disk), else copied in 1 MiB blocks; either way checked against its hash, never
+        read whole, and never linked, so a later in-place write to the source cannot reach it.
         An unkept record of a folder replaces the unkept records of that folder.
         """
         rec = dict(record)
@@ -70,7 +71,7 @@ class Kept:
         if data is not None:
             names = []
             for h, source in parts:
-                place(source, self._blob_path(h), h, link=False)
+                place(source, self._blob_path(h), h, link=False, clone_ok=True)
                 names.append(h)
             b = sha256(data)
             if not self._blob_path(b).exists():

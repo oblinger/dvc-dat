@@ -22,6 +22,15 @@ Every user-visible change to `dvc_dat`, newest first.
   alias it will be saved under: a value sealed with it as a dep before
   it is saved binds the dep through that name at its own save (refused
   until the name holds those bytes), as a `Ref` by that name would.
+- **`keep=True` clones.** A kept part is a copy-on-write clone where the
+  filesystem can (macOS APFS `clonefile`, Linux reflink `FICLONE`),
+  else a streaming copy as before; never a hardlink. A clone costs no
+  disk and an in-place edit of the source never reaches it, so
+  `keep=True` is free on the laptop: measured, a 1 GiB file kept on
+  APFS by clone, free space unchanged within noise, the kept bytes
+  unchanged after the source is edited in place
+  (`tests/ledger/test_seal_record.py`). `place(..., clone_ok=True)`
+  and `store.clone(src, dest)` are the mechanism.
 - **`just sealed`** lists every seal never saved, kept or not (`kept`
   marks the kept ones); `purge` drops records, then blobs no record
   names (older than an hour, as before). A save drops its record at

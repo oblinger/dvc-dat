@@ -83,10 +83,11 @@ three forms.
   `TypeError` at the seal.
 - `keep=True` also copies the bytes, by hash, into the kept cache
   (`$DAT_KEPT`, else `~/.cache/dvc-dat/kept`; module `ledger.kept`), so
-  the folder or object may change afterwards. Parts are streamed in
-  1 MiB blocks and checked against their hash; they are copied, never
-  linked, so an in-place write to the source cannot reach the kept
-  copy. A save of a kept value hardlinks the kept blobs into the art
+  the folder or object may change afterwards. A part is cloned
+  copy-on-write where the filesystem can (macOS APFS `clonefile`, Linux
+  reflink `FICLONE`), which costs no disk, else streamed in 1 MiB
+  blocks; either way it is checked against its hash and never linked,
+  so an in-place write to the source cannot reach the kept copy. A save of a kept value hardlinks the kept blobs into the art
   store. `just sealed` lists every seal never saved, kept or not;
   `just sealed purge [older=14d]` drops the records. Each seal is its
   own entry (equal kept bytes share blobs), dropped by its save at

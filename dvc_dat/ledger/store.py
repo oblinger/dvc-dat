@@ -78,12 +78,53 @@ def _copy(src: IO[bytes], dest: Path, h: str) -> None:
                          "was hashed")
 
 
-def place(source: Source, dest: Path, h: str, *, link: bool = True) -> bool:
+def clone(src: Any, dest: Path) -> bool:
+    """Make ``dest`` a copy-on-write clone of the file ``src`` (macOS APFS ``clonefile``, Linux ``FICLONE``
+    reflink); ``True`` when cloned, ``False`` when the filesystem or platform cannot (nothing written).
+
+    A clone shares the source's blocks until either is written, so it costs no disk, and an in-place
+    write to the source never reaches it -- unlike a hardlink."""
+    import sys
+
+    if sys.platform == "darwin":
+        import ctypes
+
+        try:
+            libc = ctypes.CDLL("/usr/lib/libSystem.dylib", use_errno=True)
+            fn = libc.clonefile
+        except (OSError, AttributeError):
+            return False
+        fn.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+        fn.restype = ctypes.c_int
+        return fn(os.fsencode(os.fspath(src)), os.fsencode(os.fspath(dest)), 0) == 0
+    if sys.platform.startswith("linux"):
+        import fcntl
+
+        FICLONE = 0x40049409
+        try:
+            with open(src, "rb") as s, open(dest, "xb") as d:
+                try:
+                    fcntl.ioctl(d.fileno(), FICLONE, s.fileno())
+                    return True
+                except OSError:
+                    pass
+        except OSError:
+            return False
+        Path(dest).unlink(missing_ok=True)
+    return False
+
+
+#: How many parts ``place(..., clone=True)`` cloned in this process (the tests read it).
+CLONES = [0]
+
+
+def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bool = False) -> bool:
     """Put the bytes of ``source`` (sha256 ``h``) at ``dest``, write-once; ``True`` when written here.
 
-    A ``Path`` is hardlinked when ``link`` and the filesystem allows it, else copied in blocks (and
-    checked against ``h``); an opener is always copied. The bytes land at a temp name and are renamed
-    into place, so a reader never sees a partial file.
+    A ``Path`` is hardlinked when ``link`` and the filesystem allows it, else, with ``clone_ok``,
+    cloned copy-on-write where the filesystem can (``clone``; the clone is checked against ``h``),
+    else copied in blocks (and checked against ``h``); an opener is always copied. The bytes land at
+    a temp name and are renamed into place, so a reader never sees a partial file.
     """
     if dest.exists():
         return False
@@ -98,6 +139,14 @@ def place(source: Source, dest: Path, h: str, *, link: bool = True) -> bool:
                     linked = True
                 except OSError:
                     pass
+            if not linked and clone_ok and clone(source, tmp):
+                linked = True
+                CLONES[0] += 1
+                got = file_sha(tmp)
+                if got != h:
+                    tmp.unlink(missing_ok=True)
+                    raise ValueError(f"a part named {h[:12]}… hashes to {got[:12]}…: its source changed since it "
+                                     "was hashed")
             if not linked:
                 with open(source, "rb") as f:
                     _copy(f, tmp, h)

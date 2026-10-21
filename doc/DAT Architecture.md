@@ -189,7 +189,8 @@ annotations land as one revision.
 the value's identity now: the preds freeze, and the bytes' hash, the
 deps, the provenance, the environment and the time are recorded; it
 writes to no ledger, only a seal record in this machine's kept folder.
-`v.seal(keep=True)` also copies the bytes into the kept cache, so the
+`v.seal(keep=True)` also copies the bytes into the kept cache (a
+copy-on-write clone where the filesystem can, so no disk), so the
 source may change. A later `v.seal(t)` saves that sealed state: the
 trace is the environment of the seal, not of the save, and a changed
 byte in a value not kept is `SealBroken`. The record makes this hold

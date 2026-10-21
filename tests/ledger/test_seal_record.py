@@ -141,3 +141,35 @@ def test_the_load_cache_rechecks_a_dat_folder(L, tmp_path):
     first.path.rename(tmp_path / "moved")
     again = Ref(L.at(), "g/1").load()
     assert again is not first and (again.path / "a.txt").read_text() == "one"
+
+
+def test_a_kept_part_is_a_clone_where_the_filesystem_can(tmp_path, kept_folder):
+    import shutil
+    import sys
+
+    from dvc_dat.ledger import store
+
+    src = tmp_path / "big"
+    src.mkdir()
+    blob = src / "a.bin"
+    gib = 1 << 30
+    with open(blob, "wb") as f:
+        block = os.urandom(1 << 20)
+        for _ in range(gib >> 20):
+            f.write(block)
+    probe = tmp_path / "probe"
+    if not store.clone(blob, probe):
+        pytest.skip(f"no copy-on-write clone on this filesystem ({sys.platform})")
+    probe.unlink()
+    before, n = shutil.disk_usage(tmp_path).free, store.CLONES[0]
+    d = Dat(src)
+    d.seal(keep=True)
+    assert store.CLONES[0] == n + 1
+    assert before - shutil.disk_usage(tmp_path).free < gib // 4     # a clone costs (almost) no disk
+    kept = next(p for p in (kept_folder / "blobs").iterdir() if p.stat().st_size == gib)
+    with open(kept, "rb") as f:
+        head = f.read(16)
+    with open(blob, "r+b") as f:                                    # an in-place edit of the source
+        f.write(b"\0" * 16)
+    with open(kept, "rb") as f:
+        assert f.read(16) == head != b"\0" * 16
