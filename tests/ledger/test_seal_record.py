@@ -1,4 +1,4 @@
-"""A seal persists (6.3.0): every ``v.seal()`` writes a record, and a later process saves it as the sealing one would."""
+"""A seal persists: every ``v.seal()`` writes a record, and a later process saves it as the sealing one would."""
 
 import os
 import subprocess

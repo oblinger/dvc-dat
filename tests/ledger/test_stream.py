@@ -1,4 +1,4 @@
-"""Streaming values (6.2.0): parts by (sha256, source), hardlinked or streamed into the stores, never
+"""Streaming values: parts by (sha256, source), hardlinked or streamed into the stores, never
 held whole; ``decode(name=)``, ``Dat.kind_ok``, ``DAT_WORK``. The 2 GB acceptance run is behind
 ``DAT_SLOW=1`` (a subprocess, so its RSS is its own)."""
 

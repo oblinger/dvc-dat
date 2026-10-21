@@ -96,7 +96,7 @@ def check_provenance(provenance: Optional[str]) -> str:
 def code_token(rev: "Rev", repo: str, env_commit: Optional[str]) -> str:
     """The ``code/<repo>`` trace item: ``<version row>+<env commit 8>``, ``+<env commit 8>`` with no
     version row (A53). The commit is always the environment's: the commit the code ran at, whatever
-    commit the ``code/<repo>`` row pins its version to (6.2.0)."""
+    commit the ``code/<repo>`` row pins its version to."""
     v = rev.get(f"code/{repo}", "version")
     return f"{v or ''}+{(env_commit or '')[:8]}"
 
@@ -110,7 +110,7 @@ class Transaction:
         if lock is not None and (isinstance(lock, bool) or not isinstance(lock, (int, float)) or lock <= 0):
             raise TypeError(f"lock is a positive number of seconds, not {lock!r}")
         if "time" in preds:
-            raise TypeError("time= is gone (6.2.0): every transaction is stamped db/time; drop the keyword")
+            raise TypeError("time= is gone: every transaction is stamped db/time; drop the keyword")
         self._lock = lock
         #: A placeholder for ``db/tx/<rev>``, rewritten at commit.
         self.tx = f"db/tx/pending-{uuid.uuid4().hex[:12]}"

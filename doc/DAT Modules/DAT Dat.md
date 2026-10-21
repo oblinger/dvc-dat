@@ -265,7 +265,7 @@ A namespace of dotted names and a runner of dats, bound to the `DatManager` whos
     From `dvc_dat.do`; see [Do Interface](#do-interface). ^do
 
 **__version__**`: str`
-    The package version, `"6.3.0"` at this checkout. ^--version--
+    The package version, `"2.18.0"` at this checkout. ^--version--
 
 
 
@@ -366,6 +366,6 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 
 
 # BRIEF
-- Hand-written against `dvc_dat/core.py` and `dvc_dat/do.py` at 6.3.0; the code is the authority, and every name and signature here was read from it. The figure is hand-written SVG; edit it beside this page.
+- Hand-written against `dvc_dat/core.py` and `dvc_dat/do.py` at 2.18.0; the code is the authority, and every name and signature here was read from it. The figure is hand-written SVG; edit it beside this page.
 - [dat.md](dat.md) is the terse per-file list of the same surface and stays as it is; keep the two in step when the surface changes. The ledger's `ledger.Dat` is a different class, documented under [DAT Ledger](ledger/DAT%20Ledger.md).
 - Block IDs: the package section owns `^do`, so `Dat.do` is `^dat-do`; a prefix with the package name would carry an underscore, which breaks an Obsidian block link.
