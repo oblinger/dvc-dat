@@ -91,7 +91,9 @@ def _merge_by_name(base: List[Dict], over: List[Dict]) -> List[Dict]:
 DAT_CONFIG_FILE = ".datconfig.yaml"
 DAT_CONFIG_OVERRIDE_FILE = ".datconfig.override.yaml"
 ENV_PREFIX = "DAT_"
-_CONFIG_KEYS = ("dat_folders", "art_folder", "index", "manager", "verify", "run")  # `run`: `just run` only
+_CONFIG_KEYS = ("dat_folders", "art_folder", "index", "manager", "verify",
+                "run",                 # `just run` only
+                "ledger", "mounts")    # the ledger's (`Ledger()`), read there
 _DEFAULT_DAT_FOLDER = "data"
 _DEFAULT_ART_FOLDER = "art"           # beside the dat folder, never inside it
 

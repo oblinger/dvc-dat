@@ -1,6 +1,7 @@
 """The ledger-just notebook's recipe bodies: `python ledger_recipes.py <recipe> [args]`.
 
-Each recipe is one ledger call. What a Python caller spells out the recipe
+Each recipe is one ledger call; running a function or a spec is not here but
+`just run` (dvc_dat.just), the one way to run. What a Python caller spells out the recipe
 supplies: the ledger (`Ledger()`), `by=human:$USER`, `confirm=` (a typed
 `yes`), the repo (`code` is the checkout the recipe runs in), short kind
 names, hash prefixes, and `k=v` (a string) / `k:=v` (JSON) arguments.
@@ -12,8 +13,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-
-import yaml
 
 from dvc_dat.ledger import Ledger, LedgerError, bump
 
@@ -68,7 +67,7 @@ def show(rev, v):
             return json.dumps(o)
         return str(o)
     preds = " ".join(f"{p}={text(p, o)}" for p, o in v.preds.items())
-    return f"{str(v):<10}{preds}"
+    return f"{str(v):<9} {preds}"
 
 
 def query(rev, args):
@@ -186,33 +185,8 @@ def bump_recipe(args):
     print(f"{subject}: {old} -> {new}{tail}")
 
 
-def eval_recipe(args):
-    import_checkout()
-    rev = Ledger().at()
-    name, keys = args[0], parse(args[1:])
-    hit = rev.eval(name, memo="get", **keys)
-    v = hit or rev.eval(name, **keys)
-    print(f"{'hit' if hit else 'ran'}  {v}")
-
-
-def run(args):
-    import_checkout()
-    L = Ledger()
-    spec = yaml.safe_load(Path(args[0]).read_text())
-    rest = parse(args[1:])
-    rev = L.at()
-    hit = rev.eval("demo_game.etl.dat.dat", memo="get", spec=spec)
-    v = hit or rev.eval("demo_game.etl.dat.dat", spec=spec)
-    name = rest.get("alias")
-    if name:
-        with L.transaction(by=BY) as t:
-            t.add(name, "db/alias", v.subject)
-    shown = " ".join(f"{p}={v.preds[p]}" for p in ("game", "stage", "metrics.score") if p in v.preds)
-    print(f"{'hit' if hit else 'ran'}  {name or v}  {shown}")
-
-
 RECIPES = {"values": values, "value": value, "history": history, "why": why, "annotate": annotate,
-           "alias": alias, "index": index, "bump": bump_recipe, "eval": eval_recipe, "run": run}
+           "alias": alias, "index": index, "bump": bump_recipe}
 
 if __name__ == "__main__":
     try:

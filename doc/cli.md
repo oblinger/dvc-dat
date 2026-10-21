@@ -91,6 +91,62 @@ x my_letters --set dat.title=Quickie --set start=100 --set end=110
 x my_letters --json rules='[[2, "my_letters.triple_it"]]'
 ```
 
+## With a ledger: `run` evaluates
+
+When the config has a `ledger:` line, `x TARGET KEY=VALUE ...` runs
+through the ledger (F447 Q40): `rev.eval` of the ledger function TARGET
+names, found if computed before from the same inputs by the same code,
+else run and sealed. It prints `hit` or `ran`, the value (its name, else
+a hash prefix) and its preds. Without a `ledger:` line it is the bare run
+above and records nothing.
+
+| TARGET | The function and its keys |
+|--------|---------------------------|
+| a spec file, `.yaml` / `.json` | `main` names it; the other keys are its keys |
+| a mounted name | the `@ledger_fn` it loads to, or a spec with `main` |
+| a dotted name | the `@ledger_fn` itself |
+
+```bash
+x demo_game.game.cut game=G1 version=1.5.3   # ran, then hit
+x model-G1.yaml epochs=9                     # the line's key wins
+x model-G1.yaml alias=model/prod             # names the result
+```
+
+`alias=NAME` is the eval's `path=`: it names the result, and a `Dat`'s
+folder is built there. `--set` / `--json` update a spec's keys. A target
+that is not a ledger function, and a positional argument, are refused.
+`DAT_LEDGER` overrides the config's ledger, as for `Ledger()`.
+
+## Commands: `@command` and `.dat/targets.just`
+
+A function marked `@command` also runs as `just NAME`:
+
+```python
+from dvc_dat.just import command
+
+@command(args="game=…", help="train the model on one game's tracks")
+@ledger_fn
+def train(rev, *, game: str, path: Path) -> StageDat: ...
+```
+
+`args` (at most 24 characters) and `help` (one or two lines of at most
+56) are what `just --list` prints; over budget is `ValueError` at import.
+A mounted spec is a command by its `command:` key, `true` or
+`{args: ..., help: ...}`. A justfile opts in with one line:
+
+```
+import 'dvc_dat.just'
+import? '.dat/targets.just'
+```
+
+`run` then writes `.dat/targets.just` beside the config: one recipe per
+mounted command (a mounted function, or a command defined in a mounted
+module, named by its function), each `just run TARGET "$@"`, in group
+`run`. It is rewritten when older than the config, the justfile or a
+mounted source, and `run` says on stderr what it wrote and skipped. A name
+the justfile already has is skipped: the hand recipe wins. Anything not
+marked stays `just run TARGET`.
+
 ## Exit status
 
 | Code | Meaning |
@@ -132,10 +188,11 @@ Copy `bin/x` onto your `PATH` for the short form. The `run` recipe:
    - `.venv/bin/python -m dvc_dat`, when `.venv` sits beside the config,
    - `python3 -m dvc_dat`.
 3. `exec`s that command with the arguments appended, working directory
-   unchanged, and one variable set for it: `DAT_CLI_CONFIG`, the config
-   file it found. A program's own main tests it to know it was launched
-   by `just run`, and `cli_main()` reads the config from it, so the file
-   is found once. Nothing else reads the variable.
+   unchanged, and two variables set for it: `DAT_CLI_CONFIG`, the config
+   file it found, and `DAT_JUSTFILE`, the justfile (for
+   `.dat/targets.just`). A program's own main tests `DAT_CLI_CONFIG` to
+   know it was launched by `just run`, and `cli_main()` reads the config
+   from it, so the file is found once.
 
 A relative path in the command's first word is relative to the config's
 folder.

@@ -9,9 +9,14 @@
 # `python3 -m dvc_dat`), and execs it with the arguments appended and the
 # working directory unchanged. The child sees DAT_CLI_CONFIG, the config
 # file: a program's own main tests it to know it was launched by `run`, and
-# `dat.cli_main()` reads the config from it. The config folder is the
-# import root (PYTHONPATH). Exit 3 when no .datconfig.yaml is above the
-# working directory.
+# `dat.cli_main()` reads the config from it; and DAT_JUSTFILE, the justfile,
+# whose `import? '.dat/targets.just'` asks for the generated commands. The
+# config folder is the import root (PYTHONPATH). Exit 3 when no
+# .datconfig.yaml is above the working directory.
+#
+# With a `ledger:` line in the config, `run` runs TARGET through the ledger:
+# found if computed before from the same inputs by the same code, else run
+# and sealed; `alias=NAME` names the result. Without one it records nothing.
 
 # run TARGET [ARG ...] [KEY=VALUE ...]: a mounted name, a dotted function, a spec
 [no-cd]
@@ -27,7 +32,8 @@ run *args:
         dir=$(dirname "$dir")
     done
     DAT_CLI_CONFIG=$dir/.datconfig.yaml
-    export DAT_CLI_CONFIG
+    DAT_JUSTFILE="{{justfile()}}"
+    export DAT_CLI_CONFIG DAT_JUSTFILE
     cfg_run=$(sed -n 's/^run:[[:space:]]*//p' "$dir/.datconfig.yaml" | head -n 1 |
         sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")
     if [ -n "$DAT_RUN" ]; then

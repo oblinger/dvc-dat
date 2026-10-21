@@ -25,8 +25,8 @@
 # >
 # > 1. **Running** — `just run <function|spec> k=v …` executes it through the
 # >    ledger: the result is a value, found if computed before, else made
-# >    and sealed; `alias=` names it. A function marked as a command runs as
-# >    `just <name>` without `run`.
+# >    and sealed; `alias=` names it. A function marked `@command` runs as
+# >    `just <name>` without `run`. `run` is dvc-dat's (`dvc_dat.just`).
 # > 2. **Listing values by predicate** — `values` lists values by predicate;
 # >    `value` gets exactly one; `history` lists every predicate a subject
 # >    has held; `why` lists what a value was computed from.
@@ -50,6 +50,7 @@ import os
 import shutil
 import subprocess
 import sys
+from importlib.resources import files
 from pathlib import Path
 
 import yaml
@@ -63,6 +64,13 @@ shutil.copytree("demo_game", scratch_project_path,
                 ignore=shutil.ignore_patterns("__pycache__"))
 os.chdir(scratch_project_path)
 L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
+with open(".datconfig.yaml", "a") as config_file:
+    config_file.write("run: python3 -m demo_main\n")  # mounts, then cli
+dvc_dat_just_path = files("dvc_dat") / "dvc_dat.just"
+Path("justfile").write_text(
+    f"import '{dvc_dat_just_path}'  # run, mounts\n"
+    "import '../../justfile'  # the demo's ledger verbs\n"
+    "import? '.dat/targets.just'  # the declared commands\n")
 user_name = os.environ.get("USER", "dan")
 
 # demo repo
@@ -77,8 +85,7 @@ def git(*args: str) -> str:
     return done.stdout.strip()
 
 
-spec_record = {"main": "demo_game.etl.model.fit",
-               "stage": "model", "game": "G1", "epochs": 8}
+spec_record = {"main": "demo_game.etl.model.train", "game": "G1"}
 Path("model-G1.yaml").write_text(yaml.safe_dump(spec_record))
 Path(".gitignore").write_text(".dat/\n")
 git("init", "-q")
@@ -116,6 +123,9 @@ cut_154_value = L.at().eval("demo_game.game.cut",       # rev 8
                             game="G1", version="1.5.4")
 with L.transaction(by="human:dan") as t:                 # rev 9
     t.add("game/G1", "db/alias", cut_154_value.subject)
+with L.transaction(by="human:dan") as t:                 # rev 10
+    t["cfg/train", "epochs"] = "8"             # what train reads
+    t["game/G1", "gameset"] = "normie"
 
 # %% [markdown]
 # # Ledger: just
@@ -126,14 +136,15 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # The example data Setup put on the ledger is one game, `G1`: its
 # video, a cut of it made by code version 1.5.3, a corrected home
 # team, and a second cut by 1.5.4 that the name `game/G1` now points
-# at.
+# at; and the training config.
 #
 # From a shell a person works the ledger by typing `just <verb>`.
 # Each verb is one ledger API call with the things a program would
 # have to say every time (which ledger, who is acting, the yes to a
 # confirmation) supplied by the recipe. No verb that reads like an
-# edit hides a seal. The `justfile` beside this notebook holds them;
-# they are the proposal for F447 Q4.
+# edit hides a seal. The project's justfile imports `run` from
+# dvc-dat (`dvc_dat.just`) and the other verbs from the `justfile`
+# beside this notebook, the proposal for F447 Q4.
 #
 # Under each heading one sentence says what the verb does; after its
 # example, which API call it is. The Python notebooks show those calls.
@@ -143,46 +154,62 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # `just run` executes a function or a spec; the result is a value, sealed once with what it read.
 #
 # ### A derived value
-# `just eval <fn> k=v …` returns the function's value, found if computed before.
+# `just run <fn> k=v …` returns the function's value, found if computed before.
 
 # %%
-# !just eval demo_game.game.cut game=G1 version=1.5.3
-# → ran  <8 hex>
-# !just eval demo_game.game.cut game=G1 version=1.5.3
-# → hit  <8 hex>
+# !just run demo_game.game.cut game=G1 version=1.5.3
+# → targets: .dat/targets.just (1 command(s))
+# → ran  <8 hex>  game=G1 version=1.5.3 video=… team=["G6", "G5"]
+# !just run demo_game.game.cut game=G1 version=1.5.3
+# → hit  <8 hex>  game=G1 version=1.5.3 video=… team=["G6", "G5"]
 
 # %% [markdown]
 # Found means computed before from the same inputs by the same code;
-# otherwise the function runs and its result is sealed. It is `rev.eval(name, **keys)`, with
-# `memo="get"` asked first.
+# otherwise the function runs and its result is sealed. It is
+# `rev.eval(name, **keys)`, with `memo="get"` asked first to say which.
 #
 # The 1.5.3 cut on the ledger read the old home team and the old
 # code version, so the first ask re-derives it and the second finds
-# it. The `memo="get"` look is how the recipe can say which.
+# it. The first `run` also wrote `.dat/targets.just`, below.
 #
 # ### A dat from a spec
-# `just run <spec.yaml>` makes a dat from a spec file; `alias=` names it.
+# `just run <spec.yaml>` runs the function the file's `main` names, its other keys the keys; `alias=` names the result.
 
 # %%
 # !cat model-G1.yaml
-# → epochs: 8
 # → game: G1
-# → main: demo_game.etl.model.fit
-# → stage: model
+# → main: demo_game.etl.model.train
 
 # %%
 # !just run model-G1.yaml alias=model/prod
-# → ran  model/prod  game=G1 stage=model metrics.score=…
+# → ran  model/prod  game=G1 stage=model metrics.count=12 …
 
 # %% [markdown]
 # The dat is a value. It is
-# `rev.eval("demo_game.etl.dat.dat", spec=…)`, then
-# `t.add("model/prod", "db/alias", s)`.
+# `rev.eval("demo_game.etl.model.train", game="G1", path="model/prod")`:
+# `path=` names the result and builds its folder there (Q36).
 #
-# The dat constructor as a verb: the file's contents are the whole
-# question, and handing the model to prod is an alias move, the seal
-# being the eval's own. Q36: the eval hands the function its folder
-# as `path`; Q37: the `fn` item hashes the modules the run loaded.
+# The file's contents are the whole question; a key on the line
+# overrides the file's. Handing the model to prod is the name, the
+# seal being the eval's own.
+#
+# ### A command
+# `just <name> k=v …` is `just run` of a function marked `@command`.
+
+# %%
+# !just --list | tail -n 2
+# →     [run]
+# →     train *args # game=…  train the model on one game's tracks
+# !just train game=G1
+# → hit  model/prod  game=G1 stage=model metrics.count=12 …
+
+# %% [markdown]
+# `train` carries `@command(args="game=…", help="…")`, and
+# `demo_main.py`, the project's main (`run:` in `.datconfig.yaml`),
+# mounts its module; `run` writes one recipe per mounted command into
+# `.dat/targets.just`, which the justfile imports. It is
+# `just run model.train game=G1`: the same question as the spec, so a
+# hit. Anything not marked stays `just run <target>`.
 
 # %% [markdown]
 # ## Listing values by predicate
@@ -197,9 +224,9 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
 # → game/G1   game=G1 version=1.5.4 video=video/G1 team=G6,G5
 # → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G6,G5
-# → <8 hex>   game=G1 stage=detect bins=16 metrics.count=40 metrics.score=…
-# → <8 hex>   game=G1 stage=track metrics.count=12 metrics.score=…
-# → model/prod game=G1 stage=model metrics.count=12 metrics.score=…
+# → anonymous/Dat game=G1 stage=detect bins=16 metrics.count=40 …
+# → anonymous/Dat_2 game=G1 stage=track metrics.count=12 …
+# → model/prod game=G1 stage=model metrics.count=12 … gameset=normie
 
 # %% [markdown]
 # One line per value: its name if it has one, else its hash, then its
@@ -207,7 +234,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 #
 # Every value of the game: the video; the 1.5.3 cut from Setup, the
 # 1.5.4 cut printed as `game/G1` because the game names it, and the
-# 1.5.3 cut `just eval` re-derived; and the dats `just run` made.
+# 1.5.3 cut `just run` re-derived; and the dats the model run made.
 
 # %%
 # !just values span:='[0, 9000]'
@@ -270,6 +297,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # →   6  human:dan  db/alias   <the 1.5.3 cut, 8 hex>
 # →   7  human:dan  home       G6
 # →   9  human:dan  db/alias   <the 1.5.4 cut, 8 hex>
+# →  10  human:dan  gameset    normie
 
 # %% [markdown]
 # Each line carries the revision it was written at and who wrote it.
@@ -287,8 +315,8 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # !just why game/G1
 # → game/G1: <8 hex>, matches the head
 # → trace: code/demo-game 0.1.0+<8 hex>, fn <8 hex>,
-# →   game/G1 away G5, game/G1 home G6, video/G1,
-# →   platform darwin-arm64-py3.11
+# →   game/G1 away G5, game/G1 home G6, platform darwin-arm64-py3.11,
+# →   query {"game":"G1","kind":"demo_game.game.Video"} -> 1 value(s)
 # → since <8 hex>, its last target: game/G1 home G4 -> G6
 
 # %% [markdown]
@@ -319,7 +347,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # A row on the named subject, literal (A34): on `game/G1` it is a
 # fact about the game, not about its cut, and it is never a seal.
 # There is no `just set <hash> game=G2`: a wrong pred on a sealed
-# value is a new seal and an alias move, made by `just eval` or, in
+# value is a new seal and an alias move, made by `just run` or, in
 # code, by `v.seal(t)`.
 #
 # ### A name for a value
@@ -432,6 +460,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # %%
 # !cat .datconfig.yaml
 # → ledger: .dat/ledger
+# → run: python3 -m demo_main
 
 # %% [markdown]
 # Every recipe opens the ledger with `Ledger()`, which walks up from

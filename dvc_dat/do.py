@@ -507,6 +507,17 @@ DESCRIPTION
     a dat, and that dat runs.  A TARGET that is a callable is simply called.
     The return value prints on stdout when it is not None.
 
+    With a `ledger:` line in the config, `x TARGET KEY=VALUE ...` runs
+    through the ledger instead: rev.eval of the ledger function TARGET names
+    (a dotted function, a mounted name, or a spec file whose `main` names
+    it, the line's keys over the file's), found if computed before from the
+    same inputs by the same code, else run and sealed; it prints `hit` or
+    `ran` and the value.  alias=NAME names the result.
+
+    A function marked @command (dvc_dat.just), or a spec with `command:`,
+    also runs as `just NAME` once the justfile has
+    `import? '.dat/targets.just'`; `run` rewrites that file when stale.
+
     Every ARG and every KEY=VALUE value is read as a YAML scalar: 7 is an int,
     true is a bool, [1,2] is a list, "x" is a string, and a bare word stays a
     string.  A KEY=VALUE pair is recognised by a leading NAME= ; use -- to end
@@ -541,6 +552,7 @@ _KWARG = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=")
 
 
 ENV_CLI_CONFIG = "DAT_CLI_CONFIG"     # set by `just run`, read here and nowhere else
+ENV_JUSTFILE = "DAT_JUSTFILE"         # set by `just run`: the justfile, for `.dat/targets.just`
 
 
 def cli_main(argv: Optional[List[str]] = None, *,
@@ -564,10 +576,19 @@ def cli_main(argv: Optional[List[str]] = None, *,
             raise ValueError(f"{ENV_CLI_CONFIG}={config}: no such config file")
     if config is not None:
         Dat.manager = DatManager.load_dat_config(config, do=do)
-    return _do_argv(list(sys.argv if argv is None else argv))
+    argv = list(sys.argv if argv is None else argv)
+    justfile = os.environ.get(ENV_JUSTFILE)
+    if config is not None and justfile and argv[1:2] not in (["--version"], ["--help"], ["-h"]):
+        from .just import refresh
+        cfg = Path(config)
+        try:
+            refresh(do, cfg.parent if cfg.is_file() else cfg, Path(justfile))
+        except Exception as e:
+            print(f"run: targets: {_message(e)}", file=sys.stderr)
+    return _do_argv(argv, config)
 
 
-def _do_argv(argv: List[str]) -> int:
+def _do_argv(argv: List[str], config: Union[None, str, Path] = None) -> int:
     """Run one command line (argv[0] is the program); returns the exit code."""
     args = list(argv[1:])
     if not args or args[0] in ("-h", "--help"):
@@ -582,10 +603,10 @@ def _do_argv(argv: List[str]) -> int:
         return _cmd_info(rest)
     elif command == "--list":
         return _cmd_list(rest)
-    return _cmd_do(args)
+    return _cmd_do(args, config)
 
 
-def _cmd_do(argv: List[str]) -> int:
+def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
     """`x TARGET ...` -- every line whose first word is not a flag."""
     try:
         overrides, args, kwargs, flags = _parse_argv(argv)
@@ -596,6 +617,13 @@ def _cmd_do(argv: List[str]) -> int:
             print(USAGE)
             return 0
         return _fail("no TARGET given; `x --help` for usage")
+    if "usage" not in flags:
+        try:
+            ledger = _ledger_of(config)
+        except Exception as e:
+            return _fail(_message(e))
+        if ledger is not None:
+            return _cmd_eval(ledger, args, kwargs, overrides, flags)
     target, fixed = args[0], [_scalar(a) for a in args[1:]]
     try:
         cmd = do.load(target)
@@ -632,6 +660,100 @@ def _cmd_do(argv: List[str]) -> int:
         return _fail(_message(e))
     if result is not None:
         print(result)
+    return 0
+
+
+def _config_file(config: Union[None, str, Path]) -> Optional[Path]:
+    """The `.datconfig.yaml` in force: `config` (a file or its folder), else the manager's."""
+    if config is None:
+        folder = getattr(Dat.manager, "_config_dir", None)
+        config = os.path.join(folder, DAT_CONFIG_FILE) if folder else None
+    if config is None:
+        return None
+    path = Path(config)
+    path = path if path.suffix in (".yaml", ".yml") else path / DAT_CONFIG_FILE
+    return path if path.is_file() else None
+
+
+def _ledger_of(config: Union[None, str, Path]) -> Any:
+    """The ledger the config's `ledger:` line names (`DAT_LEDGER` overriding it), else None."""
+    path = _config_file(config)
+    if path is None:
+        return None
+    led = (yaml.safe_load(path.read_text()) or {}).get("ledger")
+    if not led:
+        return None
+    from .ledger import Ledger
+    from .ledger.ledger import ENV, _relative, is_dsn
+    if os.environ.get(ENV):
+        return Ledger()
+    ledger = Ledger(led if is_dsn(led) else _relative(path, led))
+    ledger._assert_mounts(path)              # the config's `mounts:` sugar, as `Ledger()` does
+    return ledger
+
+
+RESERVED_RUN_KEYS = ("alias",)                # control options on a ledger run, never a key
+
+
+def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: Spec, flags: set) -> int:
+    """`x TARGET k=v ...` with a ledger: `rev.eval` -- found if computed before, else run and sealed.
+
+    TARGET is a spec file (`.yaml`/`.json`, its `main` naming the function, its
+    other keys the keys), a mounted name loading to a ledger function or such a
+    spec, or a dotted ledger function.  Line keys override the file's; `--set` /
+    `--json` update a spec's keys.  `alias=NAME` names the result (`path=`).
+    """
+    target, fixed = args[0], args[1:]
+    if fixed:
+        return _fail(f"a ledger function takes keywords only (KEY=VALUE); got {fixed!r}")
+    keys: Dict[str, Any] = {}
+    spec: Any = None
+    if os.path.isfile(target) and target.endswith((".yaml", ".yml", ".json")):
+        try:
+            with open(target) as f:
+                spec = json.load(f) if target.endswith(".json") else yaml.safe_load(f)
+        except Exception as e:
+            return _fail(f"{target}: {_message(e)}")
+        name = None
+    else:
+        name = target
+        try:
+            obj = do._load_mounted(target)
+        except KeyError as e:
+            return _fail(f"cannot load {target!r}: {_message(e)}", code=2)
+        if obj is not _DO_NULL:                 # a mounted name; else the dotted name is the function's
+            if isinstance(obj, dict):
+                spec = obj
+            elif callable(obj) and getattr(obj, "__ledger_fn__", False):
+                name = do.name_of(obj)
+            else:
+                return _fail(f"{target!r} is not a ledger function (@ledger_fn) or a spec "
+                             f"whose main names one; with a ledger, run evaluates through it")
+    if spec is not None:
+        if not isinstance(spec, dict) or not isinstance(spec.get("main"), str):
+            return _fail(f"{target}: a spec run through the ledger names its function in `main`")
+        spec = merge_dicts(copy.deepcopy(spec), overrides)
+        name = spec["main"]
+        keys = {k: v for k, v in spec.items() if k not in ("main", "command")}
+    elif overrides:
+        return _fail(f"--set/--json need a spec; {target!r} is a function")
+    keys.update(kwargs)
+    alias = keys.pop("alias", None)
+    if "dry-run" in flags:
+        shown = [repr(name)] + [f"{k}={v!r}" for k, v in keys.items()]
+        print(f"rev.eval({', '.join(shown)})" + (f", then named {alias!r}" if alias else ""))
+        return 0
+    try:
+        fn = ledger.at().load_fn(name)
+        hit = fn(memo="get", path=alias, **keys)
+        value = hit or fn(path=alias, **keys)
+    except Exception as e:
+        if os.environ.get("DAT_DEBUG"):
+            raise
+        return _fail(_message(e))
+    preds = " ".join(f"{p}={json.dumps(o) if isinstance(o, (dict, list)) else o}"
+                     for p, o in value.preds.items())
+    print(f"{'hit' if hit else 'ran'}  {value}" + (f"  {preds}" if preds else ""))
     return 0
 
 
