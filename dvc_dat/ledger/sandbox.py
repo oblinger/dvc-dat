@@ -898,6 +898,7 @@ def _warm() -> None:
     """What every child shares, loaded once before any fork: the ledger's machinery (never a mounted
     module, never CUDA) and the installed distributions' map."""
     from . import kept, ledger, rev, store, trace, txn, value  # noqa: F401
+    from .. import just  # noqa: F401 - `@command` on a mounted function imports it in the body
     _dist_map()
 
 
