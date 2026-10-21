@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 720" width="1600" height="720" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#37474f"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1600" height="720" fill="#ffffff"/>
+
+  <!-- the two halves -->
+  <rect x="30" y="30" width="460" height="660" rx="16" fill="#fafafa" stroke="#b0bec5" stroke-width="2" stroke-dasharray="10,6"/>
+  <rect x="560" y="30" width="1010" height="660" rx="16" fill="#fafafa" stroke="#b0bec5" stroke-width="2" stroke-dasharray="10,6"/>
+  <g font-size="20" font-weight="bold" fill="#546e7a">
+    <text x="50" y="66">the dat: a thing · dvc_dat</text>
+    <text x="580" y="66">the ledger: history · dvc_dat.ledger</text>
+  </g>
+
+  <!-- nodes -->
+  <g stroke="#37474f" stroke-width="2">
+    <rect x="70" y="110" width="380" height="130" rx="10" fill="#eceff1"/>
+    <rect x="70" y="360" width="380" height="170" rx="10" fill="#fff8e1"/>
+    <rect x="600" y="110" width="340" height="130" rx="10" fill="#eceff1"/>
+    <rect x="1140" y="110" width="390" height="130" rx="10" fill="#e3f2fd"/>
+    <rect x="600" y="380" width="340" height="130" rx="10" fill="#f3e5f5"/>
+    <rect x="1140" y="380" width="390" height="130" rx="10" fill="#e8f5e9"/>
+    <rect x="1140" y="580" width="390" height="90" rx="10" fill="#fff8e1"/>
+  </g>
+
+  <g fill="#263238" text-anchor="middle">
+    <text x="260" y="158" font-size="24" font-weight="bold">DatManager</text>
+    <text x="260" y="184" font-size="15" fill="#607d8b">class · dat folders, the do namespace</text>
+    <text x="260" y="212" font-size="15">do · load · artifacts by hash</text>
+
+    <text x="260" y="404" font-size="24" font-weight="bold">dat folder</text>
+    <text x="260" y="430" font-size="15" fill="#607d8b">Dat (class) · its own recipe</text>
+    <text x="260" y="460" font-size="15">_spec_.yaml · files · _result_.yaml</text>
+    <text x="260" y="486" font-size="15">sealed under a content hash</text>
+
+    <text x="770" y="158" font-size="24" font-weight="bold">just recipes</text>
+    <text x="770" y="184" font-size="15" fill="#607d8b">the human's verbs</text>
+    <text x="770" y="212" font-size="15">values · why · alias · bump · eval</text>
+
+    <text x="1335" y="158" font-size="24" font-weight="bold">Ledger</text>
+    <text x="1335" y="184" font-size="15" fill="#607d8b">class · quads read as of a Rev</text>
+    <text x="1335" y="212" font-size="15">at · transaction</text>
+
+    <text x="770" y="428" font-size="24" font-weight="bold">value function</text>
+    <text x="770" y="454" font-size="15" fill="#607d8b">@ledger_fn, declares work: Path</text>
+    <text x="770" y="482" font-size="15">the dat constructor</text>
+
+    <text x="1335" y="428" font-size="24" font-weight="bold">Value</text>
+    <text x="1335" y="454" font-size="15" fill="#607d8b">class · ledger Dat is one</text>
+    <text x="1335" y="482" font-size="15">a folder as {relpath: sha256}</text>
+
+    <text x="1335" y="622" font-size="22" font-weight="bold">ArtStore</text>
+    <text x="1335" y="648" font-size="15" fill="#607d8b">bytes by sha256, write-once</text>
+  </g>
+
+  <!-- primary flow: solid -->
+  <g stroke="#37474f" stroke-width="2.5" fill="none" marker-end="url(#arrow)">
+    <line x1="260" y1="240" x2="260" y2="356"/>
+    <line x1="940" y1="175" x2="1136" y2="175"/>
+    <line x1="1180" y1="240" x2="920" y2="376"/>
+    <line x1="600" y1="445" x2="454" y2="445"/>
+    <line x1="940" y1="445" x2="1136" y2="445"/>
+    <line x1="1335" y1="510" x2="1335" y2="576"/>
+  </g>
+  <!-- rows on a subject: dotted -->
+  <g stroke="#37474f" stroke-width="2" stroke-dasharray="6,6" fill="none" marker-end="url(#arrow)">
+    <line x1="1450" y1="240" x2="1450" y2="376"/>
+  </g>
+
+  <g font-size="16" fill="#37474f">
+    <text x="272" y="305">do() · load()</text>
+    <text x="1038" y="163" text-anchor="middle">one call each</text>
+    <text x="1010" y="292">eval</text>
+    <text x="527" y="433" text-anchor="middle">writes</text>
+    <text x="1038" y="433" text-anchor="middle">Dat(work)</text>
+    <text x="1347" y="550">seal: files by hash</text>
+    <text x="1462" y="305">sealed rows</text>
+  </g>
+
+  <text x="1038" y="476" font-size="15" font-style="italic" fill="#2e7d32" text-anchor="middle">a dat is a value</text>
+</svg>

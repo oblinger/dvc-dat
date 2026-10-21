@@ -98,7 +98,7 @@ Module functions: `merge_dicts`, `expand`, `expand_spec`.
 ## Left to other modules
 
 The ledger (history, values, `eval`) is
-[`dvc_dat.ledger`](../DAT%20Architecture.md#the-ledger-facts-read-as-of-a-moment);
+[`dvc_dat.ledger`](ledger/DAT%20Ledger.md);
 the command line is `dvc_dat.do.cli_main` and `bin/dat`
 ([Command Line](../cli.md)); tabulating dats into DataFrames and Excel
 is `dvc_dat/dat_tools.py`; the spec format is
