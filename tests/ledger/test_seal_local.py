@@ -49,7 +49,7 @@ def test_changed_bytes_break_the_seal_unless_kept(L):
     k.data = b"after"
     s = k.seal(L)
     assert L.at().load(s).data == b"before"
-    assert Kept().listing() == []          # saved: the kept copy is dropped at commit
+    assert [e["kept"] for e in Kept().listing()] == [False]   # saved: k's record goes at commit; v's stays
 
 
 def test_a_kept_dat_saves_the_folder_as_it_was_sealed(L, tmp_path):

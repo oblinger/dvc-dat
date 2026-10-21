@@ -6,6 +6,42 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org): a change to the public contract (`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system resolution, the CLI) is **major**; a new capability that leaves every existing consumer working is **minor**; a fix is **patch**. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 6.3.0 — 2026-10-20
+
+- **A seal persists.** Every `v.seal()`, kept or not, writes a seal
+  record, `sealed/<entry>.json` in the kept folder (`$DAT_KEPT`, else
+  `~/.cache/dvc-dat/kept`): hash, kind, time, a `Dat`'s folder
+  (`path`), deps (`ref:` texts with subject, hash and name), provenance,
+  preds, environment, `kept`, size. Until 6.2 the seal lived on the
+  object, so only the sealing process could save it (sv-pipe kept its
+  own `<root>/.sealed/<name>.json` to bridge that; it can go).
+- **`Dat.sealed_at_path(path, *, name=None)`** reopens the last seal of
+  a folder in any later process; `v.seal(t)` on it saves exactly as
+  the sealing process would have (same subject; `SealBroken` on a
+  changed byte unless kept; the kept bytes when kept). `name=` is the
+  alias it will be saved under: a value sealed with it as a dep before
+  it is saved binds the dep through that name at its own save (refused
+  until the name holds those bytes), as a `Ref` by that name would.
+- **`keep=True` clones.** A kept part is a copy-on-write clone where the
+  filesystem can (macOS APFS `clonefile`, Linux reflink `FICLONE`),
+  else a streaming copy as before; never a hardlink. A clone costs no
+  disk and an in-place edit of the source never reaches it, so
+  `keep=True` is free on the laptop: measured, a 1 GiB file kept on
+  APFS by clone, free space unchanged within noise, the kept bytes
+  unchanged after the source is edited in place
+  (`tests/ledger/test_seal_record.py`). `place(..., clone_ok=True)`
+  and `store.clone(src, dest)` are the mechanism.
+- **`just sealed`** lists every seal never saved, kept or not (`kept`
+  marks the kept ones); `purge` drops records, then blobs no record
+  names (older than an hour, as before). A save drops its record at
+  commit; a new unkept seal of a folder replaces that folder's unkept
+  records. `Kept.put` is now `Kept.seal(record, data=None, parts=())`;
+  `Kept.for_path(path)` is the latest record of a folder.
+- **The loaded-value cache rechecks a `Dat`'s folder.** `Ref.load`
+  hands back a cached `Dat` only while its folder is still there and
+  the same directory (device and inode); a folder moved or replaced
+  since is loaded afresh.
+
 ## 6.2.1 — 2026-10-20
 
 - **A repo marks what is not code.** The dirty flag of `dat.code`

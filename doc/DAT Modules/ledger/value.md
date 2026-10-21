@@ -68,20 +68,31 @@ three forms.
 | `v.seal(keep=True)` | yes | into this machine's kept cache | no | the hash |
 | `v.seal(t)`, `v.seal(L)` | yes | into the art store | yes, at commit | the subject |
 
-- `v.seal()` writes nothing: it freezes `preds` (an undeclared name is
-  `Undeclared`), and records the bytes' hash, `deps`, `provenance`, the
-  environment and `sealed_at`. `alias=`/`by=` are `TypeError`; a second
-  seal is `ValueError`.
+- `v.seal()` writes to no ledger: it freezes `preds` (an undeclared name
+  is `Undeclared`), fixes the bytes' hash, `deps`, `provenance`, the
+  environment and `sealed_at`, and writes them as a **seal record**,
+  `sealed/<entry>.json` in the kept folder (`$DAT_KEPT`, else
+  `~/.cache/dvc-dat/kept`; module `ledger.kept`): `hash`, `kind`,
+  `sealed_at`, `path` (a `Dat`'s folder, resolved; `None` in memory),
+  `deps` (each a `ref:` text with its subject, hash and name, or a
+  function's subject and rows), `provenance`, `preds` (plain values;
+  an edge as its ref), `env`, `kept`, `bytes`. A new unkept seal of a
+  folder replaces that folder's unkept records. `alias=`/`by=` are
+  `TypeError`; a second seal is `ValueError`; a pred value that is not
+  a str, number, bool, list, dict of plain values or value is
+  `TypeError` at the seal.
 - `keep=True` also copies the bytes, by hash, into the kept cache
   (`$DAT_KEPT`, else `~/.cache/dvc-dat/kept`; module `ledger.kept`), so
-  the folder or object may change afterwards. Parts are streamed in
-  1 MiB blocks and checked against their hash; they are copied, never
-  linked, so an in-place write to the source cannot reach the kept
-  copy. A save of a kept value hardlinks the kept blobs into the art
-  store. `just sealed` lists what
-  is kept and never saved; `just sealed purge [older=14d]` drops it. Each
-  keep is its own entry (equal bytes share blobs), dropped by its save at
-  commit; `purge` also collects blobs no entry names. If the kept bytes
+  the folder or object may change afterwards. A part is cloned
+  copy-on-write where the filesystem can (macOS APFS `clonefile`, Linux
+  reflink `FICLONE`), which costs no disk, else streamed in 1 MiB
+  blocks; either way it is checked against its hash and never linked,
+  so an in-place write to the source cannot reach the kept copy. A save of a kept value hardlinks the kept blobs into the art
+  store. `just sealed` lists every seal never saved, kept or not;
+  `just sealed purge [older=14d]` drops the records. Each seal is its
+  own entry (equal kept bytes share blobs), dropped by its save at
+  commit; `purge` also collects blobs no entry names and older than an
+  hour. If the kept bytes
   were purged, a save takes the source when it still hashes to the
   seal, else `SealBroken`.
 - `to` a `Transaction` saves into it (the value lands with that
@@ -96,7 +107,17 @@ three forms.
   are `TypeError`. Unless kept, the bytes are hashed again and a change
   is `SealBroken`. An abandoned save leaves the value sealed, saved
   nowhere. A dep sealed but saved nowhere is `ValueError` until it is
-  saved first, earlier in the same transaction or before.
+  saved first, earlier in the same transaction or before; one reopened
+  with `name=` binds through that name at the save (the name must hold
+  its bytes by then, else `ValueError`), with a `<name> db/alias` trace
+  item, as a `Ref` by that name would.
+- `Dat.sealed_at_path(path, *, name=None) -> Dat | None` (classmethod):
+  the last seal record of the folder `path` not saved since, reopened
+  in this process as the sealing one left it (made as `kind(path)`,
+  `kind` the record's class, which must be a subclass of the class
+  called on, else `TypeError`); `None` with no record. `v.seal(t)` on it saves exactly
+  as the sealing process would have: the same subject, `SealBroken` on
+  a changed byte unless kept, the kept bytes when kept.
 - After a save, `hash` is the stored bytes' hash, whatever the live
   object holds; `db/sealed-at` is one of the subject's frozen rows. An
   `eval` whose function returns a value sealed by `v.seal()` is

@@ -158,3 +158,8 @@ class Blobby(Value):
     @classmethod
     def decode(cls, data: bytes, store) -> "Blobby":
         return cls(store.get(data.decode()))
+
+
+@ledger_class(preds=("game", "take"))
+class GameDat(Dat):
+    """A folder value with preds: the seal-record tests reopen it in another process."""

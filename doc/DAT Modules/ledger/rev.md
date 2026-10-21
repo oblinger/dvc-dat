@@ -68,7 +68,9 @@ trace (see [trace](trace.md)). Part of the
 - `sealed_at -> Rev | None`: the revision of its `db/value` row.
 - `load() -> Value`: decode by `type`, restore `subject`, `rev` (the
   sealing revision), `trace`, `preds`; cached per `(subject, rev,
-  name)`; no value `KeyError`; a `decode` returning a non-`Value`
+  name)`, a cached `Dat` handed back only while its folder is still
+  there and the same folder (one stat: the directory's device and
+  inode), else loaded afresh; no value `KeyError`; a `decode` returning a non-`Value`
   `TypeError`. A `decode` accepting `name=` is passed the alias the
   `Ref` was made by (`None` by subject), so a `Dat` lands under
   `art/dats/<name>/`. A `Dat` whose folder's `_spec_` names a
