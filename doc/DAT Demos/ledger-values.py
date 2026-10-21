@@ -270,7 +270,6 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 # →    7 + <hash>   db/provenance         import:archive
 # →    7 + <hash>   db/preds              ["game","camera","span"]
 # →    7 + <hash>   db/trace/platform     darwin-arm64-py3.12
-# →    7 + <hash>   db/trace/uv.lock      sha256:<hash>
 # →    7 + <hash>   game                  G1
 # →    7 + <hash>   camera                wide
 # →    7 + <hash>   span                  [0,9000]
@@ -697,7 +696,7 @@ print(length_fn.mode, length_fn.mount)
 # → sandbox plane
 segment_value = length_fn(a=(0, 0), b=(3, 4))
 print(segment_value.obj, sorted(segment_value.trace))
-# → 2.5 ['fn', 'platform', 'uv.lock']
+# → 2.5 ['fn', 'platform']
 print(L.at()[segment_value.trace["fn"], "db/modules"])
 # → {'plane/measure.py': '<hash>', 'plane/units.py': '<hash>'}
 
@@ -798,7 +797,6 @@ for item in sorted(far_value.trace):
 # → code/geometry -> +<8 hex>
 # → fn -> db/fn/geometry.distance/<16 hex>
 # → platform -> darwin-arm64-py3.12
-# → uv.lock -> sha256:<hash>
 
 # %% [markdown]
 # `rev.eval(name, **keys)` is `rev.load_fn(name)` and then the
@@ -810,7 +808,7 @@ for item in sorted(far_value.trace):
 # - `fn` — the code the name resolved to, its `Fn` subject: for a
 #   global function the commit, beside the hash of the module's
 #   source and what it imports from its repo (A39).
-# - `platform`, `uv.lock` — the environment, discovered.
+# - `platform` — the environment, discovered.
 #
 # `distance` reads nothing through `rev`, so nothing else is in its
 # trace; a function that reads rows or loads values adds an item for
@@ -822,9 +820,9 @@ for item in sorted(far_value.trace):
 
 # %%
 print(dict(sorted(wide_video.trace.items())))
-# → {'platform': 'darwin-arm64-py3.12', 'uv.lock': 'sha256:<hash>'}
+# → {'platform': 'darwin-arm64-py3.12'}
 print(sorted(trimmed_video.trace))
-# → ['platform', 'ref:demo_game.game.Video:<hash>', 'uv.lock']
+# → ['platform', 'ref:demo_game.game.Video:<hash>']
 
 # %% [markdown]
 # ### Evaluation is memoized

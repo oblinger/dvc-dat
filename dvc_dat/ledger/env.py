@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Callable, Dict, Optional
 
 from ..core import CODE_PATHSPEC
-from .codec import sha256
 
 try:
     import tomllib
@@ -45,10 +44,9 @@ class Code:
 
 @dataclass(frozen=True)
 class Env:
-    """What a provider reports: ``code`` (repo -> ``Code``), the ``uv.lock`` hash, the platform."""
+    """What a provider reports: ``code`` (repo -> ``Code``) and the platform."""
 
     code: Dict[str, Code]
-    lock: str
     platform: str
     mounts: Optional[str] = field(default=None)
 
@@ -72,15 +70,6 @@ def current_env() -> Env:
 
 def platform_tag() -> str:
     return f"{sys.platform}-{_platform.machine()}-py{sys.version_info[0]}.{sys.version_info[1]}"
-
-
-def lock_hash() -> str:
-    """sha256 of the ``uv.lock`` of the project whose venv runs this process; ``<none>`` without one."""
-    for folder in (Path(sys.prefix).parent, Path.cwd()):
-        lock = folder / "uv.lock"
-        if lock.is_file():
-            return "sha256:" + sha256(lock.read_bytes())
-    return "<none>"
 
 
 def _git(folder: str, *args: str) -> Optional[str]:
@@ -147,7 +136,7 @@ def discover() -> Env:
         if name == SELF:
             continue            # dvc-dat itself, its demos included (A56)
         code[name] = code_at(top)
-    return Env(code, lock_hash(), platform_tag())
+    return Env(code, platform_tag())
 
 
 def repo_of(env: Env, path: Optional[Path]) -> Optional[str]:

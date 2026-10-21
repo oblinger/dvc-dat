@@ -289,7 +289,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # → game/G1: <8 hex>, matches the head
 # → trace: code/demo-game 0.1.0+<8 hex>, fn <8 hex>,
 # →   game/G1 away G5, game/G1 home G6, video/G1,
-# →   platform darwin-arm64-py3.11, uv.lock <8 hex>
+# →   platform darwin-arm64-py3.11
 # → since <8 hex>, its last target: game/G1 home G4 -> G6
 
 # %% [markdown]

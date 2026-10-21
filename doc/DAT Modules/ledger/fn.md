@@ -26,21 +26,27 @@ world hands back the value already sealed. Part of the
   `mount` (the prefix or `None`), `signature` (the keys, without the
   `Rev` and `work`), `env` (an `Env`; `mounts` the mount-table hash in
   sandbox mode), `subject` (`db/fn/<name>/<16 hex>`).
-- `Fn.__call__(*, memo=True, **keys) -> Value | None`:
+- `Fn.__call__(*, memo=True, clean=False, **keys) -> Value | None`:
   - `memo=True`: a hit, else run, seal, return; `memo=False`: run, seal
     nothing; `memo="get"`: a hit or `None`, never runs; anything else
     `ValueError`.
   - Keys bind to the signature with defaults applied (`TypeError` from
-    `inspect` on a bad key); `memo` or `work` given as a key is
-    `TypeError`.
-  - A miss runs only when the function's code is in a git checkout and
-    the checkout is clean; code outside any checkout or a dirty checkout
-    is `NotEvaluated`. A `code/<repo>` `commit` row does not gate a base
-    eval: it pins what the version means, and the
-    entry's `code/<repo>` item records the commit the code ran at, so a
-    hit holds only at that commit ([trace](trace.md)). A sandboxed eval
-    keeps the gate ([sandbox](sandbox.md)): it hashes its modules at the
-    row's commit.
+    `inspect` on a bad key); `memo`, `clean` or `work` given as a key
+    is `TypeError`.
+  - Base mode: a miss runs only when the function's code is in a git
+    checkout and the checkout is clean; code outside any checkout or a
+    dirty checkout is `NotEvaluated` (there is no byte record of what
+    ran). A `code/<repo>` `commit` row does not gate a base eval: it
+    pins what the version means, and the entry's `code/<repo>` item
+    records the commit the code ran at, so a hit holds only at that
+    commit ([trace](trace.md)).
+  - Sandbox mode: a miss runs at HEAD, clean or dirty; its identity is
+    the bytes of the modules it loaded ([sandbox](sandbox.md)).
+  - `clean=True` (either mode): before the lookup, the checkout must be
+    clean and at the commit the rev's `code/<repo>` row names, else
+    `NotClean`, a `NotEvaluated`; a rev naming no commit is refused
+    too. For a reader who must say simply which version of the code
+    ran. No warn mode.
   - A result not an instance of a `Value`-subclass annotation is
     `TypeError`; with any other annotation a non-`Value` result is
     wrapped in `Pickled`.
@@ -65,7 +71,7 @@ world hands back the value already sealed. Part of the
   (`$DAT_WORK`, else `~/.cache/dvc-dat/work`), removed after the seal;
   a GB-scale result built there should sit on the filesystem it is
   saved to, so set `DAT_WORK` beside the ledger's art store. The trace is the recorded reads plus `fn`, `code/<repo>` (the
-  function's own repo), `uv.lock` and `platform`.
+  function's own repo) and `platform`.
 - Seal: one transaction `by="eval:<name>"`, subject = hash of
   `{fn, keys, trace, preds, value}`; writes the `db/fn/<name>/<hash>`
   rows (`db/name`, `db/module`, `db/sha`, `db/modules`, `db/mounts`,

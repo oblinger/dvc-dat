@@ -4,14 +4,17 @@ Items (Module § Value ``Trace``):
 
 ``fn``
     the ``db/fn/<name>/<hash>`` subject of the code that ran; holds when the
-    name resolves at the rev to the same subject (base: the module's source;
-    sandbox: the recorded modules re-hashed at the rev's commit, A38, Q37).
+    name resolves at the rev to the same subject (base: the static import
+    closure; sandbox: exactly the modules the run loaded, re-hashed: a mounted
+    one at the rev's commit, a third-party one as installed, A38, Q37).
 ``code/<repo>``
     ``<version>+<commit 8>``; holds when the commit agrees with the
     environment's, whatever commit a ``code/<repo>`` row pins (T543
     Q7 (C)), the version being informational (Q1: the commit is the pin).
-``uv.lock``, ``platform``
-    the environment, now.
+``platform``
+    the environment, now. (A sandboxed entry's third-party modules are in
+    ``fn``, each by its bytes or its distribution's ``RECORD``; there is no
+    whole-``uv.lock`` item.)
 ``<subject> <predicate>``
     a two-position bracket read or ``get``: the held object.
 ``<name> db/alias``
@@ -195,8 +198,6 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
         from .fn import fn_holds
 
         return fn_holds(rev, recorded)
-    if item == "uv.lock":
-        return env().lock == recorded
     if item == "platform":
         return env().platform == recorded
     if item.startswith("ref:"):

@@ -6,6 +6,12 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## Unreleased
+
+- **A sandboxed entry is keyed on exactly the modules it loaded.** Its `fn` item holds every module the run loaded, third-party ones included: a mounted module (with the static import closure) by the bytes of its file as read, a module of an installed distribution as `dist:<name>` → `<version>:<sha256 of its RECORD>`, any other (the standard library, an editable source) as `py:<path>` → the file's sha256. A lookup re-hashes exactly those, so one changed byte in a loaded module is a different value and an edit to a module the run never loaded moves nothing. The whole-`uv.lock` trace item is gone from every trace (base, sandbox, hand seal), and `Env` has no `lock` (`Env(code, platform, mounts=None)`).
+- **A fresh process per sandboxed call.** One warm `python -I` server per environment, holding only the ledger's machinery (no mounted module, no CUDA), forks a child for each call; nothing a body loaded or changed outlives it. This replaces the warm per-mount worker and its per-call purge of mounted modules.
+- **A sandboxed miss runs at HEAD, clean or dirty** (F447 Q39 (A)). `clean=True` on `Fn.__call__` and `rev.eval` asks for a clean checkout at the commit the rev's `code/<repo>` row names, in either mode, checked before the lookup, else `NotClean`, a new `NotEvaluated` subclass. Base mode keeps its gate: a miss needs a clean checkout. `clean` is reserved and never a key.
+
 ## 2.18.1 — 2026-10-21
 
 - **A sandboxed body's first traced read works in a fresh worker.** With dvc-dat installed editable, a body whose first read was `rev.all` (or any read that first imports `dvc_dat.ledger.trace`) failed with `ModuleNotFoundError`: the read guard refused the import system's listing of the editable source folder. The worker now imports `trace` before the guard goes up.

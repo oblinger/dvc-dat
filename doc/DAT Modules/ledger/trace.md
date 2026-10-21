@@ -11,9 +11,9 @@ lookup alone. Part of the [architecture](../../DAT%20Architecture.md).
 
 | item | value | holds when |
 | --- | --- | --- |
-| `fn` | `db/fn/<name>/<hash>` | the name resolves at the rev to the same subject |
+| `fn` | `db/fn/<name>/<hash>` | the name resolves at the rev to the same subject (sandbox: every module the run loaded, re-hashed, has the same bytes) |
 | `code/<repo>` | `<version>+<commit8>` | the environment's commit agrees with the recorded commit, whatever commit a `code/<repo>` row pins; the version is ignored |
-| `uv.lock`, `platform` | the environment's | the environment, now, is the same |
+| `platform` | the environment's | the environment, now, is the same |
 | `<subject> <predicate>` | the held object (`<none>` if none) | the same object is held at the rev |
 | `<name> db/alias` | `ref:<class>:<hash>` | the name still resolves to those bytes |
 | `ref:<class>:<hash>` | the same text | always |

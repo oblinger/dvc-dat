@@ -60,7 +60,7 @@ def pin_env() -> None:
         sys.path.insert(0, str(ROOT))
     from dvc_dat.ledger import Code, Env, set_env_provider
 
-    env = Env({"loadrepo": Code(None, COMMIT, False, LOAD_DIR)}, "sha256:load-lock", "load-platform")
+    env = Env({"loadrepo": Code(None, COMMIT, False, LOAD_DIR)}, "load-platform")
     set_env_provider(lambda: env)
 
 

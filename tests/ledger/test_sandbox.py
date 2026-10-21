@@ -7,8 +7,10 @@ import textwrap
 import backends
 import pytest
 
-from dvc_dat.ledger import (ConfinedNetwork, ConfinedWrite, LedgerError, NotEvaluated, UnmountedImport, UntracedRead,
-                             bump, set_env_provider)
+from dvc_dat.ledger import (ConfinedNetwork, ConfinedWrite, LedgerError, NotClean, NotEvaluated, UnmountedImport,
+                             UntracedRead, bump, set_env_provider)
+from dvc_dat.ledger import sandbox
+from dvc_dat.ledger.codec import sha256
 from dvc_dat.ledger.sandbox import _ledger_endpoints, shutdown
 
 PKG = {
@@ -67,6 +69,24 @@ PKG = {
         def folder(rev, *, game: str, work: Path) -> Dat:
             (work / "f.txt").write_text(game)
             return Dat(work)
+
+        @ledger_fn
+        def pid(rev, *, game: str) -> dict:
+            from sbx.stage import helper
+            helper.CALLS = getattr(helper, "CALLS", 0) + 1
+            import os
+            return {"pid": os.getpid(), "calls": helper.CALLS}
+
+        @ledger_fn
+        def die(rev, *, game: str) -> dict:
+            import os
+            os._exit(3)
+
+        @ledger_fn
+        def libs(rev, *, game: str) -> dict:
+            import colorsys
+            import xlsxwriter
+            return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0], "x": bool(xlsxwriter.__version__)}
 
         @ledger_fn
         def borrow(rev, *, game: str) -> dict:
@@ -322,8 +342,9 @@ def test_refusals(sbx):
     old = L.at(1)
     (repo / "sbx/other.py").write_text("X = 2\n")
     git(repo, "commit", "-q", "-am", "elsewhere")
-    with pytest.raises(NotEvaluated):
-        old.eval("sbx.stage.fns.count", game="G1")
+    with pytest.raises(NotClean, match="binds code/sbx-repo to"):
+        old.eval("sbx.stage.fns.count", game="G1", clean=True)
+    assert old.eval("sbx.stage.fns.count", game="G1").obj == {"n": 6}   # no gate: it runs at HEAD (Q39)
 
 
 def test_salt_item(sbx):
@@ -353,8 +374,50 @@ def test_memo_false_keeps_preds_and_runs_on_a_dirty_tree(sbx):
     assert not v.sealed and v.preds == {"game": "G1"} and v.trace["fn"].startswith("db/fn/")
     (repo / "sbx/other.py").write_text("X = 3\n")              # dirty
     assert L.at().eval("sbx.stage.fns.count", game="G1", memo=False).obj == {"n": 6}
-    with pytest.raises(NotEvaluated):
-        L.at().eval("sbx.stage.fns.count", game="G1")
+    assert L.at().eval("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # a miss runs dirty (Q39)
+    with pytest.raises(NotClean, match="uncommitted changes"):
+        L.at().eval("sbx.stage.fns.count", game="G1", clean=True)
+
+
+def test_a_dirty_edit_to_a_loaded_module_is_a_new_value_and_reverting_hits(sbx):
+    L, repo = sbx
+    v = L.at().eval("sbx.stage.fns.count", game="G1")
+    top = L.at().id
+    (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return 3 * x\n")     # uncommitted
+    w = L.at().eval("sbx.stage.fns.count", game="G1")
+    assert w.obj == {"n": 9} and w.subject != v.subject and L.at().id == top + 1
+    (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return 2 * x\n")
+    assert L.at().eval("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top + 1
+    (repo / "sbx/other.py").write_text("X = 4\n")              # a module the run never loaded
+    assert L.at().eval("sbx.stage.fns.count", game="G1").subject == v.subject
+
+
+def test_each_call_is_a_fresh_process(sbx):
+    L, _repo = sbx
+    a = L.at().eval("sbx.stage.fns.pid", game="G1", memo=False).obj
+    b = L.at().eval("sbx.stage.fns.pid", game="G1", memo=False).obj
+    assert a["calls"] == b["calls"] == 1 and a["pid"] != b["pid"]
+    assert sandbox._server().alive()
+    with pytest.raises(RuntimeError, match=r"ended \(exit code 3\) before it replied"):
+        L.at().eval("sbx.stage.fns.die", game="G1")
+    assert L.at().eval("sbx.stage.fns.pid", game="G1", memo=False).obj["calls"] == 1   # the server lives on
+
+
+def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
+    import colorsys
+    import importlib.metadata as md
+
+    pytest.importorskip("xlsxwriter")
+    L, _repo = sbx
+    v = L.at().eval("sbx.stage.fns.libs", game="G1")
+    mods = L.at()[v.trace["fn"], "db/modules"]
+    assert mods["py:colorsys.py"] == sha256(open(colorsys.__file__, "rb").read())
+    assert mods["dist:xlsxwriter"].startswith(md.version("xlsxwriter") + ":")
+    assert not any(k.startswith(("dist:dvc-dat", "py:dvc_dat", "dist:pyyaml")) for k in mods)
+    assert v.matches(L.at())
+    real = sandbox.third_party_now
+    monkeypatch.setattr(sandbox, "third_party_now", lambda k: "9.9:x" if k == "dist:xlsxwriter" else real(k))
+    assert not v.matches(L.at())                    # a new install of a loaded distribution: a new value
 
 
 def test_load_fn_refuses_an_unmounted_import_at_load(sbx):
