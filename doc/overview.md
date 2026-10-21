@@ -29,7 +29,7 @@ Everything else hangs off those four:
 | Name | What it is |
 |------|------------|
 | `Dat.do` | The default world's namespace and runner, forwarding to `Dat.manager.do` |
-| `Dat.cli_main` | The `dat` command line for a program's own main |
+| `Dat.cli_main` | The command line (`just run`) for a program's own main |
 | `Dat.merge_dicts` | The zipper merge `dat.base` uses |
 | `Dat.manager.expand` / `expand_spec` | The `{}` grammar |
 
@@ -126,7 +126,7 @@ See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
 
 ## dat_tools — DataFrames and Excel
 
-`dvc_dat.dat_tools` is mounted as `dt`, and `dt.list` is `dat --list`.
+`dvc_dat.dat_tools` is mounted as `dt`, and `dt.list` is `just mounts`.
 
 | Function | Description |
 |----------|-------------|
@@ -141,18 +141,20 @@ See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
 ## Command line
 
 ```
-dat TARGET [ARG ...] [KEY=VALUE ...]
-dat --list [PREFIX]
-dat --info
-dat --version
+just run TARGET [ARG ...] [KEY=VALUE ...]
+x TARGET [ARG ...] [KEY=VALUE ...]
+just mounts [PREFIX]
+x --info
+x --version
 
-dat TARGET --set DOTTED.KEY=VALUE [--set ...]
-dat TARGET --json DOTTED.KEY=JSON [--json ...]
-dat TARGET --dry-run
-dat TARGET --usage
+x TARGET --set DOTTED.KEY=VALUE [--set ...]
+x TARGET --json DOTTED.KEY=JSON [--json ...]
+x TARGET --dry-run
+x TARGET --usage
 ```
 
-`dat` configures itself from the nearest `.datconfig.yaml`. A target that
+`just run` (the recipe in `dvc_dat.just`; `x` is `just run`) configures
+itself from the nearest `.datconfig.yaml`. A target that
 is a template spec is forked: the fixed arguments become its `dat.args`,
 the `KEY=VALUE` pairs update its `dat.kwargs`, and `--set` / `--json` update
 any spec key. Every argument value is a YAML scalar. A first word is
@@ -160,10 +162,10 @@ always a target; `--list`, `--info`, `--version` and `--help` are the
 commands that are not. The exit code is `0` ran, `1` failed, `2` the
 target does not load.
 
-A copy of `bin/dat` on your `PATH` runs your project's `run:` main from any
-directory. The environment's `dat` console script does not read `run:`: it
-runs the library's own command line, with no project mounts. See **[Command Line](cli.md)** for every
-command, flag and exit code, the bootstrap and the `run:` config key.
+`just run` runs your project's `run:` main from any directory, else the
+library's own command line (`python -m dvc_dat`) with no project mounts.
+See **[Command Line](cli.md)** for every command, flag and exit code,
+`dvc_dat.just` and the `run:` config key.
 
 ## `.datconfig.yaml`
 
@@ -181,7 +183,7 @@ art_folder: art
 # verify: false
 # optional: the DatManager subclass to build, and its own keys
 # manager: mylab.store.Store
-# what a copy of bin/dat execs
+# what `just run` execs
 run: .venv/bin/python -m mypkg.main
 ```
 

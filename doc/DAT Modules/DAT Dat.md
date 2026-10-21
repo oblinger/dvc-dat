@@ -39,7 +39,7 @@ A folder of data described by its `_spec_.yaml`, held in memory as the spec as w
 | [get](#^get) | Read a dotted key path in a dict tree |
 | [set](#^set) | Write a dotted key path in a dict tree |
 | [merge_dicts](#^merge-dicts) | The zipper merge `dat.base` uses |
-| [cli_main](#^cli-main) | The `dat` command line, for a program's main |
+| [cli_main](#^cli-main) | The command line (`just run`), for a program's main |
 
 **manager**`: DatManager`
     On the class, the process's default world: a plain assignable attribute, built on first read by `DatManager.load_dat_config()`, shared by every subclass, and replaced by assigning a `DatManager` (anything else is `TypeError`; assigning `None` clears it, so the next read builds it again). On an instance, read-only: the manager that loaded the dat, else the default. See [The manager is the world](#the-manager-is-the-world). ^manager
@@ -105,7 +105,7 @@ A folder of data described by its `_spec_.yaml`, held in memory as the spec as w
     Merge dicts left to right, each overriding the ones before: mappings merge key by key, lists of mappings that all carry a `name` merge by name (`{name: X, remove: true}` deletes X), and anything else is replaced whole. The first dict is copied unless `inplace`. The merge `dat.base` uses, and the way to vary an existing spec. ^merge-dicts
 
 **cli_main**`(argv: list[str] | None = None, *, config: str | Path | None = None) -> int` (static)
-    The `dat` command line, `dvc_dat.do.cli_main`, for a program's own main: the program imports and mounts what it needs, then hands over its arguments. Returns the exit code. ^cli-main
+    The command line (`just run`, `x`), `dvc_dat.do.cli_main`, for a program's own main: the program imports and mounts what it needs, then hands over its arguments. Returns the exit code. ^cli-main
 
 
 
@@ -358,9 +358,9 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 | `index` | The index file | `_index_.json` in `art_folder` |
 | `verify` | Re-hash every load | `false` |
 | `manager` | The `DatManager` subclass to build, dotted | `DatManager` |
-| `run` | The command `bin/dat` hands its arguments to | none |
+| `run` | The command `just run` hands its arguments to | none |
 
-`DAT_FOLDERS` replaces `dat_folders` with one folder (the value is not split) and `DAT_ART_FOLDER` replaces `art_folder`. `run` is read by the `bin/dat` bootstrap only; see [Command Line](../cli.md). A `manager:` subclass may accept more keys by listing them in its `CONFIG_KEYS`.
+`DAT_FOLDERS` replaces `dat_folders` with one folder (the value is not split) and `DAT_ART_FOLDER` replaces `art_folder`. `run` is read by the `run` recipe of `dvc_dat.just` only; see [Command Line](../cli.md). A `manager:` subclass may accept more keys by listing them in its `CONFIG_KEYS`.
 
 
 

@@ -231,7 +231,7 @@ def podium(rev, *, gameset: str) -> list:
 # %% [markdown]
 # ### Mounting the code
 #
-# Mounting `bins` makes its stages sandboxed: each runs in an isolated worker, and its code is the hash of every module file the run loaded.
+# Mounting `bins` makes its stages sandboxed: each call runs in a fresh process of its own, and its code is the hash of every module file the run loaded.
 
 # %%
 with L.transaction(by="human:dan", why="mount the stages") as t:
@@ -327,8 +327,6 @@ print(ran_since(counts_before))
 report_path = repo_path / "bins/report.py"
 report_source = report_path.read_text().replace("[:3]", "[:2]").replace("three fullest", "two fullest")
 write_module("bins/report.py", report_source, "report: the podium is two bins")
-with L.transaction(by="human:dan", why="the podium is two bins") as t:
-    bump(t, "code/bins-repo")               # moves code/bins-repo to the new commit
 counts_before = entry_counts()
 podium_value = L.at().eval("bins.report.podium", gameset="gameset/normie")
 print(podium_value.obj)
@@ -338,7 +336,7 @@ print(ran_since(counts_before))
 
 # %% [markdown]
 # Only the podium ran: its run loaded `report.py`, and no other stage's run did.
-# The `bump` is needed today because a sandboxed miss runs only at the commit the revision's `code/bins-repo` row names (F520 Q39, open, would drop that for sandboxed stages).
+# No `bump` was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the podium a new question, and a miss runs at HEAD, clean or dirty (F520 Q39).
 
 # %% [markdown]
 # ## Reading the chain back
@@ -352,7 +350,6 @@ for item in sorted(podium_value.trace):
 #   fn
 #   platform
 #   q:{"__call__":"all","args":["gameset/normie","contains"],"since":null}
-#   uv.lock
 print(sorted(L.at()[podium_value.trace["fn"], "db/modules"]))
 # → ['bins/__init__.py', 'bins/report.py', 'bins/values.py']
 

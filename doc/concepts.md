@@ -227,7 +227,7 @@ A bare `Do()` is a namespace with no world: it mounts and loads, and a
 manager built with `do=` adopts it; running anything in it before then is a
 `RuntimeError`.
 
-The `dat` command-line tool needs no special handling (see
+The command line (`just run`) needs no special handling (see
 [Command Line](cli.md)); a long-lived service that starts in one directory
 and works in another should assign `Dat.manager` explicitly rather than
 depend on where the process happened to launch.
@@ -390,7 +390,7 @@ verify: false
 # CONFIG_KEYS are allowed here and reach its constructor
 manager: mylab.store.Store
 
-# the command a copy of bin/dat hands its arguments to (see cli.md):
+# the command `just run` hands its arguments to (see cli.md):
 # your program's main: imports what it mounts, calls Dat.cli_main()
 run: .venv/bin/python -m mypkg.main
 ```
@@ -406,9 +406,9 @@ The file is found by walking up from the working directory, or from the path
 given to `DatManager.load_dat_config(start)`. A `.datconfig.override.yaml`
 wins over it, and `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment win
 over both; `DAT_FOLDERS` names one folder (its value is not split). `run` is
-read by the `bin/dat` bootstrap only (`DAT_RUN` overrides it there). The
-bootstrap hands its child the config it found as `DAT_CLI_CONFIG`, which
-`cli_main()` alone reads.
+read by the `run` recipe of `dvc_dat.just` only (`DAT_RUN` overrides it
+there). The recipe hands its child the config it found as `DAT_CLI_CONFIG`,
+which `cli_main()` alone reads.
 
 See [Mounts](mount-commands.md) for what a program can mount.
 
@@ -416,5 +416,5 @@ See [Mounts](mount-commands.md) for what a program can mount.
 
 - [Spec Format](spec-format.md) — `_spec_.yaml` and `_result_.yaml` reference
 - [Mounts](mount-commands.md) — names that are not imports
-- [Command Line](cli.md) — the `dat` verbs and the bootstrap copy
+- [Command Line](cli.md) — `just run`, `x`, and `dvc_dat.just`
 - [Overview](overview.md) — API reference

@@ -39,7 +39,7 @@ result = do("catalog.experiment", epochs=200)
   configuration on first use, `dat.base`, the `{}` grammar, validation
 - **[Spec Format](spec-format.md)** — `_spec_.yaml` / `_result_.yaml` reference
 - **[Mounts](mount-commands.md)** — giving a name to something that is not an import
-- **[Command Line](cli.md)** — the `dat` verbs, the bootstrap copy, exit codes
+- **[Command Line](cli.md)** — `just run` (`x`), `dvc_dat.just`, exit codes
 
 ## API Reference
 

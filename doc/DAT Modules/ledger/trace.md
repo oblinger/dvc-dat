@@ -60,5 +60,5 @@ by the call, its arguments and `since`.
 
 Recording happens in [rev](rev.md) (the `_rec` dict a recording `Rev`
 carries); the `fn` check is [fn](fn.md)'s `fn_holds` (and
-[sandbox](sandbox.md)'s re-hash at the rev's commit); the environment
+[sandbox](sandbox.md)'s re-hash of the recorded modules as they are now); the environment
 comes from [env](env.md).

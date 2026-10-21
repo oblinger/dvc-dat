@@ -1,42 +1,42 @@
 # Command Line
 
-`dat` is the command line. It configures itself from the nearest
-`.datconfig.yaml` — walking up from the working directory — before it runs
-anything that needs the namespace; `dat --version` and `dat --help` need no
-config at all.
+`just run TARGET` is the one way to run (F447 Q40): the `run` recipe of
+`dvc_dat.just`, which every project's justfile imports. `x TARGET` is the
+same command, two lines of `sh` in `bin/x`: `exec just run "$@"`. There is
+no `dat` command any more.
 
-It comes two ways, and they are not the same. A copy of `bin/dat` (below)
-execs the config's `run:` — your program's main, with its mounts. The `dat`
-console script an environment installs is `dvc_dat.do:cli_main`: the
-library's own command line, with no project mounts, and it never reads
-`run:`.
+The recipe configures the command line from the nearest `.datconfig.yaml` —
+walking up from the working directory — before it runs anything that needs
+the namespace; `x --version` and `x --help` need no namespace. It execs the
+config's `run:` (your program's main, with its mounts), else the library's
+own command line, `python -m dvc_dat`, with no project mounts.
 
 The config's folder is the project's import root: it goes first on
-`sys.path` when the config installs, so `mypkg.job.run` means the same
-thing from every directory under the project, whether or not `mypkg` is
-installed.
+`sys.path` (and on `PYTHONPATH` for the command it execs), so `mypkg.job.run`
+means the same thing from every directory under the project, whether or not
+`mypkg` is installed.
 
 ```
-dat TARGET [ARG ...] [KEY=VALUE ...]      run TARGET
-dat --list [PREFIX]                       the mounted names
-dat --info                                version, folders, config
-dat --version                             the version
-dat --help                                the usage message
+x TARGET [ARG ...] [KEY=VALUE ...]      run TARGET (just run)
+just mounts [PREFIX]                    the mounted names (x --list)
+x --info                                version, folders, config
+x --version                             the version
+x --help                                the usage message
 ```
 
 ## Commands
 
 | Command | Does |
 |---------|------|
-| `dat TARGET [ARG ...] [KEY=VALUE ...]` | `do(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
-| `dat --list [PREFIX]` | Every mounted name that starts with `PREFIX`, with what it loads to. The library mounts `dt` (`dvc_dat.dat_tools`) itself; `dat dt.list` is the same command. |
-| `dat --info` | The version, the dat and artifact folders, the config folder and the `.datconfig.yaml` in force. |
-| `dat --version` | The version. |
-| `dat` · `dat --help` · `dat -h` | The usage message. |
+| `x TARGET [ARG ...] [KEY=VALUE ...]` | `do(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
+| `just mounts [PREFIX]` · `x --list [PREFIX]` | Every mounted name that starts with `PREFIX`, with what it loads to. The library mounts `dt` (`dvc_dat.dat_tools`) itself; `x dt.list` is the same command. |
+| `x --info` | The version, the dat and artifact folders, the config folder and the `.datconfig.yaml` in force. |
+| `x --version` | The version. |
+| `x` · `x --help` · `x -h` | The usage message. |
 
 A word in the first position is always a `TARGET`; the commands that ask
-`dat` about itself are flags. There are no reserved words, so a target
-named `list` runs like any other.
+the command line about itself are flags. There are no reserved words, so a
+target named `list` runs like any other.
 
 ## Arguments
 
@@ -50,17 +50,17 @@ Every fixed argument and every `KEY=VALUE` value is read as a **YAML scalar**:
 
 ```bash
 # do("train", 7, True)
-dat train 7 true
+x train 7 true
 
 # do("train", epochs=7, lr=0.01)
-dat train epochs=7 lr=0.01
+x train epochs=7 lr=0.01
 
 # do("train", tags=["a", "b"], name="7")
-dat train tags=[a,b] name='"7"'
+x train tags=[a,b] name='"7"'
 
 # a bare word stays a string; an empty value is None
-dat train note=hello
-dat train note=
+x train note=hello
+x train note=
 ```
 
 A word is a keyword argument when it starts with `NAME=` (a Python identifier
@@ -68,7 +68,7 @@ followed by `=`); anything else is a fixed argument. `--` ends the options, so
 every word after it is a fixed argument even when it looks like one of them:
 
 ```bash
-dat echo -- --not-an-option
+x echo -- --not-an-option
 ```
 
 The `TARGET` itself is never parsed as YAML.
@@ -86,9 +86,9 @@ The `TARGET` itself is never parsed as YAML.
 a plain function is an error.
 
 ```bash
-dat my_letters --set "dat.title=Re-configured letterator"
-dat my_letters --set dat.title=Quickie --set start=100 --set end=110
-dat my_letters --json rules='[[2, "my_letters.triple_it"]]'
+x my_letters --set "dat.title=Re-configured letterator"
+x my_letters --set dat.title=Quickie --set start=100 --set end=110
+x my_letters --json rules='[[2, "my_letters.triple_it"]]'
 ```
 
 ## Exit status
@@ -98,42 +98,51 @@ dat my_letters --json rules='[[2, "my_letters.triple_it"]]'
 | `0` | Ran. |
 | `1` | The run raised, or the command line was malformed. |
 | `2` | `TARGET` does not load. |
-| `3` | (the bootstrap copy only) no `.datconfig.yaml` above the working directory. |
+| `3` | No `.datconfig.yaml` above the working directory. |
 
 A failed run prints one line on stderr and no traceback. Set `DAT_DEBUG=1` to
 get the traceback instead.
 
-## `bin/dat` — your project's `dat` from any directory
+## `dvc_dat.just` — `run` and `mounts` in every project
 
-`bin/dat` is a POSIX `sh` script, checked into the repo and copied wherever it
-is useful — `~/bin`, a project's root. It is `dat` from any directory, with no
-environment activated and nothing assumed about the project's layout. With an
-environment active, the console script of the same name comes first on
-`PATH`; it runs the library's own command line with no project mounts and
-never reads `run:`, so call the copy by its path to get your main:
+dvc-dat ships `dvc_dat.just` inside the package (`dvc_dat/dvc_dat.just`).
+A project links it beside its justfile once and imports it:
 
-1. Walk up from the working directory to the nearest `.datconfig.yaml` (it
+```bash
+# once, at the project root
+uv run python -c 'import dvc_dat, pathlib; print(
+  pathlib.Path(dvc_dat.__file__).with_name("dvc_dat.just"))' |
+  xargs -I{} ln -s {} dvc_dat.just
+```
+
+```
+# the project's justfile
+import 'dvc_dat.just'
+```
+
+`just` finds the justfile walking up from any folder, so `just run` and `x`
+work from every directory of the project with no environment activated.
+Copy `bin/x` onto your `PATH` for the short form. The `run` recipe:
+
+1. Walks up from the working directory to the nearest `.datconfig.yaml` (it
    stops at `/`; with none found it prints a message and exits `3`).
-2. Pick the command — the first of:
+2. Picks the command — the first of:
    - `$DAT_RUN`,
    - the config's `run:` key,
    - `.venv/bin/python -m dvc_dat`, when `.venv` sits beside the config,
    - `python3 -m dvc_dat`.
-3. `exec` that command with the arguments appended, working directory
+3. `exec`s that command with the arguments appended, working directory
    unchanged, and one variable set for it: `DAT_CLI_CONFIG`, the config
    file it found. A program's own main tests it to know it was launched
-   by `dat`, and `cli_main()` reads the config from it, so the file is
-   found once. Nothing else reads the variable.
+   by `just run`, and `cli_main()` reads the config from it, so the file
+   is found once. Nothing else reads the variable.
 
 A relative path in the command's first word is relative to the config's
 folder.
 
 ```bash
-# once
-cp .../dvc-dat/bin/dat ~/bin/dat
-
-# then, from anywhere in the project
-cd any/deep/subfolder && dat train epochs=200
+# from anywhere in the project
+cd any/deep/subfolder && x train epochs=200
 ```
 
 ## `run:` in `.datconfig.yaml`
@@ -141,22 +150,22 @@ cd any/deep/subfolder && dat train epochs=200
 ```yaml
 dat_folders: data
 
-# the command a copy of bin/dat hands its arguments to
-run: uv run dat
+# the command `just run` hands its arguments to
+run: uv run python -m dvc_dat
 ```
 
 `run` is any command that ends up in `cli_main()`. For a project with no
-mounts, the library's own command line will do: `uv run dat`, `conda run -n
-ml dat`, `.venv/bin/python -m dvc_dat`. A project that mounts names points it at
-its **own main** — `run: .venv/bin/python -m mypkg.main` — a module that
-imports what it needs, makes its `do.mount(...)` calls and, when
+mounts, the library's own command line will do: `uv run python -m
+dvc_dat`, `.venv/bin/python -m dvc_dat`. A project that mounts names points
+it at its **own main** — `run: .venv/bin/python -m mypkg.main` — a module
+that imports what it needs, makes its `do.mount(...)` calls and, when
 `DAT_CLI_CONFIG` is set, ends with `sys.exit(Dat.cli_main())`, so the shell
 runs inside the program's own namespace and the same main is free to do
 anything else when run by hand:
 
 ```python
 if __name__ == "__main__":
-    if os.environ.get("DAT_CLI_CONFIG"):   # launched by the dat bootstrap
+    if os.environ.get("DAT_CLI_CONFIG"):   # launched by `just run`
         sys.exit(Dat.cli_main())
     ...                                    # your own main
 ```

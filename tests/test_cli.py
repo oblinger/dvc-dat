@@ -100,9 +100,9 @@ def make_wrapper(folder: Path, marker: str) -> Path:
 
 
 class TestVerbs:
-    def test_bare_dat_prints_usage(self):
+    def test_no_target_prints_usage(self):
         code, out, _ = dat()
-        assert code == 0 and "SYNOPSIS" in out and "dat --list" in out
+        assert code == 0 and "SYNOPSIS" in out and "x --list" in out
 
     @pytest.mark.parametrize("flag", ["-h", "--help"])
     def test_help(self, flag):

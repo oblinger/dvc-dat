@@ -70,7 +70,7 @@ FILES = {
         Dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
 
         if __name__ == "__main__":
-            if os.environ.get("DAT_CLI_CONFIG"):   # launched by the dat bootstrap
+            if os.environ.get("DAT_CLI_CONFIG"):   # launched by `just run`
                 sys.exit(Dat.cli_main())
     """,
 }
@@ -144,21 +144,22 @@ print(d3.get_path_name(), d3.get_spec()["model"], d3.get_results()["loss"])
 # %% [markdown]
 # ## The command line
 #
-# `bin/dat` finds `.datconfig.yaml`, sets `DAT_CLI_CONFIG` and execs `run:`,
-# here `python -m mypkg.main`, which makes its mounts and hands the command line
-# to `Dat.cli_main()`. The cell does the same by hand, so it needs no `dat` on
-# `PATH`. Every `KEY=VALUE` is a YAML scalar.
+# `x TARGET` is `just run TARGET`: the `run` recipe of `dvc_dat.just` finds
+# `.datconfig.yaml`, sets `DAT_CLI_CONFIG` and execs `run:`, here
+# `python -m mypkg.main`, which makes its mounts and hands the command line
+# to `Dat.cli_main()`. The cell does the same by hand, so it needs no `just`
+# on `PATH`. Every `KEY=VALUE` is a YAML scalar.
 
 # %%
-def dat(*args):
+def x(*args):
     env = dict(os.environ, DAT_CLI_CONFIG=str(PROJECT / ".datconfig.yaml"))
     done = subprocess.run([sys.executable, "-m", "mypkg.main", *args],
                           cwd=PROJECT, env=env, capture_output=True, text=True)
-    print(f"$ dat {' '.join(args)}\n{done.stdout}{done.stderr}")
+    print(f"$ x {' '.join(args)}\n{done.stdout}{done.stderr}")
 
-dat("catalog.experiment", "epochs=5", "--dry-run")
-dat("catalog.experiment", "epochs=5")
-dat("--list", "catalog")
+x("catalog.experiment", "epochs=5", "--dry-run")
+x("catalog.experiment", "epochs=5")
+x("--list", "catalog")
 
 # %% [markdown]
 # ## Clean up

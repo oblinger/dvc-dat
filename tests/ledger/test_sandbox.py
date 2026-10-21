@@ -394,6 +394,15 @@ def test_a_dirty_edit_to_a_loaded_module_is_a_new_value_and_reverting_hits(sbx):
     assert L.at().eval("sbx.stage.fns.count", game="G1").subject == v.subject
 
 
+def test_a_committed_edit_recomputes_with_no_bump(sbx):
+    L, repo = sbx
+    v = L.at().eval("sbx.stage.fns.count", game="G1")
+    (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return 4 * x\n")
+    git(repo, "commit", "-q", "-am", "four")                   # the rev still names the old commit
+    w = L.at().eval("sbx.stage.fns.count", game="G1")
+    assert w.obj == {"n": 12} and w.subject != v.subject and not v.matches(L.at())
+
+
 def test_each_call_is_a_fresh_process(sbx):
     L, _repo = sbx
     a = L.at().eval("sbx.stage.fns.pid", game="G1", memo=False).obj

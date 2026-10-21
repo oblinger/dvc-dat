@@ -6,9 +6,8 @@ CTO SportsVisio Inc.
 
 ## Versioning
 
-Releases follow [semver](https://semver.org). The public contract is
-`Dat.create` / `Dat.load` / `do`, the `_spec_.yaml` format, do-system name
-resolution and the `dat` CLI: a change to any of those is a **major** version;
-a new capability that leaves every existing consumer working is **minor**; a
-fix is **patch**. Every release is listed in `CHANGELOG.md` at the repo root.
+Releases follow [semver](https://semver.org), as `CHANGELOG.md` states it:
+a major marks a different DAT and is cut only by the owner (1.x the
+original DAT, 2.x DAT with the ledger); a minor is a notable capability,
+one per run of related changes; everything else is a patch. Every release is listed in `CHANGELOG.md` at the repo root.
 Consumers pin a tag: `dvc_dat @ git+https://github.com/oblinger/dvc-dat@v2.3.0`.
