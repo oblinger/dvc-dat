@@ -87,6 +87,18 @@ def folder(rev, *, game: str, path: Path) -> Dat:
 
 
 @ledger_fn
+def placed(rev, *, game: str, path: Path = "games/{game}") -> Dat:
+    _count("placed")
+    (path / "g.txt").write_text(game)
+    return Dat(path)
+
+
+@ledger_fn
+def controls(rev, *, memo: int, clean: str, kwargs: dict, n: int = 0) -> dict:
+    return {"memo": memo, "clean": clean, "kwargs": kwargs, "n": n}
+
+
+@ledger_fn
 def wrong(rev, *, game: str) -> Cut:
     return {"not": "a cut"}
 

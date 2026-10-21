@@ -99,7 +99,7 @@ def test_alias_chain_repr_and_aliases(L):
         t.add("raw/G1/long-name", "db/alias", s)
     rev = L.at()
     r = Ref(rev, "raw/G1/long-name")
-    assert r.subject == s and r.name == "raw/G1/long-name" and repr(r) == "video/G1"
+    assert r.subject == s and r.name == "raw/G1/long-name" and repr(r) == "raw/G1/long-name"   # its name: the latest (Q36)
     assert sorted(r.aliases) == ["raw/G1/long-name", "video/G1"]
     assert rev["video/G1"] == {"db/alias": s}           # literal
     assert rev.load("video/G1").subject == s
