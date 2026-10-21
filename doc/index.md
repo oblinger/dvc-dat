@@ -53,7 +53,7 @@ outputs kept (`just demo` re-syncs and re-runs them; the tests run every one):
 - **[`demo-walkthrough`](DAT%20Demos/demo-walkthrough.ipynb)** — one project, end to end: mounts,
   `dat.base`, `do()` and a fork, `Dat.load`, `merge_dicts`, the command-line main
 - **[`demo-dats`](DAT%20Demos/demo-dats.ipynb)** — dats, dependencies and versions
-- **[`demo-etl`](DAT%20Demos/demo-etl.ipynb)** — datasets built on datasets, each seal over the stage below
+- **[`demo-etl`](DAT%20Demos/demo-etl.ipynb)** — an ETL chain over a game set, and what each change to it recomputes
 - **[`ledger-triples`](DAT%20Demos/ledger-triples.py)** — the ledger as a quad store: transactions, reads as of a revision
 - **[`ledger-values`](DAT%20Demos/ledger-values.py)** — values, preds, ledger functions, `eval`, the sandbox
 - **[`ledger-dats`](DAT%20Demos/ledger-dats.py)** — a dat as a value

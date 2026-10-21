@@ -630,6 +630,8 @@ def install_worker(ledger: Any, mounts: List[Mount], scratch: Path) -> None:
     global IN_WORKER
     IN_WORKER = True
     if not any(isinstance(f, MountFinder) for f in sys.meta_path):
+        from . import trace  # noqa: F401  (a body's first traced read imports it; under the guard an
+        #                    editable install's source folder is unreadable to the import system)
         sys.meta_path.insert(0, MountFinder())
         sys.addaudithook(_audit)
         tempfile.gettempdir()                       # probed unconfined, so a default temp file in a body is

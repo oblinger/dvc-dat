@@ -60,6 +60,10 @@ PKG = {
             return {"inner": rev.eval("sbx.stage.fns.count", game=game).obj}
 
         @ledger_fn
+        def members(rev, *, s: str) -> list:
+            return sorted(rev.all(s, "contains"))
+
+        @ledger_fn
         def folder(rev, *, game: str, work: Path) -> Dat:
             (work / "f.txt").write_text(game)
             return Dat(work)
@@ -293,6 +297,17 @@ def test_nested_eval_in_process_and_work_folder(sbx):
     assert any(k.startswith("eval:sbx.stage.fns.count") for k in v.trace)
     d = L.at().eval("sbx.stage.fns.folder", game="G1")
     assert (d.path / "f.txt").read_text() == "G1"
+
+
+def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):
+    L, _repo = sbx
+    shutdown()                                       # a fresh worker: no ledger module imported lazily yet
+    with L.transaction(by="t") as t:
+        t.add("db/pred/contains", "db/cardinality", "many")
+        t.add("set/A", "contains", "G2")
+        t.add("set/A", "contains", "G1")
+    v = L.at().eval("sbx.stage.fns.members", s="set/A")
+    assert v.obj == ["G1", "G2"] and any(k.startswith("all") or "contains" in k for k in v.trace)
 
 
 def test_refusals(sbx):
