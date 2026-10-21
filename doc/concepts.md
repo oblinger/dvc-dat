@@ -1,4 +1,6 @@
+:>> [[DAT]] → [concepts](ha://p/concepts) 
 # Core Concepts
+The core ideas of dvc_dat: dats, specs, results and the do system.
 
 A **dat** is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
 itself. `_result_.yaml` holds only what running it produced.

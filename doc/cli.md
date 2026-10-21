@@ -1,4 +1,14 @@
+:>>
 # Command Line
+The command line, `just run` and `x`: where it finds its config, and every subcommand.
+
+```
+x TARGET [ARG ...] [KEY=VALUE ...]      run TARGET (just run)
+just mounts [PREFIX]                    the mounted names (x --list)
+x --info                                version, folders, config
+x --version                             the version
+x --help                                the usage message
+```
 
 `just run TARGET` is the one way to run (F447 Q40): the `run` recipe of
 `dvc_dat.just`, which every project's justfile imports. `x TARGET` is the
@@ -15,14 +25,6 @@ The config's folder is the project's import root: it goes first on
 `sys.path` (and on `PYTHONPATH` for the command it execs), so `mypkg.job.run`
 means the same thing from every directory under the project, whether or not
 `mypkg` is installed.
-
-```
-x TARGET [ARG ...] [KEY=VALUE ...]      run TARGET (just run)
-just mounts [PREFIX]                    the mounted names (x --list)
-x --info                                version, folders, config
-x --version                             the version
-x --help                                the usage message
-```
 
 ## Commands
 

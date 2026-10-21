@@ -1,13 +1,15 @@
+:>>
 # DVC-DAT API Reference
-
-A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
-itself. `Dat.manager` is the default world; `do` is its namespace and runner.
+The dvc_dat API reference: what the package exports and how each part is called.
 
 ## Quick Links
 
 - **[Core Concepts](concepts.md)** — the fork rule, the two kinds of name
 - **[Spec Format](spec-format.md)** — `_spec_.yaml` / `_result_.yaml` reference
 - **[Mount Commands](mount-commands.md)** — configuring the do-system
+
+A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
+itself. `Dat.manager` is the default world; `do` is its namespace and runner.
 
 ## What the package exports
 

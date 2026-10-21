@@ -1,4 +1,6 @@
+:>> [[DAT]] → [spec-format](ha://p/spec-format) 
 # Spec File Format
+The `_spec_.yaml` and `_result_.yaml` file formats.
 
 Every dat folder holds a `_spec_.yaml` (a `_spec_.json` is read too). The spec
 is the dat's complete, argumentless recipe: everything needed to run it is in
