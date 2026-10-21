@@ -65,12 +65,7 @@ the row's place within its transaction, `object` a tagged string
 - Art-store bytes are write-once: a hash already present is not
   rewritten.
 
-- TODO: the module docstring names the two SQL indexes as "the index
-  table a where clause reads"; it does not mention the partial
-  per-predicate indexes the `db/index` rows build.
-- TODO: a `db/index` partial index on `(object, subject, rev)` repeats
-  what `(predicate, object, rev)` already serves for `predicate = p`;
-  neither planner was seen to prefer it.
+- TODO: the `db/index` partial index repeats what `(predicate, object, rev)` already serves; neither planner was seen to prefer it.
 
 ## Postgres
 
@@ -185,12 +180,9 @@ Fresh schema per row (`--ledger
 - `lock=0.02`: 1286 of 2029 locked transactions timed out (SQLite: 108);
   a 20 ms bound is below Postgres's p50 here. None left a row or its
   tag.
-- A first run of this matrix (before 2f74f52) lost 5 of 8 workers in
-  the `lock=0.02` row: the alarm interrupting a read left the thread's
-  connection mid-statement and every later read failed. Fixed in
-  2f74f52; `test_pg_lock_alarm_mid_read_leaves_the_reader_usable`.
-  The 4-process row of that run gave 107 tx/s: run-to-run spread is
-  that wide.
+- The `lock=` alarm interrupting a read leaves the reader usable
+  (`test_pg_lock_alarm_mid_read_leaves_the_reader_usable`).
+- Run-to-run spread is wide: another run's 4-process row gave 107 tx/s.
 
 **The floor.** `tests/load/test_threshold.py`, run with `DAT_LOAD=1`
 (Postgres also needs `DAT_LOAD_PG`, a server URL; it makes and drops

@@ -28,7 +28,7 @@ Items (Module § Value ``Trace``):
     canonical JSON, ``kind`` dotted, A41, A47) -> the sorted ``ref:`` list it
     answered; any other read (``all``, ``in``, ``asserted``, a 1- or
     3-position bracket, ``rows``, ``get`` with ``since``) is
-    ``q:{"__call__": …}`` -> a token of its result.
+    ``q:{"__call__": …}`` -> a token of its result (for ``rows``, its row count).
 """
 
 from __future__ import annotations

@@ -12,7 +12,7 @@ lookup alone. Part of the [architecture](../../DAT%20Architecture.md).
 | item | value | holds when |
 | --- | --- | --- |
 | `fn` | `db/fn/<name>/<hash>` | the name resolves at the rev to the same subject |
-| `code/<repo>` | `<version>+<commit8>` | the environment's commit agrees with the recorded commit, whatever commit a `code/<repo>` row pins (6.2.0); the version is ignored |
+| `code/<repo>` | `<version>+<commit8>` | the environment's commit agrees with the recorded commit, whatever commit a `code/<repo>` row pins; the version is ignored |
 | `uv.lock`, `platform` | the environment's | the environment, now, is the same |
 | `<subject> <predicate>` | the held object (`<none>` if none) | the same object is held at the rev |
 | `<name> db/alias` | `ref:<class>:<hash>` | the name still resolves to those bytes |
@@ -51,12 +51,10 @@ by the call, its arguments and `since`.
 - `code/<repo>` compares commits by prefix; a `bump` that changes only
   the version stales nothing, while `Value.diff` still shows it. The
   commit compared is the environment's, never the row's: an entry
-  holds at the commit it ran at, tagged or not, and misses elsewhere
-  (T543 Q7 (C)).
+  holds at the commit it ran at, tagged or not, and misses elsewhere.
 
-- TODO: the module docstring says each recorded call maps to "a token
-  of its result"; for `rows` the recorded token is the row count
-  (see [rev](rev.md)).
+- A recorded call maps to a token of its result; for `rows` the token
+  is the row count (see [rev](rev.md)).
 
 ## Left to other modules
 

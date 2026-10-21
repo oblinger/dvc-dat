@@ -1,4 +1,4 @@
-"""dvc_dat 2.17 — dats are folders whose `_spec_.yaml` is a complete, argumentless recipe.
+"""dvc_dat — dats are folders whose `_spec_.yaml` is a complete, argumentless recipe.
 
     from dvc_dat import Dat, DatManager
 

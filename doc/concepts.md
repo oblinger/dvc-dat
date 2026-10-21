@@ -251,7 +251,8 @@ Dat.save_artifact("/tmp/lock.json")
 
 `Dat.save_artifact` and `Dat.load_artifact` forward to the default world's
 `save_artifact(source, *, type=None, name=None, link=False)` and
-`load_artifact(name_or_urn)`; `Dat.load` stays a dat's, and `dat.save()` a
+`load_artifact(name, *, verify=None)`, `name` a name, an `art:` name or a
+URN; `Dat.load` stays a dat's, and `dat.save()` a
 dat's seal. `save_artifact` returns the artifact's
 URN, `sha256:<hex>`. **The type** is what `load_artifact` hands the payload's path
 to: a class or callable, recorded by its dotted name, or that name as a
@@ -404,7 +405,7 @@ modules resolve from any working directory, installed or not.
 The file is found by walking up from the working directory, or from the path
 given to `DatManager.load_dat_config(start)`. A `.datconfig.override.yaml`
 wins over it, and `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment win
-over both. `run` is
+over both; `DAT_FOLDERS` names one folder (its value is not split). `run` is
 read by the `bin/dat` bootstrap only (`DAT_RUN` overrides it there). The
 bootstrap hands its child the config it found as `DAT_CLI_CONFIG`, which
 `cli_main()` alone reads.

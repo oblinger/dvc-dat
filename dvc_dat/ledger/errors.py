@@ -10,11 +10,13 @@ class Multiple(LedgerError, LookupError):
 
 
 class NotEvaluated(LedgerError, RuntimeError):
-    """A miss at a revision this environment cannot run, or a mount whose repo has no checkout here."""
+    """A call this environment will not run, a miss or a ``memo=False`` run: its code is
+    outside any git checkout or the checkout is dirty, its repo has no checkout here, or
+    (sandboxed) HEAD is not the rev's ``code/<repo>`` commit."""
 
 
 class UnmountedImport(LedgerError, ImportError):
-    """A sandboxed function imported a repo module outside every mount."""
+    """A sandboxed function imported a module of a mounted repo outside that repo's mounts."""
 
 
 class UntracedRead(LedgerError, PermissionError):

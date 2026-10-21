@@ -273,7 +273,7 @@ class Fn:
         if code.dirty:
             raise NotEvaluated(f"{self.name}: the checkout of {repo} has uncommitted changes; a result would "
                                "carry false provenance")
-        return repo         # a code/<repo> commit row pins a version, not where evals may run (6.2.0)
+        return repo         # a code/<repo> commit row pins a version, not where evals may run
 
     def _run_base(self, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> Value:
         from .rev import Rev
