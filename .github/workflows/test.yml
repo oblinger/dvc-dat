@@ -17,5 +17,6 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - uses: extractions/setup-just@v2     # `just run`, `x` and the ledger-just notebook
       - run: uv sync --locked
       - run: uv run python -m pytest -q
