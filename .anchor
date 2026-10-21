@@ -7,3 +7,4 @@ inbox: doc/DAT Track/DAT Inbox.md
 agent: DAT
 stones:
   pebbles:
+namespace: true
