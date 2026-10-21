@@ -6,7 +6,7 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
-## Unreleased
+## 2.19.0 — 2026-10-21
 
 - **`just run` is the one way to run; `x` is its sugar; `dat` is gone** (F447 Q40, A69). `dvc_dat/dvc_dat.just` (shipped in the package) holds the recipes `run` (the old `bin/dat` bootstrap: the `.datconfig.yaml` walk, `$DAT_RUN` / `run:` / `.venv` / `python3`, `DAT_CLI_CONFIG`, the config folder on `PYTHONPATH`, exit 3 with no config) and `mounts` (`--list`); a project's justfile imports it. `bin/x` is `exec just run "$@"`. `bin/dat` and the `dat` console script are removed; `python -m dvc_dat` remains the library's own command line. Error lines start `run:`.
 - **A sandboxed lookup compares the modules' bytes as they are now** (Q39). A lookup no longer re-hashes mounted modules at the rev's `code/<repo>` commit, so editing a loaded module, committed or not, recomputes with no `bump`. `demo-etl`'s "Changing one stage's code" drops its `bump`: binning 0, cumulative 0, podium 1.
