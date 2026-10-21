@@ -408,7 +408,8 @@ class Dat(Value):
 
         ``v.seal(t)`` on it saves it exactly as the sealing process would have: the same subject (its
         deps, provenance, environment and time are the record's), ``SealBroken`` when a byte of the
-        folder changed since unless kept, the kept bytes when kept. ``name`` is the alias it will be
+        folder changed since unless kept, the kept bytes when kept. The object is made as ``kind(path)``,
+        ``kind`` the class the record names (a subclass of this one). ``name`` is the alias it will be
         saved under: a value sealed with it as a dep before it is saved binds the dep through that
         name at its own save, which refuses until the name holds these bytes.
         """
@@ -426,8 +427,7 @@ class Dat(Value):
             raise ImportError(f"{path}: sealed as {record['kind']}, which does not import") from None
         if not (isinstance(kind, type) and issubclass(kind, cls)):
             raise TypeError(f"{path}: sealed as {record['kind']}, not a {cls.__name__}")
-        obj = kind.__new__(kind)
-        obj.path = Path(record["path"])
+        obj = kind(Path(record["path"]))       # a Dat is made from its folder, as by hand
         obj._reopen(record, name)
         return obj
 

@@ -112,9 +112,9 @@ three forms.
   item, as a `Ref` by that name would.
 - `Dat.sealed_at_path(path, *, name=None) -> Dat | None` (classmethod):
   the last seal record of the folder `path` not saved since, reopened
-  in this process as the sealing one left it (its class the record's
-  `kind`, which must be a subclass of the class called on, else
-  `TypeError`); `None` with no record. `v.seal(t)` on it saves exactly
+  in this process as the sealing one left it (made as `kind(path)`,
+  `kind` the record's class, which must be a subclass of the class
+  called on, else `TypeError`); `None` with no record. `v.seal(t)` on it saves exactly
   as the sealing process would have: the same subject, `SealBroken` on
   a changed byte unless kept, the kept bytes when kept.
 - After a save, `hash` is the stored bytes' hash, whatever the live
