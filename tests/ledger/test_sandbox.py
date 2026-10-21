@@ -316,7 +316,9 @@ def test_nested_eval_in_process_and_work_folder(sbx):
     assert v.obj == {"inner": {"n": 6}}
     assert any(k.startswith("eval:sbx.stage.fns.count") for k in v.trace)
     d = L.at().eval("sbx.stage.fns.folder", game="G1")
-    assert (d.path / "f.txt").read_text() == "G1"
+    assert (d.path / "f.txt").read_text() == "G1" and d.name == "anonymous/Dat"
+    e = L.at().eval("sbx.stage.fns.folder", game="G1", path="games/G1")      # a hit, renamed
+    assert e.subject == d.subject and e.name == "games/G1" and (e.path / "f.txt").read_text() == "G1"
 
 
 def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):
