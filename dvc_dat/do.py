@@ -488,18 +488,20 @@ do = _DefaultDo()
 
 USAGE = """
 SYNOPSIS
-    dat TARGET [ARG ...] [KEY=VALUE ...]        run TARGET
-    dat --list [PREFIX]                         the mounted names
-    dat --info                                  version, folders, config
-    dat --version                               the version
-    dat --help                                  this message
+    x TARGET [ARG ...] [KEY=VALUE ...]          run TARGET
+    x --list [PREFIX]                           the mounted names
+    x --info                                    version, folders, config
+    x --version                                 the version
+    x --help                                    this message
 
 DESCRIPTION
-    `dat` configures itself from the nearest .datconfig.yaml before it runs
-    anything that needs the namespace.  A word in first position is always
-    a TARGET; the commands that ask `dat` about itself are flags.
+    `x` is `just run` (the recipe in dvc_dat.just; `just mounts` is
+    `x --list`).  It configures itself from the nearest .datconfig.yaml
+    before it runs anything that needs the namespace.  A word in first
+    position is always a TARGET; the commands that ask about the command
+    line itself are flags.
 
-    `dat TARGET ...` calls do(TARGET, *ARGS, **KWARGS).  A TARGET that is a
+    `x TARGET ...` calls do(TARGET, *ARGS, **KWARGS).  A TARGET that is a
     template spec is forked: the fixed ARGs become its dat.args and the
     KEY=VALUE pairs update its dat.kwargs, key by key; the forked spec creates
     a dat, and that dat runs.  A TARGET that is a callable is simply called.
@@ -529,28 +531,28 @@ EXIT STATUS
     for the traceback.
 
 EXAMPLES
-    dat hello_world
-    dat hello_again.salutation Maxim emphasis=true lucky_number=7
-    dat my_letters --set dat.title=Quickie --set start=100 --set end=110
-    dat --list hello
+    x hello_world
+    x hello_again.salutation Maxim emphasis=true lucky_number=7
+    x my_letters --set dat.title=Quickie --set start=100 --set end=110
+    just mounts hello
 """
 
 _KWARG = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=")
 
 
-ENV_CLI_CONFIG = "DAT_CLI_CONFIG"     # set by the bootstrap, read here and nowhere else
+ENV_CLI_CONFIG = "DAT_CLI_CONFIG"     # set by `just run`, read here and nowhere else
 
 
 def cli_main(argv: Optional[List[str]] = None, *,
              config: Union[None, str, Path] = None) -> int:
-    """The `dat` command line, for a program's own main.
+    """The command line (`just run`, `x`), for a program's own main.
 
-    A program that mounts names -- or simply wants `dat` to run inside its own
-    imports -- names its main in `.datconfig.yaml`'s `run:` and, when
-    `DAT_CLI_CONFIG` is set, ends with `sys.exit(dat.cli_main())`.  The bootstrap
-    copy of `bin/dat` sets that one variable -- the config file it found -- for
-    the program it launches, so the main knows it was launched by `dat` and the
-    config is read once; nothing else reads the variable.  `argv` defaults to
+    A program that mounts names -- or simply wants the command line to run
+    inside its own imports -- names its main in `.datconfig.yaml`'s `run:` and,
+    when `DAT_CLI_CONFIG` is set, ends with `sys.exit(dat.cli_main())`.  The
+    `run` recipe of `dvc_dat.just` sets that one variable -- the config file it
+    found -- for the program it launches, so the main knows it was launched by
+    `just run` and the config is read once; nothing else reads the variable.  `argv` defaults to
     `sys.argv`; `config` (a folder or a config file) replaces the default world,
     `Dat.manager = DatManager.load_dat_config(config, do=dvc_dat.do)`, keeping
     its mounts; with neither, first use discovers one.  The return value is the
@@ -566,7 +568,7 @@ def cli_main(argv: Optional[List[str]] = None, *,
 
 
 def _do_argv(argv: List[str]) -> int:
-    """Run one `dat` command line (argv[0] is the program); returns the exit code."""
+    """Run one command line (argv[0] is the program); returns the exit code."""
     args = list(argv[1:])
     if not args or args[0] in ("-h", "--help"):
         print(USAGE)
@@ -584,7 +586,7 @@ def _do_argv(argv: List[str]) -> int:
 
 
 def _cmd_do(argv: List[str]) -> int:
-    """`dat TARGET ...` -- every line whose first word is not a flag."""
+    """`x TARGET ...` -- every line whose first word is not a flag."""
     try:
         overrides, args, kwargs, flags = _parse_argv(argv)
     except ValueError as e:
@@ -593,7 +595,7 @@ def _cmd_do(argv: List[str]) -> int:
         if "usage" in flags:
             print(USAGE)
             return 0
-        return _fail("no TARGET given; `dat --help` for usage")
+        return _fail("no TARGET given; `x --help` for usage")
     target, fixed = args[0], [_scalar(a) for a in args[1:]]
     try:
         cmd = do.load(target)
@@ -634,7 +636,7 @@ def _cmd_do(argv: List[str]) -> int:
 
 
 def _cmd_list(argv: List[str]) -> int:
-    """`dat --list [PREFIX]` -- the mounted names."""
+    """`x --list [PREFIX]` (`just mounts`) -- the mounted names."""
     if len(argv) > 1:
         return _fail("--list takes at most one PREFIX")
     from .dat_tools import cmd_list
@@ -643,7 +645,7 @@ def _cmd_list(argv: List[str]) -> int:
 
 
 def _cmd_info(argv: List[str]) -> int:
-    """`dat --info` -- the version, the folders and the config in force."""
+    """`x --info` -- the version, the folders and the config in force."""
     if argv:
         return _fail("--info takes no arguments")
     from . import __version__
@@ -666,7 +668,7 @@ def _cmd_info(argv: List[str]) -> int:
 
 
 def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
-    """Split `dat TARGET` arguments into spec overrides, positionals, kwargs and flags.
+    """Split `x TARGET` arguments into spec overrides, positionals, kwargs and flags.
 
     Positionals come back as written (the first is the target name); every
     KEY=VALUE value is a YAML scalar.  A malformed line raises `ValueError`.
@@ -739,5 +741,5 @@ def _message(error: BaseException) -> str:
 
 def _fail(text: str, code: int = 1) -> int:
     """Print a one-line error on stderr and return the exit code."""
-    print(f"dat: {text}", file=sys.stderr)
+    print(f"run: {text}", file=sys.stderr)
     return code

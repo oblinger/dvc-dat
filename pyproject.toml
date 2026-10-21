@@ -17,11 +17,11 @@ dynamic = ["version"]
 excel = ["xlsxwriter"]
 pg = ["psycopg[binary]>=3.1"]
 
-[project.scripts]
-dat = "dvc_dat.do:cli_main"
-
 [tool.setuptools]
 packages = ["dvc_dat", "dvc_dat.ledger"]
+
+[tool.setuptools.package-data]
+dvc_dat = ["dvc_dat.just"]
 
 [tool.setuptools.dynamic]
 version = {attr = "dvc_dat.__init__.__version__"}

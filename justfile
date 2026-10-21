@@ -1,5 +1,8 @@
 # dvc-dat's verbs: thin wrappers over `uv run`.
 
+# `run` and `mounts`, the recipes every project imports
+import 'dvc_dat/dvc_dat.just'
+
 # the test suite
 test *ARGS:
     uv run python -m pytest -q {{ARGS}}

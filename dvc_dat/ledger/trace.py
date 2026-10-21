@@ -5,8 +5,8 @@ Items (Module § Value ``Trace``):
 ``fn``
     the ``db/fn/<name>/<hash>`` subject of the code that ran; holds when the
     name resolves at the rev to the same subject (base: the static import
-    closure; sandbox: exactly the modules the run loaded, re-hashed: a mounted
-    one at the rev's commit, a third-party one as installed, A38, Q37).
+    closure; sandbox: exactly the modules the run loaded, re-hashed as they
+    are now, on disk or installed, A38, Q37, Q39).
 ``code/<repo>``
     ``<version>+<commit 8>``; holds when the commit agrees with the
     environment's, whatever commit a ``code/<repo>`` row pins (T543

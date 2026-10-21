@@ -20,5 +20,5 @@ def run_notebook(name, tmp_path):
 
 def test_walkthrough_runs(tmp_path):
     out = run_notebook("demo-walkthrough.ipynb", tmp_path)
-    assert "$ dat catalog.experiment epochs=5\n<Dat: runs/" in out
+    assert "$ x catalog.experiment epochs=5\n<Dat: runs/" in out
 

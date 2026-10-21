@@ -41,9 +41,9 @@ RECORD>`` when its distribution has a ``RECORD``, else ``py:<path under its
 sys.path entry> -> sha256`` of the file (the standard library, an editable
 source). dvc-dat and what the server holds before the fork (the standard
 library pieces the ledger uses, pyyaml) are infrastructure, like dvc-dat (A56).
-A lookup re-hashes exactly those: a mounted file at the rev's ``code/<repo>``
-commit when it binds one other than HEAD, else on disk; a third-party one as
-installed now. Any byte changed in a loaded module is a different entry.
+A lookup re-hashes exactly those as they are now: a mounted file on disk
+(whatever commit the rev's ``code/<repo>`` row names), a third-party one as
+installed. Any byte changed in a loaded module is a different entry.
 ``Fn.subject`` before any run is the static closure.
 """
 
@@ -125,23 +125,8 @@ def _mount_of(mounts: List[Mount], dotted: str) -> Optional[Mount]:
     return best
 
 
-def _commit_for(rev: "Rev", repo: str, env: Env) -> Optional[str]:
-    """The commit the rev binds the repo to, when it differs from the checkout's HEAD (else ``None``: disk)."""
-    c = rev.get(f"code/{repo}", "commit")
-    head = env.code[repo].commit if repo in env.code else None
-    if c and head and not (head.startswith(c) or c.startswith(head)):
-        return c
-    return None
-
-
-def file_sha(checkout: Path, rel: str, commit: Optional[str]) -> str:
-    if commit:
-        try:
-            data = subprocess.run(["git", "-C", str(checkout), "show", f"{commit}:{rel}"], capture_output=True,
-                                  check=True, timeout=20).stdout
-            return sha256(data)
-        except (OSError, subprocess.SubprocessError):
-            return "<missing>"
+def file_sha(checkout: Path, rel: str) -> str:
+    """sha256 of a mounted file as it is on disk now (``<missing>`` when it is gone)."""
     p = checkout / rel
     return sha256(p.read_bytes()) if p.is_file() else "<missing>"
 
@@ -278,12 +263,13 @@ def static_closure(root: Path, start: str, within: Path) -> Dict[str, Path]:
     return seen
 
 
-def module_shas(rev: "Rev", env: Env, mods: Dict[str, Tuple[Mount, Path]], at_rev: bool = True) -> Dict[str, str]:
-    """``relpath -> sha256`` of mounted modules: at the rev's commit (a lookup), or on disk, as read (a run)."""
+def module_shas(mods: Dict[str, Tuple[Mount, Path]]) -> Dict[str, str]:
+    """``relpath -> sha256`` of mounted modules, the bytes on disk: what a run reads, what a lookup
+    compares (a sandboxed entry is its modules' bytes, whatever commit a rev names, Q39)."""
     out = {}
     for _d, (m, path) in mods.items():
         rel = path.relative_to(m.checkout).as_posix()
-        out[rel] = file_sha(m.checkout, rel, _commit_for(rev, m.repo, env) if at_rev else None)
+        out[rel] = file_sha(m.checkout, rel)
     return dict(sorted(out.items()))
 
 
@@ -445,9 +431,9 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
     if not decorated:
         raise TypeError(f"{name!r} is not a ledger function (mark it @ledger_fn)")
     check_mounted_imports(mounts, modname, attr_name)
-    mods = module_shas(plain, env, closure(mounts, [modname]))
+    mods = module_shas(closure(mounts, [modname]))
     rel = f[0].relative_to(m.checkout).as_posix()
-    return Fn(name=name, module=f[0], sha=file_sha(m.checkout, rel, _commit_for(plain, m.repo, env)),
+    return Fn(name=name, module=f[0], sha=file_sha(m.checkout, rel),
               mode="sandbox", mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain)),
               subject=fn_subject(name, mods, mounts_hash(plain)), _rev=rev, _takes_path=takes_path,
               _template=template, _modules=mods, _returns=returns,
@@ -462,8 +448,7 @@ def sandbox_subject_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Option
     m = _mount_of(mounts, name)
     if m is None:
         return None
-    commit = _commit_for(plain, m.repo, env)
-    now = {rel: third_party_now(rel) if rel.startswith(("dist:", "py:")) else file_sha(m.checkout, rel, commit)
+    now = {rel: third_party_now(rel) if rel.startswith(("dist:", "py:")) else file_sha(m.checkout, rel)
            for rel in modules}
     return fn_subject(name, dict(sorted(now.items())), mounts_hash(plain))
 
@@ -786,7 +771,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
                 STATE.frames[-1].claimed |= new     # a nested body's loads are its own entry's (Q37 (ii))
         value = wrap_result(fn.name, obj, out)
         mounted = sorted(n for n in loaded if _mount_of(mounts, n) is not None)
-        mods = module_shas(plain, env, closure(mounts, [modname, *mounted]), at_rev=False)
+        mods = module_shas(closure(mounts, [modname, *mounted]))
         mods = dict(sorted({**mods, **third_party_items(loaded)}.items()))
         fsub = fn_subject(fn.name, mods, mounts_hash(plain))
         trace = dict(rec)

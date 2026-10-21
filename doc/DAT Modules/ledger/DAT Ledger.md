@@ -566,7 +566,7 @@ A sandboxed function lives under a mount: rows naming a dotted prefix, its repo 
 | `salt` | the mount's `db/salt` | the mount has that salt |
 | `q:{...}` | the sorted refs it answered | the query answers the same |
 
-A value input is named by its bytes, so identical inputs are the same input. A correction to a row a function read makes its result stale, and the next ask re-derives it. A `code/<repo>` `commit` row pins what a version means. A sandboxed eval runs at HEAD, clean or dirty, and its `fn` item holds the bytes of every module the run loaded, third-party ones included: one changed byte in any of them is a different value; a lookup at a revision binding another commit re-hashes the mounted ones at that commit. A base eval runs at any clean commit and its entry holds at the commit it ran at. `clean=True` asks for a clean checkout at the revision's commit in either mode. `matches` and `diff` consult the memo and never run anything.
+A value input is named by its bytes, so identical inputs are the same input. A correction to a row a function read makes its result stale, and the next ask re-derives it. A `code/<repo>` `commit` row pins what a version means. A sandboxed eval runs at HEAD, clean or dirty, and its `fn` item holds the bytes of every module the run loaded, third-party ones included: one changed byte in any of them is a different value, at any revision, whatever commit it names. A base eval runs at any clean commit and its entry holds at the commit it ran at. `clean=True` asks for a clean checkout at the revision's commit in either mode. `matches` and `diff` consult the memo and never run anything.
 
 
 

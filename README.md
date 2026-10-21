@@ -47,18 +47,19 @@ Excel reports need the optional extra: `pip install -e ".[excel]"`.
 
 ```bash
 # do("catalog.experiment", epochs=200)
-dat catalog.experiment epochs=200
+just run catalog.experiment epochs=200
+# the same: bin/x is `exec just run "$@"`
+x catalog.experiment epochs=200
 # print that do(...) call instead of making it
-dat catalog.experiment epochs=200 --dry-run
-dat --list catalog
-dat --info
+x catalog.experiment epochs=200 --dry-run
+just mounts catalog
+x --info
 ```
 
-`dat` configures itself from the nearest `.datconfig.yaml`. A copy of
-`bin/dat` on your `PATH` runs your project's `run:` main from any directory
-with no environment activated. The environment's `dat` console script does
-not read `run:`: it runs the library's own command line, with no project
-mounts. See [the CLI reference](doc/cli.md).
+`just run` is the one way to run: the `run` recipe of `dvc_dat.just`, which
+a project's justfile imports. It configures itself from the nearest
+`.datconfig.yaml` and runs your project's `run:` main from any directory
+with no environment activated. See [the CLI reference](doc/cli.md).
 
 ## Testing
 

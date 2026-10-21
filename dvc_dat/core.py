@@ -91,7 +91,7 @@ def _merge_by_name(base: List[Dict], over: List[Dict]) -> List[Dict]:
 DAT_CONFIG_FILE = ".datconfig.yaml"
 DAT_CONFIG_OVERRIDE_FILE = ".datconfig.override.yaml"
 ENV_PREFIX = "DAT_"
-_CONFIG_KEYS = ("dat_folders", "art_folder", "index", "manager", "verify", "run")  # `run`: `bin/dat` only
+_CONFIG_KEYS = ("dat_folders", "art_folder", "index", "manager", "verify", "run")  # `run`: `just run` only
 _DEFAULT_DAT_FOLDER = "data"
 _DEFAULT_ART_FOLDER = "art"           # beside the dat folder, never inside it
 
@@ -1641,7 +1641,7 @@ class Dat(metaclass=_DatMeta):
     @staticmethod
     def cli_main(argv: Optional[List[str]] = None, *,
                  config: Union[None, str, Path] = None) -> int:
-        """The `dat` command line, for a program's own main; see `dvc_dat.do.cli_main`."""
+        """The command line (`just run`, `x`), for a program's own main; see `dvc_dat.do.cli_main`."""
         from .do import cli_main
         return cli_main(argv, config=config)
 

@@ -38,9 +38,8 @@ Parent side:
   `RuntimeError` naming its exit code.
 - `shutdown()`: stops every server; registered at exit.
 - `sandbox_subject_at(rev, name, modules) -> str | None`: the `fn`
-  subject the recorded modules hash to now: a mounted file at the
-  rev's commit (via `git show` when the rev's commit is not HEAD),
-  else on disk; a third-party item as installed
+  subject the recorded modules hash to now: a mounted file on disk,
+  whatever commit the rev names; a third-party item as installed
   (`third_party_now`).
 - `third_party_items(names) -> dict`: the `fn` items of loaded
   modules outside the mounts: `dist:<name>` →
@@ -49,7 +48,7 @@ Parent side:
   entry>` → `sha256` of the file (the standard library, an editable
   source). dvc-dat is never one (A56).
 - `static_closure(root, start, within)`, `closure(mounts, start)`,
-  `module_shas(…)`, `file_sha(checkout, rel, commit)`, `Mount`,
+  `module_shas(mods)`, `file_sha(checkout, rel)`, `Mount`,
   `mounts_for(rev, env)`: the module walkers and hashers, shared with
   base mode's `fn` hash.
 
