@@ -73,7 +73,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tupl
 from .codec import sha256
 from .env import Env, current_env
 from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
-from .fn import Fn, drop_work, fn_subject, mounts_at, mounts_hash, seal_entry, wrap_result
+from .fn import Fn, drop_work, fn_subject, mounts_at, mounts_hash, path_template, seal_entry, wrap_result
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -386,7 +386,7 @@ def third_party_now(key: str) -> str:
     return "<missing>"
 
 
-def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, bool, str, bool]:
+def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, bool, Optional[str], str, bool]:
     a = fdef.args
     params = []
     pos = a.posonlyargs + a.args
@@ -413,12 +413,13 @@ def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, boo
     if not params or params[0].kind is not inspect.Parameter.POSITIONAL_OR_KEYWORD:
         raise TypeError(f"{name!r}: a revision function takes the Rev as its first parameter")
     rest = params[1:]
-    takes_work = any(p.name == "work" for p in rest)
-    keep = [p for p in rest if p.name != "work"]
+    folder = next((p for p in rest if p.name == "path"), None)
+    keep = [p for p in rest if p.name != "path"]
+    template = path_template(folder.default) if folder is not None else None
     decorated = any((isinstance(d, ast.Name) and d.id == "ledger_fn")
                     or (isinstance(d, ast.Attribute) and d.attr == "ledger_fn") for d in fdef.decorator_list)
     returns = ast.unparse(fdef.returns) if fdef.returns is not None else ""
-    return inspect.Signature(keep), takes_work, returns, decorated
+    return inspect.Signature(keep), folder is not None, template, returns, decorated
 
 
 def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Fn:
@@ -440,7 +441,7 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
     fdef = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == attr_name), None)
     if fdef is None:
         raise ImportError(f"{name!r}: no function {attr_name!r} in {f[0]}")
-    sig, takes_work, returns, decorated = _signature(fdef, name)
+    sig, takes_path, template, returns, decorated = _signature(fdef, name)
     if not decorated:
         raise TypeError(f"{name!r} is not a ledger function (mark it @ledger_fn)")
     check_mounted_imports(mounts, modname, attr_name)
@@ -448,8 +449,8 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
     rel = f[0].relative_to(m.checkout).as_posix()
     return Fn(name=name, module=f[0], sha=file_sha(m.checkout, rel, _commit_for(plain, m.repo, env)),
               mode="sandbox", mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain)),
-              subject=fn_subject(name, mods, mounts_hash(plain)), _rev=rev, _takes_work=takes_work,
-              _modules=mods, _returns=returns,
+              subject=fn_subject(name, mods, mounts_hash(plain)), _rev=rev, _takes_path=takes_path,
+              _template=template, _modules=mods, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
 
 
@@ -755,7 +756,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
         STATE.mounts = mounts
         modname, attr_name = fn._info["modname"], fn._info["attr"]
         work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None)) \
-            if fn._takes_work else None
+            if fn._takes_path else None
         STATE.frames.append(_Frame())
         STATE.works.append(os.path.realpath(work) if work is not None else None)
         rec: Dict[str, str] = {}
@@ -768,7 +769,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
                 obj = getattr(importlib.import_module(modname), attr_name)
                 if not getattr(obj, "__ledger_fn__", False):
                     raise TypeError(f"{fn.name!r} is not a ledger function (mark it @ledger_fn)")
-                args = dict(kw, work=work) if work is not None else kw
+                args = dict(kw, path=work) if work is not None else kw
                 out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
             finally:
                 STATE.guard = False

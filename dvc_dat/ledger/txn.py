@@ -291,7 +291,7 @@ class Transaction:
             value._provenance(subject=subject, rev=sealed_at, trace=trace, preds=r.preds)
             value.sealed_at = stamp
             value.__dict__["_hash"] = h
-            value._after_seal(art)
+            value._after_seal(art, loaded_as)
             local = value.__dict__.pop("_local", None)
             if local and local.get("entry"):
                 records.append(local["entry"])
@@ -592,6 +592,8 @@ class Transaction:
             deps, provenance, env = local["deps"], local["provenance"], local["env"]
             extra.append(("db/sealed-at", "str:" + str(value.sealed_at)))
         provenance = check_provenance(provenance)
+        if alias is None:
+            alias = value.__dict__.get("_name")          # Value(name=...): the name it is saved under
         if alias is not None:
             _name(alias, "alias")
         pred_rows, canon = self._encode_preds(value)
@@ -629,7 +631,7 @@ class Transaction:
         if not already:
             self._to_store.append(value)
         self._pending[id(value)] = (value, subject)
-        self._finalize.append((value, subject, dict(trace), None))
+        self._finalize.append((value, subject, dict(trace), alias))
         if not already and not self.base._held(subject, "db/value"):
             ops: List[Tuple[str, str, bool]] = [
                 ("db/value", ref_text(dotted(type(value)), h), False),
@@ -642,7 +644,16 @@ class Transaction:
             for p, o, is_pred in ops:
                 self._ops.append(_Op(subject, p, o, True, seal_of=subject, pred=is_pred))
         if alias is not None:
-            self._ops.append(_Op(alias, "db/alias", "str:" + subject, True))
+            self._name_value(subject, alias)
+
+    def _name_value(self, subject: str, name: Optional[str]) -> None:
+        """Name ``subject`` (Q36, A70): ``name db/alias subject``, every other name of it retracted, so a
+        value has one name; ``None`` unnames it."""
+        for other in self.base._aliases_of(subject):
+            if other != name:
+                self._ops.append(_Op(other, "db/alias", "str:" + subject, False))
+        if name is not None:
+            self._ops.append(_Op(name, "db/alias", "str:" + subject, True))
 
     def _ensure_fn(self, f: "Fn") -> None:
         if f.subject in self._fns:

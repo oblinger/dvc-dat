@@ -26,12 +26,16 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 from .codec import canonical, hash_text, ref_text, sha256
 from .env import Env, current_env, repo_of
 from .errors import NotClean, NotEvaluated
-from .value import Pickled, Value, dotted
+from .value import Dat, Pickled, Value, dotted
 
 if TYPE_CHECKING:
     from .rev import Rev
 
-RESERVED_KEYS = ("memo", "clean", "work")
+#: The control options of a call (Q41): never keys, never hashed. A function may declare one as a
+#: key and is then called through ``kwargs=``; a declared ``path`` is the folder it builds (Q36).
+RESERVED_KEYS = ("memo", "clean", "path", "kwargs")
+#: The name a folder-producing miss gets with neither ``path=`` nor a template (as ``Dat.create``).
+ANONYMOUS = "anonymous/Dat{unique}"
 
 
 def ledger_fn(func: Callable) -> Callable:
@@ -143,20 +147,28 @@ def resolve_in_process(name: str) -> Any:
     raise ImportError(f"{name!r} does not resolve in this process ({'; '.join(errors[:1]) or 'no attribute'})")
 
 
-def signature_of(name: str, obj: Callable) -> Tuple[inspect.Signature, bool]:
-    """The keys a function takes (the ``Rev`` and ``work`` excluded), and whether it takes ``work``."""
+def path_template(default: Any) -> Optional[str]:
+    """A declared ``path`` parameter's default, the path template (Q36); ``None`` for no default."""
+    if default is inspect.Parameter.empty or default is None:
+        return None
+    if not isinstance(default, (str, os.PathLike)):
+        raise TypeError(f"a path parameter's default is a path template, a str, not {default!r}")
+    return os.fspath(default)
+
+
+def signature_of(name: str, obj: Callable) -> Tuple[inspect.Signature, bool, Optional[str]]:
+    """The keys a function takes (the ``Rev`` and ``path`` excluded), whether it takes ``path`` (the
+    folder it builds), and that parameter's default (the path template)."""
     sig = inspect.signature(obj)
     params = list(sig.parameters.values())
     if not params or params[0].kind not in (inspect.Parameter.POSITIONAL_ONLY,
                                             inspect.Parameter.POSITIONAL_OR_KEYWORD):
         raise TypeError(f"{name!r}: a revision function takes the Rev as its first parameter")
     rest = params[1:]
-    for p in rest:
-        if p.name in RESERVED_KEYS and p.name != "work":
-            raise TypeError(f"{name!r}: {p.name!r} is reserved (Q12, Q39)")
-    takes_work = any(p.name == "work" for p in rest)
-    keep = [p for p in rest if p.name != "work"]
-    return sig.replace(parameters=keep, return_annotation=inspect.Signature.empty), takes_work
+    folder = next((p for p in rest if p.name == "path"), None)
+    keep = [p for p in rest if p.name != "path"]
+    template = path_template(folder.default) if folder is not None else None
+    return sig.replace(parameters=keep, return_annotation=inspect.Signature.empty), folder is not None, template
 
 
 def load_fn(rev: "Rev", name: str) -> "Fn":
@@ -176,11 +188,12 @@ def load_fn(rev: "Rev", name: str) -> "Fn":
     if not src or not os.path.exists(src):
         raise ImportError(f"{name!r}: no source file to hash")
     sha = sha256(Path(src).read_bytes())
-    sig, takes_work = signature_of(name, obj)
+    sig, takes_path, template = signature_of(name, obj)
     env = current_env()
     modules = base_closure(modname, Path(src), env)
     return Fn(name=name, module=Path(src), sha=sha, mode="base", mount=None, signature=sig, env=env,
-              subject=fn_subject(name, modules, None), _rev=rev, _obj=obj, _takes_work=takes_work,
+              subject=fn_subject(name, modules, None), _rev=rev, _obj=obj, _takes_path=takes_path,
+              _template=template,
               _modules=modules, _returns=returns_text(obj))
 
 
@@ -216,7 +229,8 @@ class Fn:
     subject: str
     _rev: Any = field(repr=False, compare=False)
     _obj: Any = field(repr=False, compare=False, default=None)
-    _takes_work: bool = field(repr=False, compare=False, default=False)
+    _takes_path: bool = field(repr=False, compare=False, default=False)
+    _template: Optional[str] = field(repr=False, compare=False, default=None)
     _modules: Dict[str, str] = field(repr=False, compare=False, default_factory=dict)
     _returns: str = field(repr=False, compare=False, default="")
     _info: Dict[str, Any] = field(repr=False, compare=False, default_factory=dict)
@@ -230,9 +244,8 @@ class Fn:
                 ("db/returns", "str:" + self._returns)]
 
     def _bind(self, keys: Dict[str, Any]) -> Dict[str, Any]:
-        for k in RESERVED_KEYS:
-            if k in keys:
-                raise TypeError(f"{k!r} is reserved and never a key")
+        if self._takes_path and "path" in keys:
+            raise TypeError(f"{self.name}: 'path' is the folder it builds, a control option (path=), never a key")
         bound = self.signature.bind(**keys)
         bound.apply_defaults()
         out: Dict[str, Any] = {}
@@ -243,15 +256,31 @@ class Fn:
                 out[k] = v
         return out
 
-    def __call__(self, *, memo: Any = True, clean: bool = False, **keys: Any) -> Optional[Value]:
-        """``memo``: ``True``, the memoised Value, or run, seal, return; ``False``, run, seal nothing;
+    def __call__(self, *, memo: Any = True, clean: bool = False, path: Any = None,
+                 kwargs: Optional[Dict[str, Any]] = None, **keys: Any) -> Optional[Value]:
+        """``f(k=v, ...)`` or ``f(kwargs={...})``: eval. The control options (Q41), never keys:
+
+        ``memo``: ``True``, the memoised Value, or run, seal, return; ``False``, run, seal nothing;
         ``"get"``, lookup only. ``clean=True``: the code must be a clean representation of a version,
         the checkout clean and at the commit the rev's ``code/<repo>`` row names, else ``NotClean``
-        (Q39), before any lookup; ``False`` (default): a sandboxed call runs at HEAD, clean or dirty."""
+        (Q39), before any lookup; ``False`` (default): a sandboxed call runs at HEAD, clean or dirty.
+        ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder
+        there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
+        (Q36). A hit asked for under a new name takes that name. ``kwargs``: the function's whole key
+        set, for a key that is also a control option's name; inline keys beside it are ``TypeError``."""
         if not (memo is True or memo is False or memo == "get"):
             raise ValueError(f"memo is True, False or 'get', not {memo!r}")
         if not isinstance(clean, bool):
             raise TypeError(f"clean is True or False, not {clean!r}")
+        if path is not None and not isinstance(path, (str, os.PathLike)):
+            raise TypeError(f"path is a str or a path, not {type(path).__name__}")
+        if kwargs is not None:
+            if keys:
+                raise TypeError(f"{self.name}: the keys go inline or in kwargs=, never both "
+                                f"(inline: {', '.join(sorted(keys))})")
+            if not isinstance(kwargs, dict) or not all(isinstance(k, str) for k in kwargs):
+                raise TypeError(f"kwargs is a dict of str keys, not {kwargs!r}")
+            keys = dict(kwargs)
         rev = self._rev
         plain = rev._plain()
         if clean:
@@ -259,11 +288,12 @@ class Fn:
         kw = self._bind(keys)
         enc = canonical(encode_keys(kw))
         item = f"eval:{self.name}{enc}"
+        target = None if path is None else os.fspath(path)
         if memo is not False:
             hit = lookup(plain, self.name, enc)
             if hit is not None or memo == "get":
                 rev._record(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
-                return hit
+                return place(plain.ledger, hit, target) if hit is not None and target is not None else hit
         if self.mode == "sandbox":
             from .sandbox import run_sandboxed
 
@@ -271,7 +301,9 @@ class Fn:
         else:
             value = self._run_base(plain, kw, enc, memo is not False)
         rev._record(item, ref_text(dotted(type(value)), value.hash))
-        return value
+        if target is None and self._takes_path and isinstance(value, Dat):
+            target = fresh_name(plain.ledger, self._template or ANONYMOUS, kw)
+        return place(plain.ledger, value, target) if target is not None else value
 
     def _check_code(self, plain: "Rev", env: Env, repo: Optional[str]) -> str:
         """The base-mode gate, always (no byte record of what ran): code in a clean checkout."""
@@ -293,8 +325,8 @@ class Fn:
         if seal:                                    # memo=False simply runs (Eval § 2)
             self._check_code(plain, env, repo)
         rec: Dict[str, str] = {}
-        work = work_folder() if self._takes_work else None
-        args = dict(kw, work=work) if work is not None else kw
+        work = work_folder() if self._takes_path else None
+        args = dict(kw, path=work) if work is not None else kw
         value = None
         try:
             out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
@@ -329,8 +361,50 @@ def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
                        f"the checkout is at {(code.commit or '?')[:8]}")
 
 
+def fresh_name(ledger: Any, template: str, keys: Dict[str, Any]) -> str:
+    """The path template expanded with the call's keys (Q36): ``{unique}`` counts up (``""``,
+    ``_2``, ...) until no name holds a value there and no folder is at it; without ``{unique}`` the
+    name moves to the new value (A70)."""
+    import datetime as _dt
+
+    from ..core import _builtins, expand
+
+    now = _dt.datetime.now()
+    data = ledger._store.art.root / "dats"
+    head = ledger.at()
+    for count in range(1, 100000):
+        unique = "" if count == 1 else f"_{count}"
+        text = expand(template, {**_builtins(now), **keys, "unique": unique})
+        if not isinstance(text, str) or not text:
+            raise TypeError(f"path template {template!r} expanded to {text!r}, not a path")
+        if "{unique}" not in template:
+            return text
+        if os.path.isabs(text) or (not head._held(text, "db/alias") and not (data / text).exists()):
+            return text
+    raise RuntimeError(f"path template {template!r}: no free name")
+
+
+def place(ledger: Any, value: Value, target: str) -> Value:
+    """``path=`` on a result (Q36, A70): relative, the value's name, its folder (a ``Dat``) rebuilt at
+    ``<data folder>/<name>`` as a view; absolute, the folder made there, no name. Unsealed
+    (``memo=False``): the name is set on the object, saved with it."""
+    if os.path.isabs(target):
+        if isinstance(value, Dat) and value.subject is not None:
+            art = ledger._store.art
+            value._forget()
+            value.path = Dat._materialise(art.get(value.hash), art, target)
+        elif isinstance(value, Dat):
+            raise ValueError(f"path={target!r}: an unsaved Dat stays where it was built (memo=False)")
+        return value
+    if value.subject is None:
+        value.name = target
+        return value
+    value._rename(ledger, target)
+    return value
+
+
 def work_root() -> Path:
-    """Where an eval's ``work`` folders are made: ``$DAT_WORK``, else ``~/.cache/dvc-dat/work``."""
+    """Where an eval's ``path`` folders are made: ``$DAT_WORK``, else ``~/.cache/dvc-dat/work``."""
     env = os.environ.get("DAT_WORK")
     return Path(env) if env else Path.home() / ".cache" / "dvc-dat" / "work"
 
@@ -343,9 +417,8 @@ def work_folder() -> Path:
 
 
 def drop_work(work: Optional[Path], value: Any) -> None:
-    """Remove an eval's ``work`` folder once the call is done, sealed or not; an unsealed ``Dat`` that
+    """Remove an eval's folder once the call is done, sealed or not; an unsealed ``Dat`` that
     still lives in it (``memo=False``) keeps it, since the folder is that value."""
-    from .value import Dat
 
     if work is None or not work.exists():
         return

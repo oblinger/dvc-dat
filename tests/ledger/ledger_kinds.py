@@ -80,10 +80,10 @@ def chain(rev, *, game: str) -> dict:
 
 
 @ledger_fn
-def folder(rev, *, game: str, work: Path) -> Dat:
+def folder(rev, *, game: str, path: Path) -> Dat:
     _count("folder")
-    (work / "a.txt").write_text(game)
-    return Dat(work)
+    (path / "a.txt").write_text(game)
+    return Dat(path)
 
 
 @ledger_fn
@@ -114,9 +114,9 @@ def maybe(rev, *, game: str) -> dict:
 
 
 @ledger_fn
-def scratchy(rev, *, game: str, work: Path) -> dict:
-    CALLS["work"] = work
-    (work / "tmp.txt").write_text(game)
+def scratchy(rev, *, game: str, path: Path) -> dict:
+    CALLS["work"] = path
+    (path / "tmp.txt").write_text(game)
     return {"game": game}
 
 
