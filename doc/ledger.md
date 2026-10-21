@@ -1,4 +1,6 @@
+:>> [[DAT]] → [dvc-dat doc ledger](ha://p/dvc-dat%20doc%20ledger) 
 # The ledger
+The ledger: one append-only table of events, and what anything was at any moment.
 
 The ledger is the dat's record in time: every fact a quad
 `(rev, subject, predicate, object)`, every read a function of one

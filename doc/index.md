@@ -1,4 +1,6 @@
+:>> [[DAT]] → [dvc-dat doc index](ha://p/dvc-dat%20doc%20index) 
 # dvc_dat Documentation
+The front page of the dvc_dat docs: what the package does, and where to read next.
 
 **dvc_dat** manages data artifacts as folders that describe themselves. A dat
 is a folder whose `_spec_.yaml` is a complete, argumentless recipe for itself;

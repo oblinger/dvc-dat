@@ -1,4 +1,6 @@
+:>> [[DAT]] → [mount-commands](ha://p/mount-commands) 
 # Mounts
+Mounts: how a dotted name resolves, and how to mount names that are not imports.
 
 A dotted name is a Python name: `do.load` imports the longest importable
 prefix and `getattr`s the rest, so `os.path.join` and `mypkg.models.Trainer`
