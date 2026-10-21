@@ -387,13 +387,13 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
     The keys the function takes, without the leading `Rev` and without `work`. ^signature
 
 **env**`: Env`
-    The environment the function resolved in: repos and commits, `uv.lock`, platform. ^env
+    The environment the function resolved in: repos and commits, platform. ^env
 
 **subject**`: str`
     `db/fn/<name>/<16 hex>`, hashing the code that runs ([Evaluation and the trace](#evaluation-and-the-trace)). ^fn-subject
 
-**__call__**`(*, memo=True, **keys) -> Value | None`
-    `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. Keys bind to the signature with defaults applied; `memo` or `work` given as a key is `TypeError`. A run needs the function's code in a clean git checkout, else `NotEvaluated`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
+**__call__**`(*, memo=True, clean=False, **keys) -> Value | None`
+    `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. Keys bind to the signature with defaults applied; `memo`, `clean` or `work` given as a key is `TypeError`. A base-mode run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
 
 
 
@@ -409,6 +409,7 @@ The package's other exports: two decorators, two helpers, and the exceptions. Ev
 | [LedgerError](#^ledgererror) | Base of every ledger exception |
 | [Multiple](#^multiple) | Several matched where one was required |
 | [NotEvaluated](#^notevaluated) | A miss this environment cannot run |
+| [NotClean](#^notclean) | `clean=True`, and the code is not a clean version |
 | [UnmountedImport](#^unmountedimport) | A sandboxed import outside every mount |
 | [UntracedRead](#^untracedread) | A sandboxed read outside the allowed places |
 | [ConfinedWrite](#^confinedwrite) | A sandboxed write outside the work folder |
@@ -439,7 +440,10 @@ The package's other exports: two decorators, two helpers, and the exceptions. Ev
     `value`, `refs(one=True)` or `select(one=True)` matched several. ^multiple
 
 **NotEvaluated**`(LedgerError, RuntimeError)`
-    A run the environment cannot make: code outside any git checkout, a dirty checkout, a mount whose repo has no checkout here, or a sandboxed function whose checkout is not at the revision's `code/<repo>` commit. ^notevaluated
+    A run the environment cannot make: a mount whose repo has no checkout here, or (base mode) code outside any git checkout or a dirty checkout. ^notevaluated
+
+**NotClean**`(NotEvaluated)`
+    A `clean=True` call whose checkout is dirty, or not at the commit the revision's `code/<repo>` row names, or whose revision names none. ^notclean
 
 **UnmountedImport**`(LedgerError, ImportError)`
     A sandboxed body imported a module of a mounted repo that lies under no mount. ^unmountedimport
@@ -522,7 +526,7 @@ On the seal's line `preds` becomes read-only and `sealed`, `subject` and `trace`
 
 A sealed value never changes: an `add` or `remove` on one of its own rows is `Exists` at commit. Any other row on its subject is annotation. A new version is a new seal. An alias, `(video/G1, db/alias, <subject>)`, is the re-pointable name: it moves while the values it pointed at stay. An alias names a subject holding a `db/value`, and a subject holding its own `db/value` cannot be an alias.
 
-A hand seal's trace is declared: the `deps` given, plus `code/<repo>` for every repo the environment reports, `uv.lock` and `platform`; its provenance is `seal` or the caller's. An eval's trace is recorded and its provenance is `eval:base` or `eval:sandbox`; `seal` refuses a provenance beginning `eval:`, so a consumer that needs proof asks for an `eval:` value.
+A hand seal's trace is declared: the `deps` given, plus `code/<repo>` for every repo the environment reports, and `platform`; its provenance is `seal` or the caller's. An eval's trace is recorded and its provenance is `eval:base` or `eval:sandbox`; `seal` refuses a provenance beginning `eval:`, so a consumer that needs proof asks for an `eval:` value.
 
 
 
@@ -543,7 +547,7 @@ A function that declares `work: Path` is given a fresh folder under `$DAT_WORK` 
 
 A base-mode function is whatever the running process imports. Its `fn` subject hashes the function module's static import closure within its checkout, and its `code/<repo>` trace item names the checkout's commit. The checkout is found by git discovery over the folders of the imported modules, skipping the standard library, `site-packages` and the dvc-dat checkout; a checkout is named by its `pyproject.toml` `[project].name`.
 
-A sandboxed function lives under a mount: rows naming a dotted prefix, its repo and its root, `(db/mount/demo_game.etl, db/root, demo_game/etl)` with `db/repo` beside it. It runs in a worker started `python -I`, one per mount, kept warm; a finder first on `sys.meta_path` serves the mounted prefixes from their roots, and the mounted modules are purged before each top-level call. The worker refuses what it cannot trace: `UnmountedImport`, `UntracedRead`, `ConfinedWrite`, `ConfinedNetwork`. An incomplete mount table is therefore a crash rather than a silently wider trace.
+A sandboxed function lives under a mount: rows naming a dotted prefix, its repo and its root, `(db/mount/demo_game.etl, db/root, demo_game/etl)` with `db/repo` beside it. Each call runs in a fresh process forked from a warm `python -I` server, one per environment, which holds only the ledger's machinery (no mounted module, no CUDA); a finder first on `sys.meta_path` serves the mounted prefixes from their roots, so every run loads, and records, exactly what it uses. The child refuses what it cannot trace: `UnmountedImport`, `UntracedRead`, `ConfinedWrite`, `ConfinedNetwork`. An incomplete mount table is therefore a crash rather than a silently wider trace.
 
 
 
@@ -554,7 +558,7 @@ A sandboxed function lives under a mount: rows naming a dotted prefix, its repo 
 | --- | --- | --- |
 | `fn` | `db/fn/<name>/<hash>` | the name resolves to the same subject |
 | `code/<repo>` | `<version>+<commit8>` | the environment is at that commit |
-| `uv.lock`, `platform` | the environment's | the environment is the same |
+| `platform` | the environment's | the environment is the same |
 | `<subject> <predicate>` | the held object | the same object is held |
 | `<name> db/alias` | `ref:<class>:<hash>` | the alias names those bytes |
 | `ref:<class>:<hash>` | the same text | always |
@@ -562,7 +566,7 @@ A sandboxed function lives under a mount: rows naming a dotted prefix, its repo 
 | `salt` | the mount's `db/salt` | the mount has that salt |
 | `q:{...}` | the sorted refs it answered | the query answers the same |
 
-A value input is named by its bytes, so identical inputs are the same input. A correction to a row a function read makes its result stale, and the next ask re-derives it. A `code/<repo>` `commit` row pins what a version means; it gates a sandboxed eval, which hashes its modules at that commit, while a base eval runs at any clean commit and its entry holds at the commit it ran at. `matches` and `diff` consult the memo and never run anything.
+A value input is named by its bytes, so identical inputs are the same input. A correction to a row a function read makes its result stale, and the next ask re-derives it. A `code/<repo>` `commit` row pins what a version means. A sandboxed eval runs at HEAD, clean or dirty, and its `fn` item holds the bytes of every module the run loaded, third-party ones included: one changed byte in any of them is a different value; a lookup at a revision binding another commit re-hashes the mounted ones at that commit. A base eval runs at any clean commit and its entry holds at the commit it ran at. `clean=True` asks for a clean checkout at the revision's commit in either mode. `matches` and `diff` consult the memo and never run anything.
 
 
 

@@ -2,7 +2,7 @@
 
 The environment a function runs in is found, never declared: which
 repositories the process is running, at which commit, whether their
-trees are clean, which `uv.lock`, which platform. Discovery runs git
+trees are clean, which platform. Discovery runs git
 over the folder of every module the process has imported, skipping the
 standard library, `site-packages` and the dvc-dat checkout itself (the
 ledger's own repo is infrastructure, like `site-packages`). The commit
@@ -17,10 +17,10 @@ mid-session is seen. Part of the
   `dirty` means tracked files are modified (untracked ignored, and any
   path `.gitattributes` marks `dat-noncode`, as `code_of`); `path`
   the checkout root a mount's `db/root` resolves under.
-- `Env(code, lock, platform, mounts=None)`: `code` maps repo name to
-  `Code`; `lock` is `sha256:<hex>` of the `uv.lock` found beside the
-  venv (`sys.prefix`'s parent) or in the working directory, else
-  `<none>`; `platform` is `<sys.platform>-<machine>-py<X.Y>`.
+- `Env(code, platform, mounts=None)`: `code` maps repo name to
+  `Code`; `platform` is `<sys.platform>-<machine>-py<X.Y>`. There is
+  no whole-`uv.lock` item: a sandboxed entry names the third-party
+  modules it loaded in its `fn` item ([sandbox](sandbox.md)).
 - `discover() -> Env`: the default provider.
 - `current_env() -> Env`: the installed provider's answer, else
   `discover()`.
@@ -32,7 +32,7 @@ mid-session is seen. Part of the
   name.
 - `repo_of(env, path) -> str | None`: the deepest reported checkout
   holding `path`.
-- `code_at(top) -> Code`, `lock_hash()`, `platform_tag()`, `SELF =
+- `code_at(top) -> Code`, `platform_tag()`, `SELF =
   "dvc-dat"`.
 
 ## Invariants

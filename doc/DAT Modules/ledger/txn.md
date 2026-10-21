@@ -75,8 +75,7 @@ never the row's. `FORMAT` is
   per `Value`/`Ref` dep, a `<name> db/alias` item for a dep loaded or
   named through an alias, the `fn` item for an `Fn` dep (its
   `db/fn/<name>/<hash>` rows are written if absent), then
-  `code/<repo>` for every repo discovery reports, `uv.lock` and
-  `platform`.
+  `code/<repo>` for every repo discovery reports, and `platform`.
 - On the seal's line: `preds` becomes a `FrozenPreds`, `sealed`,
   `subject` and `trace` are set. At commit: `rev` is set, `preds`
   becomes the subject's non-`db/` rows as loaded (a typed pred a

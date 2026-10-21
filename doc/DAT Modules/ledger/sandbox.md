@@ -1,13 +1,15 @@
 # ledger.sandbox
 
 A function under a mount runs where the code it can reach is bounded:
-in a `python -I` worker whose only importable repository code is the
+in a fresh process of its own, forked for the one call from a warm
+`python -I` server, whose only importable repository code is the
 mounted roots, and whose file reads and writes are confined while the
-body runs. That bound is what lets one `fn` trace item, the hashes of
-the mounted modules the run used, stand for the code. The parent side
-resolves a name through the mounts and sends a miss to a worker; the
-worker side installs the finder and the open hook, runs the function,
-and seals the entry itself. Part of the
+body runs. That bound is what lets one `fn` trace item, the bytes of
+every module the run loaded, stand for the code: one changed byte in
+any of them, third-party ones included, is a different value. The
+parent side resolves a name through the mounts and sends a miss to the
+server; the child installs the finder and the open hook, runs the
+function, seals the entry itself, and exits. Part of the
 [architecture](../../DAT%20Architecture.md).
 
 ## Public surface
@@ -21,32 +23,41 @@ Parent side:
   `@ledger_fn` by its decorator text (`TypeError`), with the `Rev` as
   its first positional parameter (`TypeError`). The source is parsed,
   not imported. `Fn.subject` before any run is the static closure.
-- `run_sandboxed(fn, rev, kw, enc, seal) -> Value`: checks the code
-  (no checkout, a dirty one, or a HEAD other than the rev's
-  `code/<repo>` commit is `NotEvaluated`), then calls the worker for
-  the mount, or runs in-process when already inside a worker.
-- `Worker(ledger_path)`: one `python -I -m dvc_dat.ledger.worker`
-  process with its own scratch folder as cwd, environment limited to
-  `PATH`, `HOME`, `TMPDIR`, `LANG`, `CUDA_VISIBLE_DEVICES`, plus
-  `DAT_LEDGER` and `DAT_SCRATCH`. `call(…)` sends one request and
-  returns the sealed entry (loaded in the parent) or, unsealed, the
-  unpickled value; a worker exception is re-raised in the parent with
-  `worker_traceback` set.
-- `shutdown()`: stops every worker; registered at exit.
+- `run_sandboxed(fn, rev, kw, enc, seal) -> Value`: a miss runs at
+  HEAD, clean or dirty (no checkout of the repo is `NotEvaluated`);
+  `clean=True` was checked before the lookup (`fn.check_clean`). It
+  calls the server, or runs in-process when already inside a child.
+- `Server()`: one `python -I -m dvc_dat.ledger.worker` process per
+  environment (`sys.executable`), with its own scratch folder as cwd,
+  environment limited to `PATH`, `HOME`, `TMPDIR`, `LANG`,
+  `CUDA_VISIBLE_DEVICES`, plus `DAT_SCRATCH`. `call(…)` sends one
+  request (the ledger, the rev, the name, the keys) and returns the
+  sealed entry (loaded in the parent) or, unsealed, the unpickled
+  value; an exception in the child is re-raised in the parent with
+  `worker_traceback` set; a child that dies before replying is a
+  `RuntimeError` naming its exit status.
+- `shutdown()`: stops every server; registered at exit.
 - `sandbox_subject_at(rev, name, modules) -> str | None`: the `fn`
-  subject the recorded modules hash to at the rev's commit (via
-  `git show` when the rev's commit is not HEAD).
+  subject the recorded modules hash to now: a mounted file at the
+  rev's commit (via `git show` when the rev's commit is not HEAD),
+  else on disk; a third-party item as installed
+  (`third_party_now`).
+- `third_party_items(names) -> dict`: the `fn` items of loaded
+  modules outside the mounts: `dist:<name>` →
+  `<version>:<sha256 of RECORD>` for a module of an installed
+  distribution with a `RECORD`, else `py:<path under its sys.path
+  entry>` → `sha256` of the file (the standard library, an editable
+  source). dvc-dat is never one (A56).
 - `static_closure(root, start, within)`, `closure(mounts, start)`,
   `module_shas(…)`, `file_sha(checkout, rel, commit)`, `Mount`,
   `mounts_for(rev, env)`: the module walkers and hashers, shared with
   base mode's `fn` hash.
 
-Worker side:
+Child side:
 
 - `MountFinder`, first on `sys.meta_path`: serves a mounted prefix from
   its root (a root without `__init__.py` imports as a namespace
   package); gives the prefix's ancestors empty namespace packages;
-  records every module it loads against the innermost running call;
   raises `UnmountedImport("<module> from <importer>; mount it or move
   it")` for a module that would resolve inside a mounted repo's
   checkout under no mount.
@@ -75,10 +86,10 @@ Worker side:
   (`rev[...]`, `rev.load`, queries) are the view, not file opens.
   Two reads stay open because their content is already in the trace:
   the import system reading a module file (the finder decides what
-  imports; the mounted ones are in `fn`, the rest under `uv.lock`), and,
-  while a module from outside the mounts is being imported, that
-  import's reads in the interpreter's folders (a library loading its
-  bundled data, `uv.lock`). A library's data read after its import is
+  imports; every module loaded is in `fn`), and, while a module from
+  outside the mounts is being imported, that import's reads in the
+  interpreter's folders (a library loading its bundled data, which
+  its `RECORD` covers). A library's data read after its import is
   refused.
 - While a body with a `work` folder runs, the worker's current
   directory is that folder, so a relative path lands in the dat being
@@ -97,32 +108,42 @@ Worker side:
   Postgres (the DSN's hosts, and their addresses at the port, resolved
   when the worker installs), and local
   `AF_UNIX` sockets and socket pairs, which are not the network.
-- `worker_main()`: the loop, one request and one reply until stdin
-  closes; adopts the parent's `Env.code` through `set_env_provider`,
-  purges the mounted modules, loads the function at the requested
-  revision, runs it, seals with provenance `eval:sandbox`.
+- `worker_main()`: the server's loop. It first loads the ledger's
+  machinery and the installed distributions' map (never a mounted
+  module, never CUDA), then per request forks a child and relays its
+  one reply, until stdin closes.
+- `serve(req, out)`: in the child: adopts the parent's `Env.code`
+  through `set_env_provider`, opens the request's ledger, installs the
+  finder and the hook, loads the function at the requested revision,
+  runs it, seals with provenance `eval:sandbox`, replies.
 - `run_here(fn, rev, kw, enc, seal)`: one run in this process; the
-  trace is the recorded reads plus `fn`, `uv.lock`, `platform` and,
-  when the mount sets one, `salt`; no `code/<repo>` item.
+  modules it loaded are those new in `sys.modules` over the body less
+  any a nested body loaded; the trace is the recorded reads plus
+  `fn`, `platform` and, when the mount sets one, `salt`; no
+  `code/<repo>` item.
 
 ## Invariants
 
-- One worker per `(ledger folder, mount prefix)`, kept warm; the
-  mounted modules are purged from `sys.modules` before each top-level
-  call, so every run loads and records what it uses.
-- The `fn` item hashes, `relpath -> sha256` at the rev's commit, the
-  static import closure of the function's module plus every mounted
-  module loaded during the run and their closures, and the mount-table
-  hash; a mounted package's `__init__.py` counts.
-- A nested eval inside a worker runs in-process and its loads count
-  toward its own entry.
-- Bulk data never crosses the pipe on a sealing call: the worker seals
+- One warm server per environment; a fresh forked child per top-level
+  call, so every run loads and records what it uses and nothing a body
+  loaded or changed outlives the call. The server holds only the
+  ledger's machinery (the standard library pieces it uses, pyyaml,
+  dvc-dat): what it holds is infrastructure, not recorded.
+- The `fn` item hashes the modules the run loaded: mounted ones (with
+  the static import closure of the function's module and of each),
+  `relpath -> sha256` of the file as read, a dirty tree's bytes
+  included; third-party ones by distribution `RECORD` or file bytes;
+  and the mount-table hash. A mounted package's `__init__.py` counts.
+- A nested eval inside a child runs in-process and its loads count
+  toward its own entry, not the caller's.
+- Bulk data never crosses the pipe on a sealing call: the child seals
   and returns the subject only.
 
-- Stubs, as built: no idle retirement; a nested
-  eval under another mount runs in the same worker; a base-mode eval
-  nested inside a worker is unsupported; repo files read under a mount
-  are allowed and not recorded.
+- Stubs, as built: a nested eval under another mount runs in the same
+  child; a base-mode eval nested inside a child is unsupported; repo
+  files read under a mount are allowed and not recorded; a nested
+  function's imports the caller already loaded are not recorded for
+  it beyond its static closure.
 
 ## Left to other modules
 

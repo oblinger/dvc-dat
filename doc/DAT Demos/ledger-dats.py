@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 from dvc_dat.ledger import Ledger, Ref, bump
-from dvc_dat.ledger import NotEvaluated, Unindexed
+from dvc_dat.ledger import NotClean, Unindexed
 from dvc_dat.ledger import UnmountedImport, UntracedRead
 
 scratch_project_path = Path("scratch/dats-demo").resolve()
@@ -333,7 +333,6 @@ for item in sorted(model_dat.trace):
 #   fn -> db/fn/demo_game.etl.model.train/<hash>
 #   game/G1 gameset -> normie
 #   platform -> darwin-arm64-py3.11
-#   uv.lock -> sha256:<hash>
 
 # %% [markdown]
 # `train` missed; its `fit` evaluated `tracks`, which evaluated
@@ -445,8 +444,7 @@ print(dict(sorted(hand_model_dat.trace.items())))
 # → {"code/demo-game": "0.1.1+<8 hex>",
 #    "platform": "darwin-arm64-py3.11",
 #    "ref:demo_game.etl.dat.StageDat:<hash>":
-#        "ref:demo_game.etl.dat.StageDat:<hash>",
-#    "uv.lock": "sha256:<hash>"}
+#        "ref:demo_game.etl.dat.StageDat:<hash>"}
 
 # %% [markdown]
 # Its trace is declared, the `deps` handed over plus the
@@ -549,19 +547,22 @@ print(old_model_dat.diff(now_model_dat))
 #
 # G4 was never trained, and `pre_bump_rev` says `code/demo-game` is
 # the first commit while the checkout is at the second. Notice a
-# miss there refuses to run.
+# miss there asked with `clean=True` refuses to run.
 
 # %%
 try:
-    pre_bump_rev.eval("demo_game.etl.model.train", game="G4")
-except NotEvaluated as e:
-    print("NotEvaluated:", e)        # → NotEvaluated: code/demo-game
+    pre_bump_rev.eval("demo_game.etl.model.train", game="G4",
+                      clean=True)
+except NotClean as e:
+    print("NotClean:", e)       # → NotClean: … binds code/demo-game
 
 # %% [markdown]
-# A revision can be read forever; it can be run only by an
-# environment whose code matches its `code/<repo>` row. A miss at a
-# revision this environment cannot run raises instead of sealing a
-# result with false provenance.
+# A revision can be read forever. A sandboxed miss runs at HEAD,
+# clean or dirty, and its `fn` item records the bytes of every
+# module it loaded, which is its identity. `clean=True` is for a
+# reader who must say which version ran: the checkout clean and at
+# the revision's `code/<repo>` commit, else `NotClean` (a
+# `NotEvaluated`), raised before anything runs.
 
 # %% [markdown]
 # ### The latest model for every game in a set
