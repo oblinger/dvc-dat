@@ -17,11 +17,11 @@ if str(HERE) not in sys.path:
 import backends  # noqa: E402
 from dvc_dat.ledger import Code, Env, set_env_provider  # noqa: E402
 
-ENV = Env({"testrepo": Code(None, "abc1234", False, HERE)}, "sha256:lock-1", "test-platform")
+ENV = Env({"testrepo": Code(None, "abc1234", False, HERE)}, "test-platform")
 
 
 class EnvBox:
-    """The pinned environment; a test calls ``code``/``set`` to move the commit, lock or platform."""
+    """The pinned environment; a test calls ``code``/``set`` to move the commit or platform."""
 
     def __init__(self):
         self.env = ENV
@@ -30,10 +30,10 @@ class EnvBox:
         return self.env
 
     def code(self, commit="abc1234", dirty=False):
-        self.env = Env({"testrepo": Code(None, commit, dirty, HERE)}, self.env.lock, self.env.platform)
+        self.env = Env({"testrepo": Code(None, commit, dirty, HERE)}, self.env.platform)
 
     def set(self, **kw):
-        fields = {"code": self.env.code, "lock": self.env.lock, "platform": self.env.platform}
+        fields = {"code": self.env.code, "platform": self.env.platform}
         fields.update(kw)
         self.env = Env(**fields)
 

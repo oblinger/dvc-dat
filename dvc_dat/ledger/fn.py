@@ -25,13 +25,13 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from .codec import canonical, hash_text, ref_text, sha256
 from .env import Env, current_env, repo_of
-from .errors import NotEvaluated
+from .errors import NotClean, NotEvaluated
 from .value import Pickled, Value, dotted
 
 if TYPE_CHECKING:
     from .rev import Rev
 
-RESERVED_KEYS = ("memo", "work")
+RESERVED_KEYS = ("memo", "clean", "work")
 
 
 def ledger_fn(func: Callable) -> Callable:
@@ -151,8 +151,9 @@ def signature_of(name: str, obj: Callable) -> Tuple[inspect.Signature, bool]:
                                             inspect.Parameter.POSITIONAL_OR_KEYWORD):
         raise TypeError(f"{name!r}: a revision function takes the Rev as its first parameter")
     rest = params[1:]
-    if any(p.name == "memo" for p in rest):
-        raise TypeError(f"{name!r}: 'memo' is reserved (Q12)")
+    for p in rest:
+        if p.name in RESERVED_KEYS and p.name != "work":
+            raise TypeError(f"{name!r}: {p.name!r} is reserved (Q12, Q39)")
     takes_work = any(p.name == "work" for p in rest)
     keep = [p for p in rest if p.name != "work"]
     return sig.replace(parameters=keep, return_annotation=inspect.Signature.empty), takes_work
@@ -242,12 +243,19 @@ class Fn:
                 out[k] = v
         return out
 
-    def __call__(self, *, memo: Any = True, **keys: Any) -> Optional[Value]:
-        """``True``: the memoised Value, or run, seal, return; ``False``: run, seal nothing; ``"get"``: lookup only."""
+    def __call__(self, *, memo: Any = True, clean: bool = False, **keys: Any) -> Optional[Value]:
+        """``memo``: ``True``, the memoised Value, or run, seal, return; ``False``, run, seal nothing;
+        ``"get"``, lookup only. ``clean=True``: the code must be a clean representation of a version,
+        the checkout clean and at the commit the rev's ``code/<repo>`` row names, else ``NotClean``
+        (Q39), before any lookup; ``False`` (default): a sandboxed call runs at HEAD, clean or dirty."""
         if not (memo is True or memo is False or memo == "get"):
             raise ValueError(f"memo is True, False or 'get', not {memo!r}")
+        if not isinstance(clean, bool):
+            raise TypeError(f"clean is True or False, not {clean!r}")
         rev = self._rev
         plain = rev._plain()
+        if clean:
+            check_clean(self, plain, current_env())
         kw = self._bind(keys)
         enc = canonical(encode_keys(kw))
         item = f"eval:{self.name}{enc}"
@@ -266,6 +274,7 @@ class Fn:
         return value
 
     def _check_code(self, plain: "Rev", env: Env, repo: Optional[str]) -> str:
+        """The base-mode gate, always (no byte record of what ran): code in a clean checkout."""
         if repo is None:
             raise NotEvaluated(f"{self.name}: its code ({self.module}) is outside any git checkout, so no "
                                "commit can vouch for a result")
@@ -291,7 +300,7 @@ class Fn:
             out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
             value = wrap_result(self.name, self._obj, out)
             trace = dict(rec)
-            trace.update({"fn": self.subject, "uv.lock": env.lock, "platform": env.platform})
+            trace.update({"fn": self.subject, "platform": env.platform})
             if repo is not None:
                 trace[f"code/{repo}"] = code_token(plain, repo, env.code[repo].commit)
             if not seal:
@@ -301,6 +310,23 @@ class Fn:
             return value
         finally:
             drop_work(work, value)
+
+
+def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
+    """``clean=True`` (Q39): the checkout clean and at the commit ``plain``'s ``code/<repo>`` row names."""
+    repo = fn._info.get("repo") if fn.mode == "sandbox" else repo_of(env, fn.module)
+    code = env.code.get(repo) if repo else None
+    if code is None:
+        raise NotClean(f"{fn.name}: clean=True, and its code ({fn.module}) is in no git checkout here")
+    if code.dirty:
+        raise NotClean(f"{fn.name}: clean=True, and the checkout of {repo} has uncommitted changes")
+    c = plain.get(f"code/{repo}", "commit")
+    if c is None:
+        raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} names no code/{repo} commit "
+                       "(bump it)")
+    if not (code.commit and (code.commit.startswith(c) or c.startswith(code.commit))):
+        raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} binds code/{repo} to {c[:8]}; "
+                       f"the checkout is at {(code.commit or '?')[:8]}")
 
 
 def work_root() -> Path:

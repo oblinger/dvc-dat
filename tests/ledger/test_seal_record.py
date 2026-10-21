@@ -20,7 +20,7 @@ CHILD = textwrap.dedent('''
     sys.path.insert(0, {here!r})
     from dvc_dat.ledger import Code, Dat, Env, set_env_provider
     from ledger_kinds import GameDat
-    set_env_provider(lambda: Env({{"testrepo": Code(None, "abc1234", False, Path({here!r}))}}, "sha256:lock-1",
+    set_env_provider(lambda: Env({{"testrepo": Code(None, "abc1234", False, Path({here!r}))}},
                                  "test-platform"))
     {body}
 ''')

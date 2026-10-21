@@ -151,7 +151,7 @@ def test_seal_block(L):
         v.preds["game"] = "G2"            # TypeError: read-only once sealed
     assert isinstance(v.preds["video"], Ref)      # a Ref now, as loaded (A36)
     rh = f"ref:ledger_kinds.Video:{raw.hash}"
-    assert v.trace == {rh: rh, "code/testrepo": "0.2.2+abc1234", "uv.lock": "sha256:lock-1",
+    assert v.trace == {rh: rh, "code/testrepo": "0.2.2+abc1234",
                        "platform": "test-platform"}
     r = L.at()
     assert r[subj, "db/kind"] == "ledger_kinds.Cut" and r[subj, "db/provenance"] == "human:dan"

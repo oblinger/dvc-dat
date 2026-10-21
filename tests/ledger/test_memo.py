@@ -3,7 +3,7 @@
 import pytest
 
 import ledger_kinds
-from dvc_dat.ledger import Dat, NotEvaluated, Pickled, Ref, ledger_fn
+from dvc_dat.ledger import Dat, NotClean, NotEvaluated, Pickled, Ref, ledger_fn
 from ledger_kinds import CALLS, Cut, Video
 
 
@@ -62,7 +62,7 @@ def test_trace_items(world):
     assert q == ['q:{"game":"G1","kind":"ledger_kinds.Video"}']
     vid = world.at().load("video/G1")
     assert t[f"ref:ledger_kinds.Video:{vid.hash}"].startswith("ref:")
-    assert set(t) >= {"fn", "uv.lock", "platform"}
+    assert set(t) >= {"fn", "platform"} and "uv.lock" not in t
 
 
 def test_memo_false_and_get(world):
@@ -102,6 +102,32 @@ def test_code_commit_pins_the_version_and_the_env_commit_decides(world, envbox):
     envbox.code(dirty=True)
     with pytest.raises(NotEvaluated):
         world.at().eval("ledger_kinds.cut", game="G3")
+
+
+def test_clean_requires_a_clean_checkout_at_the_revs_commit(world, envbox):
+    a = world.at().eval("ledger_kinds.cut", game="G1", clean=True)      # clean, at the row's commit
+    assert world.at().eval("ledger_kinds.cut", game="G1", clean=True).subject == a.subject
+    envbox.code(commit="def5678")
+    with pytest.raises(NotClean, match="binds code/testrepo to abc1234"):
+        world.at().eval("ledger_kinds.cut", game="G1", clean=True)        # refused before the lookup
+    envbox.code(dirty=True)
+    with pytest.raises(NotClean, match="uncommitted changes") as e:
+        world.at().eval("ledger_kinds.cut", game="G1", clean=True, memo=False)
+    assert isinstance(e.value, NotEvaluated)                               # catchable as either
+    with pytest.raises(TypeError):
+        world.at().eval("ledger_kinds.cut", game="G1", clean="yes")
+
+
+def test_clean_needs_a_code_row(L):
+    with L.transaction(by="t") as t:
+        t["game/G1"] = {"home": "G4"}
+        t.add("db/pred/video", "db/type", "ledger_kinds.Video")
+    v = Video(b"x")
+    v.preds.update(game="G1")
+    with L.transaction(by="t") as t:
+        v.seal(t)
+    with pytest.raises(NotClean, match="names no code/testrepo commit"):
+        L.at().eval("ledger_kinds.cut", game="G1", clean=True)
 
 
 def test_no_code_row_runs_with_the_env_commit(L):

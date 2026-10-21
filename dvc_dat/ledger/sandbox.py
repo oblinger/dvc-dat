@@ -1,40 +1,50 @@
-"""Sandbox mode: a function under a ``db/mount/<prefix>`` row, loaded from the mounted tree, run in a worker.
+"""Sandbox mode: a function under a ``db/mount/<prefix>`` row, loaded from the mounted tree, run in a process of its own.
 
 Parent side (``load_sandboxed``, ``run_sandboxed``): the name resolves through
 the mounts as of the rev to a file under ``<checkout>/<db/root>``, the checkout
 being what discovery reports for the mount's ``db/repo`` (A40); no checkout is
-``NotEvaluated`` naming the repo. A miss runs in a worker process, one per
-mount (Q37 consequence (i)), started ``python -I`` (the standard library,
-``site-packages`` and nothing else on its path) with ``DAT_LEDGER`` naming the
-parent's ledger (A44). The worker seals the entry itself and hands back its
-subject; an exception comes back with the worker's traceback, nothing sealed.
+``NotEvaluated`` naming the repo. A miss runs at HEAD, clean or dirty (Q39 (A));
+``clean=True`` asks for a clean checkout at the rev's commit (``fn.check_clean``).
+It runs in a fresh process forked for the one call from a warm server, one per
+environment (the interpreter): the server is started ``python -I`` (the
+standard library, ``site-packages`` and nothing else on its path), imports the
+ledger's machinery and no mounted module, never initialises CUDA, and forks a
+child per request. The child opens the request's ledger (A44), runs the call,
+seals the entry itself and hands back its subject; an exception comes back
+with the child's traceback, nothing sealed; the child then exits, so nothing a
+body loaded or changed outlives its call.
 
-Worker side (``worker.py`` drives it): ``MountFinder``, first on
+Child side (``worker.py`` drives the server): ``MountFinder``, first on
 ``sys.meta_path``, loads a mounted prefix from its root, gives the prefix's
-ancestors empty namespace packages (their ``__init__`` never runs), records
-every module it loads against the innermost running eval, and refuses a
-module that would resolve inside a mounted repo's checkout but under no mount
+ancestors empty namespace packages (their ``__init__`` never runs), and refuses
+a module that would resolve inside a mounted repo's checkout but under no mount
 (``UnmountedImport``). An audit hook refuses, while a function body (or its
 module's load) runs, a read (``open``, ``os.listdir``/``scandir``) outside
 the mounted roots, the art store (the dats) and the body's ``work`` folder
 (``UntracedRead``), except the import system's own reads of module files and,
 while a module from outside the mounts is being imported, its reads in the
-interpreter's folders (covered by ``uv.lock``); and a write anywhere but the running body's ``work`` folder, the dat being produced
+interpreter's folders (its bundled data); and a write anywhere but the running
+body's ``work`` folder, the dat being produced
 (``ConfinedWrite``): ``open``/``os.open`` for writing, every path-changing
 ``os`` call (mkdir, rename, link, remove, chmod, ...), and through them
 ``pathlib``, ``shutil``, ``tempfile`` and ``sqlite3``. The ledger's own
 writes inside a body (a nested eval's seal, a dat materialised into the art
 store) run ``unguarded``. The same hook refuses a host-name lookup or an internet
 send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
-Before each top-level call the mounted modules are purged from
-``sys.modules``, so each run loads (and records) what it uses; a nested eval
-runs in-process and its loads count toward its own entry (Q37 (ii)).
+A nested eval runs in-process and its loads count toward its own entry (Q37 (ii)).
 
-The ``fn`` item (Q37 (A), lean): the static import closure of the function's
-module (its ``import`` statements, read from the source, within the mounts)
-plus every module loaded during the run and their closures, each
-``relpath -> sha256`` at the rev's commit, hashed with the mount rows into
-``db/fn/<name>/<hash>``. ``Fn.subject`` before any run is the static closure.
+The ``fn`` item (Q37 (A); Dan 2026-10-21): exactly the modules the run loaded,
+hashed with the mount rows into ``db/fn/<name>/<hash>``. A mounted module (and
+the static import closure of the function's module) is ``relpath -> sha256`` of
+the file as read; a third-party one is ``dist:<name> -> <version>:<sha256 of its
+RECORD>`` when its distribution has a ``RECORD``, else ``py:<path under its
+sys.path entry> -> sha256`` of the file (the standard library, an editable
+source). dvc-dat and what the server holds before the fork (the standard
+library pieces the ledger uses, pyyaml) are infrastructure, like dvc-dat (A56).
+A lookup re-hashes exactly those: a mounted file at the rev's ``code/<repo>``
+commit when it binds one other than HEAD, else on disk; a third-party one as
+installed now. Any byte changed in a loaded module is a different entry.
+``Fn.subject`` before any run is the static closure.
 """
 
 from __future__ import annotations
@@ -268,12 +278,112 @@ def static_closure(root: Path, start: str, within: Path) -> Dict[str, Path]:
     return seen
 
 
-def module_shas(rev: "Rev", env: Env, mods: Dict[str, Tuple[Mount, Path]]) -> Dict[str, str]:
+def module_shas(rev: "Rev", env: Env, mods: Dict[str, Tuple[Mount, Path]], at_rev: bool = True) -> Dict[str, str]:
+    """``relpath -> sha256`` of mounted modules: at the rev's commit (a lookup), or on disk, as read (a run)."""
     out = {}
     for _d, (m, path) in mods.items():
         rel = path.relative_to(m.checkout).as_posix()
-        out[rel] = file_sha(m.checkout, rel, _commit_for(rev, m.repo, env))
+        out[rel] = file_sha(m.checkout, rel, _commit_for(rev, m.repo, env) if at_rev else None)
     return dict(sorted(out.items()))
+
+
+# -- third-party modules: by distribution RECORD, else by file bytes ------------------------------------
+
+_SHAS: Dict[Tuple[str, int, int], str] = {}
+_DISTS: Optional[Dict[Tuple[str, str], Tuple[str, str]]] = None
+
+
+def _bytes_sha(path: str) -> str:
+    """sha256 of a file, cached by (path, mtime, size); ``<missing>`` when it is not there."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return "<missing>"
+    key = (path, st.st_mtime_ns, st.st_size)
+    if key not in _SHAS:
+        with open(path, "rb") as f:
+            _SHAS[key] = sha256(f.read())
+    return _SHAS[key]
+
+
+def _path_roots() -> List[str]:
+    """``sys.path`` folders, real, longest first (the innermost entry holding a file names it)."""
+    roots = {os.path.realpath(p) for p in sys.path if p and os.path.isdir(p)}
+    return sorted(roots, key=len, reverse=True)
+
+
+def _dist_record(dist: Any) -> Optional[str]:
+    text = dist.read_text("RECORD")
+    return None if text is None else f"{dist.version}:{sha256(text.encode())}"
+
+
+def _dist_map() -> Dict[Tuple[str, str], Tuple[str, str]]:
+    """``(site folder, top-level name) -> (dist:<name>, <version>:<RECORD sha>)`` for every installed
+    distribution whose ``RECORD`` lists its files (an editable install lists none of its sources)."""
+    global _DISTS
+    if _DISTS is None:
+        import importlib.metadata as md
+
+        out: Dict[Tuple[str, str], Tuple[str, str]] = {}
+        for dist in md.distributions():
+            try:
+                rec = _dist_record(dist)
+                files = dist.files or []
+                site = os.path.realpath(str(dist.locate_file("")))
+            except Exception:                   # a broken install names nothing
+                continue
+            name = re.sub(r"[-_.]+", "-", (dist.metadata["Name"] or "")).lower()
+            if rec is None or not name:
+                continue
+            for f in files:
+                top = f.parts[0] if f.parts else ""
+                if top and top != ".." and not top.endswith((".dist-info", ".data", ".pth")) \
+                        and top != "__pycache__":
+                    out.setdefault((site, top), (f"dist:{name}", rec))
+        _DISTS = out
+    return _DISTS
+
+
+def third_party_items(names: Set[str]) -> Dict[str, str]:
+    """The ``fn`` items of the non-mounted modules ``names`` (dvc-dat itself excluded, A56)."""
+    roots = _path_roots()
+    dists = _dist_map()
+    out: Dict[str, str] = {}
+    for name in sorted(names):
+        if name == "dvc_dat" or name.startswith("dvc_dat.") or _mount_of(STATE.mounts, name) is not None:
+            continue
+        f = getattr(sys.modules.get(name), "__file__", None)
+        if not f:
+            continue                            # built in, frozen, a namespace: the interpreter's
+        real = os.path.realpath(f)
+        root = next((r for r in roots if real.startswith(r + os.sep)), None)
+        if root is None:
+            continue
+        rel = Path(os.path.relpath(real, root)).as_posix()
+        hit = dists.get((root, rel.split("/")[0]))
+        if hit is not None:
+            out[hit[0]] = hit[1]
+        else:
+            out["py:" + rel] = _bytes_sha(real)
+    return out
+
+
+def third_party_now(key: str) -> str:
+    """A recorded third-party item's value as installed now (``<missing>`` when it is gone)."""
+    if key.startswith("dist:"):
+        import importlib.metadata as md
+
+        try:
+            rec = _dist_record(md.distribution(key[len("dist:"):]))
+        except md.PackageNotFoundError:
+            return "<missing>"
+        return rec or "<missing>"
+    rel = key[len("py:"):]
+    for root in [p for p in sys.path if p and os.path.isdir(p)]:
+        p = os.path.join(root, rel)
+        if os.path.isfile(p):
+            return _bytes_sha(os.path.realpath(p))
+    return "<missing>"
 
 
 def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, bool, str, bool]:
@@ -337,8 +447,7 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
     mods = module_shas(plain, env, closure(mounts, [modname]))
     rel = f[0].relative_to(m.checkout).as_posix()
     return Fn(name=name, module=f[0], sha=file_sha(m.checkout, rel, _commit_for(plain, m.repo, env)),
-              mode="sandbox", mount=m.prefix, signature=sig, env=Env(env.code, env.lock, env.platform,
-                                                                      mounts_hash(plain)),
+              mode="sandbox", mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain)),
               subject=fn_subject(name, mods, mounts_hash(plain)), _rev=rev, _takes_work=takes_work,
               _modules=mods, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
@@ -353,38 +462,34 @@ def sandbox_subject_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Option
     if m is None:
         return None
     commit = _commit_for(plain, m.repo, env)
-    now = {rel: file_sha(m.checkout, rel, commit) for rel in modules}
+    now = {rel: third_party_now(rel) if rel.startswith(("dist:", "py:")) else file_sha(m.checkout, rel, commit)
+           for rel in modules}
     return fn_subject(name, dict(sorted(now.items())), mounts_hash(plain))
 
 
-def _check_code(fn: Fn, plain: "Rev", env: Env) -> None:
-    repo = fn._info["repo"]
-    code = env.code.get(repo)
-    if code is None:
-        raise NotEvaluated(f"{fn.name}: repo {repo!r} has no checkout in this environment")
-    if code.dirty:
-        raise NotEvaluated(f"{fn.name}: the checkout of {repo} has uncommitted changes; a sandboxed result "
-                           "must be reproducible from a commit")
-    c = plain.get(f"code/{repo}", "commit")
-    if c is not None and not (code.commit and (code.commit.startswith(c) or c.startswith(code.commit))):
-        raise NotEvaluated(f"{fn.name}: rev {plain.id} binds code/{repo} to commit {c[:8]}; this environment "
-                           f"is at {(code.commit or '?')[:8]}; a miss there cannot run here")
-
-
 def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> Any:
+    """A miss: at HEAD, clean or dirty (Q39 (A)); the ``fn`` item records the bytes it loaded."""
     env = current_env()
-    if seal:                                        # memo=False simply runs (Eval § 2)
-        _check_code(fn, plain, env)
+    if fn._info["repo"] not in env.code:
+        raise NotEvaluated(f"{fn.name}: repo {fn._info['repo']!r} has no checkout in this environment")
     if IN_WORKER:
         return run_here(fn, plain, kw, enc, seal)
-    return _pool(plain, fn._info["prefix"]).call(fn, plain, kw, seal, env)
+    return _server().call(fn, plain, kw, seal, env)
 
 
 # -- the worker's own machinery -----------------------------------------------------------------------
 
+class _Frame:
+    """One running body: the modules present when it started, and those a nested body claimed."""
+
+    def __init__(self) -> None:
+        self.before: Set[str] = set(sys.modules)
+        self.claimed: Set[str] = set()
+
+
 class _State:
     mounts: List[Mount] = []
-    frames: List[Set[str]] = []
+    frames: List[_Frame] = []
     guard = False
     reads: List[str] = []                           # the mounted roots and the art store (the dats)
     importable: List[str] = []                      # sys.path and the mounts: where the import system reads
@@ -410,13 +515,6 @@ def unguarded() -> Iterator[None]:
         STATE.guard = old
 
 
-class _Loader(importlib.machinery.SourceFileLoader):
-    def exec_module(self, module: Any) -> None:
-        if STATE.frames:
-            STATE.frames[-1].add(module.__name__)
-        super().exec_module(module)
-
-
 def _importer() -> str:
     for fr in inspect.stack()[2:]:
         name = fr.frame.f_globals.get("__name__", "")
@@ -438,7 +536,7 @@ class MountFinder(importlib.abc.MetaPathFinder):
                 spec = importlib.machinery.ModuleSpec(fullname, None, is_package=True)
                 spec.submodule_search_locations = [str(d)]    # a root with no __init__.py: a namespace
                 return spec
-            loader = _Loader(fullname, str(f[0]))
+            loader = importlib.machinery.SourceFileLoader(fullname, str(f[0]))
             return importlib.util.spec_from_file_location(
                 fullname, str(f[0]), loader=loader,
                 submodule_search_locations=[str(f[0].parent)] if f[1] else None)
@@ -614,7 +712,7 @@ def _importing(frame: Any) -> Optional[str]:
 def _check_read(p: Optional[str], caller: Any) -> None:
     """Reads: the mounts, the dats, the running body's work folder; the import system's own reads of
     module files; and, while a module from outside the mounts is being imported, the interpreter's
-    folders (that module's data, covered by ``uv.lock``). Else ``UntracedRead``."""
+    folders (that module's data; the module itself is in ``fn``). Else ``UntracedRead``."""
     if p is None or _under(p, STATE.reads + _writable()):
         return
     if caller.f_code.co_filename.startswith("<frozen importlib") and _under(p, STATE.importable):
@@ -626,7 +724,7 @@ def _check_read(p: Optional[str], caller: Any) -> None:
     raise UntracedRead(f"{p}: outside the mounts, the dats and the work folder")
 
 
-def install_worker(ledger: Any, mounts: List[Mount], scratch: Path) -> None:
+def install_worker(ledger: Any, mounts: List[Mount]) -> None:
     global IN_WORKER
     IN_WORKER = True
     if not any(isinstance(f, MountFinder) for f in sys.meta_path):
@@ -646,13 +744,6 @@ def install_worker(ledger: Any, mounts: List[Mount], scratch: Path) -> None:
     STATE.hosts, STATE.addrs = _ledger_endpoints(ledger.path)
 
 
-def purge_mounted() -> None:
-    for name in list(sys.modules):
-        if _mount_of(STATE.mounts, name) is not None or any(m.prefix.startswith(name + ".") for m in STATE.mounts):
-            del sys.modules[name]
-    importlib.invalidate_caches()
-
-
 def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> Any:
     from .rev import Rev
 
@@ -665,7 +756,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
         modname, attr_name = fn._info["modname"], fn._info["attr"]
         work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None)) \
             if fn._takes_work else None
-        STATE.frames.append(set())
+        STATE.frames.append(_Frame())
         STATE.works.append(os.path.realpath(work) if work is not None else None)
         rec: Dict[str, str] = {}
         cwd = os.getcwd()
@@ -686,13 +777,19 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
             drop_work(work, None)
             raise
         finally:
-            loaded = STATE.frames.pop()
+            frame = STATE.frames.pop()
             STATE.works.pop()
+            new = set(sys.modules) - frame.before
+            loaded = new - frame.claimed
+            if STATE.frames:
+                STATE.frames[-1].claimed |= new     # a nested body's loads are its own entry's (Q37 (ii))
         value = wrap_result(fn.name, obj, out)
-        mods = module_shas(plain, env, closure(mounts, [modname, *sorted(loaded)]))
+        mounted = sorted(n for n in loaded if _mount_of(mounts, n) is not None)
+        mods = module_shas(plain, env, closure(mounts, [modname, *mounted]), at_rev=False)
+        mods = dict(sorted({**mods, **third_party_items(loaded)}.items()))
         fsub = fn_subject(fn.name, mods, mounts_hash(plain))
         trace = dict(rec)
-        trace.update({"fn": fsub, "uv.lock": env.lock, "platform": env.platform})
+        trace.update({"fn": fsub, "platform": env.platform})
         salt = rows.get(fn._info["prefix"], {}).get("salt")
         if salt is not None:
             trace["salt"] = salt
@@ -734,13 +831,12 @@ def encode_key(v: Any) -> Any:
     return v
 
 
-class Worker:
-    """One ``python -I`` process serving one mount of one ledger."""
+class Server:
+    """One warm ``python -I`` process per environment (the interpreter): it forks a fresh child per call."""
 
-    def __init__(self, ledger_path: Path) -> None:
+    def __init__(self) -> None:
         self.scratch = Path(tempfile.mkdtemp(prefix="ledger-worker-"))
         env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "TMPDIR", "LANG", "CUDA_VISIBLE_DEVICES")}
-        env["DAT_LEDGER"] = str(ledger_path)
         env["DAT_SCRATCH"] = str(self.scratch)
         self.proc = subprocess.Popen([sys.executable, "-I", "-m", "dvc_dat.ledger.worker"], stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, cwd=str(self.scratch), env=env)
@@ -752,7 +848,8 @@ class Worker:
     def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env) -> Any:
         from .rev import Ref
 
-        req = {"rev": plain.id, "name": fn.name, "keys": {k: encode_key(v) for k, v in kw.items()}, "seal": seal,
+        req = {"ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
+               "keys": {k: encode_key(v) for k, v in kw.items()}, "seal": seal,
                "env": {r: (c.version, c.commit, c.dirty, str(c.path) if c.path else None) for r, c in env.code.items()}}
         with self.lock:
             send(self.proc.stdin, req)
@@ -787,72 +884,107 @@ class Worker:
                 self.proc.kill()
 
 
-_POOL: Dict[Tuple[str, str], Worker] = {}
-_POOL_LOCK = threading.Lock()
+_SERVERS: Dict[str, Server] = {}
+_SERVERS_LOCK = threading.Lock()
 
 
-def _pool(plain: "Rev", prefix: str) -> Worker:
-    key = (str(plain.ledger.path), prefix)
-    with _POOL_LOCK:
-        w = _POOL.get(key)
-        if w is None or not w.alive():
-            w = _POOL[key] = Worker(plain.ledger.path)
-        return w
+def _server() -> Server:
+    """The warm server of this environment (``sys.executable``), started on first use."""
+    with _SERVERS_LOCK:
+        s = _SERVERS.get(sys.executable)
+        if s is None or not s.alive():
+            s = _SERVERS[sys.executable] = Server()
+        return s
 
 
 def shutdown() -> None:
-    """Stop every worker (also run at exit)."""
-    with _POOL_LOCK:
-        for w in _POOL.values():
-            w.close()
-        _POOL.clear()
+    """Stop every server (also run at exit)."""
+    with _SERVERS_LOCK:
+        for s in _SERVERS.values():
+            s.close()
+        _SERVERS.clear()
 
 
 atexit.register(shutdown)
 
 
-def worker_main() -> None:
-    """The worker's loop: one request, one reply, until its stdin closes."""
-    from .env import Code, set_env_provider
-    from .env import lock_hash, platform_tag
-    from .ledger import Ledger
-    from .rev import Ref
+def _warm() -> None:
+    """What every child shares, loaded once before any fork: the ledger's machinery (never a mounted
+    module, never CUDA) and the installed distributions' map."""
+    from . import kept, ledger, rev, store, trace, txn, value  # noqa: F401
+    _dist_map()
 
+
+def worker_main() -> None:
+    """The server's loop: one request, one forked child, one reply, until its stdin closes."""
     proto_in = sys.stdin.buffer
     proto_out = os.fdopen(os.dup(1), "wb")
     os.dup2(2, 1)
-    ledger = Ledger(os.environ["DAT_LEDGER"])
-    scratch = Path(os.environ.get("DAT_SCRATCH") or os.getcwd())
+    _warm()
     while True:
         try:
             req = recv(proto_in)
         except EOFError:
             return
-        try:
-            code = {r: Code(v, c, d, Path(p) if p else None) for r, (v, c, d, p) in req["env"].items()}
-            env = Env(code, lock_hash(), platform_tag())
-            set_env_provider(lambda env=env: env)
-            plain = ledger.at(req["rev"])
-            mounts, _rows = mounts_for(plain, env)
-            install_worker(ledger, mounts, scratch)
-            purge_mounted()
-            keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__" else v)
-                    for k, v in req["keys"].items()}
-            fn = plain.load_fn(req["name"])
-            kw = fn._bind(keys)
-            value = run_here(fn, plain, kw, _enc(kw), req["seal"])
-            if req["seal"]:
-                send(proto_out, {"ok": True, "subject": value.subject})
-            else:
-                preds = {k: _ship(v) for k, v in value.__dict__.pop("_preds", {}).items()}
-                send(proto_out, {"ok": True, "value": pickle.dumps(value), "preds": preds})
-        except BaseException as e:  # noqa: BLE001 - every failure goes back to the parent
+        r, w = os.pipe()
+        pid = os.fork()
+        if pid == 0:                                # the child: one call, then gone
+            os.close(r)
+            status = 0
             try:
-                blob = pickle.dumps(e)
-            except Exception:
-                blob = None
-            send(proto_out, {"ok": False, "exc": blob, "type": type(e).__name__, "message": str(e),
-                             "traceback": traceback.format_exc()})
+                with os.fdopen(w, "wb") as out:
+                    serve(req, out)
+            except BaseException:  # noqa: BLE001 - the parent reports a child that never replied
+                status = 1
+            finally:
+                sys.stdout.flush()
+                sys.stderr.flush()
+                os._exit(status)
+        os.close(w)
+        with os.fdopen(r, "rb") as inp:
+            try:
+                resp = recv(inp)
+            except (EOFError, pickle.UnpicklingError, struct.error):
+                resp = None
+        _pid, status = os.waitpid(pid, 0)
+        if resp is None:
+            resp = {"ok": False, "exc": None, "type": "WorkerDied",
+                    "message": f"the sandboxed call's process ended (status {status}) before it replied",
+                    "traceback": ""}
+        send(proto_out, resp)
+
+
+def serve(req: Dict[str, Any], out: Any) -> None:
+    """In the forked child: confine this process, run the call, reply on ``out``."""
+    from .env import Code, platform_tag, set_env_provider
+    from .ledger import Ledger
+    from .rev import Ref
+
+    try:
+        code = {r: Code(v, c, d, Path(p) if p else None) for r, (v, c, d, p) in req["env"].items()}
+        env = Env(code, platform_tag())
+        set_env_provider(lambda env=env: env)
+        ledger = Ledger(req["ledger"])
+        plain = ledger.at(req["rev"])
+        mounts, _rows = mounts_for(plain, env)
+        install_worker(ledger, mounts)
+        keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__" else v)
+                for k, v in req["keys"].items()}
+        fn = plain.load_fn(req["name"])
+        kw = fn._bind(keys)
+        value = run_here(fn, plain, kw, _enc(kw), req["seal"])
+        if req["seal"]:
+            send(out, {"ok": True, "subject": value.subject})
+        else:
+            preds = {k: _ship(v) for k, v in value.__dict__.pop("_preds", {}).items()}
+            send(out, {"ok": True, "value": pickle.dumps(value), "preds": preds})
+    except BaseException as e:  # noqa: BLE001 - every failure goes back to the parent
+        try:
+            blob = pickle.dumps(e)
+        except Exception:
+            blob = None
+        send(out, {"ok": False, "exc": blob, "type": type(e).__name__, "message": str(e),
+                   "traceback": traceback.format_exc()})
 
 
 def _ship(v: Any) -> Any:

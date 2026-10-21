@@ -10,9 +10,13 @@ class Multiple(LedgerError, LookupError):
 
 
 class NotEvaluated(LedgerError, RuntimeError):
-    """A call this environment will not run, a miss or a ``memo=False`` run: its code is
-    outside any git checkout or the checkout is dirty, its repo has no checkout here, or
-    (sandboxed) HEAD is not the rev's ``code/<repo>`` commit."""
+    """A call this environment will not run: its repo has no checkout here, or (base mode, a
+    miss) its code is outside any git checkout or the checkout is dirty."""
+
+
+class NotClean(NotEvaluated):
+    """A ``clean=True`` call whose code is not a clean representation of a version: the checkout
+    is dirty, or not at the commit the rev's ``code/<repo>`` row names (or the rev names none)."""
 
 
 class UnmountedImport(LedgerError, ImportError):

@@ -182,7 +182,7 @@ def test_deps_trace_and_alias_binding(L):
     t = out.trace
     key = f"ref:ledger_kinds.Plain:{raw.hash}"
     assert t[key] == key and t["data/raw db/alias"] == key
-    assert t["code/testrepo"] == "+abc1234" and t["uv.lock"] == "sha256:lock-1"
+    assert t["code/testrepo"] == "+abc1234" and "uv.lock" not in t
 
 
 def test_a_row_may_point_at_a_value(L):

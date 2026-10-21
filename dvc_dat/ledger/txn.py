@@ -563,7 +563,6 @@ class Transaction:
         env = env if env is not None else current_env()
         for repo in (env.code if repos is None else repos):
             trace[f"code/{repo}"] = code_token(self.base, repo, env.code[repo].commit if repo in env.code else None)
-        trace["uv.lock"] = env.lock
         trace["platform"] = env.platform
 
     def _seal_value(self, value: Value, *, deps: Sequence[Any] = (), alias: Optional[str] = None,

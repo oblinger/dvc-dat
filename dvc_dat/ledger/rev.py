@@ -567,14 +567,14 @@ class Rev:
 
         return load_fn(self, name)
 
-    def eval(self, name: str, /, *, memo: Any = True, **keys: Any) -> Optional[Value]:
-        """``load_fn(name)(memo=memo, **keys)``: memoised evaluation (see ``Fn.__call__``)."""
+    def eval(self, name: str, /, *, memo: Any = True, clean: bool = False, **keys: Any) -> Optional[Value]:
+        """``load_fn(name)(memo=memo, clean=clean, **keys)``: memoised evaluation (see ``Fn.__call__``)."""
         if not isinstance(name, str):
             raise TypeError("eval takes a dotted name; a function object would resolve in this process")
         from .sandbox import unguarded
 
         with unguarded():                          # in a sandboxed body: the lookup and seal are the ledger's
-            return self.load_fn(name)(memo=memo, **keys)
+            return self.load_fn(name)(memo=memo, clean=clean, **keys)
 
 
 def describe(s: Any, kind: Any, fn: Any, where: Optional[Dict[str, Any]], preds: Dict[str, Any]) -> str:
