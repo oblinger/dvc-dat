@@ -3,7 +3,7 @@
 A subclass says how it becomes bytes (``encode``) and back (``decode``) and,
 with ``@ledger_class(preds=...)``, which pred names its values may carry.
 ``preds`` is a plain dict while the value is unsealed, filled by whoever builds
-it; the seal (``v.seal(t)`` or an ``eval``) freezes it into a
+it; the seal (``v.seal(t)`` or an ``run``) freezes it into a
 read-only mapping and fixes ``subject``, ``rev`` and ``trace`` (Q25 (D)). A
 subclass's own ``__init__`` need not call ``super().__init__``. Shipped
 subclasses: ``Pickled`` (any pickleable object), ``Table`` (parquet), ``Dat``

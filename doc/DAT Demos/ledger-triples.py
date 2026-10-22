@@ -28,7 +28,7 @@ scratch_ledger_path = Path("scratch/triples-demo/ledger").resolve()
 #
 # The ledger as a quad store and nothing else. Every fact is a row
 # `(rev, subject, predicate, object)`, every write is one
-# transaction, every read is a function of one revision. No `eval`
+# transaction, every read is a function of one revision. No `run`
 # and no value functions here: the running example is plain
 # metadata about games (`game/G1`: teams, date, court, officials)
 # and a few clock subjects (`code/demo-game`, `schema/tape`).

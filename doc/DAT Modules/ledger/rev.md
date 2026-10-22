@@ -4,7 +4,7 @@ Every read of the ledger is made through a `Rev`, a frozen view as of
 one revision. Row reads (`[]`, `get`, `all`, `in`) fold the rows at or
 before the revision by each predicate's cardinality; `asserted` and
 `rows` walk history unfolded; subject reads (`refs`, `values`, `value`,
-`select`, `load`, `eval`) treat the store as a table whose rows are
+`select`, `load`, `run`) treat the store as a table whose rows are
 subjects. A stored `ref:` object always comes back as a `Ref`,
 unloaded; `Ref.load` is the one act that fetches bytes. A `Rev` handed
 to a value function's body also records every read into the function's
@@ -51,9 +51,11 @@ trace (see [trace](trace.md)). Part of the
   `keys` not a non-empty tuple `TypeError`.
 - `load(subject) -> Value`: `Ref(self, subject).load()`.
 - `load_fn(name) -> Fn`: see [fn](fn.md).
-- `eval(name, /, *, memo=True, clean=False, path=None, kwargs=None,
-  **keys) -> Value | None`: `load_fn(name)(...)` with the same
-  control options; a non-`str` name `TypeError`.
+- `run(name, /, *, memo=True, clean=False, path=None, kwargs=None,
+  **keys) -> Value | None`: the API form of `just run NAME KEY=VALUE`;
+  `load_fn(name)(...)` with the same control options; a non-`str` name
+  `TypeError`. `eval` is its deprecated alias (`DeprecationWarning`),
+  removed at the next major.
 
 `Ref(rev, name)`: one value at one moment, frozen, unpicklable.
 
@@ -107,5 +109,5 @@ Module functions used elsewhere: `class_named(ledger, dotted)`,
 ## Left to other modules
 
 Folding is [fold](fold.md)'s, SQL is [store](store.md)'s, trace item
-names and the hit test are [trace](trace.md)'s, resolution and `eval`
+names and the hit test are [trace](trace.md)'s, resolution and `run`
 are [fn](fn.md)'s, writing is [txn](txn.md)'s.

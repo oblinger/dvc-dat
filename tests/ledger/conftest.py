@@ -1,6 +1,6 @@
 """Fixtures for the ledger suite: a fresh ledger per test, once per store (``backends``), and a pinned environment.
 
-The environment provider (the test seam, A51) is pinned so ``eval`` is
+The environment provider (the test seam, A51) is pinned so ``run`` is
 deterministic: one repo, ``testrepo``, at commit ``abc1234``, clean, its
 checkout this folder; ``coded`` writes the matching ``code/testrepo`` rows.
 """

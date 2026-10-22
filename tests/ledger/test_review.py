@@ -17,15 +17,15 @@ def test_1_a_ref_made_in_a_body_keeps_the_recorder(coded):
     L = coded
     a = Plain(b"aaa")
     seal(L, a, alias="model/x")
-    v = L.at().eval("ledger_kinds.via_ref", name="model/x")
+    v = L.at().run("ledger_kinds.via_ref", name="model/x")
     assert v.trace["model/x db/alias"] == f"ref:ledger_kinds.Plain:{a.hash}"
     assert v.trace[f"ref:ledger_kinds.Plain:{a.hash}"]
     b = Plain(b"bbbbb")
     seal(L, b)
     with L.transaction(by="t") as t:
         t.add("model/x", "db/alias", b.subject)
-    assert L.at().eval("ledger_kinds.via_ref", name="model/x", memo="get") is None   # no stale hit
-    assert L.at().eval("ledger_kinds.via_ref", name="model/x").obj == {"n": 10}
+    assert L.at().run("ledger_kinds.via_ref", name="model/x", memo="get") is None   # no stale hit
+    assert L.at().run("ledger_kinds.via_ref", name="model/x").obj == {"n": 10}
 
 
 def test_1_ref_preds_and_ref_rev_reads_are_traced(coded):
@@ -33,12 +33,12 @@ def test_1_ref_preds_and_ref_rev_reads_are_traced(coded):
     v = Video(b"v")
     v.preds["game"] = "G1"
     seal(L, v, alias="vid")
-    p = L.at().eval("ledger_kinds.via_ref_preds", name="vid")
+    p = L.at().run("ledger_kinds.via_ref_preds", name="vid")
     assert any(k.startswith('q:{"__call__":"preds"') for k in p.trace)
     with L.transaction(by="t") as t:
         t.add(v.subject, "note", "hi")
     assert not p.matches(L.at())                       # an annotation moved the preds read
-    r = L.at().eval("ledger_kinds.via_refs_rev", game="G1")
+    r = L.at().run("ledger_kinds.via_refs_rev", game="G1")
     assert r.obj == {"note": "hi"} and f"{v.subject} note" in r.trace
 
 
@@ -111,10 +111,10 @@ def test_6_verbs_outside_with_raise(L):
 
 def test_7_a_recorded_miss_holds_while_still_missing(coded):
     L = coded
-    m = L.at().eval("ledger_kinds.maybe", game="G1")
+    m = L.at().run("ledger_kinds.maybe", game="G1")
     assert m.trace['eval:ledger_kinds.cut{"game":"G1","version":"1.0.0"}'] == "<none>"
     n = CALLS.get("maybe", 0)
-    assert L.at().eval("ledger_kinds.maybe", game="G1").subject == m.subject and CALLS.get("maybe", 0) == n
+    assert L.at().run("ledger_kinds.maybe", game="G1").subject == m.subject and CALLS.get("maybe", 0) == n
 
 
 def test_8_base_fn_hashes_the_static_closure(coded):
@@ -122,7 +122,7 @@ def test_8_base_fn_hashes_the_static_closure(coded):
     assert set(f._modules) == {"ledger_kinds.py", "ledger_helper.py"}
     v = Plain(b"x")
     seal(coded, v, alias="n")
-    e = coded.at().eval("ledger_kinds.via_ref", name="n")
+    e = coded.at().run("ledger_kinds.via_ref", name="n")
     assert sorted(coded.at()[e.trace["fn"], "db/modules"]) == ["ledger_helper.py", "ledger_kinds.py"]
 
 

@@ -1,11 +1,11 @@
-"""``ledger_fn``, ``Fn`` and ``eval`` (``Fn.__call__``): a revision function resolved at a ``Rev``.
+"""``ledger_fn``, ``Fn`` and ``run`` (``Fn.__call__``): a revision function resolved at a ``Rev``.
 
 ``@ledger_fn`` declares and returns the function unchanged (A52): a plain call
 runs the body and returns an unsealed ``Value``, recording nothing.
 ``rev.load_fn(name)`` resolves a dotted name at a revision: under a mounted
 prefix (``db/mount/<prefix>`` rows) it is a sandboxed function, loaded from the
 mounted tree and run in a worker (``sandbox``); otherwise a base function,
-resolved in this process. Calling the ``Fn`` is ``eval``: a memo lookup over
+resolved in this process. Calling the ``Fn`` is ``run``: a memo lookup over
 every entry at the top whose ``db/fn`` and ``db/keys`` rows match, each
 candidate's trace matched against the rev, the latest-sealed match winning
 (Q20, A20); on a miss, run, record the trace, seal with ``db/fn``,
@@ -217,7 +217,7 @@ def base_closure(modname: str, src: Path, env: Env) -> Dict[str, str]:
 
 @dataclass(frozen=True)
 class Fn:
-    """A revision function, resolved at ``_rev``; calling it is ``eval``."""
+    """A revision function, resolved at ``_rev``; calling it is ``run``."""
 
     name: str
     module: Path

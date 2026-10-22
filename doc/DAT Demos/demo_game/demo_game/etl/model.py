@@ -18,7 +18,7 @@ def train(rev, *, game: str, path: Path) -> StageDat:
 
 
 def fit(rev, path, *, game, epochs, **_):
-    trk = rev.eval("demo_game.etl.track.tracks", game=game)
+    trk = rev.run("demo_game.etl.track.tracks", game=game)
     runs = json.loads((trk.path / "tracks.json").read_text())
     weights = [round(r * epochs / 100, 3) for r in runs]
     (path / "weights.json").write_text(json.dumps(weights))

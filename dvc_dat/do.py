@@ -508,7 +508,7 @@ DESCRIPTION
     The return value prints on stdout when it is not None.
 
     With a `ledger:` line in the config, `x TARGET KEY=VALUE ...` runs
-    through the ledger instead: rev.eval of the ledger function TARGET names
+    through the ledger instead: rev.run of the ledger function TARGET names
     (a dotted function, a mounted name, or a spec file whose `main` names
     it, the line's keys over the file's), found if computed before from the
     same inputs by the same code, else run and sealed; it prints `hit` or
@@ -696,7 +696,7 @@ RESERVED_RUN_KEYS = ("alias",)                # control options on a ledger run,
 
 
 def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: Spec, flags: set) -> int:
-    """`x TARGET k=v ...` with a ledger: `rev.eval` -- found if computed before, else run and sealed.
+    """`x TARGET k=v ...` with a ledger: `rev.run` -- found if computed before, else run and sealed.
 
     TARGET is a spec file (`.yaml`/`.json`, its `main` naming the function, its
     other keys the keys), a mounted name loading to a ledger function or such a
@@ -741,7 +741,7 @@ def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: S
     alias = keys.pop("alias", None)
     if "dry-run" in flags:
         shown = [repr(name)] + [f"{k}={v!r}" for k, v in keys.items()]
-        print(f"rev.eval({', '.join(shown)})" + (f", then named {alias!r}" if alias else ""))
+        print(f"rev.run({', '.join(shown)})" + (f", then named {alias!r}" if alias else ""))
         return 0
     try:
         fn = ledger.at().load_fn(name)

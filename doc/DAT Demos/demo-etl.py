@@ -207,8 +207,8 @@ def cumulative(rev, *, games: list) -> Binning:
     """The binning over `games`: the cumulative over all but the last, plus the last game's binning."""
     if not games:
         return Binning([0] * 10)
-    rest = rev.eval("bins.stages.cumulative", games=games[:-1])   # the recursion
-    last = rev.eval("bins.stages.binning", game=games[-1])
+    rest = rev.run("bins.stages.cumulative", games=games[:-1])   # the recursion
+    last = rev.run("bins.stages.binning", game=games[-1])
     b = Binning([r + c for r, c in zip(rest.counts, last.counts)])
     b.preds["games"] = list(games)
     return b
@@ -223,7 +223,7 @@ from dvc_dat.ledger import ledger_fn
 def podium(rev, *, gameset: str) -> list:
     """The three fullest bins over a game set's games, fullest first."""
     games = sorted(rev.all(gameset, "contains"))                  # traced: the set's rows
-    total = rev.eval("bins.stages.cumulative", games=games)
+    total = rev.run("bins.stages.cumulative", games=games)
     fullest = sorted(range(10), key=lambda i: (-total.counts[i], i))[:3]
     return [f"{10 * i}-{10 * i + 9}" for i in fullest]
 ''', "report: podium")
@@ -244,11 +244,11 @@ print(L.at().load_fn("bins.report.podium").mode)
 # %% [markdown]
 # ### Asking for the podium
 #
-# `rev.eval(name, **keys)` returns the stage's result, running it only when no sealed result with a holding trace answers the same question.
+# `rev.run(name, **keys)` returns the stage's result, running it only when no sealed result with a holding trace answers the same question.
 
 # %%
 counts_before = entry_counts()
-podium_value = L.at().eval("bins.report.podium", gameset="gameset/normie")
+podium_value = L.at().run("bins.report.podium", gameset="gameset/normie")
 print(podium_value.obj)
 # → ['60-69', '0-9', '20-29']
 print(ran_since(counts_before))
@@ -259,7 +259,7 @@ print(ran_since(counts_before))
 
 # %%
 counts_before = entry_counts()
-again_value = L.at().eval("bins.report.podium", gameset="gameset/normie")
+again_value = L.at().run("bins.report.podium", gameset="gameset/normie")
 print(again_value.subject == podium_value.subject)
 # → True
 print(ran_since(counts_before))
@@ -277,7 +277,7 @@ print(ran_since(counts_before))
 with L.transaction(by="human:dan", why="G4 joins") as t:
     t.add("gameset/normie", "contains", "G4")
 counts_before = entry_counts()
-podium_value = L.at().eval("bins.report.podium", gameset="gameset/normie")
+podium_value = L.at().run("bins.report.podium", gameset="gameset/normie")
 print(ran_since(counts_before))
 # → {'binning': 1, 'cumulative': 1, 'podium': 1}
 
@@ -294,7 +294,7 @@ with L.transaction(by="human:dan", why="G5 for G3") as t:
     t.remove("gameset/normie", "contains", "G3")
     t.add("gameset/normie", "contains", "G5")
 counts_before = entry_counts()
-podium_value = L.at().eval("bins.report.podium", gameset="gameset/normie")
+podium_value = L.at().run("bins.report.podium", gameset="gameset/normie")
 print(sorted(L.at().all("gameset/normie", "contains")))
 # → ['G1', 'G2', 'G4', 'G5']
 print(ran_since(counts_before))
@@ -311,7 +311,7 @@ print(ran_since(counts_before))
 # %%
 seal_dataset("G2", seed=22)                 # G2 re-measured
 counts_before = entry_counts()
-podium_value = L.at().eval("bins.report.podium", gameset="gameset/normie")
+podium_value = L.at().run("bins.report.podium", gameset="gameset/normie")
 print(ran_since(counts_before))
 # → {'binning': 1, 'cumulative': 3, 'podium': 1}
 
@@ -328,7 +328,7 @@ report_path = repo_path / "bins/report.py"
 report_source = report_path.read_text().replace("[:3]", "[:2]").replace("three fullest", "two fullest")
 write_module("bins/report.py", report_source, "report: the podium is two bins")
 counts_before = entry_counts()
-podium_value = L.at().eval("bins.report.podium", gameset="gameset/normie")
+podium_value = L.at().run("bins.report.podium", gameset="gameset/normie")
 print(podium_value.obj)
 # → ['30-39', '20-29']
 print(ran_since(counts_before))

@@ -207,7 +207,7 @@ dat_fn = rev.load_fn("demo_game.etl.dat.dat")
 print(dat_fn.mode, dat_fn.mount)     # → sandbox demo_game.etl
 
 # %%
-spec_dat = rev.eval("demo_game.etl.dat.dat",
+spec_dat = rev.run("demo_game.etl.dat.dat",
                     spec=detect_spec_record)
 print(spec_dat, spec_dat.sealed)     # → <8 hex> True
 print(dict(sorted(spec_dat.preds.items())))
@@ -249,7 +249,7 @@ print(sorted(module_paths))
 
 # %%
 top_id = L.at().id
-again_dat = L.at().eval("demo_game.etl.dat.dat",
+again_dat = L.at().run("demo_game.etl.dat.dat",
                         spec=detect_spec_record)
 print(again_dat.subject == spec_dat.subject)   # → True: a hit
 print(L.at().id == top_id)           # → True: nothing written
@@ -260,7 +260,7 @@ print(L.at().id == top_id)           # → True: nothing written
 # stage function `detections`, which fixes the spec but the game:
 
 # %%
-detections_dat = rev.eval("demo_game.etl.detect.detections",
+detections_dat = rev.run("demo_game.etl.detect.detections",
                           game="G1")
 print(detections_dat.same_as(spec_dat),
       detections_dat.subject != spec_dat.subject)   # → True True
@@ -290,7 +290,7 @@ print(detections_ref.preds["metrics.count"])        # → 40
 #
 #
 # def link(rev, path, *, game, **_):
-#     dets = rev.eval("demo_game.etl.detect.detections", game=game)
+#     dets = rev.run("demo_game.etl.detect.detections", game=game)
 #     boxes = json.loads((dets.path / "boxes.json").read_text())
 #     runs = [b for a, b in zip(boxes, boxes[1:]) if a <= b]
 #     (path / "tracks.json").write_text(json.dumps(runs))
@@ -326,7 +326,7 @@ with L.transaction(by="human:dan", why="training") as t:
 
 # %%
 rev = L.at()
-model_dat = rev.eval("demo_game.etl.model.train", game="G1")
+model_dat = rev.run("demo_game.etl.model.train", game="G1")
 print(model_dat, model_dat.preds["stage"],
       model_dat.preds["gameset"])    # → <8 hex> model normie
 for item in sorted(model_dat.trace):
@@ -341,7 +341,7 @@ for item in sorted(model_dat.trace):
 # %% [markdown]
 # `train` missed; its `fit` evaluated `tracks`, which evaluated
 # `detections` (a hit: sealed above), and each miss sealed its own
-# dat. A stage depends on the one below by a nested `eval`, never
+# dat. A stage depends on the one below by a nested `run`, never
 # by an import and never by a `deps=` list: the eval records it.
 # The model's trace holds its own code (`fn`: `model.py` and
 # `dat.py`, since the modules a nested eval loads are that
@@ -350,7 +350,7 @@ for item in sorted(model_dat.trace):
 
 # %%
 for game in ("G2", "G3"):
-    rev.eval("demo_game.etl.model.train", game=game)
+    rev.run("demo_game.etl.model.train", game=game)
 print(L.at().select(("stage", "metrics.count"), kind=StageDat,
                     game="G1"))
 # → [("detect", "40"), ("detect", "40"), ("detect", "40"),
@@ -367,7 +367,7 @@ print(L.at().select(("stage", "metrics.count"), kind=StageDat,
 
 # %%
 rev = L.at()
-tracks_dat = rev.eval("demo_game.etl.track.tracks",
+tracks_dat = rev.run("demo_game.etl.track.tracks",
                       game="G1")                   # a hit
 pre_bump_rev = rev
 track_path = scratch_project_path / "demo_game/etl/track.py"
@@ -407,8 +407,8 @@ print(model_dat.matches(rev))                   # → False, for now
 # its nested `tracks` item has no entry that holds at this rev yet.
 
 # %%
-model_hit_dat = rev.eval("demo_game.etl.model.train", game="G1")
-retracked_dat = rev.eval("demo_game.etl.track.tracks",
+model_hit_dat = rev.run("demo_game.etl.model.train", game="G1")
+retracked_dat = rev.run("demo_game.etl.track.tracks",
                          game="G1")                # a hit
 print(retracked_dat.subject != tracks_dat.subject)  # → True
 print(retracked_dat.same_as(tracks_dat))     # → True: same bytes
@@ -433,7 +433,7 @@ print(tracks_dat.diff(retracked_dat))
 
 # %%
 rev = L.at()
-tracks_g3_dat = rev.eval("demo_game.etl.track.tracks",
+tracks_g3_dat = rev.run("demo_game.etl.track.tracks",
                          game="G3")    # re-derived: track.py moved
 fit_spec_record = {"main": "demo_game.etl.model.fit",
                    "stage": "model", "game": "G3", "epochs": 20}
@@ -524,7 +524,7 @@ with L.transaction(by="human:dan", why="train longer") as t:
     t["cfg/train", "epochs"] = "12"
 rev = L.at()
 for game in ("G1", "G2"):
-    rev.eval("demo_game.etl.model.train", game=game)
+    rev.run("demo_game.etl.model.train", game=game)
 print(len(L.at().refs(kind=StageDat, since=rev)))   # → 3: two
 #   models, and G2's tracks, re-derived since track.py moved
 
@@ -534,10 +534,10 @@ print(len(L.at().refs(kind=StageDat, since=rev)))   # → 3: two
 
 # %%
 release_rev = L.at("0.1.0")
-old_model_dat = release_rev.eval("demo_game.etl.model.train",
+old_model_dat = release_rev.run("demo_game.etl.model.train",
                                  game="G1")
 print(old_model_dat.subject == model_dat.subject)  # → True: 8
-now_model_dat = L.at().eval("demo_game.etl.model.train",
+now_model_dat = L.at().run("demo_game.etl.model.train",
                             game="G1")
 print(now_model_dat.subject == old_model_dat.subject)  # → False
 print(old_model_dat.diff(now_model_dat))
@@ -555,7 +555,7 @@ print(old_model_dat.diff(now_model_dat))
 
 # %%
 try:
-    pre_bump_rev.eval("demo_game.etl.model.train", game="G4",
+    pre_bump_rev.run("demo_game.etl.model.train", game="G4",
                       clean=True)
 except NotClean as e:
     print("NotClean:", e)       # → NotClean: … binds code/demo-game
@@ -602,7 +602,7 @@ print({game: model_ref.preds["metrics.score"]
 
 # %%
 rev = L.at()
-scores_table = rev.eval("demo_game.etl.report.scores",
+scores_table = rev.run("demo_game.etl.report.scores",
                         gameset="normie")
 print(type(scores_table).__name__)       # → Table
 q_items = [k for k in scores_table.trace if k.startswith("q:")]
@@ -622,10 +622,10 @@ print(len(json.loads(scores_table.trace[q_items[0]])))   # → 4
 with L.transaction(by="human:dan", why="G3 plays normie") as t:
     t["game/G3", "gameset"] = "normie"
 rev = L.at()
-rev.eval("demo_game.etl.model.train", game="G3")  # re-derived
+rev.run("demo_game.etl.model.train", game="G3")  # re-derived
 rev = L.at()                                  # after its seal
 print(scores_table.matches(rev))              # → False
-rescored_table = rev.eval("demo_game.etl.report.scores",
+rescored_table = rev.run("demo_game.etl.report.scores",
                           gameset="normie")
 print(list(scores_table.diff(rescored_table)))
 # → [the q: item, the fifth model's ref: item]: values loads each
@@ -662,7 +662,7 @@ print(Path(".datconfig.yaml").read_text())   # → ledger: .dat/ledger
 
 # %%
 try:
-    rev.eval("demo_game.etl.stray.borrow", game="G1")
+    rev.run("demo_game.etl.stray.borrow", game="G1")
 except UnmountedImport as e:
     print("UnmountedImport:", e)     # → … demo_game.shots
 
@@ -672,7 +672,7 @@ except UnmountedImport as e:
 
 # %%
 try:
-    rev.eval("demo_game.etl.stray.snoop", game="G1")
+    rev.run("demo_game.etl.stray.snoop", game="G1")
 except UntracedRead as e:
     print("UntracedRead:", e)        # → UntracedRead: /etc/hosts
 

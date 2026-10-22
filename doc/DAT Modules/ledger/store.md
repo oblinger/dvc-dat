@@ -123,7 +123,7 @@ The load harness (`tests/load/`, `uv run python -m tests.load
 a small run) drives N processes on one fresh ledger, each doing M
 operations: seals (unique, and a few shared ones raced across
 processes), alias re-points and salt changes under `lock=`, base-mode
-`eval`s with memo hits and misses, reads. Its invariants (contiguous
+`run`s with memo hits and misses, reads. Its invariants (contiguous
 revisions, no lost row, no duplicate subject or memo entry, every
 memo hit's trace holding at the rev it hit, every alias at its last
 re-point, the fold identical from fresh handles and fresh processes,

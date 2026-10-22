@@ -4,7 +4,7 @@ Every read lives on ``Rev``. The row reads (``[]``, ``get``, ``all``, ``in``)
 fold the rows at or before the revision by each predicate's cardinality as of
 that revision, at every arity (Q19); ``asserted`` and ``rows`` are the two
 reads that walk history unfolded. The subject reads (``refs``, ``values``,
-``value``, ``select``, ``load``, ``eval``) treat the store as a table whose
+``value``, ``select``, ``load``, ``run``) treat the store as a table whose
 rows are subjects. No pattern read decodes a ``ref:`` object: it comes back a
 ``Ref``, unloaded (Q35). Inside a value function the ``Rev`` handed to the body
 records what it reads into the function's trace (``trace``).
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from .codec import canonical, encode_plain, is_hash, parse_ref, ref_text, show, strip_hint, tag
@@ -577,14 +578,19 @@ class Rev:
 
         return load_fn(self, name)
 
-    def eval(self, name: str, /, *, memo: Any = True, clean: bool = False, **keys: Any) -> Optional[Value]:
-        """``load_fn(name)(memo=memo, clean=clean, **keys)``: memoised evaluation (see ``Fn.__call__``)."""
+    def run(self, name: str, /, *, memo: Any = True, clean: bool = False, **keys: Any) -> Optional[Value]:
+        """The API form of ``just run NAME KEY=VALUE``: ``load_fn(name)(memo=memo, clean=clean, **keys)``, memoised."""
         if not isinstance(name, str):
-            raise TypeError("eval takes a dotted name; a function object would resolve in this process")
+            raise TypeError("run takes a dotted name; a function object would resolve in this process")
         from .sandbox import unguarded
 
         with unguarded():                          # in a sandboxed body: the lookup and seal are the ledger's
             return self.load_fn(name)(memo=memo, clean=clean, **keys)
+
+    def eval(self, name: str, /, *, memo: Any = True, clean: bool = False, **keys: Any) -> Optional[Value]:
+        """Deprecated: ``run``."""
+        warnings.warn("Rev.eval is renamed Rev.run; eval goes at the next major", DeprecationWarning, stacklevel=2)
+        return self.run(name, memo=memo, clean=clean, **keys)
 
 
 def describe(s: Any, kind: Any, fn: Any, where: Optional[Dict[str, Any]], preds: Dict[str, Any]) -> str:

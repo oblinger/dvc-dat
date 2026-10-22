@@ -2,11 +2,11 @@
 
 A value function is a plain Python function marked `@ledger_fn`; an
 `Fn` is that function resolved at a revision, and calling an `Fn` is
-`eval`. Resolution decides the mode: a name under a mounted prefix
+`run`. Resolution decides the mode: a name under a mounted prefix
 (`db/mount/<prefix>` rows as of the revision) is a sandboxed function,
 loaded from the mounted tree and run in a worker
 ([sandbox](sandbox.md)); any other name is a base function, resolved in
-this process. `eval` is a memo: the same question asked of an unchanged
+this process. `run` is a memo: the same question asked of an unchanged
 world hands back the value already sealed. Part of the
 [architecture](../../DAT%20Architecture.md).
 

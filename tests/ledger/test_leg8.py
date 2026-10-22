@@ -11,20 +11,20 @@ def test_memo_false_runs_on_a_dirty_or_stale_checkout(coded, envbox):
     with coded.transaction(by="t") as t:
         t["game/G1"] = {"home": "G4"}
     envbox.code(dirty=True)
-    assert coded.at().eval("ledger_kinds.scratchy", game="G1", memo=False).obj == {"game": "G1"}
+    assert coded.at().run("ledger_kinds.scratchy", game="G1", memo=False).obj == {"game": "G1"}
     with pytest.raises(NotEvaluated):
-        coded.at().eval("ledger_kinds.scratchy", game="G1")
+        coded.at().run("ledger_kinds.scratchy", game="G1")
     envbox.code(commit="other99")
-    v = coded.at().eval("ledger_kinds.scratchy", game="G1", memo=False)
+    v = coded.at().run("ledger_kinds.scratchy", game="G1", memo=False)
     assert not v.sealed and "fn" in v.trace
 
 
 def test_the_work_folder_goes_after_the_call_in_both_modes(coded):
-    coded.at().eval("ledger_kinds.scratchy", game="G1", memo=False)
+    coded.at().run("ledger_kinds.scratchy", game="G1", memo=False)
     assert not CALLS["work"].exists()
-    coded.at().eval("ledger_kinds.scratchy", game="G2")
+    coded.at().run("ledger_kinds.scratchy", game="G2")
     assert not CALLS["work"].exists()
-    d = coded.at().eval("ledger_kinds.folder", game="G1", memo=False)    # an unsealed Dat is its folder
+    d = coded.at().run("ledger_kinds.folder", game="G1", memo=False)    # an unsealed Dat is its folder
     assert (d.path / "a.txt").read_text() == "G1"
 
 

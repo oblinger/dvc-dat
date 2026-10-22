@@ -1,4 +1,4 @@
-"""Contracts of functions and eval in base mode: ledger_fn, load_fn, the memo, the trace, NotEvaluated."""
+"""Contracts of functions and run in base mode: ledger_fn, load_fn, the memo, the trace, NotEvaluated."""
 
 import pytest
 
@@ -42,10 +42,10 @@ def test_load_fn_fields(world):
 
 def test_eval_seals_once_and_hits(world):
     rev = world.at()
-    a = rev.eval("ledger_kinds.cut", game="G1")
+    a = rev.run("ledger_kinds.cut", game="G1")
     assert a.sealed and a.rev.id == rev.id + 1 and CALLS["cut"] == 1
     top = world.at().id
-    b = world.at().eval("ledger_kinds.cut", game="G1", version="1.0.0")      # defaults bound in
+    b = world.at().run("ledger_kinds.cut", game="G1", version="1.0.0")      # defaults bound in
     assert b.subject == a.subject and CALLS["cut"] == 1 and world.at().id == top and b.rev.id == a.rev.id
     r = world.at()
     assert r[a.subject, "db/keys"] == {"game": "G1", "version": "1.0.0"}
@@ -55,7 +55,7 @@ def test_eval_seals_once_and_hits(world):
 
 
 def test_trace_items(world):
-    a = world.at().eval("ledger_kinds.cut", game="G1")
+    a = world.at().run("ledger_kinds.cut", game="G1")
     t = dict(a.trace)
     assert t["game/G1 home"] == "G4" and t["code/testrepo"] == "1.0.0+abc1234"
     q = [k for k in t if k.startswith("q:")]
@@ -65,57 +65,63 @@ def test_trace_items(world):
     assert set(t) >= {"fn", "platform"} and "uv.lock" not in t
 
 
+def test_eval_is_a_deprecated_alias_of_run(world):
+    a = world.at().run("ledger_kinds.cut", game="G1")
+    with pytest.warns(DeprecationWarning, match="Rev.eval is renamed Rev.run"):
+        b = world.at().eval("ledger_kinds.cut", game="G1")
+    assert b.subject == a.subject
+
 def test_memo_false_and_get(world):
     rev = world.at()
-    assert rev.eval("ledger_kinds.cut", game="G1", memo="get") is None
-    dry = rev.eval("ledger_kinds.cut", game="G1", memo=False)
+    assert rev.run("ledger_kinds.cut", game="G1", memo="get") is None
+    dry = rev.run("ledger_kinds.cut", game="G1", memo=False)
     assert not dry.sealed and world.at().id == rev.id
-    a = rev.eval("ledger_kinds.cut", game="G1")
-    assert dry.same_as(a) and rev.eval("ledger_kinds.cut", game="G1", memo="get").subject == a.subject
+    a = rev.run("ledger_kinds.cut", game="G1")
+    assert dry.same_as(a) and rev.run("ledger_kinds.cut", game="G1", memo="get").subject == a.subject
 
 
 def test_a_read_change_misses_and_diff_names_it(world):
-    a = world.at().eval("ledger_kinds.cut", game="G1")
+    a = world.at().run("ledger_kinds.cut", game="G1")
     with world.transaction(by="t") as t:
         t["game/G1", "away"] = "G9"                 # not read
     assert a.matches(world.at())
     with world.transaction(by="t") as t:
         t["game/G1", "home"] = "G6"
     assert not a.matches(world.at())
-    b = world.at().eval("ledger_kinds.cut", game="G1")
+    b = world.at().run("ledger_kinds.cut", game="G1")
     assert b.subject != a.subject and a.diff(b) == {"game/G1 home": ("G4", "G6")}
 
 
 def test_code_commit_pins_the_version_and_the_env_commit_decides(world, envbox):
-    a = world.at().eval("ledger_kinds.cut", game="G1")
+    a = world.at().run("ledger_kinds.cut", game="G1")
     assert a.trace["code/testrepo"] == "1.0.0+abc1234"
     with world.transaction(by="t") as t:
         t.add("code/testrepo", "version", "1.0.1")        # version moves, commit does not
     assert a.matches(world.at())
     envbox.code(commit="def5678")                          # a later commit: the row no longer gates (Q7 (C))
     assert not a.matches(world.at())                       # a hit holds at the commit it ran at
-    b = world.at().eval("ledger_kinds.cut", game="G2")
+    b = world.at().run("ledger_kinds.cut", game="G2")
     assert b.trace["code/testrepo"] == "1.0.1+def5678"     # the row's version, the environment's commit
-    assert world.at().eval("ledger_kinds.cut", game="G2", memo="get").subject == b.subject
+    assert world.at().run("ledger_kinds.cut", game="G2", memo="get").subject == b.subject
     envbox.code(commit="abc1234")
-    assert world.at().eval("ledger_kinds.cut", game="G1", memo="get").subject == a.subject
+    assert world.at().run("ledger_kinds.cut", game="G1", memo="get").subject == a.subject
     envbox.code(dirty=True)
     with pytest.raises(NotEvaluated):
-        world.at().eval("ledger_kinds.cut", game="G3")
+        world.at().run("ledger_kinds.cut", game="G3")
 
 
 def test_clean_requires_a_clean_checkout_at_the_revs_commit(world, envbox):
-    a = world.at().eval("ledger_kinds.cut", game="G1", clean=True)      # clean, at the row's commit
-    assert world.at().eval("ledger_kinds.cut", game="G1", clean=True).subject == a.subject
+    a = world.at().run("ledger_kinds.cut", game="G1", clean=True)      # clean, at the row's commit
+    assert world.at().run("ledger_kinds.cut", game="G1", clean=True).subject == a.subject
     envbox.code(commit="def5678")
     with pytest.raises(NotClean, match="binds code/testrepo to abc1234"):
-        world.at().eval("ledger_kinds.cut", game="G1", clean=True)        # refused before the lookup
+        world.at().run("ledger_kinds.cut", game="G1", clean=True)        # refused before the lookup
     envbox.code(dirty=True)
     with pytest.raises(NotClean, match="uncommitted changes") as e:
-        world.at().eval("ledger_kinds.cut", game="G1", clean=True, memo=False)
+        world.at().run("ledger_kinds.cut", game="G1", clean=True, memo=False)
     assert isinstance(e.value, NotEvaluated)                               # catchable as either
     with pytest.raises(TypeError):
-        world.at().eval("ledger_kinds.cut", game="G1", clean="yes")
+        world.at().run("ledger_kinds.cut", game="G1", clean="yes")
 
 
 def test_clean_needs_a_code_row(L):
@@ -127,7 +133,7 @@ def test_clean_needs_a_code_row(L):
     with L.transaction(by="t") as t:
         v.seal(t)
     with pytest.raises(NotClean, match="names no code/testrepo commit"):
-        L.at().eval("ledger_kinds.cut", game="G1", clean=True)
+        L.at().run("ledger_kinds.cut", game="G1", clean=True)
 
 
 def test_no_code_row_runs_with_the_env_commit(L):
@@ -138,32 +144,32 @@ def test_no_code_row_runs_with_the_env_commit(L):
     v.preds.update(game="G1")
     with L.transaction(by="t") as t:
         v.seal(t)
-    a = L.at().eval("ledger_kinds.cut", game="G1")
+    a = L.at().run("ledger_kinds.cut", game="G1")
     assert a.trace["code/testrepo"] == "+abc1234"
 
 
 def test_keys_by_bytes_and_bare_return_pickled(world):
-    a = world.at().eval("ledger_kinds.cut", game="G1")
-    th = world.at().eval("ledger_kinds.thumb", clip=Ref(world.at(), a.subject))
+    a = world.at().run("ledger_kinds.cut", game="G1")
+    th = world.at().run("ledger_kinds.thumb", clip=Ref(world.at(), a.subject))
     assert isinstance(th, Pickled) and th.obj == {"n": len(a.clip)}
     assert world.at()[th.subject, "db/keys"] == {"clip": f"ref:ledger_kinds.Cut:{a.hash}"}
     assert world.at()[th.trace["fn"], "db/returns"] == "dict"
     with pytest.raises(TypeError):
-        world.at().eval("ledger_kinds.thumb", clip={"x": Ref(world.at(), a.subject)})
+        world.at().run("ledger_kinds.thumb", clip={"x": Ref(world.at(), a.subject)})
 
 
 def test_wrong_return_type_refused(world):
     with pytest.raises(TypeError):
-        world.at().eval("ledger_kinds.wrong", game="G1")
+        world.at().run("ledger_kinds.wrong", game="G1")
 
 
 def test_alias_binding_and_nested_eval(world):
-    a = world.at().eval("ledger_kinds.cut", game="G1")
+    a = world.at().run("ledger_kinds.cut", game="G1")
     with world.transaction(by="t") as t:
         t.add("game/G1", "db/alias", a.subject)
-    p = world.at().eval("ledger_kinds.poster", game="G1")
+    p = world.at().run("ledger_kinds.poster", game="G1")
     assert p.trace["game/G1 db/alias"] == f"ref:ledger_kinds.Cut:{a.hash}"
-    ch = world.at().eval("ledger_kinds.chain", game="G1")
+    ch = world.at().run("ledger_kinds.chain", game="G1")
     item = 'eval:ledger_kinds.cut{"game":"G1","version":"1.0.0"}'
     assert ch.trace[item] == f"ref:ledger_kinds.Cut:{a.hash}"
     assert ch.matches(world.at())
@@ -175,11 +181,11 @@ def test_alias_binding_and_nested_eval(world):
 
 
 def test_work_folder_dat(world):
-    d = world.at().eval("ledger_kinds.folder", game="G1")
+    d = world.at().run("ledger_kinds.folder", game="G1")
     assert isinstance(d, Dat) and (d.path / "a.txt").read_text() == "G1"
     assert "work" not in world.at()[d.subject, "db/keys"]
     with pytest.raises(TypeError):
-        world.at().eval("ledger_kinds.folder", game="G1", work="x")
+        world.at().run("ledger_kinds.folder", game="G1", work="x")
 
 
 def test_racing_entries_both_kept_latest_wins(world):
@@ -187,7 +193,7 @@ def test_racing_entries_both_kept_latest_wins(world):
     out = []
 
     def go():
-        out.append(world.at().eval("ledger_kinds.cut", game="G2"))
+        out.append(world.at().run("ledger_kinds.cut", game="G2"))
     ts = [threading.Thread(target=go) for _ in range(2)]
     [t.start() for t in ts]
     [t.join() for t in ts]
