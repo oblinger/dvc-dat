@@ -56,13 +56,13 @@ def test_usage_block(L, tmp_path, monkeypatch):
         raw0.preds.update(game="G1")
         raw0.seal(t)
     rev = L.at()
-    m = rev.eval("ledger_kinds.cut", game="G1")   # memoised  ADAPTED: ledger_kinds.cut for demo_game.identity.train
+    m = rev.run("ledger_kinds.cut", game="G1")   # memoised  ADAPTED: ledger_kinds.cut for demo_game.identity.train
     assert m.trace and m.rev and m.sealed    # the model itself, with its provenance on it
-    assert rev.eval("ledger_kinds.cut", game="G1", memo=False).sealed is False   # run, no seal
-    assert rev.eval("ledger_kinds.cut", game="G1", memo="get").subject == m.subject   # or None
+    assert rev.run("ledger_kinds.cut", game="G1", memo=False).sealed is False   # run, no seal
+    assert rev.run("ledger_kinds.cut", game="G1", memo="get").subject == m.subject   # or None
 
     f = rev.load_fn("ledger_kinds.cut")           # Fn: resolved at rev
-    assert f(game="G1").subject == m.subject  # == rev.eval(...)  ADAPTED: G1, the game that exists
+    assert f(game="G1").subject == m.subject  # == rev.run(...)  ADAPTED: G1, the game that exists
     assert f.module.name == "ledger_kinds.py" and len(f.sha) == 64 and f.mode == "base" and f.env.platform
 
     rev = L.at()                             # ADAPTED: refs are as-of; the entry is after the old rev
@@ -96,7 +96,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
     raw.preds.update(game="G2", camera="wide")
     with L.transaction(by="human:dan") as t:
         raw.seal(t, provenance="import:alg2")
-    cut = L.at().eval("ledger_kinds.cut", game="G2", version="1.5.3")
+    cut = L.at().run("ledger_kinds.cut", game="G2", version="1.5.3")
     with L.transaction(by="human:dan") as t:
         t.add("game/G2", "db/alias", cut.subject)
         t["game/G2", "court"] = "C2"         # literal: the game's own row beside its alias (A34)
@@ -178,7 +178,7 @@ def test_putting_an_artifact_in_block(L):
     rows = {r.predicate for r in L.at().rows(since=L.at(L.at().id - 1)) if r.subject == raw.subject}
     assert {"db/value", "db/kind", "db/provenance", "db/preds", "game", "camera"} <= rows
     assert any(p.startswith("db/trace/") for p in rows)
-    cut = L.at().eval("ledger_kinds.cut", game="G1", version="1.5.3")
+    cut = L.at().run("ledger_kinds.cut", game="G1", version="1.5.3")
     with L.transaction(by="human:dan") as t:   # seal-then-repoint
         t.add("game/G1", "db/alias", cut.subject)   # the current cut
     r = L.at()

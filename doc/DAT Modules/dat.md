@@ -98,7 +98,7 @@ Module functions: `merge_dicts`, `expand`, `expand_spec`.
 
 ## Left to other modules
 
-The ledger (history, values, `eval`) is
+The ledger (history, values, `run`) is
 [`dvc_dat.ledger`](ledger/DAT%20Ledger.md);
 the command line is `dvc_dat.do.cli_main`, reached by `just run`
 (`dvc_dat.just`) and `bin/x`

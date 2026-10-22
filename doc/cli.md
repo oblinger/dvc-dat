@@ -94,7 +94,7 @@ x my_letters --json rules='[[2, "my_letters.triple_it"]]'
 ## With a ledger: `run` evaluates
 
 When the config has a `ledger:` line, `x TARGET KEY=VALUE ...` runs
-through the ledger (F447 Q40): `rev.eval` of the ledger function TARGET
+through the ledger (F447 Q40): `rev.run` of the ledger function TARGET
 names, found if computed before from the same inputs by the same code,
 else run and sealed. It prints `hit` or `ran`, the value (its name, else
 a hash prefix) and its preds. Without a `ledger:` line it is the bare run
@@ -112,7 +112,7 @@ x model-G1.yaml epochs=9                     # the line's key wins
 x model-G1.yaml alias=model/prod             # names the result
 ```
 
-`alias=NAME` is the eval's `path=`: it names the result, and a `Dat`'s
+`alias=NAME` is the run's `path=`: it names the result, and a `Dat`'s
 folder is built there. `--set` / `--json` update a spec's keys. A target
 that is not a ledger function, and a positional argument, are refused.
 `DAT_LEDGER` overrides the config's ledger, as for `Ledger()`.

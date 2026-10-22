@@ -6,7 +6,7 @@ Each worker process opens its own ``Ledger`` handle and runs a seeded mix of ope
 ``shared``  one of a few ``Blob``s every worker seals: the same subject raced across processes
 ``alias``   an ``alias/<k>`` re-pointed at one of this worker's seals, under ``lock=``
 ``salt``    ``load/config salt`` changed, under ``lock=``: every memo entry's trace reads it
-``eval``    ``rev.eval("tests.load.loadfns.square", n=k)``, a base-mode function: hits and misses
+``eval``    ``rev.run("tests.load.loadfns.square", n=k)``, a base-mode function: hits and misses
 ``read``    a load of one of this worker's seals, an alias resolution and a bracket read at the top
 
 Every write transaction is tagged ``by=load:w<w>:<i>``. After the run the parent checks, each from a
@@ -179,7 +179,7 @@ def worker(cfg: Dict[str, Any], wid: int, ready: Any, start: Any, out: str) -> N
                 n = rng.randrange(cfg["keys"])
                 rev = L.at()
                 before = loadfns.CALLS["square"]
-                v = rev.eval(FN, n=n)
+                v = rev.run(FN, n=n)
                 ran = loadfns.CALLS["square"] != before
                 rec["counts"][op]["misses" if ran else "hits"] += 1
                 rec["evals"].append({"i": i, "at": rev.id, "n": n, "subject": v.subject, "ran": ran,

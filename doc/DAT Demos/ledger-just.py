@@ -113,13 +113,13 @@ video_value.preds.update(game="G1", camera="wide", span=[0, 9000])
 with L.transaction(by="human:dan") as t:                 # rev 4
     video_value.seal(t, alias="video/G1",
                      provenance="import:archive")
-cut_153_value = L.at().eval("demo_game.game.cut",       # rev 5
+cut_153_value = L.at().run("demo_game.game.cut",       # rev 5
                             game="G1", version="1.5.3")
 with L.transaction(by="human:dan") as t:                 # rev 6
     t.add("game/G1", "db/alias", cut_153_value.subject)
 with L.transaction(by="human:dan", why="home was G6") as t:
     t["game/G1", "home"] = "G6"                          # rev 7
-cut_154_value = L.at().eval("demo_game.game.cut",       # rev 8
+cut_154_value = L.at().run("demo_game.game.cut",       # rev 8
                             game="G1", version="1.5.4")
 with L.transaction(by="human:dan") as t:                 # rev 9
     t.add("game/G1", "db/alias", cut_154_value.subject)
@@ -166,7 +166,7 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # %% [markdown]
 # Found means computed before from the same inputs by the same code;
 # otherwise the function runs and its result is sealed. It is
-# `rev.eval(name, **keys)`, with `memo="get"` asked first to say which.
+# `rev.run(name, **keys)`, with `memo="get"` asked first to say which.
 #
 # The 1.5.3 cut on the ledger read the old home team and the old
 # code version, so the first ask re-derives it and the second finds
@@ -186,7 +186,7 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 
 # %% [markdown]
 # The dat is a value. It is
-# `rev.eval("demo_game.etl.model.train", game="G1", path="model/prod")`:
+# `rev.run("demo_game.etl.model.train", game="G1", path="model/prod")`:
 # `path=` names the result and builds its folder there (Q36).
 #
 # The file's contents are the whole question; a key on the line
@@ -448,7 +448,7 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # - **Kinds** — a short class name, matched against `db/kind`.
 # - **Hashes** — a prefix, expanded by `refs(s="<prefix>*",
 #   one=True)`.
-# - **Hit or ran** — `memo="get"` before `eval`.
+# - **Hit or ran** — `memo="get"` before `run`.
 # - **Printing** — each value in its alias form with its preds; a
 #   moved alias with its old target.
 # - **Project policy** — a version-sync line after `just bump code`.

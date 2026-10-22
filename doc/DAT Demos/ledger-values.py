@@ -789,7 +789,7 @@ except ConfinedWrite as e:
 
 # %%
 rev = L.at()
-far_value = rev.eval("geometry.distance", a=(6, 8))
+far_value = rev.run("geometry.distance", a=(6, 8))
 print(far_value.obj, far_value.sealed)
 # → 10.0 True
 for item in sorted(far_value.trace):
@@ -799,7 +799,7 @@ for item in sorted(far_value.trace):
 # → platform -> darwin-arm64-py3.12
 
 # %% [markdown]
-# `rev.eval(name, **keys)` is `rev.load_fn(name)` and then the
+# `rev.run(name, **keys)` is `rev.load_fn(name)` and then the
 # call, as in Ledger functions. What makes it more than a call is
 # the trace, recorded during the run, not declared, item by item:
 #
@@ -831,7 +831,7 @@ print(sorted(trimmed_video.trace))
 
 # %%
 top_id = L.at().id
-again_value = L.at().eval("geometry.distance", a=(6, 8))
+again_value = L.at().run("geometry.distance", a=(6, 8))
 print(again_value.subject == far_value.subject)
 # → True: a hit
 print(L.at().id == top_id)
@@ -912,7 +912,7 @@ git("add", "clips.py")
 git("commit", "-m", "clips")
 
 rev = L.at()
-opening_clip = rev.eval("clips.clip", video="video/G1", start=0, end=8)
+opening_clip = rev.run("clips.clip", video="video/G1", start=0, end=8)
 print(type(opening_clip).__name__, opening_clip.frames, opening_clip.preds)
 # → Video b'G1 wide ' {'span': [0, 8]}
 for item in sorted(opening_clip.trace):
@@ -938,7 +938,7 @@ stable_video.preds.update(game="G1", camera="wide", span=[600, 9000])
 with L.transaction(by="human:dan", why="stabilised") as t:
     stable_video.seal(t, deps=[trimmed_video], alias="video/G1")
 rev = L.at()
-stable_clip = rev.eval("clips.clip", video="video/G1", start=0, end=8)
+stable_clip = rev.run("clips.clip", video="video/G1", start=0, end=8)
 print(stable_clip.subject != opening_clip.subject, stable_clip.frames)
 # → True b'G1 stabi'
 print(sorted(opening_clip.diff(stable_clip)))
@@ -947,7 +947,7 @@ print(sorted(opening_clip.diff(stable_clip)))
 
 # %% [markdown]
 # The binding moved, so the old entry's trace no longer holds: the
-# `eval` missed and re-derived. `diff` names the items that moved:
+# `run` missed and re-derived. `diff` names the items that moved:
 # the `video/G1` binding, and each side's value item. The old clip
 # stays, found by its hash.
 
@@ -956,7 +956,7 @@ print(sorted(opening_clip.diff(stable_clip)))
 
 # %%
 rev = L.at()
-shifted_value = rev.eval("geometry.distance", a=(1, 1), b=(4, 5))
+shifted_value = rev.run("geometry.distance", a=(1, 1), b=(4, 5))
 print(shifted_value.obj, shifted_value.same_as(hypotenuse_value),
       shifted_value.subject != hypotenuse_value.subject)
 # → 5.0 True True
@@ -980,7 +980,7 @@ with L.transaction(by="human:dan", why="span off by ten") as t:
 rev = L.at()
 print(restamped_video, stable_video)
 # → video/G1 <8 hex>
-again_clip = rev.eval("clips.clip", video="video/G1", start=0, end=8)
+again_clip = rev.run("clips.clip", video="video/G1", start=0, end=8)
 print(again_clip.subject == stable_clip.subject)
 # → True: a hit
 
@@ -1008,9 +1008,9 @@ print(stable_clip.matches(rev))
 # return.
 
 # %%
-print(rev.eval("geometry.distance", a=(5, 12), memo="get"))
+print(rev.run("geometry.distance", a=(5, 12), memo="get"))
 # → None: never run
-dry_value = rev.eval("geometry.distance", a=(6, 8), memo=False)
+dry_value = rev.run("geometry.distance", a=(6, 8), memo=False)
 print(dry_value.sealed, dry_value.hash == far_value.hash)
 # → False True
 print(L.at().id == rev.id)
@@ -1114,7 +1114,7 @@ print(pick_ref, pick_ref.subject == stable_clip.subject)
 # %% [markdown]
 # ### A hand seal and an eval write the same rows
 #
-# A hand seal and `eval` (calling the `Fn` that `load_fn` hands back
-# is `eval`) write the same rows, so every read above treats a value
+# A hand seal and `run` (calling the `Fn` that `load_fn` hands back
+# is `run`) write the same rows, so every read above treats a value
 # the same way whichever door sealed it; an eval's entry adds only
 # `db/fn` and `db/keys`.

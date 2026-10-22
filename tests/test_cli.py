@@ -451,7 +451,7 @@ class TestLedgerRun:
     def test_dry_run_shows_the_eval(self, tmp_path):
         make_ledger_project(tmp_path)
         code, out, _ = run_x("proj_fns.double", "n=3", "--dry-run", cwd=tmp_path)
-        assert (code, out) == (0, "rev.eval('proj_fns.double', n=3)")
+        assert (code, out) == (0, "rev.run('proj_fns.double', n=3)")
 
 
 @needs_just

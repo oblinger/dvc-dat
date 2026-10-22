@@ -59,7 +59,7 @@ PKG = {
 
         @ledger_fn
         def nested(rev, *, game: str) -> dict:
-            return {"inner": rev.eval("sbx.stage.fns.count", game=game).obj}
+            return {"inner": rev.run("sbx.stage.fns.count", game=game).obj}
 
         @ledger_fn
         def members(rev, *, s: str) -> list:
@@ -294,30 +294,30 @@ def test_sandboxed_eval_seals_records_loaded_modules_and_hits(sbx):
     L, repo = sbx
     f = L.at().load_fn("sbx.stage.fns.count")
     assert f.mode == "sandbox" and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
-    v = L.at().eval("sbx.stage.fns.count", game="G1")
+    v = L.at().run("sbx.stage.fns.count", game="G1")
     assert v.sealed and v.obj == {"n": 6} and L.at()[v.subject, "db/provenance"] == "eval:sandbox"
     mods = L.at()[v.trace["fn"], "db/modules"]
     assert sorted(mods) == ["sbx/stage/__init__.py", "sbx/stage/fns.py", "sbx/stage/helper.py"]
     assert "code/sbx-repo" not in v.trace and v.trace["game/G1 n"] == "3"
     top = L.at().id
-    assert L.at().eval("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top
+    assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return x + x\n")
     git(repo, "commit", "-q", "-am", "two")
     with L.transaction(by="t") as t:
         bump(t, "code/sbx-repo")
     assert not v.matches(L.at())                    # the run-time import's file moved
-    w = L.at().eval("sbx.stage.fns.count", game="G1")
+    w = L.at().run("sbx.stage.fns.count", game="G1")
     assert w.same_as(v) and w.subject != v.subject and list(v.diff(w)) == ["fn"]
 
 
 def test_nested_eval_in_process_and_work_folder(sbx):
     L, _repo = sbx
-    v = L.at().eval("sbx.stage.fns.nested", game="G1")
+    v = L.at().run("sbx.stage.fns.nested", game="G1")
     assert v.obj == {"inner": {"n": 6}}
     assert any(k.startswith("eval:sbx.stage.fns.count") for k in v.trace)
-    d = L.at().eval("sbx.stage.fns.folder", game="G1")
+    d = L.at().run("sbx.stage.fns.folder", game="G1")
     assert (d.path / "f.txt").read_text() == "G1" and d.name == "anonymous/Dat"
-    e = L.at().eval("sbx.stage.fns.folder", game="G1", path="games/G1")      # a hit, renamed
+    e = L.at().run("sbx.stage.fns.folder", game="G1", path="games/G1")      # a hit, renamed
     assert e.subject == d.subject and e.name == "games/G1" and (e.path / "f.txt").read_text() == "G1"
 
 
@@ -328,32 +328,32 @@ def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):
         t.add("db/pred/contains", "db/cardinality", "many")
         t.add("set/A", "contains", "G2")
         t.add("set/A", "contains", "G1")
-    v = L.at().eval("sbx.stage.fns.members", s="set/A")
+    v = L.at().run("sbx.stage.fns.members", s="set/A")
     assert v.obj == ["G1", "G2"] and any(k.startswith("all") or "contains" in k for k in v.trace)
 
 
 def test_refusals(sbx):
     L, repo = sbx
     with pytest.raises(UnmountedImport, match="sbx.other from sbx.stage.fns"):
-        L.at().eval("sbx.stage.fns.borrow", game="G1")
+        L.at().run("sbx.stage.fns.borrow", game="G1")
     with pytest.raises(UntracedRead):
-        L.at().eval("sbx.stage.fns.snoop", game="G1")
+        L.at().run("sbx.stage.fns.snoop", game="G1")
     with pytest.raises(ConfinedWrite, match="writes only in its path folder") as e:
-        L.at().eval("sbx.stage.fns.scribble", game="G1")
+        L.at().run("sbx.stage.fns.scribble", game="G1")
     assert not isinstance(e.value, UntracedRead)
     old = L.at(1)
     (repo / "sbx/other.py").write_text("X = 2\n")
     git(repo, "commit", "-q", "-am", "elsewhere")
     with pytest.raises(NotClean, match="binds code/sbx-repo to"):
-        old.eval("sbx.stage.fns.count", game="G1", clean=True)
-    assert old.eval("sbx.stage.fns.count", game="G1").obj == {"n": 6}   # no gate: it runs at HEAD (Q39)
+        old.run("sbx.stage.fns.count", game="G1", clean=True)
+    assert old.run("sbx.stage.fns.count", game="G1").obj == {"n": 6}   # no gate: it runs at HEAD (Q39)
 
 
 def test_salt_item(sbx):
     L, _repo = sbx
     with L.transaction(by="t") as t:
         t.add("db/mount/sbx.stage", "db/salt", "v2")
-    v = L.at().eval("sbx.stage.fns.count", game="G1")
+    v = L.at().run("sbx.stage.fns.count", game="G1")
     assert v.trace["salt"] == "v2" and v.matches(L.at())
     with L.transaction(by="t") as t:
         t.add("db/mount/sbx.stage", "db/salt", "v3")
@@ -364,54 +364,54 @@ def test_a_mount_root_without_init_imports_namespace_style(sbx):
     L, _repo = sbx
     f = L.at().load_fn("flatpkg.calc.area")
     assert f.mode == "sandbox" and f.mount == "flatpkg"
-    v = L.at().eval("flatpkg.calc.area", side=3)
+    v = L.at().run("flatpkg.calc.area", side=3)
     assert v.obj == {"area": 9}
     assert sorted(L.at()[v.trace["fn"], "db/modules"]) == ["flat/calc.py", "flat/util.py"]
-    assert L.at().eval("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # the package case
+    assert L.at().run("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # the package case
 
 
 def test_memo_false_keeps_preds_and_runs_on_a_dirty_tree(sbx):
     L, repo = sbx
-    v = L.at().eval("sbx.stage.kinds.tagged", game="G1", memo=False)
+    v = L.at().run("sbx.stage.kinds.tagged", game="G1", memo=False)
     assert not v.sealed and v.preds == {"game": "G1"} and v.trace["fn"].startswith("db/fn/")
     (repo / "sbx/other.py").write_text("X = 3\n")              # dirty
-    assert L.at().eval("sbx.stage.fns.count", game="G1", memo=False).obj == {"n": 6}
-    assert L.at().eval("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # a miss runs dirty (Q39)
+    assert L.at().run("sbx.stage.fns.count", game="G1", memo=False).obj == {"n": 6}
+    assert L.at().run("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # a miss runs dirty (Q39)
     with pytest.raises(NotClean, match="uncommitted changes"):
-        L.at().eval("sbx.stage.fns.count", game="G1", clean=True)
+        L.at().run("sbx.stage.fns.count", game="G1", clean=True)
 
 
 def test_a_dirty_edit_to_a_loaded_module_is_a_new_value_and_reverting_hits(sbx):
     L, repo = sbx
-    v = L.at().eval("sbx.stage.fns.count", game="G1")
+    v = L.at().run("sbx.stage.fns.count", game="G1")
     top = L.at().id
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return 3 * x\n")     # uncommitted
-    w = L.at().eval("sbx.stage.fns.count", game="G1")
+    w = L.at().run("sbx.stage.fns.count", game="G1")
     assert w.obj == {"n": 9} and w.subject != v.subject and L.at().id == top + 1
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return 2 * x\n")
-    assert L.at().eval("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top + 1
+    assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top + 1
     (repo / "sbx/other.py").write_text("X = 4\n")              # a module the run never loaded
-    assert L.at().eval("sbx.stage.fns.count", game="G1").subject == v.subject
+    assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject
 
 
 def test_a_committed_edit_recomputes_with_no_bump(sbx):
     L, repo = sbx
-    v = L.at().eval("sbx.stage.fns.count", game="G1")
+    v = L.at().run("sbx.stage.fns.count", game="G1")
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return 4 * x\n")
     git(repo, "commit", "-q", "-am", "four")                   # the rev still names the old commit
-    w = L.at().eval("sbx.stage.fns.count", game="G1")
+    w = L.at().run("sbx.stage.fns.count", game="G1")
     assert w.obj == {"n": 12} and w.subject != v.subject and not v.matches(L.at())
 
 
 def test_each_call_is_a_fresh_process(sbx):
     L, _repo = sbx
-    a = L.at().eval("sbx.stage.fns.pid", game="G1", memo=False).obj
-    b = L.at().eval("sbx.stage.fns.pid", game="G1", memo=False).obj
+    a = L.at().run("sbx.stage.fns.pid", game="G1", memo=False).obj
+    b = L.at().run("sbx.stage.fns.pid", game="G1", memo=False).obj
     assert a["calls"] == b["calls"] == 1 and a["pid"] != b["pid"]
     assert sandbox._server().alive()
     with pytest.raises(RuntimeError, match=r"ended \(exit code 3\) before it replied"):
-        L.at().eval("sbx.stage.fns.die", game="G1")
-    assert L.at().eval("sbx.stage.fns.pid", game="G1", memo=False).obj["calls"] == 1   # the server lives on
+        L.at().run("sbx.stage.fns.die", game="G1")
+    assert L.at().run("sbx.stage.fns.pid", game="G1", memo=False).obj["calls"] == 1   # the server lives on
 
 
 def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
@@ -420,7 +420,7 @@ def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
 
     pytest.importorskip("xlsxwriter")
     L, _repo = sbx
-    v = L.at().eval("sbx.stage.fns.libs", game="G1")
+    v = L.at().run("sbx.stage.fns.libs", game="G1")
     mods = L.at()[v.trace["fn"], "db/modules"]
     assert mods["py:colorsys.py"] == sha256(open(colorsys.__file__, "rb").read())
     assert mods["dist:xlsxwriter"].startswith(md.version("xlsxwriter") + ":")
@@ -444,19 +444,19 @@ def test_network_refused(sbx):
     L, _repo = sbx
     assert issubclass(ConfinedNetwork, PermissionError) and issubclass(ConfinedNetwork, LedgerError)
     with pytest.raises(ConfinedNetwork, match="example.com: a sandboxed function does not use the network"):
-        L.at().eval("sbx.stage.net.resolve", host="example.com")
+        L.at().run("sbx.stage.net.resolve", host="example.com")
     with socket.socket() as srv:
         srv.bind(("127.0.0.1", 0))
         srv.listen(1)
         srv.setblocking(False)
         port = srv.getsockname()[1]
         with pytest.raises(ConfinedNetwork, match=f"127.0.0.1:{port}"):
-            L.at().eval("sbx.stage.net.dial", port=port)
+            L.at().run("sbx.stage.net.dial", port=port)
         with pytest.raises(BlockingIOError):
             srv.accept()                            # refused before the connect was made
     with pytest.raises(ConfinedNetwork):
-        L.at().eval("sbx.stage.net.datagram", port=9)
-    assert L.at().eval("sbx.stage.net.pair", text="hi").obj == {"echo": "hi"}   # a local socket is not the network
+        L.at().run("sbx.stage.net.datagram", port=9)
+    assert L.at().run("sbx.stage.net.pair", text="hi").obj == {"echo": "hi"}   # a local socket is not the network
 
 
 def test_the_ledgers_own_endpoint_is_allowed():
@@ -474,7 +474,7 @@ WRITE_HOWS = ["open", "os.open", "o_trunc", "write_text", "mkdir", "makedirs", "
 
 def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
     L, repo = sbx
-    assert L.at().eval("sbx.stage.writes.write", how="all", where="work").obj == {"n": len(WRITE_HOWS) + 1}
+    assert L.at().run("sbx.stage.writes.write", how="all", where="work").obj == {"n": len(WRITE_HOWS) + 1}
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "seed").write_text("s")
@@ -484,17 +484,17 @@ def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
     before = sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*"))
     for how in WRITE_HOWS:
         with pytest.raises(ConfinedWrite, match="a sandboxed function writes only in its path folder"):
-            L.at().eval("sbx.stage.writes.write", how=how, where=str(outside))
+            L.at().run("sbx.stage.writes.write", how=how, where=str(outside))
     assert sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*")) == before
     assert (outside / "seed").read_text() == "s"
     for where in ("scratch", "art"):
         for how in ("open", "mkdir", "mkstemp"):
             with pytest.raises(ConfinedWrite):
-                L.at().eval("sbx.stage.writes.write", how=how, where=where)
+                L.at().run("sbx.stage.writes.write", how=how, where=where)
     with pytest.raises(ConfinedWrite):
-        L.at().eval("sbx.stage.writes.write", how="mkstemp-default", where="")
+        L.at().run("sbx.stage.writes.write", how="mkstemp-default", where="")
     with pytest.raises(ConfinedWrite):                  # a path relative to a descriptor on a mount
-        L.at().eval("sbx.stage.writes.write", how="dir_fd", where="mount")
+        L.at().run("sbx.stage.writes.write", how="dir_fd", where="mount")
     assert not (repo / "sbx/stage/by-fd").exists()
 
 
@@ -505,8 +505,8 @@ SWALLOWED = ["glob", "walk"]            # they catch the OSError themselves: the
 def test_reads_confined_to_the_mounts_the_dats_and_the_work_folder(sbx, tmp_path):
     pytest.importorskip("jsonschema_specifications")
     L, _repo = sbx
-    L.at().eval("sbx.stage.fns.folder", game="G1")           # something in the art store
-    v = L.at().eval("sbx.stage.reads.allowed", game="G1")
+    L.at().run("sbx.stage.fns.folder", game="G1")           # something in the art store
+    v = L.at().run("sbx.stage.reads.allowed", game="G1")
     assert v.obj == {"n": True, "mine": "G1", "art": True, "registry": True, "h": (0.0, 0.0, 0.0)}
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -514,10 +514,10 @@ def test_reads_confined_to_the_mounts_the_dats_and_the_work_folder(sbx, tmp_path
     for where in ("stdlib", "site", "dvc_dat", "prefix", "repo", "scratch", str(outside / "f.txt")):
         for how in READ_HOWS:
             with pytest.raises(UntracedRead, match="outside the mounts, the dats and the path folder"):
-                L.at().eval("sbx.stage.reads.read", how=how, where=where)
+                L.at().run("sbx.stage.reads.read", how=how, where=where)
         for how in SWALLOWED:
-            assert L.at().eval("sbx.stage.reads.read", how=how, where=where).obj == {"n": 0}
+            assert L.at().run("sbx.stage.reads.read", how=how, where=where).obj == {"n": 0}
     with pytest.raises(UntracedRead):                       # a library's data, read after its import
-        L.at().eval("sbx.stage.reads.library_data", game="G1")
+        L.at().run("sbx.stage.reads.library_data", game="G1")
     with pytest.raises(UntracedRead, match="/etc/hosts"):    # a mounted module's own load
-        L.at().eval("sbx.stage.eager.f", game="G1")
+        L.at().run("sbx.stage.eager.f", game="G1")

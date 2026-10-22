@@ -94,7 +94,7 @@ Child side:
   directory is that folder, so a relative path lands in the dat being
   produced.
 - `unguarded()`: the ledger's own machinery inside a body (a nested
-  `rev.eval`'s lookup and seal, a `Dat` materialised into the art
+  `rev.run`'s lookup and seal, a `Dat` materialised into the art
   store on load) runs with the hook stood aside; a nested body is
   confined again, to its own `path` folder.
 - The same hook on the network, active while a function body runs:

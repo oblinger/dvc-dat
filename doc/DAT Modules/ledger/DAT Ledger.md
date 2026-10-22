@@ -61,7 +61,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 | [select](#^select) | Chosen objects of each match, as tuples |
 | [load](#^load) | One value by subject or alias |
 | [load_fn](#^load-fn) | A value function resolved at this revision |
-| [eval](#^eval) | Evaluate a value function, memoised |
+| [run](#^run) | Evaluate a value function, memoised (`just run`); `eval` is its deprecated alias |
 
 **id**`: int`
     The revision this view reads as of; revision 0 is the empty ledger. ^id
@@ -108,8 +108,8 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 **load_fn**`(name: str) -> Fn`
     The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Functions and the sandbox](#functions-and-the-sandbox). ^load-fn
 
-**eval**`(name: str, /, *, memo=True, **keys) -> Value | None`
-    `load_fn(name)(memo=memo, **keys)`; a name that is not a `str` is `TypeError`. See [Evaluation and the trace](#evaluation-and-the-trace). ^eval
+**run**`(name: str, /, *, memo=True, clean=False, **keys) -> Value | None`
+    The API form of `just run NAME KEY=VALUE`: `load_fn(name)(memo=memo, clean=clean, **keys)`; a name that is not a `str` is `TypeError`. `eval` is a deprecated alias that warns and forwards. See [Evaluation and the trace](#evaluation-and-the-trace). ^run
 
 
 
@@ -226,7 +226,7 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 
 
 ## Value Interface
-The object itself with its provenance on it: what `eval` returns, what `seal` stores and what `Ref.load` restores. A subclass says how it becomes bytes (`encode`) and back (`decode`); `@ledger_class(preds=...)` names the preds its values may carry. Until sealed, `preds` is a plain dict filled by whoever builds the value; the seal freezes it and fixes the identity. A subclass's `__init__` need not call `super().__init__`.
+The object itself with its provenance on it: what `run` returns, what `seal` stores and what `Ref.load` restores. A subclass says how it becomes bytes (`encode`) and back (`decode`); `@ledger_class(preds=...)` names the preds its values may carry. Until sealed, `preds` is a plain dict filled by whoever builds the value; the seal freezes it and fixes the identity. A subclass's `__init__` need not call `super().__init__`.
 
 | Value | |
 | --- | --- |
@@ -354,7 +354,7 @@ A `Value` that is a folder: it encodes as its content manifest, `{"files": {relp
 
 
 ## Fn Interface
-A value function resolved at one revision: a frozen dataclass made by `Rev.load_fn`, never by hand. Calling it is `eval`. Its mode is `base` (imported in this process) or `sandbox` (loaded from a mount and run in a worker).
+A value function resolved at one revision: a frozen dataclass made by `Rev.load_fn`, never by hand. Calling it is `run`. Its mode is `base` (imported in this process) or `sandbox` (loaded from a mount and run in a worker).
 
 | Fn | |
 | --- | --- |
@@ -552,7 +552,7 @@ A sandboxed function lives under a mount: rows naming a dotted prefix, its repo 
 
 
 ## Evaluation and the trace
-`eval` is a memo. It looks up every entry at the top whose `db/fn` (the dotted name) and `db/keys` (the bound keys, defaults included, as canonical JSON) match, newest seal first, and hands back the first whose trace holds at the revision asked. A miss runs the body with a recording `Rev`, then seals the result in a transaction `by="eval:<name>"` under a subject hashing the function, keys, trace, preds and `db/value` text. `memo=False` runs without sealing; `memo="get"` looks up and never runs.
+`run` is a memo. It looks up every entry at the top whose `db/fn` (the dotted name) and `db/keys` (the bound keys, defaults included, as canonical JSON) match, newest seal first, and hands back the first whose trace holds at the revision asked. A miss runs the body with a recording `Rev`, then seals the result in a transaction `by="eval:<name>"` under a subject hashing the function, keys, trace, preds and `db/value` text. `memo=False` runs without sealing; `memo="get"` looks up and never runs.
 
 | trace item | value | holds when |
 | --- | --- | --- |

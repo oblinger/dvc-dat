@@ -1,6 +1,6 @@
 # ledger.value
 
-A `Value` is the object itself with its provenance on it: what `eval`
+A `Value` is the object itself with its provenance on it: what `run`
 returns, what `v.seal` stores and what `Ref.load` restores. A
 subclass says how it becomes bytes (`encode`) and back (`decode`), and
 `@ledger_class(preds=…)` names the preds its values may carry. Until
@@ -129,7 +129,7 @@ three forms.
   a changed byte unless kept, the kept bytes when kept.
 - After a save, `hash` is the stored bytes' hash, whatever the live
   object holds; `db/sealed-at` is one of the subject's frozen rows. An
-  `eval` whose function returns a value sealed by `v.seal()` is
+  `run` whose function returns a value sealed by `v.seal()` is
   `TypeError`: eval seals its own result.
 
 `ledger_class(*, preds=()) -> decorator`: sets the kind's declared pred

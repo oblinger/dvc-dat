@@ -76,7 +76,7 @@ def poster(rev, *, game: str) -> dict:
 @ledger_fn
 def chain(rev, *, game: str) -> dict:
     _count("chain")
-    return {"thumb": rev.eval("ledger_kinds.cut", game=game).hash[:8]}
+    return {"thumb": rev.run("ledger_kinds.cut", game=game).hash[:8]}
 
 
 @ledger_fn
@@ -121,7 +121,7 @@ def via_refs_rev(rev, *, game: str) -> dict:
 
 @ledger_fn
 def maybe(rev, *, game: str) -> dict:
-    hit = rev.eval("ledger_kinds.cut", game=game, memo="get")
+    hit = rev.run("ledger_kinds.cut", game=game, memo="get")
     return {"had": hit is not None}
 
 
