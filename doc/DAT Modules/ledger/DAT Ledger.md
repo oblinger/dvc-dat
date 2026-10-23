@@ -1,7 +1,7 @@
 ---
 description: "The ledger half of dvc_dat: quads read as of a revision, values stored by content, value functions evaluated with their dependencies traced. Source: `dvc_dat/ledger/`."
 ---
-:>> [DAT](../../DAT.md) → [ledger](ha://ledger) → [DAT doc Modules Ledger](ha://p/DAT%20doc%20Modules%20Ledger) 
+:>> [DAT](../../DAT.md) → [DAT doc Modules Ledger](ha://p/DAT%20doc%20Modules%20Ledger) 
 # DAT Ledger
 The ledger is a project's history: every fact a quad `(rev, subject, predicate, object)`, every read a frozen view as of one revision, every value stored by its content and found by its preds.
 
@@ -24,7 +24,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Fn | [name](#^fn-name), [module](#^module), [sha](#^sha), [subject](#^fn-subject), [mode](#^mode), [mount](#^mount), [env](#^env), [signature](#^signature), [()](#^--call--) |
 
 
-This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md). The four notebooks run it end to end: [ledger-triples](../../DAT%20Demos/ledger-triples.py), [ledger-values](../../DAT%20Demos/ledger-values.py), [ledger-dats](../../DAT%20Demos/ledger-dats.py), [ledger-just](../../DAT%20Demos/ledger-just.py).
+This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md). The four notebooks run it end to end: [ledger-triples](../../DAT%20Demos/ledger-triples.ipynb), [ledger-values](../../DAT%20Demos/ledger-values.ipynb), [ledger-dats](../../DAT%20Demos/ledger-dats.ipynb), [ledger-just](../../DAT%20Demos/ledger-just.ipynb).
 
 
 

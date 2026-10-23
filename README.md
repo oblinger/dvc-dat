@@ -78,6 +78,6 @@ with a `py:percent` script (jupytext) and executed with its outputs kept; `just 
 - [`demo-dats`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-dats.ipynb) — dats, dependencies and versions: seal, hash, `dat.dependencies` two deep.
 - [`demo-etl`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-etl.ipynb) — an ETL chain over a game set (a binning per game, a cumulative binning built recursively, a podium) and what each change recomputes.
 - The ledger's four notebooks, `doc/DAT Demos/ledger-*.py` (run by `tests/ledger/test_notebooks.py`):
-  [`ledger-triples`](doc/DAT%20Demos/ledger-triples.py), [`ledger-values`](doc/DAT%20Demos/ledger-values.py),
-  [`ledger-dats`](doc/DAT%20Demos/ledger-dats.py), [`ledger-just`](doc/DAT%20Demos/ledger-just.py).
+  [`ledger-triples`](doc/DAT%20Demos/ledger-triples.ipynb), [`ledger-values`](doc/DAT%20Demos/ledger-values.ipynb),
+  [`ledger-dats`](doc/DAT%20Demos/ledger-dats.ipynb), [`ledger-just`](doc/DAT%20Demos/ledger-just.ipynb).
   See [The ledger](doc/DAT%20Modules/ledger/DAT%20Ledger.md).
