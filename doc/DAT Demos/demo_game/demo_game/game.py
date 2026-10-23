@@ -82,7 +82,7 @@ def thumb(rev, *, clip: Ref) -> dict:
     """Downstream of one cut, keyed by the cut itself.
 
     `-> dict` names no `Value` subclass, so the result is wrapped in
-    `Pickled` and the annotation recorded as `db/returns`.
+    `Value.Blob` and the annotation recorded as `db/returns`.
     """
     c = clip.load()
     return {"bytes": len(c.clip), "head": c.clip[:4].hex()}

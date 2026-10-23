@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 from .codec import canonical, hash_text, ref_text, sha256
 from .env import Env, current_env, repo_of
 from .errors import NotClean, NotEvaluated
-from .value import Dat, Pickled, Value, dotted
+from .value import Dat, Blob, Value, dotted
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -42,7 +42,7 @@ def ledger_fn(func: Callable) -> Callable:
     """Mark a value function: it takes the ``Rev`` first and keywords after, and returns a ``Value``.
 
     The return annotation is required (``TypeError`` at decoration): a ``Value`` subclass means the
-    result must be one; any other annotation means a bare result is wrapped in ``Pickled`` (A31).
+    result must be one; any other annotation means a bare result is wrapped in ``Value.Blob`` (A31).
     The function comes back unchanged and still callable (A52); nothing is written on import.
     """
     if not callable(func):
@@ -50,7 +50,7 @@ def ledger_fn(func: Callable) -> Callable:
     ann = getattr(func, "__annotations__", {})
     if "return" not in ann:
         raise TypeError(f"@ledger_fn {getattr(func, '__qualname__', func)!r}: a return annotation is required "
-                        "(-> a Value subclass, or any type to be wrapped in Pickled)")
+                        "(-> a Value subclass, or any type to be wrapped in Value.Blob)")
     func.__ledger_fn__ = True  # type: ignore[attr-defined]
     return func
 
@@ -66,7 +66,7 @@ def returns_text(func: Callable) -> str:
 
 
 def returns_class(func: Callable) -> Optional[type]:
-    """The ``Value`` subclass the annotation names, or ``None`` (wrap a bare result in ``Pickled``)."""
+    """The ``Value`` subclass the annotation names, or ``None`` (wrap a bare result in ``Value.Blob``)."""
     ann = func.__annotations__["return"]
     if isinstance(ann, str):
         try:
@@ -435,7 +435,7 @@ def wrap_result(name: str, func: Callable, out: Any) -> Value:
         if not isinstance(out, cls):
             raise TypeError(f"{name}: annotated -> {cls.__name__}, returned {type(out).__name__}")
         return out
-    return out if isinstance(out, Value) else Pickled(out)
+    return out if isinstance(out, Value) else Blob(out)
 
 
 class _AlreadySealed(Exception):

@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from dvc_dat.ledger import Dat, Pickled, Ref
+from dvc_dat.ledger import Dat, Ref, Value
 from ledger_kinds import CALLS
 from test_memo import world  # noqa: F401  (the fixture)
 
@@ -16,24 +16,24 @@ def seal(L, v, **kw):
 
 
 def test_a_value_has_one_name_and_a_name_one_value(L):
-    a = Pickled("a", name="x/a")
+    a = Value.Blob("a", name="x/a")
     s = seal(L, a)
     assert a.name == "x/a" and repr(a) == "x/a" and Ref(L.at(), "x/a").subject == s
     a.name = "x/b"                                           # renamed: one name at a time
     assert a.name == "x/b" and Ref(L.at(), "x/a").hash is None and Ref(L.at(), "x/b").subject == s
-    b = Pickled("b")
+    b = Value.Blob("b")
     seal(L, b, alias="x/b")                                  # the name moves to another value
     assert b.name == "x/b" and a.name is None and repr(a) == s[:8]
     assert L.at().load(s).obj == "a"                         # still reachable by hash
     with pytest.raises(ValueError):
-        Pickled("c", name="/abs/name")
+        Value.Blob("c", name="/abs/name")
     with pytest.raises(ValueError):
-        Pickled("c", name="a/../b")
+        Value.Blob("c", name="a/../b")
 
 
 def test_the_name_is_not_in_the_hash(L):
-    s1 = seal(L, Pickled(1, name="n/one"))
-    s2 = seal(L, Pickled(1, name="n/two"))
+    s1 = seal(L, Value.Blob(1, name="n/one"))
+    s2 = seal(L, Value.Blob(1, name="n/two"))
     assert s1 == s2 and L.at().load(s1).name == "n/two"     # the same value, renamed
 
 

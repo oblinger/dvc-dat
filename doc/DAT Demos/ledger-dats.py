@@ -596,9 +596,9 @@ print({game: model_ref.preds["metrics.score"]
 # %% [markdown]
 # ### A table over a set
 #
-# `demo_game.etl.report.scores(rev, *, gameset) -> Table` queries
+# `demo_game.etl.report.scores(rev, *, gameset) -> Value.Table` queries
 # the set's models with `values` and returns their scores as a
-# parquet `Table`, the shipped tabular `Value`.
+# parquet `Value.Table`, the shipped tabular `Value`.
 
 # %%
 rev = L.at()

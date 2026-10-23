@@ -7,7 +7,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 
 ![DAT Ledger](DAT%20Ledger.svg) 
 
-**Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Pickled](#Pickled%20Interface) · [Table](#Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [module functions](#dvc_dat.ledger%20Interface) 
+**Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [module functions](#dvc_dat.ledger%20Interface) 
 
 *The fold* governs what a `Rev` reads, *Sealing and saving* governs how a `Value` gets its identity, and *Evaluation and the trace* governs when calling an `Fn` runs the body and when it hands back a sealed result.
 
@@ -287,31 +287,31 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
 
 
 
-## Pickled Interface
-A `Value` holding any pickleable object, encoded with pickle protocol 4. Declares no preds.
+## Value.Blob Interface
+A `Value` holding any Python object, stored with pickle (protocol 4). Declares no preds.
 
-| Pickled | |
+| Value.Blob | |
 | --- | --- |
-| [Pickled](#^pickled) | Wrap an object |
+| [Value.Blob](#^blob) | Wrap an object |
 | [obj](#^obj) | The object |
 
-**Pickled**`(obj)`
-    A value whose bytes are `obj` pickled. A value function whose return annotation is not a `Value` subclass has its result wrapped in one. ^pickled
+**Value.Blob**`(obj)`
+    A value whose bytes are `obj` pickled. A value function whose return annotation is not a `Value` subclass has its result wrapped in one. ^blob
 
 **obj**`: Any`
     The wrapped object. ^obj
 
 
 
-## Table Interface
-A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted on encode; a decoded `Table` holds a `pyarrow.Table`.
+## Value.Table Interface
+A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted on encode; a decoded `Value.Table` holds a `pyarrow.Table`.
 
-| Table | |
+| Value.Table | |
 | --- | --- |
-| [Table](#^table) | Wrap a table |
+| [Value.Table](#^table) | Wrap a table |
 | [table](#^table-table) | The table |
 
-**Table**`(table)`
+**Value.Table**`(table)`
     A value whose bytes are `table` as parquet; `table` is a `pyarrow.Table` or a pandas `DataFrame`. ^table
 
 **table**`: pyarrow.Table | pandas.DataFrame`

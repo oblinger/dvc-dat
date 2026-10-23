@@ -6,7 +6,7 @@ with ``@ledger_class(preds=...)``, which pred names its values may carry.
 it; the seal (``v.seal(t)`` or an ``run``) freezes it into a
 read-only mapping and fixes ``subject``, ``rev`` and ``trace`` (Q25 (D)). A
 subclass's own ``__init__`` need not call ``super().__init__``. Shipped
-subclasses: ``Pickled`` (any pickleable object), ``Table`` (parquet), ``Dat``
+subclasses: ``Value.Blob`` (any Python object, pickled), ``Value.Table`` (parquet), ``Dat``
 (a folder, encoded as its content manifest).
 """
 
@@ -379,7 +379,7 @@ def ledger_class(*, preds: Iterable[str] = ()):
     return deco
 
 
-class Pickled(Value):
+class Blob(Value):
     """Any pickleable object; ``obj`` is the object. Declares no preds (A16)."""
 
     def __init__(self, obj: Any, *, name: Optional[str] = None) -> None:
@@ -390,11 +390,11 @@ class Pickled(Value):
         return pickle.dumps(self.obj, protocol=4)
 
     @classmethod
-    def decode(cls, data: bytes, store: "ArtStore") -> "Pickled":
+    def decode(cls, data: bytes, store: "ArtStore") -> "Blob":
         return cls(pickle.loads(data))
 
     def __repr__(self) -> str:
-        return super().__repr__() if self.sealed else f"Pickled({self.obj!r})"
+        return super().__repr__() if self.sealed else f"Value.Blob({self.obj!r})"
 
 
 class Table(Value):
@@ -418,6 +418,12 @@ class Table(Value):
         import pyarrow.parquet as pq
 
         return cls(pq.read_table(io.BytesIO(data)))
+
+
+Blob.__qualname__ = "Value.Blob"
+Table.__qualname__ = "Value.Table"
+Value.Blob = Blob      # type: ignore[attr-defined]
+Value.Table = Table    # type: ignore[attr-defined]
 
 
 class Dat(Value):

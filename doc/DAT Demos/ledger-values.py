@@ -875,15 +875,15 @@ print(len(rev.values(fn="geometry.distance")))
 
 # %%
 print(type(far_value).__name__, far_value.obj)
-# → Pickled 10.0
+# → Blob 10.0
 print(L.at()[far_value.trace["fn"], "db/returns"])
 # → float
 
 # %% [markdown]
 # `distance` returns a plain `float`. `-> float` names no `Value`
-# subclass, so the float was boxed in `Pickled` and sealed like any
+# subclass, so the float was wrapped in `Value.Blob` and sealed like any
 # value; `.obj` unboxes it. The annotation is kept as `db/returns`
-# on the function's `db/fn/…` subject. `Pickled` declares no preds,
+# on the function's `db/fn/…` subject. `Value.Blob` declares no preds,
 # so the entry is found by `db/fn` and `db/keys` alone.
 
 # %% [markdown]
