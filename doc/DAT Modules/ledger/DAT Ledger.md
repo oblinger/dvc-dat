@@ -46,23 +46,23 @@ The handle on one ledger: a folder holding `ledger.db` and the art store `art/`,
 ## Rev Interface
 A frozen view of the ledger as of one revision, made by `Ledger.at`, never by hand. Every read is bounded by `id`, so a `Rev` gives the same answer forever. Row reads fold the rows by each predicate's cardinality ([The fold](#The%20fold)); `rows` takes the same pattern and walks history unfolded; subject reads (`refs`, `values`, `value`, `select`) treat the store as a table whose rows are subjects. A stored reference comes back as an unloaded `Ref`. A `Rev` handed to a value function's body also records every read into the function's trace. Ordered and equal by `id` within one ledger.
 
-| Rev                            |                                                      |
-| ------------------------------ | ---------------------------------------------------- |
-| [id](#^id)                     | The revision number                                  |
-| [ledger](#^rev-ledger)         | The ledger this view reads                           |
-| [tx](#^tx)                     | The subject carrying this revision's provenance      |
-| [__getitem__](#^--getitem--)   | A record, an object, or when a triple was added      |
-| [get](#^get)                   | __getitem__ with a default                           |
-| [all](#^all)                   | Returns ordered pattern-matched values with folding  |
-| [__contains__](#^--contains--) | Tests whether a triple is currently held             |
-| [rows](#^rows)                 | Returns ordered pattern-matched rows without folding |
-| [refs](#^refs)                 | The subjects matching a where clause                 |
-| [values](#^values)             | The sealed values matching, loaded                   |
-| [value](#^value)               | The one sealed value matching, loaded                |
-| [select](#^select)             | Chosen objects of each match, as tuples              |
-| [load](#^load)                 | One value by subject or alias                        |
-| [load_fn](#^load-fn)           | A value function resolved at this revision           |
-| [run](#^run)                   | Evaluate a value function, memoised (`just run`)     |
+| Rev                            |                                                            |
+| ------------------------------ | ---------------------------------------------------------- |
+| [id](#^id)                     | The revision number                                        |
+| [ledger](#^rev-ledger)         | The ledger this view reads                                 |
+| [tx](#^tx)                     | The subject carrying this revision's provenance            |
+| [__getitem__](#^--getitem--)   | A record, an object, or when a triple was added            |
+| [get](#^get)                   | __getitem__ with a default                                 |
+| [all](#^all)                   | Returns ordered pattern-matched values with folding        |
+| [__contains__](#^--contains--) | Tests whether a triple is currently held                   |
+| [rows](#^rows)                 | Returns ordered pattern-matched rows without folding       |
+| [refs](#^refs)                 | Returns a Ref to every subject matching a query            |
+| [values](#^values)             | Returns the values whose subjects match a query            |
+| [value](#^value)               | Same as values, but requires exactly one match             |
+| [select](#^select)             | Returns chosen preds of matching values, without loading them |
+| [load](#^load)                 | One value by subject or alias                              |
+| [load_fn](#^load-fn)           | A value function resolved at this revision                 |
+| [run](#^run)                   | Evaluate a value function, memoised (`just run`)           |
 
 **id**`: int`
     The revision this view reads as of; revision 0 is the empty ledger. ^id
@@ -89,16 +89,16 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     Every row matching the pattern at or before this revision, or in `(since, id]`, removes included, unfolded, in `(rev, ord)` order: `all`'s pattern without the fold. No pattern is the ledger as stored; `rows(s, p, o)` with `added` true says when a triple was set. ^rows
 
 **refs**`(*, s=None, kind=None, fn=None, where=None, one=False, since=None, **preds) -> list[Ref] | Ref`
-    The subjects satisfying every constraint, each a `Ref` at this revision. A bare keyword names a pred (any member of a `many` pred); `kind=` a `Value` class or dotted name, following `db/moved` renames; `fn=` the producing function's dotted name; `where={p: o}` any predicate, `None` meaning any object; `s` an exact subject or a prefix glob. `one=True` returns the single match: none is `KeyError`, several `Multiple`. A dotted predicate neither declared nor on any row is `Unindexed`. ^refs
+    Returns a `Ref` to every subject matching the query, sealed value or not. `refs`, `values` and `value` take the same query and pick the same subjects: a bare keyword names a pred (any member of a `many` pred); `kind=` a `Value` class or dotted name, following `db/moved` renames; `fn=` the producing function's dotted name; `where={p: o}` any predicate, `None` meaning any object; `s` an exact subject or a prefix glob; `since` keeps rows in `(since, id]`. `one=True` returns the single match: none is `KeyError`, several `Multiple`. A dotted predicate neither declared nor on any row is `Unindexed`. ^refs
 
 **values**`(*, s=None, kind=None, fn=None, where=None, since=None, **preds) -> list[Value]`
-    The sealed values matching the where clause of `refs`, loaded. ^values
+    Returns the values whose subjects match the query, loaded: the same query as `refs`, keeping only subjects that hold a sealed value. ^values
 
 **value**`(*, s=None, kind=None, fn=None, where=None, since=None, **preds) -> Value`
-    The one sealed value matching the where clause of `refs`, loaded: none is `KeyError`, several `Multiple`. ^value
+    Same as `values`, but requires exactly one match: none is `KeyError`, several `Multiple`. ^value
 
 **select**`(keys: tuple[str, ...], *, s=None, kind=None, fn=None, where=None, one=False, since=None, **preds) -> list[tuple] | tuple`
-    Each match as a tuple of its objects for `keys`: `None` where absent, a list for a `many` predicate. `keys` not a non-empty tuple is `TypeError`; `one=True` as in `refs`. ^select
+    Returns the chosen preds of every matching subject without loading the value: the same query as `refs`, and per subject a tuple of its objects for `keys`, `None` where absent, a list for a `many` predicate. `rev.select(("home", "away"), s="game/*")` reads two preds of every game from the ledger alone, where `values` would fetch each value's bytes. `keys` not a non-empty tuple is `TypeError`; `one=True` as in `refs`. ^select
 
 **load**`(subject: str) -> Value`
     `Ref(self, subject).load()`: the value under a subject or an alias, decoded, its provenance restored. ^load
@@ -107,12 +107,12 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Functions and the sandbox](#Functions%20and%20the%20sandbox). ^load-fn
 
 **run**`(name: str, /, *, memo=True, clean=False, **keys) -> Value | None`
-    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` refuses with `NotClean` unless the function's checkout is clean and at the commit this revision names for its repo; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Evaluation and the trace](#Evaluation%20and%20the%20trace). ^run
+    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` requires the function's checkout to be clean (no uncommitted changes, and HEAD at the commit this revision's version number is bound to, its `code/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Evaluation and the trace](#Evaluation%20and%20the%20trace). ^run
 
 
 
 ## Ref Interface
-One value at one moment, named without fetching a byte. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is the value's name (the alias naming it written latest), else the hash's first 8 hex. Made from a recording `Rev`, it records its reads into the trace like the `Rev` would.
+A reference to one value at one moment, named without fetching a byte: the subject and the revision, nothing loaded until `load`. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is the value's name (the alias naming it written latest), else the hash's first 8 hex. Made from a recording `Rev`, it records its reads into the trace like the `Rev` would.
 
 | Ref | |
 | --- | --- |
