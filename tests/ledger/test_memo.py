@@ -1,4 +1,4 @@
-"""Contracts of functions and run in base mode: ledger_fn, load_fn, the memo, the trace, NotEvaluated."""
+"""Contracts of functions and run unsandboxed: ledger_fn, load_fn, the memo, the dependencies, NotEvaluated."""
 
 import pytest
 
@@ -29,12 +29,12 @@ def test_ledger_fn_needs_an_annotation_and_stays_callable(world):
         def f(rev, *, a):
             return a
     v = ledger_kinds.cut(world.at(), game="G1")
-    assert isinstance(v, Cut) and not v.sealed and v.trace == {} and world.at().id == 4
+    assert isinstance(v, Cut) and not v.sealed and v.dependencies == {} and world.at().id == 4
 
 
 def test_load_fn_fields(world):
     f = world.at().load_fn("ledger_kinds.cut")
-    assert f.mode == "base" and f.mount is None and str(f.signature) == "(*, game: str, version: str = '1.0.0')"
+    assert f.mode == "unsandboxed" and f.mount is None and str(f.signature) == "(*, game: str, version: str = '1.0.0')"
     assert len(f.sha) == 64 and f.subject.startswith("db/fn/ledger_kinds.cut/")
     with pytest.raises(TypeError):
         world.at().load_fn("ledger_kinds.Video")
@@ -49,15 +49,15 @@ def test_eval_seals_once_and_hits(world):
     assert b.subject == a.subject and CALLS["cut"] == 1 and world.at().id == top and b.rev.id == a.rev.id
     r = world.at()
     assert r[a.subject, "db/keys"] == {"game": "G1", "version": "1.0.0"}
-    assert r[a.subject, "db/fn"] == "ledger_kinds.cut" and r[a.subject, "db/provenance"] == "eval:base"
-    assert r[a.trace["fn"], "db/returns"] == "Cut" and r[a.trace["fn"], "db/mode"] == "base"
+    assert r[a.subject, "db/fn"] == "ledger_kinds.cut" and r[a.subject, "db/provenance"] == "eval:unsandboxed"
+    assert r[a.dependencies["fn"], "db/returns"] == "Cut" and r[a.dependencies["fn"], "db/mode"] == "unsandboxed"
     assert [x.subject for x in r.refs(fn="ledger_kinds.cut")] == [a.subject]
 
 
-def test_trace_items(world):
+def test_dependency_items(world):
     a = world.at().run("ledger_kinds.cut", game="G1")
-    t = dict(a.trace)
-    assert t["game/G1 home"] == "G4" and t["code/testrepo"] == "1.0.0+abc1234"
+    t = dict(a.dependencies)
+    assert t["game/G1 home"] == "G4" and t["code/testrepo"] == "abc1234"
     q = [k for k in t if k.startswith("q:")]
     assert q == ['q:{"game":"G1","kind":"ledger_kinds.Video"}']
     vid = world.at().load("video/G1")
@@ -81,14 +81,14 @@ def test_a_read_change_misses_and_diff_names_it(world):
 
 def test_code_commit_pins_the_version_and_the_env_commit_decides(world, envbox):
     a = world.at().run("ledger_kinds.cut", game="G1")
-    assert a.trace["code/testrepo"] == "1.0.0+abc1234"
+    assert a.dependencies["code/testrepo"] == "abc1234"
     with world.transaction(by="t") as t:
         t.add("code/testrepo", "version", "1.0.1")        # version moves, commit does not
     assert a.matches(world.at())
     envbox.code(commit="def5678")                          # a later commit: the row no longer gates (Q7 (C))
     assert not a.matches(world.at())                       # a hit holds at the commit it ran at
     b = world.at().run("ledger_kinds.cut", game="G2")
-    assert b.trace["code/testrepo"] == "1.0.1+def5678"     # the row's version, the environment's commit
+    assert b.dependencies["code/testrepo"] == "def5678"           # the environment's commit; the version is the row's
     assert world.at().run("ledger_kinds.cut", game="G2", memo="get").subject == b.subject
     envbox.code(commit="abc1234")
     assert world.at().run("ledger_kinds.cut", game="G1", memo="get").subject == a.subject
@@ -132,7 +132,7 @@ def test_no_code_row_runs_with_the_env_commit(L):
     with L.transaction(by="t") as t:
         v.seal(t)
     a = L.at().run("ledger_kinds.cut", game="G1")
-    assert a.trace["code/testrepo"] == "+abc1234"
+    assert a.dependencies["code/testrepo"] == "abc1234"
 
 
 def test_keys_by_bytes_and_bare_return_pickled(world):
@@ -140,7 +140,7 @@ def test_keys_by_bytes_and_bare_return_pickled(world):
     th = world.at().run("ledger_kinds.thumb", clip=Ref(world.at(), a.subject))
     assert isinstance(th, Value.Blob) and th.obj == {"n": len(a.clip)}
     assert world.at()[th.subject, "db/keys"] == {"clip": f"ref:ledger_kinds.Cut:{a.hash}"}
-    assert world.at()[th.trace["fn"], "db/returns"] == "dict"
+    assert world.at()[th.dependencies["fn"], "db/returns"] == "dict"
     with pytest.raises(TypeError):
         world.at().run("ledger_kinds.thumb", clip={"x": Ref(world.at(), a.subject)})
 
@@ -155,10 +155,10 @@ def test_alias_binding_and_nested_eval(world):
     with world.transaction(by="t") as t:
         t.add("game/G1", "db/alias", a.subject)
     p = world.at().run("ledger_kinds.poster", game="G1")
-    assert p.trace["game/G1 db/alias"] == f"ref:ledger_kinds.Cut:{a.hash}"
+    assert p.dependencies["game/G1 db/alias"] == f"ref:ledger_kinds.Cut:{a.hash}"
     ch = world.at().run("ledger_kinds.chain", game="G1")
     item = 'eval:ledger_kinds.cut{"game":"G1","version":"1.0.0"}'
-    assert ch.trace[item] == f"ref:ledger_kinds.Cut:{a.hash}"
+    assert ch.dependencies[item] == f"ref:ledger_kinds.Cut:{a.hash}"
     assert ch.matches(world.at())
     with world.transaction(by="t") as t:
         t["game/G1", "home"] = "G7"

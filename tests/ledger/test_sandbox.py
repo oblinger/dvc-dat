@@ -296,9 +296,9 @@ def test_sandboxed_eval_seals_records_loaded_modules_and_hits(sbx):
     assert f.mode == "sandbox" and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
     v = L.at().run("sbx.stage.fns.count", game="G1")
     assert v.sealed and v.obj == {"n": 6} and L.at()[v.subject, "db/provenance"] == "eval:sandbox"
-    mods = L.at()[v.trace["fn"], "db/modules"]
+    mods = L.at()[v.dependencies["fn"], "db/modules"]
     assert sorted(mods) == ["sbx/stage/__init__.py", "sbx/stage/fns.py", "sbx/stage/helper.py"]
-    assert "code/sbx-repo" not in v.trace and v.trace["game/G1 n"] == "3"
+    assert "code/sbx-repo" not in v.dependencies and v.dependencies["game/G1 n"] == "3"
     top = L.at().id
     assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return x + x\n")
@@ -314,7 +314,7 @@ def test_nested_eval_in_process_and_work_folder(sbx):
     L, _repo = sbx
     v = L.at().run("sbx.stage.fns.nested", game="G1")
     assert v.obj == {"inner": {"n": 6}}
-    assert any(k.startswith("eval:sbx.stage.fns.count") for k in v.trace)
+    assert any(k.startswith("eval:sbx.stage.fns.count") for k in v.dependencies)
     d = L.at().run("sbx.stage.fns.folder", game="G1")
     assert (d.path / "f.txt").read_text() == "G1" and d.name == "anonymous/Dat"
     e = L.at().run("sbx.stage.fns.folder", game="G1", path="games/G1")      # a hit, renamed
@@ -329,7 +329,7 @@ def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):
         t.add("set/A", "contains", "G2")
         t.add("set/A", "contains", "G1")
     v = L.at().run("sbx.stage.fns.members", s="set/A")
-    assert v.obj == ["G1", "G2"] and any(k.startswith("all") or "contains" in k for k in v.trace)
+    assert v.obj == ["G1", "G2"] and any(k.startswith("all") or "contains" in k for k in v.dependencies)
 
 
 def test_refusals(sbx):
@@ -354,7 +354,7 @@ def test_salt_item(sbx):
     with L.transaction(by="t") as t:
         t.add("db/mount/sbx.stage", "db/salt", "v2")
     v = L.at().run("sbx.stage.fns.count", game="G1")
-    assert v.trace["salt"] == "v2" and v.matches(L.at())
+    assert v.dependencies["salt"] == "v2" and v.matches(L.at())
     with L.transaction(by="t") as t:
         t.add("db/mount/sbx.stage", "db/salt", "v3")
     assert not v.matches(L.at())
@@ -366,14 +366,14 @@ def test_a_mount_root_without_init_imports_namespace_style(sbx):
     assert f.mode == "sandbox" and f.mount == "flatpkg"
     v = L.at().run("flatpkg.calc.area", side=3)
     assert v.obj == {"area": 9}
-    assert sorted(L.at()[v.trace["fn"], "db/modules"]) == ["flat/calc.py", "flat/util.py"]
+    assert sorted(L.at()[v.dependencies["fn"], "db/modules"]) == ["flat/calc.py", "flat/util.py"]
     assert L.at().run("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # the package case
 
 
 def test_memo_false_keeps_preds_and_runs_on_a_dirty_tree(sbx):
     L, repo = sbx
     v = L.at().run("sbx.stage.kinds.tagged", game="G1", memo=False)
-    assert not v.sealed and v.preds == {"game": "G1"} and v.trace["fn"].startswith("db/fn/")
+    assert not v.sealed and v.preds == {"game": "G1"} and v.dependencies["fn"].startswith("db/fn/")
     (repo / "sbx/other.py").write_text("X = 3\n")              # dirty
     assert L.at().run("sbx.stage.fns.count", game="G1", memo=False).obj == {"n": 6}
     assert L.at().run("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # a miss runs dirty (Q39)
@@ -421,7 +421,7 @@ def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
     pytest.importorskip("xlsxwriter")
     L, _repo = sbx
     v = L.at().run("sbx.stage.fns.libs", game="G1")
-    mods = L.at()[v.trace["fn"], "db/modules"]
+    mods = L.at()[v.dependencies["fn"], "db/modules"]
     assert mods["py:colorsys.py"] == sha256(open(colorsys.__file__, "rb").read())
     assert mods["dist:xlsxwriter"].startswith(md.version("xlsxwriter") + ":")
     assert not any(k.startswith(("dist:dvc-dat", "py:dvc_dat", "dist:pyyaml")) for k in mods)

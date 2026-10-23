@@ -269,7 +269,7 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 # →    7 + <hash>   db/kind               demo_game.game.Video
 # →    7 + <hash>   db/provenance         import:archive
 # →    7 + <hash>   db/preds              ["game","camera","span"]
-# →    7 + <hash>   db/trace/platform     darwin-arm64-py3.12
+# →    7 + <hash>   db/deps/platform      darwin-arm64-py3.12
 # →    7 + <hash>   game                  G1
 # →    7 + <hash>   camera                wide
 # →    7 + <hash>   span                  [0,9000]
@@ -280,7 +280,7 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 # `db/value` names the bytes by class and hash. `db/kind` is the
 # class. `db/provenance` is the caller's word. `db/preds` lists the
 # preds the kind declared when the value was stored. The
-# `db/trace/…` rows are the trace (Ledger evaluation § Evaluation
+# `db/deps/…` rows are the dependencies (Ledger evaluation § Evaluation
 # is a lookup, a call and a trace): a hand seal records the environment it
 # runs in. Then one row per pred, and the alias.
 
@@ -520,7 +520,7 @@ print(trimmed_video, wide_video)
 # %% [markdown]
 # The new version is sealed as a new value, then the alias moves to
 # it; the untrimmed video stays, unnamed. `deps=[wide_video]` puts
-# the video it was cut from into its trace.
+# the video it was cut from into its dependencies.
 
 # %% [markdown]
 # ## Ledger functions
@@ -605,7 +605,7 @@ print(git("log", "--oneline"))
 rev = L.at()
 distance_fn = rev.load_fn("geometry.distance")
 print(distance_fn.mode)
-# → base
+# → unsandboxed
 print(distance_fn.signature)
 # → (a, b=(0, 0), *, metric='euclidean')
 print(distance_fn.subject)
@@ -614,7 +614,7 @@ print(distance_fn.subject)
 # %% [markdown]
 # The ledger finds the function by its dotted name at `rev` and
 # hands back an `Fn` saying which code the name resolves to: `mode`
-# is `base` for a global function, `signature` the keywords it
+# is `unsandboxed` for a global function, `signature` the keywords it
 # takes, `subject` the one name for that resolution.
 
 # %%
@@ -623,12 +623,12 @@ print(hypotenuse_value, hypotenuse_value.obj)
 # → <8 hex> 5.0
 print(hypotenuse_value.sealed, hypotenuse_value.rev.id > rev.id)
 # → True True
-print(hypotenuse_value.trace["code/geometry"] == "+" + git("rev-parse", "HEAD")[:8])
+print(hypotenuse_value.dependencies["code/geometry"] == git("rev-parse", "HEAD")[:8])
 # → True
 
 # %% [markdown]
 # Calling the `Fn` ran `distance` and sealed its result as a value
-# in a revision of its own. The trace's `code/geometry` item is the
+# in a revision of its own. The dependencies' `code/geometry` item is the
 # commit of the scratch repo, named by its folder: that is the code
 # the result came from.
 
@@ -695,9 +695,9 @@ length_fn = rev.load_fn("plane.measure.length")
 print(length_fn.mode, length_fn.mount)
 # → sandbox plane
 segment_value = length_fn(a=(0, 0), b=(3, 4))
-print(segment_value.obj, sorted(segment_value.trace))
+print(segment_value.obj, sorted(segment_value.dependencies))
 # → 2.5 ['fn', 'platform']
-print(L.at()[segment_value.trace["fn"], "db/modules"])
+print(L.at()[segment_value.dependencies["fn"], "db/modules"])
 # → {'plane/measure.py': '<hash>', 'plane/units.py': '<hash>'}
 
 # %% [markdown]
@@ -705,8 +705,8 @@ print(L.at()[segment_value.trace["fn"], "db/modules"])
 # whose path holds the standard library, `site-packages` and the
 # mounted folders, nothing else. The run pulled in `units.py`
 # through the import, and `db/modules` records each source file
-# loaded with its checksum: that is the function's version. The
-# trace carries no `code/geometry` item.
+# loaded with its checksum: that is the function's version. Its
+# dependencies carry no `code/geometry` item.
 
 # %% [markdown]
 # #### What the sandbox refuses
@@ -747,7 +747,7 @@ except UnmountedImport as e:
 # The sandbox looks up every import that is not under a mount in
 # the mounted repo's checkout; `geometry.py` is there, outside
 # `plane/`, so the import is refused by name rather than silently
-# reaching code the trace would not record. A module found nowhere
+# reaching code the dependencies would not record. A module found nowhere
 # is simply not there: a plain `ModuleNotFoundError`. Nothing is
 # sealed.
 
@@ -792,16 +792,16 @@ rev = L.at()
 far_value = rev.run("geometry.distance", a=(6, 8))
 print(far_value.obj, far_value.sealed)
 # → 10.0 True
-for item in sorted(far_value.trace):
-    print(item, "->", far_value.trace[item])
-# → code/geometry -> +<8 hex>
+for item in sorted(far_value.dependencies):
+    print(item, "->", far_value.dependencies[item])
+# → code/geometry -> <8 hex>
 # → fn -> db/fn/geometry.distance/<16 hex>
 # → platform -> darwin-arm64-py3.12
 
 # %% [markdown]
 # `rev.run(name, **keys)` is `rev.load_fn(name)` and then the
 # call, as in Ledger functions. What makes it more than a call is
-# the trace, recorded during the run, not declared, item by item:
+# the dependencies, traced during the run, not declared, item by item:
 #
 # - `code/geometry` — `distance` is global, so the code it ran is
 #   known only as its repo's commit.
@@ -811,17 +811,17 @@ for item in sorted(far_value.trace):
 # - `platform` — the environment, discovered.
 #
 # `distance` reads nothing through `rev`, so nothing else is in its
-# trace; a function that reads rows or loads values adds an item for
+# dependencies; a function that reads rows or loads values adds an item for
 # each (§ When an entry goes stale).
 
 # %% [markdown]
-# A hand seal has a trace too: with no `deps`, the environment
+# A hand seal has dependencies too: with no `deps`, the environment
 # alone; with them, each dep by its bytes.
 
 # %%
-print(dict(sorted(wide_video.trace.items())))
+print(dict(sorted(wide_video.dependencies.items())))
 # → {'platform': 'darwin-arm64-py3.12'}
-print(sorted(trimmed_video.trace))
+print(sorted(trimmed_video.dependencies))
 # → ['platform', 'ref:demo_game.game.Video:<hash>']
 
 # %% [markdown]
@@ -841,7 +841,7 @@ print(again_value.rev.id == far_value.rev.id)
 
 # %% [markdown]
 # The second call is a memo hit: same function, same keys, every
-# trace item unchanged. It writes nothing, and the value it hands
+# dependency item unchanged. It writes nothing, and the value it hands
 # back carries the revision it was sealed in.
 
 # %% [markdown]
@@ -876,7 +876,7 @@ print(len(rev.values(fn="geometry.distance")))
 # %%
 print(type(far_value).__name__, far_value.obj)
 # → Blob 10.0
-print(L.at()[far_value.trace["fn"], "db/returns"])
+print(L.at()[far_value.dependencies["fn"], "db/returns"])
 # → float
 
 # %% [markdown]
@@ -915,9 +915,9 @@ rev = L.at()
 opening_clip = rev.run("clips.clip", video="video/G1", start=0, end=8)
 print(type(opening_clip).__name__, opening_clip.frames, opening_clip.preds)
 # → Video b'G1 wide ' {'span': [0, 8]}
-for item in sorted(opening_clip.trace):
+for item in sorted(opening_clip.dependencies):
     if item.startswith(("video/", "ref:")):
-        print(item, "->", opening_clip.trace[item])
+        print(item, "->", opening_clip.dependencies[item])
 # → ref:demo_game.game.Video:<trimmed> -> ref:demo_game.game.Video:<trimmed>
 # → video/G1 db/alias -> ref:demo_game.game.Video:<trimmed>
 
@@ -946,7 +946,7 @@ print(sorted(opening_clip.diff(stable_clip)))
 #    'ref:demo_game.game.Video:<trimmed>', 'video/G1 db/alias']
 
 # %% [markdown]
-# The binding moved, so the old entry's trace no longer holds: the
+# The binding moved, so the old entry's dependencies no longer hold: the
 # `run` missed and re-derived. `diff` names the items that moved:
 # the `video/G1` binding, and each side's value item. The old clip
 # stays, found by its hash.
@@ -993,7 +993,7 @@ print(again_clip.subject == stable_clip.subject)
 #
 # Whether an entry still holds can be asked without evaluating:
 # `matches(rev)` returns a bool, whether every item of the entry's
-# trace still reads the same at `rev`.
+# dependencies still reads the same at `rev`.
 
 # %%
 rev = L.at()

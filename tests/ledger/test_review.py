@@ -18,8 +18,8 @@ def test_1_a_ref_made_in_a_body_keeps_the_recorder(coded):
     a = Plain(b"aaa")
     seal(L, a, name="model/x")
     v = L.at().run("ledger_kinds.via_ref", name="model/x")
-    assert v.trace["model/x db/alias"] == f"ref:ledger_kinds.Plain:{a.hash}"
-    assert v.trace[f"ref:ledger_kinds.Plain:{a.hash}"]
+    assert v.dependencies["model/x db/alias"] == f"ref:ledger_kinds.Plain:{a.hash}"
+    assert v.dependencies[f"ref:ledger_kinds.Plain:{a.hash}"]
     b = Plain(b"bbbbb")
     seal(L, b)
     with L.transaction(by="t") as t:
@@ -34,12 +34,12 @@ def test_1_ref_preds_and_ref_rev_reads_are_traced(coded):
     v.preds["game"] = "G1"
     seal(L, v, name="vid")
     p = L.at().run("ledger_kinds.via_ref_preds", name="vid")
-    assert any(k.startswith('q:{"__call__":"preds"') for k in p.trace)
+    assert any(k.startswith('q:{"__call__":"preds"') for k in p.dependencies)
     with L.transaction(by="t") as t:
         t.add(v.subject, "note", "hi")
     assert not p.matches(L.at())                       # an annotation moved the preds read
     r = L.at().run("ledger_kinds.via_refs_rev", game="G1")
-    assert r.obj == {"note": "hi"} and f"{v.subject} note" in r.trace
+    assert r.obj == {"note": "hi"} and f"{v.subject} note" in r.dependencies
 
 
 def test_2_an_alias_row_on_a_sealed_subject_is_refused(L):
@@ -112,7 +112,7 @@ def test_6_verbs_outside_with_raise(L):
 def test_7_a_recorded_miss_holds_while_still_missing(coded):
     L = coded
     m = L.at().run("ledger_kinds.maybe", game="G1")
-    assert m.trace['eval:ledger_kinds.cut{"game":"G1","version":"1.0.0"}'] == "<none>"
+    assert m.dependencies['eval:ledger_kinds.cut{"game":"G1","version":"1.0.0"}'] == "<none>"
     n = CALLS.get("maybe", 0)
     assert L.at().run("ledger_kinds.maybe", game="G1").subject == m.subject and CALLS.get("maybe", 0) == n
 
@@ -123,7 +123,7 @@ def test_8_base_fn_hashes_the_static_closure(coded):
     v = Plain(b"x")
     seal(coded, v, name="n")
     e = coded.at().run("ledger_kinds.via_ref", name="n")
-    assert sorted(coded.at()[e.trace["fn"], "db/modules"]) == ["ledger_helper.py", "ledger_kinds.py"]
+    assert sorted(coded.at()[e.dependencies["fn"], "db/modules"]) == ["ledger_helper.py", "ledger_kinds.py"]
 
 
 def test_9_salt_item_is_named_salt():

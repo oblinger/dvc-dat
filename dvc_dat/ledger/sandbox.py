@@ -245,7 +245,7 @@ def closure(mounts: List[Mount], start: List[str]) -> Dict[str, Tuple[Mount, Pat
 
 
 def static_closure(root: Path, start: str, within: Path) -> Dict[str, Path]:
-    """Base mode (Q37 (iii)): every module under ``within`` reachable from ``start`` by import statements,
+    """Unsandboxed (Q37 (iii)): every module under ``within`` reachable from ``start`` by import statements,
     resolving a dotted name under ``root`` (the ``sys.path`` entry the start module was imported from)."""
     within = Path(os.path.realpath(within))
     seen: Dict[str, Path] = {}
@@ -780,7 +780,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
         if salt is not None:
             trace["salt"] = salt
         if not seal:
-            value.trace = trace  # type: ignore[misc]
+            value.dependencies = trace  # type: ignore[misc]
             drop_work(work, value)
             return value
         sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", modules=mods)

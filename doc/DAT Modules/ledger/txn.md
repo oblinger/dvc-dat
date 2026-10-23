@@ -61,30 +61,29 @@ on a refusal. Part of the [architecture](../../DAT%20Architecture.md).
 
 Module functions: `attr(obj, path)` walks a dotted path over mappings,
 sequences (integer steps) and attributes, `KeyError` at the first
-missing step, `TypeError` for an empty path. `code_token(rev, repo,
-env_commit)` is the `code/<repo>` trace value: `<version>+<env
-commit8>`, the version from the `code/<repo>` row (empty when there is
-none) and the commit always the environment's, the one the code ran at,
-never the row's. `FORMAT` is
+missing step, `TypeError` for an empty path. `code_token(env_commit)`
+is the `code/<repo>` dependency value: the environment's commit, 8
+hex, the one the code ran at, never the row's; the version is not in
+it (it stays readable from the `code/<repo>` rows). `FORMAT` is
 `"dvc-dat-ledger/1"`; `SEAL_PREDICATES` the seal's own predicates.
 
 ## The seal
 
-- The subject hashes, as canonical JSON, the trace, the preds (a `many`
+- The subject hashes, as canonical JSON, the dependencies, the preds (a `many`
   list sorted) and the `db/value` text `ref:<class>:<hash>`; an eval's
   seal ([fn](fn.md)) adds the dotted name and the keys.
-- The trace of a hand seal is declared: one `ref:<class>:<hash>` item
+- The dependencies of a hand seal are declared: one `ref:<class>:<hash>` item
   per `Value`/`Ref` dep, a `<name> db/alias` item for a dep loaded or
   named through an alias, the `fn` item for an `Fn` dep (its
   `db/fn/<name>/<hash>` rows are written if absent), then
   `code/<repo>` for every repo discovery reports, and `platform`.
 - On the seal's line: `preds` becomes a `FrozenPreds`, `sealed`,
-  `subject` and `trace` are set. At commit: `rev` is set, `preds`
+  `subject` and `dependencies` are set. At commit: `rev` is set, `preds`
   becomes the subject's non-`db/` rows as loaded (a typed pred a
   `Ref`), and `_after_seal` runs (a `Dat` moves to its stored folder).
 - Rows written once per subject: `db/value`, `db/kind` (dotted class),
   `db/provenance` (default `seal`), `db/preds` (the kind's declared
-  names, JSON), `db/trace/<item>` per item, one row per pred (per
+  names, JSON), `db/deps/<item>` per item, one row per pred (per
   member for `many`); with `alias`, `(alias, db/alias, subject)`.
 - A subject already sealed at `base`, or sealed by another writer before
   this commit, is not written again: the seal is idempotent.

@@ -16,7 +16,7 @@ def test_memo_false_runs_on_a_dirty_or_stale_checkout(coded, envbox):
         coded.at().run("ledger_kinds.scratchy", game="G1")
     envbox.code(commit="other99")
     v = coded.at().run("ledger_kinds.scratchy", game="G1", memo=False)
-    assert not v.sealed and "fn" in v.trace
+    assert not v.sealed and "fn" in v.dependencies
 
 
 def test_the_work_folder_goes_after_the_call_in_both_modes(coded):

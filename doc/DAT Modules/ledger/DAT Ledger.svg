@@ -51,7 +51,7 @@
 
     <text x="1010" y="406" font-size="24" font-weight="bold">Value</text>
     <text x="1010" y="432" font-size="15" fill="#607d8b">class · Pickled · Table · Dat</text>
-    <text x="1010" y="460" font-size="15">encode · decode · seal · trace</text>
+    <text x="1010" y="460" font-size="15">encode · decode · seal · dependencies</text>
 
     <text x="1410" y="136" font-size="24" font-weight="bold">Fn</text>
     <text x="1410" y="162" font-size="15" fill="#607d8b">class · a @ledger_fn at a revision</text>
@@ -66,7 +66,7 @@
   <g font-size="15" font-style="italic" fill="#2e7d32" text-anchor="middle">
     <text x="600" y="236">governed by The fold</text>
     <text x="1010" y="506">governed by Sealing and saving</text>
-    <text x="1410" y="236">governed by Evaluation and the trace</text>
+    <text x="1410" y="236">governed by Evaluation and the dependencies</text>
   </g>
 
   <!-- primary flow: solid -->

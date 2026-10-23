@@ -66,7 +66,7 @@ def test_numbers_coerced_and_eval_provenance_refused(L):
     v = Video(b"f")
     v.preds.update(game=5)
     with pytest.raises(ValueError):
-        seal(L, v, provenance="eval:base")
+        seal(L, v, provenance="eval:unsandboxed")
     seal(L, v, provenance="import:x")
     assert L.at()[v.subject, "game"] == "5" and L.at()[v.subject, "db/provenance"] == "import:x"
 
@@ -173,16 +173,16 @@ def test_kind_follows_db_moved(L):
     assert len(rev.refs(kind=Cut)) == 1 and Ref(rev, v.subject).type is Cut
 
 
-def test_deps_trace_and_alias_binding(L):
+def test_deps_dependencies_and_alias_binding(L):
     raw = Plain(b"raw")
     seal(L, raw, name="data/raw")
     loaded = L.at().load("data/raw")
     out = Value.Blob({"a": 1})
     seal(L, out, deps=[loaded])
-    t = out.trace
+    t = out.dependencies
     key = f"ref:ledger_kinds.Plain:{raw.hash}"
     assert t[key] == key and t["data/raw db/alias"] == key
-    assert t["code/testrepo"] == "+abc1234" and "uv.lock" not in t
+    assert t["code/testrepo"] == "abc1234" and "uv.lock" not in t
 
 
 def test_a_row_may_point_at_a_value(L):

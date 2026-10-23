@@ -1,7 +1,7 @@
 :>> [DAT](../../DAT.md) → [ledger](ledger.md) → [DAT trace](ha://p/DAT%20trace) 
 # ledger.trace
-A trace is the record of what producing a value read, item name to
-value, and it is half the memo key: a hit is an entry every one of
+A value's dependencies are the record of what producing it read, item
+name to value, and they are half the memo key: a hit is an entry every one of
 whose items still holds at the revision asked. This module names the
 items a recording `Rev` writes and decides whether a recorded item
 still holds. It never runs a function: a nested eval is checked by a
@@ -12,7 +12,7 @@ lookup alone. Part of the [architecture](../../DAT%20Architecture.md).
 | item | value | holds when |
 | --- | --- | --- |
 | `fn` | `db/fn/<name>/<hash>` | the name resolves at the rev to the same subject (sandbox: every module the run loaded, re-hashed, has the same bytes) |
-| `code/<repo>` | `<version>+<commit8>` | the environment's commit agrees with the recorded commit, whatever commit a `code/<repo>` row pins; the version is ignored |
+| `code/<repo>` | `<commit8>` | the environment's commit agrees with the recorded commit, whatever commit a `code/<repo>` row pins; the version is not recorded (it stays readable from the `code/<repo>` rows) |
 | `platform` | the environment's | the environment, now, is the same |
 | `<subject> <predicate>` | the held object (`<none>` if none) | the same object is held at the rev |
 | `<name> db/alias` | `ref:<class>:<hash>` | the name still resolves to those bytes |
@@ -37,7 +37,7 @@ by the call, its arguments and `since`.
   names.
 - `present(rev, item, recorded, env, trace=None) -> bool`: whether one
   item holds.
-- `trace_matches(rev, trace) -> bool`: every item holds; `fn` is
+- `trace_matches(rev, trace) -> bool`: every item of `trace` (a value's dependencies) holds; `fn` is
   checked last; a `LedgerError` or `ImportError` while checking is a
   miss, never an exception.
 - `salt_at(rev, fn_subject) -> str`, `NONE = "<none>"`.

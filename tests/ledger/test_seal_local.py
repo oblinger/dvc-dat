@@ -32,7 +32,7 @@ def test_a_save_carries_the_environment_of_the_seal(L, envbox):
     s = v.seal(L, name="clip/1")
     held = Ref(L.at(), "clip/1")
     assert held.subject == s == v.subject and v.rev is not None
-    assert v.trace["code/testrepo"] == "+abc1234"
+    assert v.dependencies["code/testrepo"] == "abc1234"
     assert L.at()[s, "db/provenance"] == "human:dan"
     assert L.at()[s, "db/sealed-at"] == v.sealed
     assert L.at()[L.at().tx, "db/by"] == "human:dan"
@@ -95,7 +95,7 @@ def test_a_dep_must_be_saved_first(L):
     with L.transaction(by="t") as t:
         r = raw.seal(t)
         c = cut.seal(t)
-    assert L.at()[c, f"db/trace/ref:{Plain.__module__}.Plain:{raw.hash}"]
+    assert L.at()[c, f"db/deps/ref:{Plain.__module__}.Plain:{raw.hash}"]
     assert r != c
 
 

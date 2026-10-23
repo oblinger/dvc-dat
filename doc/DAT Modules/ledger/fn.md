@@ -5,7 +5,7 @@ A value function is a plain Python function marked `@ledger_fn`; an
 `run`. Resolution decides the mode: a name under a mounted prefix
 (`db/mount/<prefix>` rows as of the revision) is a sandboxed function,
 loaded from the mounted tree and run in a worker
-([sandbox](sandbox.md)); any other name is a base function, resolved in
+([sandbox](sandbox.md)); any other name is an unsandboxed function, resolved in
 this process. `run` is a memo: the same question asked of an unchanged
 world hands back the value already sealed. Part of the
 [architecture](../../DAT%20Architecture.md).
@@ -16,13 +16,13 @@ world hands back the value already sealed. Part of the
   returns it unchanged, still a plain callable. No return annotation is
   `TypeError` at decoration; a non-callable `TypeError`. Writes nothing.
 - `load_fn(rev, name) -> Fn` (also `Rev.load_fn`): `name` a dotted
-  `str` (else `TypeError`); the longest mounted prefix wins. Base mode:
+  `str` (else `TypeError`); the longest mounted prefix wins. Unsandboxed:
   the name must import in this process (`ImportError`), be marked
   (`TypeError`), have a source file (`ImportError`), and take the `Rev`
   as its first positional parameter (`TypeError`); a parameter named
   `memo` is `TypeError`.
 - `Fn`: a frozen dataclass with `name`, `module` (the source file),
-  `sha` (sha256 of that file), `mode` (`"base"` or `"sandbox"`),
+  `sha` (sha256 of that file), `mode` (`"unsandboxed"` or `"sandbox"`),
   `mount` (the prefix or `None`), `signature` (the keys, without the
   `Rev` and `path`), `env` (an `Env`; `mounts` the mount-table hash in
   sandbox mode), `subject` (`db/fn/<name>/<16 hex>`).
@@ -50,10 +50,10 @@ world hands back the value already sealed. Part of the
     path template, expanded with the keys (`{unique}` counts up to a
     free name), else `anonymous/Dat{unique}`. `memo=False`: the name
     is set on the unsaved object.
-  - Base mode: a miss runs only when the function's code is in a git
+  - Unsandboxed: a miss runs only when the function's code is in a git
     checkout and the checkout is clean; code outside any checkout or a
     dirty checkout is `NotEvaluated` (there is no byte record of what
-    ran). A `code/<repo>` `commit` row does not gate a base eval: it
+    ran). A `code/<repo>` `commit` row does not gate an unsandboxed eval: it
     pins what the version means, and the entry's `code/<repo>` item
     records the commit the code ran at, so a hit holds only at that
     commit ([trace](trace.md)).
@@ -81,24 +81,24 @@ world hands back the value already sealed. Part of the
 
 - Lookup: every entry at the top whose `db/keys` row is the canonical
   JSON of the bound keys and whose `db/fn` row is the dotted name,
-  newest seal first; the first whose trace holds at the asked revision
+  newest seal first; the first whose dependencies hold at the asked revision
   ([trace](trace.md)) is restored by `Ref.load`.
-- Base run: the body gets a recording `Rev`; a function declaring
+- Unsandboxed run: the body gets a recording `Rev`; a function declaring
   `path` gets a fresh `ledger-work-*` folder under `work_root()`
   (`$DAT_WORK`, else `~/.cache/dvc-dat/work`), removed after the seal;
   a GB-scale result built there should sit on the filesystem it is
-  saved to, so set `DAT_WORK` beside the ledger's art store. The trace is the recorded reads plus `fn`, `code/<repo>` (the
+  saved to, so set `DAT_WORK` beside the ledger's art store. The dependencies are the traced reads plus `fn`, `code/<repo>` (the
   function's own repo) and `platform`.
 - Seal: one transaction `by="eval:<name>"`, subject = hash of
-  `{fn, keys, trace, preds, value}`; writes the `db/fn/<name>/<hash>`
+  `{fn, keys, dependencies, preds, value}`; writes the `db/fn/<name>/<hash>`
   rows (`db/name`, `db/module`, `db/sha`, `db/modules`, `db/mounts`,
   `db/mode`, `db/returns`) if absent, then the seal with `db/fn`,
-  `db/keys` and `db/provenance eval:base|eval:sandbox`. A subject
+  `db/keys` and `db/provenance eval:unsandboxed|eval:sandbox`. A subject
   already sealed writes no revision and returns that entry.
 - A call made from inside a value function records
   `eval:<name>{keys}` → the result's `ref:` (or `<none>` for a
-  `memo="get"` miss) in the caller's trace.
-- The base `fn` subject hashes `relpath -> sha256` of the module's
+  `memo="get"` miss) in the caller's dependencies.
+- The unsandboxed `fn` subject hashes `relpath -> sha256` of the module's
   static import closure within its checkout (the module file alone
   outside any checkout); `fn_holds` re-resolves the name at the asked
   revision and compares subjects.
@@ -113,7 +113,7 @@ world hands back the value already sealed. Part of the
 
 ## Left to other modules
 
-Sandbox resolution and running are [sandbox](sandbox.md)'s; the trace
+Sandbox resolution and running are [sandbox](sandbox.md)'s; the dependency
 items and their hit test are [trace](trace.md)'s; repos and commits
 come from [env](env.md); the seal rows are written by [txn](txn.md)'s
 `_seal`.

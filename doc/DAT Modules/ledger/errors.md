@@ -13,7 +13,7 @@ anything. Part of the [architecture](../../DAT%20Architecture.md).
 | --- | --- | --- |
 | `LedgerError` | `Exception` | no ledger found or opened; the backend refused |
 | `Multiple` | `LookupError` | `value`, `refs(one=True)`, `select(one=True)` matched several |
-| `NotEvaluated` | `RuntimeError` | a call the environment will not run: a repo with no checkout here, or (base mode, a miss) code outside any git checkout or a dirty checkout |
+| `NotEvaluated` | `RuntimeError` | a call the environment will not run: a repo with no checkout here, or (unsandboxed, a miss) code outside any git checkout or a dirty checkout |
 | `NotClean` | `NotEvaluated` | a `clean=True` call whose checkout is dirty, or not at the commit the rev's `code/<repo>` row names, or whose rev names none |
 | `UnmountedImport` | `ImportError` | a sandboxed run imported a module of a mounted repo outside that repo's mounts; a module of an unmounted repo is not refused (an ordinary `ModuleNotFoundError`, or, reached through `site-packages`, loaded with nothing recorded) |
 | `UntracedRead` | `PermissionError` | a sandboxed body read outside the mounts, the dats and its `path` folder |

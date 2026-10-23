@@ -1,16 +1,17 @@
-"""Trace items: how a read inside a value function is named, and whether a recorded item still holds.
+"""Dependency items: how a read inside a value function is traced, and whether a recorded item still holds.
 
-Items (Module § Value ``Trace``):
+Items (Module § Value ``Dependencies``):
 
 ``fn``
     the ``db/fn/<name>/<hash>`` subject of the code that ran; holds when the
-    name resolves at the rev to the same subject (base: the static import
+    name resolves at the rev to the same subject (unsandboxed: the static import
     closure; sandbox: exactly the modules the run loaded, re-hashed as they
     are now, on disk or installed, A38, Q37, Q39).
 ``code/<repo>``
-    ``<version>+<commit 8>``; holds when the commit agrees with the
-    environment's, whatever commit a ``code/<repo>`` row pins (T543
-    Q7 (C)), the version being informational (Q1: the commit is the pin).
+    ``<commit 8>``; holds when the commit agrees with the environment's,
+    whatever commit a ``code/<repo>`` row pins (T543 Q7 (C); Q1: the commit
+    is the pin). The version is not in the item (T034); it stays readable
+    from the ``code/<repo>`` rows at the revision.
 ``platform``
     the environment, now. (A sandboxed entry's third-party modules are in
     ``fn``, each by its bytes or its distribution's ``RECORD``; there is no
@@ -203,8 +204,7 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
     if item.startswith("code/"):                # the environment's commit, row or no row
         code = env().code.get(item[len("code/"):])
         c = code.commit if code is not None else None
-        want = recorded.rpartition("+")[2]
-        return bool(c) and bool(want) and (c.startswith(want) or want.startswith(c))
+        return bool(c) and bool(recorded) and (c.startswith(recorded) or recorded.startswith(c))
     if item.startswith("eval:"):
         from .fn import lookup_encoded
 

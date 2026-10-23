@@ -6,6 +6,13 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.21.0 — 2026-10-23
+
+- **`Value.dependencies` replaces `Value.trace` (T035).** The mapping of what producing a value read is `v.dependencies`, its type `Value.Dependencies`, and its rows `db/deps/<item>` (were `db/trace/<item>`). "Trace" stays the verb: a recording `Rev` traces reads into the dependencies; `UntracedRead` and `dvc_dat.ledger.trace` keep their names. No alias for the old names.
+- **The unsandboxed mode is named `unsandboxed` (T034).** `Fn.mode`, the `db/mode` row and provenance read `unsandboxed` / `eval:unsandboxed` (were `base` / `eval:base`).
+- **The `code/<repo>` dependency item is the commit alone (T034):** `<commit8>`, was `<version>+<commit8>`; the version stays readable from the `code/<repo>` rows at the revision. `code_token(env_commit)` takes the commit only.
+- Entries sealed before 2.21 carry `db/trace/` rows and old tokens, so a lookup no longer finds them: they recompute once.
+
 ## 2.20.0 — 2026-10-22
 
 - **`Rev.run` is the ledger's evaluation verb, matching `just run`.** `rev.run(name, /, *, memo=True, clean=False, **keys)` is `rev.eval` renamed, same behaviour and signature: the API form of `just run NAME KEY=VALUE`. `rev.eval` remains a deprecated alias that warns (`DeprecationWarning`) and forwards; it goes at the next major. Docs, demos and tests use `run`. Stored names are unchanged: trace items stay `eval:<name>{keys}` and provenance `eval:base` / `eval:sandbox`, so every sealed entry still hits.

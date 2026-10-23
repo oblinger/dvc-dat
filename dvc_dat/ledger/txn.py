@@ -42,7 +42,7 @@ SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds",
 
 
 def is_seal_predicate(p: str, frozen: Sequence[str]) -> bool:
-    return p in SEAL_PREDICATES or p.startswith("db/trace/") or p in frozen
+    return p in SEAL_PREDICATES or p.startswith("db/deps/") or p in frozen
 
 
 def attr(obj: Any, path: str) -> Any:
@@ -93,12 +93,11 @@ def check_provenance(provenance: Optional[str]) -> str:
     return provenance
 
 
-def code_token(rev: "Rev", repo: str, env_commit: Optional[str]) -> str:
-    """The ``code/<repo>`` trace item: ``<version row>+<env commit 8>``, ``+<env commit 8>`` with no
-    version row (A53). The commit is always the environment's: the commit the code ran at, whatever
-    commit the ``code/<repo>`` row pins its version to."""
-    v = rev.get(f"code/{repo}", "version")
-    return f"{v or ''}+{(env_commit or '')[:8]}"
+def code_token(env_commit: Optional[str]) -> str:
+    """The ``code/<repo>`` dependency item: the environment's commit, 8 hex (T034): the commit the code
+    ran at, whatever commit the ``code/<repo>`` row pins its version to. The version is not in the
+    item; it stays readable from the ``code/<repo>`` rows at the revision."""
+    return (env_commit or "")[:8]
 
 
 class Transaction:
@@ -245,7 +244,7 @@ class Transaction:
         self._state = "abandoned"
         for value, old in self._frozen:
             value.subject = None
-            value.trace = _EMPTY
+            value.dependencies = _EMPTY
             value.__dict__.pop("_ledger", None)
             if old is None:
                 continue            # sealed by v.seal() before this body: sealed still, saved nowhere
@@ -287,7 +286,7 @@ class Transaction:
             r = Ref(top, subject)
             sealed_at = r.sealed_at or top
             stamp, h = value.sealed, value.hash        # the hash of the bytes stored, not of the live object
-            value._provenance(subject=subject, rev=sealed_at, trace=trace, preds=r.preds)
+            value._provenance(subject=subject, rev=sealed_at, dependencies=trace, preds=r.preds)
             value.sealed = stamp or value.sealed
             value.__dict__["_hash"] = h
             value._after_seal(art, loaded_as)
@@ -561,15 +560,15 @@ class Transaction:
 
         env = env if env is not None else current_env()
         for repo in (env.code if repos is None else repos):
-            trace[f"code/{repo}"] = code_token(self.base, repo, env.code[repo].commit if repo in env.code else None)
+            trace[f"code/{repo}"] = code_token(env.code[repo].commit if repo in env.code else None)
         trace["platform"] = env.platform
 
     def _seal_value(self, value: Value, *, deps: Sequence[Any] = (), name: Optional[str] = None,
                     provenance: Optional[str] = None) -> str:
-        """``value.seal(t)``: seal into the immutable subject ``<hash of (trace, preds, bytes)>``; return it.
+        """``value.seal(t)``: seal into the immutable subject ``<hash of (dependencies, preds, bytes)>``; return it.
 
         On this line the seal freezes ``preds`` (read-only), and sets ``sealed``, ``subject`` and
-        ``trace``; only ``rev`` waits for the commit. A seal refused here, or a transaction abandoned
+        ``dependencies``; only ``rev`` waits for the commit. A seal refused here, or a transaction abandoned
         later (a body exception, a refusal at commit), leaves the value unsealed with its preds a plain
         dict (A43).
         """
@@ -606,7 +605,7 @@ class Transaction:
         return subject
 
     def _freeze(self, value: Value, subject: str, trace: Dict[str, str]) -> None:
-        """The seal fixes subject, trace and preds now; the revision is assigned at commit (Q25 (D))."""
+        """The seal fixes subject, dependencies and preds now; the revision is assigned at commit (Q25 (D))."""
         from types import MappingProxyType
         from .value import FrozenPreds
 
@@ -618,7 +617,7 @@ class Transaction:
             value.__dict__["_preds"] = FrozenPreds(value.preds)
             value.sealed = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         value.subject = subject
-        value.trace = MappingProxyType(dict(trace))
+        value.dependencies = MappingProxyType(dict(trace))
         value.__dict__["_hash"] = h
         value.__dict__["_ledger"] = self._ledger
 
@@ -637,7 +636,7 @@ class Transaction:
                 ("db/provenance", "str:" + provenance, False),
                 ("db/preds", "json:" + canonical(list(type(value)._ledger_preds)), False)]
             ops += [(p, o, False) for p, o in extra]
-            ops += [(f"db/trace/{k}", "str:" + v, False) for k, v in sorted(trace.items())]
+            ops += [(f"db/deps/{k}", "str:" + v, False) for k, v in sorted(trace.items())]
             ops += [(p, o, True) for p, o in pred_rows]
             for p, o, is_pred in ops:
                 self._ops.append(_Op(subject, p, o, True, seal_of=subject, pred=is_pred))

@@ -7,9 +7,9 @@ prefix (``db/mount/<prefix>`` rows) it is a sandboxed function, loaded from the
 mounted tree and run in a worker (``sandbox``); otherwise a base function,
 resolved in this process. Calling the ``Fn`` is ``run``: a memo lookup over
 every entry at the top whose ``db/fn`` and ``db/keys`` rows match, each
-candidate's trace matched against the rev, the latest-sealed match winning
-(Q20, A20); on a miss, run, record the trace, seal with ``db/fn``,
-``db/keys`` and ``db/provenance eval:base|eval:sandbox``.
+candidate's dependencies matched against the rev, the latest-sealed match winning
+(Q20, A20); on a miss, run, trace its reads, seal with ``db/fn``,
+``db/keys`` and ``db/provenance eval:unsandboxed|eval:sandbox``.
 """
 
 from __future__ import annotations
@@ -191,7 +191,7 @@ def load_fn(rev: "Rev", name: str) -> "Fn":
     sig, takes_path, template = signature_of(name, obj)
     env = current_env()
     modules = base_closure(modname, Path(src), env)
-    return Fn(name=name, module=Path(src), sha=sha, mode="base", mount=None, signature=sig, env=env,
+    return Fn(name=name, module=Path(src), sha=sha, mode="unsandboxed", mount=None, signature=sig, env=env,
               subject=fn_subject(name, modules, None), _rev=rev, _obj=obj, _takes_path=takes_path,
               _template=template,
               _modules=modules, _returns=returns_text(obj))
@@ -334,11 +334,11 @@ class Fn:
             trace = dict(rec)
             trace.update({"fn": self.subject, "platform": env.platform})
             if repo is not None:
-                trace[f"code/{repo}"] = code_token(plain, repo, env.code[repo].commit)
+                trace[f"code/{repo}"] = code_token(env.code[repo].commit)
             if not seal:
-                value.trace = trace  # type: ignore[misc]
+                value.dependencies = trace  # type: ignore[misc]
                 return value
-            value = seal_entry(self, plain, value, trace, enc, "eval:base")
+            value = seal_entry(self, plain, value, trace, enc, "eval:unsandboxed")
             return value
         finally:
             drop_work(work, value)
@@ -475,7 +475,7 @@ def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: s
 
 
 def lookup(plain: "Rev", name: str, enc: str) -> Optional[Value]:
-    """The latest-sealed entry for ``(name, keys)`` whose trace holds at ``plain``; never runs."""
+    """The latest-sealed entry for ``(name, keys)`` whose dependencies hold at ``plain``; never runs."""
     from .rev import Ref
     from .trace import trace_matches
 
@@ -487,8 +487,8 @@ def lookup(plain: "Rev", name: str, enc: str) -> Optional[Value]:
         if fnh and fnh[0].obj == "str:" + name and val:
             cands.append((val[0].rev, val[0].ord, s))
     for _r, _o, s in sorted(cands, reverse=True):
-        trace = {p[len("db/trace/"):]: h.obj.partition(":")[2]
-                 for _s, p, h in top._held_rows(subject=s) if p.startswith("db/trace/")}
+        trace = {p[len("db/deps/"):]: h.obj.partition(":")[2]
+                 for _s, p, h in top._held_rows(subject=s) if p.startswith("db/deps/")}
         if trace_matches(plain, trace):
             return Ref(top, s).load()
     return None

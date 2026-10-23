@@ -99,7 +99,7 @@ def history(args):
 
 
 def brief(text):
-    """A trace item or value, short: hashes to 8 hex, a query to its answer's size."""
+    """A dependency item or value, short: hashes to 8 hex, a query to its answer's size."""
     if text.startswith("ref:"):
         cls, _, h = text[4:].partition(":")
         return f"{cls.rpartition('.')[2]}:{h[:8]}"
@@ -119,7 +119,7 @@ def why(args):
     name, rest = args[0], parse(args[1:])
     v = rev.load(name)
     print(f"{name}: {v.subject[:8]}, {'matches' if v.matches(rev) else 'does not match'} the head")
-    print("trace: " + ", ".join(f"{brief(k)} {brief(t)}" for k, t in sorted(v.trace.items())
+    print("dependencies: " + ", ".join(f"{brief(k)} {brief(t)}" for k, t in sorted(v.dependencies.items())
                                 if not k.startswith("ref:")))
     prev = rest.get("against")
     if prev is None:

@@ -9,7 +9,7 @@ The third position of a row is stored as one of three tagged strings:
 ``ref:<dotted class>:<hex sha256>[:<subject>]``
     a sealed value: the class that decodes it and the hash of its bytes; the
     subject is an optional hint, written only on a row ``add`` made from a
-    ``Ref`` (A28). In ``db/value``, typed preds, ``db/keys`` and traces it is
+    ``Ref`` (A28). In ``db/value``, typed preds, ``db/keys`` and dependencies it is
     omitted, so a dependency is its bytes, not its entry (A21).
 
 A bare ``int``, ``float``, ``bool`` or ``None`` is refused by ``add`` (Q5 (A)).
@@ -58,7 +58,7 @@ def parse_ref(text: str) -> Tuple[str, str, Optional[str]]:
 
 
 def strip_hint(text: str) -> str:
-    """A ``ref:`` text without its subject hint: what a trace, a key or a where clause compares."""
+    """A ``ref:`` text without its subject hint: what a dependency, a key or a where clause compares."""
     if not text.startswith("ref:"):
         return text
     cls, h, _s = parse_ref(text)
