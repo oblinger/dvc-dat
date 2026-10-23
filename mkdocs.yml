@@ -14,7 +14,6 @@ nav:
 exclude_docs: |
   DAT Track/
   DAT Design/
-  DAT Archive/
   DAT.md
   DAT Hooks.md
   .obsidian/
