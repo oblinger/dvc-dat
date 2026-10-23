@@ -193,7 +193,7 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 | Transaction | |
 | --- | --- |
 | [tx](#^transaction-tx) | A placeholder for this revision's tx subject |
-| [base](#^base) | The top when the block was entered |
+| [base](#^base) | The revision immediately prior to this transaction |
 | [rev](#^transaction-rev) | The revision the exit wrote |
 | [add](#^add) | Append an add row |
 | [remove](#^remove) | Append a remove row |
@@ -204,7 +204,7 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
     A placeholder subject, rewritten to `db/tx/<rev>` at commit wherever it appears as a subject or a `str` object, so the body can write rows about its own transaction. ^transaction-tx
 
 **base**`: Rev`
-    The revision the writes are read against: the top when the block was entered, and under `lock=` the top until exit, since no one else can commit in between. Always a committed revision. `RuntimeError` before entry. ^base
+    The revision immediately prior to this transaction: the committed one its reads see and its writes are decided against. Without `lock=` it is the top at entry, and others may commit after it before this one does; with `lock=` nothing commits in between, so the revision written is `base.id + 1`. `RuntimeError` before entry. ^base
 
 **rev**`: Rev`
     The revision written: the state after this transaction, so it exists only once committed; `RuntimeError` before. Under `lock=` the number it will be is `base.id + 1`. ^transaction-rev
