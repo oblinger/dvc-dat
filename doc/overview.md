@@ -1,4 +1,4 @@
-:>>
+:>> [[DAT]] → [overview](ha://p/overview) 
 # DVC-DAT API Reference
 The dvc_dat API reference: what the package exports and how each part is called.
 
