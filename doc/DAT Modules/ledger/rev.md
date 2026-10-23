@@ -1,5 +1,5 @@
+:>> 
 # ledger.rev
-
 Every read of the ledger is made through a `Rev`, a frozen view as of
 one revision. Row reads (`[]`, `get`, `all`, `in`) fold the rows at or
 before the revision by each predicate's cardinality; `asserted` and
@@ -52,8 +52,10 @@ trace (see [trace](trace.md)). Part of the
 - `load(subject) -> Value`: `Ref(self, subject).load()`.
 - `load_fn(name) -> Fn`: see [fn](fn.md).
 - `run(name, /, *, memo=True, clean=False, path=None, kwargs=None,
-  **keys) -> Value | None`: the API form of `just run NAME KEY=VALUE`;
-  `load_fn(name)(...)` with the same control options; a non-`str` name
+  **keys) -> Value | None`: calls the value function `name` with `keys`
+  and returns its result, handing back an already-sealed result when one
+  from the same code and keys still holds at this revision; `memo` and
+  `clean` as on `Fn.__call__` ([fn](fn.md)); a non-`str` name
   `TypeError`.
 
 `Ref(rev, name)`: one value at one moment, frozen, unpicklable.

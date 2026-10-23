@@ -5,7 +5,7 @@ description: "`Dat`, `DatManager`, `DatContainer`, `Do`: the folder that is its 
 # DAT Dat
 A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for itself and whose `_result_.yaml` holds what running it produced, sealed under a content hash.
 
-![DAT Dat](DAT%20Dat.svg)
+![DAT Dat](DAT%20Dat.svg) 
 
 *The spec is the record* is the topic that governs the Do node (arguments fork a new spec; they never ride beside one); the other topics annotate the nodes they govern.
 
@@ -42,7 +42,7 @@ A folder of data described by its `_spec_.yaml`, held in memory as the spec as w
 | [cli_main](#^cli-main) | The command line (`just run`), for a program's main |
 
 **manager**`: DatManager`
-    On the class, the process's default world: a plain assignable attribute, built on first read by `DatManager.load_dat_config()`, shared by every subclass, and replaced by assigning a `DatManager` (anything else is `TypeError`; assigning `None` clears it, so the next read builds it again). On an instance, read-only: the manager that loaded the dat, else the default. See [The manager is the world](#the-manager-is-the-world). ^manager
+    On the class, the process's default world: a plain assignable attribute, built on first read by `DatManager.load_dat_config()`, shared by every subclass, and replaced by assigning a `DatManager` (anything else is `TypeError`; assigning `None` clears it, so the next read builds it again). On an instance, read-only: the manager that loaded the dat, else the default. See [The manager is the world](#The%20manager%20is%20the%20world). ^manager
 
 **do**`: Any` (class property)
     The forwarder `dvc_dat.do.do`: every call and attribute goes to `Dat.manager.do`, whichever manager that is at the moment of the call, so `do = Dat.do` binds a shortcut that follows a later reassignment. It is defined on the metaclass, so `Dat.do` works and `some_dat.do` is `AttributeError`. ^dat-do
@@ -66,10 +66,10 @@ A folder of data described by its `_spec_.yaml`, held in memory as the spec as w
     The path relative to the dat folder that holds it, which is the dat's name in every lookup and dependency map; the absolute path for a dat outside every dat folder. ^get-path-name
 
 **run**`: Dat | None` (property)
-    The sub-dat `run/` that the last `execute` made: its results hold `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and `dat.content`, and its `work/` is the run's scratch. `None` for a dat never run. Loaded as a plain `Dat`, outside the load cache. See [The run sub-dat](#the-run-sub-dat). ^run
+    The sub-dat `run/` that the last `execute` made: its results hold `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and `dat.content`, and its `work/` is the run's scratch. `None` for a dat never run. Loaded as a plain `Dat`, outside the load cache. See [The run sub-dat](#The%20run%20sub-dat). ^run
 
 **save**`() -> None`
-    Write `_result_.yaml`, stamping `dat.sha256`, `dat.hash: functional` and `dat.standing`, and key the new hash in the index. Inside the dat's own run it writes a checkpoint (`open`, or `rolling`) and asks for the seal, which comes when the run returns; anywhere else it seals now and adds the dependency `$MANUAL`. A dat already `sealed` or `referenceable` is `RuntimeError`, and so is a seal that earns less than a spec's `dat.standing: referenceable` demand. See [Sealing and the content hash](#sealing-and-the-content-hash) and [Standing](#standing). ^save
+    Write `_result_.yaml`, stamping `dat.sha256`, `dat.hash: functional` and `dat.standing`, and key the new hash in the index. Inside the dat's own run it writes a checkpoint (`open`, or `rolling`) and asks for the seal, which comes when the run returns; anywhere else it seals now and adds the dependency `$MANUAL`. A dat already `sealed` or `referenceable` is `RuntimeError`, and so is a seal that earns less than a spec's `dat.standing: referenceable` demand. See [Sealing and the content hash](#Sealing%20and%20the%20content%20hash) and [Standing](#Standing). ^save
 
 **verify**`() -> bool`
     `True` when the folder on disk, `run/` left out, still hashes to the `dat.sha256` its `_result_.yaml` carries; `False` when it does not, when there is no `_result_.yaml`, or when it carries no hash. Reads the file, not the in-memory results. ^verify
@@ -137,13 +137,13 @@ A world of dats: the dat folders searched by name (the first is where new dats a
     A world on `dat_folders`, searched in order, the first written to; `art_folder` holds the artifacts, and with none this world holds no artifacts. `index` is the index file, default `_index_.json` in the artifact folder, else in the first dat folder. `do` adopts an existing namespace with its mounts, and adopting the default world's `do` makes this manager the default world; with none the manager builds a fresh `Do`. Every manager mounts `dvc_dat.dat_tools` at `dt`. `verify` sets the default of every load's `verify`. Reads nothing from disk. A string for `dat_folders` is `TypeError`, an empty list `ValueError`, an artifact folder nested with a dat folder `ValueError`, a non-bool `verify` `TypeError`. ^--init--
 
 **load_dat_config**`(start: str | Path | None = None, *, do: Do | None = None) -> DatManager` (classmethod)
-    A new manager from the `.datconfig.yaml` found walking up from `start` (default the working directory; a file path names the config file itself), with `.datconfig.override.yaml` over it and `DAT_FOLDERS` / `DAT_ART_FOLDER` over both. Relative folders resolve against the config's folder, which goes first on `sys.path`. A `manager:` key builds that dotted subclass instead, and its `CONFIG_KEYS` class attribute names extra keys passed to its constructor. An unknown key, or a malformed value, is `ValueError`; a `manager:` that is not a subclass is `TypeError`. See [Configuration](#configuration). ^load-dat-config
+    A new manager from the `.datconfig.yaml` found walking up from `start` (default the working directory; a file path names the config file itself), with `.datconfig.override.yaml` over it and `DAT_FOLDERS` / `DAT_ART_FOLDER` over both. Relative folders resolve against the config's folder, which goes first on `sys.path`. A `manager:` key builds that dotted subclass instead, and its `CONFIG_KEYS` class attribute names extra keys passed to its constructor. An unknown key, or a malformed value, is `ValueError`; a `manager:` that is not a subclass is `TypeError`. See [Configuration](#Configuration). ^load-dat-config
 
 **do**`: Do`
     The manager's namespace and runner, its only public attribute: `m.do(...)` runs inside this world, `m.do.mount(...)` adds names to it. ^datmanager-do
 
 **create**`(spec: dict | str | None = None, *, path: str | Path | None = None) -> Dat`
-    Make a dat as the class its `dat.kind` names. `spec` is a dict or a dotted name loaded through `do`; `dat.base` is merged in, `validate_spec` runs, and the folder is `path`, else the spec's `dat.name` template, else `anonymous/Dat{unique}`, under the first dat folder. `dat.target_exists` settles an existing folder, and `use` returns the dat already there. Every `{}` in the spec is expanded once, with the same `now` and `unique` the folder got, `dat.name` keeps the path template (`path` as given, else the spec's own; a constant path is its own template), never its expansion, and the result is written as `_spec_.yaml`; no `_result_.yaml` is written. A name an artifact holds is `FileExistsError`; a spec that is not YAML data once expanded is `TypeError`, and the folder is removed. See [The spec is the record](#the-spec-is-the-record). ^datmanager-create
+    Make a dat as the class its `dat.kind` names. `spec` is a dict or a dotted name loaded through `do`; `dat.base` is merged in, `validate_spec` runs, and the folder is `path`, else the spec's `dat.name` template, else `anonymous/Dat{unique}`, under the first dat folder. `dat.target_exists` settles an existing folder, and `use` returns the dat already there. Every `{}` in the spec is expanded once, with the same `now` and `unique` the folder got, `dat.name` keeps the path template (`path` as given, else the spec's own; a constant path is its own template), never its expansion, and the result is written as `_spec_.yaml`; no `_result_.yaml` is written. A name an artifact holds is `FileExistsError`; a spec that is not YAML data once expanded is `TypeError`, and the folder is removed. See [The spec is the record](#The%20spec%20is%20the%20record). ^datmanager-create
 
 **load**`(name: str | Path, *, cache_after_load: bool = True, verify: bool | None = None) -> Any`
     What `name` names: a dat, built as the class its `dat.kind` names, or an artifact, handed to the type recorded at its save. `name` is a dat's name or path, an artifact's name, or the `sha256:` URN of either. A dat is searched as an absolute path, then among the dats mounted in `do`, then in each dat folder; not found is `KeyError`, a folder with no spec `FileNotFoundError`, a name both a dat and an artifact hold `ValueError`. Dats are cached by path, weakly, so a second load returns the same object while it lives; `cache_after_load=False` skips the cache. `verify` (default the manager's) re-hashes and raises `ValueError` naming both hashes on a mismatch. Inside a recording the load lands in the recording dat's `dat.dependencies`. ^datmanager-load
@@ -155,13 +155,13 @@ A world of dats: the dat folders searched by name (the first is where new dats a
     `True` when `name` (a dat's name, an artifact's, or a URN) names something stored; a dat counts when its folder holds a spec file. ^exists
 
 **standing**`(name: str | Path | Dat) -> str | None`
-    How far `name` can be relied on, read from its files without building it: `rolling`, `open`, `sealed` or `referenceable`; `None` when nothing is stored under it. An artifact is `referenceable`; a `Dat` instance answers from its last write. See [Standing](#standing). ^datmanager-standing
+    How far `name` can be relied on, read from its files without building it: `rolling`, `open`, `sealed` or `referenceable`; `None` when nothing is stored under it. An artifact is `referenceable`; a `Dat` instance answers from its last write. See [Standing](#Standing). ^datmanager-standing
 
 **execute**`(dat: Dat) -> Any`
-    Run `dat`: call `fn(dat, *dat.args, **dat.kwargs)`, with `fn` the object `dat.do` names loaded through this world's `do`, inside `recording(dat)`, with a fresh `run/` sub-dat holding the run's record and `run/work/` as the working directory. Returns `fn`'s value, or the dat when the spec has no `dat.do`. Saves nothing by itself; a `dat.save()` inside `fn` is answered with the seal when `fn` returns. A sealed dat is `RuntimeError`, a non-callable `dat.do` `TypeError`, and a spec demanding `referenceable` is `RuntimeError` when the code is dirty or outside a git checkout. Every run in the world, nested ones included, comes here. See [The run sub-dat](#the-run-sub-dat). ^execute
+    Run `dat`: call `fn(dat, *dat.args, **dat.kwargs)`, with `fn` the object `dat.do` names loaded through this world's `do`, inside `recording(dat)`, with a fresh `run/` sub-dat holding the run's record and `run/work/` as the working directory. Returns `fn`'s value, or the dat when the spec has no `dat.do`. Saves nothing by itself; a `dat.save()` inside `fn` is answered with the seal when `fn` returns. A sealed dat is `RuntimeError`, a non-callable `dat.do` `TypeError`, and a spec demanding `referenceable` is `RuntimeError` when the code is dirty or outside a git checkout. Every run in the world, nested ones included, comes here. See [The run sub-dat](#The%20run%20sub-dat). ^execute
 
 **recording**`(dat: Dat)` (context manager)
-    Every `load`, `load_path` and `save_artifact` inside the block lands in `dat`'s `dat.dependencies`, name to hash. Blocks nest: when an inner block ends, its dat becomes one entry of the outer one. `execute` runs its function inside one; a builder gathering a dat's inputs outside a run uses it directly. See [Dependency capture](#dependency-capture). ^recording
+    Every `load`, `load_path` and `save_artifact` inside the block lands in `dat`'s `dat.dependencies`, name to hash. Blocks nest: when an inner block ends, its dat becomes one entry of the outer one. `execute` runs its function inside one; a builder gathering a dat's inputs outside a run uses it directly. See [Dependency capture](#Dependency%20capture). ^recording
 
 **record_dependency**`(name: str, sha256: str | None = None) -> None`
     Add `name -> sha256` to the recording dat's dependencies, for an input that reached the run around the manager (a URL, a file read directly). `RuntimeError` when nothing is recording. ^record-dependency
@@ -173,7 +173,7 @@ A world of dats: the dat folders searched by name (the first is where new dats a
     `{branch, commit, dirty}` of the git checkout holding `fn`'s source, as a run records it in `dat.code`: `branch` is `None` on a detached HEAD, `dirty` counts tracked files outside the paths the repo's `.gitattributes` marks `dat-noncode`. `None` when the source is outside a checkout. ^code-of
 
 **save_artifact**`(source: str | Path, *, type: str | Callable | None = None, name: str | None = None, link: bool = False) -> str`
-    Store the file or folder `source` in the artifact folder and return its URN, `sha256:<hex>`. `type` is what a load hands the payload's path to: a class or callable, recorded by its dotted name, or that name as a string, anything `do.load` resolves; one that does not load back by its name is `TypeError`. `name` is a relative path held once; with none the artifact answers to its URN only. Bytes already stored are not stored again: the new name becomes a second key to them. `link` hard-links instead of copying. Errors: no artifact folder `RuntimeError`, a malformed name `ValueError`, a missing source `FileNotFoundError`, a name already held by a dat or an artifact `FileExistsError`. Recorded inside a recording. See [Artifacts and the index](#artifacts-and-the-index). ^datmanager-save-artifact
+    Store the file or folder `source` in the artifact folder and return its URN, `sha256:<hex>`. `type` is what a load hands the payload's path to: a class or callable, recorded by its dotted name, or that name as a string, anything `do.load` resolves; one that does not load back by its name is `TypeError`. `name` is a relative path held once; with none the artifact answers to its URN only. Bytes already stored are not stored again: the new name becomes a second key to them. `link` hard-links instead of copying. Errors: no artifact folder `RuntimeError`, a malformed name `ValueError`, a missing source `FileNotFoundError`, a name already held by a dat or an artifact `FileExistsError`. Recorded inside a recording. See [Artifacts and the index](#Artifacts%20and%20the%20index). ^datmanager-save-artifact
 
 **load_artifact**`(name: str | Path, *, verify: bool | None = None) -> Any`
     The artifact `name` (a name or a URN) names, handed to its recorded type, or its payload's `Path` with none. A dat's name is `KeyError`; `load` takes either. A type that no longer resolves is `ImportError`. ^datmanager-load-artifact
@@ -222,7 +222,7 @@ A namespace of dotted names and a runner of dats, bound to the `DatManager` whos
     The manager this namespace belongs to; `RuntimeError` when it has none. ^do-manager
 
 **__call__**`(target: str | dict | Dat | Callable, *args, **kwargs) -> Any`
-    Run `target`, a name first loaded through `load`. A callable is called with `args` and `kwargs`. A template spec is forked: `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key, the new spec creates a dat (`dat.target_exists: use` returns the existing one unrun), and that dat runs through `manager.execute` with no call-site arguments. A `Dat` re-runs in place with no arguments, which a sealed dat refuses, and with arguments forks a new dat from its spec that lands beside it (`target_exists` `error` becomes `increment`). Returns the run's value, or the dat when the spec has no `dat.do`. Every error is re-raised as `Exception("In <target>")` chained from the original. See [The spec is the record](#the-spec-is-the-record). ^--call--
+    Run `target`, a name first loaded through `load`. A callable is called with `args` and `kwargs`. A template spec is forked: `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key, the new spec creates a dat (`dat.target_exists: use` returns the existing one unrun), and that dat runs through `manager.execute` with no call-site arguments. A `Dat` re-runs in place with no arguments, which a sealed dat refuses, and with arguments forks a new dat from its spec that lands beside it (`target_exists` `error` becomes `increment`). Returns the run's value, or the dat when the spec has no `dat.do`. Every error is re-raised as `Exception("In <target>")` chained from the original. See [The spec is the record](#The%20spec%20is%20the%20record). ^--call--
 
 **resolve**`(spec: dict | str) -> dict`
     A spec, or the name of one, merged over its `dat.base` (a name, a spec, or a list of them, later entries winning), recursively, with `dat.base` dropped from the result so the spec stands on its own. ^resolve
@@ -253,16 +253,16 @@ A namespace of dotted names and a runner of dats, bound to the `DatManager` whos
 | [__version__](#^--version--) | The package version |
 
 **Dat**`(class)`
-    From `dvc_dat.core`; see [Dat Interface](#dat-interface). ^dat
+    From `dvc_dat.core`; see [Dat Interface](#Dat%20Interface). ^dat
 
 **DatContainer**`(class)`
-    From `dvc_dat.core`; see [DatContainer Interface](#datcontainer-interface). ^datcontainer
+    From `dvc_dat.core`; see [DatContainer Interface](#DatContainer%20Interface). ^datcontainer
 
 **DatManager**`(class)`
-    From `dvc_dat.core`; see [DatManager Interface](#datmanager-interface). ^datmanager
+    From `dvc_dat.core`; see [DatManager Interface](#DatManager%20Interface). ^datmanager
 
 **Do**`(class)`
-    From `dvc_dat.do`; see [Do Interface](#do-interface). ^do
+    From `dvc_dat.do`; see [Do Interface](#Do%20Interface). ^do
 
 **__version__**`: str`
     The package version, `"2.18.0"` at this checkout. ^--version--
