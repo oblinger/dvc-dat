@@ -1,4 +1,4 @@
-:>>
+:>> [[DAT]] → [cli](ha://p/cli) 
 # Command Line
 The command line, `just run` and `x`: where it finds its config, and every subcommand.
 
