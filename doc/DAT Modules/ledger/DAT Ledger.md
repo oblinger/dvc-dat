@@ -10,9 +10,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 **Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [module functions](#dvc_dat.ledger%20Interface) 
 **Topics:** [Ledger Semantics](#Ledger%20Semantics) · [Execution Semantics](#Execution%20Semantics) · [Value Provenance](#Value%20Provenance) 
 
-**Methods:**
-
-| Class | Methods |
+| Methods | |
 | --- | --- |
 | Ledger | [path](#^path), [at](#^at), [transaction](#^transaction), [close](#^close) |
 | Rev | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [[]](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [load_fn](#^load-fn), [run](#^run) |
@@ -24,7 +22,6 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Value.Table | [table](#^table-table) |
 | Dat | [path](#^dat-path), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind) |
 | Fn | [name](#^fn-name), [module](#^module), [sha](#^sha), [subject](#^fn-subject), [mode](#^mode), [mount](#^mount), [env](#^env), [signature](#^signature), [()](#^--call--) |
-| dvc_dat.ledger | [ledger_fn](#^ledger-fn), [ledger_class](#^ledger-class), [bump](#^bump), [attr](#^attr), [LedgerError](#^ledgererror), [Multiple](#^multiple), [NotEvaluated](#^notevaluated), [NotClean](#^notclean), [UnmountedImport](#^unmountedimport), [UntracedRead](#^untracedread), [ConfinedWrite](#^confinedwrite), [ConfinedNetwork](#^confinednetwork), [LockTimeout](#^locktimeout), [Unindexed](#^unindexed), [Exists](#^exists), [Undeclared](#^undeclared), [AliasLoop](#^aliasloop), [SealBroken](#^sealbroken) |
 
 
 This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The per-file pages beside it hold the internals and every refusal in full: [ledger](ledger.md), [rev](rev.md), [txn](txn.md), [value](value.md), [fn](fn.md), [trace](trace.md), [env](env.md), [sandbox](sandbox.md), [worker](worker.md), [store](store.md), [fold](fold.md), [codec](codec.md), [helpers](helpers.md), [errors](errors.md). The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md).
@@ -316,7 +313,7 @@ A `Value` holding any Python object, stored with pickle (protocol 4). Declares n
 
 
 ## Value.Table Interface
-A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted on encode; a decoded `Value.Table` holds a `pyarrow.Table`.
+A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted on encode; a decoded `Value.Table` holds a `pyarrow.Table`. It exists beside `Value.Blob` because the encoding is the identity: pickle bytes change with the Python, pandas and pyarrow versions and nothing outside Python reads them, while parquet encodes the same table the same way, stores it columnar and compact, and any tool that reads parquet can read it from the art store.
 
 | Value.Table            |                             |
 | ---------------------- | --------------------------- |
