@@ -160,7 +160,7 @@ One value at one moment, named without fetching a byte. Making one resolves the 
 
 
 ## Row Interface
-One stored row as `rows()` returns it, a named tuple. `str(row)` is one aligned line: revision, `+` or `-`, subject, predicate, object.
+A named tuple encoding a single row in the ledger: revision, subject, predicate, object, and an added/removed bit. `rows()` returns them; `str(row)` is one aligned line: revision, `+` or `-`, subject, predicate, object.
 
 | Row | |
 | --- | --- |
