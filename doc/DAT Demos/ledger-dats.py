@@ -131,7 +131,7 @@ hand_dat = build(rev, detect_spec_record, work_path)
 print(sorted(file_path.name for file_path in work_path.iterdir()))
 # → ["_result_.yaml", "_spec_.yaml", "boxes.json"]
 with L.transaction(by="human:dan") as t:
-    hand_dat.seal(t, alias="detect/G1", provenance="human:dan")
+    hand_dat.seal(t, name="detect/G1", provenance="human:dan")
 print(hand_dat, hand_dat.sealed)     # → detect/G1 True
 
 # %% [markdown]

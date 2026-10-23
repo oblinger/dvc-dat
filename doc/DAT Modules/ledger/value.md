@@ -24,8 +24,8 @@ Part of the [architecture](../../DAT%20Architecture.md).
 - `preds`: a `dict` while unsealed (assignable as a whole); a
   `FrozenPreds` once sealed, whose every mutator is `TypeError`.
 - `subject: str | None`, `rev: Rev | None`, `trace: Mapping[str, str]`
-  (empty until saved or evaluated), `sealed: bool`,
-  `sealed_at: str | None` (UTC `YYYY-MM-DDTHH:MM:SSZ`); set only by the
+  (empty until saved or evaluated), `sealed: str | None` (the seal's
+  moment, UTC `YYYY-MM-DDTHH:MM:SSZ`, `None` while unsealed); set only by the
   seal, `load`, or (`trace` alone) an unsealed `memo=False` run.
   `sealed` with `subject` `None` is a value sealed by `v.seal()` and
   saved nowhere yet.
@@ -68,7 +68,7 @@ Subclasses:
   folder. `Dat.kind_ok(kind) -> bool` (classmethod) is the load's kind
   hook, below.
 
-`seal(to=None, *, keep=False, deps=(), alias=None, provenance=None, by=None) -> str`:
+`seal(to=None, *, keep=False, deps=(), name=None, provenance=None, by=None) -> str`:
 three forms.
 
 | Form | Identity fixed | Bytes copied | In the ledger | Returns |

@@ -53,10 +53,9 @@ class Value:
     subject: Optional[str] = None
     rev: Optional["Rev"] = None
     trace: Mapping[str, str] = _EMPTY
-    #: Identity fixed: by ``v.seal()`` (saved nowhere yet, ``subject`` ``None``) or by a save.
-    sealed: bool = False
-    #: When the seal happened (UTC, ``YYYY-MM-DDTHH:MM:SSZ``).
-    sealed_at: Optional[str] = None
+    #: The seal's moment, UTC ``YYYY-MM-DDTHH:MM:SSZ``, once the identity is fixed by ``v.seal()`` or a save;
+    #: ``None`` while unsealed, so it reads as the boolean too.
+    sealed: Optional[str] = None
 
     def __init__(self, *, name: Optional[str] = None) -> None:
         if name is not None:
@@ -140,7 +139,7 @@ class Value:
     def _after_seal(self, store: "ArtStore", name: Optional[str] = None) -> None:
         """Hook run once the value is sealed (a ``Dat`` moves to its stored folder, at its name if named)."""
 
-    def seal(self, to: Any = None, *, keep: bool = False, deps: Iterable[Any] = (), alias: Optional[str] = None,
+    def seal(self, to: Any = None, *, keep: bool = False, deps: Iterable[Any] = (), name: Optional[str] = None,
              provenance: Optional[str] = None, by: Optional[str] = None) -> str:
         """Fix the value's identity; with a transaction or a ledger, save it too.
 
@@ -159,19 +158,19 @@ class Value:
         from .txn import Transaction
 
         if to is None:
-            if alias is not None or by is not None:
-                raise TypeError("alias= and by= name a ledger write; v.seal() writes none (v.seal(t, alias=...))")
+            if name is not None or by is not None:
+                raise TypeError("name= and by= name a ledger write; v.seal() writes none (v.seal(t, name=...))")
             return self._seal_here(keep, tuple(deps), provenance)
         if keep:
             raise TypeError("keep= is v.seal()'s; a save stores the bytes in the art store")
         if isinstance(to, Transaction):
             if by is not None:
                 raise TypeError("by= names the writer of a transaction seal opens; this one is open already")
-            return to._seal_value(self, deps=tuple(deps), alias=alias, provenance=provenance)
+            return to._seal_value(self, deps=tuple(deps), name=name, provenance=provenance)
         if isinstance(to, Ledger):
             local = self.__dict__.get("_local")
             with to.transaction(by=by or provenance or (local and local["provenance"]) or "seal") as t:
-                return t._seal_value(self, deps=tuple(deps), alias=alias, provenance=provenance)
+                return t._seal_value(self, deps=tuple(deps), name=name, provenance=provenance)
         raise TypeError(f"seal takes a Transaction or a Ledger, or nothing, not {type(to).__name__}")
 
     def _seal_here(self, keep: bool, deps: tuple, provenance: Optional[str]) -> str:
@@ -186,7 +185,7 @@ class Value:
         if self.subject is not None:
             raise ValueError(f"{self!r} is saved already; a different value is a new object")
         if self.sealed:
-            raise ValueError(f"{self!r} is sealed already (at {self.sealed_at}); a different value is a new object")
+            raise ValueError(f"{self!r} is sealed already (at {self.sealed}); a different value is a new object")
         provenance = check_provenance(provenance)
         declared = type(self)._ledger_preds
         extra = [k for k in self.preds if k not in declared]
@@ -212,8 +211,7 @@ class Value:
                                    "kept": keep, "entry": entry}
         self.__dict__["_preds"] = FrozenPreds(self.preds)
         self.__dict__["_hash"] = h
-        self.sealed_at = stamp
-        self.sealed = True
+        self.sealed = stamp
         return h
 
     def _seal_path(self) -> Optional[str]:
@@ -235,8 +233,7 @@ class Value:
         self.__dict__["_hash"] = record["hash"]
         if name is not None:
             self.__dict__["_loaded_as"] = name
-        self.sealed_at = record["sealed_at"]
-        self.sealed = True
+        self.sealed = record["sealed_at"]
 
     def _kept(self) -> Optional[Dict[str, Any]]:
         """The kept entry of a ``v.seal(keep=True)``; ``None`` when the bytes were not kept, or were purged
@@ -253,7 +250,7 @@ class Value:
                 return None
             from .errors import SealBroken
 
-            raise SealBroken(f"{type(self).__name__} sealed at {self.sealed_at}: its kept bytes were purged and "
+            raise SealBroken(f"{type(self).__name__} sealed at {self.sealed}: its kept bytes were purged and "
                              "the source changed since; seal a new value") from None
 
     def _stored_bytes(self) -> bytes:
@@ -318,7 +315,9 @@ class Value:
         self.subject = subject
         self.rev = rev
         self.trace = MappingProxyType(dict(trace))
-        self.sealed = True
+        if not self.sealed:                         # loaded: the seal's moment is on the ledger
+            self.sealed = (rev.get(subject, "db/sealed-at") if rev is not None and subject else None) \
+                or (rev.get(rev.tx, "db/time") if rev is not None else None) or "sealed"
         self.__dict__["_preds"] = FrozenPreds(preds)
         self.__dict__["_loaded_as"] = loaded_as
         self.__dict__.pop("_name", None)            # saved: the name is the ledger's now

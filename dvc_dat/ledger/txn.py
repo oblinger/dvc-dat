@@ -249,8 +249,7 @@ class Transaction:
             value.__dict__.pop("_ledger", None)
             if old is None:
                 continue            # sealed by v.seal() before this body: sealed still, saved nowhere
-            value.sealed = False
-            value.sealed_at = None
+            value.sealed = None
             value.__dict__["_preds"] = old
             value.__dict__.pop("_hash", None)
         for path in self._created:
@@ -287,9 +286,9 @@ class Transaction:
         for value, subject, trace, loaded_as in self._finalize:
             r = Ref(top, subject)
             sealed_at = r.sealed_at or top
-            stamp, h = value.sealed_at, value.hash        # the hash of the bytes stored, not of the live object
+            stamp, h = value.sealed, value.hash        # the hash of the bytes stored, not of the live object
             value._provenance(subject=subject, rev=sealed_at, trace=trace, preds=r.preds)
-            value.sealed_at = stamp
+            value.sealed = stamp or value.sealed
             value.__dict__["_hash"] = h
             value._after_seal(art, loaded_as)
             local = value.__dict__.pop("_local", None)
@@ -565,7 +564,7 @@ class Transaction:
             trace[f"code/{repo}"] = code_token(self.base, repo, env.code[repo].commit if repo in env.code else None)
         trace["platform"] = env.platform
 
-    def _seal_value(self, value: Value, *, deps: Sequence[Any] = (), alias: Optional[str] = None,
+    def _seal_value(self, value: Value, *, deps: Sequence[Any] = (), name: Optional[str] = None,
                     provenance: Optional[str] = None) -> str:
         """``value.seal(t)``: seal into the immutable subject ``<hash of (trace, preds, bytes)>``; return it.
 
@@ -584,25 +583,25 @@ class Transaction:
         extra: List[Tuple[str, str]] = []
         if local is not None:
             if deps or provenance is not None:
-                raise TypeError(f"deps and provenance were fixed by v.seal() at {value.sealed_at}; "
+                raise TypeError(f"deps and provenance were fixed by v.seal() at {value.sealed}; "
                                 "save with v.seal(t) alone")
             if not local["kept"] and sha256(value.encode()) != local["hash"]:
-                raise SealBroken(f"{type(value).__name__} sealed at {value.sealed_at}: its bytes changed since; "
+                raise SealBroken(f"{type(value).__name__} sealed at {value.sealed}: its bytes changed since; "
                                  "seal a new value (or seal with keep=True to keep the bytes)")
             deps, provenance, env = local["deps"], local["provenance"], local["env"]
-            extra.append(("db/sealed-at", "str:" + str(value.sealed_at)))
+            extra.append(("db/sealed-at", "str:" + str(value.sealed)))
         provenance = check_provenance(provenance)
-        if alias is None:
-            alias = value.__dict__.get("_name")          # Value(name=...): the name it is saved under
-        if alias is not None:
-            _name(alias, "alias")
+        if name is None:
+            name = value.__dict__.get("_name")          # Value(name=...): the name it is saved under
+        if name is not None:
+            _name(name, "name")
         pred_rows, canon = self._encode_preds(value)
         trace: Dict[str, str] = {}
         self._dep_items(deps, trace)
         self._env_items(trace, env=env)
         vtext = ref_text(dotted(type(value)), value.hash)
         subject = hash_text(canonical({"trace": trace, "preds": canon, "value": vtext}))
-        self._seal(value, subject, trace, provenance, pred_rows, extra, alias)
+        self._seal(value, subject, trace, provenance, pred_rows, extra, name)
         self._freeze(value, subject, trace)
         return subject
 
@@ -617,10 +616,9 @@ class Transaction:
         else:
             self._frozen.append((value, dict(value.preds)))
             value.__dict__["_preds"] = FrozenPreds(value.preds)
-            value.sealed_at = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            value.sealed = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         value.subject = subject
         value.trace = MappingProxyType(dict(trace))
-        value.sealed = True
         value.__dict__["_hash"] = h
         value.__dict__["_ledger"] = self._ledger
 

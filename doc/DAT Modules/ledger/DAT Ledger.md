@@ -226,22 +226,21 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 ## Value Interface
 The object itself with its provenance on it: what `run` returns, what `seal` stores and what `Ref.load` restores. A subclass says how it becomes bytes (`encode`) and back (`decode`); `@ledger_class(preds=...)` names the preds its values may carry. Until sealed, `preds` is a plain dict filled by whoever builds the value; the seal freezes it and fixes the identity. A subclass's `__init__` need not call `super().__init__`.
 
-| Value | |
-| --- | --- |
-| [preds](#^value-preds) | The strings the value is found by |
-| [subject](#^value-subject) | Its ledger subject once saved |
-| [rev](#^value-rev) | The revision that saved it |
-| [trace](#^trace) | What producing it read |
-| [sealed](#^sealed) | Whether its identity is fixed |
-| [sealed_at](#^value-sealed-at) | When the seal happened |
-| [hash](#^value-hash) | The sha256 of its encoding |
-| [encode](#^encode) | The bytes to store |
-| [decode](#^decode) | The object from its bytes |
-| [seal](#^seal) | Fix its identity, and save it when given a ledger |
-| [matches](#^matches) | Whether its trace still holds at a revision |
-| [diff](#^diff) | The trace items that differ from another value's |
-| [same_as](#^same-as) | Equal bytes |
-| [Trace](#^value-trace) | The type of `trace` |
+| Value                      |                                                   |
+| -------------------------- | ------------------------------------------------- |
+| [preds](#^value-preds)     | The strings the value is found by                 |
+| [subject](#^value-subject) | Its ledger subject once saved                     |
+| [rev](#^value-rev)         | The revision that saved it                        |
+| [trace](#^trace)           | What producing it read                            |
+| [sealed](#^sealed)         | The seal's moment, or None while unsealed         |
+| [hash](#^value-hash)       | The sha256 of its encoding                        |
+| [encode](#^encode)         | Abstract: the bytes to store, every subclass implements it |
+| [decode](#^decode)         | Abstract: the object from its bytes, every subclass implements it |
+| [seal](#^seal)             | Fix its identity, and save it when given a ledger |
+| [matches](#^matches)       | Whether its trace still holds at a revision       |
+| [diff](#^diff)             | The trace items that differ from another value's  |
+| [same_as](#^same-as)       | Equal bytes                                       |
+| [Trace](#^value-trace)     | The type of `trace`                               |
 
 **preds**`: dict | FrozenPreds`
     A `dict` while unsealed, assignable as a whole; a `FrozenPreds` once sealed, whose every mutator is `TypeError`. Each pred is a `str`, number, bool, list, `Value` or `Ref`, and its name must be declared by the class's `@ledger_class` (`Undeclared` at the seal). ^value-preds
@@ -255,23 +254,20 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
 **trace**`: Mapping[str, str]`
     Item name to version or hash: what producing the value read. Empty until saved or evaluated. See [Value provenance](#Value%20provenance%20(the%20memo)). ^trace
 
-**sealed**`: bool`
-    The identity is fixed: by `seal()` (saved nowhere yet, `subject` `None`) or by a save. ^sealed
-
-**sealed_at**`: str | None`
-    When the seal happened, UTC `YYYY-MM-DDTHH:MM:SSZ`. ^value-sealed-at
+**sealed**`: str | None`
+    The moment the identity was fixed, UTC `YYYY-MM-DDTHH:MM:SSZ`, by `seal()` (saved nowhere yet, `subject` `None`) or by a save; `None` while unsealed, so `if v.sealed:` reads as before. A time rather than a revision because a seal can precede any ledger; the revision is `rev`, set at the save. ^sealed
 
 **hash**`: str`
     The hex sha256 of `encode()`, cached once sealed; after a save, the stored bytes' hash whatever the live object holds. ^value-hash
 
 **encode**`() -> bytes`
-    The bytes to store; `NotImplementedError` unless a subclass defines it. Two calls must return the same bytes: the seal refuses a class whose encoding is not deterministic. ^encode
+    Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). The bytes to store. Two calls must return the same bytes: the seal refuses a class whose encoding is not deterministic. ^encode
 
 **decode**`(data: bytes, store: ArtStore) -> Value` (classmethod)
-    The object from its bytes; `NotImplementedError` unless a subclass defines it. A `decode` that also accepts `name=` is passed the alias the value is loaded by, `None` when loaded by its subject. ^decode
+    Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). The object from its bytes. A `decode` that also accepts `name=` is passed the alias the value is loaded by, `None` when loaded by its subject. ^decode
 
-**seal**`(to=None, *, keep=False, deps=(), alias=None, provenance=None, by=None) -> str`
-    `v.seal()` fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by` (default the provenance, else `seal`). `alias=` writes `(alias, db/alias, subject)` beside it. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. See [Versioning](#Versioning). ^seal
+**seal**`(to=None, *, keep=False, deps=(), name=None, provenance=None, by=None) -> str`
+    `v.seal()` fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by` (default the provenance, else `seal`). `name=` writes `(alias, db/alias, subject)` beside it. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. See [Versioning](#Versioning). ^seal
 
 **matches**`(rev: Rev) -> bool`
     Whether every trace item holds at `rev`: the memo's hit test. Consults the ledger only; never runs anything. ^matches

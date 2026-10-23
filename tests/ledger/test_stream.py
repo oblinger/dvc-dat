@@ -34,7 +34,7 @@ def test_a_saved_dat_hardlinks_its_files_into_the_art_store(L, tmp_path):
     src = folder(tmp_path / "src", **{"a.txt": "one", "b.txt": "two"})
     ino = (src / "a.txt").stat().st_ino
     d = Dat(src)
-    d.seal(L, alias="clip/1")
+    d.seal(L, name="clip/1")
     blob = L._store.art.path(sha256(b"one"))
     if L._store.art.root.stat().st_dev == src.stat().st_dev:
         assert blob.stat().st_ino == ino
@@ -79,12 +79,12 @@ def test_a_part_from_an_opener_is_streamed_and_checked(L):
 
 def test_a_load_by_alias_lands_under_its_name_and_follows_a_repoint(L, tmp_path):
     a = Dat(folder(tmp_path / "a", **{"x.txt": "1", "y.txt": "2"}))
-    a.seal(L, alias="game/G1")
+    a.seal(L, name="game/G1")
     got = L.at().load("game/G1")
     assert got.path == L._store.art.root / "dats" / "game" / "G1"
     assert sorted(p.name for p in got.path.iterdir()) == ["x.txt", "y.txt"]
     b = Dat(folder(tmp_path / "b", **{"x.txt": "3"}))
-    b.seal(L, alias="game/G1")
+    b.seal(L, name="game/G1")
     again = L.at().load("game/G1")
     assert again.path == got.path and sorted(p.name for p in again.path.iterdir()) == ["x.txt"]
     assert (again.path / "x.txt").read_text() == "3"
@@ -109,7 +109,7 @@ def test_kind_ok_lets_a_class_accept_a_foreign_dat_kind(L, tmp_path):
 
     src = folder(tmp_path / "s", **{"_spec_.yaml": "dat:\n  kind: GameDat\n"})
     d = ledger_kinds.Dat2(src)
-    d.seal(L, alias="g/1")
+    d.seal(L, name="g/1")
     with pytest.raises(TypeError, match="dat.kind GameDat"):
         L.at().load("g/1")
     ledger_kinds.Dat2.kinds = ("GameDat",)
@@ -146,7 +146,7 @@ SCRIPT = textwrap.dedent("""
     before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * scale
     d = Dat(src)
     d.seal(keep=True)
-    s = d.seal(L, alias="big/1")
+    s = d.seal(L, name="big/1")
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * scale
     art = L._store.art
     linked = []

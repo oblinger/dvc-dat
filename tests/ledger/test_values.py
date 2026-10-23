@@ -94,7 +94,7 @@ def test_add_refuses_a_value(L):
 
 
 def test_alias_chain_repr_and_aliases(L):
-    s = seal(L, Plain(b"1"), alias="video/G1")
+    s = seal(L, Plain(b"1"), name="video/G1")
     with L.transaction(by="t") as t:
         t.add("raw/G1/long-name", "db/alias", s)
     rev = L.at()
@@ -151,7 +151,7 @@ def test_value_values_refs_select_kind(L):
     for g in ("G1", "G2"):
         v = Video(g.encode())
         v.preds.update(game=g, camera="wide")
-        seal(L, v, alias=f"video/{g}")
+        seal(L, v, name=f"video/{g}")
     rev = L.at()
     assert [repr(v) for v in rev.values(kind=Video)] == ["video/G1", "video/G2"]
     assert repr(rev.value(game="G1")) == "video/G1"
@@ -175,7 +175,7 @@ def test_kind_follows_db_moved(L):
 
 def test_deps_trace_and_alias_binding(L):
     raw = Plain(b"raw")
-    seal(L, raw, alias="data/raw")
+    seal(L, raw, name="data/raw")
     loaded = L.at().load("data/raw")
     out = Value.Blob({"a": 1})
     seal(L, out, deps=[loaded])
@@ -186,7 +186,7 @@ def test_deps_trace_and_alias_binding(L):
 
 
 def test_a_row_may_point_at_a_value(L):
-    s = seal(L, Plain(b"1"), alias="p")
+    s = seal(L, Plain(b"1"), name="p")
     with L.transaction(by="t") as t:
         t.add("review", "pick", Ref(t.base, s))
     got = L.at()["review", "pick"]
@@ -201,7 +201,7 @@ def test_ledger_class_rejects_non_values():
 
 def test_seal_on_a_ledger_commits_its_own_transaction(L):
     top = L.at().id
-    s = Plain(b"alone").seal(L, alias="note/alone", provenance="human:dan")
+    s = Plain(b"alone").seal(L, name="note/alone", provenance="human:dan")
     now = L.at()
     assert now.id == top + 1
     assert Ref(now, "note/alone").subject == s

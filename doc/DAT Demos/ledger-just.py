@@ -111,7 +111,7 @@ with L.transaction(by="human:dan") as t:                 # rev 3
 video_value = Video(b"G1 wide camera, 9000 frames")
 video_value.preds.update(game="G1", camera="wide", span=[0, 9000])
 with L.transaction(by="human:dan") as t:                 # rev 4
-    video_value.seal(t, alias="video/G1",
+    video_value.seal(t, name="video/G1",
                      provenance="import:archive")
 cut_153_value = L.at().run("demo_game.game.cut",       # rev 5
                             game="G1", version="1.5.3")
