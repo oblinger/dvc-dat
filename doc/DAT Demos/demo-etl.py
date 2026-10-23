@@ -13,14 +13,13 @@
 # ---
 
 # %% [markdown]
-# > **Plan** (delete once the sections carry it). An ETL chain computes over a game set in stages, and the ledger recomputes only the stages whose inputs moved.
+# > **Plan** (delete once the sections carry it). An ETL pipeline computes over a set of inputs in stages, and the ledger recomputes only the stages whose inputs moved.
 # >
-# > 1. **A game set and its data**: a dataset is a list of integers, one per game; a game set is a list of games, held as rows.
-# > 2. **A chain of stages**: a binning per game, a cumulative binning over a list of games built recursively, a podium over a game set; asked once, every stage runs; asked again, every stage is a hit.
-# > 3. **Adding a game**: only the new game's binning and the cumulative over the whole set run.
-# > 4. **Replacing a game**: only the new game's binning and the cumulatives past the change run.
-# > 5. **Changing a game's data**: only that game's binning and what is downstream of it run.
-# > 6. **Changing one stage's code**: only that stage runs; the stages below it are hits.
+# > 1. **Setup: the city data**: each city's year of daily weather is a sealed value found by an alias; the city set the pipeline runs over is rows.
+# > 2. **A pipeline of stages**: a daily comfort per city (its weather plus a comfort column), a city comfort per city over a date range (the days binned by comfort level), a comfort report over a city set and a date range; asked once, every stage runs; asked again, every stage is a hit.
+# > 3. **Summer, and one more city**: one edit narrows the range to summer and adds a city; only the new city's daily comfort runs, then every city's summer binning and the report.
+# > 4. **Changing a city's data**: only that city's daily comfort and what is downstream of it run.
+# > 5. **Changing one stage's code**: only that stage runs; the stages below it are hits.
 # >
 # > Each section ends on the count of stages that ran, read off the ledger.
 
@@ -28,17 +27,35 @@
 # #### Setup
 
 # %%
+import math
 import random
+import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import date, timedelta
+from importlib.resources import files
 from pathlib import Path
+
+from IPython.display import SVG, Code, display
 
 from dvc_dat.ledger import Ledger, bump
 
+for module_name in [m for m in sys.modules if m == "comfort" or m.startswith("comfort.")]:
+    del sys.modules[module_name]                  # a re-run: forget the last run's code repo
+sys.path[:] = [p for p in sys.path if not p.endswith("/comfort-repo")]
 scratch_path = Path(tempfile.mkdtemp(prefix="demo-etl-"))
-repo_path = scratch_path / "bins-repo"      # the code's repo: its name is its folder's
-repo_path.mkdir()
+repo_path = scratch_path / "comfort-repo"      # the code's repo, a copy of comfort-repo/ beside this notebook
+shutil.copytree("comfort-repo", repo_path, ignore=shutil.ignore_patterns("__pycache__"))
+
+
+def show(name: str) -> None:
+    """A module of the code's repo (`comfort/stages.py`) shown as code, or the figure `<name>.svg` beside this notebook."""
+    if name.endswith(".py"):
+        print(f"comfort-repo/{name}")
+        display(Code(filename=str(repo_path / name), language="python"))
+    else:
+        display(SVG(filename=f"{name}.svg"))
 
 
 def git(*args: str) -> str:
@@ -49,22 +66,25 @@ def git(*args: str) -> str:
     return done.stdout.strip()
 
 
-def write_module(rel: str, source: str, message: str) -> None:
-    """Write one module of the code's repo and commit it."""
-    path = repo_path / rel
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(source)
-    git("add", rel)
-    git("commit", "-q", "-m", message)
+def commit(message: str, *rels: str) -> None:
+    """Commit files of the code's repo; re-running with the same files commits nothing."""
+    git("add", *rels)
+    if git("status", "--porcelain", "--", *rels):
+        git("commit", "-q", "-m", message)
 
 
 git("init", "-q")
-(repo_path / "bins").mkdir()
-write_module("bins/__init__.py", '"""`bins`: the ETL demo\'s stages."""\n', "bins")
+commit("comfort: the stages", "comfort")
+(repo_path / ".datconfig.yaml").write_text(     # for `just`: the ledger, and a main importing comfort
+    "ledger: ../ledger\n"
+    'run: python3 -c "import sys, comfort; from dvc_dat import Dat; sys.exit(Dat.cli_main())"\n')
+(repo_path / "justfile").write_text(
+    f"import '{files('dvc_dat') / 'dvc_dat.just'}'  # run\n"
+    f"import '{Path('justfile').resolve()}'  # the demo's ledger verbs\n")
 sys.path.insert(0, str(repo_path))
 L = Ledger(scratch_path / "ledger", create=True)
 
-STAGES = ("bins.stages.binning", "bins.stages.cumulative", "bins.report.podium")
+STAGES = ("comfort.stages.daily_comfort", "comfort.stages.city_comfort", "comfort.report.comfort_report")
 
 
 def entry_counts() -> dict:
@@ -80,243 +100,188 @@ def ran_since(counts_before: dict) -> dict:
 
 
 # %% [markdown]
-# # ETL: computing over game sets, recomputing only what moved
+# # ETL pipelines: computing, recomputing only what moved
 #
-# An ETL chain is a series of stages, each computing a value from the values of the stage below it, over a whole game set.
+# An ETL pipeline is a series of stages, each computing a value from the values of the stage below it, over a set of inputs.
 # Every stage here is a ledger function, so every result is a value sealed with its trace, the exact inputs and code it was computed from.
 # Asked for a result, the ledger hands back a sealed one whose trace still holds and runs the stage only when something in its trace has moved.
-# So a change anywhere in the chain recomputes that stage and what is downstream of it, and nothing else.
+# So a change anywhere in the pipeline recomputes that stage and what is downstream of it, and nothing else.
 
 # %% [markdown]
-# ## A game set and its data
+# ## Setup: the city data
 #
-# A game's dataset is a value, a list of integers, found by the alias `dataset/<game>`; a game set is a list of games, held as `contains` rows on its own subject.
+# The task: five cities each report a year of weather, a date, a temperature and a humidity per day; a city set names the representative cities a report covers.
+# The pipeline adds a comfort score to each city's days, bins a city's days by comfort level over a date range, and reports the city set's comfortable days and its two most comfortable cities over that range.
+# Every input is a ledger write, so every change to one is something the pipeline can see.
+# Each city's weather is a value found by the alias `weather/<city>`; the city set, a few representative cities, is held as `contains` rows on its own subject.
+
+# %%
+show("demo-etl-data")
 
 # %% [markdown]
 # ### The value kinds
 #
-# Two kinds of value: a game's dataset, and a binning, the count of integers falling in each of ten bins; a binning's `games` pred is an ordered list, so it is declared JSON.
+# Two kinds of value: a city's days, one row per day, `[date, °F, humidity %]` as reported and with a comfort column once scored, and a comfort count, the count of days at each of ten comfort levels.
+# The code lives in `comfort-repo/` beside this notebook, plain Python files; setup copies it into a scratch git repo, since a stage's code is identified by the files its repo holds, and `show` prints a module.
 
 # %%
-write_module("bins/values.py", '''\
-"""`bins.values`: a game's dataset and a binning."""
-import json
+show("comfort/values.py")
 
-from dvc_dat.ledger import Value, ledger_class
-
-
-@ledger_class(preds=("game",))
-class Dataset(Value):
-    """A game's dataset: a list of integers in [0, 100)."""
-
-    def __init__(self, ints):
-        self.ints = list(ints)
-
-    def encode(self) -> bytes:
-        return json.dumps(self.ints).encode()
-
-    @classmethod
-    def decode(cls, data: bytes, store) -> "Dataset":
-        return cls(json.loads(data))
-
-
-@ledger_class(preds=("games",))
-class Binning(Value):
-    """How many integers fall in each of ten bins, 0-9 to 90-99, over the games it names."""
-
-    def __init__(self, counts):
-        self.counts = list(counts)
-
-    def encode(self) -> bytes:
-        return json.dumps(self.counts).encode()
-
-    @classmethod
-    def decode(cls, data: bytes, store) -> "Binning":
-        return cls(json.loads(data))
-''', "values: Dataset, Binning")
-from bins.values import Dataset, Binning
-with L.transaction(by="human:dan", why="a binning's games are an ordered list") as t:
-    t.add("db/pred/games", "db/type", "json")
+# %%
+from comfort.values import Days
 
 
 # %% [markdown]
-# ### Four games' datasets
+# ### Five cities' weather
+#
+# Each city's temperature follows the seasons around its own yearly mean, so summer and winter differ.
 
 # %%
-def seal_dataset(game: str, seed: int) -> None:
-    """Seal a game's dataset, 50 integers drawn from `seed`, and point `dataset/<game>` at it."""
+MEAN_F = {"Austin": 69, "Boston": 52, "Chicago": 50, "Denver": 51, "Miami": 77}
+
+
+def seal_weather(city: str, seed: int) -> None:
+    """Seal a year of a city's weather drawn from `seed`, and point `weather/<city>` at it."""
     rng = random.Random(seed)
-    dataset_value = Dataset(rng.randrange(100) for _ in range(50))
-    dataset_value.preds["game"] = game
-    with L.transaction(by="human:dan", why=f"{game}'s data") as t:
-        dataset_value.seal(t, alias=f"dataset/{game}")
+    days = []
+    for n in range(365):
+        season = -math.cos(2 * math.pi * (n - 15) / 365)    # -1 mid-January, +1 mid-July
+        temp = round(MEAN_F[city] + 20 * season + rng.uniform(-8, 8))
+        days.append([(date(2026, 1, 1) + timedelta(n)).isoformat(), temp, rng.randrange(20, 90)])
+    weather_value = Days(days)
+    weather_value.preds["city"] = city
+    with L.transaction(by="human:dan", why=f"{city}'s data") as t:
+        weather_value.seal(t, alias=f"weather/{city}")
 
 
-for game, seed in [("G1", 1), ("G2", 2), ("G3", 3), ("G4", 4), ("G5", 5)]:
-    seal_dataset(game, seed)
-print(L.at().load("dataset/G1").ints[:10])
-# → [17, 72, 97, 8, 32, 15, 63, 97, 57, 60]
+for city, seed in [("Austin", 1), ("Boston", 2), ("Chicago", 3), ("Denver", 4), ("Miami", 5)]:
+    seal_weather(city, seed)
+print(L.at().load("weather/Austin").days[:3])
+# → [['2026-01-01', 44, 28], ['2026-01-02', 46, 83], ['2026-01-03', 54, 80]]
 
 # %% [markdown]
-# ### The game set
+# ### The city set
 #
-# A game set is rows: `gameset/normie contains G1`, one per game; `contains` is declared many-valued, so the rows add up to a set.
+# A city set is rows: `cityset/representative contains Austin`, one per city; `contains` is declared many-valued, so the rows add up to a set.
+# `all` answers in revision order, the order the rows were added.
 
 # %%
-with L.transaction(by="human:dan", why="the normie set") as t:
+with L.transaction(by="human:dan", why="the city set") as t:
     t.add("db/pred/contains", "db/cardinality", "many")
-    for game in ("G1", "G2", "G3"):
-        t.add("gameset/normie", "contains", game)
-print(sorted(L.at().all("gameset/normie", "contains")))
-# → ['G1', 'G2', 'G3']
+    for city in ("Boston", "Austin", "Chicago"):
+        t.add("cityset/representative", "contains", city)
+print(L.at().all("cityset/representative", "contains"))
+# → ['Boston', 'Austin', 'Chicago']
 
 # %% [markdown]
-# ## A chain of stages
+# ## A pipeline of stages
 #
-# Three stages, each a ledger function evaluating the one below it: a binning per game, a cumulative binning over a list of games, and a podium over a game set.
+# Three stages, each a ledger function running the one below it: a daily comfort per city, a city comfort per city over a date range, and a comfort report over a city set and a date range.
+
+# %%
+show("demo-etl-pipeline")
 
 # %% [markdown]
 # ### The stages
 #
-# `cumulative` is recursive: the binning over a list of games is the binning over all but the last game, plus the last game's own.
+# `daily_comfort` adds a column, a comfort score per day; `city_comfort` bins those days by comfort level, keeping only the days in its range; a range is a half-open pair of dates, `start` up to `end`.
 
 # %%
-write_module("bins/stages.py", '''\
-"""`bins.stages`: a binning per game, and the cumulative binning over a list of games."""
-from dvc_dat.ledger import ledger_fn
+show("comfort/stages.py")
 
-from .values import Binning
-
-WIDTH = 10                                  # each bin's span: 0-9, 10-19, ...
-
-
-@ledger_fn
-def binning(rev, *, game: str) -> Binning:
-    """One game's binning: its dataset's integers counted per bin."""
-    dataset = rev.load(f"dataset/{game}")   # traced: the alias and the bytes it names
-    counts = [0] * 10
-    for i in dataset.ints:
-        counts[i // WIDTH] += 1
-    b = Binning(counts)
-    b.preds["games"] = [game]
-    return b
-
-
-@ledger_fn
-def cumulative(rev, *, games: list) -> Binning:
-    """The binning over `games`: the cumulative over all but the last, plus the last game's binning."""
-    if not games:
-        return Binning([0] * 10)
-    rest = rev.run("bins.stages.cumulative", games=games[:-1])   # the recursion
-    last = rev.run("bins.stages.binning", game=games[-1])
-    b = Binning([r + c for r, c in zip(rest.counts, last.counts)])
-    b.preds["games"] = list(games)
-    return b
-''', "stages: binning, cumulative")
-
-write_module("bins/report.py", '''\
-"""`bins.report`: the podium over a game set."""
-from dvc_dat.ledger import ledger_fn
-
-
-@ledger_fn
-def podium(rev, *, gameset: str) -> list:
-    """The three fullest bins over a game set's games, fullest first."""
-    games = sorted(rev.all(gameset, "contains"))                  # traced: the set's rows
-    total = rev.run("bins.stages.cumulative", games=games)
-    fullest = sorted(range(10), key=lambda i: (-total.counts[i], i))[:3]
-    return [f"{10 * i}-{10 * i + 9}" for i in fullest]
-''', "report: podium")
+# %%
+show("comfort/report.py")
 
 # %% [markdown]
 # ### Mounting the code
 #
-# Mounting `bins` makes its stages sandboxed: each call runs in a fresh process of its own, and its code is the hash of every module file the run loaded.
+# Mounting `comfort` makes its stages sandboxed: each call runs in a fresh process of its own, and its code is the hash of every module file the run loaded.
+# A `# same as` line is the shell form, typed in the code's repo, whose justfile imports `run` from dvc-dat (`dvc_dat.just`) and the ledger verbs from the `justfile` beside this notebook.
 
 # %%
 with L.transaction(by="human:dan", why="mount the stages") as t:
-    t.add("db/mount/bins", "db/root", "bins")
-    t.add("db/mount/bins", "db/repo", "bins-repo")
-    bump(t, "code/bins-repo", "minor", confirm=lambda old, new: True)   # 0.1.0, at HEAD
-print(L.at().load_fn("bins.report.podium").mode)
+    t.add("db/mount/comfort", "db/root", "comfort")
+    t.add("db/mount/comfort", "db/repo", "comfort-repo")
+    bump(t, "code/comfort-repo", "minor", confirm=lambda old, new: True)   # 0.1.0, at HEAD
+print(L.at().load_fn("comfort.report.comfort_report").mode)
 # → sandbox
+# the bump, same as:
+#   echo yes | just bump code minor
 
 # %% [markdown]
-# ### Asking for the podium
+# ### Asking for the comfort report
 #
 # `rev.run(name, **keys)` returns the stage's result, running it only when no sealed result with a holding trace answers the same question.
+# The first report covers the whole year.
 
 # %%
 counts_before = entry_counts()
-podium_value = L.at().run("bins.report.podium", gameset="gameset/normie")
-print(podium_value.obj)
-# → ['60-69', '0-9', '20-29']
+comfort_report_value = L.at().run("comfort.report.comfort_report", cityset="cityset/representative",
+                                  start="2026-01-01", end="2027-01-01")
+print(comfort_report_value.obj)
+# → {'comfortable': '213/1095 days', 'top': ['Austin', 'Boston']}
 print(ran_since(counts_before))
-# → {'binning': 3, 'cumulative': 4, 'podium': 1}
+# → {'daily_comfort': 3, 'city_comfort': 3, 'comfort_report': 1}
+# same as:
+#   just run comfort.report.comfort_report cityset=cityset/representative start=2026-01-01 end=2027-01-01
 
 # %% [markdown]
-# Everything ran: a binning per game, the cumulatives over `[]`, `[G1]`, `[G1, G2]` and `[G1, G2, G3]`, and the podium.
+# Everything ran: a daily comfort per city, a city comfort per city over the year, and the comfort report.
 
 # %%
 counts_before = entry_counts()
-again_value = L.at().run("bins.report.podium", gameset="gameset/normie")
-print(again_value.subject == podium_value.subject)
+again_value = L.at().run("comfort.report.comfort_report", cityset="cityset/representative",
+                         start="2026-01-01", end="2027-01-01")
+print(again_value.subject == comfort_report_value.subject)
 # → True
 print(ran_since(counts_before))
-# → {'binning': 0, 'cumulative': 0, 'podium': 0}
+# → {'daily_comfort': 0, 'city_comfort': 0, 'comfort_report': 0}
+# same as (a hit):
+#   just run comfort.report.comfort_report cityset=cityset/representative start=2026-01-01 end=2027-01-01
 
 # %% [markdown]
-# Asked again, nothing ran: the podium is a hit.
+# Asked again, nothing ran: the comfort report is a hit.
 
 # %% [markdown]
-# ## Adding a game
+# ## Summer, and one more city
 #
-# Adding a game to the set moves the set's rows, so the podium reruns; below it, only what the new game touches runs.
+# Two changes at once: Denver joins the set, and the report is asked for summer, June through August.
+# A new range is a new question for every city comfort; the daily comfort under it does not depend on the range, so only the new city's runs.
 
 # %%
-with L.transaction(by="human:dan", why="G4 joins") as t:
-    t.add("gameset/normie", "contains", "G4")
+with L.transaction(by="human:dan", why="Denver joins") as t:
+    t.add("cityset/representative", "contains", "Denver")
 counts_before = entry_counts()
-podium_value = L.at().run("bins.report.podium", gameset="gameset/normie")
+comfort_report_value = L.at().run("comfort.report.comfort_report", cityset="cityset/representative",
+                                  start="2026-06-01", end="2026-09-01")
+print(comfort_report_value.obj)
+# → {'comfortable': '175/368 days', 'top': ['Denver', 'Boston']}
 print(ran_since(counts_before))
-# → {'binning': 1, 'cumulative': 1, 'podium': 1}
+# → {'daily_comfort': 1, 'city_comfort': 4, 'comfort_report': 1}
+# the run, same as:
+#   just run comfort.report.comfort_report cityset=cityset/representative start=2026-06-01 end=2026-09-01
 
 # %% [markdown]
-# G4's binning ran, and the cumulative over `[G1, G2, G3, G4]`, which found the cumulative over `[G1, G2, G3]` already sealed: three games' binnings were never touched.
+# Denver's daily comfort ran; Austin's, Boston's and Chicago's were hits, scored once for the year and binned again for summer.
+# All four city comforts ran over the new range, and the report ran once.
 
 # %% [markdown]
-# ## Replacing a game
+# ## Changing a city's data
 #
-# Replacing a game in the set reruns the new game's binning and every cumulative from the replaced position on.
+# A new version of a city's weather is a new value with the alias re-pointed, so every result that loaded the alias is stale.
 
 # %%
-with L.transaction(by="human:dan", why="G5 for G3") as t:
-    t.remove("gameset/normie", "contains", "G3")
-    t.add("gameset/normie", "contains", "G5")
+seal_weather("Boston", seed=22)                 # Boston re-reported
 counts_before = entry_counts()
-podium_value = L.at().run("bins.report.podium", gameset="gameset/normie")
-print(sorted(L.at().all("gameset/normie", "contains")))
-# → ['G1', 'G2', 'G4', 'G5']
+comfort_report_value = L.at().run("comfort.report.comfort_report", cityset="cityset/representative",
+                                  start="2026-06-01", end="2026-09-01")
 print(ran_since(counts_before))
-# → {'binning': 1, 'cumulative': 2, 'podium': 1}
+# → {'daily_comfort': 1, 'city_comfort': 1, 'comfort_report': 1}
+# the run, same as:
+#   just run comfort.report.comfort_report cityset=cityset/representative start=2026-06-01 end=2026-09-01
 
 # %% [markdown]
-# G5's binning ran; G4's was a hit. The cumulative over `[G1, G2]` was a hit, so only `[G1, G2, G4]` and `[G1, G2, G4, G5]` ran: the recursion is what lets a long prefix be reused.
-
-# %% [markdown]
-# ## Changing a game's data
-#
-# A new version of a game's dataset is a new value with the alias re-pointed, so every result that loaded the alias is stale.
-
-# %%
-seal_dataset("G2", seed=22)                 # G2 re-measured
-counts_before = entry_counts()
-podium_value = L.at().run("bins.report.podium", gameset="gameset/normie")
-print(ran_since(counts_before))
-# → {'binning': 1, 'cumulative': 3, 'podium': 1}
-
-# %% [markdown]
-# G2's binning ran, and the three cumulatives that contain G2; G1's binning and the cumulative over `[G1]` were hits, since they never read `dataset/G2`.
+# Boston's daily comfort ran, then its summer city comfort and the report; the other three cities were hits, since they never read `weather/Boston`.
 
 # %% [markdown]
 # ## Changing one stage's code
@@ -324,36 +289,42 @@ print(ran_since(counts_before))
 # An edit to one stage's module changes that stage's code hash, so that stage reruns; stages whose runs never loaded the module are hits.
 
 # %%
-report_path = repo_path / "bins/report.py"
-report_source = report_path.read_text().replace("[:3]", "[:2]").replace("three fullest", "two fullest")
-write_module("bins/report.py", report_source, "report: the podium is two bins")
+report_path = repo_path / "comfort/report.py"
+report_source = report_path.read_text().replace("[:2]", "[:1]").replace("two most comfortable cities", "most comfortable city")
+report_path.write_text(report_source)
+commit("report: the one most comfortable city", "comfort/report.py")
 counts_before = entry_counts()
-podium_value = L.at().run("bins.report.podium", gameset="gameset/normie")
-print(podium_value.obj)
-# → ['30-39', '20-29']
+comfort_report_value = L.at().run("comfort.report.comfort_report", cityset="cityset/representative",
+                                  start="2026-06-01", end="2026-09-01")
+print(comfort_report_value.obj)
+# → {'comfortable': '182/368 days', 'top': ['Boston']}
 print(ran_since(counts_before))
-# → {'binning': 0, 'cumulative': 0, 'podium': 1}
+# → {'daily_comfort': 0, 'city_comfort': 0, 'comfort_report': 1}
+# the run, same as:
+#   just run comfort.report.comfort_report cityset=cityset/representative start=2026-06-01 end=2026-09-01
 
 # %% [markdown]
-# Only the podium ran: its run loaded `report.py`, and no other stage's run did.
-# No `bump` was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the podium a new question, and a miss runs at HEAD, clean or dirty (F520 Q39).
+# Only the comfort report ran: its run loaded `report.py`, and no other stage's run did.
+# No `bump` was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a new question, and a miss runs at HEAD, clean or dirty (F520 Q39).
 
 # %% [markdown]
-# ## Reading the chain back
+# ## Reading a result's trace back
 #
-# A result's trace lists every input it read: the stage below by its result's bytes (`eval:`), the set's rows (`q:`, the `all` call and its answer), its own code (`fn`) and the environment.
+# A result's trace lists every input it read: each stage below by its result's bytes (`eval:`), the set's rows (`q:`, the `all` call and its answer), its own code (`fn`) and the environment.
 
 # %%
-for item in sorted(podium_value.trace):
+for item in sorted(comfort_report_value.trace):
     print(item)
-# → eval:bins.stages.cumulative{"games":["G1","G2","G4","G5"]}
+# → eval:comfort.stages.city_comfort{"city":"Austin","end":"2026-09-01","start":"2026-06-01"}
+#   eval:comfort.stages.city_comfort{"city":"Boston","end":"2026-09-01","start":"2026-06-01"}
+#   eval:comfort.stages.city_comfort{"city":"Chicago","end":"2026-09-01","start":"2026-06-01"}
+#   eval:comfort.stages.city_comfort{"city":"Denver","end":"2026-09-01","start":"2026-06-01"}
 #   fn
 #   platform
-#   q:{"__call__":"all","args":["gameset/normie","contains"],"since":null}
-print(sorted(L.at()[podium_value.trace["fn"], "db/modules"]))
-# → ['bins/__init__.py', 'bins/report.py', 'bins/values.py']
+#   q:{"__call__":"all","args":["cityset/representative","contains"],"since":null}
+print(sorted(L.at()[comfort_report_value.trace["fn"], "db/modules"]))
+# → ['comfort/__init__.py', 'comfort/report.py', 'comfort/values.py']
 
 # %%
 # clean up
-import shutil
-shutil.rmtree(scratch_path)
+shutil.rmtree(scratch_path, ignore_errors=True)   # a second run finds it gone
