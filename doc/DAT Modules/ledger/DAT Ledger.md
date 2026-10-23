@@ -18,13 +18,14 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Rev | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [[]](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [load_fn](#^load-fn), [run](#^run) |
 | Ref | [rev](#^rev), [subject](#^subject), [name](#^name), [aliases](#^aliases), [hash](#^hash), [type](#^type), [preds](#^preds), [sealed_at](#^sealed-at), [load](#^ref-load) |
 | Row | [rev](#^row-rev), [subject](#^row-subject), [predicate](#^predicate), [object](#^object), [added](#^added) |
-| Transaction | [tx](#^transaction-tx), [base](#^base), [rev](#^transaction-rev), [add](#^add), [[]=](#^--setitem--), [remove](#^remove), [del []](#^--delitem--) |
+| Transaction | [tx](#^transaction-tx), [base](#^base), [rev](#^transaction-rev), [add](#^add), ~~[[]=](#^--setitem--), [remove](#^remove), [del []]~~(#^--delitem--) |
 | Value | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [sealed](#^sealed), [hash](#^value-hash), [trace](#^trace), [Trace](#^value-trace), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
 | Value.Blob | [obj](#^obj) |
 | Value.Table | [table](#^table-table) |
 | Dat | [path](#^dat-path), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind) |
 | Fn | [name](#^fn-name), [module](#^module), [sha](#^sha), [subject](#^fn-subject), [mode](#^mode), [mount](#^mount), [env](#^env), [signature](#^signature), [()](#^--call--) |
 | dvc_dat.ledger | [ledger_fn](#^ledger-fn), [ledger_class](#^ledger-class), [bump](#^bump), [attr](#^attr), [LedgerError](#^ledgererror), [Multiple](#^multiple), [NotEvaluated](#^notevaluated), [NotClean](#^notclean), [UnmountedImport](#^unmountedimport), [UntracedRead](#^untracedread), [ConfinedWrite](#^confinedwrite), [ConfinedNetwork](#^confinednetwork), [LockTimeout](#^locktimeout), [Unindexed](#^unindexed), [Exists](#^exists), [Undeclared](#^undeclared), [AliasLoop](#^aliasloop), [SealBroken](#^sealbroken) |
+
 
 This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The per-file pages beside it hold the internals and every refusal in full: [ledger](ledger.md), [rev](rev.md), [txn](txn.md), [value](value.md), [fn](fn.md), [trace](trace.md), [env](env.md), [sandbox](sandbox.md), [worker](worker.md), [store](store.md), [fold](fold.md), [codec](codec.md), [helpers](helpers.md), [errors](errors.md). The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md).
 
@@ -301,10 +302,10 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
 ## Value.Blob Interface
 A `Value` holding any Python object, stored with pickle (protocol 4). Declares no preds.
 
-| Value.Blob | |
-| --- | --- |
-| [Value.Blob](#^blob) | Wrap an object |
-| [obj](#^obj) | The object |
+| Value.Blob           |                               |
+| -------------------- | ----------------------------- |
+| [Value.Blob](#^blob) | Constructor to wrap an object |
+| [obj](#^obj)         | The object                    |
 
 **Value.Blob**`(obj)`
     A value whose bytes are `obj` pickled. A value function whose return annotation is not a `Value` subclass has its result wrapped in one. ^blob
@@ -317,10 +318,10 @@ A `Value` holding any Python object, stored with pickle (protocol 4). Declares n
 ## Value.Table Interface
 A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted on encode; a decoded `Value.Table` holds a `pyarrow.Table`.
 
-| Value.Table | |
-| --- | --- |
-| [Value.Table](#^table) | Wrap a table |
-| [table](#^table-table) | The table |
+| Value.Table            |                             |
+| ---------------------- | --------------------------- |
+| [Value.Table](#^table) | Constructor to wrap a table |
+| [table](#^table-table) | The table                   |
 
 **Value.Table**`(table)`
     A value whose bytes are `table` as parquet; `table` is a `pyarrow.Table` or a pandas `DataFrame`. ^table
@@ -621,7 +622,7 @@ A run records the first seven as it goes: `fn`, `code/<repo>` and `platform` fro
 ## same_as, matches and diff
 **`same_as(other)`** measures byte identity between the contents of two values: `hash == other.hash`, `False` for `None`. It reads no trace. Two values computed from different inputs can be the same bytes, and the store keeps them once; two values with identical traces can differ in bytes, which is what a nondeterminism check looks for.
 
-**`matches(rev)`** measures whether a value is still current at a revision: whether every input it was computed from still has, at `rev`, the identity its trace recorded. A later `rev` asks whether anything the value was built from has moved since; an earlier one asks whether the value would have been current then. The measure is the trace re-asked item by item, each kind its own way: `fn` holds when `<name>` resolves at `rev` to the same `db/fn` subject (sandboxed: the mounted modules re-hashed as they are now; unsandboxed: the static closure); `code/<repo>` when the environment is at that commit; `platform` when the environment is the same; a `<subject> <predicate>` item when the fold at `rev` holds the same object; an alias item when the name resolves at `rev` to the same bytes; an `eval:` item when the nested lookup at `rev`, never running, yields that hash; a `q:` item when the query asked at `rev` answers the same; a `ref:` item always, since bytes do not change. It consults the ledger and the environment only and never runs anything; it is the hit test `run` applies to each candidate.
+**`matches(rev)`** measures if anything a value is depending upon has changed upto the 'rev' timeframe: whether any input it was computed from still has been updated on the ledger.  A later `rev` asks whether anything the value was built from has moved since; an earlier one asks whether the value would have been current then. The measure is the trace re-asked item by item, each kind its own way: `fn` holds when `<name>` resolves at `rev` to the same `db/fn` subject (sandboxed: the mounted modules re-hashed as they are now; unsandboxed: the static closure); `code/<repo>` when the environment is at that commit; `platform` when the environment is the same; a `<subject> <predicate>` item when the fold at `rev` holds the same object; an alias item when the name resolves at `rev` to the same bytes; an `eval:` item when the nested lookup at `rev`, never running, yields that hash; a `q:` item when the query asked at `rev` answers the same; a `ref:` item always, since bytes do not change. It consults the ledger and the environment only and never runs anything; it is the hit test `run` applies to each candidate.
 
 **`diff(other)`** measures how two values differ in what they were computed from: the trace items whose recorded identities differ between them, item to `(mine, theirs)`, `None` where one lacks the item. It compares the two stored traces and asks the ledger nothing. Two seals of the same function and keys with different bytes differ in some item here, and that item is the cause.
 
