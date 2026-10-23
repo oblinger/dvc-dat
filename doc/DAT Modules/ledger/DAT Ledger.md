@@ -9,7 +9,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 
 **Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [module functions](#dvc_dat.ledger%20Interface) 
 
-*The fold* governs what a `Rev` reads, *Sealing and saving* governs how a `Value` gets its identity, *Execution* governs where a function runs and what it may see, and *Provenance and the memo* governs when calling an `Fn` runs the body and when it hands back a sealed result.
+*The fold* governs what a `Rev` reads, *Execution* governs where a function runs, what it may see and how its result becomes a value, and *Value provenance* governs when calling an `Fn` runs the body and when it hands back a sealed result.
 
 This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The per-file pages beside it hold the internals and every refusal in full: [ledger](ledger.md), [rev](rev.md), [txn](txn.md), [value](value.md), [fn](fn.md), [trace](trace.md), [env](env.md), [sandbox](sandbox.md), [worker](worker.md), [store](store.md), [fold](fold.md), [codec](codec.md), [helpers](helpers.md), [errors](errors.md). The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md).
 
@@ -104,37 +104,37 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     `Ref(self, subject).load()`: the value under a subject or an alias, decoded, its provenance restored. ^load
 
 **load_fn**`(name: str) -> Fn`
-    The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Execution](#Execution). ^load-fn
+    The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Execution (Rev.run)](#Execution%20(Rev.run)). ^load-fn
 
 **run**`(name: str, /, *, memo=True, clean=False, **keys) -> Value | None`
-    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit this revision's version number is bound to, its `code/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Provenance and the memo](#Provenance%20and%20the%20memo). ^run
+    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit this revision's version number is bound to, its `code/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Execution](#Execution%20(Rev.run)) and [Value provenance](#Value%20provenance%20(the%20memo)). ^run
 
 
 
 ## Ref Interface
 A reference to one value at one moment, named without fetching a byte: the subject and the revision, nothing loaded until `load`. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is the value's name (the alias naming it written latest), else the hash's first 8 hex. Made from a recording `Rev`, it records its reads into the trace like the `Rev` would.
 
-| Ref | |
-| --- | --- |
-| [Ref](#^ref) | Name a value at a revision |
-| [rev](#^rev) | The revision the reference was made at |
-| [name](#^name) | The name it was made by |
-| [subject](#^subject) | The subject, alias resolved |
-| [hash](#^hash) | The sha256 of the value's bytes |
-| [type](#^type) | The class that decodes it |
-| [preds](#^preds) | The subject's user rows |
-| [aliases](#^aliases) | Every alias naming the subject |
-| [sealed_at](#^sealed-at) | The revision that sealed it |
-| [load](#^ref-load) | Fetch, decode and restore the value |
+| Ref                      |                                        |
+| ------------------------ | -------------------------------------- |
+| [Ref](#^ref)             | Name a value at a revision             |
+| [rev](#^rev)             | The revision the reference was made at |
+| [name](#^name)           | The print name currently associated with the value |
+| [subject](#^subject)     | The subject, alias resolved            |
+| [hash](#^hash)           | The sha256 of the value's bytes        |
+| [type](#^type)           | The class that decodes it              |
+| [preds](#^preds)         | The subject's user rows                |
+| [aliases](#^aliases)     | Every alias naming the subject         |
+| [sealed_at](#^sealed-at) | The revision it was sealed into the ledger |
+| [load](#^ref-load)       | Fetch, decode and restore the value    |
 
 **Ref**`(rev: Rev, name: str)`
     A reference to whatever `name` (a subject or an alias) names at `rev`. `rev` not a `Rev` or `name` not a non-empty `str` is `TypeError`. ^ref
 
 **rev**`: Rev`
-    The revision the reference was made at. ^rev
+    The revision this reference reads through: the snapshot it was made from, so every answer it gives is as of that revision. ^rev
 
 **name**`: str`
-    The name it was made by: an alias or a subject. ^name
+    The print name currently associated with the value: its alias at the head (the latest written), else the hash's first 8 hex; what the `Ref` prints. Unique one way: a name points at one value at a time, and re-pointing it moves it to another value; a value may carry several names (`aliases`). `subject` is what the reference resolved to. ^name
 
 **subject**`: str | None`
     The subject after the alias chain. For a stored hint-less reference, the latest entry holding those bytes as of `rev`. ^subject
@@ -152,7 +152,7 @@ A reference to one value at one moment, named without fetching a byte: the subje
     Every name aliasing the subject as of `rev`. ^aliases
 
 **sealed_at**`: Rev | None`
-    The revision of the subject's `db/value` row. ^sealed-at
+    The revision the value was sealed into the ledger, its `db/value` row's: at or before `rev`, since a reference made later can point at a value sealed earlier. `None` while the subject holds no value. ^sealed-at
 
 **load**`() -> Value`
     Fetch the bytes from the art store, decode them by `type`, and restore `subject`, `rev` (the sealing revision), `trace` and `preds`. Cached per `(subject, rev, name)` on the `Ledger`; a cached `Dat` is handed back only while its folder is still there and the same folder. A `decode` that accepts `name=` is passed the alias the `Ref` was made by, so a `Dat` loaded by an alias lands under `art/dats/<alias>/`. No value is `KeyError`; a `decode` returning a non-`Value` is `TypeError`; a `Dat` whose `_spec_` names a `dat.kind` the row's class does not accept is `TypeError`. ^ref-load
@@ -162,13 +162,13 @@ A reference to one value at one moment, named without fetching a byte: the subje
 ## Row Interface
 A named tuple encoding a single row in the ledger: revision, subject, predicate, object, and an added/removed bit. `rows()` returns them; `str(row)` is one aligned line: revision, `+` or `-`, subject, predicate, object.
 
-| Row | |
-| --- | --- |
-| [rev](#^row-rev) | The revision that wrote it |
-| [subject](#^row-subject) | The subject |
-| [predicate](#^predicate) | The predicate |
-| [object](#^object) | The object, decoded |
-| [added](#^added) | False on a remove row |
+| Row                      |                                    |
+| ------------------------ | ---------------------------------- |
+| [rev](#^row-rev)         | The revision that wrote it         |
+| [subject](#^row-subject) | The subject                        |
+| [predicate](#^predicate) | The predicate                      |
+| [object](#^object)       | The object, decoded                |
+| [added](#^added)         | True/False indicates added/removed |
 
 **rev**`: Rev`
     The revision that wrote the row. ^row-rev
@@ -204,10 +204,10 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
     A placeholder subject, rewritten to `db/tx/<rev>` at commit wherever it appears as a subject or a `str` object, so the body can write rows about its own transaction. ^transaction-tx
 
 **base**`: Rev`
-    The top when the block was entered; under `lock=` the top until exit. `RuntimeError` before entry. ^base
+    The revision the writes are read against: the top when the block was entered, and under `lock=` the top until exit, since no one else can commit in between. Always a committed revision. `RuntimeError` before entry. ^base
 
 **rev**`: Rev`
-    The revision written; `RuntimeError` before commit. ^transaction-rev
+    The revision written: the state after this transaction, so it exists only once committed; `RuntimeError` before. Under `lock=` the number it will be is `base.id + 1`. ^transaction-rev
 
 **add**`(subject: str, predicate: str, object) -> None`
     One add row. `object` is a `str`, a JSON `dict` or `list`, or a `Ref` to a sealed value; a `Value` is `TypeError` naming `seal`; a bare number, bool or `None` is `TypeError` (a number is its string). `predicate == "db/value"` is `TypeError`: only a seal writes it. ^add
@@ -253,7 +253,7 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
     The revision that saved the value; set at commit or by `load`. ^value-rev
 
 **trace**`: Mapping[str, str]`
-    Item name to version or hash: what producing the value read. Empty until saved or evaluated. See [Provenance and the memo](#Provenance%20and%20the%20memo). ^trace
+    Item name to version or hash: what producing the value read. Empty until saved or evaluated. See [Value provenance](#Value%20provenance%20(the%20memo)). ^trace
 
 **sealed**`: bool`
     The identity is fixed: by `seal()` (saved nowhere yet, `subject` `None`) or by a save. ^sealed
@@ -271,7 +271,7 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
     The object from its bytes; `NotImplementedError` unless a subclass defines it. A `decode` that also accepts `name=` is passed the alias the value is loaded by, `None` when loaded by its subject. ^decode
 
 **seal**`(to=None, *, keep=False, deps=(), alias=None, provenance=None, by=None) -> str`
-    `v.seal()` fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by` (default the provenance, else `seal`). `alias=` writes `(alias, db/alias, subject)` beside it. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. See [Sealing and saving](#Sealing%20and%20saving). ^seal
+    `v.seal()` fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by` (default the provenance, else `seal`). `alias=` writes `(alias, db/alias, subject)` beside it. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. See [Versioning](#Versioning). ^seal
 
 **matches**`(rev: Rev) -> bool`
     Whether every trace item holds at `rev`: the memo's hit test. Consults the ledger only; never runs anything. ^matches
@@ -388,7 +388,7 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
     The environment the function resolved in: repos and commits, platform. ^env
 
 **subject**`: str`
-    `db/fn/<name>/<16 hex>`, hashing the code that runs ([Provenance and the memo](#Provenance%20and%20the%20memo)). ^fn-subject
+    `db/fn/<name>/<16 hex>`, hashing the code that runs ([Value provenance](#Value%20provenance%20(the%20memo))). ^fn-subject
 
 **__call__**`(*, memo=True, clean=False, path=None, kwargs=None, **keys) -> Value | None`
     `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. The control options are exactly `memo`, `clean`, `path` and `kwargs`, never keys and never hashed. Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. A base-mode run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
@@ -509,26 +509,7 @@ A read turns the rows at or before its revision into what they hold, by each pre
 
 
 
-## Sealing and saving
-A value's subject is a 64-hex hash of its trace, its preds and its `db/value` text (the class and the bytes' hash); no one types it. Sealing fixes that identity; saving writes it into a ledger.
-
-| Form | Bytes copied | In the ledger | Returns |
-| --- | --- | --- | --- |
-| `v.seal()` | no | no | the hash |
-| `v.seal(keep=True)` | into the kept cache | no | the hash |
-| `v.seal(t)`, `v.seal(L)` | into the art store | yes, at commit | the subject |
-
-On the seal's line `preds` becomes read-only and `sealed`, `subject` and `trace` are set; `rev` is set at commit, when the bytes go to the art store just before the rows. A save writes the subject's own rows once: `db/value`, `db/kind`, `db/provenance` (default `seal`), `db/preds`, one `db/trace/<item>` per trace item, and one row per pred (per member for a `many` pred). A subject already saved is not written again: the seal is idempotent.
-
-`v.seal()` alone writes a seal record to this machine's kept folder (`$DAT_KEPT`, else `~/.cache/dvc-dat/kept`); a later `v.seal(t)` saves the state it was sealed in, its trace the environment of the seal, not of the save. A value not kept whose bytes changed in between is `SealBroken`. `Dat.sealed_at_path` reopens such a seal in another process. `just sealed` lists the seals never saved; `just sealed purge` drops them.
-
-A sealed value never changes: an `add` or `remove` on one of its own rows is `Exists` at commit. Any other row on its subject is annotation. A new version is a new seal. An alias, `(video/G1, db/alias, <subject>)`, is the re-pointable name: it moves while the values it pointed at stay. An alias names a subject holding a `db/value`, and a subject holding its own `db/value` cannot be an alias.
-
-A hand seal's trace is declared: the `deps` given, plus `code/<repo>` for every repo the environment reports, and `platform`; its provenance is `seal` or the caller's. An eval's trace is recorded and its provenance is `eval:base` or `eval:sandbox`; `seal` refuses a provenance beginning `eval:`, so a consumer that needs proof asks for an `eval:` value.
-
-
-
-## Execution
+## Execution (Rev.run)
 Where a value function runs, what the run is allowed to see, and how its result becomes a value in the ledger.
 
 ![DAT Ledger Execution](DAT%20Ledger%20Execution.svg) 
@@ -537,9 +518,9 @@ Where a value function runs, what the run is allowed to see, and how its result 
 
 **The version row.** `bump` on `code/<repo>` writes two rows, `version` and `commit`, which is the only tie between a ledger version and the source tree. Every eval's trace carries `code/<repo>` as `<version>+<commit8>`. `clean=True` asks that the checkout be clean, no uncommitted changes and HEAD at the commit the revision's row names, and refuses with `NotClean` otherwise; by default only base mode insists on it.
 
-**Running.** A call is a memo lookup first ([Provenance and the memo](#Provenance%20and%20the%20memo)); a miss runs the body with a recording `Rev`, in the child for a sandboxed function, and the result comes back with its trace. The child refuses what it cannot trace: `UnmountedImport`, `UntracedRead`, `ConfinedWrite`, `ConfinedNetwork`.
+**Running.** A call is a memo lookup first ([Value provenance](#Value%20provenance%20(the%20memo))); a miss runs the body with a recording `Rev`, in the child for a sandboxed function, and the result comes back with its trace. The child refuses what it cannot trace: `UnmountedImport`, `UntracedRead`, `ConfinedWrite`, `ConfinedNetwork`.
 
-**Three states of a value.** A value is *built*, then *sealed*, then *saved*; a result of `run` goes through all three before it is returned.
+**Value.** The return of a run is a value: the object the function built, with its preds and, once sealed, its provenance. Sealing is the act of capturing it: the identity is fixed from the trace, the preds and the bytes; saving then writes it into the ledger. So a value is in one of three states, and a result of `run` goes through all three before it is returned.
 
 | State | What is fixed | Where it lives | How |
 | --- | --- | --- | --- |
@@ -547,7 +528,7 @@ Where a value function runs, what the run is allowed to see, and how its result 
 | sealed | its identity: the subject hashing trace, preds and bytes; `preds` read-only | the same place, with a seal record in the kept folder | `v.seal()` (`keep=True` copies the bytes into the kept cache) |
 | saved | the rows at a revision, the bytes in the art store | the ledger | `v.seal(t)` or `v.seal(L)`; an eval seals and saves its own result |
 
-A sealed value that is never saved is still a value with a fixed identity, usable as a dep and reopenable by `Dat.sealed_at_path`; saving it later writes the state it was sealed in. A saved value never changes; a new version is a new seal ([Sealing and saving](#Sealing%20and%20saving)).
+A sealed value that is never saved is still a value with a fixed identity, usable as a dep. `v.seal()` alone writes a seal record to this machine's kept folder (`$DAT_KEPT`, else `~/.cache/dvc-dat/kept`); a later `v.seal(t)` saves the state it was sealed in, its trace the environment of the seal, not of the save. A value not kept whose bytes changed in between is `SealBroken`. `Dat.sealed_at_path` reopens such a seal in another process. `just sealed` lists the seals never saved; `just sealed purge` drops them. A saved value never changes; a new version is a new seal ([Versioning](#Versioning)).
 
 **The function itself.** A value function takes the revision first and keywords after, is marked `@ledger_fn`, and returns a `Value`; its return annotation is required.
 
@@ -569,10 +550,10 @@ A sandboxed function lives under a mount: rows naming a dotted prefix, its repo 
 
 
 
-## Provenance and the memo
-The trace is a value's provenance: every input its run read, kept as `db/trace/<item>` rows on its subject, so what a result was computed from can always be read back. The memo reads the same rows to decide when `run` may hand back a stored result instead of running.
+## Value provenance (the memo)
+A run is something that happens; its result is a value; the trace on that value is its provenance: every input the run read, kept as `db/trace/<item>` rows on its subject, so what a result was computed from can always be read back. The memo is what provenance buys: asked again with the same function and keys, `run` hands back the value whose provenance still holds instead of running.
 
-`run` is a memo. It looks up every entry at the top whose `db/fn` (the dotted name) and `db/keys` (the bound keys, defaults included, as canonical JSON) match, newest seal first, and hands back the first whose trace holds at the revision asked. A miss runs the body with a recording `Rev`, then seals the result in a transaction `by="eval:<name>"` under a subject hashing the function, keys, trace, preds and `db/value` text. `memo=False` runs without sealing; `memo="get"` looks up and never runs.
+`run` looks up every entry at the top whose `db/fn` (the dotted name) and `db/keys` (the bound keys, defaults included, as canonical JSON) match, newest seal first, and hands back the first whose trace holds at the revision asked. A miss runs the body with a recording `Rev`, then seals the result in a transaction `by="eval:<name>"` under a subject hashing the function, keys, trace, preds and `db/value` text. `memo=False` runs without sealing; `memo="get"` looks up and never runs.
 
 | trace item | value | holds when |
 | --- | --- | --- |
@@ -586,7 +567,25 @@ The trace is a value's provenance: every input its run read, kept as `db/trace/<
 | `salt` | the mount's `db/salt` | the mount has that salt |
 | `q:{...}` | the sorted refs it answered | the query answers the same |
 
-The hit test is the table and nothing else: an entry holds while every item holds. A value input is named by its bytes, so identical inputs are the same input. A correction to a row a function read makes its result stale, and the next ask re-derives it; a changed byte in a module a sandboxed run loaded does the same through the `fn` item, whatever commit it names ([Execution](#Execution)). `matches` and `diff` consult the memo and never run anything.
+The hit test is the table and nothing else: an entry holds while every item holds. A value input is named by its bytes, so identical inputs are the same input. A correction to a row a function read makes its result stale, and the next ask re-derives it; a changed byte in a module a sandboxed run loaded does the same through the `fn` item, whatever commit it names ([Execution (Rev.run)](#Execution%20(Rev.run))). `matches` and `diff` consult the memo and never run anything.
+
+A save writes the subject's own rows once: `db/value`, `db/kind`, `db/provenance` (default `seal`), `db/preds`, one `db/trace/<item>` per trace item, and one row per pred (per member for a `many` pred). A subject already saved is not written again: the seal is idempotent.
+
+A hand seal's trace is declared: the `deps` given, plus `code/<repo>` for every repo the environment reports, and `platform`; its provenance is `seal` or the caller's. An eval's trace is recorded and its provenance is `eval:base` or `eval:sandbox`; `seal` refuses a provenance beginning `eval:`, so a consumer that needs proof asks for an `eval:` value.
+
+
+
+## Versioning
+The ledger has versions for many things: the ledger itself is versioned, the code is versioned, and schemas, APIs, model families and configs are versioned. All of them are asserted within the ledger: the current value of every version is a row, `(<subject>, version, M.m.p)`, so a revision holds every version in force at once. By convention a version number lives in the source tree (a repo's `pyproject.toml`), the environment reads it with the commit when the code is loaded, and `bump` is what asserts it into the ledger.
+
+The ledger version is the main one. It determines the revision we are on, `L.at("1.4.0")` being the latest revision that set `(db, version, 1.4.0)`, and that revision in turn implies a version for everything else: the code's, the schema's, the API's, every `version` row held there. So the version of a value is the ledger version at the revision it was sealed, and one number names the whole state it was computed in; what makes that true is bumping `db` whenever any version it stands for moves. Two pieces have their own machinery:
+
+- **Code**, `code/<repo>`: a `version` row and the `commit` it is pinned to, read from the checkout. Every value's trace names the code version it was computed under ([Execution](#Execution%20(Rev.run))), because that is the version the memo checks on its own.
+- **Anything else**: a subject with a `version` row, `schema/metrics` or `api/jobs`, bumped when it changes and readable at any revision.
+
+A sealed value never changes: an `add` or `remove` on one of its own rows is `Exists` at commit, and any other row on its subject is annotation. A new version of a value is a new seal and a new subject; the re-pointable name is an alias, `(video/G1, db/alias, <subject>)`, which moves while the values it pointed at stay, so a read at an older revision still finds the older value. An alias names a subject holding a `db/value`, and a subject holding its own `db/value` cannot be an alias.
+
+`bump(t, subject, part)` is the one writer of a version: the current one read through the transaction, the next by `part`, `minor` and `major` behind a `confirm`. A subject holding a `db/alias` row is refused: a value's version is a pred, and a new version of a value is a new seal and a re-point.
 
 
 

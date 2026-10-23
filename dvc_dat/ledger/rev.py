@@ -626,7 +626,7 @@ class Ref:
     ``sealed_at`` and ``ref.rev[...]`` record like any other read (Eval § 5.3).
     """
 
-    __slots__ = ("rev", "name", "_subject", "_cls", "_hash", "_lazy", "_p")
+    __slots__ = ("rev", "_given", "_subject", "_cls", "_hash", "_lazy", "_p")
 
     def __init__(self, rev: Rev, name: str) -> None:
         if not isinstance(rev, Rev):
@@ -654,7 +654,7 @@ class Ref:
               lazy: bool) -> None:
         object.__setattr__(self, "rev", rev)
         object.__setattr__(self, "_p", rev._plain())
-        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "_given", name)
         object.__setattr__(self, "_subject", subject)
         object.__setattr__(self, "_cls", cls)
         object.__setattr__(self, "_hash", h)
@@ -667,6 +667,11 @@ class Ref:
         r = cls.__new__(cls)
         r._init(rev, subj or "", subj, c, h, subj is None)
         return r
+
+    @property
+    def name(self) -> str:
+        """The print name of this value: its alias at the head (the latest written), else the hash's first 8 hex."""
+        return repr(self)
 
     def __setattr__(self, k: str, v: Any) -> None:
         raise AttributeError("a Ref is frozen")
@@ -684,7 +689,7 @@ class Ref:
                 if held and strip_hint(held[0].obj) == text and (best is None or held[0].rev >= best[1]):
                     best = (s, held[0].rev)
             object.__setattr__(self, "_subject", best[0] if best else None)
-            object.__setattr__(self, "name", best[0] if best else "")
+            object.__setattr__(self, "_given", best[0] if best else "")
             object.__setattr__(self, "_lazy", False)
         return self._subject
 
@@ -711,7 +716,7 @@ class Ref:
     def preds(self) -> FrozenPreds:
         """The subject's non-``db/`` rows at ``rev``, annotations included; one view (A24); unchecked."""
         out = self._preds()
-        self.rev._record_call("preds", (self.name,), None, dict(out))
+        self.rev._record_call("preds", (self._given,), None, dict(out))
         return out
 
     @property
@@ -719,7 +724,7 @@ class Ref:
         """Every ``db/alias`` name pointing at the subject as of ``rev`` (A25)."""
         s = self.subject
         out = [] if s is None else self._p._aliases_of(s)
-        self.rev._record_call("aliases", (self.name,), None, sorted(out))
+        self.rev._record_call("aliases", (self._given,), None, sorted(out))
         return out
 
     def _sealed_at(self) -> Optional[Rev]:
@@ -731,7 +736,7 @@ class Ref:
     def sealed_at(self) -> Optional[Rev]:
         """The revision of the subject's ``db/value`` row; ``None`` with no value (A41)."""
         out = self._sealed_at()
-        self.rev._record_call("sealed_at", (self.name,), None, out)
+        self.rev._record_call("sealed_at", (self._given,), None, out)
         return out
 
     def __eq__(self, other: object) -> bool:
@@ -756,9 +761,9 @@ class Ref:
         while it is still there (a ``Dat`` whose folder was moved or replaced since is loaded afresh)."""
         s = self.subject
         if self._hash is None or s is None:
-            raise KeyError(f"{self.name!r} has no value at rev {self.rev.id}")
+            raise KeyError(f"{self._given!r} has no value at rev {self.rev.id}")
         ledger = self._p.ledger
-        key = (s, self.rev.id, self.name)
+        key = (s, self.rev.id, self._given)
         v = ledger._values.get(key)
         if v is not None and not v._present():
             v = None
@@ -766,7 +771,7 @@ class Ref:
             store = ledger._store.art
             cls = self.type
             assert cls is not None
-            loaded_as = self.name if self.name != s else None
+            loaded_as = self._given if self._given != s else None
             data = store.get(self._hash)
             v = cls.decode(data, store, name=loaded_as) if takes_name(cls) else cls.decode(data, store)
             if not isinstance(v, Value):
@@ -787,5 +792,5 @@ class Ref:
             v._provenance(subject=s, rev=sealed_at, trace=trace, preds=self._preds(), loaded_as=loaded_as)
             v.__dict__["_hash"] = self._hash
             ledger._values[key] = v
-        self.rev._record_value(v, self.name)
+        self.rev._record_value(v, self._given)
         return v

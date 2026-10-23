@@ -1,5 +1,5 @@
+:>> [DAT](../../DAT.md) → [ledger](ledger.md) → [DAT trace](ha://p/DAT%20trace) 
 # ledger.trace
-
 A trace is the record of what producing a value read, item name to
 value, and it is half the memo key: a hit is an entry every one of
 whose items still holds at the revision asked. This module names the
