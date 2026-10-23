@@ -204,10 +204,10 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
     A placeholder subject, rewritten to `db/tx/<rev>` at commit wherever it appears as a subject or a `str` object, so the body can write rows about its own transaction. ^transaction-tx
 
 **base**`: Rev`
-    The top when the block was entered; under `lock=` the top until exit. `RuntimeError` before entry. ^base
+    The revision the writes are read against: the top when the block was entered, and under `lock=` the top until exit, since no one else can commit in between. Always a committed revision. `RuntimeError` before entry. ^base
 
 **rev**`: Rev`
-    The revision written; `RuntimeError` before commit. ^transaction-rev
+    The revision written: the state after this transaction, so it exists only once committed; `RuntimeError` before. Under `lock=` the number it will be is `base.id + 1`. ^transaction-rev
 
 **add**`(subject: str, predicate: str, object) -> None`
     One add row. `object` is a `str`, a JSON `dict` or `list`, or a `Ref` to a sealed value; a `Value` is `TypeError` naming `seal`; a bare number, bool or `None` is `TypeError` (a number is its string). `predicate == "db/value"` is `TypeError`: only a seal writes it. ^add
