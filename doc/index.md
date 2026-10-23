@@ -61,4 +61,4 @@ outputs kept (`just demo` re-syncs and re-runs them; the tests run every one):
 - **[`ledger-dats`](DAT%20Demos/ledger-dats.py)** — a dat as a value
 - **[`ledger-just`](DAT%20Demos/ledger-just.py)** — the human's verbs, one ledger call per recipe
 
-The ledger: [The ledger](ledger.md).
+The ledger: [The ledger](DAT%20Modules/ledger/DAT%20Ledger.md).
