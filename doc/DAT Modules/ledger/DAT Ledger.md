@@ -9,7 +9,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 
 **Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [module functions](#dvc_dat.ledger%20Interface) 
 
-*The fold* governs what a `Rev` reads, *Sealing and saving* governs how a `Value` gets its identity, *Execution* governs where a function runs and what it may see, and *Provenance and the memo* governs when calling an `Fn` runs the body and when it hands back a sealed result.
+*The fold* governs what a `Rev` reads, *Sealing and saving* governs how a `Value` gets its identity, *Execution* governs where a function runs and what it may see, and *Value provenance* governs when calling an `Fn` runs the body and when it hands back a sealed result.
 
 This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The per-file pages beside it hold the internals and every refusal in full: [ledger](ledger.md), [rev](rev.md), [txn](txn.md), [value](value.md), [fn](fn.md), [trace](trace.md), [env](env.md), [sandbox](sandbox.md), [worker](worker.md), [store](store.md), [fold](fold.md), [codec](codec.md), [helpers](helpers.md), [errors](errors.md). The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md).
 
@@ -107,7 +107,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Execution (Rev.run)](#Execution%20(Rev.run)). ^load-fn
 
 **run**`(name: str, /, *, memo=True, clean=False, **keys) -> Value | None`
-    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit this revision's version number is bound to, its `code/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Provenance and the memo](#Provenance%20and%20the%20memo). ^run
+    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit this revision's version number is bound to, its `code/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Value provenance](#Value%20provenance%20(the%20memo)). ^run
 
 
 
@@ -253,7 +253,7 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
     The revision that saved the value; set at commit or by `load`. ^value-rev
 
 **trace**`: Mapping[str, str]`
-    Item name to version or hash: what producing the value read. Empty until saved or evaluated. See [Provenance and the memo](#Provenance%20and%20the%20memo). ^trace
+    Item name to version or hash: what producing the value read. Empty until saved or evaluated. See [Value provenance](#Value%20provenance%20(the%20memo)). ^trace
 
 **sealed**`: bool`
     The identity is fixed: by `seal()` (saved nowhere yet, `subject` `None`) or by a save. ^sealed
@@ -388,7 +388,7 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
     The environment the function resolved in: repos and commits, platform. ^env
 
 **subject**`: str`
-    `db/fn/<name>/<16 hex>`, hashing the code that runs ([Provenance and the memo](#Provenance%20and%20the%20memo)). ^fn-subject
+    `db/fn/<name>/<16 hex>`, hashing the code that runs ([Value provenance](#Value%20provenance%20(the%20memo))). ^fn-subject
 
 **__call__**`(*, memo=True, clean=False, path=None, kwargs=None, **keys) -> Value | None`
     `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. The control options are exactly `memo`, `clean`, `path` and `kwargs`, never keys and never hashed. Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. A base-mode run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
@@ -537,9 +537,9 @@ Where a value function runs, what the run is allowed to see, and how its result 
 
 **The version row.** `bump` on `code/<repo>` writes two rows, `version` and `commit`, which is the only tie between a ledger version and the source tree. Every eval's trace carries `code/<repo>` as `<version>+<commit8>`. `clean=True` asks that the checkout be clean, no uncommitted changes and HEAD at the commit the revision's row names, and refuses with `NotClean` otherwise; by default only base mode insists on it.
 
-**Running.** A call is a memo lookup first ([Provenance and the memo](#Provenance%20and%20the%20memo)); a miss runs the body with a recording `Rev`, in the child for a sandboxed function, and the result comes back with its trace. The child refuses what it cannot trace: `UnmountedImport`, `UntracedRead`, `ConfinedWrite`, `ConfinedNetwork`.
+**Running.** A call is a memo lookup first ([Value provenance](#Value%20provenance%20(the%20memo))); a miss runs the body with a recording `Rev`, in the child for a sandboxed function, and the result comes back with its trace. The child refuses what it cannot trace: `UnmountedImport`, `UntracedRead`, `ConfinedWrite`, `ConfinedNetwork`.
 
-**Three states of a value.** A value is *built*, then *sealed*, then *saved*; a result of `run` goes through all three before it is returned.
+**Value.** The return of a run is a value: the object the function built, with its preds and, once sealed, its provenance. Sealing is the act of capturing it: the identity is fixed from the trace, the preds and the bytes; saving then writes it into the ledger. So a value is in one of three states, and a result of `run` goes through all three before it is returned.
 
 | State | What is fixed | Where it lives | How |
 | --- | --- | --- | --- |
@@ -569,10 +569,10 @@ A sandboxed function lives under a mount: rows naming a dotted prefix, its repo 
 
 
 
-## Provenance and the memo
-The trace is a value's provenance: every input its run read, kept as `db/trace/<item>` rows on its subject, so what a result was computed from can always be read back. The memo reads the same rows to decide when `run` may hand back a stored result instead of running.
+## Value provenance (the memo)
+A run is something that happens; its result is a value; the trace on that value is its provenance: every input the run read, kept as `db/trace/<item>` rows on its subject, so what a result was computed from can always be read back. The memo is what provenance buys: asked again with the same function and keys, `run` hands back the value whose provenance still holds instead of running.
 
-`run` is a memo. It looks up every entry at the top whose `db/fn` (the dotted name) and `db/keys` (the bound keys, defaults included, as canonical JSON) match, newest seal first, and hands back the first whose trace holds at the revision asked. A miss runs the body with a recording `Rev`, then seals the result in a transaction `by="eval:<name>"` under a subject hashing the function, keys, trace, preds and `db/value` text. `memo=False` runs without sealing; `memo="get"` looks up and never runs.
+`run` looks up every entry at the top whose `db/fn` (the dotted name) and `db/keys` (the bound keys, defaults included, as canonical JSON) match, newest seal first, and hands back the first whose trace holds at the revision asked. A miss runs the body with a recording `Rev`, then seals the result in a transaction `by="eval:<name>"` under a subject hashing the function, keys, trace, preds and `db/value` text. `memo=False` runs without sealing; `memo="get"` looks up and never runs.
 
 | trace item | value | holds when |
 | --- | --- | --- |
