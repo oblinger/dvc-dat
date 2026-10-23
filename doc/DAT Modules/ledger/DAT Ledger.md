@@ -118,23 +118,23 @@ A reference to one value at one moment, named without fetching a byte: the subje
 | ------------------------ | -------------------------------------- |
 | [Ref](#^ref)             | Name a value at a revision             |
 | [rev](#^rev)             | The revision the reference was made at |
-| [name](#^name)           | The string the reference was made with |
+| [name](#^name)           | The print name currently associated with the value |
 | [subject](#^subject)     | The subject, alias resolved            |
 | [hash](#^hash)           | The sha256 of the value's bytes        |
 | [type](#^type)           | The class that decodes it              |
 | [preds](#^preds)         | The subject's user rows                |
 | [aliases](#^aliases)     | Every alias naming the subject         |
-| [sealed_at](#^sealed-at) | The revision that sealed it            |
+| [sealed_at](#^sealed-at) | The revision it was sealed into the ledger |
 | [load](#^ref-load)       | Fetch, decode and restore the value    |
 
 **Ref**`(rev: Rev, name: str)`
     A reference to whatever `name` (a subject or an alias) names at `rev`. `rev` not a `Rev` or `name` not a non-empty `str` is `TypeError`. ^ref
 
 **rev**`: Rev`
-    The revision the reference was made at. ^rev
+    The revision this reference reads through: the snapshot it was made from, so every answer it gives is as of that revision. ^rev
 
 **name**`: str`
-    The string this reference was made with, kept as given: an alias such as `video/G1`, or a subject. A name resolves to at most one value at a revision; a value may have several names (`aliases`), and a `Ref` from `refs` has its subject as its name. What a `Ref` prints is not this but the value's display name (its latest alias, else a hash prefix). ^name
+    The print name currently associated with the value: its alias at the head (the latest written), else the hash's first 8 hex; what the `Ref` prints. Unique one way: a name points at one value at a time, and re-pointing it moves it to another value; a value may carry several names (`aliases`). `subject` is what the reference resolved to. ^name
 
 **subject**`: str | None`
     The subject after the alias chain. For a stored hint-less reference, the latest entry holding those bytes as of `rev`. ^subject
@@ -152,7 +152,7 @@ A reference to one value at one moment, named without fetching a byte: the subje
     Every name aliasing the subject as of `rev`. ^aliases
 
 **sealed_at**`: Rev | None`
-    The revision of the subject's `db/value` row. ^sealed-at
+    The revision the value was sealed into the ledger, its `db/value` row's: at or before `rev`, since a reference made later can point at a value sealed earlier. `None` while the subject holds no value. ^sealed-at
 
 **load**`() -> Value`
     Fetch the bytes from the art store, decode them by `type`, and restore `subject`, `rev` (the sealing revision), `trace` and `preds`. Cached per `(subject, rev, name)` on the `Ledger`; a cached `Dat` is handed back only while its folder is still there and the same folder. A `decode` that accepts `name=` is passed the alias the `Ref` was made by, so a `Dat` loaded by an alias lands under `art/dats/<alias>/`. No value is `KeyError`; a `decode` returning a non-`Value` is `TypeError`; a `Dat` whose `_spec_` names a `dat.kind` the row's class does not accept is `TypeError`. ^ref-load
@@ -162,13 +162,13 @@ A reference to one value at one moment, named without fetching a byte: the subje
 ## Row Interface
 A named tuple encoding a single row in the ledger: revision, subject, predicate, object, and an added/removed bit. `rows()` returns them; `str(row)` is one aligned line: revision, `+` or `-`, subject, predicate, object.
 
-| Row | |
-| --- | --- |
-| [rev](#^row-rev) | The revision that wrote it |
-| [subject](#^row-subject) | The subject |
-| [predicate](#^predicate) | The predicate |
-| [object](#^object) | The object, decoded |
-| [added](#^added) | False on a remove row |
+| Row                      |                                    |
+| ------------------------ | ---------------------------------- |
+| [rev](#^row-rev)         | The revision that wrote it         |
+| [subject](#^row-subject) | The subject                        |
+| [predicate](#^predicate) | The predicate                      |
+| [object](#^object)       | The object, decoded                |
+| [added](#^added)         | True/False indicates added/removed |
 
 **rev**`: Rev`
     The revision that wrote the row. ^row-rev

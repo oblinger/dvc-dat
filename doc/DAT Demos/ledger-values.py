@@ -141,7 +141,7 @@ camera_ref = Ref(rev, "raw/G1/wide-camera")
 print(camera_ref)
 # → video/G1: the shortest, as of the head
 print(camera_ref.name)
-# → raw/G1/wide-camera: what you said
+# → video/G1: the print name, the same
 print(sorted(camera_ref.aliases))
 # → ['raw/G1/wide-camera', 'video/G1']
 
