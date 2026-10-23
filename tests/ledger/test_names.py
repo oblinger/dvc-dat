@@ -22,7 +22,7 @@ def test_a_value_has_one_name_and_a_name_one_value(L):
     a.name = "x/b"                                           # renamed: one name at a time
     assert a.name == "x/b" and Ref(L.at(), "x/a").hash is None and Ref(L.at(), "x/b").subject == s
     b = Value.Blob("b")
-    seal(L, b, alias="x/b")                                  # the name moves to another value
+    seal(L, b, name="x/b")                                  # the name moves to another value
     assert b.name == "x/b" and a.name is None and repr(a) == s[:8]
     assert L.at().load(s).obj == "a"                         # still reachable by hash
     with pytest.raises(ValueError):

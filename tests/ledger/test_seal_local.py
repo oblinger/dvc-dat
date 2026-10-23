@@ -17,7 +17,7 @@ def test_seal_fixes_identity_and_writes_nothing(L):
     top = L.at().id
     v = Plain(b"clip")
     h = v.seal()
-    assert v.sealed and v.subject is None and v.sealed_at and h == v.hash
+    assert v.sealed and v.subject is None and h == v.hash
     assert L.at().id == top
     with pytest.raises(TypeError, match="sealed"):
         v.preds["x"] = "y"
@@ -29,12 +29,12 @@ def test_a_save_carries_the_environment_of_the_seal(L, envbox):
     v = Plain(b"clip")
     v.seal(provenance="human:dan")
     envbox.code(commit="later99")
-    s = v.seal(L, alias="clip/1")
+    s = v.seal(L, name="clip/1")
     held = Ref(L.at(), "clip/1")
     assert held.subject == s == v.subject and v.rev is not None
     assert v.trace["code/testrepo"] == "+abc1234"
     assert L.at()[s, "db/provenance"] == "human:dan"
-    assert L.at()[s, "db/sealed-at"] == v.sealed_at
+    assert L.at()[s, "db/sealed-at"] == v.sealed
     assert L.at()[L.at().tx, "db/by"] == "human:dan"
 
 
@@ -70,8 +70,8 @@ def test_the_seal_fixes_deps_and_provenance(L):
         v.seal(L, provenance="other")
     with pytest.raises(TypeError, match="keep="):
         Plain(b"y").seal(L, keep=True)
-    with pytest.raises(TypeError, match="alias="):
-        Plain(b"z").seal(alias="n/1")
+    with pytest.raises(TypeError, match="name="):
+        Plain(b"z").seal(name="n/1")
 
 
 def test_an_abandoned_save_leaves_the_value_sealed(L):
@@ -161,7 +161,7 @@ def test_sealed_at_is_frozen(L):
     s = v.seal(L)
     with pytest.raises(Exists):
         with L.transaction(by="t") as t:
-            t.remove(s, "db/sealed-at", v.sealed_at)
+            t.remove(s, "db/sealed-at", v.sealed)
 
 
 def test_eval_refuses_a_result_sealed_early(coded):

@@ -117,7 +117,7 @@ print(loaded_video.subject == video_subject)
 # ### Adding an alias
 #
 # An alias is a `db/alias` row naming the subject. `v.seal(t, …,
-                                                           # alias="video/G1")` writes it in the same transaction; here it is
+                                                           # name="video/G1")` writes it in the same transaction; here it is
 # added later, by hand.
 
 # %%
@@ -228,7 +228,7 @@ with L.transaction(by="human:dan") as t:
 wide_video = Video(b"G1 wide camera, 9000 frames")
 wide_video.preds.update(game="G1", camera="wide", span=[0, 9000])
 with L.transaction(by="human:dan") as t:
-    wide_video.seal(t, alias="video/G1",
+    wide_video.seal(t, name="video/G1",
                     provenance="import:archive")
 print(wide_video)
 # → video/G1
@@ -251,7 +251,7 @@ print(wide_video.preds)
 g2_video = Video(b"G2 wide camera, 8400 frames")
 g2_video.preds.update(game="G2", camera="wide", span=[0, 8400])
 with L.transaction(by="human:dan") as t:
-    g2_video.seal(t, alias="video/G2",
+    g2_video.seal(t, name="video/G2",
                   provenance="import:archive")
 
 # %% [markdown]
@@ -470,7 +470,7 @@ print(rev[wide_video.subject, "db/preds"])
 # %%
 tele_video.preds["camera"] = "tlee"              # a typo
 with L.transaction(by="human:dan") as t:
-    wrong_subject = tele_video.seal(t, alias="video/G1-tele",
+    wrong_subject = tele_video.seal(t, name="video/G1-tele",
                                     provenance="import:archive")
 print(Ref(L.at(), "video/G1-tele").preds["camera"])
 # → tlee
@@ -484,7 +484,7 @@ print(Ref(L.at(), "video/G1-tele").preds["camera"])
 fixed_video = Video(tele_video.frames)           # the same bytes
 fixed_video.preds.update(game="G1", camera="tele", span=[0, 9000])
 with L.transaction(by="human:dan", why="camera typo") as t:
-    right_subject = fixed_video.seal(t, alias="video/G1-tele",
+    right_subject = fixed_video.seal(t, name="video/G1-tele",
                                      provenance="import:archive")
 rev = L.at()
 print(right_subject != wrong_subject,
@@ -936,7 +936,7 @@ for item in sorted(opening_clip.trace):
 stable_video = Video(b"G1 stabilised, frames 600-9000")
 stable_video.preds.update(game="G1", camera="wide", span=[600, 9000])
 with L.transaction(by="human:dan", why="stabilised") as t:
-    stable_video.seal(t, deps=[trimmed_video], alias="video/G1")
+    stable_video.seal(t, deps=[trimmed_video], name="video/G1")
 rev = L.at()
 stable_clip = rev.run("clips.clip", video="video/G1", start=0, end=8)
 print(stable_clip.subject != opening_clip.subject, stable_clip.frames)
@@ -976,7 +976,7 @@ print(shifted_value.obj, shifted_value.same_as(hypotenuse_value),
 restamped_video = Video(stable_video.frames)     # the same bytes
 restamped_video.preds.update(game="G1", camera="wide", span=[600, 8990])
 with L.transaction(by="human:dan", why="span off by ten") as t:
-    restamped_video.seal(t, deps=[trimmed_video], alias="video/G1")
+    restamped_video.seal(t, deps=[trimmed_video], name="video/G1")
 rev = L.at()
 print(restamped_video, stable_video)
 # → video/G1 <8 hex>

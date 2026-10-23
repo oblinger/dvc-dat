@@ -16,7 +16,7 @@ def seal(L, v, **kw):
 def test_1_a_ref_made_in_a_body_keeps_the_recorder(coded):
     L = coded
     a = Plain(b"aaa")
-    seal(L, a, alias="model/x")
+    seal(L, a, name="model/x")
     v = L.at().run("ledger_kinds.via_ref", name="model/x")
     assert v.trace["model/x db/alias"] == f"ref:ledger_kinds.Plain:{a.hash}"
     assert v.trace[f"ref:ledger_kinds.Plain:{a.hash}"]
@@ -32,7 +32,7 @@ def test_1_ref_preds_and_ref_rev_reads_are_traced(coded):
     L = coded
     v = Video(b"v")
     v.preds["game"] = "G1"
-    seal(L, v, alias="vid")
+    seal(L, v, name="vid")
     p = L.at().run("ledger_kinds.via_ref_preds", name="vid")
     assert any(k.startswith('q:{"__call__":"preds"') for k in p.trace)
     with L.transaction(by="t") as t:
@@ -121,7 +121,7 @@ def test_8_base_fn_hashes_the_static_closure(coded):
     f = coded.at().load_fn("ledger_kinds.via_ref")
     assert set(f._modules) == {"ledger_kinds.py", "ledger_helper.py"}
     v = Plain(b"x")
-    seal(coded, v, alias="n")
+    seal(coded, v, name="n")
     e = coded.at().run("ledger_kinds.via_ref", name="n")
     assert sorted(coded.at()[e.trace["fn"], "db/modules"]) == ["ledger_helper.py", "ledger_kinds.py"]
 

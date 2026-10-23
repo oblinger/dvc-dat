@@ -34,7 +34,7 @@ on a refusal. Part of the [architecture](../../DAT%20Architecture.md).
 - `remove(s, p, o) -> None`: one remove row: out of the set on a
   `many` predicate, the tombstone on a `one` predicate when `o` is the
   held object.
-- `v.seal(t, *, deps=(), alias=None, provenance=None) -> str`
+- `v.seal(t, *, deps=(), name=None, provenance=None) -> str`
   (`Value.seal`): seal `v` in this
   transaction and return its subject (64 hex). `alias` (else the
   value's pending `name`) names it: its other names are retracted,

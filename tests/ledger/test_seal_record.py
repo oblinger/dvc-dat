@@ -66,14 +66,14 @@ def test_a_seal_in_one_process_saves_in_another_as_in_one(L, tmp_path):
     ''')
     v = GameDat.sealed_at_path(a)
     assert v.sealed and v.subject is None and v.hash == h and dict(v.preds) == {"game": "G1", "take": 2}
-    s = v.seal(L, alias="game/G1")
+    s = v.seal(L, name="game/G1")
     assert Kept().listing() == []                    # saved: the record goes at commit
     b = folder(tmp_path, "b", "one")                 # the same bytes, sealed and saved in this process
     w = GameDat(b)
     w.preds.update(game="G1", take=2)
     w.seal(provenance="run:demo")
     assert w.seal(L) == s
-    assert L.at()[s, "db/sealed-at"] == v.sealed_at
+    assert L.at()[s, "db/sealed-at"] == v.sealed
 
 
 def test_changed_bytes_break_a_reopened_seal_unless_kept(L, tmp_path):
@@ -88,7 +88,7 @@ def test_changed_bytes_break_a_reopened_seal_unless_kept(L, tmp_path):
     with pytest.raises(SealBroken, match="changed"):
         GameDat.sealed_at_path(a).seal(L)
     v = GameDat.sealed_at_path(k)
-    v.seal(L, alias="k/1")
+    v.seal(L, name="k/1")
     assert (Ref(L.at(), "k/1").load().path / "a.txt").read_text() == "kept"
 
 
@@ -101,8 +101,8 @@ def test_a_dep_sealed_before_it_is_saved_binds_by_its_name(L, tmp_path):
     ''')
     with pytest.raises(ValueError, match="saved nowhere"):
         GameDat.sealed_at_path(b).seal(L)
-    GameDat.sealed_at_path(a).seal(L, alias="in/A")
-    s = GameDat.sealed_at_path(b).seal(L, alias="out/B")
+    GameDat.sealed_at_path(a).seal(L, name="in/A")
+    s = GameDat.sealed_at_path(b).seal(L, name="out/B")
     c = folder(tmp_path, "c", "output")
     w = GameDat(c)
     w.seal(deps=[Ref(L.at(), "in/A")])
@@ -135,7 +135,7 @@ def test_purge_drops_records_kept_or_not(tmp_path, kept_folder):
 
 def test_the_load_cache_rechecks_a_dat_folder(L, tmp_path):
     a = folder(tmp_path, "a", "one")
-    GameDat(a).seal(L, alias="g/1")
+    GameDat(a).seal(L, name="g/1")
     first = Ref(L.at(), "g/1").load()
     assert Ref(L.at(), "g/1").load() is first
     first.path.rename(tmp_path / "moved")

@@ -18,7 +18,7 @@ def world(coded):
         v = Video(f"{g} frames".encode())
         v.preds.update(game=g)
         with L.transaction(by="t") as t:
-            v.seal(t, alias=f"video/{g}")
+            v.seal(t, name=f"video/{g}")
     CALLS.clear()
     return L
 

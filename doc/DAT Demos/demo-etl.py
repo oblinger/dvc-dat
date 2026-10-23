@@ -151,7 +151,7 @@ def seal_weather(city: str, seed: int) -> None:
     weather_value = Days(days)
     weather_value.preds["city"] = city
     with L.transaction(by="human:dan", why=f"{city}'s data") as t:
-        weather_value.seal(t, alias=f"weather/{city}")
+        weather_value.seal(t, name=f"weather/{city}")
 
 
 for city, seed in [("Austin", 1), ("Boston", 2), ("Chicago", 3), ("Denver", 4), ("Miami", 5)]:

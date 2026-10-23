@@ -58,7 +58,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
     rev = L.at()
     m = rev.run("ledger_kinds.cut", game="G1")   # memoised  ADAPTED: ledger_kinds.cut for demo_game.identity.train
     assert m.trace and m.rev and m.sealed    # the model itself, with its provenance on it
-    assert rev.run("ledger_kinds.cut", game="G1", memo=False).sealed is False   # run, no seal
+    assert rev.run("ledger_kinds.cut", game="G1", memo=False).sealed is None   # run, no seal
     assert rev.run("ledger_kinds.cut", game="G1", memo="get").subject == m.subject   # or None
 
     f = rev.load_fn("ledger_kinds.cut")           # Fn: resolved at rev
@@ -115,7 +115,7 @@ def test_all_block(L):
         t.add("model/shot", "version", "1.0.0")
     v = Video(b"w")
     with L.transaction(by="setup") as t:
-        v.seal(t, alias="model/shot")
+        v.seal(t, name="model/shot")
     rev = L.at()
     assert ("code/testrepo", "version", "0.2.2") in rev.all()   # list of rows: (subject, predicate, object)
     assert rev.all("code/testrepo") == [("version", "0.2.2"), ("commit", "abc1234")]
@@ -143,10 +143,10 @@ def test_seal_block(L):
 
     with L.transaction(by="human:dan") as t:
         subj: str = v.seal(t, deps=[raw],
-                           alias="game/G1",  # seal, then re-point
+                           name="game/G1",  # seal, then re-point
                            provenance="human:dan")
         t.add(subj, "note", "cut by hand")        # any further row
-    assert (v.sealed, v.subject) == (True, subj)
+    assert (bool(v.sealed), v.subject) == (True, subj)
     with pytest.raises(TypeError):
         v.preds["game"] = "G2"            # TypeError: read-only once sealed
     assert isinstance(v.preds["video"], Ref)      # a Ref now, as loaded (A36)
@@ -196,7 +196,7 @@ def test_new_pred_later_block(L):
         raw.seal(t)
     hand.preds.update(game="G2", version="1.5.4", video=raw)    # wrong game
     with L.transaction(by="t") as t:
-        hand.seal(t, alias="game/G1")
+        hand.seal(t, name="game/G1")
     rev = L.at()
 
     with L.transaction(by="human:dan") as t:        # allowed: gameset
@@ -212,7 +212,7 @@ def test_new_pred_later_block(L):
     video = c.preds["video"]             # a Ref (Q35): allowed as is
     fixed.preds.update(game="G1", version="1.5.4", video=video)
     with L.transaction(by="human:dan") as t:
-        fixed.seal(t, deps=[video], alias="game/G1")
+        fixed.seal(t, deps=[video], name="game/G1")
     now = L.at()
     assert fixed.subject != c.subject and Ref(now, "game/G1").subject == fixed.subject
     assert [r.subject for r in now.refs(kind=Cut, game="G2")] == [c.subject]   # still found by game="G2"
