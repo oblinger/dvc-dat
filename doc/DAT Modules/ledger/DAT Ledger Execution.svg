@@ -115,8 +115,8 @@
     <path d="M860,252 L1088,558"/>
   </g>
   <text x="345" y="612" font-size="12" fill="#37474f">imports</text>
-  <text x="690" y="520" font-size="13" fill="#37474f" font-style="italic">load_fn: a name under a mount</text>
-  <text x="925" y="400" font-size="13" fill="#37474f" font-style="italic">load_fn: a name under a mount</text>
+  <text x="690" y="520" font-size="13" fill="#37474f" font-style="italic">load_fn</text>
+  <text x="1000" y="388" font-size="13" fill="#37474f" font-style="italic">load_fn</text>
 
   <!-- ===== the ledger (right) ===== -->
   <g stroke="#37474f" stroke-width="2">
@@ -163,29 +163,38 @@
   <g stroke="#8d6e63" stroke-width="1.5">
     <rect x="1040" y="300" width="230" height="78" rx="8" fill="#ffffff"/>
   </g>
-  <text x="1052" y="322" font-size="13" fill="#5d4037" font-weight="bold">bump pins 0.3.0 to 9f1c2ab</text>
+  <text x="1052" y="322" font-size="13" fill="#5d4037" font-weight="bold">bump pins v0.3.0 to 9f1c2ab</text>
   <text x="1052" y="342" font-size="13" fill="#5d4037">clean=True: the checkout is</text>
   <text x="1052" y="360" font-size="13" fill="#5d4037">at that commit, nothing edited</text>
   <path d="M1270,330 L1290,250" stroke="#8d6e63" stroke-width="1.5" fill="none"/>
   <path d="M1155,378 L1155,558" stroke="#8d6e63" stroke-width="1.5" fill="none" marker-end="url(#arrow-thin)"/>
+  <path d="M1040,322 L968,346" stroke="#8d6e63" stroke-width="1.5" fill="none" marker-end="url(#arrow-thin)"/>
+  <path d="M1046,378 L1010,420" stroke="#8d6e63" stroke-width="1.5" fill="none" marker-end="url(#arrow-thin)"/>
 
   <!-- ===== values ===== -->
   <g stroke="#37474f" stroke-width="2">
     <rect x="400" y="750" width="240" height="110" rx="10" fill="#e8f5e9"/>
+    <rect x="670" y="750" width="260" height="110" rx="10" fill="#e8f5e9"/>
     <rect x="960" y="750" width="260" height="110" rx="10" fill="#e8f5e9"/>
   </g>
-  <text x="418" y="778" font-size="16" font-weight="bold" fill="#263238">Days · sealed, not saved</text>
-  <text x="418" y="802" font-size="13" fill="#455a64">v.seal(): identity fixed, kept here</text>
-  <text x="418" y="822" font-size="13" fill="#455a64">eval:base · code 0.3.0+9f1c2ab</text>
+  <text x="418" y="778" font-size="16" font-weight="bold" fill="#263238">Value: Days · sealed</text>
+  <text x="418" y="802" font-size="13" fill="#455a64">not saved: v.seal() fixed its identity</text>
+  <text x="418" y="822" font-size="13" fill="#455a64">kept here · eval:base · 0.3.0+9f1c2ab</text>
   <text x="418" y="844" font-size="13" fill="#455a64">v.seal(t) would save it</text>
 
-  <text x="978" y="778" font-size="16" font-weight="bold" fill="#263238">Value.Table · sealed, saved</text>
+  <text x="688" y="778" font-size="16" font-weight="bold" fill="#263238">Value: Dat · sealed, saved</text>
+  <text x="688" y="802" font-size="13" fill="#455a64">clean=False · eval:sandbox</text>
+  <text x="688" y="822" font-size="13" fill="#455a64">code 0.3.0+9f1c2ab, dirty · fn 5d02</text>
+  <text x="688" y="844" font-size="13" fill="#455a64">its folder in the art store, rows at rev 41</text>
+
+  <text x="978" y="778" font-size="16" font-weight="bold" fill="#263238">Value: Table · sealed, saved</text>
   <text x="978" y="802" font-size="13" fill="#455a64">clean=True · eval:sandbox</text>
   <text x="978" y="822" font-size="13" fill="#455a64">code 0.3.0+9f1c2ab · fn a91c</text>
   <text x="978" y="844" font-size="13" fill="#455a64">bytes in the art store, rows at rev 42</text>
 
   <g stroke="#37474f" stroke-width="2" fill="none" marker-end="url(#arrow)">
     <path d="M520,712 L520,748"/>
+    <path d="M800,712 L800,748"/>
     <path d="M1090,712 L1090,748"/>
     <path d="M1222,790 L1288,760"/>
   </g>
