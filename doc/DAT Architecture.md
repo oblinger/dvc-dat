@@ -74,11 +74,11 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 
 - [`DAT Modules/`](DAT%20Modules/): the two module docs above, and [`dat.md`](DAT%20Modules/dat.md).
 - The notebooks in [`DAT Demos/`](DAT%20Demos/):
-  [`ledger-triples.py`](DAT%20Demos/ledger-triples.py) (the quad store
-  alone), [`ledger-values.py`](DAT%20Demos/ledger-values.py) (values,
-  functions, evaluation), [`ledger-dats.py`](DAT%20Demos/ledger-dats.py) 
+  [`ledger-triples.py`](DAT%20Demos/ledger-triples.ipynb) (the quad store
+  alone), [`ledger-values.py`](DAT%20Demos/ledger-values.ipynb) (values,
+  functions, evaluation), [`ledger-dats.py`](DAT%20Demos/ledger-dats.ipynb) 
   (a dat as a value, an ETL chain, releases),
-  [`ledger-just.py`](DAT%20Demos/ledger-just.py) (the human's verbs).
+  [`ledger-just.py`](DAT%20Demos/ledger-just.ipynb) (the human's verbs).
 - The dat half's guides: [Concepts](concepts.md),
   [Spec Format](spec-format.md), [Mounts](mount-commands.md),
   [Command Line](cli.md), [Overview](overview.md).
