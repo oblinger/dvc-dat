@@ -5,6 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
+#       jupytext_version: 1.19.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -73,82 +74,60 @@ sys.path.insert(0, str(Path("demo_game").resolve()))   # Video, PlainVideo
 from demo_game.game import PlainVideo
 
 # %% [markdown]
-# ### Storing a value
+# ### Storing a value, with its name
 
 # %%
 video_value = PlainVideo(b"G1 wide camera, 9000 frames")
 with L.transaction(by="human:dan") as t:
-    video_subject = video_value.seal(t)
+    video_subject = video_value.seal(t, name="video/G1")
+print(video_value)
+# → video/G1
 print(video_subject)
 # → 64 hex: from the content
 
 # %% [markdown]
-# `v.seal(t)` returns the value's subject, a hash derived from its
-# content: a subject nobody typed.
+# `v.seal(t, name=…)` stores the value and names it in one
+# transaction. Its subject is the hash of its content; its name is a
+# `db/alias` row pointing at that subject.
 
 # %% [markdown]
-# ### Getting a reference
+# ### Referring to it: by name or by hash
 
 # %%
 rev = L.at()
-plain_ref = Ref(rev, video_subject)
-print(plain_ref, plain_ref.type)
-# → <8 hex> <class 'demo_game.game.PlainVideo'>
-
-# %% [markdown]
-# `Ref(rev, subject)` points at the value without fetching a byte,
-# and prints as the hash's first eight characters.
-
-# %% [markdown]
-# ### Loading it back
-
-# %%
-loaded_video = rev.load(video_subject)
-print(type(loaded_video).__name__, loaded_video.frames)
+by_name = rev.load("video/G1")
+by_hash = rev.load(video_subject)
+print(type(by_name).__name__, by_name.frames)
 # → PlainVideo b'G1 wide camera, 9000 frames'
-print(loaded_video.subject == video_subject)
+print(by_name.subject == by_hash.subject == video_subject)
 # → True
+video_ref = Ref(rev, video_subject)
+print(video_ref, video_ref.type)
+# → video/G1 <class 'demo_game.game.PlainVideo'>
 
 # %% [markdown]
-# `load` decodes the bytes into the class they were put in as: the
-# same frames, the same hash.
+# `load` takes either and decodes the bytes into the class they were
+# put in as. `Ref(rev, …)` points at the value without fetching a byte.
 
 # %% [markdown]
 # ### Adding an alias
-#
-# An alias is a `db/alias` row naming the subject. `v.seal(t, …,
-                                                           # name="video/G1")` writes it in the same transaction; here it is
-# added later, by hand.
-
-# %%
-with L.transaction(by="human:dan") as t:
-    t.add("video/G1", "db/alias", video_subject)
-rev = L.at()
-aliased_video = rev.load("video/G1")
-print(aliased_video.subject == video_subject)
-# → True
-print(video_value)
-# → video/G1
-
-# %% [markdown]
-# A second alias for the video. Notice it prints as the shorter one.
 
 # %%
 with L.transaction(by="human:dan") as t:
     t.add("raw/G1/wide-camera", "db/alias", video_subject)
 rev = L.at()
 camera_ref = Ref(rev, "raw/G1/wide-camera")
-print(camera_ref)
-# → video/G1: the shortest, as of the head
-print(camera_ref.name)
-# → video/G1: the print name, the same
+print(camera_ref.subject == video_subject)
+# → True
 print(sorted(camera_ref.aliases))
 # → ['raw/G1/wide-camera', 'video/G1']
+print(camera_ref.name)
+# → raw/G1/wide-camera: the alias written latest
 
 # %% [markdown]
-# A value or its `Ref` prints as the shortest alias naming it, else
-# the first eight characters of its hash. `Ref.aliases` lists every
-# alias.
+# A name is an alias. A value has every alias pointing at it
+# (`aliases`), and its name is the one written latest; with no alias
+# it prints as its hash's first eight characters.
 
 # %% [markdown]
 # ### An alias is a row of its own
@@ -159,8 +138,8 @@ print(sorted(camera_ref.aliases))
 # %%
 print(rev["video/G1"])
 # → {'db/alias': '<the video's subject, 64 hex>'}
-print(rev.load("video/G1"))
-# → video/G1: the value itself
+print(rev.load("video/G1").subject == video_subject)
+# → True: load follows the row
 
 # %% [markdown]
 # `rev["video/G1"]` is literal: the alias's own rows, its `db/alias`
@@ -169,22 +148,20 @@ print(rev.load("video/G1"))
 # %% [markdown]
 # ### A new version is a new value
 #
-# A second take of G1's wide camera. `video/G1` names the current
-# version of the video, so the alias re-points.
+# A second take of G1's wide camera, sealed under the name
+# `video/G1`: the name moves to it.
 
 # %%
 retake_video = PlainVideo(b"G1 wide camera, retake, 9100 frames")
-with L.transaction(by="human:dan") as t:
-    retake_subject = retake_video.seal(t)
 with L.transaction(by="human:dan", why="the retake") as t:
-    t.add("video/G1", "db/alias", retake_subject)
+    retake_subject = retake_video.seal(t, name="video/G1")
 rev = L.at()
 print(rev.load("video/G1").frames)
 # → b'G1 wide camera, retake, 9100 frames'
 print(rev.load(video_subject).frames)
-# → b'G1 wide camera, 9000 frames': the old one, by its subject
-print(video_value)
-# → raw/G1/wide-camera: video/G1 moved
+# → b'G1 wide camera, 9000 frames': the old one, by its hash
+print(sorted(Ref(rev, video_subject).aliases))
+# → ['raw/G1/wide-camera']: video/G1 moved
 
 # %% [markdown]
 # A value never changes; an alias moves.
@@ -357,7 +334,7 @@ print(rev.select(("game", "span"), kind=Video))
 
 # %%
 print(wide_video.sealed)
-# → True
+# → <YYYY-MM-DDTHH:MM:SSZ>: the seal's moment
 try:
     wide_video.preds["camera"] = "tele"
 except TypeError as e:
@@ -401,7 +378,7 @@ except Undeclared as e:
 
 # %%
 print(tele_video.sealed)
-# → False: nothing was written
+# → None: nothing was written
 del tele_video.preds["lens"]
 
 # %% [markdown]
@@ -1012,7 +989,7 @@ print(rev.run("geometry.distance", a=(5, 12), memo="get"))
 # → None: never run
 dry_value = rev.run("geometry.distance", a=(6, 8), memo=False)
 print(dry_value.sealed, dry_value.hash == far_value.hash)
-# → False True
+# → None True
 print(L.at().id == rev.id)
 # → True: nothing written
 
@@ -1101,8 +1078,8 @@ except Exists as e:
 #
 # A `Ref` may be any row's object. `add` stores it as
 # `ref:<class>:<hash>:<subject>`, the subject a hint; every pattern
-# read hands it back as a `Ref`, unloaded, printed as its shortest
-# alias, else the hash's first eight characters.
+# read hands it back as a `Ref`, unloaded, printed as its name (its
+# latest alias), else the hash's first eight characters.
 
 # %%
 with L.transaction(by="human:dan") as t:

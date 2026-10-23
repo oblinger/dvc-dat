@@ -5,6 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
+#       jupytext_version: 1.19.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -132,7 +133,7 @@ print(sorted(file_path.name for file_path in work_path.iterdir()))
 # → ["_result_.yaml", "_spec_.yaml", "boxes.json"]
 with L.transaction(by="human:dan") as t:
     hand_dat.seal(t, name="detect/G1", provenance="human:dan")
-print(hand_dat, hand_dat.sealed)     # → detect/G1 True
+print(hand_dat, hand_dat.sealed)     # → detect/G1 <the seal's moment>
 
 # %% [markdown]
 # `build` made the dat in a folder of yours; `v.seal(t)` sealed it.
@@ -209,7 +210,7 @@ print(dat_fn.mode, dat_fn.mount)     # → sandbox demo_game.etl
 # %%
 spec_dat = rev.run("demo_game.etl.dat.dat",
                     spec=detect_spec_record)
-print(spec_dat, spec_dat.sealed)     # → <8 hex> True
+print(spec_dat, spec_dat.sealed)     # → anonymous/Dat <the seal's moment>: no name= given, so it gets one
 print(dict(sorted(spec_dat.preds.items())))
 # → {"bins": "16", "game": "G1", "metrics.count": "40",
 #    "metrics.score": "0.494", "stage": "detect"}
@@ -221,7 +222,7 @@ print(L.at()[spec_dat.subject, "db/keys"])
 # %% [markdown]
 # The spec is the whole question: one key, a JSON object (A38), in
 # the one `db/keys` row, numbers kept native. `path` is not a key
-# (Q36): the eval bound it to a fresh scratch folder, the function
+# (Q36): the run bound it to a fresh scratch folder, the function
 # built the dat there, and the seal moved the folder into the art
 # store by its manifest, as `v.seal(t)` did by hand. With no
 # `path=` on the call the result is named `anonymous/Dat{unique}`;
@@ -328,7 +329,7 @@ with L.transaction(by="human:dan", why="training") as t:
 rev = L.at()
 model_dat = rev.run("demo_game.etl.model.train", game="G1")
 print(model_dat, model_dat.preds["stage"],
-      model_dat.preds["gameset"])    # → <8 hex> model normie
+      model_dat.preds["gameset"])    # → anonymous/Dat_<n> model normie
 for item in sorted(model_dat.dependencies):
     print(item, "->", model_dat.dependencies[item])
 # → cfg/train epochs -> 8
@@ -342,11 +343,11 @@ for item in sorted(model_dat.dependencies):
 # `train` missed; its `fit` evaluated `tracks`, which evaluated
 # `detections` (a hit: sealed above), and each miss sealed its own
 # dat. A stage depends on the one below by a nested `run`, never
-# by an import and never by a `deps=` list: the eval records it.
+# by an import and never by a `deps=` list: the run records it.
 # The model's dependencies hold its own code (`fn`: `model.py` and
-# `dat.py`, since the modules a nested eval loads are that
+# `dat.py`, since the modules a nested run loads are that
 # entry's), the two rows it read by name, and the stage below as a
-# nested eval, held by its result's bytes.
+# nested run, held by its result's bytes.
 
 # %%
 for game in ("G2", "G3"):
@@ -469,10 +470,10 @@ print(len(proof_refs))                         # → 1
 
 # %%
 print(rev.refs(kind=StageDat, stage="model", gameset="normie"))
-# → [<8 hex>, <8 hex>]: G1 and G2
+# → [anonymous/Dat_<n>, anonymous/Dat_<n>]: G1 and G2
 print(rev.select(("game", "metrics.score"), kind=StageDat,
                  stage="model", gameset="pro"))
-# → [("G3", "0.958"), ("G3", "0.983")]: the eval and the hand run
+# → [("G3", "0.958"), ("G3", "0.983")]: the run and the hand run
 
 # %% [markdown]
 # `gameset` is read from the game's own row by `train` and set on
