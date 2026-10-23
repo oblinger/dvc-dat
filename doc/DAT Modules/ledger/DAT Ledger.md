@@ -5,7 +5,7 @@ description: "The ledger half of dvc_dat: quads read as of a revision, values st
 # DAT Ledger
 The ledger is a project's history: every fact a quad `(rev, subject, predicate, object)`, every read a frozen view as of one revision, every value stored by its content and found by its preds.
 
-![DAT Ledger](DAT%20Ledger.svg)
+![DAT Ledger](DAT%20Ledger.svg) 
 
 *The fold* governs what a `Rev` reads, *Sealing and saving* governs how a `Value` gets its identity, and *Evaluation and the trace* governs when calling an `Fn` runs the body and when it hands back a sealed result.
 
@@ -34,7 +34,7 @@ The handle on one ledger: a folder holding `ledger.db` and the art store `art/`,
     `None` is the top; an `int` or a digit string is that revision (`KeyError` outside `0..top`); `"M.m.p"` is the latest revision that set `(db, version, M.m.p)` (`KeyError` when none did); a `bool` or anything else is `TypeError`. ^at
 
 **transaction**`(*, by: str, lock: float | None = None, **preds) -> Transaction`
-    A write set, used only as `with L.transaction(by=...) as t:`. `by` names the writer and is required; `lock=` holds the write lock for the whole body, at most that many seconds. Each extra keyword is a `str` or a JSON document and lands as a row on the transaction's `db/tx/<rev>` subject beside `db/by` and `db/time`. See [Revisions and transactions](#revisions-and-transactions). ^transaction
+    A write set, used only as `with L.transaction(by=...) as t:`. `by` names the writer and is required; `lock=` holds the write lock for the whole body, at most that many seconds. Each extra keyword is a `str` or a JSON document and lands as a row on the transaction's `db/tx/<rev>` subject beside `db/by` and `db/time`. See [Revisions and transactions](#Revisions%20and%20transactions). ^transaction
 
 **close**`() -> None`
     Close the handle's database connections in every thread; a later read or write reopens one. ^close
@@ -42,7 +42,7 @@ The handle on one ledger: a folder holding `ledger.db` and the art store `art/`,
 
 
 ## Rev Interface
-A frozen view of the ledger as of one revision, made by `Ledger.at`, never by hand. Every read is bounded by `id`, so a `Rev` gives the same answer forever. Row reads fold the rows by each predicate's cardinality ([The fold](#the-fold)); `asserted` and `rows` walk history unfolded; subject reads (`refs`, `values`, `value`, `select`) treat the store as a table whose rows are subjects. A stored reference comes back as an unloaded `Ref`. A `Rev` handed to a value function's body also records every read into the function's trace. Ordered and equal by `id` within one ledger.
+A frozen view of the ledger as of one revision, made by `Ledger.at`, never by hand. Every read is bounded by `id`, so a `Rev` gives the same answer forever. Row reads fold the rows by each predicate's cardinality ([The fold](#The%20fold)); `asserted` and `rows` walk history unfolded; subject reads (`refs`, `values`, `value`, `select`) treat the store as a table whose rows are subjects. A stored reference comes back as an unloaded `Ref`. A `Rev` handed to a value function's body also records every read into the function's trace. Ordered and equal by `id` within one ledger.
 
 | Rev | |
 | --- | --- |
@@ -106,10 +106,10 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     `Ref(self, subject).load()`: the value under a subject or an alias, decoded, its provenance restored. ^load
 
 **load_fn**`(name: str) -> Fn`
-    The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Functions and the sandbox](#functions-and-the-sandbox). ^load-fn
+    The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Functions and the sandbox](#Functions%20and%20the%20sandbox). ^load-fn
 
 **run**`(name: str, /, *, memo=True, clean=False, **keys) -> Value | None`
-    The API form of `just run NAME KEY=VALUE`: `load_fn(name)(memo=memo, clean=clean, **keys)`; a name that is not a `str` is `TypeError`. See [Evaluation and the trace](#evaluation-and-the-trace). ^run
+    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` refuses with `NotClean` unless the function's checkout is clean and at the commit this revision names for its repo; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Evaluation and the trace](#Evaluation%20and%20the%20trace). ^run
 
 
 
@@ -182,7 +182,7 @@ One stored row as `rows()` returns it, a named tuple. `str(row)` is one aligned 
     The row's predicate. ^predicate
 
 **object**`: str | dict | list | Ref`
-    The row's object, decoded from its tagged text ([Storage](#storage)). ^object
+    The row's object, decoded from its tagged text ([Storage](#Storage)). ^object
 
 **added**`: bool`
     `True` for an add, `False` for a remove. ^added
@@ -255,7 +255,7 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
     The revision that saved the value; set at commit or by `load`. ^value-rev
 
 **trace**`: Mapping[str, str]`
-    Item name to version or hash: what producing the value read. Empty until saved or evaluated. See [Evaluation and the trace](#evaluation-and-the-trace). ^trace
+    Item name to version or hash: what producing the value read. Empty until saved or evaluated. See [Evaluation and the trace](#Evaluation%20and%20the%20trace). ^trace
 
 **sealed**`: bool`
     The identity is fixed: by `seal()` (saved nowhere yet, `subject` `None`) or by a save. ^sealed
@@ -273,7 +273,7 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
     The object from its bytes; `NotImplementedError` unless a subclass defines it. A `decode` that also accepts `name=` is passed the alias the value is loaded by, `None` when loaded by its subject. ^decode
 
 **seal**`(to=None, *, keep=False, deps=(), alias=None, provenance=None, by=None) -> str`
-    `v.seal()` fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by` (default the provenance, else `seal`). `alias=` writes `(alias, db/alias, subject)` beside it. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. See [Sealing and saving](#sealing-and-saving). ^seal
+    `v.seal()` fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by` (default the provenance, else `seal`). `alias=` writes `(alias, db/alias, subject)` beside it. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. See [Sealing and saving](#Sealing%20and%20saving). ^seal
 
 **matches**`(rev: Rev) -> bool`
     Whether every trace item holds at `rev`: the memo's hit test. Consults the ledger only; never runs anything. ^matches
@@ -390,7 +390,7 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
     The environment the function resolved in: repos and commits, platform. ^env
 
 **subject**`: str`
-    `db/fn/<name>/<16 hex>`, hashing the code that runs ([Evaluation and the trace](#evaluation-and-the-trace)). ^fn-subject
+    `db/fn/<name>/<16 hex>`, hashing the code that runs ([Evaluation and the trace](#Evaluation%20and%20the%20trace)). ^fn-subject
 
 **__call__**`(*, memo=True, clean=False, path=None, kwargs=None, **keys) -> Value | None`
     `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. The control options are exactly `memo`, `clean`, `path` and `kwargs`, never keys and never hashed. Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. A base-mode run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--

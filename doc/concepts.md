@@ -61,7 +61,7 @@ byte-identical; `do(dat)` with none re-runs it in place while it is open.
 ## The seal
 
 A run saves nothing by itself. Every `dat.save()` writes `_result_.yaml` and
-stamps `dat.sha256`, the hash of the dat's content (see [The run](#the-run)
+stamps `dat.sha256`, the hash of the dat's content (see [The run](#The%20run) 
 for what is not content); the save that counts **seals** the dat, after
 which a second `save()` and any later run of it are refused. Inside the dat's own run a save is a checkpoint — a crash leaves
 something readable — and asks for the seal, which comes when the run returns,
