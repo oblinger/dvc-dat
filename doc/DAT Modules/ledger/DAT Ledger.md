@@ -474,7 +474,10 @@ The package's other exports: two decorators, two helpers, and the exceptions. Ev
 
 # Ledger Semantics
 
-## Revisions and transactions
+## Triple semantics
+The rows themselves: how triples are written, as revisions by transactions, and how they are read, by the fold.
+
+### Revisions and transactions
 Every fact is a quad `(rev, subject, predicate, object)`; rows are only ever appended, never updated or deleted, and `remove` appends a remove row.
 
 | rev | subject | predicate | object |
@@ -500,7 +503,7 @@ One `with` block is one revision: its rows land together on exit, in body order,
 
 
 
-## The fold
+### The fold
 A read turns the rows at or before its revision into what they hold, by each predicate's cardinality. Under `one`, the default, the latest add wins, so `add` is assignment; a remove of the held object leaves nothing held. Under `many`, the held objects are the set added and not since removed, each at its earliest add. Cardinality is itself a row, `(db/pred/officials, db/cardinality, many)`, read as of the same revision; every `db/` predicate and the clocks `version` and `commit` are fixed at `one`. Every read folds except `rows` and `asserted`, which walk history.
 
 
