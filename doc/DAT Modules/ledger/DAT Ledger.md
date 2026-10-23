@@ -549,9 +549,11 @@ A sandboxed function lives under a mount: rows naming a dotted prefix, its repo 
 ## Value provenance (the memo)
 A run is something that happens; its result is a value; the trace on that value is its provenance: every input the run read, kept as `db/trace/<item>` rows on its subject, so what a result was computed from can always be read back. The memo is what provenance buys: asked again with the same function and keys, `run` hands back the value whose provenance still holds instead of running.
 
+A trace is a list of questions and the answers they got. Each key is one read the run made, written as a canonical question; each value is the answer as a single comparable string. A trace *holds* at a revision when every question gets the same answer there: `matches(rev)` re-asks them all, `diff(prev)` lists the questions whose answers differ, and `same_as` is equal answers. Nothing in a trace describes the value; it is the evidence the value was computed from, in a form the memo re-checks without running.
+
 `run` looks up every entry at the top whose `db/fn` (the dotted name) and `db/keys` (the bound keys, defaults included, as canonical JSON) match, newest seal first, and hands back the first whose trace holds at the revision asked. A miss runs the body with a recording `Rev`, then seals the result in a transaction `by="eval:<name>"` under a subject hashing the function, keys, trace, preds and `db/value` text. `memo=False` runs without sealing; `memo="get"` looks up and never runs.
 
-| trace item | value | holds when |
+| question (the item) | answer (its value) | holds when |
 | --- | --- | --- |
 | `fn` | `db/fn/<name>/<hash>` | the name resolves to the same subject |
 | `code/<repo>` | `<version>+<commit8>` | the environment is at that commit |
