@@ -576,13 +576,12 @@ A hand seal's trace is declared: the `deps` given, plus `code/<repo>` for every 
 
 
 ## Versioning
-A version is a row, `(<subject>, version, M.m.p)`, written by `bump` and read at any revision like any other row. Three kinds of subject carry one:
+The ledger has versions for many things: the ledger itself is versioned, the code is versioned, and schemas, APIs, model families and configs are versioned. All of them are asserted within the ledger: the current value of every version is a row, `(<subject>, version, M.m.p)`, so a revision holds every version in force at once. By convention a version number lives in the source tree (a repo's `pyproject.toml`), the environment reads it with the commit when the code is loaded, and `bump` is what asserts it into the ledger.
 
-- **The ledger**, `db`: its own version. `L.at("1.4.0")` is the latest revision that set it.
-- **The code**, `code/<repo>`: a `version` row and the `commit` it is pinned to, read from the checkout. Every value's trace names the code version it was computed under ([Execution](#Execution%20(Rev.run))).
-- **Anything else that changes shape**: a schema (`schema/metrics`), an API (`api/jobs`), a model family, a config. Each is a subject with a `version` row, bumped when it changes and readable at any revision.
+The ledger version is the main one. It determines the revision we are on, `L.at("1.4.0")` being the latest revision that set `(db, version, 1.4.0)`, and that revision in turn implies a version for everything else: the code's, the schema's, the API's, every `version` row held there. So the version of a value is the ledger version at the revision it was sealed, and one number names the whole state it was computed in; what makes that true is bumping `db` whenever any version it stands for moves. Two pieces have their own machinery:
 
-**The version of a value is the ledger version at its revision.** A value is sealed at one revision, and `L.at(value.rev)` holds every `version` row in force then: the code's, the schema's, the API's, all of them. So one number names the whole state a value was computed in, and what makes it so is the rule that `db` is bumped whenever any version it stands for moves. The trace carries the code version on its own because that is the one the memo checks.
+- **Code**, `code/<repo>`: a `version` row and the `commit` it is pinned to, read from the checkout. Every value's trace names the code version it was computed under ([Execution](#Execution%20(Rev.run))), because that is the version the memo checks on its own.
+- **Anything else**: a subject with a `version` row, `schema/metrics` or `api/jobs`, bumped when it changes and readable at any revision.
 
 A sealed value never changes: an `add` or `remove` on one of its own rows is `Exists` at commit, and any other row on its subject is annotation. A new version of a value is a new seal and a new subject; the re-pointable name is an alias, `(video/G1, db/alias, <subject>)`, which moves while the values it pointed at stay, so a read at an older revision still finds the older value. An alias names a subject holding a `db/value`, and a subject holding its own `db/value` cannot be an alias.
 
