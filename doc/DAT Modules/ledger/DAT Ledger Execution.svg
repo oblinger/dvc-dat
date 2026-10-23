@@ -1,0 +1,193 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#37474f"/>
+    </marker>
+    <marker id="arrow-thin" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#78909c"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1600" height="900" fill="#ffffff"/>
+
+  <!-- ===== source checkout (left) ===== -->
+  <g stroke="#37474f" stroke-width="2">
+    <rect x="40" y="100" width="300" height="640" rx="10" fill="#eceff1"/>
+  </g>
+  <text x="60" y="130" font-size="19" font-weight="bold" fill="#263238">source checkout · demo-game</text>
+  <text x="60" y="156" font-size="14" fill="#455a64">pyproject.toml: version = 0.3.0</text>
+  <text x="60" y="178" font-size="14" fill="#455a64">git HEAD 9f1c2ab · stages.py modified</text>
+  <!-- tree lines -->
+  <g stroke="#90a4ae" stroke-width="2" fill="none">
+    <path d="M80,205 V690"/>
+    <path d="M80,220 H100"/>
+    <path d="M120,228 V500"/>
+    <path d="M120,260 H140"/>
+    <path d="M120,300 H140"/>
+    <path d="M160,308 V420"/>
+    <path d="M160,340 H180"/>
+    <path d="M160,380 H180"/>
+    <path d="M160,420 H180"/>
+    <path d="M120,460 H140"/>
+    <path d="M120,500 H140"/>
+    <path d="M80,560 H100"/>
+    <path d="M120,568 V640"/>
+    <path d="M120,600 H140"/>
+    <path d="M120,640 H140"/>
+    <path d="M80,690 H100"/>
+  </g>
+  <g font-family="Menlo, Consolas, monospace" font-size="14" fill="#263238">
+    <text x="108" y="225">demo_game/</text>
+    <text x="148" y="265">__init__.py</text>
+    <text x="148" y="305">etl/</text>
+    <text x="188" y="345">stages.py</text>
+    <text x="188" y="385">report.py</text>
+    <text x="148" y="465">values.py</text>
+    <text x="108" y="565">tests/</text>
+    <text x="108" y="695">pyproject.toml</text>
+  </g>
+  <text x="268" y="345" font-size="13" fill="#c62828">edited</text>
+  <!-- unlabeled entries -->
+  <g fill="#cfd8dc">
+    <rect x="188" y="415" width="70" height="7" rx="3"/>
+    <rect x="148" y="495" width="90" height="7" rx="3"/>
+    <rect x="148" y="595" width="110" height="7" rx="3"/>
+    <rect x="148" y="635" width="80" height="7" rx="3"/>
+  </g>
+
+  <!-- ===== the two module files ===== -->
+  <!-- stages.py, lower left -->
+  <g stroke="#37474f" stroke-width="2">
+    <path d="M400,330 H700 L720,350 V470 H400 Z" fill="#fffde7"/>
+    <path d="M700,330 V350 H720" fill="#fff59d"/>
+  </g>
+  <text x="418" y="358" font-size="16" font-weight="bold" fill="#263238">etl/stages.py</text>
+  <g font-family="Menlo, Consolas, monospace" font-size="14" fill="#263238">
+    <text x="418" y="392">from .values import Days</text>
+    <text x="418" y="420">@ledger_fn</text>
+    <text x="418" y="445">def city_comfort(rev, *, ...)</text>
+  </g>
+  <!-- report.py, upper right -->
+  <g stroke="#37474f" stroke-width="2">
+    <path d="M700,110 H1000 L1020,130 V250 H700 Z" fill="#fffde7"/>
+    <path d="M1000,110 V130 H1020" fill="#fff59d"/>
+  </g>
+  <text x="718" y="138" font-size="16" font-weight="bold" fill="#263238">etl/report.py</text>
+  <g font-family="Menlo, Consolas, monospace" font-size="14" fill="#263238">
+    <text x="718" y="172">from .stages import city_comfort</text>
+    <text x="718" y="200">@ledger_fn</text>
+    <text x="718" y="225">def comfort_report(rev, *, ...)</text>
+  </g>
+  <!-- tree -> import lines -->
+  <g stroke="#78909c" stroke-width="1.5" fill="none" marker-end="url(#arrow-thin)">
+    <path d="M262,340 L698,168"/>
+    <path d="M230,460 L398,388"/>
+  </g>
+  <text x="470" y="245" font-size="13" fill="#78909c" font-style="italic">only what the run imports</text>
+
+  <!-- ===== execution environments (bottom row) ===== -->
+  <g stroke="#37474f" stroke-width="2">
+    <rect x="400" y="560" width="240" height="150" rx="10" fill="#f3e5f5"/>
+    <rect x="670" y="560" width="260" height="150" rx="10" fill="#e3f2fd"/>
+    <rect x="960" y="560" width="260" height="150" rx="10" fill="#e3f2fd"/>
+  </g>
+  <text x="418" y="590" font-size="17" font-weight="bold" fill="#263238">global environment</text>
+  <text x="418" y="614" font-size="14" fill="#455a64">this process, base mode</text>
+  <text x="418" y="636" font-size="14" fill="#455a64">imports whatever it imports</text>
+  <text x="418" y="658" font-size="14" fill="#455a64">fn = static import closure</text>
+  <text x="418" y="690" font-size="14" fill="#455a64">runs only at a clean commit</text>
+
+  <text x="688" y="590" font-size="17" font-weight="bold" fill="#263238">sandbox · city_comfort</text>
+  <text x="688" y="614" font-size="14" fill="#455a64">fresh process, mounted roots only</text>
+  <text x="688" y="636" font-size="14" fill="#455a64">loaded: stages.py, values.py</text>
+  <text x="688" y="658" font-size="14" fill="#455a64">fn = bytes of every module loaded</text>
+  <text x="688" y="690" font-size="14" fill="#c62828">clean=False · HEAD 9f1c2ab, dirty</text>
+
+  <text x="978" y="590" font-size="17" font-weight="bold" fill="#263238">sandbox · comfort_report</text>
+  <text x="978" y="614" font-size="14" fill="#455a64">fresh process, mounted roots only</text>
+  <text x="978" y="636" font-size="14" fill="#455a64">loaded: report.py, stages.py, values.py</text>
+  <text x="978" y="658" font-size="14" fill="#455a64">fn = bytes of every module loaded</text>
+  <text x="978" y="690" font-size="14" fill="#2e7d32">clean=True · HEAD 9f1c2ab, clean</text>
+
+  <!-- tree -> global env; files -> sandboxes -->
+  <g stroke="#37474f" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M340,620 L398,620"/>
+    <path d="M560,472 L798,558"/>
+    <path d="M860,252 L1088,558"/>
+  </g>
+  <text x="345" y="612" font-size="12" fill="#37474f">imports</text>
+  <text x="690" y="520" font-size="13" fill="#37474f" font-style="italic">load_fn: a name under a mount</text>
+  <text x="925" y="400" font-size="13" fill="#37474f" font-style="italic">load_fn: a name under a mount</text>
+
+  <!-- ===== the ledger (right) ===== -->
+  <g stroke="#37474f" stroke-width="2">
+    <rect x="1290" y="100" width="280" height="760" rx="10" fill="#fff8e1"/>
+  </g>
+  <text x="1308" y="130" font-size="19" font-weight="bold" fill="#263238">ledger</text>
+  <g fill="#d7ccc8">
+    <rect x="1308" y="152" width="230" height="7" rx="3"/>
+    <rect x="1308" y="176" width="180" height="7" rx="3"/>
+    <rect x="1308" y="200" width="210" height="7" rx="3"/>
+  </g>
+  <g font-family="Menlo, Consolas, monospace" font-size="12.5" fill="#263238">
+    <text x="1308" y="240">code/demo-game version 0.3.0</text>
+    <text x="1308" y="262">code/demo-game commit  9f1c2ab</text>
+  </g>
+  <g fill="#d7ccc8">
+    <rect x="1308" y="290" width="200" height="7" rx="3"/>
+    <rect x="1308" y="314" width="240" height="7" rx="3"/>
+    <rect x="1308" y="338" width="160" height="7" rx="3"/>
+    <rect x="1308" y="362" width="220" height="7" rx="3"/>
+  </g>
+  <text x="1420" y="420" font-size="26" fill="#8d6e63">⋯</text>
+  <g fill="#d7ccc8">
+    <rect x="1308" y="470" width="190" height="7" rx="3"/>
+    <rect x="1308" y="494" width="230" height="7" rx="3"/>
+    <rect x="1308" y="518" width="170" height="7" rx="3"/>
+    <rect x="1308" y="542" width="210" height="7" rx="3"/>
+    <rect x="1308" y="566" width="150" height="7" rx="3"/>
+    <rect x="1308" y="590" width="220" height="7" rx="3"/>
+    <rect x="1308" y="614" width="200" height="7" rx="3"/>
+    <rect x="1308" y="638" width="180" height="7" rx="3"/>
+  </g>
+  <text x="1308" y="690" font-size="13" font-weight="bold" fill="#5d4037">rev 42, by eval:comfort_report</text>
+  <g font-family="Menlo, Consolas, monospace" font-size="11.5" fill="#263238">
+    <text x="1308" y="714">7e2f… db/value ref:Value.Table:b4…</text>
+    <text x="1308" y="736">7e2f… db/provenance eval:sandbox</text>
+    <text x="1308" y="758">7e2f… db/trace/fn db/fn/…/a91c</text>
+    <text x="1308" y="780">7e2f… db/trace/code/demo-game</text>
+    <text x="1308" y="800">           0.3.0+9f1c2ab</text>
+    <text x="1308" y="822">7e2f… cityset cityset/representative</text>
+  </g>
+
+  <!-- callout: the version row pins a commit; clean=True checks against it -->
+  <g stroke="#8d6e63" stroke-width="1.5">
+    <rect x="1040" y="300" width="230" height="78" rx="8" fill="#ffffff"/>
+  </g>
+  <text x="1052" y="322" font-size="13" fill="#5d4037" font-weight="bold">bump pins 0.3.0 to 9f1c2ab</text>
+  <text x="1052" y="342" font-size="13" fill="#5d4037">clean=True: the checkout is</text>
+  <text x="1052" y="360" font-size="13" fill="#5d4037">at that commit, nothing edited</text>
+  <path d="M1270,330 L1290,250" stroke="#8d6e63" stroke-width="1.5" fill="none"/>
+  <path d="M1155,378 L1155,558" stroke="#8d6e63" stroke-width="1.5" fill="none" marker-end="url(#arrow-thin)"/>
+
+  <!-- ===== values ===== -->
+  <g stroke="#37474f" stroke-width="2">
+    <rect x="400" y="750" width="240" height="110" rx="10" fill="#e8f5e9"/>
+    <rect x="960" y="750" width="260" height="110" rx="10" fill="#e8f5e9"/>
+  </g>
+  <text x="418" y="778" font-size="16" font-weight="bold" fill="#263238">Days · sealed, not saved</text>
+  <text x="418" y="802" font-size="13" fill="#455a64">v.seal(): identity fixed, kept here</text>
+  <text x="418" y="822" font-size="13" fill="#455a64">eval:base · code 0.3.0+9f1c2ab</text>
+  <text x="418" y="844" font-size="13" fill="#455a64">v.seal(t) would save it</text>
+
+  <text x="978" y="778" font-size="16" font-weight="bold" fill="#263238">Value.Table · sealed, saved</text>
+  <text x="978" y="802" font-size="13" fill="#455a64">clean=True · eval:sandbox</text>
+  <text x="978" y="822" font-size="13" fill="#455a64">code 0.3.0+9f1c2ab · fn a91c</text>
+  <text x="978" y="844" font-size="13" fill="#455a64">bytes in the art store, rows at rev 42</text>
+
+  <g stroke="#37474f" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M520,712 L520,748"/>
+    <path d="M1090,712 L1090,748"/>
+    <path d="M1222,790 L1288,760"/>
+  </g>
+  <text x="1228" y="780" font-size="12" fill="#37474f">seal</text>
+</svg>
