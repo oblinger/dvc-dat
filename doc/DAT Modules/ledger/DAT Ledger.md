@@ -10,6 +10,22 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 **Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [module functions](#dvc_dat.ledger%20Interface) 
 **Topics:** [Ledger Semantics](#Ledger%20Semantics) · [Execution Semantics](#Execution%20Semantics) · [Value Provenance](#Value%20Provenance) 
 
+**Methods:**
+
+| Class | Methods |
+| --- | --- |
+| Ledger | [path](#^path), [at](#^at), [transaction](#^transaction), [close](#^close) |
+| Rev | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [__getitem__](#^--getitem--), [get](#^get), [all](#^all), [__contains__](#^--contains--), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [load_fn](#^load-fn), [run](#^run) |
+| Ref | [rev](#^rev), [name](#^name), [subject](#^subject), [hash](#^hash), [type](#^type), [preds](#^preds), [aliases](#^aliases), [sealed_at](#^sealed-at), [load](#^ref-load) |
+| Row | [rev](#^row-rev), [subject](#^row-subject), [predicate](#^predicate), [object](#^object), [added](#^added) |
+| Transaction | [tx](#^transaction-tx), [base](#^base), [rev](#^transaction-rev), [add](#^add), [remove](#^remove), [__setitem__](#^--setitem--), [__delitem__](#^--delitem--) |
+| Value | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [trace](#^trace), [sealed](#^sealed), [hash](#^value-hash), [encode](#^encode), [decode](#^decode), [seal](#^seal), [matches](#^matches), [diff](#^diff), [same_as](#^same-as), [Trace](#^value-trace) |
+| Value.Blob | [obj](#^obj) |
+| Value.Table | [table](#^table-table) |
+| Dat | [path](#^dat-path), [sealed_at_path](#^sealed-at-path), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind), [decode](#^dat-decode) |
+| Fn | [name](#^fn-name), [module](#^module), [sha](#^sha), [mode](#^mode), [mount](#^mount), [signature](#^signature), [env](#^env), [subject](#^fn-subject), [__call__](#^--call--) |
+| dvc_dat.ledger | [ledger_fn](#^ledger-fn), [ledger_class](#^ledger-class), [bump](#^bump), [attr](#^attr), [LedgerError](#^ledgererror), [Multiple](#^multiple), [NotEvaluated](#^notevaluated), [NotClean](#^notclean), [UnmountedImport](#^unmountedimport), [UntracedRead](#^untracedread), [ConfinedWrite](#^confinedwrite), [ConfinedNetwork](#^confinednetwork), [LockTimeout](#^locktimeout), [Unindexed](#^unindexed), [Exists](#^exists), [Undeclared](#^undeclared), [AliasLoop](#^aliasloop), [SealBroken](#^sealbroken) |
+
 This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The per-file pages beside it hold the internals and every refusal in full: [ledger](ledger.md), [rev](rev.md), [txn](txn.md), [value](value.md), [fn](fn.md), [trace](trace.md), [env](env.md), [sandbox](sandbox.md), [worker](worker.md), [store](store.md), [fold](fold.md), [codec](codec.md), [helpers](helpers.md), [errors](errors.md). The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md).
 
 
