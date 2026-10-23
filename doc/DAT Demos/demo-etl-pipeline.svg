@@ -1,0 +1,198 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 565" width="900" height="565" font-family="Virgil, 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive">
+<rect width="900" height="565" fill="#ffffff"/>
+<text x="79.0" y="34" font-size="16" fill="#3b6ea5" text-anchor="middle" font-weight="bold" >weather</text>
+<text x="284.5" y="34" font-size="16" fill="#7a5aa5" text-anchor="middle" font-weight="bold" >daily_comfort(city)</text>
+<text x="522.0" y="34" font-size="16" fill="#4f8a5b" text-anchor="middle" font-weight="bold" >city_comfort(city, range)</text>
+<text x="770.0" y="34" font-size="16" fill="#333" text-anchor="middle" font-weight="bold" >comfort_report</text>
+<text x="284.5" y="54" font-size="12" fill="#666" text-anchor="middle" font-weight="normal" >the weather plus a comfort column</text>
+<text x="522.0" y="54" font-size="12" fill="#666" text-anchor="middle" font-weight="normal" >its days binned by comfort level</text>
+<path d="M22,114 L137,113 L136,167 L21,166 Z" fill="#e8f0f8" stroke="none"/>
+<path d="M22.8,112.8 Q79.2,112.2 137.1,111.1" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M137.0,112.4 Q136.7,139.2 138.7,169.0" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M135.8,168.9 Q79.0,168.5 21.1,167.3" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M21.2,168.8 Q19.7,140.0 19.2,111.8" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="79" y="136" font-size="14" fill="#3b6ea5" text-anchor="middle" font-weight="normal" >weather/</text>
+<text x="79" y="156" font-size="16" fill="#3b6ea5" text-anchor="middle" font-weight="bold" >Austin</text>
+<path d="M141.3,139.6 Q154.0,139.5 166.5,138.8" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M156.1,144.7 L166.0,140.0 L156.1,135.3" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M174,98 L396,97 L395,183 L173,182 Z" fill="#f0eaf7" stroke="none"/>
+<path d="M171.8,96.3 Q284.4,94.6 397.0,95.0" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M396.1,95.4 Q397.9,141.4 395.9,184.7" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M397.1,184.8 Q282.9,183.8 171.4,183.2" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M171.0,182.9 Q172.2,140.6 172.5,95.8" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="182" y="114" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >date</text>
+<text x="242" y="114" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >°F</text>
+<text x="280" y="114" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >hum</text>
+<text x="330" y="114" font-size="12" fill="#7a5aa5" text-anchor="start" font-weight="bold" >comfort</text>
+<path d="M324,100 L392,100 L392,180 L324,180 Z" fill="#e2d6f0" stroke="none"/>
+<text x="330" y="114" font-size="12" fill="#7a5aa5" text-anchor="start" font-weight="bold" >comfort</text>
+<path d="M178.3,120.7 Q283.2,121.3 390.0,120.9" stroke="#7a5aa5" stroke-width="1.1" fill="none" stroke-linecap="round" />
+<text x="182" y="138" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >05-05</text>
+<text x="242" y="138" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >69</text>
+<text x="280" y="138" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >68</text>
+<text x="344" y="138" font-size="14" fill="#7a5aa5" text-anchor="start" font-weight="bold" >7</text>
+<text x="182" y="157" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >05-06</text>
+<text x="242" y="157" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >69</text>
+<text x="280" y="157" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >48</text>
+<text x="344" y="157" font-size="14" fill="#7a5aa5" text-anchor="start" font-weight="bold" >9</text>
+<text x="182" y="176" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >…  365 days</text>
+<path d="M400.9,139.6 Q412.2,141.1 426.1,141.0" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M416.1,144.7 L426.0,140.0 L416.1,135.3" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M434,98.0 L611,97.0 L610,183.0 L433,182.0 Z" fill="#e6f2e8" stroke="none"/>
+<path d="M430.4,95.1 Q520.4,96.1 611.2,94.9" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M612.6,95.5 Q611.4,139.4 612.0,183.2" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M610.2,184.6 Q520.2,183.3 432.1,183.3" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M432.8,183.8 Q433.3,138.8 432.0,96.8" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M445.9,166.0 L446.0,161.2 L457.6,160.8 L457.4,166.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M461.7,166.0 L461.7,160.1 L472.3,159.7 L472.1,166.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M476.5,166.0 L477.3,152.4 L487.6,152.2 L488.4,166.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M492.9,166.0 L492.7,148.1 L503.2,148.1 L503.5,166.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M507.6,166.0 L507.9,143.8 L519.6,144.6 L519.1,166.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M523.2,166.0 L524.1,144.9 L534.3,144.5 L534.4,166.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M539.0,166.0 L539.0,145.8 L550.0,145.6 L549.7,166.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M554.0,166.0 L554.4,152.5 L564.9,152.8 L565.2,166.0" fill="#4f8a5b" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M570.1,166.0 L570.0,155.9 L581.2,155.8 L581.5,166.0" fill="#4f8a5b" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M585.4,166.0 L585.3,163.0 L596.1,162.7 L596.7,166.0" fill="#4f8a5b" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M440.9,166.3 Q520.6,167.0 604.6,166.7" stroke="#4f8a5b" stroke-width="1.2" fill="none" stroke-linecap="round" />
+<text x="446" y="180.0" font-size="11" fill="#666" text-anchor="start" font-weight="normal" >0</text>
+<text x="586.5" y="180.0" font-size="11" fill="#666" text-anchor="start" font-weight="normal" >9</text>
+<text x="522" y="180.0" font-size="11" fill="#666" text-anchor="middle" font-weight="normal" >comfort level</text>
+<path d="M22,249 L137,248 L136,302 L21,301 Z" fill="#e8f0f8" stroke="none"/>
+<path d="M19.4,247.7 Q78.3,247.0 138.8,247.2" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M137.4,245.9 Q138.5,275.6 137.1,302.7" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M136.7,303.3 Q79.2,303.2 20.4,303.0" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M20.0,303.1 Q20.9,275.7 20.4,246.0" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="79" y="271" font-size="14" fill="#3b6ea5" text-anchor="middle" font-weight="normal" >weather/</text>
+<text x="79" y="291" font-size="16" fill="#3b6ea5" text-anchor="middle" font-weight="bold" >Boston</text>
+<path d="M141.0,274.4 Q154.7,274.3 166.6,274.3" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M156.1,279.7 L166.0,275.0 L156.1,270.3" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M174,233 L396,232 L395,318 L173,317 Z" fill="#f0eaf7" stroke="none"/>
+<path d="M172.7,230.9 Q286.4,231.0 397.4,231.6" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M396.2,230.4 Q397.4,273.7 397.6,318.5" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M396.7,319.4 Q283.2,317.7 172.5,319.4" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M171.9,318.1 Q172.0,274.9 172.9,230.3" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="182" y="249" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >date</text>
+<text x="242" y="249" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >°F</text>
+<text x="280" y="249" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >hum</text>
+<text x="330" y="249" font-size="12" fill="#7a5aa5" text-anchor="start" font-weight="bold" >comfort</text>
+<path d="M324,235 L392,235 L392,315 L324,315 Z" fill="#e2d6f0" stroke="none"/>
+<text x="330" y="249" font-size="12" fill="#7a5aa5" text-anchor="start" font-weight="bold" >comfort</text>
+<path d="M176.8,254.9 Q285.9,256.3 391.8,256.1" stroke="#7a5aa5" stroke-width="1.1" fill="none" stroke-linecap="round" />
+<text x="182" y="273" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >05-05</text>
+<text x="242" y="273" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >60</text>
+<text x="280" y="273" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >47</text>
+<text x="344" y="273" font-size="14" fill="#7a5aa5" text-anchor="start" font-weight="bold" >6</text>
+<text x="182" y="292" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >05-06</text>
+<text x="242" y="292" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >61</text>
+<text x="280" y="292" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >23</text>
+<text x="344" y="292" font-size="14" fill="#7a5aa5" text-anchor="start" font-weight="bold" >5</text>
+<text x="182" y="311" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >…  365 days</text>
+<path d="M400.3,276.1 Q413.3,274.3 425.3,275.2" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M416.1,279.7 L426.0,275.0 L416.1,270.3" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M434,233.0 L611,232.0 L610,318.0 L433,317.0 Z" fill="#e6f2e8" stroke="none"/>
+<path d="M429.7,231.8 Q521.4,232.4 612.0,231.9" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M612.0,229.9 Q611.2,276.2 610.8,319.0" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M611.4,318.6 Q521.3,317.9 432.8,317.8" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M433.0,319.5 Q433.0,273.9 433.0,230.5" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M445.8,301.0 L445.9,260.9 L457.1,260.2 L456.9,301.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M461.2,301.0 L461.0,288.6 L472.9,288.9 L473.0,301.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M476.7,301.0 L476.7,287.0 L487.6,286.8 L488.5,301.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M493.0,301.0 L492.9,292.5 L504.0,292.9 L503.6,301.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M508.3,301.0 L507.5,293.0 L518.9,293.0 L519.2,301.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M523.2,301.0 L523.0,291.4 L534.1,290.9 L534.3,301.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M538.8,301.0 L539.3,290.4 L549.7,290.0 L549.8,301.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M554.6,301.0 L554.4,289.1 L565.1,289.1 L566.0,301.0" fill="#4f8a5b" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M570.0,301.0 L569.7,292.5 L581.6,291.9 L580.6,301.0" fill="#4f8a5b" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M585.1,301.0 L585.0,294.7 L596.0,294.6 L596.2,301.0" fill="#4f8a5b" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M440.6,300.8 Q522.2,302.2 603.8,301.1" stroke="#4f8a5b" stroke-width="1.2" fill="none" stroke-linecap="round" />
+<text x="446" y="315.0" font-size="11" fill="#666" text-anchor="start" font-weight="normal" >0</text>
+<text x="586.5" y="315.0" font-size="11" fill="#666" text-anchor="start" font-weight="normal" >9</text>
+<text x="522" y="315.0" font-size="11" fill="#666" text-anchor="middle" font-weight="normal" >comfort level</text>
+<path d="M22,384 L137,383 L136,437 L21,436 Z" fill="#e8f0f8" stroke="none"/>
+<path d="M19.0,383.1 Q78.3,380.7 137.1,382.0" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M137.5,381.4 Q139.1,409.1 137.8,437.9" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M138.7,436.9 Q81.0,439.1 20.5,438.9" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M19.7,439.0 Q20.3,408.5 20.8,382.9" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="79" y="406" font-size="14" fill="#3b6ea5" text-anchor="middle" font-weight="normal" >weather/</text>
+<text x="79" y="426" font-size="16" fill="#3b6ea5" text-anchor="middle" font-weight="bold" >Chicago</text>
+<path d="M141.1,409.2 Q155.4,409.2 166.1,410.4" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M156.1,414.7 L166.0,410.0 L156.1,405.3" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M174,368 L396,367 L395,453 L173,452 Z" fill="#f0eaf7" stroke="none"/>
+<path d="M174.4,365.9 Q286.0,366.4 397.1,364.9" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M397.3,365.5 Q396.2,411.3 396.1,453.4" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M396.5,454.1 Q285.4,452.8 172.2,453.7" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M171.5,453.9 Q172.3,408.5 173.1,366.3" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="182" y="384" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >date</text>
+<text x="242" y="384" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >°F</text>
+<text x="280" y="384" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >hum</text>
+<text x="330" y="384" font-size="12" fill="#7a5aa5" text-anchor="start" font-weight="bold" >comfort</text>
+<path d="M324,370 L392,370 L392,450 L324,450 Z" fill="#e2d6f0" stroke="none"/>
+<text x="330" y="384" font-size="12" fill="#7a5aa5" text-anchor="start" font-weight="bold" >comfort</text>
+<path d="M177.4,389.4 Q285.7,389.9 392.1,390.5" stroke="#7a5aa5" stroke-width="1.1" fill="none" stroke-linecap="round" />
+<text x="182" y="408" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >05-05</text>
+<text x="242" y="408" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >62</text>
+<text x="280" y="408" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >36</text>
+<text x="344" y="408" font-size="14" fill="#7a5aa5" text-anchor="start" font-weight="bold" >7</text>
+<text x="182" y="427" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >05-06</text>
+<text x="242" y="427" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >49</text>
+<text x="280" y="427" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >26</text>
+<text x="344" y="427" font-size="14" fill="#7a5aa5" text-anchor="start" font-weight="bold" >3</text>
+<text x="182" y="446" font-size="12" fill="#666" text-anchor="start" font-weight="normal" >…  365 days</text>
+<path d="M401.0,410.4 Q412.9,408.6 425.8,409.4" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M416.1,414.7 L426.0,410.0 L416.1,405.3" stroke="#7a5aa5" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M434,368.0 L611,367.0 L610,453.0 L433,452.0 Z" fill="#e6f2e8" stroke="none"/>
+<path d="M431.6,365.6 Q523.6,365.2 611.8,366.4" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M612.0,365.3 Q612.9,410.7 613.1,453.5" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M613.9,453.5 Q521.8,453.2 433.1,454.0" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M432.4,455.1 Q431.2,409.8 431.2,365.7" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M445.7,436.0 L446.6,385.2 L456.5,385.1 L456.9,436.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M462.0,436.0 L462.0,429.1 L473.1,429.3 L472.3,436.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M476.6,436.0 L477.5,425.5 L487.4,425.4 L487.9,436.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M492.3,436.0 L492.3,427.0 L502.9,427.1 L503.3,436.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M508.5,436.0 L507.5,426.5 L518.6,425.7 L519.4,436.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M523.9,436.0 L523.4,426.1 L534.5,426.5 L535.0,436.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M538.6,436.0 L538.8,424.6 L549.4,424.0 L550.4,436.0" fill="#9bbfa2" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M554.8,436.0 L553.9,426.1 L565.0,427.1 L565.2,436.0" fill="#4f8a5b" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M570.3,436.0 L570.5,426.8 L580.7,427.5 L581.1,436.0" fill="#4f8a5b" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M585.2,436.0 L585.8,431.1 L596.2,430.7 L596.8,436.0" fill="#4f8a5b" stroke="#4f8a5b" stroke-width="1.1"/>
+<path d="M441.1,434.9 Q523.2,436.4 603.4,435.9" stroke="#4f8a5b" stroke-width="1.2" fill="none" stroke-linecap="round" />
+<text x="446" y="450.0" font-size="11" fill="#666" text-anchor="start" font-weight="normal" >0</text>
+<text x="586.5" y="450.0" font-size="11" fill="#666" text-anchor="start" font-weight="normal" >9</text>
+<text x="522" y="450.0" font-size="11" fill="#666" text-anchor="middle" font-weight="normal" >comfort level</text>
+<text x="522.0" y="482" font-size="12" fill="#666" text-anchor="middle" font-weight="normal" >range: 2026-01-01 up to 2027-01-01</text>
+<path d="M692,80 L849,79 L848,147 L691,146 Z" fill="#fff" stroke="none"/>
+<path d="M691.2,77.8 Q772.3,77.7 850.0,79.0" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M850.8,78.7 Q850.9,113.7 850.3,147.6" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M848.3,147.3 Q769.2,148.8 690.6,147.4" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M689.6,149.2 Q688.6,113.2 690.9,79.2" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="770" y="103" font-size="14" fill="#c8743a" text-anchor="middle" font-weight="normal" >cityset/</text>
+<text x="770" y="121" font-size="15" fill="#c8743a" text-anchor="middle" font-weight="bold" >representative</text>
+<text x="770" y="140" font-size="12" fill="#8a5a33" text-anchor="middle" font-weight="normal" >contains rows</text>
+<path d="M769.0,152.0 Q769.3,181.8 770.5,213.9" stroke="#c8743a" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-dasharray="6 5"/>
+<path d="M765.3,204.1 L770.0,214.0 L774.7,204.1" stroke="#c8743a" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M662,222 L879,221 L878,409 L661,408 Z" fill="#f5f5f2" stroke="none"/>
+<path d="M659.4,220.6 Q769.2,220.4 880.8,220.4" stroke="#333" stroke-width="2.2" fill="none" stroke-linecap="round" />
+<path d="M880.2,219.7 Q881.0,314.4 880.6,409.3" stroke="#333" stroke-width="2.2" fill="none" stroke-linecap="round" />
+<path d="M879.9,410.2 Q768.7,409.0 659.6,409.8" stroke="#333" stroke-width="2.2" fill="none" stroke-linecap="round" />
+<path d="M660.7,410.4 Q660.0,314.2 661.2,219.0" stroke="#333" stroke-width="2.2" fill="none" stroke-linecap="round" />
+<text x="770.0" y="248" font-size="16" fill="#333" text-anchor="middle" font-weight="bold" >the report</text>
+<path d="M672.8,261.0 Q769.9,261.0 866.9,259.5" stroke="#333" stroke-width="1.2" fill="none" stroke-linecap="round" />
+<text x="676" y="290" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >comfortable:</text>
+<text x="676" y="316" font-size="16" fill="#4f8a5b" text-anchor="start" font-weight="bold" >  213/1095 days</text>
+<text x="676" y="342" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >top:</text>
+<text x="676" y="368" font-size="16" fill="#4f8a5b" text-anchor="start" font-weight="bold" >  Austin, Boston</text>
+<text x="770.0" y="398" font-size="12" fill="#666" text-anchor="middle" font-weight="normal" >(days at level 7–9)</text>
+<path d="M617.1,140.2 Q633.9,209.1 655.0,279.7" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M646.9,271.6 L654.0,280.0 L655.9,269.2" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M615.4,275.7 Q636.1,297.3 655.1,319.1" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M644.0,315.4 L654.0,320.0 L651.2,309.4" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M615.3,409.7 Q635.3,385.4 653.1,359.3" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M651.7,370.8 L654.0,360.0 L644.2,365.1" stroke="#4f8a5b" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M22,507 L419,506 L418,550 L21,549 Z" fill="#fafafa" stroke="none"/>
+<path d="M18.3,503.8 Q219.8,505.5 419.6,505.4" stroke="#999" stroke-width="1.3" fill="none" stroke-linecap="round" />
+<path d="M420.7,505.1 Q419.4,527.1 419.0,550.0" stroke="#999" stroke-width="1.3" fill="none" stroke-linecap="round" />
+<path d="M418.6,550.2 Q219.9,551.4 20.5,550.8" stroke="#999" stroke-width="1.3" fill="none" stroke-linecap="round" />
+<path d="M19.5,551.2 Q19.4,529.4 19.7,504.8" stroke="#999" stroke-width="1.3" fill="none" stroke-linecap="round" />
+<text x="34" y="525" font-size="14" fill="#333" text-anchor="start" font-weight="normal" >comfort(temp, humidity): 0 miserable … 9 ideal</text>
+<text x="34" y="543" font-size="14" fill="#666" text-anchor="start" font-weight="normal" >best near 72 °F and 45 % humidity</text>
+</svg>

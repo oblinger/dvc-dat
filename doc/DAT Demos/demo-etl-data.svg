@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 490" width="900" height="490" font-family="Virgil, 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive">
+<rect width="900" height="490" fill="#ffffff"/>
+<text x="450" y="34" font-size="19" fill="#333" text-anchor="middle" font-weight="normal" >each city's weather: a sealed value, found by its alias</text>
+<text x="165.0" y="68" font-size="18" fill="#3b6ea5" text-anchor="middle" font-weight="bold" >weather/Austin</text>
+<path d="M42,80 L289,79 L288,245 L41,244 Z" fill="#e8f0f8" stroke="none"/>
+<path d="M38.3,78.1 Q163.6,78.5 289.7,76.9" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M289.0,77.0 Q288.6,161.8 289.8,246.8" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M289.6,246.2 Q163.4,246.4 39.8,247.1" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M39.1,245.1 Q41.1,161.4 39.5,78.8" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="54" y="104" font-size="15" fill="#666" text-anchor="start" font-weight="normal" >date</text>
+<text x="180" y="104" font-size="15" fill="#666" text-anchor="start" font-weight="normal" >°F</text>
+<text x="240" y="104" font-size="15" fill="#666" text-anchor="start" font-weight="normal" >hum %</text>
+<path d="M48.3,113.7 Q164.0,114.2 282.1,113.0" stroke="#3b6ea5" stroke-width="1.2" fill="none" stroke-linecap="round" />
+<text x="54" y="140" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >2026-01-01</text>
+<text x="180" y="140" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >44</text>
+<text x="240" y="140" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >28</text>
+<text x="54" y="166" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >2026-01-02</text>
+<text x="180" y="166" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >46</text>
+<text x="240" y="166" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >83</text>
+<text x="54" y="192" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >2026-01-03</text>
+<text x="180" y="192" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >54</text>
+<text x="240" y="192" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >80</text>
+<text x="54" y="216" font-size="16" fill="#666" text-anchor="start" font-weight="normal" >…  365 days</text>
+<text x="450.0" y="68" font-size="18" fill="#3b6ea5" text-anchor="middle" font-weight="bold" >weather/Boston</text>
+<path d="M327,80 L574,79 L573,245 L326,244 Z" fill="#e8f0f8" stroke="none"/>
+<path d="M323.1,77.6 Q448.2,78.5 575.2,77.9" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M574.4,78.2 Q575.9,162.6 575.1,246.9" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M575.0,245.8 Q449.8,247.4 325.6,245.2" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M325.6,246.2 Q323.6,162.5 325.9,77.6" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="339" y="104" font-size="15" fill="#666" text-anchor="start" font-weight="normal" >date</text>
+<text x="465" y="104" font-size="15" fill="#666" text-anchor="start" font-weight="normal" >°F</text>
+<text x="525" y="104" font-size="15" fill="#666" text-anchor="start" font-weight="normal" >hum %</text>
+<path d="M333.2,113.9 Q450.6,114.3 567.8,115.1" stroke="#3b6ea5" stroke-width="1.2" fill="none" stroke-linecap="round" />
+<text x="339" y="140" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >2026-01-01</text>
+<text x="465" y="140" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >40</text>
+<text x="525" y="140" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >27</text>
+<text x="339" y="166" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >2026-01-02</text>
+<text x="465" y="166" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >26</text>
+<text x="525" y="166" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >66</text>
+<text x="339" y="192" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >2026-01-03</text>
+<text x="465" y="192" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >38</text>
+<text x="525" y="192" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >59</text>
+<text x="339" y="216" font-size="16" fill="#666" text-anchor="start" font-weight="normal" >…  365 days</text>
+<text x="735.0" y="68" font-size="18" fill="#3b6ea5" text-anchor="middle" font-weight="bold" >weather/Chicago</text>
+<path d="M612,80 L859,79 L858,245 L611,244 Z" fill="#e8f0f8" stroke="none"/>
+<path d="M610.4,78.4 Q735.4,76.7 861.2,78.8" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M858.9,77.9 Q859.7,162.5 859.2,245.1" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M857.6,245.7 Q734.9,244.9 610.9,245.0" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M610.8,246.9 Q610.1,163.2 609.5,77.8" stroke="#3b6ea5" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="624" y="104" font-size="15" fill="#666" text-anchor="start" font-weight="normal" >date</text>
+<text x="750" y="104" font-size="15" fill="#666" text-anchor="start" font-weight="normal" >°F</text>
+<text x="810" y="104" font-size="15" fill="#666" text-anchor="start" font-weight="normal" >hum %</text>
+<path d="M619.1,113.2 Q734.6,115.2 851.2,113.4" stroke="#3b6ea5" stroke-width="1.2" fill="none" stroke-linecap="round" />
+<text x="624" y="140" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >2026-01-01</text>
+<text x="750" y="140" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >26</text>
+<text x="810" y="140" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >89</text>
+<text x="624" y="166" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >2026-01-02</text>
+<text x="750" y="166" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >25</text>
+<text x="810" y="166" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >80</text>
+<text x="624" y="192" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >2026-01-03</text>
+<text x="750" y="192" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >33</text>
+<text x="810" y="192" font-size="16" fill="#333" text-anchor="start" font-weight="normal" >28</text>
+<text x="624" y="216" font-size="16" fill="#666" text-anchor="start" font-weight="normal" >…  365 days</text>
+<text x="620" y="450" font-size="14" fill="#777" text-anchor="start" font-weight="normal" font-style="italic">(Denver, Miami: sealed the same way)</text>
+<text x="450.0" y="333" font-size="18" fill="#c8743a" text-anchor="middle" font-weight="bold" >cityset/representative</text>
+<ellipse cx="450.0" cy="405.0" rx="150.0" ry="60.0" fill="#fbeee2" stroke="none"/>
+<path d="M598.9,405.0 L598.5,414.2 L590.8,423.4 L583.2,432.4 L572.8,440.7 L556.1,447.8 L538.6,452.1 L518.8,459.5 L496.8,463.2 L473.4,463.9 L450.0,465.5 L426.8,462.6 L404.0,460.8 L382.2,456.9 L363.0,452.4 L345.1,447.0 L330.2,441.1 L315.9,431.6 L308.3,423.4 L302.4,414.2 L298.6,405.0 L302.0,395.6 L308.9,387.0 L316.9,378.2 L327.6,370.5 L345.3,361.3 L361.8,357.6 L381.8,353.2 L403.6,346.1 L426.3,345.0 L450.0,345.5 L473.3,344.7 L496.4,346.9 L517.8,352.5 L538.9,354.9 L557.1,361.7 L572.4,369.2 L582.7,377.7 L592.1,387.0 L596.3,395.8 L599.0,405.0 Z" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+<path d="M324,389 L399,388 L398,420 L323,419 Z" fill="#fff" stroke="none"/>
+<path d="M325.0,388.1 Q361.8,388.3 399.7,386.3" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M400.3,388.0 Q399.1,403.1 400.8,421.0" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M401.0,422.0 Q362.2,419.8 322.7,421.6" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M321.6,421.7 Q321.0,404.9 323.1,386.8" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="361" y="410" font-size="16" fill="#333" text-anchor="middle" font-weight="normal" >Austin</text>
+<path d="M414,389 L489,388 L488,420 L413,419 Z" fill="#fff" stroke="none"/>
+<path d="M410.8,386.1 Q452.1,387.7 489.2,388.0" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M491.2,387.4 Q488.9,405.0 489.6,421.1" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M488.9,421.1 Q448.8,422.4 413.0,420.8" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M411.4,420.5 Q413.0,403.1 411.4,387.2" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="451" y="410" font-size="16" fill="#333" text-anchor="middle" font-weight="normal" >Boston</text>
+<path d="M504,389 L579,388 L578,420 L503,419 Z" fill="#fff" stroke="none"/>
+<path d="M502.0,386.6 Q540.3,385.9 579.9,387.2" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M580.0,387.1 Q579.8,405.3 580.1,419.8" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M580.5,420.2 Q539.9,419.5 501.9,421.5" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<path d="M502.1,421.7 Q501.5,404.1 501.1,387.1" stroke="#c8743a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+<text x="541" y="410" font-size="16" fill="#333" text-anchor="middle" font-weight="normal" >Chicago</text>
+<text x="450.0" y="451" font-size="14" fill="#8a5a33" text-anchor="middle" font-weight="normal" >contains  ×3</text>
+<path d="M361.7,385.0 Q262.2,317.8 165.1,252.6" stroke="#c8743a" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-dasharray="6 5"/>
+<path d="M175.9,253.7 L165.0,252.0 L170.6,261.5" stroke="#c8743a" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M451.3,385.0 Q451.7,318.3 450.0,252.5" stroke="#c8743a" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-dasharray="6 5"/>
+<path d="M454.8,261.9 L450.0,252.0 L445.4,262.0" stroke="#c8743a" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M540.9,386.1 Q637.9,318.6 735.5,252.9" stroke="#c8743a" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-dasharray="6 5"/>
+<path d="M729.5,261.5 L735.0,252.0 L724.1,253.7" stroke="#c8743a" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="620" y="409" font-size="14" fill="#8a5a33" text-anchor="start" font-weight="normal" >rows on its own subject;</text>
+<text x="620" y="429" font-size="14" fill="#8a5a33" text-anchor="start" font-weight="normal" >each name finds weather/&lt;name&gt;</text>
+</svg>
