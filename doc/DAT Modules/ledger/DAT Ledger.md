@@ -1,7 +1,7 @@
 ---
 description: "The ledger half of dvc_dat: quads read as of a revision, values stored by content, value functions evaluated with a trace. Source: `dvc_dat/ledger/`."
 ---
-:>> [DAT Architecture](../../DAT%20Architecture.md) → DAT Ledger
+:>> [DAT](../../DAT.md) → [ledger](ha://ledger) → [DAT Modules Ledger](ha://p/DAT%20Modules%20Ledger) 
 # DAT Ledger
 The ledger is a project's history: every fact a quad `(rev, subject, predicate, object)`, every read a frozen view as of one revision, every value stored by its content and found by its preds.
 
