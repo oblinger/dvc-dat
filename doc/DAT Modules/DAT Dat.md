@@ -267,7 +267,7 @@ A namespace of dotted names and a runner of dats, bound to the `DatManager` whos
     From `dvc_dat.do`; see [Do Interface](#Do%20Interface). ^do
 
 **__version__**`: str`
-    The package version, `"2.18.0"` at this checkout. ^--version--
+    The package version, `"2.21.0"` at this checkout. ^--version--
 
 
 
@@ -361,6 +361,8 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 | `verify` | Re-hash every load | `false` |
 | `manager` | The `DatManager` subclass to build, dotted | `DatManager` |
 | `run` | The command `just run` hands its arguments to | none |
+| `ledger` | The ledger: a folder, or a Postgres DSN; read by `Ledger()` | none |
+| `mounts` | Prefix-to-folder mounts the ledger asserts as rows; read by `Ledger()` | none |
 
 `DAT_FOLDERS` replaces `dat_folders` with one folder (the value is not split) and `DAT_ART_FOLDER` replaces `art_folder`. `run` is read by the `run` recipe of `dvc_dat.just` only; see [Command Line](../cli.md). A `manager:` subclass may accept more keys by listing them in its `CONFIG_KEYS`.
 
