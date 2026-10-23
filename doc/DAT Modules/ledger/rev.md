@@ -54,8 +54,7 @@ trace (see [trace](trace.md)). Part of the
 - `run(name, /, *, memo=True, clean=False, path=None, kwargs=None,
   **keys) -> Value | None`: the API form of `just run NAME KEY=VALUE`;
   `load_fn(name)(...)` with the same control options; a non-`str` name
-  `TypeError`. `eval` is its deprecated alias (`DeprecationWarning`),
-  removed at the next major.
+  `TypeError`.
 
 `Ref(rev, name)`: one value at one moment, frozen, unpicklable.
 

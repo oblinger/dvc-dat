@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import importlib
 import json
-import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from .codec import canonical, encode_plain, is_hash, parse_ref, ref_text, show, strip_hint, tag
@@ -587,10 +586,6 @@ class Rev:
         with unguarded():                          # in a sandboxed body: the lookup and seal are the ledger's
             return self.load_fn(name)(memo=memo, clean=clean, **keys)
 
-    def eval(self, name: str, /, *, memo: Any = True, clean: bool = False, **keys: Any) -> Optional[Value]:
-        """Deprecated: ``run``."""
-        warnings.warn("Rev.eval is renamed Rev.run; eval goes at the next major", DeprecationWarning, stacklevel=2)
-        return self.run(name, memo=memo, clean=clean, **keys)
 
 
 def describe(s: Any, kind: Any, fn: Any, where: Optional[Dict[str, Any]], preds: Dict[str, Any]) -> str:

@@ -450,7 +450,7 @@ def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: s
 
     ledger = plain.ledger
     if value.sealed and value.subject is None:
-        raise TypeError(f"{fn.name} returned a {type(value).__name__} sealed by v.seal(); eval seals its own "
+        raise TypeError(f"{fn.name} returned a {type(value).__name__} sealed by v.seal(); run seals its own "
                         "result, so return it unsealed")
     vtext = ref_text(dotted(type(value)), value.hash)
     try:

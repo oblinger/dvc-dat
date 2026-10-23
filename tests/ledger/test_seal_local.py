@@ -165,5 +165,5 @@ def test_sealed_at_is_frozen(L):
 
 
 def test_eval_refuses_a_result_sealed_early(coded):
-    with pytest.raises(TypeError, match="eval seals its own"):
+    with pytest.raises(TypeError, match="run seals its own"):
         coded.at().run("ledger_kinds.sealed_early", game="G1")
