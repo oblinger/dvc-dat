@@ -13,10 +13,10 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Methods | |
 | --- | --- |
 | Ledger | [path](#^path), [at](#^at), [transaction](#^transaction), [close](#^close) |
-| Rev | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [[]](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [load_fn](#^load-fn), [run](#^run) |
+| Rev | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [load_fn](#^load-fn), [run](#^run) |
 | Ref | [rev](#^rev), [subject](#^subject), [name](#^name), [aliases](#^aliases), [hash](#^hash), [type](#^type), [preds](#^preds), [sealed_at](#^sealed-at), [load](#^ref-load) |
 | Row | [rev](#^row-rev), [subject](#^row-subject), [predicate](#^predicate), [object](#^object), [added](#^added) |
-| Transaction | [tx](#^transaction-tx), [base](#^base), [rev](#^transaction-rev), [add](#^add), ~~[[]=](#^--setitem--), [remove](#^remove), [del []]~~(#^--delitem--) |
+| Transaction | [tx](#^transaction-tx), [base](#^base), [rev](#^transaction-rev), [add](#^add), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--) |
 | Value | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [sealed](#^sealed), [hash](#^value-hash), [dependencies](#^dependencies), [Dependencies](#^value-dependencies), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
 | Value.Blob | [obj](#^obj) |
 | Value.Table | [table](#^table-table) |
@@ -24,7 +24,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Fn | [name](#^fn-name), [module](#^module), [sha](#^sha), [subject](#^fn-subject), [mode](#^mode), [mount](#^mount), [env](#^env), [signature](#^signature), [()](#^--call--) |
 
 
-This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The per-file pages beside it hold the internals and every refusal in full: [ledger](ledger.md), [rev](rev.md), [txn](txn.md), [value](value.md), [fn](fn.md), [trace](trace.md), [env](env.md), [sandbox](sandbox.md), [worker](worker.md), [store](store.md), [fold](fold.md), [codec](codec.md), [helpers](helpers.md), [errors](errors.md). The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md).
+This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The per-file pages beside it hold the internals and every refusal in full: [ledger](ledger.md), [rev](rev.md), [txn](txn.md), [value](value.md), [fn](fn.md), [trace](trace.md), [env](env.md), [sandbox](sandbox.md), [worker](worker.md), [store](store.md), [fold](fold.md), [codec](codec.md), [helpers](helpers.md), [errors](errors.md). The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md). The four notebooks run it end to end: [ledger-triples](../../DAT%20Demos/ledger-triples.py), [ledger-values](../../DAT%20Demos/ledger-values.py), [ledger-dats](../../DAT%20Demos/ledger-dats.py), [ledger-just](../../DAT%20Demos/ledger-just.py).
 
 
 

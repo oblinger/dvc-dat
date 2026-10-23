@@ -80,4 +80,4 @@ with a `py:percent` script (jupytext) and executed with its outputs kept; `just 
 - The ledger's four notebooks, `doc/DAT Demos/ledger-*.py` (run by `tests/ledger/test_notebooks.py`):
   [`ledger-triples`](doc/DAT%20Demos/ledger-triples.py), [`ledger-values`](doc/DAT%20Demos/ledger-values.py),
   [`ledger-dats`](doc/DAT%20Demos/ledger-dats.py), [`ledger-just`](doc/DAT%20Demos/ledger-just.py).
-  See [The ledger](doc/ledger.md).
+  See [The ledger](doc/DAT%20Modules/ledger/DAT%20Ledger.md).
