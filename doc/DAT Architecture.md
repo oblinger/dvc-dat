@@ -43,7 +43,7 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 - **A dat streams.** Its files are its parts, hashed in 1 MiB blocks and
   hardlinked into the art store (a streamed copy across filesystems), so
   a GB-scale folder seals and saves in memory bounded by its manifest.
-- **An ETL pipeline is a set of value functions.** Each stage evaluates
+- **An ETL pipeline is a set of value functions.** Each stage runs
   the stage below it and returns a dat; a change upstream re-derives
   only the stages whose dependencies moved.
 - **The just layer is the human's verbs.** Each recipe is one ledger
@@ -60,8 +60,8 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 
 ## Designed, not yet built
 
-- **Sandbox stubs.** No idle retirement of workers; a nested eval
-  under another mount runs in the same worker; a base-mode eval nested
+- **Sandbox stubs.** No idle retirement of workers; a nested run
+  under another mount runs in the same worker; an unsandboxed run nested
   inside a worker is unsupported; repo files read under a mount are
   allowed, not recorded; no old commit is ever checked out.
 - **The mirror**: one durable shelf per cloud region beside the local

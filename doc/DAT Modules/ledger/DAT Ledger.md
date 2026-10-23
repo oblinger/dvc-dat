@@ -369,7 +369,7 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
 | [module](#^module) | The source file |
 | [sha](#^sha) | The sha256 of the source file |
 | [subject](#^fn-subject) | The db/fn subject naming this code |
-| [mode](#^mode) | base or sandbox |
+| [mode](#^mode) | unsandboxed or sandbox |
 | [mount](#^mount) | The mounted prefix, in sandbox mode |
 | [env](#^env) | The environment it resolved in |
 | [signature](#^signature) | The keys it takes |
@@ -400,7 +400,7 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
     The keys the function takes, without the leading `Rev` and without `path`. ^signature
 
 **__call__**`(*, memo=True, clean=False, path=None, kwargs=None, **keys) -> Value | None`
-    `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. The control options are exactly `memo`, `clean`, `path` and `kwargs`, never keys and never hashed. Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. A base-mode run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
+    `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. The control options are exactly `memo`, `clean`, `path` and `kwargs`, never keys and never hashed. Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. An unsandboxed run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
 
 
 
