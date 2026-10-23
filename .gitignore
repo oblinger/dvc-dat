@@ -17,3 +17,14 @@ __pycache__
 # the test world's artifact store and index (2.14)
 /tests/art/
 .vscode/
+
+# Anchor (DAS repo-anchor shape, 2026-10-19): the Track folder is a grout worktree, never history
+
+/doc/*Track/
+
+/doc/.obsidian/
+
+/.claude/settings.local.json
+# grout (HA F471)
+.obsidian/
+doc/*Track/
