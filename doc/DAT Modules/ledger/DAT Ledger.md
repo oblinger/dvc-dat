@@ -114,18 +114,18 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 ## Ref Interface
 A reference to one value at one moment, named without fetching a byte: the subject and the revision, nothing loaded until `load`. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is the value's name (the alias naming it written latest), else the hash's first 8 hex. Made from a recording `Rev`, it records its reads into the trace like the `Rev` would.
 
-| Ref | |
-| --- | --- |
-| [Ref](#^ref) | Name a value at a revision |
-| [rev](#^rev) | The revision the reference was made at |
-| [name](#^name) | The name it was made by |
-| [subject](#^subject) | The subject, alias resolved |
-| [hash](#^hash) | The sha256 of the value's bytes |
-| [type](#^type) | The class that decodes it |
-| [preds](#^preds) | The subject's user rows |
-| [aliases](#^aliases) | Every alias naming the subject |
-| [sealed_at](#^sealed-at) | The revision that sealed it |
-| [load](#^ref-load) | Fetch, decode and restore the value |
+| Ref                      |                                        |
+| ------------------------ | -------------------------------------- |
+| [Ref](#^ref)             | Name a value at a revision             |
+| [rev](#^rev)             | The revision the reference was made at |
+| [name](#^name)           | The string the reference was made with |
+| [subject](#^subject)     | The subject, alias resolved            |
+| [hash](#^hash)           | The sha256 of the value's bytes        |
+| [type](#^type)           | The class that decodes it              |
+| [preds](#^preds)         | The subject's user rows                |
+| [aliases](#^aliases)     | Every alias naming the subject         |
+| [sealed_at](#^sealed-at) | The revision that sealed it            |
+| [load](#^ref-load)       | Fetch, decode and restore the value    |
 
 **Ref**`(rev: Rev, name: str)`
     A reference to whatever `name` (a subject or an alias) names at `rev`. `rev` not a `Rev` or `name` not a non-empty `str` is `TypeError`. ^ref
@@ -134,7 +134,7 @@ A reference to one value at one moment, named without fetching a byte: the subje
     The revision the reference was made at. ^rev
 
 **name**`: str`
-    The name it was made by: an alias or a subject. ^name
+    The string this reference was made with, kept as given: an alias such as `video/G1`, or a subject. A name resolves to at most one value at a revision; a value may have several names (`aliases`), and a `Ref` from `refs` has its subject as its name. What a `Ref` prints is not this but the value's display name (its latest alias, else a hash prefix). ^name
 
 **subject**`: str | None`
     The subject after the alias chain. For a stored hint-less reference, the latest entry holding those bytes as of `rev`. ^subject
