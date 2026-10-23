@@ -104,7 +104,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     `Ref(self, subject).load()`: the value under a subject or an alias, decoded, its provenance restored. ^load
 
 **load_fn**`(name: str) -> Fn`
-    The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Execution](#Execution). ^load-fn
+    The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Execution (Rev.run)](#Execution%20(Rev.run)). ^load-fn
 
 **run**`(name: str, /, *, memo=True, clean=False, **keys) -> Value | None`
     Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit this revision's version number is bound to, its `code/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Provenance and the memo](#Provenance%20and%20the%20memo). ^run
@@ -528,7 +528,7 @@ A hand seal's trace is declared: the `deps` given, plus `code/<repo>` for every 
 
 
 
-## Execution
+## Execution (Rev.run)
 Where a value function runs, what the run is allowed to see, and how its result becomes a value in the ledger.
 
 ![DAT Ledger Execution](DAT%20Ledger%20Execution.svg) 
@@ -586,7 +586,7 @@ The trace is a value's provenance: every input its run read, kept as `db/trace/<
 | `salt` | the mount's `db/salt` | the mount has that salt |
 | `q:{...}` | the sorted refs it answered | the query answers the same |
 
-The hit test is the table and nothing else: an entry holds while every item holds. A value input is named by its bytes, so identical inputs are the same input. A correction to a row a function read makes its result stale, and the next ask re-derives it; a changed byte in a module a sandboxed run loaded does the same through the `fn` item, whatever commit it names ([Execution](#Execution)). `matches` and `diff` consult the memo and never run anything.
+The hit test is the table and nothing else: an entry holds while every item holds. A value input is named by its bytes, so identical inputs are the same input. A correction to a row a function read makes its result stale, and the next ask re-derives it; a changed byte in a module a sandboxed run loaded does the same through the `fn` item, whatever commit it names ([Execution (Rev.run)](#Execution%20(Rev.run))). `matches` and `diff` consult the memo and never run anything.
 
 
 
