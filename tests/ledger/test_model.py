@@ -1,7 +1,7 @@
 """The reference model. Hypothesis writes random histories of add / remove / cardinality
 flips; every row read at every revision is checked against ``model.Model``: ``all`` at
 every arity, ``[]``/``get`` (a ``many`` predicate refused by its declaration, Q26), ``in``,
-``asserted``, ``rows`` and the where clause of ``refs``."""
+``rows`` (by pattern, unfolded) and the where clause of ``refs``."""
 
 import tempfile
 from pathlib import Path
@@ -65,7 +65,7 @@ def check_rev(L, model, R):
             for o in OBJS:
                 assert ((s, p, o) in rev) == (o in want)
                 assert [r.id for r in rev.all(s, p, o)] == model.pattern(R, (s, p, o))
-                assert [r.id for r in rev.asserted(s, p, o)] == model.asserted(R, s, p, o)
+                assert list(dict.fromkeys(r.rev.id for r in rev.rows(s, p, o) if r.added)) == model.added_at(R, s, p, o)
                 held = model.pattern(R, (s, p, o))
                 assert outcome(lambda: rev[s, p, o].id) == (("ok", held[0]) if held else ("none",))
     for p in PREDS:

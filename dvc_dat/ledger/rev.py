@@ -2,8 +2,8 @@
 
 Every read lives on ``Rev``. The row reads (``[]``, ``get``, ``all``, ``in``)
 fold the rows at or before the revision by each predicate's cardinality as of
-that revision, at every arity (Q19); ``asserted`` and ``rows`` are the two
-reads that walk history unfolded. The subject reads (``refs``, ``values``,
+that revision, at every arity (Q19); ``rows`` takes the same pattern and walks
+history unfolded, removes included. The subject reads (``refs``, ``values``,
 ``value``, ``select``, ``load``, ``run``) treat the store as a table whose
 rows are subjects. No pattern read decodes a ``ref:`` object: it comes back a
 ``Ref``, unloaded (Q35). Inside a value function the ``Rev`` handed to the body
@@ -347,7 +347,7 @@ class Rev:
         else:
             self._record_call("getitem", k, None, value if found else None)
         if not found:
-            what = "no rows" if len(k) == 1 else "nothing held" if len(k) == 2 else "not held (asserted gives when)"
+            what = "no rows" if len(k) == 1 else "nothing held" if len(k) == 2 else "not held (rows gives when)"
             raise KeyError(f"{k!r} at rev {self.id}: {what}")
         return value
 
@@ -378,31 +378,32 @@ class Rev:
         self._record_call("in", triple, None, out)
         return out
 
-    def asserted(self, subject: str, predicate: str, object: Any = _OMIT) -> list:
-        """History, unfolded. Three positions: every Rev that added the triple. Two: ``(Rev, obj, added)``."""
-        rows = self._store.rows(self.id, subject=subject, predicate=predicate)
-        if object is _OMIT:
-            out: list = [(self.ledger.at(r[0]), self._decode(r[4]), r[5]) for r in rows]
-        else:
-            want = strip_hint(self._objtext(object))
-            revs: List[int] = []
-            for r in rows:
-                if r[5] and strip_hint(r[4]) == want and r[0] not in revs:
-                    revs.append(r[0])
-            out = [self.ledger.at(i) for i in revs]
-        self._record_call("asserted", (subject, predicate) + (() if object is _OMIT else (object,)), None, out)
-        return out
-
-    def rows(self, since: Optional["Rev"] = None) -> List[Row]:
-        """Every row at or before this revision (or in ``(since, id]``), unfolded, in ``(rev, ord)`` order (A48)."""
+    def rows(self, *pattern: Any, since: Optional["Rev"] = None) -> List[Row]:
+        """Every row matching the pattern at or before this revision (or in ``(since, id]``), unfolded,
+        removes included, in ``(rev, ord)`` order (A48): ``all``'s pattern without the fold."""
+        n = len(pattern)
+        if n > 3:
+            raise TypeError(f"a pattern fixes at most 3 positions, not {n}")
+        exact = prefix = predicate = None
+        if n >= 1:
+            exact, prefix = self._glob(pattern[0])
+        if n >= 2:
+            if not isinstance(pattern[1], str) or not pattern[1]:
+                raise TypeError(f"a predicate is a non-empty str, not {pattern[1]!r}")
+            predicate = pattern[1]
+        found = self._store.rows(self.id, subject=exact, predicate=predicate, prefix=prefix,
+                                 after=self._after(since))
+        if n == 3:
+            want = strip_hint(self._objtext(pattern[2]))
+            found = [r for r in found if strip_hint(r[4]) == want]
         revs: Dict[int, Rev] = {}
         out = []
-        for r in self._store.rows(self.id, after=self._after(since)):
+        for r in found:
             rv = revs.get(r[0])
             if rv is None:
                 rv = revs[r[0]] = Rev(self.ledger, r[0])
             out.append(Row(rv, r[2], r[3], rv._decode(r[4]), r[5]))
-        self._record_call("rows", (), since, len(out))
+        self._record_call("rows", pattern, since, len(out))
         return out
 
     # -- subject reads --------------------------------------------------------

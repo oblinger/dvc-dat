@@ -44,26 +44,25 @@ The handle on one ledger: a folder holding `ledger.db` and the art store `art/`,
 
 
 ## Rev Interface
-A frozen view of the ledger as of one revision, made by `Ledger.at`, never by hand. Every read is bounded by `id`, so a `Rev` gives the same answer forever. Row reads fold the rows by each predicate's cardinality ([The fold](#The%20fold)); `asserted` and `rows` walk history unfolded; subject reads (`refs`, `values`, `value`, `select`) treat the store as a table whose rows are subjects. A stored reference comes back as an unloaded `Ref`. A `Rev` handed to a value function's body also records every read into the function's trace. Ordered and equal by `id` within one ledger.
+A frozen view of the ledger as of one revision, made by `Ledger.at`, never by hand. Every read is bounded by `id`, so a `Rev` gives the same answer forever. Row reads fold the rows by each predicate's cardinality ([The fold](#The%20fold)); `rows` takes the same pattern and walks history unfolded; subject reads (`refs`, `values`, `value`, `select`) treat the store as a table whose rows are subjects. A stored reference comes back as an unloaded `Ref`. A `Rev` handed to a value function's body also records every read into the function's trace. Ordered and equal by `id` within one ledger.
 
-| Rev                            |                                                  |
-| ------------------------------ | ------------------------------------------------ |
-| [id](#^id)                     | The revision number                              |
-| [ledger](#^rev-ledger)         | The ledger this view reads                       |
-| [tx](#^tx)                     | The subject carrying this revision's provenance  |
-| [__getitem__](#^--getitem--)   | A record, an object, or when a triple was added  |
-| [get](#^get)                   | __getitem__ with a default                       |
-| [all](#^all)                   | Returns every match of a pattern                 |
-| [__contains__](#^--contains--) | Tests whether a triple is currently held         |
-| [asserted](#^asserted)         | The history of one subject and predicate         |
-| [rows](#^rows)                 | Every row, unfolded                              |
-| [refs](#^refs)                 | The subjects matching a where clause             |
-| [values](#^values)             | The sealed values matching, loaded               |
-| [value](#^value)               | The one sealed value matching, loaded            |
-| [select](#^select)             | Chosen objects of each match, as tuples          |
-| [load](#^load)                 | One value by subject or alias                    |
-| [load_fn](#^load-fn)           | A value function resolved at this revision       |
-| [run](#^run)                   | Evaluate a value function, memoised (`just run`) |
+| Rev                            |                                                      |
+| ------------------------------ | ---------------------------------------------------- |
+| [id](#^id)                     | The revision number                                  |
+| [ledger](#^rev-ledger)         | The ledger this view reads                           |
+| [tx](#^tx)                     | The subject carrying this revision's provenance      |
+| [__getitem__](#^--getitem--)   | A record, an object, or when a triple was added      |
+| [get](#^get)                   | __getitem__ with a default                           |
+| [all](#^all)                   | Returns ordered pattern-matched values with folding  |
+| [__contains__](#^--contains--) | Tests whether a triple is currently held             |
+| [rows](#^rows)                 | Returns ordered pattern-matched rows without folding |
+| [refs](#^refs)                 | The subjects matching a where clause                 |
+| [values](#^values)             | The sealed values matching, loaded                   |
+| [value](#^value)               | The one sealed value matching, loaded                |
+| [select](#^select)             | Chosen objects of each match, as tuples              |
+| [load](#^load)                 | One value by subject or alias                        |
+| [load_fn](#^load-fn)           | A value function resolved at this revision           |
+| [run](#^run)                   | Evaluate a value function, memoised (`just run`)     |
 
 **id**`: int`
     The revision this view reads as of; revision 0 is the empty ledger. ^id
@@ -81,16 +80,13 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     The bracket read with `default` in place of `KeyError`. `since` keeps only rows in `(since, id]`: what one transaction wrote, or what moved between two releases. ^get
 
 **all**`(*pattern, since: Rev | None = None) -> list`
-    Every match of the fold, binding the open positions, in revision order; a prefix glob `"game/*"` binds the subject. Not checked against `db/type`. More than three positions is `TypeError`; a `*` anywhere but the end is `ValueError`. ^all
+    Every currently held match of the pattern (the fold), binding the open positions, in revision order; a prefix glob `"game/*"` binds the subject. Not checked against `db/type`. More than three positions is `TypeError`; a `*` anywhere but the end is `ValueError`. ^all
 
 **__contains__**`(triple) -> bool`
     `(s, p, o) in rev`: whether the triple is held at this revision, by the same fold. ^--contains--
 
-**asserted**`(subject: str, predicate: str, object=...) -> list`
-    History at or before this revision, removes included, unfolded. With two arguments, `[(Rev, obj, added)]`; with three, every `Rev` that added that triple. ^asserted
-
-**rows**`(since: Rev | None = None) -> list[Row]`
-    Every row at or before this revision, or in `(since, id]`, unfolded, in `(rev, ord)` order: the ledger as stored. ^rows
+**rows**`(*pattern, since: Rev | None = None) -> list[Row]`
+    Every row matching the pattern at or before this revision, or in `(since, id]`, removes included, unfolded, in `(rev, ord)` order: `all`'s pattern without the fold. No pattern is the ledger as stored; `rows(s, p, o)` with `added` true says when a triple was set. ^rows
 
 **refs**`(*, s=None, kind=None, fn=None, where=None, one=False, since=None, **preds) -> list[Ref] | Ref`
     The subjects satisfying every constraint, each a `Ref` at this revision. A bare keyword names a pred (any member of a `many` pred); `kind=` a `Value` class or dotted name, following `db/moved` renames; `fn=` the producing function's dotted name; `where={p: o}` any predicate, `None` meaning any object; `s` an exact subject or a prefix glob. `one=True` returns the single match: none is `KeyError`, several `Multiple`. A dotted predicate neither declared nor on any row is `Unindexed`. ^refs

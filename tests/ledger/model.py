@@ -89,7 +89,7 @@ class Model:
             return [(p, o) for s, p, o, _r, _o in hs if s == pattern[0]]
         return [o for s, p, o, _r, _o in hs if (s, p) == pattern]
 
-    def asserted(self, R, s, p, o):
+    def added_at(self, R, s, p, o):
         revs = []
         for rev, _o, s2, p2, o2, added in self.rows:
             if rev <= R and added and (s2, p2, o2) == (s, p, o) and rev not in revs:

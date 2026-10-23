@@ -44,8 +44,8 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev["code/testrepo", "version"] == "0.2.2"          # "0.2.2"; one or raise
     assert rev["code/testrepo"] == {"version": "0.2.2", "commit": "abc1234"}   # its record, a dict
     assert rev.get("model/shot", "db/value") is None           # a Ref, or None
-    assert rev.asserted("code/testrepo", "version", "0.2.1") == []   # [Rev]: when
-    assert [(r.id, o, a) for r, o, a in rev.asserted("code/testrepo", "version")] == [(1, "0.2.2", True)]
+    assert rev.rows("code/testrepo", "version", "0.2.1") == []      # [Row]: when, unfolded
+    assert [(r.rev.id, r.object, r.added) for r in rev.rows("code/testrepo", "version")] == [(1, "0.2.2", True)]
     assert rev.rows(since=L.at(0))                              # [Row], unfolded (A48)
     assert [r.subject for r in rev.refs(s="db/pred/*", where={"db/index": "true"})] == ["db/pred/game"]
     assert ("db/pred/game", "db/index", "true") in rev
