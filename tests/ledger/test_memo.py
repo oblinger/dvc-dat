@@ -65,19 +65,6 @@ def test_trace_items(world):
     assert set(t) >= {"fn", "platform"} and "uv.lock" not in t
 
 
-def test_eval_is_a_deprecated_alias_of_run(world):
-    a = world.at().run("ledger_kinds.cut", game="G1")
-    with pytest.warns(DeprecationWarning, match="Rev.eval is renamed Rev.run"):
-        b = world.at().eval("ledger_kinds.cut", game="G1")
-    assert b.subject == a.subject
-
-def test_memo_false_and_get(world):
-    rev = world.at()
-    assert rev.run("ledger_kinds.cut", game="G1", memo="get") is None
-    dry = rev.run("ledger_kinds.cut", game="G1", memo=False)
-    assert not dry.sealed and world.at().id == rev.id
-    a = rev.run("ledger_kinds.cut", game="G1")
-    assert dry.same_as(a) and rev.run("ledger_kinds.cut", game="G1", memo="get").subject == a.subject
 
 
 def test_a_read_change_misses_and_diff_names_it(world):

@@ -61,7 +61,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 | [select](#^select) | Chosen objects of each match, as tuples |
 | [load](#^load) | One value by subject or alias |
 | [load_fn](#^load-fn) | A value function resolved at this revision |
-| [run](#^run) | Evaluate a value function, memoised (`just run`); `eval` is its deprecated alias |
+| [run](#^run) | Evaluate a value function, memoised (`just run`) |
 
 **id**`: int`
     The revision this view reads as of; revision 0 is the empty ledger. ^id
@@ -109,7 +109,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Functions and the sandbox](#functions-and-the-sandbox). ^load-fn
 
 **run**`(name: str, /, *, memo=True, clean=False, **keys) -> Value | None`
-    The API form of `just run NAME KEY=VALUE`: `load_fn(name)(memo=memo, clean=clean, **keys)`; a name that is not a `str` is `TypeError`. `eval` is a deprecated alias that warns and forwards. See [Evaluation and the trace](#evaluation-and-the-trace). ^run
+    The API form of `just run NAME KEY=VALUE`: `load_fn(name)(memo=memo, clean=clean, **keys)`; a name that is not a `str` is `TypeError`. See [Evaluation and the trace](#evaluation-and-the-trace). ^run
 
 
 
