@@ -137,7 +137,7 @@ def test_many_earliest_surviving_add_order(L):
     r5 = write(L, ("g", "o", "kim"))
     assert r5.all("g", "o") == ["ortiz", "lee", "kim"]
     assert r5["g", "o", "kim"] == r5 and r5["g", "o", "ortiz"].id == 2
-    assert [r.id for r in r5.asserted("g", "o", "kim")] == [2, 3, 5]
+    assert [(r.rev.id, r.added) for r in r5.rows("g", "o", "kim")] == [(2, True), (3, True), (4, False), (5, True)]
 
 
 def test_bracket_reads(L):
@@ -157,12 +157,17 @@ def test_bracket_reads(L):
     assert rev.get("g", "away", default="x") == "x"
 
 
-def test_asserted_at_two_positions_is_every_change(L):
+def test_rows_by_pattern_is_every_change(L):
     write(L, ("s", "v", "1"))
     write(L, ("s", "v", "2"))
+    write(L, ("t", "v", "9"))
     rev = write(L, ("-", "s", "v", "2"))
-    assert [(r.id, o, a) for r, o, a in rev.asserted("s", "v")] == [(1, "1", True), (2, "2", True),
-                                                                    (3, "2", False)]
+    assert [(r.rev.id, r.object, r.added) for r in rev.rows("s", "v")] == [(1, "1", True), (2, "2", True),
+                                                                          (4, "2", False)]
+    assert [r.subject for r in rev.rows("*", "v")] == ["s", "s", "t", "s"]
+    assert [r.rev.id for r in rev.rows("s", "v", since=rev.ledger.at(2))] == [4]
+    with pytest.raises(TypeError, match="at most 3"):
+        rev.rows("s", "v", "1", "x")
 
 
 def test_rows_are_rev_and_decoded(L):

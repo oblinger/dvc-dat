@@ -29,7 +29,7 @@ Items (Module § Value ``Trace``):
 ``q:{...}``
     a ``refs``/``values``/``value``/``select`` query (the whole query as
     canonical JSON, ``kind`` dotted, A41, A47) -> the sorted ``ref:`` list it
-    answered; any other read (``all``, ``in``, ``asserted``, a 1- or
+    answered; any other read (``all``, ``in``, a 1- or
     3-position bracket, ``rows``, ``get`` with ``since``) is
     ``q:{"__call__": …}`` -> a token of its result (for ``rows``, its row count).
 """
@@ -132,10 +132,8 @@ def _requery(rev: "Rev", body: Dict[str, Any]) -> str:
                 return token(rev.all(*args, since=since))
             if call == "in":
                 return token(tuple(args) in rev)
-            if call == "asserted":
-                return token(rev.asserted(*args))
             if call == "rows":
-                return token(len(rev.rows(since=since)))
+                return token(len(rev.rows(*args, since=since)))
             if call == "preds":
                 return token(dict(Ref(rev, args[0])._preds()))
             if call == "aliases":

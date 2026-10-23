@@ -323,7 +323,7 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # The trace is what it read when made; `matches` says whether each
 # input still holds; `diff` names what moved since the name's previous
 # value. It is `v.trace`, `v.matches(rev)` and `v.diff(prev)`, `prev` the
-# alias's previous target from `rev.asserted(s, "db/alias")`.
+# alias's previous target from `rev.rows(s, "db/alias")`.
 #
 # Everything the cut read is in its trace; `matches` re-reads each
 # item at the head, and `diff` against the cut the game named before

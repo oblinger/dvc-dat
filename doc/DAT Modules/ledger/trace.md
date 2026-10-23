@@ -24,7 +24,7 @@ lookup alone. Part of the [architecture](../../DAT%20Architecture.md).
 
 A query item is named by the whole query (`s`, `kind` dotted, `fn`,
 `since`, `one`, every where entry) as canonical JSON. The other calls
-(`all`, `in`, `asserted`, a 1- or 3-position bracket, `rows`, `get`
+(`all`, `in`, a 1- or 3-position bracket, `rows`, `get`
 with `since`, and `preds`, `aliases`, `sealed_at` on a `Ref`) are named
 by the call, its arguments and `since`.
 

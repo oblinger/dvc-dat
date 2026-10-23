@@ -123,7 +123,7 @@ def why(args):
                                 if not k.startswith("ref:")))
     prev = rest.get("against")
     if prev is None:
-        moves = [o for _r, o, added in rev.asserted(name, "db/alias") if added]
+        moves = [r.object for r in rev.rows(name, "db/alias") if r.added]
         prev = moves[-2] if len(moves) > 1 else None
     if prev is not None:
         other = rev.load(prev)

@@ -2,8 +2,8 @@
 # ledger.rev
 Every read of the ledger is made through a `Rev`, a frozen view as of
 one revision. Row reads (`[]`, `get`, `all`, `in`) fold the rows at or
-before the revision by each predicate's cardinality; `asserted` and
-`rows` walk history unfolded; subject reads (`refs`, `values`, `value`,
+before the revision by each predicate's cardinality; `rows` takes the
+same pattern and walks history unfolded; subject reads (`refs`, `values`, `value`,
 `select`, `load`, `run`) treat the store as a table whose rows are
 subjects. A stored `ref:` object always comes back as a `Ref`,
 unloaded; `Ref.load` is the one act that fetches bytes. A `Rev` handed
@@ -27,14 +27,13 @@ trace (see [trace](trace.md)). Part of the
   not since removed; not held `KeyError`.
 - `get(*pattern, default=None, since=None)`: `[]` with `default`
   instead of `KeyError`; `since` (a `Rev`) keeps rows in `(since, id]`.
-- `all(*pattern, since=None) -> list`: every match, binding the open
+- `all(*pattern, since=None) -> list`: every currently held match, binding the open
   positions, ordered by revision; a prefix glob `"game/*"` binds the
   subject; unchecked against `db/type`. More than 3 positions
   `TypeError`; a `*` anywhere but the end `ValueError`.
 - `(s, p, o) in rev -> bool`: held at this revision.
-- `asserted(s, p) -> [(Rev, obj, added)]`; `asserted(s, p, o) -> [Rev]`:
-  history at or before this revision, removes included.
-- `rows(since=None) -> [Row]`: every row, unfolded, `(rev, ord)` order.
+- `rows(*pattern, since=None) -> [Row]`: every row matching `all`'s
+  pattern, removes included, unfolded, `(rev, ord)` order.
 - `refs(*, s=None, kind=None, fn=None, where=None, one=False,
   since=None, **preds) -> [Ref] | Ref`: subjects satisfying every
   constraint. A bare keyword names a pred (any member of a `many`);

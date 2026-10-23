@@ -95,7 +95,7 @@ print(rev1.get(rev1.tx, "why"))      # season opener
 
 # %% [markdown]
 # Every revision carries the wall-clock stamp `db/time` (UTC) beside
-# `by`. The stamp is a row like any other, so `asserted` and `since=`
+# `by`. The stamp is a row like any other, so `rows` and `since=`
 # work on it too.
 
 # %% [markdown]
@@ -162,7 +162,7 @@ for r in rows:
 # %% [markdown]
 # ## Folding semantics
 #
-# Every read except `rows` and `asserted` folds: it turns the rows
+# Every read except `rows` folds: it turns the rows
 # at or before its revision into the state they mean. How a
 # predicate folds is its cardinality.
 
@@ -460,7 +460,7 @@ print(t.rev.get("game/G3", "home"))      # None: every row retracted
 # pattern, and subjects as a table.
 
 # %% [markdown]
-# ### `get`, `in`, `asserted`
+# ### `get`, `in`, `rows`
 
 # %%
 rev = L.at()
@@ -468,17 +468,23 @@ print(rev.get("game/G1", "score"))                # None
 print(rev.get("game/G1", "score", default="tbd")) # tbd
 print(("game/G1", "home", "G4") in rev)           # True
 print(("game/G1", "court", "north") in rev)       # False
-print(rev.asserted("game/G1", "court", "north"))  # [Rev(1)]
-print(rev.asserted("game/G1", "court", "west"))   # []
-print(rev.asserted("game/G1", "officials", "kim"))
-# [Rev(2), Rev(4), Rev(6)]
+for row in rev.rows("game/G1", "court", "north"):  # its add; `south` replaced it, no remove row
+    print(row)
+#    1 + game/G1   court      north
+print(rev.rows("game/G1", "court", "west"))       # []
+for row in rev.rows("game/G1", "officials", "kim"):
+    print(row)
+#    2 + game/G1   officials  kim
+#    4 + game/G1   officials  kim
+#    5 - game/G1   officials  kim
+#    6 + game/G1   officials  kim
 
 # %% [markdown]
 # `get` is `[]` answering `default` instead of raising on none.
 # `in` is the no-raise membership test, by the same fold.
-# `asserted` walks history: `north` is gone from the fold and still
-# in the history, and every add of `kim` is listed, the removed one
-# included.
+# `rows` takes `all`'s pattern and walks history unfolded: `north` is
+# gone from the fold and still in the history, and every add and
+# remove of `kim` is listed, in order.
 
 # %% [markdown]
 # ### `all` binds the open positions
@@ -742,10 +748,10 @@ print(L.at()["rel/demo-game", "pair"])    # 0.1.1+<commit>
 
 # %%
 rev = L.at()
-when = rev.asserted("code/demo-game", "version", "0.1.0")
+when = [r.rev for r in rev.rows("code/demo-game", "version", "0.1.0") if r.added]
 print(when)                               # [Rev(...)]: when it was set
 print(when[0][when[0].tx, "db/by"])       # human:dan: by whom
 
 # %% [markdown]
-# The reverse lookup for a version: `asserted` names the revision,
+# The reverse lookup for a version: `rows` names the revision,
 # and its `db/tx/<rev>` rows say who, and when if stamped.
