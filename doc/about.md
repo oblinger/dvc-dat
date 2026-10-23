@@ -1,3 +1,7 @@
+:>> [[DAT]] → [about](ha://p/about) 
+# About
+Who built dvc_dat, and the versioning rule for its public contract.
+
 DVC-DAT - A DVC-based Data Management Framework for managing Machine Learning related
 data and code.
 
