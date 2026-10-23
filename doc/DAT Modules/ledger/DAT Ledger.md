@@ -474,7 +474,10 @@ The package's other exports: two decorators, two helpers, and the exceptions. Ev
 
 # Ledger Semantics
 
-## Revisions and transactions
+## Triple semantics
+The rows themselves: how triples are written, as revisions by transactions, and how they are read, by the fold.
+
+### Revisions and transactions
 Every fact is a quad `(rev, subject, predicate, object)`; rows are only ever appended, never updated or deleted, and `remove` appends a remove row.
 
 | rev | subject | predicate | object |
