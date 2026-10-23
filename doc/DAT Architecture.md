@@ -1,5 +1,5 @@
+:>> 
 # DAT Architecture
-
 `dvc_dat` keeps two kinds of record. A **dat** is a folder that is its
 own recipe: a spec, the files a run wrote, and a result, sealed under a
 content hash. The **ledger** is the history around it: every fact a row
@@ -13,7 +13,7 @@ every value stored by its content. The dat half is the package
   `Ref`, `Transaction`, `Value`, `Fn`; the fold, sealing and saving,
   the sandbox, evaluation and the dependencies.
 
-![The dat and the ledger](DAT%20Architecture.svg)
+![The dat and the ledger](DAT%20Architecture.svg) 
 
 ## Purpose
 
@@ -78,7 +78,7 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 - The notebooks in [`DAT Demos/`](DAT%20Demos/):
   [`ledger-triples.py`](DAT%20Demos/ledger-triples.py) (the quad store
   alone), [`ledger-values.py`](DAT%20Demos/ledger-values.py) (values,
-  functions, evaluation), [`ledger-dats.py`](DAT%20Demos/ledger-dats.py)
+  functions, evaluation), [`ledger-dats.py`](DAT%20Demos/ledger-dats.py) 
   (a dat as a value, an ETL chain, releases),
   [`ledger-just.py`](DAT%20Demos/ledger-just.py) (the human's verbs).
 - The dat half's guides: [Concepts](concepts.md),
