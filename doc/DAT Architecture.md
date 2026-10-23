@@ -1,4 +1,4 @@
-:>> 
+:>> [DAT](DAT.md) → [DAT Architecture](ha://p/DAT%20Architecture) 
 # DAT Architecture
 `dvc_dat` keeps two kinds of record. A **dat** is a folder that is its
 own recipe: a spec, the files a run wrote, and a result, sealed under a
@@ -72,9 +72,7 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 
 ## Where the detail lives
 
-- [`DAT Modules/`](DAT%20Modules/): the two module docs above, and the
-  per-file pages beside them ([`dat.md`](DAT%20Modules/dat.md), and one
-  per file under [`ledger/`](DAT%20Modules/ledger/ledger.md)).
+- [`DAT Modules/`](DAT%20Modules/): the two module docs above, and [`dat.md`](DAT%20Modules/dat.md).
 - The notebooks in [`DAT Demos/`](DAT%20Demos/):
   [`ledger-triples.py`](DAT%20Demos/ledger-triples.py) (the quad store
   alone), [`ledger-values.py`](DAT%20Demos/ledger-values.py) (values,
