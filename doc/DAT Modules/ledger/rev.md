@@ -1,4 +1,4 @@
-:>> 
+:>> [DAT](../../DAT.md) → [ledger](ledger.md) → [DAT rev](ha://p/DAT%20rev) 
 # ledger.rev
 Every read of the ledger is made through a `Rev`, a frozen view as of
 one revision. Row reads (`[]`, `get`, `all`, `in`) fold the rows at or
