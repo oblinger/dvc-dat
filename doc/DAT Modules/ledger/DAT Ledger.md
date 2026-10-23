@@ -9,7 +9,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 
 **Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [module functions](#dvc_dat.ledger%20Interface) 
 
-*The fold* governs what a `Rev` reads, *Sealing and saving* governs how a `Value` gets its identity, and *Evaluation and the trace* governs when calling an `Fn` runs the body and when it hands back a sealed result.
+*The fold* governs what a `Rev` reads, *Sealing and saving* governs how a `Value` gets its identity, *Execution* governs where a function runs and what it may see, and *Evaluation and the trace* governs when calling an `Fn` runs the body and when it hands back a sealed result.
 
 This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The per-file pages beside it hold the internals and every refusal in full: [ledger](ledger.md), [rev](rev.md), [txn](txn.md), [value](value.md), [fn](fn.md), [trace](trace.md), [env](env.md), [sandbox](sandbox.md), [worker](worker.md), [store](store.md), [fold](fold.md), [codec](codec.md), [helpers](helpers.md), [errors](errors.md). The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md).
 
@@ -104,10 +104,10 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     `Ref(self, subject).load()`: the value under a subject or an alias, decoded, its provenance restored. ^load
 
 **load_fn**`(name: str) -> Fn`
-    The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Functions and the sandbox](#Functions%20and%20the%20sandbox). ^load-fn
+    The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (base mode). See [Execution](#Execution). ^load-fn
 
 **run**`(name: str, /, *, memo=True, clean=False, **keys) -> Value | None`
-    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` requires the function's checkout to be clean (no uncommitted changes, and HEAD at the commit this revision's version number is bound to, its `code/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Evaluation and the trace](#Evaluation%20and%20the%20trace). ^run
+    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit this revision's version number is bound to, its `code/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Evaluation and the trace](#Evaluation%20and%20the%20trace). ^run
 
 
 
@@ -528,8 +528,28 @@ A hand seal's trace is declared: the `deps` given, plus `code/<repo>` for every 
 
 
 
-## Functions and the sandbox
-A value function takes the revision first and keywords after, is marked `@ledger_fn`, and returns a `Value`; its return annotation is required.
+## Execution
+Where a value function runs, what the run is allowed to see, and how its result becomes a value in the ledger.
+
+![DAT Ledger Execution](DAT%20Ledger%20Execution.svg) 
+
+**Two environments.** `load_fn(name)` decides which. A name under a mounted prefix (`db/mount/<prefix>` rows naming a repo and a root) is *sandboxed*: each call runs in a fresh process holding only the ledger's machinery, and a finder serves the mounted roots, so the run imports exactly the files it needs and nothing else, third-party modules included. The `fn` trace item is then the bytes of every module the run loaded: one changed byte anywhere is a different function, so a sandboxed call runs at HEAD, clean or dirty. Any other name is *base mode*: whatever this process has imported; its `fn` item is the static import closure within the checkout, and the environment's `code/<repo>` commit stands for the bytes, which is why a base-mode call needs a clean checkout.
+
+**The version row.** `bump` on `code/<repo>` writes two rows, `version` and `commit`, which is the only tie between a ledger version and the source tree. Every eval's trace carries `code/<repo>` as `<version>+<commit8>`. `clean=True` asks that the checkout be clean, no uncommitted changes and HEAD at the commit the revision's row names, and refuses with `NotClean` otherwise; by default only base mode insists on it.
+
+**Running.** A call is a memo lookup first ([Evaluation and the trace](#Evaluation%20and%20the%20trace)); a miss runs the body with a recording `Rev`, in the child for a sandboxed function, and the result comes back with its trace. The child refuses what it cannot trace: `UnmountedImport`, `UntracedRead`, `ConfinedWrite`, `ConfinedNetwork`.
+
+**Three states of a value.** A value is *built*, then *sealed*, then *saved*; a result of `run` goes through all three before it is returned.
+
+| State | What is fixed | Where it lives | How |
+| --- | --- | --- | --- |
+| built | nothing: `preds` and the bytes may still change | memory, or its work folder for a `Dat` | the constructor, or the body of a value function |
+| sealed | its identity: the subject hashing trace, preds and bytes; `preds` read-only | the same place, with a seal record in the kept folder | `v.seal()` (`keep=True` copies the bytes into the kept cache) |
+| saved | the rows at a revision, the bytes in the art store | the ledger | `v.seal(t)` or `v.seal(L)`; an eval seals and saves its own result |
+
+A sealed value that is never saved is still a value with a fixed identity, usable as a dep and reopenable by `Dat.sealed_at_path`; saving it later writes the state it was sealed in. A saved value never changes; a new version is a new seal ([Sealing and saving](#Sealing%20and%20saving)).
+
+**The function itself.** A value function takes the revision first and keywords after, is marked `@ledger_fn`, and returns a `Value`; its return annotation is required.
 
 ```python
 @ledger_fn
