@@ -37,7 +37,7 @@ def fixed_one(p: str) -> bool:
 
 
 class Row(NamedTuple):
-    """One stored row, unfolded: ``added`` is false on a remove (A48)."""
+    """A single row in the ledger: revision, subject, predicate, object, and ``added`` (false on a remove, A48)."""
 
     rev: "Rev"
     subject: str
