@@ -36,7 +36,7 @@ result = do("catalog.experiment", epochs=200)
 - **[Architecture](DAT%20Architecture.md)** — the dat and the ledger, and
   how they meet; a module doc for each:
   [DAT Dat](DAT%20Modules/DAT%20Dat.md),
-  [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md)
+  [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md) 
 - **[Concepts](concepts.md)** — the fork rule, the two kinds of name,
   configuration on first use, `dat.base`, the `{}` grammar, validation
 - **[Spec Format](spec-format.md)** — `_spec_.yaml` / `_result_.yaml` reference
