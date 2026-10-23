@@ -103,8 +103,8 @@ def ran_since(counts_before: dict) -> dict:
 # # ETL pipelines: computing, recomputing only what moved
 #
 # An ETL pipeline is a series of stages, each computing a value from the values of the stage below it, over a set of inputs.
-# Every stage here is a ledger function, so every result is a value sealed with its trace, the exact inputs and code it was computed from.
-# Asked for a result, the ledger hands back a sealed one whose trace still holds and runs the stage only when something in its trace has moved.
+# Every stage here is a ledger function, so every result is a value sealed with its dependencies, the exact inputs and code it was computed from.
+# Asked for a result, the ledger hands back a sealed one whose dependencies still hold and runs the stage only when one of its dependencies has moved.
 # So a change anywhere in the pipeline recomputes that stage and what is downstream of it, and nothing else.
 
 # %% [markdown]
@@ -211,7 +211,7 @@ print(L.at().load_fn("comfort.report.comfort_report").mode)
 # %% [markdown]
 # ### Asking for the comfort report
 #
-# `rev.run(name, **keys)` returns the stage's result, running it only when no sealed result with a holding trace answers the same question.
+# `rev.run(name, **keys)` returns the stage's result, running it only when no sealed result whose dependencies hold answers the same question.
 # The first report covers the whole year.
 
 # %%
@@ -308,12 +308,12 @@ print(ran_since(counts_before))
 # No `bump` was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a new question, and a miss runs at HEAD, clean or dirty (F520 Q39).
 
 # %% [markdown]
-# ## Reading a result's trace back
+# ## Reading a result's dependencies back
 #
-# A result's trace lists every input it read: each stage below by its result's bytes (`eval:`), the set's rows (`q:`, the `all` call and its answer), its own code (`fn`) and the environment.
+# A result's dependencies list every input it read: each stage below by its result's bytes (`eval:`), the set's rows (`q:`, the `all` call and its answer), its own code (`fn`) and the environment.
 
 # %%
-for item in sorted(comfort_report_value.trace):
+for item in sorted(comfort_report_value.dependencies):
     print(item)
 # → eval:comfort.stages.city_comfort{"city":"Austin","end":"2026-09-01","start":"2026-06-01"}
 #   eval:comfort.stages.city_comfort{"city":"Boston","end":"2026-09-01","start":"2026-06-01"}
@@ -322,7 +322,7 @@ for item in sorted(comfort_report_value.trace):
 #   fn
 #   platform
 #   q:{"__call__":"all","args":["cityset/representative","contains"],"since":null}
-print(sorted(L.at()[comfort_report_value.trace["fn"], "db/modules"]))
+print(sorted(L.at()[comfort_report_value.dependencies["fn"], "db/modules"]))
 # → ['comfort/__init__.py', 'comfort/report.py', 'comfort/values.py']
 
 # %%

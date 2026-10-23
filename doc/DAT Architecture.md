@@ -11,7 +11,7 @@ every value stored by its content. The dat half is the package
   `DatContainer`, `Do`; specs, sealing, standing, the manager.
 - [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md): `Ledger`, `Rev`,
   `Ref`, `Transaction`, `Value`, `Fn`; the fold, sealing and saving,
-  the sandbox, evaluation and the trace.
+  the sandbox, evaluation and the dependencies.
 
 ![The dat and the ledger](DAT%20Architecture.svg)
 
@@ -45,7 +45,7 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
   a GB-scale folder seals and saves in memory bounded by its manifest.
 - **An ETL pipeline is a set of value functions.** Each stage evaluates
   the stage below it and returns a dat; a change upstream re-derives
-  only the stages whose trace moved.
+  only the stages whose dependencies moved.
 - **The just layer is the human's verbs.** Each recipe is one ledger
   call under a name a person would type; a minimal justfile sits beside
   the notebooks ([`DAT Demos/justfile`](DAT%20Demos/justfile)).

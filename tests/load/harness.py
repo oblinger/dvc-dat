@@ -5,7 +5,7 @@ Each worker process opens its own ``Ledger`` handle and runs a seeded mix of ope
 ``seal``    a unique ``Blob`` sealed by ``v.seal(t)``, plus a ``made`` row (a many pred) naming it
 ``shared``  one of a few ``Blob``s every worker seals: the same subject raced across processes
 ``alias``   an ``alias/<k>`` re-pointed at one of this worker's seals, under ``lock=``
-``salt``    ``load/config salt`` changed, under ``lock=``: every memo entry's trace reads it
+``salt``    ``load/config salt`` changed, under ``lock=``: every memo entry's dependencies read it
 ``eval``    ``rev.run("tests.load.loadfns.square", n=k)``, a base-mode function: hits and misses
 ``read``    a load of one of this worker's seals, an alias resolution and a bracket read at the top
 
@@ -16,7 +16,7 @@ fresh handle (and the fold from fresh processes too):
 ``no-lost-row`` every committed transaction's rows at its revision; no failed one's tag anywhere;
                 no tag twice
 ``no-dup``      no subject with two ``db/value`` rows; one memo entry per (keys, salt)
-``memo``        every eval's entry: ``db/fn``/``db/keys`` right, its trace holds at the rev it was
+``memo``        every eval's entry: ``db/fn``/``db/keys`` right, its dependencies hold at the rev it was
                 evaluated at, its bytes decode to the expected result for that rev's salt
 ``alias``       each re-point resolves at its revision; each alias ends at its last re-point
 ``fold``        the whole-ledger fold digest identical from every handle, and at the mid-run revisions
@@ -312,7 +312,7 @@ def check(path: Path, setup_top: int, recs: List[Dict[str, Any]], ctx: Any, work
     memo: Dict[tuple, List[str]] = defaultdict(list)
     for s in store.subjects(top, predicate="db/fn", obj="str:" + FN):
         keys = head.get(s, "db/keys")
-        salt = head.get(s, "db/trace/load/config salt")
+        salt = head.get(s, "db/deps/load/config salt")
         memo[(json.dumps(keys, sort_keys=True), salt)].append(s)
     for k, subs in memo.items():
         if len(subs) > 1:
@@ -330,11 +330,11 @@ def check(path: Path, setup_top: int, recs: List[Dict[str, Any]], ctx: Any, work
                 fail("memo", why="entry's db/fn or db/keys wrong", eval=e, fn=head.get(s, "db/fn"),
                      keys=head.get(s, "db/keys"))
             at = L.at(e["at"])
-            trace = {p[len("db/trace/"):]: h.obj.partition(":")[2]
-                     for _s, p, h in head._held_rows(subject=s) if p.startswith("db/trace/")}
+            trace = {p[len("db/deps/"):]: h.obj.partition(":")[2]
+                     for _s, p, h in head._held_rows(subject=s) if p.startswith("db/deps/")}
             if not trace_matches(at, trace):
-                fail("memo", why="entry's trace does not hold at the rev it was evaluated at", eval=e,
-                     trace=trace, salt_at=at.get("load/config", "salt"))
+                fail("memo", why="entry's dependencies do not hold at the rev it was evaluated at", eval=e,
+                     dependencies=trace, salt_at=at.get("load/config", "salt"))
             if e["at"] not in salt_at:
                 salt_at[e["at"]] = at.get("load/config", "salt")
             want = expected(e["n"], salt_at[e["at"]])

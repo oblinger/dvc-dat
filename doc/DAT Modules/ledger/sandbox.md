@@ -4,7 +4,7 @@ A function under a mount runs where the code it can reach is bounded:
 in a fresh process of its own, forked for the one call from a warm
 `python -I` server, whose only importable repository code is the
 mounted roots, and whose file reads and writes are confined while the
-body runs. That bound is what lets one `fn` trace item, the bytes of
+body runs. That bound is what lets one `fn` dependency item, the bytes of
 every module the run loaded, stand for the code: one changed byte in
 any of them, third-party ones included, is a different value. The
 parent side resolves a name through the mounts and sends a miss to the
@@ -50,7 +50,7 @@ Parent side:
 - `static_closure(root, start, within)`, `closure(mounts, start)`,
   `module_shas(mods)`, `file_sha(checkout, rel)`, `Mount`,
   `mounts_for(rev, env)`: the module walkers and hashers, shared with
-  base mode's `fn` hash.
+  the unsandboxed `fn` hash.
 
 Child side:
 
@@ -83,7 +83,7 @@ Child side:
   `os.listdir`, `os.scandir`, `os.listxattr`, `os.getxattr`, and
   through them `pathlib`, `shutil` and `glob`. The ledger's own reads
   (`rev[...]`, `rev.load`, queries) are the view, not file opens.
-  Two reads stay open because their content is already in the trace:
+  Two reads stay open because their content is already in the dependencies:
   the import system reading a module file (the finder decides what
   imports; every module loaded is in `fn`), and, while a module from
   outside the mounts is being imported, that import's reads in the
@@ -117,7 +117,7 @@ Child side:
   runs it, seals with provenance `eval:sandbox`, replies.
 - `run_here(fn, rev, kw, enc, seal)`: one run in this process; the
   modules it loaded are those new in `sys.modules` over the body less
-  any a nested body loaded; the trace is the recorded reads plus
+  any a nested body loaded; the dependencies are the traced reads plus
   `fn`, `platform` and, when the mount sets one, `salt`; no
   `code/<repo>` item.
 
@@ -139,7 +139,7 @@ Child side:
   and returns the subject only.
 
 - Stubs, as built: a nested eval under another mount runs in the same
-  child; a base-mode eval nested inside a child is unsupported; repo
+  child; an unsandboxed eval nested inside a child is unsupported; repo
   files read under a mount are allowed and not recorded; a nested
   function's imports the caller already loaded are not recorded for
   it beyond its static closure.
@@ -147,5 +147,5 @@ Child side:
 ## Left to other modules
 
 The memo lookup and the seal are [fn](fn.md)'s (`lookup`,
-`seal_entry`); the trace's hit test is [trace](trace.md)'s; discovery
+`seal_entry`); the dependencies' hit test is [trace](trace.md)'s; discovery
 is [env](env.md)'s; the entry point is [worker](worker.md).

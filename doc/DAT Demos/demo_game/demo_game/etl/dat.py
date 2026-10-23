@@ -6,7 +6,7 @@ the folder the eval hands it as `path` (F447 Q36) and runs the spec's
 anonymous template. Its preds merge spec keys and result metrics under one
 namespace: `game`, `stage`, `bins` from the spec, `metrics.<m>` from
 the result. `main` is imported by the spec's key at run time, so the
-one `fn` trace item hashes the modules the run loaded (Q37, lean A).
+one `fn` dependency item hashes the modules the run loaded (Q37, lean A).
 """
 import importlib
 from pathlib import Path

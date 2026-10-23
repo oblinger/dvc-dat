@@ -7,7 +7,7 @@ history unfolded, removes included. The subject reads (``refs``, ``values``,
 ``value``, ``select``, ``load``, ``run``) treat the store as a table whose
 rows are subjects. No pattern read decodes a ``ref:`` object: it comes back a
 ``Ref``, unloaded (Q35). Inside a value function the ``Rev`` handed to the body
-records what it reads into the function's trace (``trace``).
+traces what it reads into the value's dependencies (``dependencies``).
 """
 
 from __future__ import annotations
@@ -740,7 +740,7 @@ class Ref:
         return out
 
     def __eq__(self, other: object) -> bool:
-        """Equal by subject: a subject hashes its trace and preds too; same bytes is ``a.hash == b.hash``."""
+        """Equal by subject: a subject hashes its dependencies and preds too; same bytes is ``a.hash == b.hash``."""
         return isinstance(other, Ref) and self.subject == other.subject and \
             (self.subject is not None or self._text() == other._text())
 
@@ -786,10 +786,10 @@ class Ref:
                 st = v.path.stat()
                 v.__dict__["_dir_id"] = (st.st_dev, st.st_ino)
             rows = self._p._held_rows(subject=s)
-            trace = {p[len("db/trace/"):]: show(h.obj) for _s, p, h in rows if p.startswith("db/trace/")}
+            trace = {p[len("db/deps/"):]: show(h.obj) for _s, p, h in rows if p.startswith("db/deps/")}
             sealed_at = self._sealed_at()
             assert sealed_at is not None
-            v._provenance(subject=s, rev=sealed_at, trace=trace, preds=self._preds(), loaded_as=loaded_as)
+            v._provenance(subject=s, rev=sealed_at, dependencies=trace, preds=self._preds(), loaded_as=loaded_as)
             v.__dict__["_hash"] = self._hash
             ledger._values[key] = v
         self.rev._record_value(v, self._given)

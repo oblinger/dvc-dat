@@ -57,13 +57,13 @@ def test_usage_block(L, tmp_path, monkeypatch):
         raw0.seal(t)
     rev = L.at()
     m = rev.run("ledger_kinds.cut", game="G1")   # memoised  ADAPTED: ledger_kinds.cut for demo_game.identity.train
-    assert m.trace and m.rev and m.sealed    # the model itself, with its provenance on it
+    assert m.dependencies and m.rev and m.sealed    # the model itself, with its provenance on it
     assert rev.run("ledger_kinds.cut", game="G1", memo=False).sealed is None   # run, no seal
     assert rev.run("ledger_kinds.cut", game="G1", memo="get").subject == m.subject   # or None
 
     f = rev.load_fn("ledger_kinds.cut")           # Fn: resolved at rev
     assert f(game="G1").subject == m.subject  # == rev.run(...)  ADAPTED: G1, the game that exists
-    assert f.module.name == "ledger_kinds.py" and len(f.sha) == 64 and f.mode == "base" and f.env.platform
+    assert f.module.name == "ledger_kinds.py" and len(f.sha) == 64 and f.mode == "unsandboxed" and f.env.platform
 
     rev = L.at()                             # ADAPTED: refs are as-of; the entry is after the old rev
     assert len(rev.values(fn="ledger_kinds.cut")) == 1               # [Value], loaded
@@ -151,7 +151,7 @@ def test_seal_block(L):
         v.preds["game"] = "G2"            # TypeError: read-only once sealed
     assert isinstance(v.preds["video"], Ref)      # a Ref now, as loaded (A36)
     rh = f"ref:ledger_kinds.Video:{raw.hash}"
-    assert v.trace == {rh: rh, "code/testrepo": "0.2.2+abc1234",
+    assert v.dependencies == {rh: rh, "code/testrepo": "abc1234",
                        "platform": "test-platform"}
     r = L.at()
     assert r[subj, "db/kind"] == "ledger_kinds.Cut" and r[subj, "db/provenance"] == "human:dan"
@@ -177,7 +177,7 @@ def test_putting_an_artifact_in_block(L):
         raw.seal(t, provenance="import:alg2")
     rows = {r.predicate for r in L.at().rows(since=L.at(L.at().id - 1)) if r.subject == raw.subject}
     assert {"db/value", "db/kind", "db/provenance", "db/preds", "game", "camera"} <= rows
-    assert any(p.startswith("db/trace/") for p in rows)
+    assert any(p.startswith("db/deps/") for p in rows)
     cut = L.at().run("ledger_kinds.cut", game="G1", version="1.5.3")
     with L.transaction(by="human:dan") as t:   # seal-then-repoint
         t.add("game/G1", "db/alias", cut.subject)   # the current cut

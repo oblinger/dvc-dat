@@ -10,7 +10,7 @@ class Multiple(LedgerError, LookupError):
 
 
 class NotEvaluated(LedgerError, RuntimeError):
-    """A call this environment will not run: its repo has no checkout here, or (base mode, a
+    """A call this environment will not run: its repo has no checkout here, or (unsandboxed, a
     miss) its code is outside any git checkout or the checkout is dirty."""
 
 

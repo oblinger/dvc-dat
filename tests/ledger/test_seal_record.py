@@ -107,7 +107,7 @@ def test_a_dep_sealed_before_it_is_saved_binds_by_its_name(L, tmp_path):
     w = GameDat(c)
     w.seal(deps=[Ref(L.at(), "in/A")])
     assert w.seal(L) == s
-    assert "in/A db/alias" in Ref(L.at(), "out/B").load().trace
+    assert "in/A db/alias" in Ref(L.at(), "out/B").load().dependencies
 
 
 def test_a_new_seal_of_a_folder_replaces_its_unkept_record(tmp_path):

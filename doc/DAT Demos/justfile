@@ -24,7 +24,7 @@ value *args:
 history subject:
     @{{python}} "{{recipes}}" history "$@"
 
-# a value's trace, whether it holds at the head, and what moved since the alias's last target
+# a value's dependencies, whether they hold at the head, and what moved since the alias's last target
 [no-cd]
 why name *args:
     @{{python}} "{{recipes}}" why "$@"

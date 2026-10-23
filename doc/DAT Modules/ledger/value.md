@@ -5,7 +5,7 @@ returns, what `v.seal` stores and what `Ref.load` restores. A
 subclass says how it becomes bytes (`encode`) and back (`decode`), and
 `@ledger_class(preds=…)` names the preds its values may carry. Until
 the seal, `preds` is a plain dict filled by whoever builds the value;
-the seal freezes it and fixes `subject`, `trace` and, at commit, `rev`.
+the seal freezes it and fixes `subject`, `dependencies` and, at commit, `rev`.
 Part of the [architecture](../../DAT%20Architecture.md).
 
 ## Public surface
@@ -23,19 +23,19 @@ Part of the [architecture](../../DAT%20Architecture.md).
   part is ever held in memory whole.
 - `preds`: a `dict` while unsealed (assignable as a whole); a
   `FrozenPreds` once sealed, whose every mutator is `TypeError`.
-- `subject: str | None`, `rev: Rev | None`, `trace: Mapping[str, str]`
+- `subject: str | None`, `rev: Rev | None`, `dependencies: Mapping[str, str]`
   (empty until saved or evaluated), `sealed: str | None` (the seal's
   moment, UTC `YYYY-MM-DDTHH:MM:SSZ`, `None` while unsealed); set only by the
-  seal, `load`, or (`trace` alone) an unsealed `memo=False` run.
+  seal, `load`, or (`dependencies` alone) an unsealed `memo=False` run.
   `sealed` with `subject` `None` is a value sealed by `v.seal()` and
   saved nowhere yet.
 - `hash -> str`: hex sha256 of `encode()`; cached once sealed.
-- `matches(rev) -> bool`: every trace item holds at `rev` (memo only,
+- `matches(rev) -> bool`: every dependency item holds at `rev` (memo only,
   never runs).
-- `diff(other) -> {item: (mine, theirs)}`: trace items that differ,
+- `diff(other) -> {item: (mine, theirs)}`: dependency items that differ,
   `None` where one lacks the item.
 - `same_as(other) -> bool`: equal `hash`; `False` for `None`.
-- `Trace`: the `Mapping[str, str]` type of `trace`.
+- `Dependencies`: the `Mapping[str, str]` type of `dependencies`.
 - `name: str | None` (Q36): the value's one name, an alias relative
   to the data folder and not part of its identity. Saved: the alias
   naming it at the head, written latest. Unsaved: the name a save
@@ -111,14 +111,14 @@ three forms.
   `TypeError`; anything else is `TypeError`. The refusals are the
   transaction's ([txn](txn.md)).
 - Saving a value sealed by `v.seal()` saves the state it was sealed in:
-  its deps, provenance and environment enter the trace, and a
+  its deps, provenance and environment enter the dependencies, and a
   `db/sealed-at` row records when; `deps=`/`provenance=` at the save
   are `TypeError`. Unless kept, the bytes are hashed again and a change
   is `SealBroken`. An abandoned save leaves the value sealed, saved
   nowhere. A dep sealed but saved nowhere is `ValueError` until it is
   saved first, earlier in the same transaction or before; one reopened
   with `name=` binds through that name at the save (the name must hold
-  its bytes by then, else `ValueError`), with a `<name> db/alias` trace
+  its bytes by then, else `ValueError`), with a `<name> db/alias` dependency
   item, as a `Ref` by that name would.
 - `Dat.sealed_at_path(path, *, name=None) -> Dat | None` (classmethod):
   the last seal record of the folder `path` not saved since, reopened

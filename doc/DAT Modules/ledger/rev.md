@@ -7,8 +7,8 @@ same pattern and walks history unfolded; subject reads (`refs`, `values`, `value
 `select`, `load`, `run`) treat the store as a table whose rows are
 subjects. A stored `ref:` object always comes back as a `Ref`,
 unloaded; `Ref.load` is the one act that fetches bytes. A `Rev` handed
-to a value function's body also records every read into the function's
-trace (see [trace](trace.md)). Part of the
+to a value function's body also traces every read into its result's
+dependencies (see [trace](trace.md)). Part of the
 [architecture](../../DAT%20Architecture.md).
 
 ## Public surface
@@ -70,7 +70,7 @@ trace (see [trace](trace.md)). Part of the
 - `aliases -> [str]`: every name aliasing the subject as of `rev`.
 - `sealed_at -> Rev | None`: the revision of its `db/value` row.
 - `load() -> Value`: decode by `type`, restore `subject`, `rev` (the
-  sealing revision), `trace`, `preds`; cached per `(subject, rev,
+  sealing revision), `dependencies`, `preds`; cached per `(subject, rev,
   name)`, a cached `Dat` handed back only while its folder is still
   there and the same folder (one stat: the directory's device and
   inode), else loaded afresh; no value `KeyError`; a `decode` returning a non-`Value`
@@ -108,6 +108,6 @@ Module functions used elsewhere: `class_named(ledger, dotted)`,
 
 ## Left to other modules
 
-Folding is [fold](fold.md)'s, SQL is [store](store.md)'s, trace item
+Folding is [fold](fold.md)'s, SQL is [store](store.md)'s, dependency item
 names and the hit test are [trace](trace.md)'s, resolution and `run`
 are [fn](fn.md)'s, writing is [txn](txn.md)'s.

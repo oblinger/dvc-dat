@@ -233,7 +233,7 @@ print(L.at()[spec_dat.subject, "db/keys"])
 # which code ran is known only after the run.
 
 # %%
-module_paths = L.at()[spec_dat.trace["fn"], "db/modules"]
+module_paths = L.at()[spec_dat.dependencies["fn"], "db/modules"]
 print(sorted(module_paths))
 # → ["demo_game/etl/__init__.py", "demo_game/etl/dat.py",
 #    "demo_game/etl/detect.py"]: the package's __init__ runs too
@@ -255,7 +255,7 @@ print(again_dat.subject == spec_dat.subject)   # → True: a hit
 print(L.at().id == top_id)           # → True: nothing written
 
 # %% [markdown]
-# The same spec is the same question, and every trace item holds:
+# The same spec is the same question, and every dependency item holds:
 # a memo hit, nothing run, nothing written. Asked another way, the
 # stage function `detections`, which fixes the spec but the game:
 
@@ -329,8 +329,8 @@ rev = L.at()
 model_dat = rev.run("demo_game.etl.model.train", game="G1")
 print(model_dat, model_dat.preds["stage"],
       model_dat.preds["gameset"])    # → <8 hex> model normie
-for item in sorted(model_dat.trace):
-    print(item, "->", model_dat.trace[item])
+for item in sorted(model_dat.dependencies):
+    print(item, "->", model_dat.dependencies[item])
 # → cfg/train epochs -> 8
 #   eval:demo_game.etl.track.tracks{"game":"G1"}
 #       -> ref:demo_game.etl.dat.StageDat:<hash>
@@ -343,7 +343,7 @@ for item in sorted(model_dat.trace):
 # `detections` (a hit: sealed above), and each miss sealed its own
 # dat. A stage depends on the one below by a nested `run`, never
 # by an import and never by a `deps=` list: the eval records it.
-# The model's trace holds its own code (`fn`: `model.py` and
+# The model's dependencies hold its own code (`fn`: `model.py` and
 # `dat.py`, since the modules a nested eval loads are that
 # entry's), the two rows it read by name, and the stage below as a
 # nested eval, held by its result's bytes.
@@ -400,7 +400,7 @@ print(detections_dat.matches(rev),
 print(model_dat.matches(rev))                   # → False, for now
 
 # %% [markdown]
-# A sandbox trace pins the modules a stage loaded, not the repo's
+# A sandboxed value's dependencies pin the modules a stage loaded, not the repo's
 # version, so the bump alone moves nothing: `detections` still
 # matches. `track.py` changed, so the tracks' `fn` item moved. The
 # model reads as stale too: `matches` never runs a stage (A42), and
@@ -444,14 +444,14 @@ hand_model_dat.preds["gameset"] = "pro"
 with L.transaction(by="human:dan", why="a long run by hand") as t:
     hand_model_dat.seal(t, deps=[tracks_g3_dat],
                         provenance="human:dan")
-print(dict(sorted(hand_model_dat.trace.items())))
-# → {"code/demo-game": "0.1.1+<8 hex>",
+print(dict(sorted(hand_model_dat.dependencies.items())))
+# → {"code/demo-game": "<8 hex>",
 #    "platform": "darwin-arm64-py3.11",
 #    "ref:demo_game.etl.dat.StageDat:<hash>":
 #        "ref:demo_game.etl.dat.StageDat:<hash>"}
 
 # %% [markdown]
-# Its trace is declared, the `deps` handed over plus the
+# Its dependencies are declared, the `deps` handed over plus the
 # environment, not recorded. It is trusted, not proven, and its
 # provenance says so. A consumer that needs proof (the fingerprint
 # gate) asks for an `eval:` value, and the hand run drops out.
@@ -476,7 +476,7 @@ print(rev.select(("game", "metrics.score"), kind=StageDat,
 
 # %% [markdown]
 # `gameset` is read from the game's own row by `train` and set on
-# each model, so it is in the trace too: moving a game to another
+# each model, so it is in the dependencies too: moving a game to another
 # set makes its model stale (Edge cases § A table over a set). A
 # dotted predicate that no row carries and no declaration names is
 # a typo; notice the query refuses it rather than finding nothing.
@@ -545,7 +545,7 @@ print(old_model_dat.diff(now_model_dat))
 
 # %% [markdown]
 # The memo lookup is over every entry, at the top, and each
-# candidate's trace is matched against the revision asked at. At
+# candidate's dependencies are matched against the revision asked at. At
 # `0.1.0` the config said 8 epochs, so the model sealed under that
 # binding is the hit, and nothing runs.
 #
@@ -605,14 +605,14 @@ rev = L.at()
 scores_table = rev.run("demo_game.etl.report.scores",
                         gameset="normie")
 print(type(scores_table).__name__)       # → Table
-q_items = [k for k in scores_table.trace if k.startswith("q:")]
+q_items = [k for k in scores_table.dependencies if k.startswith("q:")]
 print(q_items)
 # → ['q:{"gameset":"normie","kind":"demo_game.etl.dat.StageDat",
 #      "stage":"model"}']
-print(len(json.loads(scores_table.trace[q_items[0]])))   # → 4
+print(len(json.loads(scores_table.dependencies[q_items[0]])))   # → 4
 
 # %% [markdown]
-# The query inside the function is a trace item, `q:` and its where
+# The query inside the function is a dependency item, `q:` and its where
 # clause, holding the refs it answered (A41): four models, two per
 # normie game. Moving G3 into the set makes G3's model stale, its
 # retrain is a fifth normie model, and the table's query now
@@ -679,4 +679,4 @@ except UntracedRead as e:
 # %% [markdown]
 # Each refusal comes back from the worker with its traceback, and
 # nothing is sealed: an incomplete mount table is a crash, never a
-# silently wider trace.
+# silently wider set of dependencies.

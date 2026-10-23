@@ -4,7 +4,7 @@ A subclass says how it becomes bytes (``encode``) and back (``decode``) and,
 with ``@ledger_class(preds=...)``, which pred names its values may carry.
 ``preds`` is a plain dict while the value is unsealed, filled by whoever builds
 it; the seal (``v.seal(t)`` or an ``run``) freezes it into a
-read-only mapping and fixes ``subject``, ``rev`` and ``trace`` (Q25 (D)). A
+read-only mapping and fixes ``subject``, ``rev`` and ``dependencies`` (Q25 (D)). A
 subclass's own ``__init__`` need not call ``super().__init__``. Shipped
 subclasses: ``Value.Blob`` (any Python object, pickled), ``Value.Table`` (parquet), ``Dat``
 (a folder, encoded as its content manifest).
@@ -46,13 +46,13 @@ class Value:
     """The object itself, with its provenance on it."""
 
     #: Item name -> version or hash: what producing a value read.
-    Trace: ClassVar[Any] = Mapping[str, str]
+    Dependencies: ClassVar[Any] = Mapping[str, str]
     #: The pred names a kind declares (``@ledger_class``); none by default.
     _ledger_preds: ClassVar[tuple] = ()
 
     subject: Optional[str] = None
     rev: Optional["Rev"] = None
-    trace: Mapping[str, str] = _EMPTY
+    dependencies: Mapping[str, str] = _EMPTY
     #: The seal's moment, UTC ``YYYY-MM-DDTHH:MM:SSZ``, once the identity is fixed by ``v.seal()`` or a save;
     #: ``None`` while unsealed, so it reads as the boolean too.
     sealed: Optional[str] = None
@@ -148,7 +148,7 @@ class Value:
         kept folder (``kept``; a later process reopens a sealed ``Dat`` from it with
         ``Dat.sealed_at_path``), and returns the hash. With ``keep=True`` it also copies the bytes
         into the kept cache, so the source may change.
-        ``to`` a ``Transaction`` saves into it: the subject is ``<hash of (trace, preds, bytes)>``
+        ``to`` a ``Transaction`` saves into it: the subject is ``<hash of (dependencies, preds, bytes)>``
         and lands with that revision or not at all. ``to`` a ``Ledger`` opens and commits a
         one-value transaction of its own, written ``by`` (default: the provenance, else ``seal``).
         Saving a value sealed earlier saves the state it was sealed in (its deps, provenance and
@@ -291,16 +291,16 @@ class Value:
         return h
 
     def matches(self, rev: "Rev") -> bool:
-        """Every trace item at its value at ``rev``: the hit test; consults the memo only, never runs."""
+        """Every dependency item at its value at ``rev``: the hit test; consults the memo only, never runs."""
         from .trace import trace_matches
 
-        return trace_matches(rev, dict(self.trace))
+        return trace_matches(rev, dict(self.dependencies))
 
     def diff(self, other: "Value") -> Dict[str, tuple]:
-        """The trace items whose values differ: item -> (mine, theirs), ``None`` where one lacks it."""
+        """The dependency items whose values differ: item -> (mine, theirs), ``None`` where one lacks it."""
         out = {}
-        for k in sorted(set(self.trace) | set(other.trace)):
-            a, b = self.trace.get(k), other.trace.get(k)
+        for k in sorted(set(self.dependencies) | set(other.dependencies)):
+            a, b = self.dependencies.get(k), other.dependencies.get(k)
             if a != b:
                 out[k] = (a, b)
         return out
@@ -309,12 +309,12 @@ class Value:
         """``hash == other.hash``; ``False`` for ``None``."""
         return other is not None and self.hash == other.hash
 
-    def _provenance(self, *, subject: str, rev: "Rev", trace: Mapping[str, str], preds: Mapping[str, Any],
+    def _provenance(self, *, subject: str, rev: "Rev", dependencies: Mapping[str, str], preds: Mapping[str, Any],
                     loaded_as: Optional[str] = None) -> None:
         self.__dict__.pop("_hash", None)
         self.subject = subject
         self.rev = rev
-        self.trace = MappingProxyType(dict(trace))
+        self.dependencies = MappingProxyType(dict(dependencies))
         if not self.sealed:                         # loaded: the seal's moment is on the ledger
             self.sealed = (rev.get(subject, "db/sealed-at") if rev is not None and subject else None) \
                 or (rev.get(rev.tx, "db/time") if rev is not None else None) or "sealed"

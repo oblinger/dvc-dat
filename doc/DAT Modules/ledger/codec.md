@@ -28,7 +28,7 @@ dependency is its bytes, not its entry. Part of the
 
 - One text per JSON document, so equal documents compare equal as
   stored strings.
-- A trace, a key or a where clause compares refs without the hint.
+- A dependency, a key or a where clause compares refs without the hint.
 
 ## Left to other modules
 

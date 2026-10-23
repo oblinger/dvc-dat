@@ -8,7 +8,7 @@ revision, every value stored by its content.
 
 - [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md): the module doc;
   every public class and member, the fold, sealing and saving, the
-  sandbox, evaluation and the trace.
+  sandbox, evaluation and the dependencies.
 - [Architecture](DAT%20Architecture.md): how the ledger and the dat
   meet.
 - [`DAT Modules/ledger/`](DAT%20Modules/ledger/ledger.md): one page per

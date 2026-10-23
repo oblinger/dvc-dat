@@ -314,18 +314,18 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # %%
 # !just why game/G1
 # → game/G1: <8 hex>, matches the head
-# → trace: code/demo-game 0.1.0+<8 hex>, fn <8 hex>,
+# → dependencies: code/demo-game <8 hex>, fn <8 hex>,
 # →   game/G1 away G5, game/G1 home G6, platform darwin-arm64-py3.11,
 # →   query {"game":"G1","kind":"demo_game.game.Video"} -> 1 value(s)
 # → since <8 hex>, its last target: game/G1 home G4 -> G6
 
 # %% [markdown]
-# The trace is what it read when made; `matches` says whether each
+# The dependencies are what it read when made; `matches` says whether each
 # input still holds; `diff` names what moved since the name's previous
-# value. It is `v.trace`, `v.matches(rev)` and `v.diff(prev)`, `prev` the
+# value. It is `v.dependencies`, `v.matches(rev)` and `v.diff(prev)`, `prev` the
 # alias's previous target from `rev.rows(s, "db/alias")`.
 #
-# Everything the cut read is in its trace; `matches` re-reads each
+# Everything the cut read is in its dependencies; `matches` re-reads each
 # item at the head, and `diff` against the cut the game named before
 # names the one item that moved, the home team. Given a bare hash,
 # which has no previous target, the recipe takes `against=`.
