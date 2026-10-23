@@ -66,7 +66,7 @@ world hands back the value already sealed. Part of the
     ran. No warn mode.
   - A result not an instance of a `Value`-subclass annotation is
     `TypeError`; with any other annotation a non-`Value` result is
-    wrapped in `Pickled`.
+    wrapped in `Value.Blob`.
 - `encode_keys(kw) -> dict`: `db/keys` content; a top-level
   `Value`/`Ref` becomes `ref:<class>:<hash>`, nested one `TypeError`,
   an unsealed `Value` `ValueError`, a non-JSON value `TypeError`.

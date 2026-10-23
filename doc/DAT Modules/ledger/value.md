@@ -39,7 +39,7 @@ Part of the [architecture](../../DAT%20Architecture.md).
 - `name: str | None` (Q36): the value's one name, an alias relative
   to the data folder and not part of its identity. Saved: the alias
   naming it at the head, written latest. Unsaved: the name a save
-  gives it (`Value(name=...)`, `Pickled(obj, name=...)`,
+  gives it (`Value(name=...)`, `Value.Blob(obj, name=...)`,
   `Dat(path, name=...)`, or assigned). Assigning it on a saved value
   moves the name in a revision of its own (`by="name"`): the other
   names of the value are retracted and the name leaves any value it
@@ -50,8 +50,8 @@ Part of the [architecture](../../DAT%20Architecture.md).
 
 Subclasses:
 
-- `Pickled(obj)`: `obj` pickled (protocol 4); declares no preds.
-- `Table(table)`: a `pyarrow.Table` or pandas `DataFrame` as parquet;
+- `Value.Blob(obj)`: any Python object, pickled (protocol 4); declares no preds.
+- `Value.Table(table)`: a `pyarrow.Table` or pandas `DataFrame` as parquet;
   decodes to `pyarrow`.
 - `Dat(path)`: a folder; encodes as `{"files": {relpath: sha256}}`
   (canonical JSON, `__pycache__` folders skipped). Each file is hashed

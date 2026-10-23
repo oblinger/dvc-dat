@@ -25,9 +25,9 @@ from .helpers import bump
 from .ledger import Ledger
 from .rev import Ref, Rev, Row
 from .txn import Transaction, attr
-from .value import Dat, Pickled, Table, Value, ledger_class
+from .value import Dat, Value, ledger_class
 
-__all__ = ["Ledger", "Rev", "Ref", "Row", "Transaction", "Value", "Pickled", "Table", "Dat", "Fn",
+__all__ = ["Ledger", "Rev", "Ref", "Row", "Transaction", "Value", "Dat", "Fn",
            "ledger_fn", "ledger_class", "bump", "attr", "LedgerError", "Multiple", "NotEvaluated", "NotClean",
            "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "LockTimeout", "Unindexed", "Exists", "Undeclared",
            "AliasLoop", "SealBroken"]

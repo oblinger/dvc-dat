@@ -3,7 +3,7 @@
 import pytest
 
 import ledger_kinds
-from dvc_dat.ledger import Dat, NotClean, NotEvaluated, Pickled, Ref, ledger_fn
+from dvc_dat.ledger import Dat, NotClean, NotEvaluated, Ref, Value, ledger_fn
 from ledger_kinds import CALLS, Cut, Video
 
 
@@ -138,7 +138,7 @@ def test_no_code_row_runs_with_the_env_commit(L):
 def test_keys_by_bytes_and_bare_return_pickled(world):
     a = world.at().run("ledger_kinds.cut", game="G1")
     th = world.at().run("ledger_kinds.thumb", clip=Ref(world.at(), a.subject))
-    assert isinstance(th, Pickled) and th.obj == {"n": len(a.clip)}
+    assert isinstance(th, Value.Blob) and th.obj == {"n": len(a.clip)}
     assert world.at()[th.subject, "db/keys"] == {"clip": f"ref:ledger_kinds.Cut:{a.hash}"}
     assert world.at()[th.trace["fn"], "db/returns"] == "dict"
     with pytest.raises(TypeError):

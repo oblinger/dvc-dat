@@ -2,7 +2,7 @@
 
 import pytest
 
-from dvc_dat.ledger import AliasLoop, Exists, Multiple, Pickled, Ref, Undeclared, Value, ledger_class
+from dvc_dat.ledger import AliasLoop, Exists, Multiple, Ref, Undeclared, Value, ledger_class
 from ledger_kinds import Cut, Plain, Video
 
 
@@ -177,7 +177,7 @@ def test_deps_trace_and_alias_binding(L):
     raw = Plain(b"raw")
     seal(L, raw, alias="data/raw")
     loaded = L.at().load("data/raw")
-    out = Pickled({"a": 1})
+    out = Value.Blob({"a": 1})
     seal(L, out, deps=[loaded])
     t = out.trace
     key = f"ref:ledger_kinds.Plain:{raw.hash}"

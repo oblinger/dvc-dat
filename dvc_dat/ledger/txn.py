@@ -576,7 +576,7 @@ class Transaction:
         """
         self._open("seal")
         if not isinstance(value, Value):
-            raise TypeError(f"seal takes a Value, not {type(value).__name__} (wrap it: Pickled(obj))")
+            raise TypeError(f"seal takes a Value, not {type(value).__name__} (wrap it: Value.Blob(obj))")
         if value.subject is not None:
             raise ValueError(f"{value!r} is sealed already; a different value is a new object")
         local = value.__dict__.get("_local")
