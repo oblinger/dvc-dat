@@ -46,24 +46,24 @@ The handle on one ledger: a folder holding `ledger.db` and the art store `art/`,
 ## Rev Interface
 A frozen view of the ledger as of one revision, made by `Ledger.at`, never by hand. Every read is bounded by `id`, so a `Rev` gives the same answer forever. Row reads fold the rows by each predicate's cardinality ([The fold](#The%20fold)); `asserted` and `rows` walk history unfolded; subject reads (`refs`, `values`, `value`, `select`) treat the store as a table whose rows are subjects. A stored reference comes back as an unloaded `Ref`. A `Rev` handed to a value function's body also records every read into the function's trace. Ordered and equal by `id` within one ledger.
 
-| Rev | |
-| --- | --- |
-| [id](#^id) | The revision number |
-| [ledger](#^rev-ledger) | The ledger this view reads |
-| [tx](#^tx) | The subject carrying this revision's provenance |
-| [__getitem__](#^--getitem--) | A record, an object, or when a triple was added |
-| [get](#^get) | The bracket read with a default |
-| [all](#^all) | Every match of a pattern |
-| [__contains__](#^--contains--) | Whether a triple is held |
-| [asserted](#^asserted) | The history of one subject and predicate |
-| [rows](#^rows) | Every row, unfolded |
-| [refs](#^refs) | The subjects matching a where clause |
-| [values](#^values) | The sealed values matching, loaded |
-| [value](#^value) | The one sealed value matching, loaded |
-| [select](#^select) | Chosen objects of each match, as tuples |
-| [load](#^load) | One value by subject or alias |
-| [load_fn](#^load-fn) | A value function resolved at this revision |
-| [run](#^run) | Evaluate a value function, memoised (`just run`) |
+| Rev                            |                                                  |
+| ------------------------------ | ------------------------------------------------ |
+| [id](#^id)                     | The revision number                              |
+| [ledger](#^rev-ledger)         | The ledger this view reads                       |
+| [tx](#^tx)                     | The subject carrying this revision's provenance  |
+| [__getitem__](#^--getitem--)   | A record, an object, or when a triple was added  |
+| [get](#^get)                   | __getitem__ with a default                       |
+| [all](#^all)                   | Returns every match of a pattern                 |
+| [__contains__](#^--contains--) | Tests whether a triple is currently held         |
+| [asserted](#^asserted)         | The history of one subject and predicate         |
+| [rows](#^rows)                 | Every row, unfolded                              |
+| [refs](#^refs)                 | The subjects matching a where clause             |
+| [values](#^values)             | The sealed values matching, loaded               |
+| [value](#^value)               | The one sealed value matching, loaded            |
+| [select](#^select)             | Chosen objects of each match, as tuples          |
+| [load](#^load)                 | One value by subject or alias                    |
+| [load_fn](#^load-fn)           | A value function resolved at this revision       |
+| [run](#^run)                   | Evaluate a value function, memoised (`just run`) |
 
 **id**`: int`
     The revision this view reads as of; revision 0 is the empty ledger. ^id
