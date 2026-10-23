@@ -32,3 +32,6 @@ doc/*Track/
 
 # Yore folders stay on disk, out of git: unzip there to look inside without it being swept in; restic backs up all of ~/ob (Dan, 2026-10-22)
 Yore/
+
+# the ledger notebooks build their demo projects here when run
+doc/DAT Demos/scratch/
