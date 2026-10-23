@@ -15,15 +15,15 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Class | Methods |
 | --- | --- |
 | Ledger | [path](#^path), [at](#^at), [transaction](#^transaction), [close](#^close) |
-| Rev | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [__getitem__](#^--getitem--), [get](#^get), [all](#^all), [__contains__](#^--contains--), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [load_fn](#^load-fn), [run](#^run) |
-| Ref | [rev](#^rev), [name](#^name), [subject](#^subject), [hash](#^hash), [type](#^type), [preds](#^preds), [aliases](#^aliases), [sealed_at](#^sealed-at), [load](#^ref-load) |
+| Rev | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [[]](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [load_fn](#^load-fn), [run](#^run) |
+| Ref | [rev](#^rev), [subject](#^subject), [name](#^name), [aliases](#^aliases), [hash](#^hash), [type](#^type), [preds](#^preds), [sealed_at](#^sealed-at), [load](#^ref-load) |
 | Row | [rev](#^row-rev), [subject](#^row-subject), [predicate](#^predicate), [object](#^object), [added](#^added) |
-| Transaction | [tx](#^transaction-tx), [base](#^base), [rev](#^transaction-rev), [add](#^add), [remove](#^remove), [__setitem__](#^--setitem--), [__delitem__](#^--delitem--) |
-| Value | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [trace](#^trace), [sealed](#^sealed), [hash](#^value-hash), [encode](#^encode), [decode](#^decode), [seal](#^seal), [matches](#^matches), [diff](#^diff), [same_as](#^same-as), [Trace](#^value-trace) |
+| Transaction | [tx](#^transaction-tx), [base](#^base), [rev](#^transaction-rev), [add](#^add), [[]=](#^--setitem--), [remove](#^remove), [del []](#^--delitem--) |
+| Value | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [sealed](#^sealed), [hash](#^value-hash), [trace](#^trace), [Trace](#^value-trace), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
 | Value.Blob | [obj](#^obj) |
 | Value.Table | [table](#^table-table) |
-| Dat | [path](#^dat-path), [sealed_at_path](#^sealed-at-path), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind), [decode](#^dat-decode) |
-| Fn | [name](#^fn-name), [module](#^module), [sha](#^sha), [mode](#^mode), [mount](#^mount), [signature](#^signature), [env](#^env), [subject](#^fn-subject), [__call__](#^--call--) |
+| Dat | [path](#^dat-path), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind) |
+| Fn | [name](#^fn-name), [module](#^module), [sha](#^sha), [subject](#^fn-subject), [mode](#^mode), [mount](#^mount), [env](#^env), [signature](#^signature), [()](#^--call--) |
 | dvc_dat.ledger | [ledger_fn](#^ledger-fn), [ledger_class](#^ledger-class), [bump](#^bump), [attr](#^attr), [LedgerError](#^ledgererror), [Multiple](#^multiple), [NotEvaluated](#^notevaluated), [NotClean](#^notclean), [UnmountedImport](#^unmountedimport), [UntracedRead](#^untracedread), [ConfinedWrite](#^confinedwrite), [ConfinedNetwork](#^confinednetwork), [LockTimeout](#^locktimeout), [Unindexed](#^unindexed), [Exists](#^exists), [Undeclared](#^undeclared), [AliasLoop](#^aliasloop), [SealBroken](#^sealbroken) |
 
 This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The per-file pages beside it hold the internals and every refusal in full: [ledger](ledger.md), [rev](rev.md), [txn](txn.md), [value](value.md), [fn](fn.md), [trace](trace.md), [env](env.md), [sandbox](sandbox.md), [worker](worker.md), [store](store.md), [fold](fold.md), [codec](codec.md), [helpers](helpers.md), [errors](errors.md). The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md).
@@ -68,8 +68,8 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 | [tx](#^tx)                     | The subject carrying this revision's provenance            |
 | [__getitem__](#^--getitem--)   | A record, an object, or when a triple was added            |
 | [get](#^get)                   | __getitem__ with a default                                 |
-| [all](#^all)                   | Returns ordered pattern-matched values with folding        |
 | [__contains__](#^--contains--) | Tests whether a triple is currently held                   |
+| [all](#^all)                   | Returns ordered pattern-matched values with folding        |
 | [rows](#^rows)                 | Returns ordered pattern-matched rows without folding       |
 | [refs](#^refs)                 | Returns a Ref to every subject matching a query            |
 | [values](#^values)             | Returns the values whose subjects match a query            |
@@ -94,11 +94,11 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 **get**`(*pattern, default=None, since: Rev | None = None)`
     The bracket read with `default` in place of `KeyError`. `since` keeps only rows in `(since, id]`: what one transaction wrote, or what moved between two releases. ^get
 
-**all**`(*pattern, since: Rev | None = None) -> list`
-    Every currently held match of the pattern (the fold), binding the open positions, in revision order; a prefix glob `"game/*"` binds the subject. Not checked against `db/type`. More than three positions is `TypeError`; a `*` anywhere but the end is `ValueError`. ^all
-
 **__contains__**`(triple) -> bool`
     `(s, p, o) in rev`: whether the triple is held at this revision, by the same fold. ^--contains--
+
+**all**`(*pattern, since: Rev | None = None) -> list`
+    Every currently held match of the pattern (the fold), binding the open positions, in revision order; a prefix glob `"game/*"` binds the subject. Not checked against `db/type`. More than three positions is `TypeError`; a `*` anywhere but the end is `ValueError`. ^all
 
 **rows**`(*pattern, since: Rev | None = None) -> list[Row]`
     Every row matching the pattern at or before this revision, or in `(since, id]`, removes included, unfolded, in `(rev, ord)` order: `all`'s pattern without the fold. No pattern is the ledger as stored; `rows(s, p, o)` with `added` true says when a triple was set. ^rows
@@ -133,12 +133,12 @@ A reference to one value at one moment, named without fetching a byte: the subje
 | ------------------------ | -------------------------------------- |
 | [Ref](#^ref)             | Name a value at a revision             |
 | [rev](#^rev)             | The revision the reference was made at |
-| [name](#^name)           | The print name currently associated with the value |
 | [subject](#^subject)     | The subject, alias resolved            |
+| [name](#^name)           | The print name currently associated with the value |
+| [aliases](#^aliases)     | Every alias naming the subject         |
 | [hash](#^hash)           | The sha256 of the value's bytes        |
 | [type](#^type)           | The class that decodes it              |
 | [preds](#^preds)         | The subject's user rows                |
-| [aliases](#^aliases)     | Every alias naming the subject         |
 | [sealed_at](#^sealed-at) | The revision it was sealed into the ledger |
 | [load](#^ref-load)       | Fetch, decode and restore the value    |
 
@@ -148,11 +148,14 @@ A reference to one value at one moment, named without fetching a byte: the subje
 **rev**`: Rev`
     The revision this reference reads through: the snapshot it was made from, so every answer it gives is as of that revision. ^rev
 
+**subject**`: str | None`
+    The subject after the alias chain. For a stored hint-less reference, the latest entry holding those bytes as of `rev`. ^subject
+
 **name**`: str`
     The print name currently associated with the value: its alias at the head (the latest written), else the hash's first 8 hex; what the `Ref` prints. Unique one way: a name points at one value at a time, and re-pointing it moves it to another value; a value may carry several names (`aliases`). `subject` is what the reference resolved to. ^name
 
-**subject**`: str | None`
-    The subject after the alias chain. For a stored hint-less reference, the latest entry holding those bytes as of `rev`. ^subject
+**aliases**`: list[str]`
+    Every name aliasing the subject as of `rev`. ^aliases
 
 **hash**`: str | None`
     The 64-hex sha256 of the value's bytes; `None` when the subject holds no value. Byte identity of two refs is `a.hash == b.hash`. ^hash
@@ -162,9 +165,6 @@ A reference to one value at one moment, named without fetching a byte: the subje
 
 **preds**`: FrozenPreds`
     The subject's non-`db/` rows, annotations included; a typed pred is an unloaded `Ref`. ^preds
-
-**aliases**`: list[str]`
-    Every name aliasing the subject as of `rev`. ^aliases
 
 **sealed_at**`: Rev | None`
     The revision the value was sealed into the ledger, its `db/value` row's: at or before `rev`, since a reference made later can point at a value sealed earlier. `None` while the subject holds no value. ^sealed-at
@@ -211,8 +211,8 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 | [base](#^base) | The revision immediately prior to this transaction |
 | [rev](#^transaction-rev) | The revision the exit wrote |
 | [add](#^add) | Append an add row |
-| [remove](#^remove) | Append a remove row |
 | [__setitem__](#^--setitem--) | Assign a predicate, or a whole record |
+| [remove](#^remove) | Append a remove row |
 | [__delitem__](#^--delitem--) | Retract a predicate, or every user predicate |
 
 **tx**`: str`
@@ -227,11 +227,11 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 **add**`(subject: str, predicate: str, object) -> None`
     One add row. `object` is a `str`, a JSON `dict` or `list`, or a `Ref` to a sealed value; a `Value` is `TypeError` naming `seal`; a bare number, bool or `None` is `TypeError` (a number is its string). `predicate == "db/value"` is `TypeError`: only a seal writes it. ^add
 
-**remove**`(subject: str, predicate: str, object) -> None`
-    One remove row: the object leaves the set of a `many` predicate, or, when it is the held object of a `one` predicate, leaves nothing held. ^remove
-
 **__setitem__**`(key, value) -> None`
     `t[s, p] = o` is `add` on a `one` predicate; a `many` or `db/` predicate is `TypeError`. `t[s] = {...}` makes the subject's user rows equal to the dict at the next revision; `t[s] = t.base[s]` writes nothing. Brackets take exact subjects; a glob is `TypeError`. ^--setitem--
+
+**remove**`(subject: str, predicate: str, object) -> None`
+    One remove row: the object leaves the set of a `many` predicate, or, when it is the held object of a `one` predicate, leaves nothing held. ^remove
 
 **__delitem__**`(key) -> None`
     `del t[s, p]` retracts what `p` holds; `del t[s]` retracts every user predicate; `db/` rows survive, and a `db/` predicate is `TypeError`. ^--delitem--
@@ -246,16 +246,16 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
 | [preds](#^value-preds)     | The strings the value is found by                 |
 | [subject](#^value-subject) | Its ledger subject once saved                     |
 | [rev](#^value-rev)         | The revision that saved it                        |
-| [trace](#^trace)           | What producing it read                            |
 | [sealed](#^sealed)         | The seal's moment, or None while unsealed         |
 | [hash](#^value-hash)       | The sha256 of its encoding                        |
+| [trace](#^trace)           | What producing it read                            |
+| [Trace](#^value-trace)     | The type of `trace`                               |
 | [encode](#^encode)         | Abstract: the bytes to store, every subclass implements it |
 | [decode](#^decode)         | Abstract: the object from its bytes, every subclass implements it |
 | [seal](#^seal)             | Fix its identity, and save it when given a ledger |
+| [same_as](#^same-as)       | Equal bytes                                       |
 | [matches](#^matches)       | Whether its trace still holds at a revision       |
 | [diff](#^diff)             | The trace items that differ from another value's  |
-| [same_as](#^same-as)       | Equal bytes                                       |
-| [Trace](#^value-trace)     | The type of `trace`                               |
 
 **preds**`: dict | FrozenPreds`
     A `dict` while unsealed, assignable as a whole; a `FrozenPreds` once sealed, whose every mutator is `TypeError`. Each pred is a `str`, number, bool, list, `Value` or `Ref`, and its name must be declared by the class's `@ledger_class` (`Undeclared` at the seal). ^value-preds
@@ -266,14 +266,17 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
 **rev**`: Rev | None`
     The revision that saved the value; set at commit or by `load`. ^value-rev
 
-**trace**`: Mapping[str, str]`
-    Item name to version or hash: what producing the value read. Empty until saved or evaluated. See [Value Provenance](#Value%20Provenance). ^trace
-
 **sealed**`: str | None`
     The moment the identity was fixed, UTC `YYYY-MM-DDTHH:MM:SSZ`, by `seal()` (saved nowhere yet, `subject` `None`) or by a save; `None` while unsealed, so `if v.sealed:` reads as before. A time rather than a revision because a seal can precede any ledger; the revision is `rev`, set at the save. ^sealed
 
 **hash**`: str`
     The hex sha256 of `encode()`, cached once sealed; after a save, the stored bytes' hash whatever the live object holds. ^value-hash
+
+**trace**`: Mapping[str, str]`
+    Item name to version or hash: what producing the value read. Empty until saved or evaluated. See [Value Provenance](#Value%20Provenance). ^trace
+
+**Trace**`: Mapping[str, str]` (class attribute)
+    The type of `trace`, for annotations. ^value-trace
 
 **encode**`() -> bytes`
     Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). The bytes to store. Two calls must return the same bytes: the seal refuses a class whose encoding is not deterministic. ^encode
@@ -284,17 +287,14 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
 **seal**`(to=None, *, keep=False, deps=(), name=None, provenance=None, by=None) -> str`
     `v.seal()` fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by` (default the provenance, else `seal`). `name=` writes `(alias, db/alias, subject)` beside it. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. See [Versioning](#Versioning). ^seal
 
+**same_as**`(other: Value | None) -> bool`
+    `self.hash == other.hash`; `False` for `None`. ^same-as
+
 **matches**`(rev: Rev) -> bool`
     Whether every trace item holds at `rev`: the memo's hit test. Consults the ledger only; never runs anything. ^matches
 
 **diff**`(other: Value) -> dict[str, tuple]`
     The trace items whose values differ, item to `(mine, theirs)`, `None` where one lacks the item. ^diff
-
-**same_as**`(other: Value | None) -> bool`
-    `self.hash == other.hash`; `False` for `None`. ^same-as
-
-**Trace**`: Mapping[str, str]` (class attribute)
-    The type of `trace`, for annotations. ^value-trace
 
 
 
@@ -338,9 +338,9 @@ A `Value` that is a folder: it encodes as its content manifest, `{"files": {relp
 | [Dat](#^dat) | Wrap a folder |
 | [path](#^dat-path) | The folder |
 | [sealed_at_path](#^sealed-at-path) | Reopen a folder sealed in another process |
+| [decode](#^dat-decode) | Materialise the folder from its manifest |
 | [kind_ok](#^kind-ok) | Whether a folder's dat.kind loads as this class |
 | [spec_kind](#^spec-kind) | The dat.kind a folder's spec names |
-| [decode](#^dat-decode) | Materialise the folder from its manifest |
 
 **Dat**`(path)`
     A value whose bytes are the manifest of the folder at `path`. ^dat
@@ -351,14 +351,14 @@ A `Value` that is a folder: it encodes as its content manifest, `{"files": {relp
 **sealed_at_path**`(path, *, name: str | None = None) -> Dat | None` (classmethod)
     The last seal record of the folder `path` not saved since, reopened in this process as the sealing process left it; `None` with no record. `v.seal(t)` on it saves exactly what the sealing process would have saved: the same subject, `SealBroken` on a changed byte unless kept. The record's class must be a subclass of the class called on, else `TypeError`. ^sealed-at-path
 
+**decode**`(data: bytes, store: ArtStore, *, name: str | None = None) -> Dat` (classmethod)
+    The folder of a manifest, placed under `<art>/dats/<name>/` when loaded by a name, else `<art>/dats/<first 16 hex of the manifest hash>/`; each file is placed by `ArtStore.get_to`. A named folder holding other content (the alias was re-pointed) is replaced. ^dat-decode
+
 **kind_ok**`(kind: str) -> bool` (classmethod)
     Whether a folder whose `_spec_` names `dat.kind` `kind` loads as this class beside the class its `db/value` row names. The default accepts the class's dotted or bare name; a subclass widens it. ^kind-ok
 
 **spec_kind**`(path: Path) -> str | None` (static)
     The `dat.kind` the folder's `_spec_.yaml` (or `_spec_.json`) names, if any. ^spec-kind
-
-**decode**`(data: bytes, store: ArtStore, *, name: str | None = None) -> Dat` (classmethod)
-    The folder of a manifest, placed under `<art>/dats/<name>/` when loaded by a name, else `<art>/dats/<first 16 hex of the manifest hash>/`; each file is placed by `ArtStore.get_to`. A named folder holding other content (the alias was re-pointed) is replaced. ^dat-decode
 
 
 
@@ -370,11 +370,11 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
 | [name](#^fn-name) | The dotted name |
 | [module](#^module) | The source file |
 | [sha](#^sha) | The sha256 of the source file |
+| [subject](#^fn-subject) | The db/fn subject naming this code |
 | [mode](#^mode) | base or sandbox |
 | [mount](#^mount) | The mounted prefix, in sandbox mode |
-| [signature](#^signature) | The keys it takes |
 | [env](#^env) | The environment it resolved in |
-| [subject](#^fn-subject) | The db/fn subject naming this code |
+| [signature](#^signature) | The keys it takes |
 | [__call__](#^--call--) | Evaluate: a memo hit, or run and seal |
 
 **name**`: str`
@@ -386,20 +386,20 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
 **sha**`: str`
     The sha256 of that file. ^sha
 
+**subject**`: str`
+    `db/fn/<name>/<16 hex>`, hashing the code that runs ([Value Provenance](#Value%20Provenance)). ^fn-subject
+
 **mode**`: str`
     `"base"` or `"sandbox"`. ^mode
 
 **mount**`: str | None`
     The mounted prefix the name resolved under; `None` when unsandboxed. ^mount
 
-**signature**`: inspect.Signature`
-    The keys the function takes, without the leading `Rev` and without `path`. ^signature
-
 **env**`: Env`
     The environment the function resolved in: repos and commits, platform. ^env
 
-**subject**`: str`
-    `db/fn/<name>/<16 hex>`, hashing the code that runs ([Value Provenance](#Value%20Provenance)). ^fn-subject
+**signature**`: inspect.Signature`
+    The keys the function takes, without the leading `Rev` and without `path`. ^signature
 
 **__call__**`(*, memo=True, clean=False, path=None, kwargs=None, **keys) -> Value | None`
     `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. The control options are exactly `memo`, `clean`, `path` and `kwargs`, never keys and never hashed. Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. A base-mode run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
