@@ -59,7 +59,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 | [refs](#^refs)                 | Returns a Ref to every subject matching a query      |
 | [values](#^values)             | Returns the values whose subjects match a query      |
 | [value](#^value)               | Same as values, but requires exactly one match       |
-| [select](#^select)             | Chosen objects of each match, as tuples              |
+| [select](#^select)             | Matching subjects as a table: a tuple of chosen preds each |
 | [load](#^load)                 | One value by subject or alias                        |
 | [load_fn](#^load-fn)           | A value function resolved at this revision           |
 | [run](#^run)                   | Evaluate a value function, memoised (`just run`)     |
@@ -98,7 +98,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     Same as `values`, but requires exactly one match: none is `KeyError`, several `Multiple`. ^value
 
 **select**`(keys: tuple[str, ...], *, s=None, kind=None, fn=None, where=None, one=False, since=None, **preds) -> list[tuple] | tuple`
-    Each match as a tuple of its objects for `keys`: `None` where absent, a list for a `many` predicate. `keys` not a non-empty tuple is `TypeError`; `one=True` as in `refs`. ^select
+    The matching subjects as a table: the same query as `refs`, and for each subject a tuple of its objects for `keys`, `None` where absent, a list for a `many` predicate (`rev.select(("home", "away"), s="game/*")`). `keys` not a non-empty tuple is `TypeError`; `one=True` as in `refs`. ^select
 
 **load**`(subject: str) -> Value`
     `Ref(self, subject).load()`: the value under a subject or an alias, decoded, its provenance restored. ^load
