@@ -1,4 +1,4 @@
-:>> [[DAT]] → [spec-format](ha://p/spec-format) 
+:>> [DAT](DAT.md) → [DAT spec-format](ha://p/DAT%20spec-format) 
 # Spec File Format
 The `_spec_.yaml` and `_result_.yaml` file formats.
 

@@ -1,7 +1,7 @@
 ---
 description: "`Dat`, `DatManager`, `DatContainer`, `Do`: the folder that is its own recipe, and the world that makes, loads, runs and seals it. Source: `dvc_dat/core.py`, `dvc_dat/do.py`."
 ---
-:>> [DAT Architecture](../DAT%20Architecture.md) → DAT Dat
+:>> [DAT](../DAT.md) → [DAT Dat](ha://p/DAT%20Dat) 
 # DAT Dat
 A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for itself and whose `_result_.yaml` holds what running it produced, sealed under a content hash.
 

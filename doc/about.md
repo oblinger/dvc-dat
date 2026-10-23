@@ -1,4 +1,4 @@
-:>> [[DAT]] → [about](ha://p/about) 
+:>> [DAT](DAT.md) → [DAT about](ha://p/DAT%20about) 
 # About
 Who built dvc_dat, and the versioning rule for its public contract.
 

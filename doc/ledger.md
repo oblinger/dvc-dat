@@ -1,4 +1,4 @@
-:>> [[DAT]] → [dvc-dat doc ledger](ha://p/dvc-dat%20doc%20ledger) 
+:>> [DAT](DAT.md) → [DAT doc ledger](ha://p/DAT%20doc%20ledger) 
 # The ledger
 The ledger: one append-only table of events, and what anything was at any moment.
 
