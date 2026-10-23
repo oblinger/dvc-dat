@@ -7,6 +7,8 @@ A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for its
 
 ![DAT Dat](DAT%20Dat.svg) 
 
+**Classes:** [Dat](#Dat%20Interface) · [DatManager](#DatManager%20Interface) · [DatContainer](#DatContainer%20Interface) · [Do](#Do%20Interface) · [module functions](#dvc_dat%20Interface) 
+
 *The spec is the record* is the topic that governs the Do node (arguments fork a new spec; they never ride beside one); the other topics annotate the nodes they govern.
 
 This page covers the dat half of `dvc_dat`: `Dat`, `DatManager` and `DatContainer` in `dvc_dat/core.py`, `Do` in `dvc_dat/do.py`, and the package's exports; the figure above is the heart. The per-file detail page is [dat.md](dat.md); the history half, the ledger, has its own module doc, [DAT Ledger](ledger/DAT%20Ledger.md); the spec file is [Spec Format](../spec-format.md) and the command line [Command Line](../cli.md).

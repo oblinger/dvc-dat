@@ -1,11 +1,13 @@
 ---
 description: "The ledger half of dvc_dat: quads read as of a revision, values stored by content, value functions evaluated with a trace. Source: `dvc_dat/ledger/`."
 ---
-:>> [DAT](../../DAT.md) → [ledger](ha://ledger) → [DAT Modules Ledger](ha://p/DAT%20Modules%20Ledger) 
+:>> [DAT](../../DAT.md) → [ledger](ledger.md) → [DAT Modules Ledger](ha://p/DAT%20Modules%20Ledger) 
 # DAT Ledger
 The ledger is a project's history: every fact a quad `(rev, subject, predicate, object)`, every read a frozen view as of one revision, every value stored by its content and found by its preds.
 
 ![DAT Ledger](DAT%20Ledger.svg) 
+
+**Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Pickled](#Pickled%20Interface) · [Table](#Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [module functions](#dvc_dat.ledger%20Interface) 
 
 *The fold* governs what a `Rev` reads, *Sealing and saving* governs how a `Value` gets its identity, and *Evaluation and the trace* governs when calling an `Fn` runs the body and when it hands back a sealed result.
 
