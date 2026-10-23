@@ -56,9 +56,9 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 | [all](#^all)                   | Returns ordered pattern-matched values with folding  |
 | [__contains__](#^--contains--) | Tests whether a triple is currently held             |
 | [rows](#^rows)                 | Returns ordered pattern-matched rows without folding |
-| [refs](#^refs)                 | The subjects matching a where clause                 |
-| [values](#^values)             | The sealed values matching, loaded                   |
-| [value](#^value)               | The one sealed value matching, loaded                |
+| [refs](#^refs)                 | Returns a Ref to every subject matching a query      |
+| [values](#^values)             | Returns the values whose subjects match a query      |
+| [value](#^value)               | Same as values, but requires exactly one match       |
 | [select](#^select)             | Chosen objects of each match, as tuples              |
 | [load](#^load)                 | One value by subject or alias                        |
 | [load_fn](#^load-fn)           | A value function resolved at this revision           |
@@ -89,13 +89,13 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     Every row matching the pattern at or before this revision, or in `(since, id]`, removes included, unfolded, in `(rev, ord)` order: `all`'s pattern without the fold. No pattern is the ledger as stored; `rows(s, p, o)` with `added` true says when a triple was set. ^rows
 
 **refs**`(*, s=None, kind=None, fn=None, where=None, one=False, since=None, **preds) -> list[Ref] | Ref`
-    The subjects satisfying every constraint, each a `Ref` at this revision. A bare keyword names a pred (any member of a `many` pred); `kind=` a `Value` class or dotted name, following `db/moved` renames; `fn=` the producing function's dotted name; `where={p: o}` any predicate, `None` meaning any object; `s` an exact subject or a prefix glob. `one=True` returns the single match: none is `KeyError`, several `Multiple`. A dotted predicate neither declared nor on any row is `Unindexed`. ^refs
+    Returns a `Ref` to every subject matching the query, sealed value or not. `refs`, `values` and `value` take the same query and pick the same subjects: a bare keyword names a pred (any member of a `many` pred); `kind=` a `Value` class or dotted name, following `db/moved` renames; `fn=` the producing function's dotted name; `where={p: o}` any predicate, `None` meaning any object; `s` an exact subject or a prefix glob; `since` keeps rows in `(since, id]`. `one=True` returns the single match: none is `KeyError`, several `Multiple`. A dotted predicate neither declared nor on any row is `Unindexed`. ^refs
 
 **values**`(*, s=None, kind=None, fn=None, where=None, since=None, **preds) -> list[Value]`
-    The sealed values matching the where clause of `refs`, loaded. ^values
+    Returns the values whose subjects match the query, loaded: the same query as `refs`, keeping only subjects that hold a sealed value. ^values
 
 **value**`(*, s=None, kind=None, fn=None, where=None, since=None, **preds) -> Value`
-    The one sealed value matching the where clause of `refs`, loaded: none is `KeyError`, several `Multiple`. ^value
+    Same as `values`, but requires exactly one match: none is `KeyError`, several `Multiple`. ^value
 
 **select**`(keys: tuple[str, ...], *, s=None, kind=None, fn=None, where=None, one=False, since=None, **preds) -> list[tuple] | tuple`
     Each match as a tuple of its objects for `keys`: `None` where absent, a list for a `many` predicate. `keys` not a non-empty tuple is `TypeError`; `one=True` as in `refs`. ^select
@@ -112,7 +112,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 
 
 ## Ref Interface
-One value at one moment, named without fetching a byte. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is the value's name (the alias naming it written latest), else the hash's first 8 hex. Made from a recording `Rev`, it records its reads into the trace like the `Rev` would.
+A reference to one value at one moment, named without fetching a byte: the subject and the revision, nothing loaded until `load`. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is the value's name (the alias naming it written latest), else the hash's first 8 hex. Made from a recording `Rev`, it records its reads into the trace like the `Rev` would.
 
 | Ref | |
 | --- | --- |
