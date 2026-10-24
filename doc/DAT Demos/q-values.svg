@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 900 560" width="900" height="560" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
-<rect width="900" height="560" fill="#ffffff"/>
-<rect x="0" y="0" width="450" height="560" fill="#f3f3f3"/>
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 900 586" width="900" height="586" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+<rect width="900" height="586" fill="#ffffff"/>
+<rect x="0" y="0" width="450" height="586" fill="#f3f3f3"/>
 <text x="225" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">IMMUTABLE CORE</text>
 <text x="675" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">MUTABLE PROPERTIES</text>
 <!-- immutable core -->
@@ -16,16 +16,19 @@
 <rect x="30" y="252" width="390" height="26" fill="#fff" stroke="#222" stroke-width="1"/>
 <text x="40" y="270" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">sha256:3f9ac27e81d04b6e…</text>
 <text x="30" y="312" font-size="15" fill="#000" font-weight="bold">Dependencies</text>
-<rect x="30" y="320" width="390" height="104" fill="#fff" stroke="#222" stroke-width="1"/>
-<line x1="30" y1="346" x2="420" y2="346" stroke="#ccc"/><line x1="30" y1="372" x2="420" y2="372" stroke="#ccc"/><line x1="30" y1="398" x2="420" y2="398" stroke="#ccc"/>
-<g font-size="12" fill="#9a9a9a" font-family="Menlo, monospace"><text x="40" y="338">video     sha256:9c1e04a7…</text><text x="40" y="364">code      annotate.git @ 4be21c7</text><text x="40" y="390">fn        annotate.label</text><text x="40" y="416">platform  linux-x86_64 · py3.11</text></g>
-<text x="30" y="458" font-size="15" fill="#000" font-weight="bold">Sealed preds</text>
-<rect x="30" y="466" width="390" height="78" fill="#fff" stroke="#222" stroke-width="1"/>
-<rect x="30" y="466" width="390" height="26" fill="#f4f4f4" stroke="#222" stroke-width="1"/>
-<line x1="150" y1="466" x2="150" y2="544" stroke="#222" stroke-width="1"/>
-<line x1="30" y1="518" x2="420" y2="518" stroke="#ccc"/>
-<text x="40" y="484" font-size="12" fill="#000" font-weight="bold">key</text><text x="160" y="484" font-size="12" fill="#000" font-weight="bold">value</text>
-<g font-size="12" fill="#9a9a9a" font-family="Menlo, monospace"><text x="40" y="510">game</text><text x="160" y="510">G1</text><text x="40" y="536">camera</text><text x="160" y="536">wide</text></g>
+<rect x="30" y="320" width="390" height="130" fill="#fff" stroke="#222" stroke-width="1"/>
+<rect x="30" y="320" width="390" height="26" fill="#f4f4f4" stroke="#222" stroke-width="1"/>
+<line x1="130" y1="320" x2="130" y2="450" stroke="#222" stroke-width="1"/>
+<line x1="30" y1="372" x2="420" y2="372" stroke="#ccc"/><line x1="30" y1="398" x2="420" y2="398" stroke="#ccc"/><line x1="30" y1="424" x2="420" y2="424" stroke="#ccc"/>
+<text x="40" y="338" font-size="12" fill="#000" font-weight="bold">key</text><text x="140" y="338" font-size="12" fill="#000" font-weight="bold">value</text>
+<g font-size="12" fill="#9a9a9a" font-family="Menlo, monospace"><text x="40" y="364">platform</text><text x="140" y="364">linux-x86_64 · py3.11</text><text x="40" y="390">fn</text><text x="140" y="390">annotate.label</text><text x="40" y="416">code</text><text x="140" y="416">annotate.git @ 4be21c7</text><text x="40" y="442">video</text><text x="140" y="442">sha256:9c1e04a7…</text></g>
+<text x="30" y="484" font-size="15" fill="#000" font-weight="bold">Sealed preds</text>
+<rect x="30" y="492" width="390" height="78" fill="#fff" stroke="#222" stroke-width="1"/>
+<rect x="30" y="492" width="390" height="26" fill="#f4f4f4" stroke="#222" stroke-width="1"/>
+<line x1="130" y1="492" x2="130" y2="570" stroke="#222" stroke-width="1"/>
+<line x1="30" y1="544" x2="420" y2="544" stroke="#ccc"/>
+<text x="40" y="510" font-size="12" fill="#000" font-weight="bold">key</text><text x="140" y="510" font-size="12" fill="#000" font-weight="bold">value</text>
+<g font-size="12" fill="#9a9a9a" font-family="Menlo, monospace"><text x="40" y="536">game</text><text x="140" y="536">G1</text><text x="40" y="562">camera</text><text x="140" y="562">wide</text></g>
 <!-- mutable properties -->
 <text x="495" y="92" font-size="15" fill="#000" font-weight="bold">Name</text>
 <rect x="495" y="100" width="360" height="26" fill="#fff" stroke="#222" stroke-width="1"/>
@@ -34,7 +37,7 @@
 <rect x="495" y="168" width="360" height="52" fill="#fff" stroke="#222" stroke-width="1"/>
 <line x1="495" y1="194" x2="855" y2="194" stroke="#ccc"/>
 <g font-size="12" fill="#9a9a9a" font-family="Menlo, monospace"><text x="505" y="186">game/2026-10-12</text><text x="505" y="212">gym-a/court-2</text></g>
-<text x="495" y="254" font-size="15" fill="#000" font-weight="bold">Predicates</text>
+<text x="495" y="254" font-size="15" fill="#000" font-weight="bold">Unsealed preds</text>
 <rect x="495" y="262" width="360" height="104" fill="#fff" stroke="#222" stroke-width="1"/>
 <rect x="495" y="262" width="360" height="26" fill="#f4f4f4" stroke="#222" stroke-width="1"/>
 <line x1="615" y1="262" x2="615" y2="366" stroke="#222" stroke-width="1"/>
