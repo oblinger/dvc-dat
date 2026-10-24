@@ -89,13 +89,16 @@ print(by_name_video.frames)                        # → b'G1 wide camera, 9000 
 print(by_name_video.subject == by_hash_video.subject)   # → True
 
 # %% [markdown]
-# ## Finding values by preds
+# ## Assigning preds, and finding values by them
+#
+# Preds set before the seal are written with it, as rows on the
+# value's subject.
 
 # %%
 g2_video = Video(b"G2 wide camera, 8400 frames")
 g2_video.preds.update(game="G2", camera="wide")
 with L.transaction(by="human:dan") as t:
-    g2_video.seal(t, name="video/G2")
+    g2_subject = g2_video.seal(t, name="video/G2")
 rev2 = L.at()
 print(rev2.values(camera="wide"))           # → [video/G1, video/G2]
 print(rev2.value(game="G1", camera="wide")) # → video/G1
@@ -106,17 +109,41 @@ print(rev2.refs(kind=Video))                # → [video/G1, video/G2]
 # matches unloaded.
 
 # %% [markdown]
-# ## Adding an alias
+# ### Updating a pred
 #
-# A name is an alias: a `db/alias` row pointing at the value's
-# subject. Any number may point at one value; its name is the alias
-# written latest.
+# The preds the class declares (`game`, `camera`, `span`) are sealed
+# with the value and never change. Any other pred is a row written
+# beside it: assigned in one transaction, updated in the next, and
+# the finders follow it.
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t[g2_subject, "status"] = "raw"
+rev3 = L.at()
+with L.transaction(by="human:dan", why="G2 reviewed") as t:
+    t[g2_subject, "status"] = "reviewed"
+print(rev3.values(status="raw"))        # → [video/G2]
+print(L.at().values(status="raw"))      # → []
+print(L.at().values(status="reviewed")) # → [video/G2]
+
+# %% [markdown]
+# ## Values are immutable; their names, aliases and preds are not
+#
+# The bytes behind a hash, and the preds sealed with them, never
+# change. A name, an alias or any other pred is a row beside the
+# value, and rows can be written any time.
+
+# %% [markdown]
+# ### Adding an alias
+#
+# An alias is a `db/alias` row pointing at the value's subject. Any
+# number may point at one value; its name is the alias written
+# latest.
 
 # %%
 with L.transaction(by="human:dan") as t:
     t.add("raw/G1/wide-camera", "db/alias", video_subject)
-camera_ref = Ref(L.at(), "raw/G1/wide-camera")
-print(camera_ref.subject == video_subject)   # → True
+camera_ref = Ref(L.at(), "video/G1")
 print(sorted(camera_ref.aliases))   # → ['raw/G1/wide-camera', 'video/G1']
 print(camera_ref.name)              # → raw/G1/wide-camera
 
@@ -124,15 +151,28 @@ print(camera_ref.name)              # → raw/G1/wide-camera
 # A `Ref` points at a value without fetching its bytes.
 
 # %% [markdown]
-# ## Annotating a value
+# ### Renaming: a new alias, the old one removed
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t.add("game/G2/baseline", "db/alias", g2_subject)
+    t.remove("video/G2", "db/alias", g2_subject)
+g2_ref = Ref(L.at(), g2_subject)
+print(g2_ref.aliases, g2_ref.name)   # → ['game/G2/baseline'] game/G2/baseline
+
+# %% [markdown]
+# ### Adding and changing a pred
 #
-# A value cannot change, but a row beside it can be added any time.
+# A pred the class never declared can be added too.
 
 # %%
 with L.transaction(by="human:dan", why="format survey") as t:
     for video_ref in L.at().refs(kind=Video):
         t.add(video_ref.subject, "resolution", "1080p")
-print(Ref(L.at(), "video/G1").preds["resolution"])   # → 1080p
+with L.transaction(by="human:dan", why="G2 was re-encoded") as t:
+    t[g2_subject, "resolution"] = "720p"
+print(Ref(L.at(), video_subject).preds["resolution"])   # → 1080p
+print(Ref(L.at(), g2_subject).preds["resolution"])      # → 720p
 
 # %% [markdown]
 # ## Ledger functions
@@ -242,11 +282,11 @@ retake_video = Video(b"G1 retake, 9100 frames")
 retake_video.preds.update(game="G1", camera="wide")
 with L.transaction(by="human:dan", why="the retake") as t:
     retake_video.seal(t, name="video/G1")   # the name moves
-rev3 = L.at()
-print(opening_clip.matches(rev3))          # → False: video/G1 moved
-retake_clip = rev3.run("clips.clip", video="video/G1", start=0, end=8)
+rev4 = L.at()
+print(opening_clip.matches(rev4))          # → False: video/G1 moved
+retake_clip = rev4.run("clips.clip", video="video/G1", start=0, end=8)
 print(retake_clip.frames)                  # → b'G1 retak'
-print(rev3.load(video_subject).frames)     # → b'G1 wide camera, 9000 frames'
+print(rev4.load(video_subject).frames)     # → b'G1 wide camera, 9000 frames'
 
 # %% [markdown]
 # A value never changes; a name moves. The old video and the old
