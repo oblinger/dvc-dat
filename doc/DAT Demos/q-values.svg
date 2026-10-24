@@ -1,26 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 900 470" width="900" height="470" font-family="Virgil, 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive">
-<rect width="900" height="470" fill="#ffffff"/>
-<path d="M300,60 L600,60 L600,330 L880,330 L880,450 L20,450 L20,330 L300,330 Z" fill="#ececec" stroke="#555" stroke-width="2" stroke-linejoin="round"/>
-<text x="450" y="88" font-size="14" fill="#111" text-anchor="middle" font-weight="bold" letter-spacing="2">IMMUTABLE CORE</text>
-<text x="450" y="128" font-size="30" fill="#000" text-anchor="middle" font-weight="bold">Value object</text>
-<text x="450" y="166" font-size="16" fill="#aaa" text-anchor="middle">basketball game</text>
-<rect x="340" y="180" width="220" height="40" rx="4" fill="none" stroke="#bbb" stroke-width="1.5"/>
-<g fill="#ccc"><rect x="346" y="184" width="8" height="6"/><rect x="346" y="210" width="8" height="6"/><rect x="546" y="184" width="8" height="6"/><rect x="546" y="210" width="8" height="6"/></g>
-<text x="450" y="206" font-size="15" fill="#aaa" text-anchor="middle">game video</text>
-<text x="450" y="250" font-size="16" fill="#aaa" text-anchor="middle">annotations</text>
-<text x="450" y="276" font-size="14" fill="#aaa" text-anchor="middle" font-family="Menlo, monospace">12:04  white 17 · 2-pt make</text>
-<text x="450" y="300" font-size="14" fill="#aaa" text-anchor="middle" font-family="Menlo, monospace">12:31  blue 4 · rebound</text>
-<text x="40" y="100" font-size="24" fill="#000" font-weight="bold">Name</text>
-<text x="40" y="128" font-size="16" fill="#aaa">"g1-final"</text>
-<text x="40" y="186" font-size="24" fill="#000" font-weight="bold">Aliases</text>
-<text x="40" y="214" font-size="16" fill="#aaa">"game/2026-10-12"</text>
-<text x="40" y="238" font-size="16" fill="#aaa">"gym-a/court-2"</text>
-<text x="40" y="374" font-size="24" fill="#000" font-weight="bold">Name hash</text>
-<text x="40" y="404" font-size="14" fill="#aaa" font-family="Menlo, monospace">sha256:3f9ac27e81d0…</text>
-<text x="630" y="100" font-size="24" fill="#000" font-weight="bold">Predicates</text>
-<g font-size="14" fill="#aaa" font-family="Menlo, monospace">
-<text x="630" y="130">game    G1</text><text x="630" y="154">camera  center</text><text x="630" y="178">span    0–4800</text></g>
-<text x="630" y="374" font-size="24" fill="#000" font-weight="bold">Dependencies</text>
-<g font-size="14" fill="#aaa" font-family="Menlo, monospace">
-<text x="630" y="402">raw-video   9c1e…</text><text x="630" y="426">annotate()  77ab…</text></g>
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 900 420" width="900" height="420" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+<rect width="900" height="420" fill="#ffffff"/>
+<!-- immutable core -->
+<rect x="20" y="20" width="450" height="380" rx="6" fill="#ececec" stroke="#888" stroke-width="1.2"/>
+<text x="40" y="48" font-size="15" fill="#000" font-weight="bold" letter-spacing="2">IMMUTABLE CORE</text>
+<rect x="40" y="64" width="410" height="146" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<text x="56" y="92" font-size="20" fill="#000" font-weight="bold">Value object</text>
+<text x="186" y="92" font-size="14" fill="#9a9a9a">basketball game</text>
+<rect x="56" y="110" width="76" height="54" rx="4" fill="none" stroke="#9a9a9a" stroke-width="1.5"/>
+<path d="M84,124 L84,150 L106,137 Z" fill="#9a9a9a"/>
+<text x="94" y="186" font-size="12" fill="#9a9a9a" text-anchor="middle">game video</text>
+<text x="156" y="122" font-size="12" fill="#9a9a9a">annotations</text>
+<g font-size="12" fill="#9a9a9a" font-family="Menlo, monospace"><text x="156" y="146">12:04  white 17  2-pt make</text><text x="156" y="168">12:31  blue 4    rebound</text></g>
+<text x="40" y="244" font-size="15" fill="#000" font-weight="bold">Name hash</text>
+<rect x="40" y="252" width="410" height="26" fill="#fff" stroke="#222" stroke-width="1"/>
+<text x="50" y="270" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">sha256:3f9ac27e81d04b6e…</text>
+<text x="40" y="312" font-size="15" fill="#000" font-weight="bold">Dependencies</text>
+<rect x="40" y="320" width="410" height="52" fill="#fff" stroke="#222" stroke-width="1"/>
+<line x1="40" y1="346" x2="450" y2="346" stroke="#ccc"/>
+<g font-size="12" fill="#9a9a9a" font-family="Menlo, monospace"><text x="50" y="338">raw-video    sha256:9c1e04a7…</text><text x="50" y="364">annotate()   sha256:77ab12f0…</text></g>
+<!-- mutable properties -->
+<rect x="500" y="20" width="380" height="380" rx="6" fill="#fff" stroke="#888" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="520" y="48" font-size="15" fill="#000" font-weight="bold" letter-spacing="2">MUTABLE PROPERTIES</text>
+<text x="520" y="92" font-size="15" fill="#000" font-weight="bold">Name</text>
+<rect x="520" y="100" width="340" height="26" fill="#fff" stroke="#222" stroke-width="1"/>
+<text x="530" y="118" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">g1-final</text>
+<text x="520" y="160" font-size="15" fill="#000" font-weight="bold">Aliases</text>
+<rect x="520" y="168" width="340" height="52" fill="#fff" stroke="#222" stroke-width="1"/>
+<line x1="520" y1="194" x2="860" y2="194" stroke="#ccc"/>
+<g font-size="12" fill="#9a9a9a" font-family="Menlo, monospace"><text x="530" y="186">game/2026-10-12</text><text x="530" y="212">gym-a/court-2</text></g>
+<text x="520" y="254" font-size="15" fill="#000" font-weight="bold">Predicates</text>
+<rect x="520" y="262" width="340" height="104" fill="#fff" stroke="#222" stroke-width="1"/>
+<rect x="520" y="262" width="340" height="26" fill="#f4f4f4" stroke="#222" stroke-width="1"/>
+<line x1="640" y1="262" x2="640" y2="366" stroke="#222" stroke-width="1"/>
+<line x1="520" y1="314" x2="860" y2="314" stroke="#ccc"/><line x1="520" y1="340" x2="860" y2="340" stroke="#ccc"/>
+<text x="530" y="280" font-size="12" fill="#000" font-weight="bold">key</text><text x="650" y="280" font-size="12" fill="#000" font-weight="bold">value</text>
+<g font-size="12" fill="#9a9a9a" font-family="Menlo, monospace"><text x="530" y="306">game</text><text x="650" y="306">G1</text><text x="530" y="332">camera</text><text x="650" y="332">center</text><text x="530" y="358">span</text><text x="650" y="358">0–4800</text></g>
 </svg>
