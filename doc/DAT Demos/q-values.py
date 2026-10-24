@@ -289,6 +289,7 @@ far_value = L.at().run("geometry.distance", a=(6, 8))
 print(far_value.obj)                       # → 10.0
 print(sorted(far_value.dependencies))      # → ['code/geometry', 'fn', 'platform']
 top_id = L.at().id
+
 again_value = L.at().run("geometry.distance", a=(6, 8))
 print(again_value.subject == far_value.subject,
       L.at().id == top_id)                 # → True True: a hit, nothing written
@@ -317,7 +318,7 @@ def clip(rev, *, video: str, start: int, end: int) -> Video:
 subprocess.run(git_cmd + ["add", "."], cwd=repo_path, check=True)
 subprocess.run(git_cmd + ["commit", "-q", "-m", "clips"], cwd=repo_path, check=True)
 
-
+# Computing a Value on the Ledger
 opening_clip = L.at().run("clips.clip", video="video/G1", start=0, end=8)
 print(opening_clip.frames)                 # → b'G1 wide '
 
@@ -347,7 +348,7 @@ print(rev4.load(video_subject).frames)     # → b'G1 wide camera, 9000 frames'
 
 # %%
 for dep_key, dep_value in sorted(retake_clip.dependencies.items()):
-    print(f"{dep_key[:28]:30}{dep_value[:56]}")
+    print(f"{dep_key[:28]:30}= {dep_value[:56]}")
 
 # %% [markdown]
 # - `code/geometry`: the commit of the repo the function ran from.
