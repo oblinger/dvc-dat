@@ -67,6 +67,29 @@ Fresh schema per row (`--ledger
   (`test_pg_lock_alarm_mid_read_leaves_the_reader_usable`).
 - Run-to-run spread is wide: another run's 4-process row gave 107 tx/s.
 
+Cloud SQL, 2026-10-24 (SVP 1450, R0037): `svp-ledger`, PostgreSQL
+17.11 on db-f1-micro (shared vCPU, 0.6 GB), us-central1, reached from
+a laptop in California (Merlin, macOS 26.6.2, arm64, 12 CPUs, Python
+3.12.0) through `cloud-sql-proxy` 2.26.3 on localhost; round trip 42 ms
+(`SELECT 1` p50, 30 samples; ping 40.6 ms). dvc-dat main at d37a71d.
+M = 100 operations per process (not 2000: at ~1.3 s an operation, the
+2000-operation rows would take ~45 min per process), 200 eval keys x 3
+salts, fresh schema per row.
+
+| Processes | `lock=` | Wall s | Transactions | tx/s | ops/s | p50 ms | p99 ms | write p50 ms | write p99 ms | Memo hits / misses | LockTimeout | Invariant failures |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 10 s | 125.4 | 71 | 0.57 | 0.80 | 1329.5 | 1812.5 | 1329.5 | 1368.6 | 0 / 30 | 0 | none |
+| 4 | 10 s | 138.5 | 287 | 2.07 | 2.89 | 1323.2 | 2292.7 | 1327.6 | 2234.6 | 9 / 101 | 0 | none |
+| 8 | 10 s | 200.8 | 542 | 2.70 | 3.99 | 2077.0 | 3469.9 | 2285.1 | 3220.8 | 48 / 178 | 0 | none |
+
+- Latency-bound from a remote client: an operation is ~30 round trips
+  (1.33 s / 42 ms), so 1 process does 0.57 tx/s (Dexter local: 45).
+  Throughput scales with processes to 4 (2.07 tx/s, p50 unchanged) and
+  flattens at 8, where p50 grows to 2.1 s.
+- No invariant failure, LockTimeout or worker error at any row.
+- These numbers are the network, not the instance: a client in
+  us-central1 (a GPU box) was not measured.
+
 **The floor.** `tests/load/test_threshold.py`, run with `DAT_LOAD=1`
 (Postgres also needs `DAT_LOAD_PG`, a server URL; it makes and drops
 its own schema): 4 processes x 2000 operations, 200 keys. It fails on

@@ -1,0 +1,161 @@
+{
+ "date": "20261024T060901Z",
+ "machine": {
+  "host": "Merlin",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "machine": "arm64",
+  "cpus": 12,
+  "python": "3.12.0",
+  "sqlite": "3.45.3",
+  "store": "pg",
+  "postgres": "17.11"
+ },
+ "config": {
+  "ledger": "postgresql://svp@127.0.0.1:5433/ledger?options=-csearch_path%3Dload_p4&art=/private/tmp/claude-501/-Users-oblinger-ob-grove-svgrove-sv-pipe/8a199b19-997d-4feb-b88f-c94da5f57767/scratchpad/load/art-p4",
+  "transactions": 100,
+  "seed": 0,
+  "lock": 10.0,
+  "keys": 200,
+  "aliases": 8,
+  "shared": 6,
+  "mix": {
+   "seal": 30,
+   "shared": 5,
+   "alias": 10,
+   "salt": 3,
+   "eval": 27,
+   "read": 25
+  },
+  "fold_checks": true,
+  "processes": 4
+ },
+ "wall_s": 138.507,
+ "check_s": 190.085,
+ "timed_out": [],
+ "transactions_committed": 287,
+ "tx_per_s": 2.07,
+ "ops_done": 400,
+ "ops_per_s": 2.89,
+ "lock_timeouts": 0,
+ "ledger_errors": 0,
+ "latency": {
+  "all": {
+   "n": 400,
+   "p50_ms": 1323.169,
+   "p90_ms": 1867.284,
+   "p99_ms": 2292.749,
+   "max_ms": 2358.117
+  },
+  "writes": {
+   "n": 186,
+   "p50_ms": 1327.571,
+   "p90_ms": 1726.138,
+   "p99_ms": 2234.566,
+   "max_ms": 2262.196
+  }
+ },
+ "per_process": [
+  {
+   "wid": 0,
+   "elapsed_s": 137.42,
+   "n": 100,
+   "p50_ms": 1320.033,
+   "p90_ms": 1848.875,
+   "p99_ms": 2358.117,
+   "max_ms": 2358.117
+  },
+  {
+   "wid": 1,
+   "elapsed_s": 132.48,
+   "n": 100,
+   "p50_ms": 1309.439,
+   "p90_ms": 1849.902,
+   "p99_ms": 2314.428,
+   "max_ms": 2314.428
+  },
+  {
+   "wid": 2,
+   "elapsed_s": 137.84,
+   "n": 100,
+   "p50_ms": 1344.104,
+   "p90_ms": 1943.594,
+   "p99_ms": 2309.031,
+   "max_ms": 2309.031
+  },
+  {
+   "wid": 3,
+   "elapsed_s": 138.484,
+   "n": 100,
+   "p50_ms": 1379.22,
+   "p90_ms": 1867.284,
+   "p99_ms": 2107.512,
+   "max_ms": 2107.512
+  }
+ ],
+ "ops": {
+  "seal": {
+   "ok": 113,
+   "n": 113,
+   "p50_ms": 1400.221,
+   "p90_ms": 1824.261,
+   "p99_ms": 2234.566,
+   "max_ms": 2262.196
+  },
+  "shared": {
+   "ok": 25,
+   "n": 25,
+   "p50_ms": 1352.029,
+   "p90_ms": 1611.51,
+   "p99_ms": 1974.343,
+   "max_ms": 1974.343
+  },
+  "alias": {
+   "ok": 38,
+   "n": 38,
+   "p50_ms": 977.923,
+   "p90_ms": 1284.332,
+   "p99_ms": 1521.279,
+   "max_ms": 1521.279
+  },
+  "salt": {
+   "ok": 10,
+   "n": 10,
+   "p50_ms": 1061.966,
+   "p90_ms": 1476.689,
+   "p99_ms": 1476.689,
+   "max_ms": 1476.689
+  },
+  "eval": {
+   "misses": 101,
+   "ok": 110,
+   "hits": 9,
+   "n": 110,
+   "p50_ms": 1676.452,
+   "p90_ms": 2034.222,
+   "p99_ms": 2314.428,
+   "max_ms": 2358.117
+  },
+  "read": {
+   "ok": 104,
+   "n": 104,
+   "p50_ms": 1035.101,
+   "p90_ms": 1050.257,
+   "p99_ms": 1064.964,
+   "max_ms": 1740.268
+  }
+ },
+ "errors": [],
+ "invariants": {
+  "failures": [],
+  "counts": {},
+  "top": 288,
+  "setup_top": 1,
+  "fold_digest": "527bac73f379982f631b2eede1c07985f738bfec677196f2f6b7b8cb0ba1cd0d",
+  "fold_handles": 4,
+  "checked": {
+   "committed": 186,
+   "evals": 110,
+   "memo_entries": 101
+  }
+ }
+}
