@@ -1,4 +1,4 @@
-:>> [Docs](Docs.md) → [DAT concepts](ha://p/DAT%20concepts) 
+:>> [DAT](DAT%20Track/DAT.md) → [DAT concepts](ha://p/DAT%20concepts) 
 # Core Concepts
 The core ideas of dvc_dat: dats, specs, results and the do system.
 
