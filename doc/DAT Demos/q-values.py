@@ -72,8 +72,8 @@ video_value = Video(b"G1 wide camera, 9000 frames")
 video_value.preds.update(game="G1", camera="wide")
 with L.transaction(by="human:dan") as t:
     video_subject = video_value.seal(t, name="video/G1")
-print(video_value)          # → video/G1
-print(len(video_subject))   # → 64: a hash of the content
+print("name:", video_value)                  # → name: video/G1
+print("subject length:", len(video_subject))  # → 64: a hash of the content
 
 # %% [markdown]
 # `seal` stores the value and names it in one step. After the seal
@@ -86,8 +86,8 @@ print(len(video_subject))   # → 64: a hash of the content
 rev1 = L.at()
 by_name_video = rev1.load("video/G1")
 by_hash_video = rev1.load(video_subject)
-print(by_name_video.frames)                        # → b'G1 wide camera, 9000 frames'
-print(by_name_video.subject == by_hash_video.subject)   # → True
+print("loaded by name:", by_name_video.frames)   # → b'G1 wide camera, 9000 frames'
+print("same value by hash:", by_name_video.subject == by_hash_video.subject)   # → True
 
 # %% [markdown]
 # ### Assigning preds, and finding values by them
@@ -101,9 +101,9 @@ g2_video.preds.update(game="G2", camera="wide")
 with L.transaction(by="human:dan") as t:
     g2_subject = g2_video.seal(t, name="video/G2")
 rev2 = L.at()
-print(rev2.values(camera="wide"))           # → [video/G1, video/G2]
-print(rev2.value(game="G1", camera="wide")) # → video/G1
-print(rev2.refs(kind=Video))                # → [video/G1, video/G2]
+print("camera=wide:", rev2.values(camera="wide"))           # → [video/G1, video/G2]
+print("game=G1, camera=wide:", rev2.value(game="G1", camera="wide")) # → video/G1
+print("every Video:", rev2.refs(kind=Video))                # → [video/G1, video/G2]
 
 # %% [markdown]
 # `values` loads every match, `value` exactly one, `refs` the
@@ -123,9 +123,9 @@ with L.transaction(by="human:dan") as t:
 rev3 = L.at()
 with L.transaction(by="human:dan", why="G2 reviewed") as t:
     t[g2_subject, "status"] = "reviewed"
-print(rev3.values(status="raw"))        # → [video/G2]
-print(L.at().values(status="raw"))      # → []
-print(L.at().values(status="reviewed")) # → [video/G2]
+print("raw, before the update:", rev3.values(status="raw"))        # → [video/G2]
+print("raw, after:", L.at().values(status="raw"))      # → []
+print("reviewed, after:", L.at().values(status="reviewed")) # → [video/G2]
 
 # %% [markdown]
 # ### Values are immutable; their names, aliases and preds are not
@@ -145,8 +145,8 @@ print(L.at().values(status="reviewed")) # → [video/G2]
 with L.transaction(by="human:dan") as t:
     t.add("raw/G1/wide-camera", "db/alias", video_subject)
 camera_ref = Ref(L.at(), "video/G1")
-print(sorted(camera_ref.aliases))   # → ['raw/G1/wide-camera', 'video/G1']
-print(camera_ref.name)              # → raw/G1/wide-camera
+print("aliases:", sorted(camera_ref.aliases))   # → ['raw/G1/wide-camera', 'video/G1']
+print("name:", camera_ref.name)              # → raw/G1/wide-camera
 
 # %% [markdown]
 # A `Ref` points at a value without fetching its bytes.
@@ -159,7 +159,7 @@ with L.transaction(by="human:dan") as t:
     t.add("game/G2/baseline", "db/alias", g2_subject)
     t.remove("video/G2", "db/alias", g2_subject)
 g2_ref = Ref(L.at(), g2_subject)
-print(g2_ref.aliases, g2_ref.name)   # → ['game/G2/baseline'] game/G2/baseline
+print("aliases:", g2_ref.aliases, " name:", g2_ref.name)   # → ['game/G2/baseline'] game/G2/baseline
 
 # %% [markdown]
 # #### Adding and changing a pred
@@ -172,8 +172,8 @@ with L.transaction(by="human:dan", why="format survey") as t:
         t.add(video_ref.subject, "resolution", "1080p")
 with L.transaction(by="human:dan", why="G2 was re-encoded") as t:
     t[g2_subject, "resolution"] = "720p"
-print(Ref(L.at(), video_subject).preds["resolution"])   # → 1080p
-print(Ref(L.at(), g2_subject).preds["resolution"])      # → 720p
+print("G1 resolution:", Ref(L.at(), video_subject).preds["resolution"])   # → 1080p
+print("G2 resolution:", Ref(L.at(), g2_subject).preds["resolution"])      # → 720p
 
 # %% [markdown]
 # ## Ledger functions
@@ -225,7 +225,7 @@ sys.path.insert(0, str(repo_path))
 # %%
 distance_fn = L.at().load_fn("geometry.distance")
 hypotenuse_value = distance_fn(a=(3, 4))
-print(hypotenuse_value.obj, hypotenuse_value.sealed)
+print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 # → 5.0 <the seal's moment>
 
 # %% [markdown]
@@ -247,7 +247,7 @@ with L.transaction(by="human:dan") as t:
 
 length_fn = L.at().load_fn("plane.measure.length")
 segment_value = length_fn(a=(0, 0), b=(3, 4))
-print(length_fn.mode, segment_value.obj)   # → sandbox 2.5
+print("mode:", length_fn.mode, " result:", segment_value.obj)   # → sandbox 2.5
 
 # %% [markdown]
 # #### A sandbox is one version of its code
@@ -257,10 +257,10 @@ print(length_fn.mode, segment_value.obj)   # → sandbox 2.5
 # at that version. Every result records it among its dependencies.
 
 # %%
-print(length_fn.sha[:12])    # → c0edae70e5dc: the checksum of plane/measure.py
-print(length_fn.subject)     # → db/fn/plane.measure.length/054ba34c4c9343da
-print(segment_value.dependencies)
-# → {'fn': 'db/fn/plane.measure.length/054ba34c4c9343da', 'platform': <this machine>}
+print("code checksum:", length_fn.sha[:12])    # → 0fc940ed13c9: the checksum of plane/measure.py
+print("function identity:", length_fn.subject)     # → db/fn/plane.measure.length/bab093250d0dffef
+print("result depends on:", segment_value.dependencies)
+# → {'fn': 'db/fn/plane.measure.length/bab093250d0dffef', 'platform': <this machine>}
 
 # %% [markdown]
 # Change the code and the function is a new one, with a new
@@ -271,11 +271,11 @@ measure_path = repo_path / "plane/measure.py"
 measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
 subprocess.run(git_cmd + ["commit", "-q", "-am", "quarter metres"], cwd=repo_path, check=True)
 new_length_fn = L.at().load_fn("plane.measure.length")
-print(new_length_fn.sha[:12], new_length_fn.subject)
-# → 70809ccdce2e db/fn/plane.measure.length/637deba82ac19922
-print(new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → 1.25
-print(segment_value.dependencies["fn"], segment_value.obj)
-# → db/fn/plane.measure.length/054ba34c4c9343da 2.5
+print("new checksum:", new_length_fn.sha[:12], " new identity:", new_length_fn.subject)
+# → 286c47147df4 db/fn/plane.measure.length/f000d89a5e3f336f
+print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → 1.25
+print("old result still names:", segment_value.dependencies["fn"], " and holds:", segment_value.obj)
+# → db/fn/plane.measure.length/bab093250d0dffef 2.5
 
 # %% [markdown]
 # ## Ledger evaluation
@@ -286,12 +286,12 @@ print(segment_value.dependencies["fn"], segment_value.obj)
 
 # %%
 far_value = L.at().run("geometry.distance", a=(6, 8))
-print(far_value.obj)                       # → 10.0
-print(sorted(far_value.dependencies))      # → ['code/geometry', 'fn', 'platform']
+print("result:", far_value.obj)                       # → 10.0
+print("depends on:", sorted(far_value.dependencies))      # → ['code/geometry', 'fn', 'platform']
 top_id = L.at().id
 
 again_value = L.at().run("geometry.distance", a=(6, 8))
-print(again_value.subject == far_value.subject,
+print("same value:", again_value.subject == far_value.subject, " nothing written:",
       L.at().id == top_id)                 # → True True: a hit, nothing written
 
 # %% [markdown]
@@ -320,17 +320,17 @@ subprocess.run(git_cmd + ["commit", "-q", "-m", "clips"], cwd=repo_path, check=T
 
 # Computing a Value on the Ledger
 opening_clip = L.at().run("clips.clip", video="video/G1", start=0, end=8)
-print(opening_clip.frames)                 # → b'G1 wide '
+print("opening clip:", opening_clip.frames)                 # → b'G1 wide '
 
 retake_video = Video(b"G1 retake, 9100 frames")
 retake_video.preds.update(game="G1", camera="wide")
 with L.transaction(by="human:dan", why="the retake") as t:
     retake_video.seal(t, name="video/G1")   # the name moves
 rev4 = L.at()
-print(opening_clip.matches(rev4))          # → False: video/G1 moved
+print("opening clip still holds:", opening_clip.matches(rev4))          # → False: video/G1 moved
 retake_clip = rev4.run("clips.clip", video="video/G1", start=0, end=8)
-print(retake_clip.frames)                  # → b'G1 retak'
-print(rev4.load(video_subject).frames)     # → b'G1 wide camera, 9000 frames'
+print("retake clip:", retake_clip.frames)                  # → b'G1 retak'
+print("first video, by hash:", rev4.load(video_subject).frames)     # → b'G1 wide camera, 9000 frames'
 
 # %% [markdown]
 # A value never changes; a name moves. The old video and the old
@@ -362,8 +362,8 @@ for dep_key, dep_value in sorted(retake_clip.dependencies.items()):
 
 # %%
 first_hash = rev4.load(video_subject).hash
-print(opening_clip.dependencies["video/G1 db/alias"].endswith(first_hash))         # → True: the first video
-print(retake_clip.dependencies["video/G1 db/alias"].endswith(retake_video.hash))   # → True: the retake
+print("opening clip read the first video:", opening_clip.dependencies["video/G1 db/alias"].endswith(first_hash))   # → True: the first video
+print("retake clip read the retake:", retake_clip.dependencies["video/G1 db/alias"].endswith(retake_video.hash))   # → True: the retake
 
 # %% [markdown]
 # ### Sealing, step by step
@@ -377,17 +377,17 @@ print(retake_clip.dependencies["video/G1 db/alias"].endswith(retake_video.hash))
 highlight_video = Video(b"G1 highlights, 600 frames")      # 1. make a value
 highlight_video.preds.update(game="G1", camera="wide")
 
-print(highlight_video.seal()[:12])        # 2. seal it, on this machine only → 75b825dc06c0
-print(highlight_video.sealed)             # → <the seal's moment>
+print("sealed, hash:", highlight_video.seal()[:12])     # 2. seal it, on this machine only
+print("sealed at:", highlight_video.sealed)             # → <the seal's moment>
 try:
     highlight_video.preds["camera"] = "baseline"
 except Exception as error:
-    print(type(error).__name__, error)    # → TypeError cannot modify a sealed value's preds
-print(L.at().values(game="G1"))           # → [raw/G1/wide-camera, video/G1]: not on the timeline yet
+    print("change refused:", type(error).__name__, error)    # → TypeError cannot modify a sealed value's preds
+print("G1 videos on the ledger:", L.at().values(game="G1"))   # not on the timeline yet
 
 with L.transaction(by="human:dan", why="keep the highlights") as t:   # 3. keep it
     highlight_video.seal(t, name="video/G1/highlights")
-print(L.at().values(game="G1"))           # → [raw/G1/wide-camera, video/G1, video/G1/highlights]
+print("G1 videos on the ledger:", L.at().values(game="G1"))   # now it is
 
 # %% [markdown]
 # A ledger function does all three in one call: it runs, seals the
@@ -397,8 +397,8 @@ print(L.at().values(game="G1"))           # → [raw/G1/wide-camera, video/G1, v
 # %%
 clip_fn = L.at().load_fn("clips.clip")                                # get the function
 draft_clip = clip_fn(video="video/G1", start=8, end=16, memo=False)   # run it
-print(draft_clip.frames, draft_clip.sealed)   # → b'e, 9100 ' None: not sealed, not saved
+print("draft:", draft_clip.frames, " sealed:", draft_clip.sealed)   # → b'e, 9100 ' None: not sealed, not saved
 
 kept_clip = clip_fn(video="video/G1", start=8, end=16)                # keep it
-print(kept_clip.frames, kept_clip.sealed is not None, kept_clip.subject[:12])
+print("kept:", kept_clip.frames, " sealed:", kept_clip.sealed is not None, " subject:", kept_clip.subject[:12])
 # → b'e, 9100 ' True <its subject>: sealed and on the timeline
