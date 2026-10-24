@@ -247,6 +247,34 @@ segment_value = length_fn(a=(0, 0), b=(3, 4))
 print(length_fn.mode, segment_value.obj)   # → sandbox 2.5
 
 # %% [markdown]
+# #### A sandbox is one version of its code
+#
+# Loading a sandboxed function pins the code it runs: `sha` is the
+# checksum of the file it loaded, and `subject` names the function
+# at that version. Every result records it among its dependencies.
+
+# %%
+print(length_fn.sha[:12])    # → c0edae70e5dc: the checksum of plane/measure.py
+print(length_fn.subject)     # → db/fn/plane.measure.length/054ba34c4c9343da
+print(segment_value.dependencies)
+# → {'fn': 'db/fn/plane.measure.length/054ba34c4c9343da', 'platform': <this machine>}
+
+# %% [markdown]
+# Change the code and the function is a new one, with a new
+# identity. The old result still names the version that made it.
+
+# %%
+measure_path = repo_path / "plane/measure.py"
+measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
+subprocess.run(git_cmd + ["commit", "-q", "-am", "quarter metres"], cwd=repo_path, check=True)
+new_length_fn = L.at().load_fn("plane.measure.length")
+print(new_length_fn.sha[:12], new_length_fn.subject)
+# → 70809ccdce2e db/fn/plane.measure.length/637deba82ac19922
+print(new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → 1.25
+print(segment_value.dependencies["fn"], segment_value.obj)
+# → db/fn/plane.measure.length/054ba34c4c9343da 2.5
+
+# %% [markdown]
 # ## Ledger evaluation
 #
 # `rev.run(name, **keys)` is a lookup and a call, traced: the result
