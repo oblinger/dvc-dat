@@ -12,7 +12,7 @@
 <text x="84" y="186" font-size="12" fill="#9a9a9a" text-anchor="middle">game video</text>
 <text x="146" y="122" font-size="12" fill="#9a9a9a">annotations</text>
 <g font-size="12" fill="#9a9a9a" font-family="Menlo, monospace"><text x="146" y="146">12:04  white 17  2-pt make</text><text x="146" y="168">12:31  blue 4    rebound</text></g>
-<text x="30" y="244" font-size="15" fill="#000" font-weight="bold">Name hash</text>
+<text x="30" y="244" font-size="15" fill="#000" font-weight="bold">Hash</text>
 <rect x="30" y="252" width="390" height="26" fill="#fff" stroke="#222" stroke-width="1"/>
 <text x="40" y="270" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">sha256:3f9ac27e81d04b6e…</text>
 <text x="30" y="312" font-size="15" fill="#000" font-weight="bold">Dependencies</text>
