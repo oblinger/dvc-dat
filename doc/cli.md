@@ -1,4 +1,4 @@
-:>> [Docs](Docs.md) → [DAT doc cli](ha://p/DAT%20doc%20cli) 
+:>> [DAT](DAT%20Track/DAT.md) → [DAT doc cli](ha://p/DAT%20doc%20cli) 
 # Command Line
 The command line, `just run` and `x`: where it finds its config, and every subcommand.
 
