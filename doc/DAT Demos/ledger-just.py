@@ -5,6 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
+#       jupytext_version: 1.19.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -93,6 +94,7 @@ git("add", ".")
 git("commit", "-q", "-m", "demo-game")
 sys.path.insert(0, str(scratch_project_path))
 os.environ["PYTHONPATH"] = str(scratch_project_path)  # for recipes
+os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"  # recipes run this python
 
 # one game, its video, a 1.5.3 cut, a home correction, a 1.5.4 cut
 
@@ -373,7 +375,7 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 
 # %%
 # !just index game
-# → game: indexed; 3 subjects hold it
+# → game: indexed; 7 subjects hold it
 
 # %% [markdown]
 # It is
