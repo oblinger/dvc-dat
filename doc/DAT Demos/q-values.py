@@ -43,7 +43,7 @@ L = Ledger(scratch_path / "ledger", create=True)
 display(SVG(filename="q-values.svg"))   # black: the parts every value has; gray: an example
 
 # %% [markdown]
-# ## Values
+# ## Value objects
 #
 # A value's class is a `Value` subclass in a module (here
 # `demo_game/game.py`), saying how the object becomes bytes and back,
@@ -89,7 +89,7 @@ print(by_name_video.frames)                        # → b'G1 wide camera, 9000 
 print(by_name_video.subject == by_hash_video.subject)   # → True
 
 # %% [markdown]
-# ## Assigning preds, and finding values by them
+# ### Assigning preds, and finding values by them
 #
 # Preds set before the seal are written with it, as rows on the
 # value's subject.
@@ -109,7 +109,7 @@ print(rev2.refs(kind=Video))                # → [video/G1, video/G2]
 # matches unloaded.
 
 # %% [markdown]
-# ### Updating a pred
+# #### Updating a pred
 #
 # The preds the class declares (`game`, `camera`, `span`) are sealed
 # with the value and never change. Any other pred is a row written
@@ -127,14 +127,14 @@ print(L.at().values(status="raw"))      # → []
 print(L.at().values(status="reviewed")) # → [video/G2]
 
 # %% [markdown]
-# ## Values are immutable; their names, aliases and preds are not
+# ### Values are immutable; their names, aliases and preds are not
 #
 # The bytes behind a hash, and the preds sealed with them, never
 # change. A name, an alias or any other pred is a row beside the
 # value, and rows can be written any time.
 
 # %% [markdown]
-# ### Adding an alias
+# #### Adding an alias
 #
 # An alias is a `db/alias` row pointing at the value's subject. Any
 # number may point at one value; its name is the alias written
@@ -151,7 +151,7 @@ print(camera_ref.name)              # → raw/G1/wide-camera
 # A `Ref` points at a value without fetching its bytes.
 
 # %% [markdown]
-# ### Renaming: a new alias, the old one removed
+# #### Renaming: a new alias, the old one removed
 
 # %%
 with L.transaction(by="human:dan") as t:
@@ -161,7 +161,7 @@ g2_ref = Ref(L.at(), g2_subject)
 print(g2_ref.aliases, g2_ref.name)   # → ['game/G2/baseline'] game/G2/baseline
 
 # %% [markdown]
-# ### Adding and changing a pred
+# #### Adding and changing a pred
 #
 # A pred the class never declared can be added too.
 
@@ -180,12 +180,19 @@ print(Ref(L.at(), g2_subject).preds["resolution"])      # → 720p
 # A ledger function is a Python function the ledger knows by dotted
 # name; it takes the revision first, and its result is sealed as a
 # value. It lives in a git repository, so the ledger can record
-# exactly which code ran. One is made here.
+# exactly which code ran.
+
+# %% [markdown]
+# ### Set up repo and code
+#
+# One git repository, `geometry`, holds both functions used below:
+# `geometry.distance` runs in this process; `plane.measure.length`
+# runs sandboxed.
 
 # %%
+# setup: create the repo in a folder, with these two source files, and commit them
 repo_path = scratch_path / "geometry"
-repo_path.mkdir(parents=True)
-git_cmd = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.com"]
+(repo_path / "plane").mkdir(parents=True)
 (repo_path / "geometry.py").write_text('''\
 import math
 from dvc_dat.ledger import ledger_fn
@@ -195,10 +202,24 @@ from dvc_dat.ledger import ledger_fn
 def distance(rev, a, b=(0, 0)) -> float:
     return math.dist(a, b)
 ''')
-for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "distance"]):
+(repo_path / "plane/measure.py").write_text('''\
+import math
+from dvc_dat.ledger import ledger_fn
+
+
+@ledger_fn
+def length(rev, a, b) -> float:
+    return math.dist(a, b) * 0.5     # metres per unit
+''')
+git_cmd = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.com"]
+for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "geometry and plane"]):
     subprocess.run(git_cmd + args, cwd=repo_path, check=True)
 sys.path.insert(0, str(repo_path))
 
+# %% [markdown]
+# ### Accessing and using Python functions
+
+# %%
 distance_fn = L.at().load_fn("geometry.distance")
 hypotenuse_value = distance_fn(a=(3, 4))
 print(hypotenuse_value.obj, hypotenuse_value.sealed)
@@ -213,21 +234,10 @@ print(hypotenuse_value.obj, hypotenuse_value.sealed)
 #
 # A sandboxed function runs isolated, seeing only its mounted source
 # folder, so its version is a checksum of the files it loaded rather
-# than a git commit. A mount is two rows.
+# than a git commit. A mount is two rows: the folder, and the repo
+# that holds it.
 
 # %%
-(repo_path / "plane").mkdir()
-(repo_path / "plane/measure.py").write_text('''\
-import math
-from dvc_dat.ledger import ledger_fn
-
-
-@ledger_fn
-def length(rev, a, b) -> float:
-    return math.dist(a, b) * 0.5     # metres per unit
-''')
-for args in (["add", "."], ["commit", "-q", "-m", "plane"]):
-    subprocess.run(git_cmd + args, cwd=repo_path, check=True)
 with L.transaction(by="human:dan") as t:
     t.add("db/mount/plane", "db/root", "plane")
     t.add("db/mount/plane", "db/repo", "geometry")
