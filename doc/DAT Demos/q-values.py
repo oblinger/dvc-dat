@@ -16,7 +16,7 @@
 # #### Setup
 
 # %%
-import shutil, subprocess, sys
+import os, shutil, subprocess, sys
 from pathlib import Path
 
 from IPython.display import SVG, display
@@ -29,6 +29,7 @@ for module_name in ("geometry", "plane", "plane.measure", "clips"):
     sys.modules.pop(module_name, None)
 sys.path.insert(0, str(Path("demo_game").resolve()))   # the Video class
 
+os.environ["DAT_KEPT"] = str(scratch_path / "kept")   # where v.seal() records local seals
 L = Ledger(scratch_path / "ledger", create=True)
 
 # %% [markdown]
@@ -197,23 +198,25 @@ repo_path = scratch_path / "geometry"
 import math
 from dvc_dat.ledger import ledger_fn
 
-
 @ledger_fn
 def distance(rev, a, b=(0, 0)) -> float:
     return math.dist(a, b)
 ''')
+
 (repo_path / "plane/measure.py").write_text('''\
 import math
 from dvc_dat.ledger import ledger_fn
-
 
 @ledger_fn
 def length(rev, a, b) -> float:
     return math.dist(a, b) * 0.5     # metres per unit
 ''')
+
 git_cmd = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.com"]
-for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "geometry and plane"]):
-    subprocess.run(git_cmd + args, cwd=repo_path, check=True)
+subprocess.run(git_cmd + ["init", "-q"], cwd=repo_path, check=True)
+subprocess.run(git_cmd + ["add", "."], cwd=repo_path, check=True)
+subprocess.run(git_cmd + ["commit", "-q", "-m", "geometry and plane"], cwd=repo_path, check=True)
+
 sys.path.insert(0, str(repo_path))
 
 # %% [markdown]
@@ -306,13 +309,15 @@ print(again_value.subject == far_value.subject,
 from dvc_dat.ledger import ledger_fn
 from demo_game.game import Video
 
-
 @ledger_fn
 def clip(rev, *, video: str, start: int, end: int) -> Video:
     return Video(rev.load(video).frames[start:end])
 ''')
-for args in (["add", "."], ["commit", "-q", "-m", "clips"]):
-    subprocess.run(git_cmd + args, cwd=repo_path, check=True)
+
+subprocess.run(git_cmd + ["add", "."], cwd=repo_path, check=True)
+subprocess.run(git_cmd + ["commit", "-q", "-m", "clips"], cwd=repo_path, check=True)
+
+
 opening_clip = L.at().run("clips.clip", video="video/G1", start=0, end=8)
 print(opening_clip.frames)                 # → b'G1 wide '
 
@@ -329,3 +334,70 @@ print(rev4.load(video_subject).frames)     # → b'G1 wide camera, 9000 frames'
 # %% [markdown]
 # A value never changes; a name moves. The old video and the old
 # clip stay, found by their hashes.
+
+# %% [markdown]
+# ## Provenance
+#
+# A value a ledger function returns records what it depended on: the
+# function at its version, the code's commit, the platform, and every
+# name and value it read. That record is its provenance.
+
+# %% [markdown]
+# ### What a result depends on
+
+# %%
+for dep_key, dep_value in sorted(retake_clip.dependencies.items()):
+    print(f"{dep_key[:28]:30}{dep_value[:56]}")
+
+# %% [markdown]
+# - `code/geometry`: the commit of the repo the function ran from.
+# - `fn`: the function at its version, as for the sandbox above.
+# - `platform`: the machine it ran on.
+# - `ref:…`: the video bytes it loaded.
+# - `video/G1 db/alias`: the value the name `video/G1` pointed at.
+#
+# That last row is how `matches` knew the opening clip was stale: it
+# names the first video, and the name has since moved to the retake.
+
+# %%
+first_hash = rev4.load(video_subject).hash
+print(opening_clip.dependencies["video/G1 db/alias"].endswith(first_hash))         # → True: the first video
+print(retake_clip.dependencies["video/G1 db/alias"].endswith(retake_video.hash))   # → True: the retake
+
+# %% [markdown]
+# ### Sealing, step by step
+#
+# Sealing fixes a value: its bytes' hash and its preds, so it can be
+# checked but not changed. Saving puts the sealed value on the
+# ledger's timeline. `v.seal(t)` does both at once; here they are
+# apart.
+
+# %%
+highlight_video = Video(b"G1 highlights, 600 frames")      # 1. make a value
+highlight_video.preds.update(game="G1", camera="wide")
+
+print(highlight_video.seal()[:12])        # 2. seal it, on this machine only → 75b825dc06c0
+print(highlight_video.sealed)             # → <the seal's moment>
+try:
+    highlight_video.preds["camera"] = "baseline"
+except Exception as error:
+    print(type(error).__name__, error)    # → TypeError cannot modify a sealed value's preds
+print(L.at().values(game="G1"))           # → [raw/G1/wide-camera, video/G1]: not on the timeline yet
+
+with L.transaction(by="human:dan", why="keep the highlights") as t:   # 3. keep it
+    highlight_video.seal(t, name="video/G1/highlights")
+print(L.at().values(game="G1"))           # → [raw/G1/wide-camera, video/G1, video/G1/highlights]
+
+# %% [markdown]
+# A ledger function does all three in one call: it runs, seals the
+# result with its provenance, and saves it. `memo=False` only runs
+# it, saving nothing, so the result can be looked at first.
+
+# %%
+clip_fn = L.at().load_fn("clips.clip")                                # get the function
+draft_clip = clip_fn(video="video/G1", start=8, end=16, memo=False)   # run it
+print(draft_clip.frames, draft_clip.sealed)   # → b'e, 9100 ' None: not sealed, not saved
+
+kept_clip = clip_fn(video="video/G1", start=8, end=16)                # keep it
+print(kept_clip.frames, kept_clip.sealed is not None, kept_clip.subject[:12])
+# → b'e, 9100 ' True <its subject>: sealed and on the timeline
