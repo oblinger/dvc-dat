@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+    # A doc-only PR skips the suite; push to main runs it always.  The docs the
+    # suite executes are listed back in: a new one goes here too.
+    paths:
+      - '**'
+      - '!doc/**'
+      - '!**/*.md'
+      - 'doc/DAT Demos/**'           # test_demo_notebooks, test_examples, ledger/test_notebooks
+      - 'doc/concepts.md'            # test_v2 runs their python recipes
+      - 'doc/spec-format.md'
 
 jobs:
   pytest:
@@ -17,6 +26,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
       - uses: extractions/setup-just@v2     # `just run`, `x` and the ledger-just notebook
       - run: uv sync --locked
-      - run: uv run python -m pytest -q
+      - run: uv run python -m pytest -q -n auto --dist loadgroup
