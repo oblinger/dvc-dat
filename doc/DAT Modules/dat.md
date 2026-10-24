@@ -1,4 +1,4 @@
-:>> [DAT](../DAT.md) → [Modules dat](ha://p/Modules%20dat) 
+:>> [Docs](../Docs.md) → [Modules dat](ha://p/Modules%20dat) 
 # dvc_dat: the dat manager
 A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe
 for itself and whose `_result_.yaml` holds what running it produced,

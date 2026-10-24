@@ -2,7 +2,7 @@
 description: "2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace"
 ---
 
-| -[DAT API](DAT%20API.md)-        | : 2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace<br>→ [DAT](../../DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](ha://p/DAT%20API) |
+| -[DAT API](DAT%20API.md)-        | : 2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace<br>→ [Docs](../../Docs.md) → [DAT Design](../DAT%20Design.md) → [DAT API](ha://p/DAT%20API) |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [[DAT Class API\|Class API]]     | `from dvc_dat import Dat`: the `Dat` class, `Dat.do`, the spec file, the config                                                                                                                 |
 | [[DAT CLI\|CLI]]                 | `dat TARGET …` from a shell, and the bootstrap copy                                                                                                                                             |

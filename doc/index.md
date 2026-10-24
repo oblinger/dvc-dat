@@ -1,4 +1,4 @@
-:>> [DAT](DAT.md) → [DAT index](ha://p/DAT%20index) 
+:>> [Docs](Docs.md) → [DAT index](ha://p/DAT%20index) 
 # dvc_dat Documentation
 The front page of the dvc_dat docs: what the package does, and where to read next.
 
