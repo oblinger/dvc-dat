@@ -42,7 +42,8 @@ Read `docs/concepts.md`, `docs/spec-format.md`, `docs/mount-commands.md` in the 
 
 ```bash
 cd ~/ob/grove/dvc-dat
-uv run python -m pytest            # 397 tests
+uv run python -m pytest            # 493 tests, ~2.5 min
+uv run python -m pytest -n auto --dist loadgroup   # parallel, as CI runs it (~45 s); groups in tests/conftest.py
 uv run python -m pytest tests/test_dat.py -k spec
 cd tests && ./do hello_world       # the do-system smoke test
 ```
