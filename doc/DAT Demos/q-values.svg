@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 900 470" width="900" height="470" font-family="Virgil, 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive">
+<rect width="900" height="470" fill="#ffffff"/>
+<path d="M300,60 L600,60 L600,330 L880,330 L880,450 L20,450 L20,330 L300,330 Z" fill="#ececec" stroke="#555" stroke-width="2" stroke-linejoin="round"/>
+<text x="450" y="88" font-size="14" fill="#111" text-anchor="middle" font-weight="bold" letter-spacing="2">IMMUTABLE CORE</text>
+<text x="450" y="128" font-size="30" fill="#000" text-anchor="middle" font-weight="bold">Value object</text>
+<text x="450" y="166" font-size="16" fill="#aaa" text-anchor="middle">basketball game</text>
+<rect x="340" y="180" width="220" height="40" rx="4" fill="none" stroke="#bbb" stroke-width="1.5"/>
+<g fill="#ccc"><rect x="346" y="184" width="8" height="6"/><rect x="346" y="210" width="8" height="6"/><rect x="546" y="184" width="8" height="6"/><rect x="546" y="210" width="8" height="6"/></g>
+<text x="450" y="206" font-size="15" fill="#aaa" text-anchor="middle">game video</text>
+<text x="450" y="250" font-size="16" fill="#aaa" text-anchor="middle">annotations</text>
+<text x="450" y="276" font-size="14" fill="#aaa" text-anchor="middle" font-family="Menlo, monospace">12:04  white 17 · 2-pt make</text>
+<text x="450" y="300" font-size="14" fill="#aaa" text-anchor="middle" font-family="Menlo, monospace">12:31  blue 4 · rebound</text>
+<text x="40" y="100" font-size="24" fill="#000" font-weight="bold">Name</text>
+<text x="40" y="128" font-size="16" fill="#aaa">"g1-final"</text>
+<text x="40" y="186" font-size="24" fill="#000" font-weight="bold">Aliases</text>
+<text x="40" y="214" font-size="16" fill="#aaa">"game/2026-10-12"</text>
+<text x="40" y="238" font-size="16" fill="#aaa">"gym-a/court-2"</text>
+<text x="40" y="374" font-size="24" fill="#000" font-weight="bold">Name hash</text>
+<text x="40" y="404" font-size="14" fill="#aaa" font-family="Menlo, monospace">sha256:3f9ac27e81d0…</text>
+<text x="630" y="100" font-size="24" fill="#000" font-weight="bold">Predicates</text>
+<g font-size="14" fill="#aaa" font-family="Menlo, monospace">
+<text x="630" y="130">game    G1</text><text x="630" y="154">camera  center</text><text x="630" y="178">span    0–4800</text></g>
+<text x="630" y="374" font-size="24" fill="#000" font-weight="bold">Dependencies</text>
+<g font-size="14" fill="#aaa" font-family="Menlo, monospace">
+<text x="630" y="402">raw-video   9c1e…</text><text x="630" y="426">annotate()  77ab…</text></g>
+</svg>
