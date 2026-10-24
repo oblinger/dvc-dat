@@ -19,6 +19,8 @@
 import shutil, subprocess, sys
 from pathlib import Path
 
+from IPython.display import SVG, display
+
 from dvc_dat.ledger import Ledger, Ref
 
 scratch_path = Path("scratch/q-values").resolve()
@@ -36,6 +38,9 @@ L = Ledger(scratch_path / "ledger", create=True)
 # hash is its subject, and once stored it never changes. The quick
 # tour: store and name a value, find it by its preds, compute values
 # with ledger functions, and let the ledger remember their results.
+
+# %%
+display(SVG(filename="q-values.svg"))   # black: the parts every value has; gray: an example
 
 # %% [markdown]
 # ## Values
