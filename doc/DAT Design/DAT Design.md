@@ -2,7 +2,7 @@
 description: "system spec — architecture, API"
 ---
 
-| -[DAT Design](DAT%20Design.md)-    | : system spec — architecture, API<br>→ [DAT](../DAT.md) → [DAT Design](ha://p/DAT%20Design)              |
+| -[DAT Design](DAT%20Design.md)-    | : system spec — architecture, API<br>→ [DAT](../DAT%20Track/DAT.md) → [DAT Design](ha://p/DAT%20Design)  |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | [[DAT Architecture\|Architecture]] | three subsystems and where they meet                                                                     |
 | [[DAT API\|API]]                   | 2.7: one example, then [[DAT Class API\|the class]], [[DAT CLI\|the CLI]], [[DAT Do API\|the namespace]] |
