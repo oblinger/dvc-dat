@@ -135,14 +135,19 @@ print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_2>
 # the dat's name, and `{unique}` counts up on a second run.
 
 # %% [markdown]
-# ## A dat is also a value
+# ## A dat can also be saved as a value
 #
 # On a ledger a dat is a value: sealed under a name, loaded back,
-# found by its preds. `TableDat` is a `Dat` that is a `Value`: the
-# folder `do` made, with preds. Nothing runs in this section: the
-# run happened above, in `do("specs.table12")`. `path_to_table_dat`
-# reads the folder's spec kwargs and result as preds; `seal` stores
-# the folder; `load` brings it back.
+# found by its preds. Nothing runs in this section: the run happened
+# above, in `do("specs.table12")`. `path_to_table_dat` reads the
+# folder's spec kwargs and result as preds; `seal` stores the folder;
+# `load` brings it back.
+#
+# Today this takes a class. The ledger's `Dat` is a `Value` over a
+# folder, but it is not the `Dat` that `do` returns, and `load`
+# refuses a folder whose spec names `dvc_dat.core.Dat` unless the
+# class accepts that kind; `TableDat` does, and declares the preds.
+# Whether a do-made dat should be a value by itself is DAT 1038.
 
 # %%
 (module_path / "table_dat.py").write_text('''\
