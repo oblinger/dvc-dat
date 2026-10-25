@@ -1,5 +1,7 @@
 """Contracts of functions and run unsandboxed: ledger_fn, load_fn, the memo, the dependencies, NotEvaluated."""
 
+import re
+
 import pytest
 
 import ledger_kinds
@@ -32,10 +34,15 @@ def test_ledger_fn_needs_an_annotation_and_stays_callable(world):
     assert isinstance(v, Cut) and not v.sealed and v.dependencies == {} and world.at().id == 4
 
 
+def f_code(world):
+    return world.at().load_fn("ledger_kinds.cut").code.subject
+
+
 def test_load_fn_fields(world):
     f = world.at().load_fn("ledger_kinds.cut")
     assert f.code.sandboxed is False and f.mount is None and str(f.signature) == "(*, game: str, version: str = '1.0.0')"
-    assert len(f.sha) == 64 and f.subject.startswith("db/fn/ledger_kinds.cut/")
+    assert f.name == "ledger_kinds.cut" and re.fullmatch(r"db/code/[0-9a-f]{16}", f.code.subject)
+    assert not hasattr(f, "subject") and not hasattr(f, "sha")
     with pytest.raises(TypeError):
         world.at().load_fn("ledger_kinds.Video")
 
@@ -50,7 +57,8 @@ def test_eval_seals_once_and_hits(world):
     r = world.at()
     assert r[a.subject, "db/keys"] == {"game": "G1", "version": "1.0.0"}
     assert r[a.subject, "db/fn"] == "ledger_kinds.cut" and r[a.subject, "db/provenance"] == "eval:unsandboxed"
-    assert r[a.dependencies["fn"], "db/returns"] == "Cut" and r[a.dependencies["fn"], "db/mounts"] == "none"
+    assert a.dependencies["fn"] == "ledger_kinds.cut" and a.dependencies["code"] == f_code(world)
+    assert r[a.subject, "db/returns"] == "Cut" and r[a.dependencies["code"], "db/mounts"] == "none" and "ledger_kinds.py" in r[a.dependencies["code"], "db/modules"]
     assert [x.subject for x in r.refs(fn="ledger_kinds.cut")] == [a.subject]
 
 
@@ -140,7 +148,8 @@ def test_keys_by_bytes_and_bare_return_pickled(world):
     th = world.at().run("ledger_kinds.thumb", clip=Ref(world.at(), a.subject))
     assert isinstance(th, Value.Blob) and th.obj == {"n": len(a.clip)}
     assert world.at()[th.subject, "db/keys"] == {"clip": f"ref:ledger_kinds.Cut:{a.hash}"}
-    assert world.at()[th.dependencies["fn"], "db/returns"] == "dict"
+    assert world.at()[th.subject, "db/returns"] == "dict"
+    assert th.dependencies["fn"] == "ledger_kinds.thumb" and th.dependencies["code"] == a.dependencies["code"]
     with pytest.raises(TypeError):
         world.at().run("ledger_kinds.thumb", clip={"x": Ref(world.at(), a.subject)})
 

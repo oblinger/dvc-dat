@@ -31,7 +31,7 @@ def test_a_draft_keeps_nothing_and_carries_its_trace(world):
     top = world.at().id
     d = fn(world)(seal=False, **KEYS)
     assert not d.sealed and d.subject is None and world.at().id == top
-    assert d.dependencies["fn"].startswith("db/fn/ledger_kinds.cut/")
+    assert d.dependencies["fn"] == "ledger_kinds.cut" and d.dependencies["code"].startswith("db/code/")
     assert d.dependencies["code/testrepo"] == "abc1234" and "game/G1 home" in d.dependencies
     fn(world)(seal=False, **KEYS)
     assert CALLS["cut"] == 2                                       # recomputes
@@ -84,7 +84,7 @@ def test_a_draft_sealed_later_to_the_ledger_is_the_memo_entry(world):
     s = d.seal(world)
     assert s == d.subject and entry_rows(world, s)[0] == "ledger_kinds.cut"
     assert world.at()[s, "db/provenance"] == "eval:unsandboxed"
-    assert world.at()[d.dependencies["fn"], "db/name"] == "ledger_kinds.cut"
+    assert "ledger_kinds.py" in world.at()[d.dependencies["code"], "db/modules"]
     assert fn(world)(**KEYS).subject == s and CALLS["cut"] == 1    # a hit
     assert fn(world)(seal="get", **KEYS).subject == s
 

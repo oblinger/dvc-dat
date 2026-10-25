@@ -119,11 +119,11 @@ def test_7_a_recorded_miss_holds_while_still_missing(coded):
 
 def test_8_base_fn_hashes_the_static_closure(coded):
     f = coded.at().load_fn("ledger_kinds.via_ref")
-    assert set(f._modules) == {"ledger_kinds.py", "ledger_helper.py"}
+    assert set(f.code.modules) == {"ledger_kinds.py", "ledger_helper.py"}
     v = Plain(b"x")
     seal(coded, v, name="n")
     e = coded.at().run("ledger_kinds.via_ref", name="n")
-    assert sorted(coded.at()[e.dependencies["fn"], "db/modules"]) == ["ledger_helper.py", "ledger_kinds.py"]
+    assert sorted(coded.at()[e.dependencies["code"], "db/modules"]) == ["ledger_helper.py", "ledger_kinds.py"]
 
 
 def test_9_salt_item_is_named_salt():

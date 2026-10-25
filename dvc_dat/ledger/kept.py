@@ -166,15 +166,16 @@ class SealedRef:
 
 
 class SealedFn:
-    """A function dep as a seal record holds it: its subject and its ``db/fn`` rows."""
+    """A function dep as a seal record holds it: its dotted name, its code's subject and that
+    ``db/code/<hash 16>`` item's rows (DAT 1037)."""
 
-    __slots__ = ("subject", "rows")
+    __slots__ = ("name", "code_subject", "rows")
 
-    def __init__(self, subject: str, rows: Sequence[Tuple[str, str]]) -> None:
-        self.subject, self.rows = subject, [tuple(r) for r in rows]
+    def __init__(self, name: str, code_subject: str, rows: Sequence[Tuple[str, str]]) -> None:
+        self.name, self.code_subject, self.rows = name, code_subject, [tuple(r) for r in rows]
 
-    def _rows(self) -> List[Tuple[str, str]]:
-        return list(self.rows)
+    def _code(self) -> Tuple[str, List[Tuple[str, str]]]:
+        return self.code_subject, list(self.rows)
 
 
 def ref_record(x: Any) -> Dict[str, Any]:
@@ -184,8 +185,10 @@ def ref_record(x: Any) -> Dict[str, Any]:
     from .rev import Ref
     from .value import Value, dotted
 
-    if isinstance(x, (Fn, SealedFn)):
-        return {"fn": x.subject, "rows": [list(r) for r in x._rows()]}
+    if isinstance(x, Fn):
+        return {"fn": x.name, "code": x.code.subject, "rows": [list(r) for r in x.code._rows()]}
+    if isinstance(x, SealedFn):
+        return {"fn": x.name, "code": x.code_subject, "rows": [list(r) for r in x.rows]}
     if isinstance(x, SealedRef):
         return {"text": x.text, "subject": x.subject, "hash": x.hash, "name": x.name}
     if isinstance(x, Ref):
@@ -200,7 +203,7 @@ def ref_record(x: Any) -> Dict[str, Any]:
 
 def ref_from(d: Dict[str, Any]) -> Any:
     if "fn" in d:
-        return SealedFn(d["fn"], d["rows"])
+        return SealedFn(d["fn"], d["code"], d["rows"])
     return SealedRef(d["text"], d["subject"], d["hash"], d["name"])
 
 
