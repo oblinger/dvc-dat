@@ -72,7 +72,7 @@ video_value = Video(b"G1 wide camera, 9000 frames")
 video_value.preds.update(game="G1", camera="wide")
 with L.transaction(by="human:dan") as t:
     video_subject = video_value.seal(t, name="video/G1")
-print("name:", video_value)                  # → name: video/G1
+print("video:", repr(video_value))           # → video: <Video video/G1>
 print("subject:", video_subject)             # → the sha256 of the content, 64 hex chars
 
 # %% [markdown]
@@ -102,7 +102,7 @@ with L.transaction(by="human:dan") as t:
     g2_subject = g2_video.seal(t, name="video/G2")
 rev2 = L.at()
 print("camera=wide:", rev2.values(camera="wide"))           # → [<Video video/G1>, <Video video/G2>]
-print("game=G1, camera=wide:", rev2.value(game="G1", camera="wide")) # → video/G1
+print("game=G1, camera=wide:", repr(rev2.value(game="G1", camera="wide")))   # → <Video video/G1>
 print("every Video:", rev2.refs(kind=Video))                # → [<Ref video/G1>, <Ref video/G2>]
 
 # %% [markdown]
@@ -230,8 +230,8 @@ sys.path.insert(0, str(repo_path))
 
 # %%
 distance_fn = L.at().load_fn("geometry.distance")
-print("fn:", distance_fn, " code:", repr(distance_fn.code))
-# → fn: geometry.distance@5.3.9  code: <Code geometry@5.3.9>
+print("fn:", repr(distance_fn), " code:", repr(distance_fn.code))
+# → fn: <Fn geometry.distance@5.3.9>  code: <Code geometry@5.3.9>
 hypotenuse_value = distance_fn(a=(3, 4))
 print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 # → result: 5.0  sealed at: <the seal's moment>
@@ -239,7 +239,7 @@ print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 # %% [markdown]
 # `load_fn` finds the function; calling it runs it and seals the
 # plain `float` it returns as a value (`.obj` unboxes it). A
-# function prints as its name `@` its version; `code` is the code it
+# function's repr is `<Fn name@version>`; `code` is the code it
 # is loaded from, the package `geometry` at the version it declares.
 
 # %% [markdown]
@@ -258,8 +258,8 @@ with L.transaction(by="human:dan") as t:
 
 length_fn = L.at().load_fn("plane.measure.length")
 segment_value = length_fn(a=(0, 0), b=(3, 4))
-print("fn:", length_fn, " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
-# → fn: plane.measure.length@2.7.1  code: <Code plane@2.7.1>  sandboxed: True
+print("fn:", repr(length_fn), " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
+# → fn: <Fn plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
 print("result:", segment_value.obj)                 # → result: 2.5
 
 # %% [markdown]

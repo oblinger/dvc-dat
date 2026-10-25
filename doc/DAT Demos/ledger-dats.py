@@ -129,11 +129,11 @@ detect_spec_record = {"main": "demo_game.etl.detect.find",
 work_path = Path("by-hand/detect-G1").resolve()
 work_path.mkdir(parents=True)
 hand_dat = build(rev, detect_spec_record, work_path)
-print(sorted(file_path.name for file_path in work_path.iterdir()))
-# → ["_result_.yaml", "_spec_.yaml", "boxes.json"]
+print("files:", sorted(file_path.name for file_path in work_path.iterdir()))
+# → files: ["_result_.yaml", "_spec_.yaml", "boxes.json"]
 with L.transaction(by="human:dan") as t:
     hand_dat.seal(t, name="detect/G1", provenance="human:dan")
-print(hand_dat, hand_dat.sealed)     # → detect/G1 <the seal's moment>
+print("dat:", repr(hand_dat), " sealed:", hand_dat.sealed)     # → dat: <StageDat detect/G1>  sealed: <the seal's moment>
 
 # %% [markdown]
 # `build` made the dat in a folder of yours; `v.seal(t)` sealed it.
@@ -149,11 +149,11 @@ print(hand_dat, hand_dat.sealed)     # → detect/G1 <the seal's moment>
 # %%
 rev = L.at()
 loaded_dat = rev.load("detect/G1")
-print(type(loaded_dat).__name__, loaded_dat)  # → StageDat detect/G1
-print(sorted(file_path.name
-             for file_path in loaded_dat.path.iterdir()))
-# → ["_result_.yaml", "_spec_.yaml", "boxes.json"]
-print(loaded_dat.path != work_path)  # → True: from the manifest
+print("loaded:", repr(loaded_dat))  # → loaded: <StageDat detect/G1>
+print("files:", sorted(file_path.name
+                       for file_path in loaded_dat.path.iterdir()))
+# → files: ["_result_.yaml", "_spec_.yaml", "boxes.json"]
+print("new folder:", loaded_dat.path != work_path)  # → new folder: True: from the manifest
 
 # %% [markdown]
 # `load` decodes the manifest into a folder of its own, fetched
@@ -164,12 +164,12 @@ print(loaded_dat.path != work_path)  # → True: from the manifest
 # ### Its preds come from its spec and its result
 
 # %%
-print(dict(sorted(loaded_dat.preds.items())))
-# → {"bins": "16", "game": "G1", "metrics.count": "40",
-#    "metrics.score": "0.494", "stage": "detect"}
-print(repr(loaded_dat.spec["bins"]),
-      repr(loaded_dat.preds["bins"]))          # → 16 '16'
-print(rev.values(kind=StageDat, game="G1"))    # → [<StageDat detect/G1>]
+print("preds:", dict(sorted(loaded_dat.preds.items())))
+# → preds: {"bins": "16", "game": "G1", "metrics.count": "40",
+#           "metrics.score": "0.494", "stage": "detect"}
+print("spec bins:", repr(loaded_dat.spec["bins"]),
+      " pred bins:", repr(loaded_dat.preds["bins"]))   # → spec bins: 16  pred bins: '16'
+print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<StageDat detect/G1>]
 
 # %% [markdown]
 # A dat keeps `_spec_` and `_result_` apart on disk; its preds merge
@@ -210,12 +210,12 @@ print("sandboxed:", dat_fn.code.sandboxed, " mount:", dat_fn.mount)     # → sa
 # %%
 spec_dat = rev.run("demo_game.etl.dat.dat",
                     spec=detect_spec_record)
-print(spec_dat, spec_dat.sealed)     # → anonymous/Dat <the seal's moment>: no name= given, so it gets one
-print(dict(sorted(spec_dat.preds.items())))
-# → {"bins": "16", "game": "G1", "metrics.count": "40",
-#    "metrics.score": "0.494", "stage": "detect"}
-print(L.at()[spec_dat.subject, "db/keys"])
-# → {"spec": {"bins": 16, "game": "G1",
+print("dat:", repr(spec_dat), " sealed:", spec_dat.sealed)     # → dat: <StageDat anonymous/Dat>  sealed: <the seal's moment>: no name= given, so it gets one
+print("preds:", dict(sorted(spec_dat.preds.items())))
+# → preds: {"bins": "16", "game": "G1", "metrics.count": "40",
+#           "metrics.score": "0.494", "stage": "detect"}
+print("keys:", L.at()[spec_dat.subject, "db/keys"])
+# → keys: {"spec": {"bins": 16, "game": "G1",
 #             "main": "demo_game.etl.detect.find",
 #             "stage": "detect"}}
 
@@ -235,8 +235,8 @@ print(L.at()[spec_dat.subject, "db/keys"])
 
 # %%
 module_paths = L.at()[spec_dat.dependencies["code"], "db/modules"]
-print(sorted(module_paths))
-# → ["demo_game/etl/__init__.py", "demo_game/etl/dat.py",
+print("modules:", sorted(module_paths))
+# → modules: ["demo_game/etl/__init__.py", "demo_game/etl/dat.py",
 #    "demo_game/etl/detect.py"]: the package's __init__ runs too
 
 # %% [markdown]
@@ -252,8 +252,8 @@ print(sorted(module_paths))
 top_id = L.at().id
 again_dat = L.at().run("demo_game.etl.dat.dat",
                         spec=detect_spec_record)
-print(again_dat.subject == spec_dat.subject)   # → True: a hit
-print(L.at().id == top_id)           # → True: nothing written
+print("same subject:", again_dat.subject == spec_dat.subject)   # → same subject: True: a hit
+print("nothing written:", L.at().id == top_id)           # → nothing written: True
 
 # %% [markdown]
 # The same spec is the same question, and every dependency item holds:
@@ -263,10 +263,10 @@ print(L.at().id == top_id)           # → True: nothing written
 # %%
 detections_dat = rev.run("demo_game.etl.detect.detections",
                           game="G1")
-print(detections_dat.same_as(spec_dat),
-      detections_dat.subject != spec_dat.subject)   # → True True
+print("same bytes:", detections_dat.same_as(spec_dat),
+      " new subject:", detections_dat.subject != spec_dat.subject)   # → same bytes: True  new subject: True
 detections_ref = Ref(L.at(), detections_dat.subject)
-print(detections_ref.preds["metrics.count"])        # → 40
+print("count:", detections_ref.preds["metrics.count"])        # → count: 40
 
 # %% [markdown]
 # Another function is another question, so it ran; the spec it
@@ -328,8 +328,8 @@ with L.transaction(by="human:dan", why="training") as t:
 # %%
 rev = L.at()
 model_dat = rev.run("demo_game.etl.model.train", game="G1")
-print(model_dat, model_dat.preds["stage"],
-      model_dat.preds["gameset"])    # → anonymous/Dat_<n> model normie
+print("model:", repr(model_dat), " stage:", model_dat.preds["stage"],
+      " gameset:", model_dat.preds["gameset"])    # → model: <StageDat anonymous/Dat_<n>>  stage: model  gameset: normie
 for item in sorted(model_dat.dependencies):
     print(item, "->", model_dat.dependencies[item])
 # → cfg/train epochs -> 8
@@ -353,9 +353,9 @@ for item in sorted(model_dat.dependencies):
 # %%
 for game in ("G2", "G3"):
     rev.run("demo_game.etl.model.train", game=game)
-print(L.at().select(("stage", "metrics.count"), kind=StageDat,
-                    game="G1"))
-# → [("detect", "40"), ("detect", "40"), ("detect", "40"),
+print("G1 counts:", L.at().select(("stage", "metrics.count"), kind=StageDat,
+                                  game="G1"))
+# → G1 counts: [("detect", "40"), ("detect", "40"), ("detect", "40"),
 #    ("track", "12"), ("model", "12")]: in no promised order
 
 # %% [markdown]
@@ -397,9 +397,9 @@ importlib.reload(demo_game.etl.track)    # sandbox workers import anew
 with L.transaction(by="human:dan", why="tidy track") as t:
     bump(t, "code/demo-game")            # 0.1.1, the new commit
 rev = L.at()
-print(detections_dat.matches(rev),
-      tracks_dat.matches(rev))                  # → True False
-print(model_dat.matches(rev))                   # → False, for now
+print("detections match:", detections_dat.matches(rev),
+      " tracks match:", tracks_dat.matches(rev))   # → detections match: True  tracks match: False
+print("model matches:", model_dat.matches(rev))     # → model matches: False, for now
 
 # %% [markdown]
 # A sandboxed value's dependencies pin the modules a stage loaded, not the repo's
@@ -412,12 +412,12 @@ print(model_dat.matches(rev))                   # → False, for now
 model_hit_dat = rev.run("demo_game.etl.model.train", game="G1")
 retracked_dat = rev.run("demo_game.etl.track.tracks",
                          game="G1")                # a hit
-print(retracked_dat.subject != tracks_dat.subject)  # → True
-print(retracked_dat.same_as(tracks_dat))     # → True: same bytes
-print(model_hit_dat.subject == model_dat.subject)   # → True: a hit
-print(model_dat.matches(L.at()))             # → True, now
-print(tracks_dat.diff(retracked_dat))
-# → {"code": ("db/code/<a>", "db/code/<b>")}
+print("new subject:", retracked_dat.subject != tracks_dat.subject)  # → new subject: True
+print("same bytes:", retracked_dat.same_as(tracks_dat))     # → same bytes: True
+print("same subject:", model_hit_dat.subject == model_dat.subject)   # → same subject: True: a hit
+print("model matches:", model_dat.matches(L.at()))             # → model matches: True, now
+print("diff:", tracks_dat.diff(retracked_dat))
+# → diff: {"code": ("db/code/<a>", "db/code/<b>")}
 
 # %% [markdown]
 # Asking for the model re-derived the tracks (their code moved) and
@@ -445,9 +445,9 @@ hand_model_dat.preds["gameset"] = "pro"
 with L.transaction(by="human:dan", why="a long run by hand") as t:
     hand_model_dat.seal(t, deps=[tracks_g3_dat],
                         provenance="human:dan")
-print(dict(sorted(hand_model_dat.dependencies.items())))
-# → {"code/demo-game": "<8 hex>",
-#    "platform": "darwin-arm64-py3.11",
+print("deps:", dict(sorted(hand_model_dat.dependencies.items())))
+# → deps: {"code/demo-game": "<8 hex>",
+#          "platform": "darwin-arm64-py3.11",
 #    "ref:demo_game.etl.dat.StageDat:<hash>":
 #        "ref:demo_game.etl.dat.StageDat:<hash>"}
 
@@ -460,20 +460,20 @@ print(dict(sorted(hand_model_dat.dependencies.items())))
 # %%
 rev = L.at()
 model_refs = rev.refs(kind=StageDat, stage="model", game="G3")
-print(len(model_refs))                         # → 2
+print("models:", len(model_refs))                         # → models: 2
 proof_refs = rev.refs(kind=StageDat, stage="model", game="G3",
                       where={"db/provenance": "eval:sandbox"})
-print(len(proof_refs))                         # → 1
+print("traced models:", len(proof_refs))                  # → traced models: 1
 
 # %% [markdown]
 # ### The game set is a pred
 
 # %%
-print(rev.refs(kind=StageDat, stage="model", gameset="normie"))
-# → [<Ref anonymous/Dat_<n>>, <Ref …>]: G1 and G2
-print(rev.select(("game", "metrics.score"), kind=StageDat,
-                 stage="model", gameset="pro"))
-# → [("G3", "0.958"), ("G3", "0.983")]: the run and the hand run
+print("normie models:", rev.refs(kind=StageDat, stage="model", gameset="normie"))
+# → normie models: [<Ref anonymous/Dat_<n>>, <Ref …>]: G1 and G2
+print("pro scores:", rev.select(("game", "metrics.score"), kind=StageDat,
+                                stage="model", gameset="pro"))
+# → pro scores: [("G3", "0.958"), ("G3", "0.983")]: the run and the hand run
 
 # %% [markdown]
 # `gameset` is read from the game's own row by `train` and set on
@@ -500,13 +500,13 @@ with L.transaction(by="human:dan",
     bump(t, "db", "minor",                   # 0.0.0 -> 0.1.0
          confirm=lambda old, new: True)
 release_rev = L.at("0.1.0")
-print(release_rev.id == t.rev.id,
-      release_rev["db", "version"])          # → True 0.1.0
-print(release_rev["code/demo-game", "version"])     # → 0.1.1
-print(release_rev["cfg/train", "epochs"])           # → 8
-print(sorted({row.subject
-              for row in release_rev.rows(since=pre_bump_rev)}))
-# → the bump, the re-derived tracks, the hand run, the release
+print("release rev:", release_rev.id == t.rev.id,
+      " version:", release_rev["db", "version"])          # → release rev: True  version: 0.1.0
+print("code version:", release_rev["code/demo-game", "version"])     # → code version: 0.1.1
+print("epochs:", release_rev["cfg/train", "epochs"])           # → epochs: 8
+print("subjects since:", sorted({row.subject
+                                 for row in release_rev.rows(since=pre_bump_rev)}))
+# → subjects since: the bump, the re-derived tracks, the hand run, the release
 #   and their db/tx/<n> subjects
 
 # %% [markdown]
@@ -526,7 +526,7 @@ with L.transaction(by="human:dan", why="train longer") as t:
 rev = L.at()
 for game in ("G1", "G2"):
     rev.run("demo_game.etl.model.train", game=game)
-print(len(L.at().refs(kind=StageDat, since=rev)))   # → 3: two
+print("new dats:", len(L.at().refs(kind=StageDat, since=rev)))   # → new dats: 3: two
 #   models, and G2's tracks, re-derived since track.py moved
 
 # %% [markdown]
@@ -537,12 +537,12 @@ print(len(L.at().refs(kind=StageDat, since=rev)))   # → 3: two
 release_rev = L.at("0.1.0")
 old_model_dat = release_rev.run("demo_game.etl.model.train",
                                  game="G1")
-print(old_model_dat.subject == model_dat.subject)  # → True: 8
+print("same subject:", old_model_dat.subject == model_dat.subject)  # → same subject: True: 8
 now_model_dat = L.at().run("demo_game.etl.model.train",
                             game="G1")
-print(now_model_dat.subject == old_model_dat.subject)  # → False
-print(old_model_dat.diff(now_model_dat))
-# → {"cfg/train epochs": ("8", "12")}
+print("same subject:", now_model_dat.subject == old_model_dat.subject)  # → same subject: False
+print("diff:", old_model_dat.diff(now_model_dat))
+# → diff: {"cfg/train epochs": ("8", "12")}
 
 # %% [markdown]
 # The memo lookup is over every entry, at the top, and each
@@ -581,9 +581,9 @@ for model_ref in rev.refs(kind=StageDat, stage="model",
     if (game not in latest_refs
             or model_ref.sealed_at.id > latest_refs[game].sealed_at.id):
         latest_refs[game] = model_ref
-print({game: model_ref.preds["metrics.score"]
-       for game, model_ref in latest_refs.items()})
-# → {"G1": "0.95", "G2": "0.922"}: the 12-epoch models
+print("latest scores:", {game: model_ref.preds["metrics.score"]
+                         for game, model_ref in latest_refs.items()})
+# → latest scores: {"G1": "0.95", "G2": "0.922"}: the 12-epoch models
 
 # %% [markdown]
 # Nothing is loaded: `Ref.preds` and `Ref.sealed_at` come with the
@@ -605,12 +605,12 @@ print({game: model_ref.preds["metrics.score"]
 rev = L.at()
 scores_table = rev.run("demo_game.etl.report.scores",
                         gameset="normie")
-print(type(scores_table).__name__)       # → Table
+print("table:", repr(scores_table))       # → table: <Table #<8 hex>>
 q_items = [k for k in scores_table.dependencies if k.startswith("q:")]
-print(q_items)
-# → ['q:{"gameset":"normie","kind":"demo_game.etl.dat.StageDat",
-#      "stage":"model"}']
-print(len(json.loads(scores_table.dependencies[q_items[0]])))   # → 4
+print("query items:", q_items)
+# → query items: ['q:{"gameset":"normie","kind":"demo_game.etl.dat.StageDat",
+#                  "stage":"model"}']
+print("models read:", len(json.loads(scores_table.dependencies[q_items[0]])))   # → models read: 4
 
 # %% [markdown]
 # The query inside the function is a dependency item, `q:` and its where
@@ -625,17 +625,17 @@ with L.transaction(by="human:dan", why="G3 plays normie") as t:
 rev = L.at()
 rev.run("demo_game.etl.model.train", game="G3")  # re-derived
 rev = L.at()                                  # after its seal
-print(scores_table.matches(rev))              # → False
+print("matches:", scores_table.matches(rev))              # → matches: False
 rescored_table = rev.run("demo_game.etl.report.scores",
                           gameset="normie")
-print(list(scores_table.diff(rescored_table)))
-# → [the q: item, the fifth model's ref: item]: values loads each
+print("diff:", list(scores_table.diff(rescored_table)))
+# → diff: [the q: item, the fifth model's ref: item]: values loads each
 
 # %% [markdown]
 # ### The config file is sugar for rows
 
 # %%
-print(Path(".datconfig.yaml").read_text())   # → ledger: .dat/ledger
+print("config:", Path(".datconfig.yaml").read_text())   # → config: ledger: .dat/ledger
 
 # %% [markdown]
 # `Ledger(create=True)` wrote it. `Ledger()`, with no path, walks up

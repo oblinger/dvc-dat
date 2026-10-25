@@ -70,13 +70,13 @@ work_path.mkdir(parents=True)
 hand_dat = build(L.at(), detect_spec_record, work_path)
 with L.transaction(by="human:dan") as t:
     hand_dat.seal(t, name="detect/G1")
-print(hand_dat, hand_dat.sealed)   # detect/G1 <the seal's moment>
+print("dat:", repr(hand_dat), " sealed:", hand_dat.sealed)   # dat: <StageDat detect/G1>  sealed: <the seal's moment>
 
 loaded_dat = L.at().load("detect/G1")
-print(sorted(p.name for p in loaded_dat.path.iterdir()))
-# ['_result_.yaml', '_spec_.yaml', 'boxes.json']
-print(dict(sorted(loaded_dat.preds.items())))
-# {'bins': '16', 'game': 'G1', 'metrics.count': '40', 'metrics.score': '0.494', 'stage': 'detect'}
+print("files:", sorted(p.name for p in loaded_dat.path.iterdir()))
+# files: ['_result_.yaml', '_spec_.yaml', 'boxes.json']
+print("preds:", dict(sorted(loaded_dat.preds.items())))
+# preds: {'bins': '16', 'game': 'G1', 'metrics.count': '40', 'metrics.score': '0.494', 'stage': 'detect'}
 
 # %% [markdown]
 # Sealing sent the files to the art store by their hashes; the
@@ -99,12 +99,12 @@ with L.transaction(by="human:dan", why="mount the etl") as t:
     bump(t, "code/demo-game", "minor", confirm=lambda old, new: True)
 
 spec_dat = L.at().run("demo_game.etl.dat.dat", spec=detect_spec_record)
-print(spec_dat)            # anonymous/Dat: no name given
+print("dat:", repr(spec_dat))   # dat: <StageDat anonymous/Dat>: no name given
 
 top_id = L.at().id
 again_dat = L.at().run("demo_game.etl.dat.dat", spec=detect_spec_record)
-print(again_dat.subject == spec_dat.subject,
-      L.at().id == top_id)   # True True: a hit, nothing written
+print("same subject:", again_dat.subject == spec_dat.subject,
+      " nothing written:", L.at().id == top_id)   # same subject: True  nothing written: True: a hit
 
 # %% [markdown]
 # The same spec is the same question: the second run is a memo hit,
@@ -154,12 +154,12 @@ import demo_game.etl.track
 importlib.reload(demo_game.etl.track)
 with L.transaction(by="human:dan", why="tidy track") as t:
     bump(t, "code/demo-game")
-print(tracks_dat.matches(L.at()))    # False: its code moved
+print("matches:", tracks_dat.matches(L.at()))    # matches: False: its code moved
 
 model_again_dat = L.at().run("demo_game.etl.model.train", game="G1")
 retracked_dat = L.at().run("demo_game.etl.track.tracks", game="G1")
-print(retracked_dat.same_as(tracks_dat))           # True: same bytes
-print(model_again_dat.subject == model_dat.subject)  # True: a hit
+print("same bytes:", retracked_dat.same_as(tracks_dat))              # same bytes: True
+print("same subject:", model_again_dat.subject == model_dat.subject)  # same subject: True: a hit
 
 # %% [markdown]
 # Asking for the model re-ran the tracks, whose code moved, and
@@ -171,9 +171,9 @@ print(model_again_dat.subject == model_dat.subject)  # True: a hit
 
 # %%
 L.at().run("demo_game.etl.model.train", game="G2")
-print(L.at().select(("game", "metrics.score"), kind=StageDat,
-                    stage="model", gameset="normie"))
-# [('G1', '0.927'), ('G2', '0.888')]
+print("scores:", L.at().select(("game", "metrics.score"), kind=StageDat,
+                               stage="model", gameset="normie"))
+# scores: [('G1', '0.927'), ('G2', '0.888')]
 
 # %% [markdown]
 # Spec keys and metrics are preds, so a query over them is an
@@ -193,9 +193,9 @@ with L.transaction(by="human:dan", why="train longer") as t:
 
 old_model_dat = L.at("0.1.0").run("demo_game.etl.model.train", game="G1")
 now_model_dat = L.at().run("demo_game.etl.model.train", game="G1")
-print(old_model_dat.subject == model_dat.subject)   # True: 8 epochs
-print(old_model_dat.diff(now_model_dat))
-# {'cfg/train epochs': ('8', '12')}
+print("same subject:", old_model_dat.subject == model_dat.subject)   # same subject: True: 8 epochs
+print("diff:", old_model_dat.diff(now_model_dat))
+# diff: {'cfg/train epochs': ('8', '12')}
 
 # %% [markdown]
 # At `0.1.0` the config said 8 epochs, so the model sealed then is
