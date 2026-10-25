@@ -73,7 +73,7 @@ video_value.preds.update(game="G1", camera="wide")
 with L.transaction(by="human:dan") as t:
     video_subject = video_value.seal(t, name="video/G1")
 print("name:", video_value)                  # → name: video/G1
-print("subject length:", len(video_subject))  # → 64: a hash of the content
+print("subject:", video_subject)             # → the sha256 of the content, 64 hex chars
 
 # %% [markdown]
 # `seal` stores the value and names it in one step. After the seal
@@ -413,7 +413,7 @@ print("draft reads:", sorted(draft_clip.dependencies)[:3])   # its trace rides o
 # %%
 with L.transaction(by="human:dan", why="keep the clip") as t:
     draft_clip.seal(t, name="video/G1/clip-8-16")          # keep the draft
-print("kept:", draft_clip.name, " subject:", draft_clip.subject[:12])
+print("kept:", draft_clip.name, " subject:", draft_clip.subject)
 print("kept fn:", L.at()[draft_clip.subject, "db/fn"])     # → clips.clip
 
 kept_clip = clip_fn(**clip_keys)                          # the same call again
