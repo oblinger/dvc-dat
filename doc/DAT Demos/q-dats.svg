@@ -40,7 +40,7 @@
 <text x="326" y="464" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">def table(dat, n=10, start=1):</text>
 <text x="326" y="481" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    ...            # writes table.csv</text>
 <text x="326" y="498" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    dat.get_results()["cells"] = n*n</text>
-<text x="326" y="515" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    dat.save()</text>
+<text x="326" y="515" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    dat.save(); return dat</text>
 <polyline points="244,158 312,122" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <polyline points="244,178 312,284" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <polyline points="244,198 312,480" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
@@ -56,18 +56,18 @@
 <text x="816" y="296" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ _spec_.yaml</text>
 <text x="816" y="316" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ _result_.yaml</text>
 <text x="816" y="336" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ table.csv</text>
-<text x="816" y="356" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ table.png</text>
-<text x="816" y="376" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ log.txt</text>
+<text x="816" y="356" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ log.txt</text>
+<text x="816" y="376" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ run/</text>
 <text x="816" y="396" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">└─ ...</text>
-<text x="940" y="496" font-size="12" fill="#9a9a9a" text-anchor="middle">_spec_.yaml: the spec, expanded once</text>
-<text x="940" y="512" font-size="12" fill="#9a9a9a" text-anchor="middle">_result_.yaml and the rest: what the run wrote</text>
+<text x="940" y="496" font-size="12" fill="#9a9a9a" text-anchor="middle">_spec_.yaml: the spec as written, its {…} filled in once</text>
+<text x="940" y="512" font-size="12" fill="#9a9a9a" text-anchor="middle">_result_.yaml, run/ and the rest: what the run wrote</text>
 <polyline points="636,292 786,292" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <text x="713.0" y="280" font-size="14" fill="#000" font-weight="bold" text-anchor="middle">instantiate</text>
 <text x="713.0" y="334" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">do(&quot;specs.table12&quot;)</text>
 <polyline points="608,500 786,342" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <text x="729.0" y="440" font-size="14" fill="#000" font-weight="bold" text-anchor="middle">run</text>
 <text x="790" y="546" font-size="15" fill="#000" font-weight="bold">Name</text>
-<text x="790" y="566" font-size="12" fill="#9a9a9a">the template, filled in once when the dat is made</text>
+<text x="790" y="566" font-size="12" fill="#9a9a9a">the name template, filled in when the dat is made</text>
 <text x="790" y="588" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">tables/{YYYY}/table12{unique}</text>
 <text x="790" y="608" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">&#8594; tables/2026/table12_2</text>
 </svg>
