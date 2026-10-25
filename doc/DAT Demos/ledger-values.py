@@ -127,7 +127,8 @@ print(camera_ref.name)
 # %% [markdown]
 # A name is an alias. A value has every alias pointing at it
 # (`aliases`), and its name is the one written latest; with no alias
-# it prints as its hash's first eight characters.
+# it prints as `#` and its hash's first eight characters. A bare cell
+# shows the type too: `<Video video/G1>`, `<Video #2db69ce1>`.
 
 # %% [markdown]
 # ### An alias is a row of its own
@@ -267,11 +268,11 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 # %%
 rev = L.at()
 print(rev.values(game="G1"))
-# → [video/G1]
+# → [<Video video/G1>]
 print(rev.values(kind=Video))
-# → [video/G1, video/G2]
+# → [<Video video/G1>, <Video video/G2>]
 print(rev.values(camera="wide"))
-# → [video/G1, video/G2]
+# → [<Video video/G1>, <Video video/G2>]
 print(rev.value(game="G1", camera="wide"))
 # → video/G1
 
@@ -293,7 +294,7 @@ except Multiple as e:
 # %%
 video_refs = rev.refs(kind=Video)
 print(video_refs)
-# → [video/G1, video/G2]
+# → [<Ref video/G1>, <Ref video/G2>]
 print(type(video_refs[0]).__name__)
 # → Ref: no bytes fetched
 [g1_ref] = rev.refs(game="G1")
@@ -470,7 +471,7 @@ print(right_subject != wrong_subject,
 print(Ref(rev, "video/G1-tele").preds["camera"])
 # → tele
 print(rev.refs(kind=Video, camera="tlee"))
-# → [<8 hex>]
+# → [<Ref #<8 hex>>]
 
 # %% [markdown]
 # The same bytes make a new subject, sharing one blob. The wrong
@@ -488,11 +489,11 @@ trimmed_video.preds.update(game="G1", camera="wide", span=[600, 9000])
 with L.transaction(by="human:dan") as t:
     trimmed_video.seal(t, deps=[wide_video])
 print(trimmed_video)
-# → <8 hex>: no alias yet
+# → #<8 hex>: no alias yet
 with L.transaction(by="human:dan", why="warm-up trimmed") as t:
     t.add("video/G1", "db/alias", trimmed_video.subject)
 print(trimmed_video, wide_video)
-# → video/G1 <8 hex>
+# → video/G1 #<8 hex>
 
 # %% [markdown]
 # The new version is sealed as a new value, then the alias moves to
@@ -597,7 +598,7 @@ print(distance_fn.subject)
 # %%
 hypotenuse_value = distance_fn(a=(3, 4))
 print(hypotenuse_value, hypotenuse_value.obj)
-# → <8 hex> 5.0
+# → #<8 hex> 5.0
 print(hypotenuse_value.sealed, hypotenuse_value.rev.id > rev.id)
 # → True True
 print(hypotenuse_value.dependencies["code/geometry"] == git("rev-parse", "HEAD")[:8])
@@ -842,8 +843,8 @@ for row in entry_rev.rows(since=L.at(entry_rev.id - 1)):
 rev = L.at()
 for memo_ref in rev.refs(fn="geometry.distance"):
     print(memo_ref, rev[memo_ref.subject, "db/keys"])
-# → <8 hex> {'a': [3, 4], 'b': [0, 0], 'metric': 'euclidean'}
-# → <8 hex> {'a': [6, 8], 'b': [0, 0], 'metric': 'euclidean'}
+# → #<8 hex> {'a': [3, 4], 'b': [0, 0], 'metric': 'euclidean'}
+# → #<8 hex> {'a': [6, 8], 'b': [0, 0], 'metric': 'euclidean'}
 print(len(rev.values(fn="geometry.distance")))
 # → 2, loaded
 
@@ -956,7 +957,7 @@ with L.transaction(by="human:dan", why="span off by ten") as t:
     restamped_video.seal(t, deps=[trimmed_video], name="video/G1")
 rev = L.at()
 print(restamped_video, stable_video)
-# → video/G1 <8 hex>
+# → video/G1 #<8 hex>
 again_clip = rev.run("clips.clip", video="video/G1", start=0, end=8)
 print(again_clip.subject == stable_clip.subject)
 # → True: a hit
@@ -1014,7 +1015,7 @@ rev = L.at()
 print(sorted(Ref(rev, "video/G1").preds["tag"]))
 # → ['home-court', 'opener']
 print(rev.values(tag="home-court"))
-# → [video/G1, video/G2]
+# → [<Video video/G1>, <Video video/G2>]
 print(rev["db/pred/span", "db/type"])
 # → json
 print(wide_video.preds["span"])
@@ -1080,14 +1081,14 @@ except Exists as e:
 # A `Ref` may be any row's object. `add` stores it as
 # `ref:<class>:<hash>:<subject>`, the subject a hint; every pattern
 # read hands it back as a `Ref`, unloaded, printed as its name (its
-# latest alias), else the hash's first eight characters.
+# latest alias), else `#` and the hash's first eight characters.
 
 # %%
 with L.transaction(by="human:dan") as t:
     t.add("review/G1", "clip", Ref(t.base, stable_clip.subject))
 pick_ref = L.at()["review/G1", "clip"]
 print(pick_ref, pick_ref.subject == stable_clip.subject)
-# → <8 hex> True
+# → #<8 hex> True
 
 # %% [markdown]
 # ### A hand seal and an eval write the same rows

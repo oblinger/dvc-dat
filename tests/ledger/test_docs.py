@@ -104,7 +104,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev.load("game/G2").subject == cut.subject   # the current cut, alias resolved
     assert rev["game/G2"]["court"] == "C2"               # rev["game/G2"] is the literal record
     c = Ref(rev, "game/G2")
-    assert repr(c) == "game/G2"              # repr: game/G1 (A25)
+    assert repr(c) == "<Ref game/G2>"        # repr: <Ref game/G2> (DAT 1036)
     assert isinstance(c.preds["video"], Ref)  # a Ref, unloaded (Q35)
     assert c.preds["video"].load().frames == raw.frames   # the video: the one explicit act
 
@@ -163,7 +163,7 @@ def test_seal_block(L):
     assert again.same_as(v) and again.matches(rev2)   # True, moved?
     assert isinstance(again.preds["video"], Ref)  # a Ref, unloaded
     assert rev2.value(kind=Cut, game="G1", version="1.5.4").subject == subj   # by its preds
-    assert repr(Ref(rev2, subj)) == "game/G1"     # repr: game/G1, shortest alias
+    assert repr(Ref(rev2, subj)) == "<Ref game/G1>"   # its alias (DAT 1036)
     assert Ref(rev2, subj).aliases == ["game/G1"]  # ["game/G1"] (A25)
 
 

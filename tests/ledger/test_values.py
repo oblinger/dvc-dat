@@ -26,7 +26,7 @@ def test_seal_returns_a_content_subject_and_loads_back(L):
     s = seal(L, v)
     assert len(s) == 64 and v.sealed and v.subject == s and v.rev.id == 1
     r = Ref(L.at(), s)
-    assert r.type is Plain and r.hash == v.hash and repr(r) == s[:8]
+    assert r.type is Plain and r.hash == v.hash and repr(r) == f"<Ref #{s[:8]}>" and str(r) == "#" + s[:8]
     back = L.at().load(s)
     assert back.data == b"abc" and back.subject == s and back is L.at().load(s)
     assert L.at()[s, "db/kind"] == "ledger_kinds.Plain" and L.at()[s, "db/provenance"] == "seal"
@@ -99,7 +99,7 @@ def test_alias_chain_repr_and_aliases(L):
         t.add("raw/G1/long-name", "db/alias", s)
     rev = L.at()
     r = Ref(rev, "raw/G1/long-name")
-    assert r.subject == s and r.name == "raw/G1/long-name" and repr(r) == "raw/G1/long-name"   # its name: the latest (Q36)
+    assert r.subject == s and r.name == "raw/G1/long-name" and str(r) == "raw/G1/long-name"   # its name: the latest (Q36)
     assert sorted(r.aliases) == ["raw/G1/long-name", "video/G1"]
     assert rev["video/G1"] == {"db/alias": s}           # literal
     assert rev.load("video/G1").subject == s
@@ -153,8 +153,8 @@ def test_value_values_refs_select_kind(L):
         v.preds.update(game=g, camera="wide")
         seal(L, v, name=f"video/{g}")
     rev = L.at()
-    assert [repr(v) for v in rev.values(kind=Video)] == ["video/G1", "video/G2"]
-    assert repr(rev.value(game="G1")) == "video/G1"
+    assert [repr(v) for v in rev.values(kind=Video)] == ["<Video video/G1>", "<Video video/G2>"]
+    assert str(rev.value(game="G1")) == "video/G1"
     with pytest.raises(Multiple):
         rev.value(kind=Video)
     with pytest.raises(KeyError):
@@ -190,7 +190,7 @@ def test_a_row_may_point_at_a_value(L):
     with L.transaction(by="t") as t:
         t.add("review", "pick", Ref(t.base, s))
     got = L.at()["review", "pick"]
-    assert isinstance(got, Ref) and got.subject == s and repr(got) == "p"
+    assert isinstance(got, Ref) and got.subject == s and repr(got) == "<Ref p>"
 
 
 def test_ledger_class_rejects_non_values():
