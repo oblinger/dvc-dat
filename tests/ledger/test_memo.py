@@ -34,7 +34,7 @@ def test_ledger_fn_needs_an_annotation_and_stays_callable(world):
 
 def test_load_fn_fields(world):
     f = world.at().load_fn("ledger_kinds.cut")
-    assert f.mode == "unsandboxed" and f.mount is None and str(f.signature) == "(*, game: str, version: str = '1.0.0')"
+    assert f.code.sandboxed is False and f.mount is None and str(f.signature) == "(*, game: str, version: str = '1.0.0')"
     assert len(f.sha) == 64 and f.subject.startswith("db/fn/ledger_kinds.cut/")
     with pytest.raises(TypeError):
         world.at().load_fn("ledger_kinds.Video")
@@ -50,7 +50,7 @@ def test_eval_seals_once_and_hits(world):
     r = world.at()
     assert r[a.subject, "db/keys"] == {"game": "G1", "version": "1.0.0"}
     assert r[a.subject, "db/fn"] == "ledger_kinds.cut" and r[a.subject, "db/provenance"] == "eval:unsandboxed"
-    assert r[a.dependencies["fn"], "db/returns"] == "Cut" and r[a.dependencies["fn"], "db/mode"] == "unsandboxed"
+    assert r[a.dependencies["fn"], "db/returns"] == "Cut" and r[a.dependencies["fn"], "db/mounts"] == "none"
     assert [x.subject for x in r.refs(fn="ledger_kinds.cut")] == [a.subject]
 
 

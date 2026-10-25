@@ -244,9 +244,9 @@ def env_record(env: Any) -> Dict[str, Any]:
 
 
 def env_from(d: Dict[str, Any]) -> Any:
-    from .env import Code, Env
+    from .env import Checkout, Env
 
-    code = {repo: Code(c["version"], c["commit"], bool(c["dirty"]), None if c["path"] is None else Path(c["path"]))
+    code = {repo: Checkout(c["version"], c["commit"], bool(c["dirty"]), None if c["path"] is None else Path(c["path"]))
             for repo, c in d["code"].items()}
     return Env(code, d["platform"], d.get("mounts"))
 

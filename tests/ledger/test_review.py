@@ -142,5 +142,5 @@ def test_10_refs_equal_by_subject_not_bytes(L):
 
 
 def test_11_the_test_seam_is_not_in_all():
-    assert not {"set_env_provider", "Env", "Code"} & set(ledger.__all__)
-    from dvc_dat.ledger import Code, Env, set_env_provider  # noqa: F401  importable by name
+    assert not {"set_env_provider", "Env", "Checkout"} & set(ledger.__all__)
+    from dvc_dat.ledger import Checkout, Env, set_env_provider  # noqa: F401  importable by name

@@ -582,8 +582,8 @@ print(git("log", "--oneline"))
 # %%
 rev = L.at()
 distance_fn = rev.load_fn("geometry.distance")
-print(distance_fn.mode)
-# → unsandboxed
+print("fn:", distance_fn, " sandboxed:", distance_fn.code.sandboxed)
+# → fn: geometry.distance@<commit, 8 hex>  sandboxed: False  (no __version__: the last commit)
 print(distance_fn.signature)
 # → (a, b=(0, 0), *, metric='euclidean')
 print(distance_fn.subject)
@@ -591,9 +591,10 @@ print(distance_fn.subject)
 
 # %% [markdown]
 # The ledger finds the function by its dotted name at `rev` and
-# hands back an `Fn` saying which code the name resolves to: `mode`
-# is `unsandboxed` for a global function, `signature` the keywords it
-# takes, `subject` the one name for that resolution.
+# hands back an `Fn` saying which code the name resolves to: it
+# prints as its name `@` its code's version, `code.sandboxed` is
+# False for a function installed in this process, `signature` the
+# keywords it takes, `subject` the one name for that resolution.
 
 # %%
 hypotenuse_value = distance_fn(a=(3, 4))
@@ -670,8 +671,8 @@ print(rev["db/mount/plane"])
 
 # %%
 length_fn = rev.load_fn("plane.measure.length")
-print(length_fn.mode, length_fn.mount)
-# → sandbox plane
+print("code:", length_fn.code, " sandboxed:", length_fn.code.sandboxed, " mount:", length_fn.mount)
+# → code: plane@<commit, 8 hex>  sandboxed: True  mount: plane
 segment_value = length_fn(a=(0, 0), b=(3, 4))
 print(segment_value.obj, sorted(segment_value.dependencies))
 # → 2.5 ['fn', 'platform']

@@ -205,7 +205,7 @@ with L.transaction(by="human:dan", why="the clock's start") as t:
          confirm=lambda old, new: True)
 rev = L.at()
 dat_fn = rev.load_fn("demo_game.etl.dat.dat")
-print(dat_fn.mode, dat_fn.mount)     # → sandbox demo_game.etl
+print("sandboxed:", dat_fn.code.sandboxed, " mount:", dat_fn.mount)     # → sandboxed: True  mount: demo_game.etl
 
 # %%
 spec_dat = rev.run("demo_game.etl.dat.dat",

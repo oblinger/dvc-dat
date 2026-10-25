@@ -188,19 +188,25 @@ print("G2 resolution:", Ref(L.at(), g2_subject).preds["resolution"])      # → 
 #
 # One git repository, `geometry`, holds both functions used below:
 # `geometry.distance` runs in this process; `plane.measure.length`
-# runs sandboxed.
+# runs sandboxed. Each package declares its version, `__version__`.
 
 # %%
-# setup: create the repo in a folder, with these two source files, and commit them
+# setup: create the repo in a folder, with these source files, and commit them
 repo_path = scratch_path / "geometry"
 (repo_path / "plane").mkdir(parents=True)
 (repo_path / "geometry.py").write_text('''\
 import math
 from dvc_dat.ledger import ledger_fn
 
+__version__ = "5.3.9"
+
 @ledger_fn
 def distance(rev, a, b=(0, 0)) -> float:
     return math.dist(a, b)
+''')
+
+(repo_path / "plane/__init__.py").write_text('''\
+__version__ = "2.7.1"
 ''')
 
 (repo_path / "plane/measure.py").write_text('''\
@@ -224,21 +230,26 @@ sys.path.insert(0, str(repo_path))
 
 # %%
 distance_fn = L.at().load_fn("geometry.distance")
+print("fn:", distance_fn, " code:", distance_fn.code)
+# → fn: geometry.distance@5.3.9  code: geometry@5.3.9
 hypotenuse_value = distance_fn(a=(3, 4))
 print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
-# → 5.0 <the seal's moment>
+# → result: 5.0  sealed at: <the seal's moment>
 
 # %% [markdown]
 # `load_fn` finds the function; calling it runs it and seals the
-# plain `float` it returns as a value (`.obj` unboxes it).
+# plain `float` it returns as a value (`.obj` unboxes it). A
+# function prints as its name `@` its version; `code` is the code it
+# is loaded from, the package `geometry` at the version it declares.
 
 # %% [markdown]
 # ### Sandboxed functions
 #
 # A sandboxed function runs isolated, seeing only its mounted source
-# folder, so its version is a checksum of the files it loaded rather
-# than a git commit. A mount is two rows: the folder, and the repo
-# that holds it.
+# folder. A mount is two rows: the folder, and the repo that holds
+# it. Its version is the mounted package's `__version__`, read after
+# importing it; the checksum of the files it loaded (`sha`) is its
+# identity.
 
 # %%
 with L.transaction(by="human:dan") as t:
@@ -247,35 +258,44 @@ with L.transaction(by="human:dan") as t:
 
 length_fn = L.at().load_fn("plane.measure.length")
 segment_value = length_fn(a=(0, 0), b=(3, 4))
-print("mode:", length_fn.mode, " result:", segment_value.obj)   # → sandbox 2.5
+print("fn:", length_fn, " code:", length_fn.code, " sandboxed:", length_fn.code.sandboxed)
+# → fn: plane.measure.length@2.7.1  code: plane@2.7.1  sandboxed: True
+print("result:", segment_value.obj)                 # → result: 2.5
 
 # %% [markdown]
 # #### A sandbox is one version of its code
 #
-# Loading a sandboxed function pins the code it runs: `sha` is the
-# checksum of the file it loaded, and `subject` names the function
-# at that version. Every result records it among its dependencies.
+# Loading a sandboxed function pins the code it runs: `version` is
+# what the package declares, `modules` the files it loads, `sha` the
+# checksum of the function's file, and `subject` names the function
+# at those bytes. Every result records the function as it ran, every
+# module it loaded (`plane/__init__.py` too), among its dependencies.
 
 # %%
+print("version:", length_fn.code.version, " modules:", length_fn.code.modules)
+# → version: 2.7.1  modules: ['plane/__init__.py', 'plane/measure.py']
 print("code checksum:", length_fn.sha[:12])    # → 0fc940ed13c9: the checksum of plane/measure.py
 print("function identity:", length_fn.subject)     # → db/fn/plane.measure.length/bab093250d0dffef
 print("result depends on:", segment_value.dependencies)
-# → {'fn': 'db/fn/plane.measure.length/bab093250d0dffef', 'platform': <this machine>}
+# → {'fn': 'db/fn/plane.measure.length/04ebdaea96da6a7b', 'platform': <this machine>}
 
 # %% [markdown]
-# Change the code and the function is a new one, with a new
-# identity. The old result still names the version that made it.
+# Change the code, and bump the version with it, and the function is
+# a new one, with a new identity. The old result still names the
+# version that made it.
 
 # %%
 measure_path = repo_path / "plane/measure.py"
 measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
+(repo_path / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
 subprocess.run(git_cmd + ["commit", "-q", "-am", "quarter metres"], cwd=repo_path, check=True)
 new_length_fn = L.at().load_fn("plane.measure.length")
+print("new fn:", new_length_fn)                     # → new fn: plane.measure.length@2.7.2
 print("new checksum:", new_length_fn.sha[:12], " new identity:", new_length_fn.subject)
 # → 286c47147df4 db/fn/plane.measure.length/f000d89a5e3f336f
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → 1.25
 print("old result still names:", segment_value.dependencies["fn"], " and holds:", segment_value.obj)
-# → db/fn/plane.measure.length/bab093250d0dffef 2.5
+# → db/fn/plane.measure.length/04ebdaea96da6a7b 2.5
 
 # %% [markdown]
 # ## Ledger evaluation

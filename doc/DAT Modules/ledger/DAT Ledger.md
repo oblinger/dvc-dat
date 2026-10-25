@@ -239,7 +239,7 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 ## Value Interface
 The object itself with its provenance on it: what `run` returns, what `seal` stores and what `Ref.load` restores. A subclass says how it becomes bytes (`encode`) and back (`decode`); `@ledger_class(preds=...)` names the preds its values may carry. Until sealed, `preds` is a plain dict filled by whoever builds the value; the seal freezes it and fixes the identity. A subclass's `__init__` need not call `super().__init__`.
 
-**What a value prints as** (DAT 1036). Python's unreadable-object form: `repr` (a bare notebook cell) is `<Type label>`, `str` (`print`, f-strings) the bare label. The label is the value's name at the head, else `#` + the hash's first 8 hex, like a short git sha; a draft has no label. A `Ref` prints the same label as `<Ref …>`, a `Fn` its name and `@` + its version (the hash ending its `db/fn/<name>/<hash>` subject).
+**What a value prints as** (DAT 1036). Python's unreadable-object form: `repr` (a bare notebook cell) is `<Type label>`, `str` (`print`, f-strings) the bare label. The label is the value's name at the head, else `#` + the hash's first 8 hex, like a short git sha; a draft has no label. A `Ref` prints the same label as `<Ref …>`; a `Fn` prints its dotted name `@` its code's version (`<Fn plane.measure.length@2.7.1>`, `str` `plane.measure.length@2.7.1`), and its `Code` the unit `@` the same version (`<Code plane@2.7.1>`) (DAT 1037).
 
 ```python
 v                    # <Video video/G1>     saved, named
@@ -248,7 +248,8 @@ str(v)               # 'video/G1'  /  '#2db69ce1'
 v                    # <Clip sealed #2db69ce1>   v.seal(), saved nowhere
 v                    # <Clip draft>         unsealed; str the same
 Ref(rev, "video/G1") # <Ref video/G1>
-f                    # <Fn clips.clip @bab09325>;  str(f) 'clips.clip'
+f                    # <Fn plane.measure.length@2.7.1>;  str(f) 'plane.measure.length@2.7.1'
+f.code               # <Code plane@2.7.1>
 ```
 
 | Value                      |                                                   |
@@ -373,7 +374,7 @@ A `Value` that is a folder: it encodes as its content manifest, `{"files": {relp
 
 
 ## Fn Interface
-A value function resolved at one revision: a frozen dataclass made by `Rev.load_fn`, never by hand. Calling it is `run`. It prints as `<Fn clips.clip @bab09325>`, `@` + the first 8 hex of its version (its subject's hash); `str` is the name. Its mode is `unsandboxed` (imported in this process) or `sandbox` (loaded from a mount and run in a worker).
+A value function resolved at one revision: a frozen dataclass made by `Rev.load_fn`, never by hand. Calling it is `run`. It prints as `<Fn plane.measure.length@2.7.1>`, `str` `plane.measure.length@2.7.1`: the dotted name `@` its code's version. `code` says where the code comes from: installed in the ledger's own Python environment (imported in this process), or mounted from a checkout (`code.sandboxed`, run in a worker).
 
 | Fn | |
 | --- | --- |
@@ -381,8 +382,8 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
 | [module](#^module) | The source file |
 | [sha](#^sha) | The sha256 of the source file |
 | [subject](#^fn-subject) | The db/fn subject naming this code |
-| [mode](#^mode) | unsandboxed or sandbox |
-| [mount](#^mount) | The mounted prefix, in sandbox mode |
+| [code](#^fn-code) | The code it is loaded from, at a version |
+| [mount](#^mount) | The mounted prefix, when sandboxed |
 | [env](#^env) | The environment it resolved in |
 | [signature](#^signature) | The keys it takes |
 | [__call__](#^--call--) | Evaluate: a memo hit, or run and send the result where `seal=` says |
@@ -399,11 +400,11 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
 **subject**`: str`
     `db/fn/<name>/<16 hex>`, hashing the code that runs ([Value Provenance](#Value%20Provenance)). ^fn-subject
 
-**mode**`: str`
-    `"unsandboxed"` or `"sandbox"`. ^mode
+**code**`: Code`
+    The code the function is loaded from, at a version (DAT 1037): a `Code(Value)`, computed at `load_fn` and not written to the ledger. Its name is `<unit>@<version>`: the unit is the mount prefix for mounted code (`plane`, `algs.ocr`) and the function's top-level package for installed code (`geometry`). Read-only properties over its content, the manifest: `sandboxed` (True for mounted code), `version` (the name after `@`), `modules` (the relpaths the loader walked: under the repo root when mounted, under the top-level package's parent when installed), `mounts` (`prefix -> {repo, root}`, empty when installed), `commit` (the checkout's at load, or `None`) and `lock` (the git blob id of that checkout's `uv.lock`, or `None`). The version is read as a module attribute after import, never parsed from source. Mounted: the root package's `__version__` (imported in the worker); else the last commit touching the loaded files, 8 hex, `+dirty` when one differs from HEAD; else `#` + the first 8 hex of `sha`. Installed: `__version__` on the top-level package; else the version of the distribution providing it; else the short commit (8 hex) of the checkout holding it, `+dirty` when that tree is dirty; else `#` + 8 hex of `sha`. The version is a name for people; `subject` stays the identity and the memo key. ^fn-code
 
 **mount**`: str | None`
-    The mounted prefix the name resolved under; `None` when unsandboxed. ^mount
+    The mounted prefix the name resolved under; `None` for installed code. ^mount
 
 **env**`: Env`
     The environment the function resolved in: repos and commits, platform. ^env
@@ -417,7 +418,7 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
 
 
 ## dvc_dat.ledger Interface
-The package's other exports: two decorators, two helpers, and the exceptions. Every exception is a `LedgerError` and also the builtin it most resembles, so a caller catches either. `Env`, `Code` and `set_env_provider` are importable as the test suite's seam for the environment and are not part of the interface.
+The package's other exports: two decorators, two helpers, and the exceptions. Every exception is a `LedgerError` and also the builtin it most resembles, so a caller catches either. `Env`, `Checkout` and `set_env_provider` are importable as the test suite's seam for the environment and are not part of the interface.
 
 | dvc_dat.ledger | |
 | --- | --- |
@@ -537,7 +538,7 @@ Every predicate the system writes or interprets is `db/...`; everything bare is 
 | `db` | `version`, the name of a whole state; `db/format` |
 | `db/tx/<rev>` | `db/by`, `db/time`, the transaction's keywords |
 | `db/pred/<name>` | `db/cardinality`, `db/index`, `db/type`, `db/doc` |
-| `db/fn/<name>/<hash>` | `db/name`, `db/module`, `db/sha`, `db/modules`, `db/mounts`, `db/mode`, `db/returns` |
+| `db/fn/<name>/<hash>` | `db/name`, `db/module`, `db/sha`, `db/modules`, `db/mounts` (the mounts hash when sandboxed, `none` when installed), `db/returns` |
 | `db/mount/<prefix>` | `db/repo`, `db/root`, `db/salt` |
 | `db/kind/<dotted>` | `db/moved`: a renamed class |
 | a sealed value's subject | `db/value`, `db/kind`, `db/provenance`, `db/preds`, `db/fn`, `db/keys`, `db/sealed-at`, `db/deps/<item>` ([Value Provenance](#Value%20Provenance)) |

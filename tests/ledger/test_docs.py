@@ -63,7 +63,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
 
     f = rev.load_fn("ledger_kinds.cut")           # Fn: resolved at rev
     assert f(game="G1").subject == m.subject  # == rev.run(...)  ADAPTED: G1, the game that exists
-    assert f.module.name == "ledger_kinds.py" and len(f.sha) == 64 and f.mode == "unsandboxed" and f.env.platform
+    assert f.module.name == "ledger_kinds.py" and len(f.sha) == 64 and f.code.sandboxed is False and f.env.platform
 
     rev = L.at()                             # ADAPTED: refs are as-of; the entry is after the old rev
     assert len(rev.values(fn="ledger_kinds.cut")) == 1               # [Value], loaded

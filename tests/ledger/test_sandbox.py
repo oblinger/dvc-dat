@@ -293,7 +293,7 @@ def sbx(tmp_path, monkeypatch, backend):
 def test_sandboxed_eval_seals_records_loaded_modules_and_hits(sbx):
     L, repo = sbx
     f = L.at().load_fn("sbx.stage.fns.count")
-    assert f.mode == "sandbox" and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
+    assert f.code.sandboxed and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
     v = L.at().run("sbx.stage.fns.count", game="G1")
     assert v.sealed and v.obj == {"n": 6} and L.at()[v.subject, "db/provenance"] == "eval:sandbox"
     mods = L.at()[v.dependencies["fn"], "db/modules"]
@@ -363,7 +363,7 @@ def test_salt_item(sbx):
 def test_a_mount_root_without_init_imports_namespace_style(sbx):
     L, _repo = sbx
     f = L.at().load_fn("flatpkg.calc.area")
-    assert f.mode == "sandbox" and f.mount == "flatpkg"
+    assert f.code.sandboxed and f.mount == "flatpkg"
     v = L.at().run("flatpkg.calc.area", side=3)
     assert v.obj == {"area": 9}
     assert sorted(L.at()[v.dependencies["fn"], "db/modules"]) == ["flat/calc.py", "flat/util.py"]
@@ -435,7 +435,7 @@ def test_load_fn_refuses_an_unmounted_import_at_load(sbx):
     L, _repo = sbx
     with pytest.raises(UnmountedImport, match="sbx.other from sbx.stage.fns; mount it or move it"):
         L.at().load_fn("sbx.stage.fns.borrow")
-    assert L.at().load_fn("sbx.stage.fns.snoop").mode == "sandbox"   # same module, no such import
+    assert L.at().load_fn("sbx.stage.fns.snoop").code.sandboxed   # same module, no such import
 
 
 def test_network_refused(sbx):
