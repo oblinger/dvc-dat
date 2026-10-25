@@ -67,6 +67,7 @@ show("q-dats")
 # arguments, `base:` a spec to inherit, `name:` a folder template.
 
 # %%
+# setup files: a run function in mult.py, two template specs in specs/
 module_path = Path("mymodule")
 (module_path / "specs").mkdir(parents=True)
 (module_path / "mult.py").write_text('''\
@@ -83,6 +84,7 @@ def write_table(folder, n=10, start=1):
 
 
 def table(dat, n=10, start=1):
+    """The run function: `do` calls it with the new dat and the spec's kwargs."""
     cells = write_table(dat.get_path(), n, start)
     Path(dat.get_path(), "log.txt").write_text(f"{n} x {n} from {start}\\n")
     dat.get_results()["cells"] = cells
@@ -136,9 +138,11 @@ print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_2>
 # ## A dat is also a value
 #
 # On a ledger a dat is a value: sealed under a name, loaded back,
-# found by its preds. `TableDat` is a ledger value class over a dat
-# folder; `as_value` reads its preds from the spec's kwargs and the
-# result.
+# found by its preds. `TableDat` is a `Dat` that is a `Value`: the
+# folder `do` made, with preds. Nothing runs in this section: the
+# run happened above, in `do("specs.table12")`. `path_to_table_dat`
+# reads the folder's spec kwargs and result as preds; `seal` stores
+# the folder; `load` brings it back.
 
 # %%
 (module_path / "table_dat.py").write_text('''\
@@ -153,7 +157,7 @@ from mymodule.mult import write_table
 
 @ledger_class(preds=("n", "start", "cells"))
 class TableDat(Dat):
-    """A table dat: `_spec_.yaml`, `_result_.yaml`, `table.csv`."""
+    """A dat that is a value: the folder `_spec_.yaml`, `_result_.yaml`, `table.csv`."""
 
     @classmethod
     def kind_ok(cls, kind):
@@ -161,30 +165,30 @@ class TableDat(Dat):
         return kind == "dvc_dat.core.Dat" or super().kind_ok(kind)
 
 
-def as_value(folder) -> TableDat:
-    """The dat in `folder` as a value; its kwargs and result are its preds."""
-    spec = yaml.safe_load(Path(folder, "_spec_.yaml").read_text())
-    result = yaml.safe_load(Path(folder, "_result_.yaml").read_text())
-    value = TableDat(Path(folder))
-    value.preds.update(spec["dat"]["kwargs"])
-    value.preds["cells"] = result["cells"]
-    return value
+def path_to_table_dat(path) -> TableDat:
+    """The dat already in `path`, as a value; nothing runs. Its kwargs and result are its preds."""
+    spec = yaml.safe_load(Path(path, "_spec_.yaml").read_text())
+    result = yaml.safe_load(Path(path, "_result_.yaml").read_text())
+    table_dat = TableDat(Path(path))
+    table_dat.preds.update(spec["dat"]["kwargs"])
+    table_dat.preds["cells"] = result["cells"]
+    return table_dat
 
 
 @ledger_fn
 def table(rev, *, spec: dict, path: Path) -> TableDat:
-    """The table constructor: `spec` the question, `path` the folder."""
+    """The table constructor: the run itself. `spec` is the question, `path` the folder it fills."""
     cells = write_table(path, **spec["dat"]["kwargs"])
     (path / "_spec_.yaml").write_text(yaml.safe_dump(spec))
     (path / "_result_.yaml").write_text(yaml.safe_dump({"cells": cells}))
-    return as_value(path)
+    return path_to_table_dat(path)
 ''')
-from mymodule.table_dat import TableDat, as_value
+from mymodule.table_dat import TableDat, path_to_table_dat
 
-hand_dat = as_value(table12_path)
+sealed_dat = path_to_table_dat(table12_path)   # the dat `do` ran above
 with L.transaction(by="human:dan") as t:
-    hand_dat.seal(t, name="tables/table12")
-print("dat:", repr(hand_dat), " sealed:", hand_dat.sealed)   # dat: <TableDat tables/table12>  sealed: <the seal's moment>
+    sealed_dat.seal(t, name="tables/table12")
+print("dat:", repr(sealed_dat), " sealed:", sealed_dat.sealed)   # dat: <TableDat tables/table12>  sealed: <the seal's moment>
 
 loaded_dat = L.at().load("tables/table12")
 print("files:", sorted(p.name for p in loaded_dat.path.iterdir()))
@@ -195,14 +199,16 @@ print("preds:", dict(sorted(loaded_dat.preds.items())))
 # %% [markdown]
 # Sealing sent the files to the art store by their hashes; the
 # manifest naming them is the value's bytes. `load` rebuilds the
-# folder from the store.
+# folder from the store; it does not run anything.
 
 # %% [markdown]
 # ## The dat constructor is a ledger function
 #
 # `table(rev, *, spec, path)` builds a table dat under `@ledger_fn`:
-# the spec is the question, and the answer is remembered. A ledger
-# function runs committed, mounted code, in a sandbox.
+# the spec is the question, and the answer is remembered. This is
+# where the ledger runs a dat: the function writes the table into
+# `path` and returns it as a value. A ledger function runs committed,
+# mounted code, in a sandbox.
 
 # %%
 subprocess.run(git_cmd + ["add", "mymodule"], check=True)
@@ -233,7 +239,7 @@ for n in (5, 9):
     L.at().run("mymodule.table_dat.table",
                spec={"dat": {"do": "mymodule.mult.table", "kwargs": {"n": n, "start": 1}}})
 print("cells:", L.at().select(("n", "cells"), kind=TableDat))
-# cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: table12 by hand, then by the constructor
+# cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: table12 sealed from do's folder, then by the constructor
 
 # %% [markdown]
 # Spec kwargs and results are preds, so a query over them is an
