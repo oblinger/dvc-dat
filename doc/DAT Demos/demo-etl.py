@@ -310,19 +310,20 @@ print(ran_since(counts_before))
 # %% [markdown]
 # ## Reading a result's dependencies back
 #
-# A result's dependencies list every input it read: each stage below by its result's bytes (`eval:`), the set's rows (`q:`, the `all` call and its answer), its own code (`fn`) and the environment.
+# A result's dependencies list every input it read: each stage below by its result's bytes (`eval:`), the set's rows (`q:`, the `all` call and its answer), its own code (`code`, the snapshot, and `fn`, the function's name in it) and the environment.
 
 # %%
 for item in sorted(comfort_report_value.dependencies):
     print(item)
-# → eval:comfort.stages.city_comfort{"city":"Austin","end":"2026-09-01","start":"2026-06-01"}
+# → code
+#   eval:comfort.stages.city_comfort{"city":"Austin","end":"2026-09-01","start":"2026-06-01"}
 #   eval:comfort.stages.city_comfort{"city":"Boston","end":"2026-09-01","start":"2026-06-01"}
 #   eval:comfort.stages.city_comfort{"city":"Chicago","end":"2026-09-01","start":"2026-06-01"}
 #   eval:comfort.stages.city_comfort{"city":"Denver","end":"2026-09-01","start":"2026-06-01"}
 #   fn
 #   platform
 #   q:{"__call__":"all","args":["cityset/representative","contains"],"since":null}
-print(sorted(L.at()[comfort_report_value.dependencies["fn"], "db/modules"]))
+print(sorted(L.at()[comfort_report_value.dependencies["code"], "db/modules"]))
 # → ['comfort/__init__.py', 'comfort/report.py', 'comfort/values.py']
 
 # %%

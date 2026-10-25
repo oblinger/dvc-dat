@@ -68,41 +68,41 @@ class RunTrace:
     """What one run knew, kept on its unsaved result (``v.__dict__["_run"]``): enough for a later
     ``v.seal(L)`` / ``v.seal(t)`` to write the memo entry a memoised run writes (DAT 1028).
 
-    ``trace`` is the dependencies (fn subject, platform, ``code/<repo>``, every read); ``fn_rows``
-    the ``db/fn/<name>/<hash>`` rows; ``repo`` and ``dirty`` the checkout that vouches for an
+    ``trace`` is the dependencies (``code``, ``fn``, platform, ``code/<repo>``, every read); ``code_rows``
+    the ``db/code/<hash 16>`` item's rows; ``repo`` and ``dirty`` the checkout that vouches for an
     unsandboxed run (``repo`` ``None`` outside any), for the code check at a late save."""
 
     name: str
     enc: str
     trace: Dict[str, str]
     provenance: str
-    fn_subject: str
-    fn_rows: Tuple[Tuple[str, str], ...]
+    code_subject: str
+    code_rows: Tuple[Tuple[str, str], ...]
     ledger: str
     sandboxed: bool
     repo: Optional[str] = None
     dirty: bool = False
+    returns: str = ""
 
     def record(self) -> Dict[str, Any]:
         """As JSON, for a ``v.seal()`` seal record."""
         d = dict(self.__dict__)
-        d["fn_rows"] = [list(r) for r in self.fn_rows]
+        d["code_rows"] = [list(r) for r in self.code_rows]
         return d
 
     @classmethod
     def from_record(cls, d: Dict[str, Any]) -> "RunTrace":
         d = dict(d)
-        d["fn_rows"] = tuple(tuple(r) for r in d["fn_rows"])
+        d["code_rows"] = tuple(tuple(r) for r in d["code_rows"])
         return cls(**d)
 
 
 def run_trace(fn: "Fn", plain: "Rev", trace: Dict[str, str], enc: str, provenance: str,
-              modules: Optional[Dict[str, str]] = None, repo: Optional[str] = None,
-              dirty: bool = False) -> RunTrace:
-    fsub = trace.get("fn", fn.subject)
-    return RunTrace(name=fn.name, enc=enc, trace=dict(trace), provenance=provenance, fn_subject=fsub,
-                    fn_rows=tuple(fn._rows(fsub, modules)), ledger=ledger_key(plain.ledger), sandboxed=fn.code.sandboxed,
-                    repo=repo, dirty=dirty)
+              code: Code, repo: Optional[str] = None, dirty: bool = False) -> RunTrace:
+    """``code`` is what ran: ``fn.code``, with a sandboxed run's run-time loads beside its own."""
+    return RunTrace(name=fn.name, enc=enc, trace=dict(trace), provenance=provenance, code_subject=code.subject,
+                    code_rows=tuple(code._rows()), ledger=ledger_key(plain.ledger), sandboxed=fn.code.sandboxed,
+                    repo=repo, dirty=dirty, returns=fn._returns)
 
 
 def attach_run(value: Value, run: RunTrace) -> Value:
@@ -117,7 +117,7 @@ def check_late_code(run: RunTrace, env: Env) -> None:
     """A late save of an unsandboxed run (DAT 1028): the code that ran is vouched for by a clean
     checkout at the commit the trace names, as a memoised run's ``_check_code``; ``NotEvaluated``."""
     if run.sandboxed:
-        return                              # the fn item records the bytes it loaded
+        return                              # the code item records the bytes it loaded
     if run.repo is None:
         raise NotEvaluated(f"{run.name}: its code is outside any git checkout, so no commit can vouch "
                            "for a result")
@@ -138,10 +138,11 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
              refuse_held: bool = False) -> str:
     """Write ``value`` as ``run``'s memo entry into the open transaction ``t``; its subject.
 
-    The entry ``seal_entry`` always wrote: ``db/fn``, ``db/keys``, the trace as ``db/deps/*``,
-    ``db/value``, under ``<hash of (fn, keys, trace, preds, value)>``. ``refuse_held``: an
+    The entry ``seal_entry`` always wrote: ``db/fn`` (the dotted name), ``db/keys``, ``db/returns``
+    (the function's return annotation), the trace as
+    ``db/deps/*`` (``code`` naming the ``db/code/<hash 16>`` item, written once), ``db/value``, under
+    ``<hash of (fn, keys, trace, preds, value)>``. ``refuse_held``: an
     identical entry already on the ledger raises ``_AlreadySealed`` (the caller loads it)."""
-    from .txn import _Op
 
     if value.sealed and value.subject is None and "_run" not in value.__dict__:
         raise TypeError(f"{run.name} returned a {type(value).__name__} sealed by v.seal(); run seals its "
@@ -156,12 +157,8 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
                                    "preds": canon, "value": vtext}))
     if refuse_held and t.base._held(subject, "db/value"):
         raise _AlreadySealed(subject)
-    fsub = run.fn_subject
-    if fsub not in t._fns and not t.base._held(fsub, "db/name"):
-        t._fns.add(fsub)
-        for p, o in run.fn_rows:
-            t._ops.append(_Op(fsub, p, o, True))
-    extra = [("db/fn", "str:" + run.name), ("db/keys", "json:" + run.enc)]
+    t._ensure_code(run.code_subject, run.code_rows)
+    extra = [("db/fn", "str:" + run.name), ("db/keys", "json:" + run.enc), ("db/returns", "str:" + run.returns)]
     if value.sealed and value.subject is None:
         extra.append(("db/sealed-at", "str:" + str(value.sealed)))
     if name is None:
@@ -256,10 +253,6 @@ def mounts_hash(rev: "Rev") -> Optional[str]:
     return hash_text(canonical(m), 16) if m else None
 
 
-def fn_subject(name: str, modules: Dict[str, str], mounts: Optional[str]) -> str:
-    return f"db/fn/{name}/{hash_text(canonical({'modules': modules, 'mounts': mounts}), 16)}"
-
-
 def resolve_in_process(name: str) -> Any:
     import importlib
 
@@ -321,14 +314,11 @@ def load_fn(rev: "Rev", name: str) -> "Fn":
     src = inspect.getsourcefile(obj)
     if not src or not os.path.exists(src):
         raise ImportError(f"{name!r}: no source file to hash")
-    sha = sha256(Path(src).read_bytes())
     sig, takes_path, template = signature_of(name, obj)
     env = current_env()
-    modules = base_closure(modname, Path(src), env)
-    return Fn(name=name, module=Path(src), sha=sha, mount=None, signature=sig, env=env,
-              subject=fn_subject(name, modules, None), code=installed_code(modname, Path(src), env, sha),
-              _rev=rev, _obj=obj, _takes_path=takes_path, _template=template,
-              _modules=modules, _returns=returns_text(obj))
+    return Fn(name=name, module=Path(src), mount=None, signature=sig, env=env,
+              code=installed_code(modname, Path(src), env),
+              _rev=rev, _obj=obj, _takes_path=takes_path, _template=template, _returns=returns_text(obj))
 
 
 def _closure_files(modname: str, src: Path, env: Env) -> Tuple[Path, Path, List[Path]]:
@@ -346,53 +336,46 @@ def _closure_files(modname: str, src: Path, env: Env) -> Tuple[Path, Path, List[
     return root, within, list(static_closure(root, modname, within).values())
 
 
-def base_closure(modname: str, src: Path, env: Env) -> Dict[str, str]:
-    """The base-mode ``fn`` hash input: the static import closure within the function's checkout (Q37 (iii)),
-    ``relpath -> sha256``; outside any checkout, the module file alone."""
-    _root, within, files = _closure_files(modname, src, env)
-    out = {}
-    for f in files:
-        out[Path(os.path.realpath(f)).relative_to(os.path.realpath(within)).as_posix()] = sha256(f.read_bytes())
-    return dict(sorted(out.items())) or {modname: sha256(src.read_bytes())}
-
-
-def installed_code(modname: str, src: Path, env: Env, sha: str) -> Code:
+def installed_code(modname: str, src: Path, env: Env) -> Code:
     """An installed function's ``Code`` (DAT 1037): its top-level package at the version its environment
-    carries; ``modules`` relative to the top-level package's parent; never sandboxed, no mounts."""
-    from .code import installed_version, lock_of
+    carries; ``modules`` the static import closure within its checkout (Q37 (iii)), relative to the
+    top-level package's parent, each by its sha256 (outside any checkout, the module file alone); never
+    sandboxed, no mounts."""
+    from .code import identity_hash, installed_version, lock_of
     from .sandbox import unguarded
 
     with unguarded():                       # the ledger's own reads, also inside a sandboxed body
         root, _within, files = _closure_files(modname, src, env)
         real = os.path.realpath(root)
-        modules = sorted({os.path.relpath(os.path.realpath(f), real).replace(os.sep, "/") for f in files}) \
-            or [os.path.relpath(os.path.realpath(src), real).replace(os.sep, "/")]
+        modules = {os.path.relpath(os.path.realpath(f), real).replace(os.sep, "/"): sha256(f.read_bytes())
+                   for f in files} \
+            or {os.path.relpath(os.path.realpath(src), real).replace(os.sep, "/"): sha256(src.read_bytes())}
         repo = repo_of(env, src)
         co = env.code.get(repo) if repo else None
         top = modname.split(".")[0]
-        version = installed_version(top, env, repo, sha)
+        version = installed_version(top, env, repo, identity_hash(modules, None))
         lock = lock_of(co.path) if co is not None else None
-    return Code({"modules": modules, "mounts": {}, "commit": co.commit if co is not None else None,
+    return Code({"modules": modules, "mounts_hash": None, "mounts": {},
+                 "commit": co.commit if co is not None else None,
                  "lock": lock, "sandboxed": False, "version": version}, unit=top)
 
 
 @dataclass(frozen=True)
 class Fn:
-    """A revision function, resolved at ``_rev``; calling it is ``run``."""
+    """A revision function, resolved at ``_rev``; calling it is ``run``. Not on the timeline: no subject.
+    ``name`` is the dotted string it was loaded by; ``code`` the snapshot it is looked up in, which alone
+    has identity (``code.subject``, DAT 1037)."""
 
     name: str
     module: Path
-    sha: str
     mount: Optional[str]
     signature: inspect.Signature
     env: Env
-    subject: str
     code: Code
     _rev: Any = field(repr=False, compare=False)
     _obj: Any = field(repr=False, compare=False, default=None)
     _takes_path: bool = field(repr=False, compare=False, default=False)
     _template: Optional[str] = field(repr=False, compare=False, default=None)
-    _modules: Dict[str, str] = field(repr=False, compare=False, default_factory=dict)
     _returns: str = field(repr=False, compare=False, default="")
     _info: Dict[str, Any] = field(repr=False, compare=False, default_factory=dict)
 
@@ -403,13 +386,6 @@ class Fn:
     def __str__(self) -> str:
         """``plane.measure.length@2.7.1``: the dotted name, ``@`` its code's version (``fn.code.version``)."""
         return f"{self.name}@{self.code.version}"
-
-    def _rows(self, subject: Optional[str] = None, modules: Optional[Dict[str, str]] = None) -> List[Tuple[str, str]]:
-        """The ``db/fn/<name>/<hash>`` rows (A15, A31)."""
-        mh = mounts_hash(self._rev._plain()) if self.code.sandboxed else None
-        return [("db/name", "str:" + self.name), ("db/module", "str:" + str(self.module)),
-                ("db/sha", "str:" + self.sha), ("db/modules", "json:" + canonical(modules or self._modules)),
-                ("db/mounts", "str:" + (mh or "none")), ("db/returns", "str:" + self._returns)]
 
     def _bind(self, keys: Dict[str, Any]) -> Dict[str, Any]:
         if self._takes_path and "path" in keys:
@@ -544,15 +520,15 @@ class Fn:
             out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
             value = wrap_result(self.name, self._obj, out)
             trace = dict(rec)
-            trace.update({"fn": self.subject, "platform": env.platform})
+            trace.update({"code": self.code.subject, "fn": self.name, "platform": env.platform})
             if repo is not None:
                 trace[f"code/{repo}"] = code_token(env.code[repo].commit)
             if save is False:
                 dirty = bool(repo is not None and env.code[repo].dirty)
-                return attach_run(value, run_trace(self, plain, trace, enc, "eval:unsandboxed",
+                return attach_run(value, run_trace(self, plain, trace, enc, "eval:unsandboxed", self.code,
                                                    repo=repo, dirty=dirty))
-            value = seal_entry(self, plain, value, trace, enc, "eval:unsandboxed", into=save, name=name,
-                               repo=repo)
+            value = seal_entry(self, plain, value, trace, enc, "eval:unsandboxed", self.code, into=save,
+                               name=name, repo=repo)
             return value
         finally:
             drop_work(work, value)
@@ -659,7 +635,7 @@ class _AlreadySealed(Exception):
 
 
 def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: str, provenance: str,
-               modules: Optional[Dict[str, str]] = None, into: Any = True, name: Optional[str] = None,
+               code: Code, into: Any = True, name: Optional[str] = None,
                repo: Optional[str] = None) -> Value:
     """Seal an eval's result as a memo entry: into the open transaction ``into``, or (``True``) in a
     transaction of its own, handing back the identical entry when one is sealed already."""
@@ -668,7 +644,7 @@ def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: s
     if value.sealed and value.subject is None:
         raise TypeError(f"{fn.name} returned a {type(value).__name__} sealed by v.seal(); run seals its own "
                         "result, so return it unsealed")
-    run = run_trace(fn, plain, trace, enc, provenance, modules, repo=repo)
+    run = run_trace(fn, plain, trace, enc, provenance, code, repo=repo)
     if into is not True:
         save_run(into, value, run, name)
         return value
@@ -705,22 +681,24 @@ def lookup_encoded(rev: "Rev", name: str, enc: str) -> Optional[Value]:
     return lookup(rev._plain(), name, enc)
 
 
-def fn_holds(rev: "Rev", subject: str) -> bool:
-    """Does the ``fn`` item still name the code ``rev`` resolves to (memo only, nothing runs)."""
+def code_holds(rev: "Rev", subject: str, name: Optional[str]) -> bool:
+    """Does the ``code`` item still name the code function ``name`` resolves to at ``rev`` (memo only,
+    nothing runs): mounted, the recorded modules re-hashed as they are now; installed, the static
+    closure as loaded now."""
     from .codec import show
 
+    if not name:
+        return False
     top = rev.ledger.at()
     mounts = top._held(subject, "db/mounts")
-    name = top._held(subject, "db/name")
-    if not mounts or not name:
+    mods = top._held(subject, "db/modules")
+    if not mounts or not mods:
         return False
-    nm = show(name[0].obj)
     if show(mounts[0].obj) != "none":           # a mounts hash: sandboxed
-        from .sandbox import sandbox_subject_at
+        from .sandbox import sandbox_code_at
 
-        mods = json.loads(show(top._held(subject, "db/modules")[0].obj))
-        return sandbox_subject_at(rev, nm, mods) == subject
+        return sandbox_code_at(rev, name, json.loads(show(mods[0].obj))) == subject
     try:
-        return load_fn(rev, nm).subject == subject
+        return load_fn(rev, name).code.subject == subject
     except (ImportError, TypeError):
         return False

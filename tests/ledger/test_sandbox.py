@@ -296,8 +296,9 @@ def test_sandboxed_eval_seals_records_loaded_modules_and_hits(sbx):
     assert f.code.sandboxed and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
     v = L.at().run("sbx.stage.fns.count", game="G1")
     assert v.sealed and v.obj == {"n": 6} and L.at()[v.subject, "db/provenance"] == "eval:sandbox"
-    mods = L.at()[v.dependencies["fn"], "db/modules"]
+    mods = L.at()[v.dependencies["code"], "db/modules"]
     assert sorted(mods) == ["sbx/stage/__init__.py", "sbx/stage/fns.py", "sbx/stage/helper.py"]
+    assert v.dependencies["fn"] == "sbx.stage.fns.count"
     assert "code/sbx-repo" not in v.dependencies and v.dependencies["game/G1 n"] == "3"
     top = L.at().id
     assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top
@@ -307,7 +308,7 @@ def test_sandboxed_eval_seals_records_loaded_modules_and_hits(sbx):
         bump(t, "code/sbx-repo")
     assert not v.matches(L.at())                    # the run-time import's file moved
     w = L.at().run("sbx.stage.fns.count", game="G1")
-    assert w.same_as(v) and w.subject != v.subject and list(v.diff(w)) == ["fn"]
+    assert w.same_as(v) and w.subject != v.subject and list(v.diff(w)) == ["code"]
 
 
 def test_nested_eval_in_process_and_work_folder(sbx):
@@ -366,14 +367,14 @@ def test_a_mount_root_without_init_imports_namespace_style(sbx):
     assert f.code.sandboxed and f.mount == "flatpkg"
     v = L.at().run("flatpkg.calc.area", side=3)
     assert v.obj == {"area": 9}
-    assert sorted(L.at()[v.dependencies["fn"], "db/modules"]) == ["flat/calc.py", "flat/util.py"]
+    assert sorted(L.at()[v.dependencies["code"], "db/modules"]) == ["flat/calc.py", "flat/util.py"]
     assert L.at().run("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # the package case
 
 
 def test_a_draft_keeps_preds_and_runs_on_a_dirty_tree(sbx):
     L, repo = sbx
     v = L.at().run("sbx.stage.kinds.tagged", game="G1", seal=False)
-    assert not v.sealed and v.preds == {"game": "G1"} and v.dependencies["fn"].startswith("db/fn/")
+    assert not v.sealed and v.preds == {"game": "G1"} and v.dependencies["code"].startswith("db/code/")
     (repo / "sbx/other.py").write_text("X = 3\n")              # dirty
     assert L.at().run("sbx.stage.fns.count", game="G1", seal=False).obj == {"n": 6}
     assert L.at().run("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # a miss runs dirty (Q39)
@@ -421,7 +422,7 @@ def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
     pytest.importorskip("xlsxwriter")
     L, _repo = sbx
     v = L.at().run("sbx.stage.fns.libs", game="G1")
-    mods = L.at()[v.dependencies["fn"], "db/modules"]
+    mods = L.at()[v.dependencies["code"], "db/modules"]
     assert mods["py:colorsys.py"] == sha256(open(colorsys.__file__, "rb").read())
     assert mods["dist:xlsxwriter"].startswith(md.version("xlsxwriter") + ":")
     assert not any(k.startswith(("dist:dvc-dat", "py:dvc_dat", "dist:pyyaml")) for k in mods)

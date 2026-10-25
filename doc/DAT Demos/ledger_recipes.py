@@ -112,7 +112,7 @@ def brief(text):
         return f"{cls.rpartition('.')[2]}:{h[:8]}"
     if text.startswith("sha256:"):
         return text[7:15]
-    if text.startswith("db/fn/"):
+    if text.startswith("db/code/"):
         return text.rpartition("/")[2][:8]
     if text.startswith("q:"):
         return "query " + text[2:]

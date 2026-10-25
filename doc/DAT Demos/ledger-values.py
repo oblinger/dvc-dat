@@ -586,15 +586,16 @@ print("fn:", distance_fn, " sandboxed:", distance_fn.code.sandboxed)
 # → fn: geometry.distance@<commit, 8 hex>  sandboxed: False  (no __version__: the last commit)
 print(distance_fn.signature)
 # → (a, b=(0, 0), *, metric='euclidean')
-print(distance_fn.subject)
-# → db/fn/geometry.distance/<16 hex>
+print("code:", repr(distance_fn.code), " subject:", distance_fn.code.subject)
+# → code: <Code geometry@<commit, 8 hex>>  subject: db/code/<16 hex>
 
 # %% [markdown]
 # The ledger finds the function by its dotted name at `rev` and
 # hands back an `Fn` saying which code the name resolves to: it
 # prints as its name `@` its code's version, `code.sandboxed` is
 # False for a function installed in this process, `signature` the
-# keywords it takes, `subject` the one name for that resolution.
+# keywords it takes. Only the code has identity, `code.subject`: the
+# function is a name looked up inside it, and has no subject.
 
 # %%
 hypotenuse_value = distance_fn(a=(3, 4))
@@ -675,8 +676,8 @@ print("code:", length_fn.code, " sandboxed:", length_fn.code.sandboxed, " mount:
 # → code: plane@<commit, 8 hex>  sandboxed: True  mount: plane
 segment_value = length_fn(a=(0, 0), b=(3, 4))
 print(segment_value.obj, sorted(segment_value.dependencies))
-# → 2.5 ['fn', 'platform']
-print(L.at()[segment_value.dependencies["fn"], "db/modules"])
+# → 2.5 ['code', 'fn', 'platform']
+print(L.at()[segment_value.dependencies["code"], "db/modules"])
 # → {'plane/measure.py': '<hash>', 'plane/units.py': '<hash>'}
 
 # %% [markdown]
@@ -684,7 +685,8 @@ print(L.at()[segment_value.dependencies["fn"], "db/modules"])
 # whose path holds the standard library, `site-packages` and the
 # mounted folders, nothing else. The run pulled in `units.py`
 # through the import, and `db/modules` records each source file
-# loaded with its checksum: that is the function's version. Its
+# loaded with its checksum on the `code` item, `db/code/<16 hex>`:
+# that is the code's identity, and `fn` names the function in it. Its
 # dependencies carry no `code/geometry` item.
 
 # %% [markdown]
@@ -773,8 +775,9 @@ print(far_value.obj, far_value.sealed)
 # → 10.0 True
 for item in sorted(far_value.dependencies):
     print(item, "->", far_value.dependencies[item])
+# → code -> db/code/<16 hex>
 # → code/geometry -> <8 hex>
-# → fn -> db/fn/geometry.distance/<16 hex>
+# → fn -> geometry.distance
 # → platform -> darwin-arm64-py3.12
 
 # %% [markdown]
@@ -784,9 +787,10 @@ for item in sorted(far_value.dependencies):
 #
 # - `code/geometry` — `distance` is global, so the code it ran is
 #   known only as its repo's commit.
-# - `fn` — the code the name resolved to, its `Fn` subject: for a
-#   global function the commit, beside the hash of the module's
-#   source and what it imports from its repo (A39).
+# - `code` — the code the name resolved to, its `Code` subject: the
+#   hash of the module's source and what it imports from its repo
+#   (A39), beside the commit.
+# - `fn` — the function's dotted name inside that code.
 # - `platform` — the environment, discovered.
 #
 # `distance` reads nothing through `rev`, so nothing else is in its
@@ -855,14 +859,14 @@ print(len(rev.values(fn="geometry.distance")))
 # %%
 print(type(far_value).__name__, far_value.obj)
 # → Blob 10.0
-print(L.at()[far_value.dependencies["fn"], "db/returns"])
+print(L.at()[far_value.subject, "db/returns"])
 # → float
 
 # %% [markdown]
 # `distance` returns a plain `float`. `-> float` names no `Value`
 # subclass, so the float was wrapped in `Value.Blob` and sealed like any
 # value; `.obj` unboxes it. The annotation is kept as `db/returns`
-# on the function's `db/fn/…` subject. `Value.Blob` declares no preds,
+# on the memo entry, beside `db/fn`. `Value.Blob` declares no preds,
 # so the entry is found by `db/fn` and `db/keys` alone.
 
 # %% [markdown]

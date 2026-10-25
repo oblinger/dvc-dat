@@ -234,16 +234,16 @@ print(L.at()[spec_dat.subject, "db/keys"])
 # which code ran is known only after the run.
 
 # %%
-module_paths = L.at()[spec_dat.dependencies["fn"], "db/modules"]
+module_paths = L.at()[spec_dat.dependencies["code"], "db/modules"]
 print(sorted(module_paths))
 # → ["demo_game/etl/__init__.py", "demo_game/etl/dat.py",
 #    "demo_game/etl/detect.py"]: the package's __init__ runs too
 
 # %% [markdown]
-# The `fn` item hashes the modules the run loaded (Q37, open;
+# The `code` item hashes the modules the run loaded (Q37, open;
 # lean): this entry's code is `dat.py` and `detect.py`. An edit to
 # `detect.py` misses it, and a spec naming another stage is
-# another `fn` subject.
+# another `code` subject; `fn` names the function inside it.
 
 # %% [markdown]
 # ### Asked twice, computed once
@@ -333,9 +333,10 @@ print(model_dat, model_dat.preds["stage"],
 for item in sorted(model_dat.dependencies):
     print(item, "->", model_dat.dependencies[item])
 # → cfg/train epochs -> 8
+#   code -> db/code/<16 hex>
 #   eval:demo_game.etl.track.tracks{"game":"G1"}
 #       -> ref:demo_game.etl.dat.StageDat:<hash>
-#   fn -> db/fn/demo_game.etl.model.train/<hash>
+#   fn -> demo_game.etl.model.train
 #   game/G1 gameset -> normie
 #   platform -> darwin-arm64-py3.11
 
@@ -344,7 +345,7 @@ for item in sorted(model_dat.dependencies):
 # `detections` (a hit: sealed above), and each miss sealed its own
 # dat. A stage depends on the one below by a nested `run`, never
 # by an import and never by a `deps=` list: the run records it.
-# The model's dependencies hold its own code (`fn`: `model.py` and
+# The model's dependencies hold its own code (`code`: `model.py` and
 # `dat.py`, since the modules a nested run loads are that
 # entry's), the two rows it read by name, and the stage below as a
 # nested run, held by its result's bytes.
@@ -403,7 +404,7 @@ print(model_dat.matches(rev))                   # → False, for now
 # %% [markdown]
 # A sandboxed value's dependencies pin the modules a stage loaded, not the repo's
 # version, so the bump alone moves nothing: `detections` still
-# matches. `track.py` changed, so the tracks' `fn` item moved. The
+# matches. `track.py` changed, so the tracks' `code` item moved. The
 # model reads as stale too: `matches` never runs a stage (A42), and
 # its nested `tracks` item has no entry that holds at this rev yet.
 
@@ -416,8 +417,7 @@ print(retracked_dat.same_as(tracks_dat))     # → True: same bytes
 print(model_hit_dat.subject == model_dat.subject)   # → True: a hit
 print(model_dat.matches(L.at()))             # → True, now
 print(tracks_dat.diff(retracked_dat))
-# → {"fn": ("db/fn/demo_game.etl.track.tracks/<a>",
-#           "db/fn/demo_game.etl.track.tracks/<b>")}
+# → {"code": ("db/code/<a>", "db/code/<b>")}
 
 # %% [markdown]
 # Asking for the model re-derived the tracks (their code moved) and
@@ -563,7 +563,7 @@ except NotClean as e:
 
 # %% [markdown]
 # A revision can be read forever. A sandboxed miss runs at HEAD,
-# clean or dirty, and its `fn` item records the bytes of every
+# clean or dirty, and its `code` item records the bytes of every
 # module it loaded, which is its identity. `clean=True` is for a
 # reader who must say which version ran: the checkout clean and at
 # the revision's `code/<repo>` commit, else `NotClean` (a

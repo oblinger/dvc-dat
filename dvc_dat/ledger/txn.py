@@ -30,7 +30,6 @@ from .errors import Exists, LockTimeout, SealBroken, Undeclared
 from .value import Value, dotted
 
 if TYPE_CHECKING:
-    from .fn import Fn
     from .ledger import Ledger
     from .rev import Rev
 
@@ -128,7 +127,7 @@ class Transaction:
         self._rev: Optional["Rev"] = None
         self._pending: Dict[int, Tuple[Value, str]] = {}
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
-        self._fns: set = set()
+        self._codes: set = set()
         #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
         self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
         self._to_store: List[Value] = []
@@ -519,9 +518,13 @@ class Transaction:
 
         pending = {s: v.hash for v, s in self._pending.values()}
         for d in deps:
-            if isinstance(d, (Fn, SealedFn)):
-                self._ensure_fn(d)
-                trace["fn"] = d.subject
+            if isinstance(d, Fn):
+                self._ensure_code(d.code.subject, d.code._rows())
+                trace.update(code=d.code.subject, fn=d.name)
+                continue
+            if isinstance(d, SealedFn):
+                self._ensure_code(d.code_subject, d.rows)
+                trace.update(code=d.code_subject, fn=d.name)
                 continue
             name = None
             if isinstance(d, SealedRef):
@@ -667,14 +670,15 @@ class Transaction:
         if name is not None:
             self._ops.append(_Op(name, "db/alias", "str:" + subject, True))
 
-    def _ensure_fn(self, f: "Fn") -> None:
-        if f.subject in self._fns:
+    def _ensure_code(self, subject: str, rows: Sequence[Tuple[str, str]]) -> None:
+        """Write the ``db/code/<hash 16>`` item once (DAT 1037): many results, and many functions, share it."""
+        if subject in self._codes:
             return
-        self._fns.add(f.subject)
-        if self.base._held(f.subject, "db/name"):
+        self._codes.add(subject)
+        if self.base._held(subject, "db/modules"):
             return
-        for p, o in f._rows():
-            self._ops.append(_Op(f.subject, p, o, True))
+        for p, o in rows:
+            self._ops.append(_Op(subject, p, o, True))
 
     # -- the bracket ----------------------------------------------------------
 

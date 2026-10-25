@@ -129,13 +129,15 @@ model_dat = L.at().run("demo_game.etl.model.train", game="G1")
 for item in sorted(model_dat.dependencies):
     print(item, "->", model_dat.dependencies[item])
 # cfg/train epochs -> 8
+# code -> db/code/<16 hex>
 # eval:demo_game.etl.track.tracks{"game":"G1"} -> ref:demo_game.etl.dat.StageDat:<hash>
-# fn -> db/fn/demo_game.etl.model.train/<hash>
+# fn -> demo_game.etl.model.train
 # game/G1 gameset -> normie
 # platform -> darwin-arm64-py3.11
 
 # %% [markdown]
-# The run recorded every dependency itself: its own code (`fn`),
+# The run recorded every dependency itself: its own code (`code`, and
+# `fn` the function's name in it),
 # the two rows it read, and the stage below, held by its bytes.
 
 # %% [markdown]

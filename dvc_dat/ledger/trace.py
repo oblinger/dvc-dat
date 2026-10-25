@@ -2,11 +2,14 @@
 
 Items (Module § Value ``Dependencies``):
 
+``code``
+    the ``db/code/<hash 16>`` subject of the code that ran (DAT 1037); holds when
+    the function the ``fn`` item names resolves at the rev to the same subject
+    (unsandboxed: the static import closure; sandbox: exactly the modules the
+    run loaded, re-hashed as they are now, on disk or installed, A38, Q37, Q39).
 ``fn``
-    the ``db/fn/<name>/<hash>`` subject of the code that ran; holds when the
-    name resolves at the rev to the same subject (unsandboxed: the static import
-    closure; sandbox: exactly the modules the run loaded, re-hashed as they
-    are now, on disk or installed, A38, Q37, Q39).
+    the function's dotted name inside that code (``plane.measure.length``);
+    holds beside a ``code`` item, which does the checking.
 ``code/<repo>``
     ``<commit 8>``; holds when the commit agrees with the environment's,
     whatever commit a ``code/<repo>`` row pins (T543 Q7 (C); Q1: the commit
@@ -14,7 +17,7 @@ Items (Module § Value ``Dependencies``):
     from the ``code/<repo>`` rows at the revision.
 ``platform``
     the environment, now. (A sandboxed entry's third-party modules are in
-    ``fn``, each by its bytes or its distribution's ``RECORD``; there is no
+    ``code``, each by its bytes or its distribution's ``RECORD``; there is no
     whole-``uv.lock`` item.)
 ``<subject> <predicate>``
     a two-position bracket read or ``get``: the held object.
@@ -168,17 +171,12 @@ class _RefText(str):
     _is_ref = True
 
 
-def salt_at(rev: "Rev", fn_subject: Optional[str]) -> str:
-    """The ``salt`` of the mount the function named by an ``fn`` subject resolves under, at ``rev``."""
-    from .codec import show
+def salt_at(rev: "Rev", nm: Optional[str]) -> str:
+    """The ``salt`` of the mount the function named ``nm`` (an ``fn`` item) resolves under, at ``rev``."""
     from .fn import mounts_at
 
-    if not fn_subject:
+    if not nm:
         return NONE
-    name = rev.ledger.at()._held(fn_subject, "db/name")
-    if not name:
-        return NONE
-    nm = show(name[0].obj)
     best = None
     for prefix, info in mounts_at(rev).items():
         if nm.startswith(prefix + ".") and (best is None or len(prefix) > len(best[0])):
@@ -193,10 +191,12 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
     if item == "salt":
         return salt_at(rev, (trace or {}).get("fn")) == recorded
 
-    if item == "fn":
-        from .fn import fn_holds
+    if item == "fn":                            # the name; the code item beside it is the check
+        return "code" in (trace or {})
+    if item == "code":
+        from .fn import code_holds
 
-        return fn_holds(rev, recorded)
+        return code_holds(rev, recorded, (trace or {}).get("fn"))
     if item == "platform":
         return env().platform == recorded
     if item.startswith("ref:"):
@@ -245,6 +245,6 @@ def trace_matches(rev: "Rev", trace: Dict[str, str]) -> bool:
         return cache[0]
     try:
         return all(present(plain, k, v, env, trace)
-                   for k, v in sorted(trace.items(), key=lambda kv: kv[0] == "fn"))
+                   for k, v in sorted(trace.items(), key=lambda kv: kv[0] == "code"))
     except (LedgerError, ImportError):
         return False

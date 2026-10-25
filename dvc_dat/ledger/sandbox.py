@@ -33,8 +33,9 @@ store) run ``unguarded``. The same hook refuses a host-name lookup or an interne
 send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
 A nested eval runs in-process and its loads count toward its own entry (Q37 (ii)).
 
-The ``fn`` item (Q37 (A); Dan 2026-10-21): exactly the modules the run loaded,
-hashed with the mount rows into ``db/fn/<name>/<hash>``. A mounted module (and
+The ``code`` item (Q37 (A); Dan 2026-10-21; DAT 1037): exactly the modules the run loaded
+(beside the function's ``Code``), hashed with the mount rows into ``db/code/<hash 16>``; the
+``fn`` item beside it is the function's dotted name. A mounted module (and
 the static import closure of the function's module) is ``relpath -> sha256`` of
 the file as read; a third-party one is ``dist:<name> -> <version>:<sha256 of its
 RECORD>`` when its distribution has a ``RECORD``, else ``py:<path under its
@@ -44,7 +45,7 @@ library pieces the ledger uses, pyyaml) are infrastructure, like dvc-dat (A56).
 A lookup re-hashes exactly those as they are now: a mounted file on disk
 (whatever commit the rev's ``code/<repo>`` row names), a third-party one as
 installed. Any byte changed in a loaded module is a different entry.
-``Fn.subject`` before any run is the static closure.
+``fn.code.subject`` before any run is the static closure.
 """
 
 from __future__ import annotations
@@ -74,7 +75,7 @@ from .codec import sha256
 from .env import Env, current_env
 from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
-from .fn import (Fn, attach_run, drop_work, fn_subject, mounts_at, mounts_hash, path_template, run_trace,
+from .fn import (Fn, attach_run, drop_work, mounts_at, mounts_hash, path_template, run_trace,
                  save_run, seal_entry, wrap_result)
 
 if TYPE_CHECKING:
@@ -333,7 +334,7 @@ def _dist_map() -> Dict[Tuple[str, str], Tuple[str, str]]:
 
 
 def third_party_items(names: Set[str]) -> Dict[str, str]:
-    """The ``fn`` items of the non-mounted modules ``names`` (dvc-dat itself excluded, A56)."""
+    """The ``code`` item's entries for the non-mounted modules ``names`` (dvc-dat itself excluded, A56)."""
     roots = _path_roots()
     dists = _dist_map()
     out: Dict[str, str] = {}
@@ -434,38 +435,38 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
         raise TypeError(f"{name!r} is not a ledger function (mark it @ledger_fn)")
     check_mounted_imports(mounts, modname, attr_name)
     mods = module_shas(closure(mounts, [modname]))
-    rel = f[0].relative_to(m.checkout).as_posix()
-    sha = file_sha(m.checkout, rel)
-    return Fn(name=name, module=f[0], sha=sha,
+    return Fn(name=name, module=f[0],
               mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain)),
-              subject=fn_subject(name, mods, mounts_hash(plain)),
-              code=mounted_code(plain, env, m, modname, mods, sha),
-              _rev=rev, _takes_path=takes_path,
-              _template=template, _modules=mods, _returns=returns,
+              code=mounted_code(plain, env, m, modname, mods),
+              _rev=rev, _takes_path=takes_path, _template=template, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
 
 
-def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str, str], sha: str) -> Code:
+def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str, str]) -> Code:
     """A mounted function's ``Code`` (DAT 1037): the mount at the version its root package declares.
 
-    ``modules`` are the files the loader walks, relative to the repo root: the function's static
-    closure plus the packages Python imports on the way to it, from the mount's root down."""
-    from .code import lock_of, mounted_version
+    ``modules`` are the files the loader walks, relative to the repo root, each by its sha256: the
+    function's static closure plus the packages Python imports on the way to it, from the mount's
+    root down; hashed with the mount rows."""
+    from .code import identity_hash, lock_of, mounted_version
 
-    files = set(mods)
+    files = dict(mods)
     parts = modname.split(".")
-    for i in range(len(m.prefix.split(".")), len(parts)):
-        f = m.file_of(".".join(parts[:i]))
-        if f is not None and f[1]:
-            files.add(f[0].relative_to(m.checkout).as_posix())
-    modules = sorted(files)
-    attr = root_version(plain, env, m.prefix)
     with unguarded():                       # the ledger's own reads, also inside a sandboxed body
-        version = mounted_version(attr, m.checkout, modules, sha)
+        for i in range(len(m.prefix.split(".")), len(parts)):
+            f = m.file_of(".".join(parts[:i]))
+            if f is not None and f[1]:
+                rel = f[0].relative_to(m.checkout).as_posix()
+                files.setdefault(rel, file_sha(m.checkout, rel))
+    mh = mounts_hash(plain)
+    attr = root_version(plain, env, m.prefix)
+    with unguarded():
+        version = mounted_version(attr, m.checkout, sorted(files), identity_hash(files, mh))
         lock = lock_of(m.checkout)
     co = env.code.get(m.repo)
     mounts = {p: {"repo": r["repo"], "root": r["root"]} for p, r in mounts_at(plain).items() if "repo" in r}
-    return Code({"modules": modules, "mounts": mounts, "commit": co.commit if co is not None else None,
+    return Code({"modules": files, "mounts_hash": mh, "mounts": mounts,
+                 "commit": co.commit if co is not None else None,
                  "lock": lock, "sandboxed": True, "version": version}, unit=m.prefix)
 
 
@@ -492,8 +493,8 @@ def import_version(prefix: str) -> Optional[str]:
     return None if v is None else str(v)
 
 
-def sandbox_subject_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Optional[str]:
-    """The ``fn`` subject the recorded modules hash to at ``rev`` (memo only: nothing loads or runs)."""
+def sandbox_code_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Optional[str]:
+    """The ``code`` subject the recorded modules hash to at ``rev`` (memo only: nothing loads or runs)."""
     plain = rev._plain()
     env = current_env()
     mounts, _rows = mounts_for(plain, env)
@@ -502,12 +503,14 @@ def sandbox_subject_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Option
         return None
     now = {rel: third_party_now(rel) if rel.startswith(("dist:", "py:")) else file_sha(m.checkout, rel)
            for rel in modules}
-    return fn_subject(name, dict(sorted(now.items())), mounts_hash(plain))
+    from .code import identity_hash
+
+    return "db/code/" + identity_hash(now, mounts_hash(plain))[:16]
 
 
 def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
                   name: Optional[str] = None) -> Any:
-    """A miss: at HEAD, clean or dirty (Q39 (A)); the ``fn`` item records the bytes it loaded.
+    """A miss: at HEAD, clean or dirty (Q39 (A)); the ``code`` item records the bytes it loaded.
 
     ``save`` as ``Fn._run_base``'s. Into a ``Transaction`` (open here, in the parent), the worker runs a
     draft and the parent saves it, since the transaction cannot cross the pipe."""
@@ -837,17 +840,17 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
         mounted = sorted(n for n in loaded if _mount_of(mounts, n) is not None)
         mods = module_shas(closure(mounts, [modname, *mounted]))
         mods = dict(sorted({**mods, **third_party_items(loaded)}.items()))
-        fsub = fn_subject(fn.name, mods, mounts_hash(plain))
+        ran = fn.code._with_modules(mods)
         trace = dict(rec)
-        trace.update({"fn": fsub, "platform": env.platform})
+        trace.update({"code": ran.subject, "fn": fn.name, "platform": env.platform})
         salt = rows.get(fn._info["prefix"], {}).get("salt")
         if salt is not None:
             trace["salt"] = salt
         if save is False:
-            attach_run(value, run_trace(fn, plain, trace, enc, "eval:sandbox", modules=mods))
+            attach_run(value, run_trace(fn, plain, trace, enc, "eval:sandbox", ran))
             drop_work(work, value)
             return value
-        sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", modules=mods, into=save, name=name)
+        sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", ran, into=save, name=name)
         drop_work(work, sealed)
         return sealed
     finally:

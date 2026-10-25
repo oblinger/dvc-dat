@@ -1,18 +1,24 @@
 """``Code``: the code a function is loaded from, at a version, as a ``Value`` (DAT 1037).
 
 One object whether the function is installed in the ledger's own Python environment or mounted from a
-checkout (``code.sandboxed``). Its content is the manifest: ``modules`` (the relpaths the loader walked),
-``mounts`` (``prefix -> {repo, root}``; empty for installed code), ``commit`` (the checkout's at load),
-``lock`` (the blob id of that checkout's ``uv.lock``), ``sandboxed`` and ``version``. Its name is
+checkout (``code.sandboxed``). Only the snapshot has identity; a function is a name looked up inside it
+(``fn.name`` + ``fn.code``). The identity is the bytes: ``encode()`` is the canonical
+``{"modules": relpath -> sha256, "mounts": <hash of the db/mount rows, or None>}``, ``hash`` its sha256 and
+``subject`` ``db/code/<hash 16>``, the 16 hex the memo key carried as ``db/fn/<name>/<hash 16>`` before.
+Beside it, fixed at load and not hashed, the description: ``mounts`` (``prefix -> {repo, root}``; empty for
+installed code), ``commit`` (the checkout's at load), ``lock`` (the blob id of that checkout's
+``uv.lock``), ``sandboxed`` and ``version``. The version is a name over the hash, never the identity, and a
+commit is pinned by a result's ``code/<repo>`` row, so neither moves the hash. Its name is
 ``<unit>@<version>``: the unit is the mount prefix for mounted code (``plane``, ``algs.ocr``) and the
 function's top-level package for installed code (``geometry``). Immutable: accessors only.
 
 The version is read as a module attribute after import, never parsed from source. Mounted: the root
 package's ``__version__``; else the last commit that touched the loaded files (8 hex, ``+dirty`` when one
-differs from HEAD); else ``#`` + 8 hex of ``fn.sha``. Installed: ``__version__`` on the top-level package;
+differs from HEAD); else ``#`` + 8 hex of the hash. Installed: ``__version__`` on the top-level package;
 else the version of the distribution providing it; else the short commit of the checkout holding it
-(``+dirty``); else ``#`` + 8 hex of ``fn.sha``. A ``Code`` is computed at ``load_fn`` and attached to
-the ``Fn``; it is not written to the ledger.
+(``+dirty``); else ``#`` + 8 hex of the hash. A ``Code`` is computed at ``load_fn`` and attached to the
+``Fn``; a run's memo entry writes its identity as the ``db/code/<hash 16>`` item (``db/modules``,
+``db/mounts``); the description is not written to the ledger yet.
 """
 
 from __future__ import annotations
@@ -20,12 +26,11 @@ from __future__ import annotations
 import functools
 import importlib
 import importlib.metadata as md
-import json
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .codec import canonical
+from .codec import canonical, sha256
 from .env import Env, _git
 from .value import Value
 
@@ -36,25 +41,42 @@ if TYPE_CHECKING:
 SHORT = 8
 
 
+def identity(modules: Mapping[str, str], mounts: Optional[str]) -> str:
+    """The canonical identity a ``Code`` hashes: the module checksums and the mounts hash."""
+    return canonical({"modules": dict(sorted(modules.items())), "mounts": mounts})
+
+
+def identity_hash(modules: Mapping[str, str], mounts: Optional[str]) -> str:
+    """The hex sha256 of ``identity``: ``Code.hash`` before the ``Code`` exists (for the ``#hash8`` version)."""
+    return sha256(identity(modules, mounts).encode())
+
+
 class Code(Value):
     """The code a function is loaded from, at a version: ``<Code plane@2.7.1>``."""
 
     def __init__(self, manifest: Mapping[str, Any], *, unit: str) -> None:
         self.__dict__["_manifest"] = {
-            "modules": list(manifest["modules"]), "mounts": {k: dict(v) for k, v in manifest["mounts"].items()},
+            "modules": dict(sorted(manifest["modules"].items())), "mounts_hash": manifest["mounts_hash"],
+            "mounts": {k: dict(v) for k, v in manifest["mounts"].items()},
             "commit": manifest["commit"], "lock": manifest["lock"], "sandboxed": bool(manifest["sandboxed"]),
             "version": str(manifest["version"])}
         self.__dict__["_unit"] = unit
+        self.__dict__["_hash"] = sha256(self.encode())
 
     @property
     def name(self) -> Optional[str]:  # type: ignore[override]
         """``<unit>@<version>``: ``plane@2.7.1``, ``geometry@5.3.9``."""
         return f"{self._unit}@{self.version}"
 
+    @property  # type: ignore[override]
+    def subject(self) -> str:
+        """``db/code/<hash 16>``: the item a run's memo entry names in its ``code`` dependency."""
+        return "db/code/" + self.hash[:16]
+
     @property
     def modules(self) -> List[str]:
         """The relpaths of every module the loader walked (under the repo root, mounted; under the top-level
-        package's parent, installed)."""
+        package's parent, installed), sorted."""
         return list(self._manifest["modules"])
 
     @property
@@ -83,13 +105,22 @@ class Code(Value):
         return str(self._manifest["version"])
 
     def encode(self) -> bytes:
-        return canonical(self._manifest).encode()
+        """The identity: ``{"modules": relpath -> sha256, "mounts": <mounts hash or None>}``, canonical."""
+        return identity(self._manifest["modules"], self._manifest["mounts_hash"]).encode()
+
+    def _rows(self) -> List[Tuple[str, str]]:
+        """The ``db/code/<hash 16>`` item's rows: the identity, so a lookup can re-hash it."""
+        return [("db/modules", "json:" + canonical(self._manifest["modules"])),
+                ("db/mounts", "str:" + (self._manifest["mounts_hash"] or "none"))]
+
+    def _with_modules(self, more: Mapping[str, str]) -> "Code":
+        """The same code with ``more`` modules beside its own: what a run actually loaded."""
+        return Code({**self._manifest, "modules": {**self._manifest["modules"], **more}}, unit=self._unit)
 
     @classmethod
     def decode(cls, data: bytes, store: "ArtStore", name: Optional[str] = None) -> "Code":
-        manifest = json.loads(data)
-        unit = name.rpartition("@")[0] if name else "?"
-        return cls(manifest, unit=unit)
+        raise NotImplementedError("a Code is not stored as a value yet: its description arrives with the "
+                                  "history tier (DAT 1037)")
 
     def _label(self) -> Optional[str]:
         return self.name
@@ -108,16 +139,16 @@ def lock_of(checkout: Optional[Path]) -> Optional[str]:
     return _git(str(checkout), "rev-parse", "HEAD:uv.lock") or None
 
 
-def mounted_version(attr: Any, checkout: Path, files: Sequence[str], sha: str) -> str:
+def mounted_version(attr: Any, checkout: Path, files: Sequence[str], ident: str) -> str:
     """The mounted ladder: the root's ``__version__``; else the last commit touching ``files``
-    (``+dirty``); else ``#`` + 8 hex of ``sha``."""
+    (``+dirty``); else ``#`` + 8 hex of ``ident`` (the code's hash)."""
     if attr is not None:
         return str(attr)
     last = _git(str(checkout), "log", "-1", "--format=%h", f"--abbrev={SHORT}", "--", *files)
     if last:
         dirty = _git(str(checkout), "status", "--porcelain", "--", *files)
         return last[:SHORT] + ("+dirty" if dirty else "")
-    return "#" + sha[:SHORT]
+    return "#" + ident[:SHORT]
 
 
 @functools.lru_cache(maxsize=1)
@@ -125,9 +156,10 @@ def _top_dists() -> Mapping[str, List[str]]:
     return md.packages_distributions()
 
 
-def installed_version(top: str, env: Env, repo: Optional[str], sha: str) -> str:
+def installed_version(top: str, env: Env, repo: Optional[str], ident: str) -> str:
     """The installed ladder: ``__version__`` on the top-level package; else its distribution's version;
-    else the short commit of the checkout holding it (``+dirty``); else ``#`` + 8 hex of ``sha``."""
+    else the short commit of the checkout holding it (``+dirty``); else ``#`` + 8 hex of ``ident`` (the
+    code's hash)."""
     mod = sys.modules.get(top) or importlib.import_module(top)
     attr = getattr(mod, "__version__", None)
     if attr is not None:
@@ -140,4 +172,4 @@ def installed_version(top: str, env: Env, repo: Optional[str], sha: str) -> str:
     co = env.code.get(repo) if repo else None
     if co is not None and co.commit:
         return co.commit[:SHORT] + ("+dirty" if co.dirty else "")
-    return "#" + sha[:SHORT]
+    return "#" + ident[:SHORT]

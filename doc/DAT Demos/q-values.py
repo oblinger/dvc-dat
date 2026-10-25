@@ -269,15 +269,20 @@ print("result:", segment_value.obj)                 # → result: 2.5
 # `code` is that snapshot, the sandbox: `modules` are the files in
 # it, `version` the name the package gives it. The function is looked
 # up by name inside it, and the version it shows is the snapshot's.
-# Every result records the function as it ran, every module it loaded
-# (`plane/__init__.py` too), among its dependencies.
+# Only the snapshot has identity, `subject` `db/code/<16 hex>`; a
+# result names it and the function in it apart, as `code` and `fn`,
+# and the snapshot records every module the run loaded
+# (`plane/__init__.py` too).
 
 # %%
 sandbox = length_fn.code
 print("sandbox:", repr(sandbox), " version:", sandbox.version, " modules:", sandbox.modules)
 # → sandbox: <Code plane@2.7.1>  version: 2.7.1  modules: ['plane/__init__.py', 'plane/measure.py']
-print("result depends on:", segment_value.dependencies)
-# → {'fn': 'db/fn/plane.measure.length/04ebdaea96da6a7b', 'platform': <this machine>}
+print("result's code:", segment_value.dependencies["code"], " is the sandbox:",
+      segment_value.dependencies["code"] == sandbox.subject)
+# → result's code: db/code/04ebdaea96da6a7b  is the sandbox: True
+print("result's fn:", segment_value.dependencies["fn"])
+# → result's fn: plane.measure.length
 
 # %% [markdown]
 # Change the code, and bump the version with it, and the snapshot is
@@ -292,8 +297,9 @@ new_length_fn = L.at().load_fn("plane.measure.length")
 print("new fn:", new_length_fn, " sandbox:", repr(new_length_fn.code))
 # → new fn: plane.measure.length@2.7.2  sandbox: <Code plane@2.7.2>
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → 1.25
-print("old result still names:", segment_value.dependencies["fn"], " and holds:", segment_value.obj)
-# → db/fn/plane.measure.length/04ebdaea96da6a7b 2.5
+print("old result's code:", segment_value.dependencies["code"], " fn:", segment_value.dependencies["fn"],
+      " holds:", segment_value.obj)
+# → old result's code: db/code/04ebdaea96da6a7b  fn: plane.measure.length  holds: 2.5
 
 # %% [markdown]
 # ## Ledger evaluation
@@ -305,7 +311,7 @@ print("old result still names:", segment_value.dependencies["fn"], " and holds:"
 # %%
 far_value = L.at().run("geometry.distance", a=(6, 8))
 print("result:", far_value.obj)                       # → 10.0
-print("depends on:", sorted(far_value.dependencies))      # → ['code/geometry', 'fn', 'platform']
+print("depends on:", sorted(far_value.dependencies))      # → ['code', 'code/geometry', 'fn', 'platform']
 top_id = L.at().id
 
 again_value = L.at().run("geometry.distance", a=(6, 8))
@@ -313,8 +319,8 @@ print("same value:", again_value.subject == far_value.subject, " nothing written
       L.at().id == top_id)                 # → True True: a hit, nothing written
 
 # %% [markdown]
-# The dependencies are the code's commit, the function, and the
-# platform.
+# The dependencies are the snapshot (`code`), the function's name in
+# it (`fn`), the checkout's commit (`code/geometry`), and the platform.
 
 # %% [markdown]
 # ### Step by step
@@ -394,7 +400,9 @@ for dep_key, dep_value in sorted(retake_clip.dependencies.items()):
 
 # %% [markdown]
 # - `code/geometry`: the commit of the repo the function ran from.
-# - `fn`: the function at its version, as for the sandbox above.
+# - `code`: the snapshot the function ran from, by its subject, as for
+#   the sandbox above.
+# - `fn`: the function's dotted name inside that snapshot.
 # - `platform`: the machine it ran on.
 # - `ref:…`: the video bytes it loaded.
 # - `video/G1 db/alias`: the value the name `video/G1` pointed at.
