@@ -122,7 +122,7 @@ def test_kind_ok_lets_a_class_accept_a_foreign_dat_kind(L, tmp_path):
 
 def test_dat_work_names_the_work_parent(coded, tmp_path, monkeypatch):
     monkeypatch.setenv("DAT_WORK", str(tmp_path / "work"))
-    coded.at().run("ledger_kinds.scratchy", game="G1", memo=False)
+    coded.at().run("ledger_kinds.scratchy", game="G1", seal=False)
     assert CALLS["work"].parent == tmp_path / "work" and CALLS["work"].name.startswith("ledger-work-")
 
 

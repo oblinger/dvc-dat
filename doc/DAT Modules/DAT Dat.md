@@ -267,7 +267,7 @@ A namespace of dotted names and a runner of dats, bound to the `DatManager` whos
     From `dvc_dat.do`; see [Do Interface](#Do%20Interface). ^do
 
 **__version__**`: str`
-    The package version, `"2.21.0"` at this checkout. ^--version--
+    The package version, `"2.22.0"` at this checkout. ^--version--
 
 
 

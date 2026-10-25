@@ -6,6 +6,13 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.22.0 — 2026-10-24
+
+- **`seal=` replaces `memo=` on a run (DAT 1028).** `Fn.__call__(*, seal=…, clean, path, kwargs, **keys)` and `Rev.run(name, *, seal=…, clean, **keys)`: the value of `seal` is where the result goes. `"get"`: the saved result or `None`, never runs (was `memo="get"`). `False`: run, keep nothing, the trace on the result (was `memo=False`). `True`: run and seal locally, off the ledger (new). A `Ledger`, by default the one the function was loaded from: the memo hit, else run and save the memo entry in a transaction of its own (was `memo=True`). An open `Transaction`: the same, saved into it atomically with whatever else it writes (new). Another ledger or any other value is `ValueError`. `memo` is no longer a control option, with no alias: a call passing `memo=` binds it as a key. `kwargs=` still carries a key named `seal`.
+- **`v.seal(x)` takes the same `x`.** `v.seal()` is `v.seal(True)`; `v.seal(t, name=…)` and `v.seal(L)` save; `v.seal(False)` and `v.seal("get")` are `TypeError`.
+- **A draft keeps its provenance.** Every run attaches its trace (fn, keys, `code/<repo>`, platform, every read) to its result at every level, and the seal record of a `seal=True` result carries it. Saving a draft or a locally sealed result later writes the full memo entry (`db/fn`, `db/keys`, `db/deps/*`), so the next identical call hits; before, a hand seal of a `memo=False` result recorded only code and platform and was no memo entry. A late save of an unsandboxed result checks the code: not run dirty, and the checkout clean at the trace's commit, else `NotEvaluated`. A hand-built value seals as before.
+- `do.py`'s `just run` asks `fn(seal="get", …)` first. Demos (q-values, ledger-values, ledger-just) and the Ledger page use `seal=`; q-values keeps its draft with `.seal(t, name=…)` instead of re-running.
+
 ## 2.21.0 — 2026-10-23
 
 - **`Value.dependencies` replaces `Value.trace` (T035).** The mapping of what producing a value read is `v.dependencies`, its type `Value.Dependencies`, and its rows `db/deps/<item>` (were `db/trace/<item>`). "Trace" stays the verb: a recording `Rev` traces reads into the dependencies; `UntracedRead` and `dvc_dat.ledger.trace` keep their names. No alias for the old names.

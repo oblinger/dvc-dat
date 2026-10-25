@@ -66,21 +66,23 @@ def test_the_path_template_then_the_anonymous_one(world):
     assert world.at().run("ledger_kinds.folder", game="G1").name == "anonymous/Dat" and CALLS["folder"] == n
 
 
-def test_memo_false_keeps_the_name_on_the_object(world):
-    v = world.at().run("ledger_kinds.cut", game="G1", memo=False, path="cuts/G1")
+def test_a_draft_keeps_the_name_on_the_object(world):
+    v = world.at().run("ledger_kinds.cut", game="G1", seal=False, path="cuts/G1")
     assert not v.sealed and v.name == "cuts/G1"
     seal(world, v)
     assert Ref(world.at(), "cuts/G1").subject == v.subject
+    n = CALLS["cut"]
+    assert world.at().run("ledger_kinds.cut", game="G1").subject == v.subject and CALLS["cut"] == n
 
 
 def test_kwargs_carries_keys_named_like_control_options(world):
-    v = world.at().run("ledger_kinds.controls", kwargs={"memo": 3, "clean": "x", "kwargs": {"k": 1}})
-    assert v.obj == {"memo": 3, "clean": "x", "kwargs": {"k": 1}, "n": 0}
-    assert world.at()[v.subject, "db/keys"] == {"memo": 3, "clean": "x", "kwargs": {"k": 1}, "n": 0}
-    w = world.at().run("ledger_kinds.controls", memo="get", kwargs={"memo": 3, "clean": "x", "kwargs": {"k": 1}})
+    v = world.at().run("ledger_kinds.controls", kwargs={"seal": 3, "clean": "x", "kwargs": {"k": 1}})
+    assert v.obj == {"seal": 3, "clean": "x", "kwargs": {"k": 1}, "n": 0}
+    assert world.at()[v.subject, "db/keys"] == {"seal": 3, "clean": "x", "kwargs": {"k": 1}, "n": 0}
+    w = world.at().run("ledger_kinds.controls", seal="get", kwargs={"seal": 3, "clean": "x", "kwargs": {"k": 1}})
     assert w.subject == v.subject
     with pytest.raises(TypeError, match="inline or in kwargs="):
-        world.at().run("ledger_kinds.controls", n=1, kwargs={"memo": 3, "clean": "x", "kwargs": {}})
+        world.at().run("ledger_kinds.controls", n=1, kwargs={"seal": 3, "clean": "x", "kwargs": {}})
     with pytest.raises(TypeError, match="control option"):
         world.at().run("ledger_kinds.folder", kwargs={"game": "G1", "path": "x"})
     f = world.at().load_fn("ledger_kinds.cut")

@@ -139,13 +139,14 @@ class Value:
     def _after_seal(self, store: "ArtStore", name: Optional[str] = None) -> None:
         """Hook run once the value is sealed (a ``Dat`` moves to its stored folder, at its name if named)."""
 
-    def seal(self, to: Any = None, *, keep: bool = False, deps: Iterable[Any] = (), name: Optional[str] = None,
+    def seal(self, to: Any = True, *, keep: bool = False, deps: Iterable[Any] = (), name: Optional[str] = None,
              provenance: Optional[str] = None, by: Optional[str] = None) -> str:
-        """Fix the value's identity; with a transaction or a ledger, save it too.
+        """Fix the value's identity; with a transaction or a ledger, save it too. ``to`` takes what
+        ``seal=`` on a run takes (DAT 1028), so ``f(seal=x)`` and a later ``v.seal(x)`` end in one place.
 
-        ``v.seal()`` writes to no ledger: it freezes ``preds``, fixes the bytes' hash, ``deps``,
-        ``provenance``, the environment and the time, writes them as a seal record in this machine's
-        kept folder (``kept``; a later process reopens a sealed ``Dat`` from it with
+        ``v.seal()`` (``v.seal(True)``) writes to no ledger: it freezes ``preds``, fixes the bytes' hash,
+        ``deps``, ``provenance``, the environment and the time, writes them as a seal record in this
+        machine's kept folder (``kept``; a later process reopens a sealed ``Dat`` from it with
         ``Dat.sealed_at_path``), and returns the hash. With ``keep=True`` it also copies the bytes
         into the kept cache, so the source may change.
         ``to`` a ``Transaction`` saves into it: the subject is ``<hash of (dependencies, preds, bytes)>``
@@ -153,14 +154,20 @@ class Value:
         one-value transaction of its own, written ``by`` (default: the provenance, else ``seal``).
         Saving a value sealed earlier saves the state it was sealed in (its deps, provenance and
         environment), and refuses with ``SealBroken`` when its bytes changed since, unless kept.
+        A run's result (``seal=False`` or ``True``) carries its trace: saving it writes the memo entry
+        the run would have, so the next identical call hits, after the code check (``NotEvaluated``).
+        ``v.seal(False)`` and ``v.seal("get")`` are ``TypeError``: nothing to do to an object.
         """
         from .ledger import Ledger
         from .txn import Transaction
 
-        if to is None:
+        if to is True:
             if name is not None or by is not None:
                 raise TypeError("name= and by= name a ledger write; v.seal() writes none (v.seal(t, name=...))")
             return self._seal_here(keep, tuple(deps), provenance)
+        if to is False or (isinstance(to, str) and to == "get"):
+            raise TypeError(f"v.seal({to!r}): {to!r} is a run's seal= level (keep nothing; look up); there is "
+                            "nothing to do to an object. v.seal() seals here; v.seal(t) or v.seal(L) saves")
         if keep:
             raise TypeError("keep= is v.seal()'s; a save stores the bytes in the art store")
         if isinstance(to, Transaction):
@@ -169,9 +176,11 @@ class Value:
             return to._seal_value(self, deps=tuple(deps), name=name, provenance=provenance)
         if isinstance(to, Ledger):
             local = self.__dict__.get("_local")
-            with to.transaction(by=by or provenance or (local and local["provenance"]) or "seal") as t:
+            run = self.__dict__.get("_run")
+            default = (f"eval:{run.name}" if run is not None else None) or (local and local["provenance"]) or "seal"
+            with to.transaction(by=by or provenance or default) as t:
                 return t._seal_value(self, deps=tuple(deps), name=name, provenance=provenance)
-        raise TypeError(f"seal takes a Transaction or a Ledger, or nothing, not {type(to).__name__}")
+        raise TypeError(f"seal takes True (the default), a Transaction or a Ledger, not {type(to).__name__}")
 
     def _seal_here(self, keep: bool, deps: tuple, provenance: Optional[str]) -> str:
         from .env import current_env
@@ -186,6 +195,10 @@ class Value:
             raise ValueError(f"{self!r} is saved already; a different value is a new object")
         if self.sealed:
             raise ValueError(f"{self!r} is sealed already (at {self.sealed}); a different value is a new object")
+        run = self.__dict__.get("_run")
+        if run is not None and (deps or provenance is not None):
+            raise TypeError(f"a run's result carries its trace ({run.name}); deps= and provenance= are a "
+                            "hand seal's")
         provenance = check_provenance(provenance)
         declared = type(self)._ledger_preds
         extra = [k for k in self.preds if k not in declared]
@@ -204,6 +217,8 @@ class Value:
         h = sha256(data)
         record.update(hash=h, kind=dotted(type(self)), sealed_at=stamp, path=self._seal_path(),
                       provenance=provenance, env=env_record(env), bytes=self._seal_bytes(data))
+        if run is not None:
+            record["run"] = run.record()
         with unguarded():                       # the ledger's own write, also inside a sandboxed body
             entry = Kept().seal(record, data if keep else None, self._parts() if keep else ())
         self._forget()              # the hash is fixed: a later check (SealBroken) hashes the source anew
@@ -233,6 +248,10 @@ class Value:
         self.__dict__["_hash"] = record["hash"]
         if name is not None:
             self.__dict__["_loaded_as"] = name
+        if record.get("run") is not None:
+            from .fn import RunTrace, attach_run
+
+            attach_run(self, RunTrace.from_record(record["run"]))
         self.sealed = record["sealed_at"]
 
     def _kept(self) -> Optional[Dict[str, Any]]:

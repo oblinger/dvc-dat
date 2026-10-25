@@ -168,7 +168,7 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # %% [markdown]
 # Found means computed before from the same inputs by the same code;
 # otherwise the function runs and its result is sealed. It is
-# `rev.run(name, **keys)`, with `memo="get"` asked first to say which.
+# `rev.run(name, **keys)`, with `seal="get"` asked first to say which.
 #
 # The 1.5.3 cut on the ledger read the old home team and the old
 # code version, so the first ask re-derives it and the second finds
@@ -450,7 +450,7 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # - **Kinds** — a short class name, matched against `db/kind`.
 # - **Hashes** — a prefix, expanded by `refs(s="<prefix>*",
 #   one=True)`.
-# - **Hit or ran** — `memo="get"` before `run`.
+# - **Hit or ran** — `seal="get"` before `run`.
 # - **Printing** — each value in its alias form with its preds; a
 #   moved alias with its old target.
 # - **Project policy** — a version-sync line after `just bump code`.

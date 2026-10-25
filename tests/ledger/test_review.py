@@ -24,7 +24,7 @@ def test_1_a_ref_made_in_a_body_keeps_the_recorder(coded):
     seal(L, b)
     with L.transaction(by="t") as t:
         t.add("model/x", "db/alias", b.subject)
-    assert L.at().run("ledger_kinds.via_ref", name="model/x", memo="get") is None   # no stale hit
+    assert L.at().run("ledger_kinds.via_ref", name="model/x", seal="get") is None   # no stale hit
     assert L.at().run("ledger_kinds.via_ref", name="model/x").obj == {"n": 10}
 
 

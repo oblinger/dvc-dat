@@ -73,7 +73,8 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tupl
 from .codec import sha256
 from .env import Env, current_env
 from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
-from .fn import Fn, drop_work, fn_subject, mounts_at, mounts_hash, path_template, seal_entry, wrap_result
+from .fn import (Fn, attach_run, drop_work, fn_subject, mounts_at, mounts_hash, path_template, run_trace,
+                 save_run, seal_entry, wrap_result)
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -453,14 +454,26 @@ def sandbox_subject_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Option
     return fn_subject(name, dict(sorted(now.items())), mounts_hash(plain))
 
 
-def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> Any:
-    """A miss: at HEAD, clean or dirty (Q39 (A)); the ``fn`` item records the bytes it loaded."""
+def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
+                  name: Optional[str] = None) -> Any:
+    """A miss: at HEAD, clean or dirty (Q39 (A)); the ``fn`` item records the bytes it loaded.
+
+    ``save`` as ``Fn._run_base``'s. Into a ``Transaction`` (open here, in the parent), the worker runs a
+    draft and the parent saves it, since the transaction cannot cross the pipe."""
     env = current_env()
     if fn._info["repo"] not in env.code:
         raise NotEvaluated(f"{fn.name}: repo {fn._info['repo']!r} has no checkout in this environment")
     if IN_WORKER:
-        return run_here(fn, plain, kw, enc, seal)
-    return _server().call(fn, plain, kw, seal, env)
+        return run_here(fn, plain, kw, enc, save, name)
+    if save is True or save is False:
+        return _server().call(fn, plain, kw, save, env)
+    draft = _server().call(fn, plain, kw, False, env)
+    run = draft.__dict__.get("_run")
+    if run is None:
+        raise TypeError(f"{fn.name} returned a {type(draft).__name__} sealed by v.seal(); run seals its own "
+                        "result, so return it unsealed")
+    save_run(save, draft, run, name)
+    return draft
 
 
 # -- the worker's own machinery -----------------------------------------------------------------------
@@ -730,7 +743,7 @@ def install_worker(ledger: Any, mounts: List[Mount]) -> None:
     STATE.hosts, STATE.addrs = _ledger_endpoints(ledger.path)
 
 
-def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> Any:
+def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name: Optional[str] = None) -> Any:
     from .rev import Rev
 
     outer_guard = STATE.guard
@@ -779,11 +792,11 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> 
         salt = rows.get(fn._info["prefix"], {}).get("salt")
         if salt is not None:
             trace["salt"] = salt
-        if not seal:
-            value.dependencies = trace  # type: ignore[misc]
+        if save is False:
+            attach_run(value, run_trace(fn, plain, trace, enc, "eval:sandbox", modules=mods))
             drop_work(work, value)
             return value
-        sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", modules=mods)
+        sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", modules=mods, into=save, name=name)
         drop_work(work, sealed)
         return sealed
     finally:

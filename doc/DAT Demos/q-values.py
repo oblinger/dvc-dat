@@ -391,14 +391,30 @@ print("G1 videos on the ledger:", L.at().values(game="G1"))   # now it is
 
 # %% [markdown]
 # A ledger function does all three in one call: it runs, seals the
-# result with its provenance, and saves it. `memo=False` only runs
-# it, saving nothing, so the result can be looked at first.
+# result with its provenance, and saves it. `seal=` says how far:
+# `False` only runs it, keeping nothing, so the result can be looked
+# at first; `True` also seals it here; a ledger or a transaction
+# saves it; `"get"` only looks. Left out, it saves to the function's
+# ledger.
 
 # %%
-clip_fn = L.at().load_fn("clips.clip")                                # get the function
-draft_clip = clip_fn(video="video/G1", start=8, end=16, memo=False)   # run it
-print("draft:", draft_clip.frames, " sealed:", draft_clip.sealed)   # → b'e, 9100 ' None: not sealed, not saved
+clip_fn = L.at().load_fn("clips.clip")                    # get the function
+clip_keys = dict(video="video/G1", start=8, end=16)
+print("saved already:", clip_fn(**clip_keys, seal="get"))  # → None: never run
+draft_clip = clip_fn(**clip_keys, seal=False)             # run it, keep nothing
+print("draft:", draft_clip.frames, " sealed:", draft_clip.sealed)   # → b'e, 9100 ' None
+print("draft reads:", sorted(draft_clip.dependencies)[:3])   # its trace rides on it
 
-kept_clip = clip_fn(video="video/G1", start=8, end=16)                # keep it
-print("kept:", kept_clip.frames, " sealed:", kept_clip.sealed is not None, " subject:", kept_clip.subject[:12])
-# → b'e, 9100 ' True <its subject>: sealed and on the timeline
+# %% [markdown]
+# The draft looks right, so keep it as it is: no second run. Saving
+# it writes the same entry the memoised call would have, provenance
+# and all, so the next identical call is a hit.
+
+# %%
+with L.transaction(by="human:dan", why="keep the clip") as t:
+    draft_clip.seal(t, name="video/G1/clip-8-16")          # keep the draft
+print("kept:", draft_clip.name, " subject:", draft_clip.subject[:12])
+print("kept fn:", L.at()[draft_clip.subject, "db/fn"])     # → clips.clip
+
+kept_clip = clip_fn(**clip_keys)                          # the same call again
+print("hit:", kept_clip.subject == draft_clip.subject)    # → True: nothing ran

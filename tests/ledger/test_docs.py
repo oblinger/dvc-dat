@@ -58,8 +58,8 @@ def test_usage_block(L, tmp_path, monkeypatch):
     rev = L.at()
     m = rev.run("ledger_kinds.cut", game="G1")   # memoised  ADAPTED: ledger_kinds.cut for demo_game.identity.train
     assert m.dependencies and m.rev and m.sealed    # the model itself, with its provenance on it
-    assert rev.run("ledger_kinds.cut", game="G1", memo=False).sealed is None   # run, no seal
-    assert rev.run("ledger_kinds.cut", game="G1", memo="get").subject == m.subject   # or None
+    assert rev.run("ledger_kinds.cut", game="G1", seal=False).sealed is None   # run, no seal
+    assert rev.run("ledger_kinds.cut", game="G1", seal="get").subject == m.subject   # or None
 
     f = rev.load_fn("ledger_kinds.cut")           # Fn: resolved at rev
     assert f(game="G1").subject == m.subject  # == rev.run(...)  ADAPTED: G1, the game that exists

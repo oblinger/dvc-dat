@@ -89,9 +89,9 @@ def test_code_commit_pins_the_version_and_the_env_commit_decides(world, envbox):
     assert not a.matches(world.at())                       # a hit holds at the commit it ran at
     b = world.at().run("ledger_kinds.cut", game="G2")
     assert b.dependencies["code/testrepo"] == "def5678"           # the environment's commit; the version is the row's
-    assert world.at().run("ledger_kinds.cut", game="G2", memo="get").subject == b.subject
+    assert world.at().run("ledger_kinds.cut", game="G2", seal="get").subject == b.subject
     envbox.code(commit="abc1234")
-    assert world.at().run("ledger_kinds.cut", game="G1", memo="get").subject == a.subject
+    assert world.at().run("ledger_kinds.cut", game="G1", seal="get").subject == a.subject
     envbox.code(dirty=True)
     with pytest.raises(NotEvaluated):
         world.at().run("ledger_kinds.cut", game="G3")
@@ -105,7 +105,7 @@ def test_clean_requires_a_clean_checkout_at_the_revs_commit(world, envbox):
         world.at().run("ledger_kinds.cut", game="G1", clean=True)        # refused before the lookup
     envbox.code(dirty=True)
     with pytest.raises(NotClean, match="uncommitted changes") as e:
-        world.at().run("ledger_kinds.cut", game="G1", clean=True, memo=False)
+        world.at().run("ledger_kinds.cut", game="G1", clean=True, seal=False)
     assert isinstance(e.value, NotEvaluated)                               # catchable as either
     with pytest.raises(TypeError):
         world.at().run("ledger_kinds.cut", game="G1", clean="yes")

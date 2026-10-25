@@ -578,6 +578,21 @@ class Transaction:
         if value.subject is not None:
             raise ValueError(f"{value!r} is sealed already; a different value is a new object")
         local = value.__dict__.get("_local")
+        run = value.__dict__.get("_run")
+        if run is not None:                             # a run's result: its memo entry (DAT 1028)
+            from .env import current_env
+            from .fn import check_late_code, save_run
+
+            if deps or provenance is not None:
+                raise TypeError(f"a run's result carries its trace ({run.name}); deps= and provenance= are "
+                                "a hand seal's")
+            if local is not None and not local["kept"] and sha256(value.encode()) != local["hash"]:
+                raise SealBroken(f"{type(value).__name__} sealed at {value.sealed}: its bytes changed since; "
+                                 "seal a new value (or seal with keep=True to keep the bytes)")
+            if name is not None:
+                _name(name, "name")
+            check_late_code(run, current_env())
+            return save_run(self, value, run, name)
         env = None
         extra: List[Tuple[str, str]] = []
         if local is not None:

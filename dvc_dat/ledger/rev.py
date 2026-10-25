@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequenc
 
 from .codec import canonical, encode_plain, is_hash, parse_ref, ref_text, show, strip_hint, tag
 from .errors import AliasLoop, Multiple, Unindexed
+from .fn import OWN
 from .fold import Held, fold
 from .value import FrozenPreds, Value, dotted, takes_name
 
@@ -578,14 +579,17 @@ class Rev:
 
         return load_fn(self, name)
 
-    def run(self, name: str, /, *, memo: Any = True, clean: bool = False, **keys: Any) -> Optional[Value]:
-        """The API form of ``just run NAME KEY=VALUE``: ``load_fn(name)(memo=memo, clean=clean, **keys)``, memoised."""
+    def run(self, name: str, /, *, seal: Any = OWN, clean: bool = False, **keys: Any) -> Optional[Value]:
+        """The API form of ``just run NAME KEY=VALUE``: ``load_fn(name)(seal=seal, clean=clean, **keys)``.
+
+        ``seal`` as ``Fn.__call__``'s (``"get"``, ``False``, ``True``, a ``Ledger``, a ``Transaction``);
+        left out, the memo entry on this rev's ledger."""
         if not isinstance(name, str):
             raise TypeError("run takes a dotted name; a function object would resolve in this process")
         from .sandbox import unguarded
 
         with unguarded():                          # in a sandboxed body: the lookup and seal are the ledger's
-            return self.load_fn(name)(memo=memo, clean=clean, **keys)
+            return self.load_fn(name)(seal=seal, clean=clean, **keys)
 
 
 
