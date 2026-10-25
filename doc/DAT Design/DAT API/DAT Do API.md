@@ -3,7 +3,7 @@ description: "the namespace under `Dat.do`: your program's main, mounts, spec su
 ---
 :>> [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Do API](ha://p/DAT%20Do%20API) 
 # DAT Do API
-The advanced half of `Dat.do`: what a dotted name resolves to, how to make one mean something other than a Python import, and what that costs — the plain surface is [[DAT API]].
+The advanced half of `Dat.do`: what a dotted name resolves to, how to make one mean something other than a Python import, and what that costs — the plain surface is [DAT API](DAT%20API.md).
 
 A project that wants `train.baseline` to be a name:
 
@@ -50,17 +50,17 @@ Base names matching: 'train*'
 ```
 
 ## Do Interface
-One world's namespace and runner. `manager.do` is built with its manager or adopted by one, and points back; `Dat.do` forwards to `Dat.manager.do`, so it always acts on the default world, whichever manager that is. Nothing reads a config here — that is `DatManager.load_dat_config` ([[DAT Manager API]]).
+One world's namespace and runner. `manager.do` is built with its manager or adopted by one, and points back; `Dat.do` forwards to `Dat.manager.do`, so it always acts on the default world, whichever manager that is. Nothing reads a config here — that is `DatManager.load_dat_config` ([DAT Manager API](DAT%20Manager%20API.md)).
 
 | Do | |
 | --- | --- |
-| [[#^manager\|manager]] | The world this namespace belongs to |
-| [[#^call\|__call__]] | Run in this world; arguments fork |
-| [[#^load\|load]] | The object a dotted name resolves to |
-| [[#^resolve\|resolve]] | A spec merged over its `dat.base` chain |
-| [[#^name-of\|name_of]] | The dotted name `load` takes back to `obj` |
-| [[#^mount\|mount]] | Add one mount: folder, file, module or value |
-| [[#^keys\|keys]] | Every mounted base name |
+| [manager](#^manager) | The world this namespace belongs to |
+| [__call__](#^call) | Run in this world; arguments fork |
+| [load](#^load) | The object a dotted name resolves to |
+| [resolve](#^resolve) | A spec merged over its `dat.base` chain |
+| [name_of](#^name-of) | The dotted name `load` takes back to `obj` |
+| [mount](#^mount) | Add one mount: folder, file, module or value |
+| [keys](#^keys) | Every mounted base name |
 
 **manager**`: DatManager`
     The world this namespace belongs to; one `do` per manager, one manager per `do`. On `Dat.do` it is `Dat.manager`. A bare `Do()` has none and is a plain namespace of Python objects: `mount`, `load`, `name_of`, `keys` and calling a plain function all work with no manager and no default world built. Running a dat (a spec or a `Dat`) is the one thing that needs a world — `Do(manager=m)`, or a manager built with `do=` adopts it — and raises `RuntimeError` without one. ^manager
@@ -90,7 +90,7 @@ One world's namespace and runner. `manager.do` is built with its manager or adop
 
 ## When you need this page
 
-Rarely, and the test is one line: **is every `dat.do` in your specs an importable Python name?** If it is — a function in a package your environment already has — nothing here applies, `.datconfig.yaml` needs nothing but `dat_folders`, and [[DAT API]] is the whole contract.
+Rarely, and the test is one line: **is every `dat.do` in your specs an importable Python name?** If it is — a function in a package your environment already has — nothing here applies, `.datconfig.yaml` needs nothing but `dat_folders`, and [DAT API](DAT%20API.md) is the whole contract.
 
 You are here because something in the namespace is *not* a Python import: a folder of loose do-scripts addressed by file name, a short alias for a long path, or a value pinned in the config.
 
@@ -98,7 +98,7 @@ You are here because something in the namespace is *not* a Python import: a fold
 
 Two layers, checked in order.
 
-**The mount table**, if one is installed — names your program put there with `do.mount(...)`, by folder, file, module or value. Nothing in YAML mounts anything, and nothing is imported on your behalf: the namespace is whatever the running program imported ([[DAT Backlog#^1008|DAT 1008]] Q2, [[DAT Backlog#^1009|DAT 1009]]). For the shell, `run:` names your own main — a module that makes the mounts and ends with `sys.exit(Dat.cli_main())` — so `dat …` runs inside it; with no `run:` the bootstrap runs the library's own main, where a dotted name is a Python name and nothing else.
+**The mount table**, if one is installed — names your program put there with `do.mount(...)`, by folder, file, module or value. Nothing in YAML mounts anything, and nothing is imported on your behalf: the namespace is whatever the running program imported ([DAT 1008](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1008) Q2, [DAT 1009](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1009)). For the shell, `run:` names your own main — a module that makes the mounts and ends with `sys.exit(Dat.cli_main())` — so `dat …` runs inside it; with no `run:` the bootstrap runs the library's own main, where a dotted name is a Python name and nothing else.
 
 **The static floor**, always — the longest importable prefix of the name, imported, then `getattr` for the rest. `pkg.mod.CONST` imports `pkg.mod` and takes `CONST` off it. Nothing found raises the import's own `ImportError` or `AttributeError`, unless `default=` was given.
 
@@ -110,7 +110,7 @@ The worry is that names resolved by the library are not the modules the rest of 
 
 **A file run as `__main__`.** `python scripts/train.py` makes that file `sys.modules["__main__"]`; a spec naming `scripts.train.run` imports it a *second* time under its real name, and you get two copies of every global in it. The rule that prevents it: anything a spec names lives in an importable module, never in a script you also run directly.
 
-**A different `sys.path`.** The `dat` command is a separate process. The `run:` key and the `bin/dat` bootstrap exist to pin it to the same interpreter as your program, so the same name resolves to the same file — see [[DAT CLI]].
+**A different `sys.path`.** The `dat` command is a separate process. The `run:` key and the `bin/dat` bootstrap exist to pin it to the same interpreter as your program, so the same name resolves to the same file — see [DAT CLI](DAT%20CLI.md).
 
 **By-path mounts.** A mounted folder or file, or a module mounted by path, is loaded **by file path**, bypassing `sys.path` entirely, so a module reached that way can never be the one your program imported — even if the file is the same file. This is the one genuinely dynamic thing in the library, and the reason mounts are opt-in. A module mounted **by name** is the opposite: it resolves through `sys.modules`, so it is an alias for the object your program already holds, and costs nothing.
 
@@ -139,4 +139,4 @@ Each is one call in your program; build paths from `__file__`, since `relative_t
 | a bare `Do()` gets a world on first use | a bare `Do()` is a plain namespace; running a dat needs `Do(manager=m)` |
 
 # BRIEF
-- 2026-09-23 — rewritten to the 2.3 surface ([[DAT Backlog#^103|DAT 103]], [[DAT Backlog#^1014|DAT 1014]]): § The names became the `Do` module doc in Dan's member format; `do.configure` and `do.config` are gone — a different world is an assignment to `Dat.manager`; `.dataconfig.yaml` → `.datconfig.yaml`; the TOC table dropped (the class table replaces it).
+- 2026-09-23 — rewritten to the 2.3 surface ([DAT 103](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^103), [DAT 1014](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1014)): § The names became the `Do` module doc in Dan's member format; `do.configure` and `do.config` are gone — a different world is an assignment to `Dat.manager`; `.dataconfig.yaml` → `.datconfig.yaml`; the TOC table dropped (the class table replaces it).

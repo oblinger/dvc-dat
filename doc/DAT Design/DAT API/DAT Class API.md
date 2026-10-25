@@ -54,7 +54,7 @@ Run.create(path="scratch/bad",
 # AssertionError: lr out of range -- and no folder was made
 ```
 
-Dats, specs, and the one call that runs them. The world they live in is [[DAT Manager API]]; the namespace behind a dotted name is [[DAT Do API]]; nothing on this page needs either.
+Dats, specs, and the one call that runs them. The world they live in is [DAT Manager API](DAT%20Manager%20API.md); the namespace behind a dotted name is [DAT Do API](DAT%20Do%20API.md); nothing on this page needs either.
 
 
 
@@ -63,33 +63,33 @@ A folder holding `_spec_.yaml` — a complete, argumentless recipe, expanded onc
 
 | Dat | |
 | --- | --- |
-| [[#^manager\|manager]] | The default world on the class; its own on a dat |
-| [[#^do\|do]] | The default world's runner and namespace |
-| [[#^create\|create]] | Make a dat in the default world, typed to `cls` |
-| [[#^load\|load]] | Read a dat, typed to the class it is called on |
-| [[#^validate-spec\|validate_spec]] | The validation hook, on create and on load |
-| [[#^get-spec\|get_spec]] | The spec as written |
-| [[#^get-results\|get_results]] | The mutable results |
-| [[#^save\|save]] | Write results, hash, standing; the one that counts seals |
-| [[#^standing\|standing]] | Rolling, open, sealed or referenceable, from the files |
-| [[#^save-artifact\|save_artifact]] | Store a file or folder as an artifact, in the default world |
-| [[#^load-artifact\|load_artifact]] | An artifact by name or URN, built by its type |
-| [[#^verify\|verify]] | Is the folder still exactly as last saved? |
-| [[#^get-path\|get_path]] | The absolute folder |
-| [[#^get-path-name\|get_path_name]] | The folder relative to its dat folder |
-| [[#^delete\|delete]] | Remove the folder |
-| [[#^copy\|copy]] | The same spec in a new folder |
-| [[#^move\|move]] | Rename the folder |
-| [[#^get\|get]] | Dotted-key read into a dict tree or a spec |
-| [[#^set\|set]] | Dotted-key write, making mappings on the way |
-| [[#^merge-dicts\|merge_dicts]] | The merge `dat.base` uses |
-| [[#^cli-main\|cli_main]] | The `dat` command line, for your own main |
+| [manager](#^manager) | The default world on the class; its own on a dat |
+| [do](#^do) | The default world's runner and namespace |
+| [create](#^create) | Make a dat in the default world, typed to `cls` |
+| [load](#^load) | Read a dat, typed to the class it is called on |
+| [validate_spec](#^validate-spec) | The validation hook, on create and on load |
+| [get_spec](#^get-spec) | The spec as written |
+| [get_results](#^get-results) | The mutable results |
+| [save](#^save) | Write results, hash, standing; the one that counts seals |
+| [standing](#^standing) | Rolling, open, sealed or referenceable, from the files |
+| [save_artifact](#^save-artifact) | Store a file or folder as an artifact, in the default world |
+| [load_artifact](#^load-artifact) | An artifact by name or URN, built by its type |
+| [verify](#^verify) | Is the folder still exactly as last saved? |
+| [get_path](#^get-path) | The absolute folder |
+| [get_path_name](#^get-path-name) | The folder relative to its dat folder |
+| [delete](#^delete) | Remove the folder |
+| [copy](#^copy) | The same spec in a new folder |
+| [move](#^move) | Rename the folder |
+| [get](#^get) | Dotted-key read into a dict tree or a spec |
+| [set](#^set) | Dotted-key write, making mappings on the way |
+| [merge_dicts](#^merge-dicts) | The merge `dat.base` uses |
+| [cli_main](#^cli-main) | The `dat` command line, for your own main |
 
 **manager**`: DatManager`
     A plain class attribute: `None` until first use, when the getter builds the default world with `DatManager.load_dat_config()`. Assign a manager to replace the default world (`Dat.manager = Store(dat_folders=[...], do=Dat.do)` keeps the mounts). Every subclass sees the same object. `dat.manager` on an instance is the manager that loaded it, else this one — a run's function loads through `dat.manager`. ^manager
 
 **do**`: Do`
-    The default world's runner and namespace: a forwarder to `Dat.manager.do`, whichever manager that is when it is called. `Dat.do("x", lr=0.5)` runs; `Dat.do.mount(...)` and `Dat.do.load(...)` name things. `do = Dat.do` binds a shortcut that follows a later reassignment of `Dat.manager`. With no arguments a spec runs as written; with arguments it **forks** — `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key — and the forked spec creates the dat that runs ([[#Running]]). ^do
+    The default world's runner and namespace: a forwarder to `Dat.manager.do`, whichever manager that is when it is called. `Dat.do("x", lr=0.5)` runs; `Dat.do.mount(...)` and `Dat.do.load(...)` name things. `do = Dat.do` binds a shortcut that follows a later reassignment of `Dat.manager`. With no arguments a spec runs as written; with arguments it **forks** — `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key — and the forked spec creates the dat that runs ([Running](#Running)). ^do
 
 **create**`(path: str | None = None, spec: dict | str | None = None) -> Dat`
     Classmethod. `Dat.manager.create(spec, path=path)`, typed: a `dat.kind` naming a class outside `cls` is `TypeError`, checked before any folder is made; with no `dat.kind`, the class it is called on is written. `spec` is a dict or a dotted name; `path` is a template under the first dat folder, default `dat.name`, else `anonymous/Dat{unique}`, with `dat.target_exists` settling a collision. ^create
@@ -113,7 +113,7 @@ A folder holding `_spec_.yaml` — a complete, argumentless recipe, expanded onc
     `Dat.manager.standing(name)`: `rolling` (saved at will, never frozen), `open` (may still change), `sealed` (frozen) or `referenceable` (frozen, from clean code and referenceable inputs), read from the files without building anything; `None` when nothing is stored under the name. An artifact is `referenceable`. ^standing
 
 **save_artifact**`(source: str | Path, *, type: str | Callable | None = None, name: str | None = None, link: bool = False) -> str` (static)
-    `Dat.manager.save_artifact(...)`: store a file or folder as an artifact and return its `sha256:` URN — [[DAT Manager API]] § save_artifact. Not `dat.save()`, which seals a dat. ^save-artifact
+    `Dat.manager.save_artifact(...)`: store a file or folder as an artifact and return its `sha256:` URN — [DAT Manager API](DAT%20Manager%20API.md) § save_artifact. Not `dat.save()`, which seals a dat. ^save-artifact
 
 **load_artifact**`(name: str | Path, *, verify: bool | None = None) -> Any` (static)
     `Dat.manager.load_artifact(name)`: the artifact under a name or URN, handed to its recorded type — its `Path` with none. `Dat.load` stays a dat's: an artifact name there is `TypeError`. ^load-artifact
@@ -158,8 +158,8 @@ A dat whose folder holds dats.
 
 | DatContainer | |
 | --- | --- |
-| [[#^get-dat-paths\|get_dat_paths]] | Every dat folder under this one |
-| [[#^get-dats\|get_dats]] | Those dats, loaded in this container's world |
+| [get_dat_paths](#^get-dat-paths) | Every dat folder under this one |
+| [get_dats](#^get-dats) | Those dats, loaded in this container's world |
 
 **get_dat_paths**`() -> list[str]`
     Every folder under this one holding a `_spec_` file, as names. ^get-dat-paths
@@ -217,13 +217,13 @@ The file a dat holds is that template expanded once, at create — `name` is the
 | `dat.target_exists` | `error` (default) · `use` · `overwrite` · `increment` |
 | anything else | Yours; reach it with `dat.get_spec()` / `Dat.get(dat, "parameters.lr")` |
 
-`_result_.yaml` holds `dat.dependencies`, `dat.standing`, `dat.hash`, `dat.sha256` and whatever the function stored; `run/_result_.yaml` holds `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code`, `dat.content` ([[DAT Manager API]] § What a run records).
+`_result_.yaml` holds `dat.dependencies`, `dat.standing`, `dat.hash`, `dat.sha256` and whatever the function stored; `run/_result_.yaml` holds `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code`, `dat.content` ([DAT Manager API](DAT%20Manager%20API.md) § What a run records).
 
 
 
 ## Grammar — `{…}` in any template string
 
-Expanded once, when the dat is created, with the same `now` and `unique` its folder got; the expanded values are what the file holds ([[DAT Backlog#^1009|DAT 1009]] Q7).
+Expanded once, when the dat is created, with the same `now` and `unique` its folder got; the expanded values are what the file holds ([DAT 1009](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1009) Q7).
 
 | Form | Resolves to |
 | --- | --- |
@@ -242,14 +242,14 @@ Expanded once, when the dat is created, with the same `now` and `unique` its fol
 | Key | Meaning |
 | --- | --- |
 | `dat_folders` | Where dats live: one folder, or a list — the first is where new dats are created, all are searched by name (default `data/`, relative to the config file) |
-| `art_folder` | Where artifacts live (default `art/` beside the config file); never inside a dat folder, nor one inside it — [[DAT Manager API]] § Artifacts on disk |
-| `verify` | Optional, `true`: every load re-hashes and refuses a mismatch — [[DAT Manager API]] § load |
-| `manager` | Optional: the `DatManager` subclass to build, dotted; its `CONFIG_KEYS` may appear as keys too — [[DAT Manager API]] § The config file |
-| `run` | Optional. The command a copy of `bin/dat` hands its arguments to — `uv run dat`, or your program's own main when it mounts names ([[DAT Do API]]); default `.venv/bin/python -m dvc_dat` beside the config, else `python3 -m dvc_dat` |
+| `art_folder` | Where artifacts live (default `art/` beside the config file); never inside a dat folder, nor one inside it — [DAT Manager API](DAT%20Manager%20API.md) § Artifacts on disk |
+| `verify` | Optional, `true`: every load re-hashes and refuses a mismatch — [DAT Manager API](DAT%20Manager%20API.md) § load |
+| `manager` | Optional: the `DatManager` subclass to build, dotted; its `CONFIG_KEYS` may appear as keys too — [DAT Manager API](DAT%20Manager%20API.md) § The config file |
+| `run` | Optional. The command a copy of `bin/dat` hands its arguments to — `uv run dat`, or your program's own main when it mounts names ([DAT Do API](DAT%20Do%20API.md)); default `.venv/bin/python -m dvc_dat` beside the config, else `python3 -m dvc_dat` |
 
 `DatManager.load_dat_config(start)` walks up from `start` (default the working directory); `.datconfig.override.yaml` wins over it; `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment win over both (`DAT_RUN` overrides `run`, in `bin/dat` only). The bootstrap hands its child the file it found as `DAT_CLI_CONFIG`, which `cli_main()` alone reads. An unknown key is an error.
 
-**You never configure anything.** `import dvc_dat` reads no filesystem; the first use of `Dat.manager` — `Dat.do(…)`, `Dat.load(…)`, `Dat.create(…)` — builds the default world from the working directory, and the config folder goes first on `sys.path`, so the project's own modules resolve from any directory, installed or not. An empty `.datconfig.yaml` is a complete config: it marks the project root, `data/` is the dat folder, and dotted names mean what `import` means. A different world is one assignment: `Dat.manager = DatManager.load_dat_config(path, do=dat.do)` ([[DAT Manager API]] § The default world).
+**You never configure anything.** `import dvc_dat` reads no filesystem; the first use of `Dat.manager` — `Dat.do(…)`, `Dat.load(…)`, `Dat.create(…)` — builds the default world from the working directory, and the config folder goes first on `sys.path`, so the project's own modules resolve from any directory, installed or not. An empty `.datconfig.yaml` is a complete config: it marks the project root, `data/` is the dat folder, and dotted names mean what `import` means. A different world is one assignment: `Dat.manager = DatManager.load_dat_config(path, do=dat.do)` ([DAT Manager API](DAT%20Manager%20API.md) § The default world).
 
 
 
@@ -279,4 +279,4 @@ Expanded once, when the dat is created, with the same `now` and `unique` its fol
 
 
 # BRIEF
-- 2026-09-23 — rewritten to the 2.3 + 2.4 surface ([[DAT Backlog#^103|DAT 103]]) in Dan's module-doc member format: `Dat` and `DatContainer` as module docs, module functions as their own table; `DataConfig` removed; `Dat.load` lost `cwd`; `Dat.manager` a plain assignable class attribute; config renamed `.datconfig.yaml` with `art_folder`. The old § Dats on disk / One dat / Strings and configuration were folded into the member blocks; § Running, § Spec file, § Grammar, § Configuration kept as reference. Decided on [[DAT Backlog#^1008|DAT 1008]], [[DAT Backlog#^1009|DAT 1009]], [[DAT Backlog#^1014|DAT 1014]], [[DAT Backlog#^102|DAT 102]].
+- 2026-09-23 — rewritten to the 2.3 + 2.4 surface ([DAT 103](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^103)) in Dan's module-doc member format: `Dat` and `DatContainer` as module docs, module functions as their own table; `DataConfig` removed; `Dat.load` lost `cwd`; `Dat.manager` a plain assignable class attribute; config renamed `.datconfig.yaml` with `art_folder`. The old § Dats on disk / One dat / Strings and configuration were folded into the member blocks; § Running, § Spec file, § Grammar, § Configuration kept as reference. Decided on [DAT 1008](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1008), [DAT 1009](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1009), [DAT 1014](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1014), [DAT 102](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^102).
