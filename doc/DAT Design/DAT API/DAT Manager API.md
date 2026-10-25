@@ -1,7 +1,7 @@
 ---
 description: "`DatManager`: the one object — folders, artifacts, recording, its `do`"
 ---
-:>> [DAT](ha://DAT) → [DAT Design](ha://DAT%20Design) → [DAT API](ha://DAT%20API) → [DAT Manager API](ha://p/DAT%20Manager%20API) 
+:>> [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Manager API](ha://p/DAT%20Manager%20API) 
 # DAT Manager API
 A `DatManager` is one world: its dat folders, its artifact folder, its `do`, and the record of every run made there.
 
@@ -198,6 +198,6 @@ The sidecar decides the class; the manager takes none.
 | 2.4: `art/` under the first dat folder by default | 2.5: `art/` beside the config file; nesting is `ValueError`; a hand-built manager has none unless given |
 
 # BRIEF
-- 2026-09-23 — rewritten to the agreed 2.3 + 2.4 surface from the proposal module doc (now [[DAT Manager API]]) ([[DAT Backlog#^F019|F019]]; [[DAT Backlog#^T017|T017]] part 1, [[DAT Backlog#^F018|F018]] part 2), in Dan's module-doc member format (bold name + signature, 4-space-indented description). The 2.3 branch history (§ Changed from the branch, Q1–Q3 calls, § On main) was dropped: Q1 survives as the `dat.code` sentence, Q2–Q3 as § The class of a dat.
+- 2026-09-23 — rewritten to the agreed 2.3 + 2.4 surface from the proposal module doc (now [[DAT Manager API]]) ([[DAT Backlog#^103|DAT 103]]; [[DAT Backlog#^1014|DAT 1014]] part 1, [[DAT Backlog#^102|DAT 102]] part 2), in Dan's module-doc member format (bold name + signature, 4-space-indented description). The 2.3 branch history (§ Changed from the branch, Q1–Q3 calls, § On main) was dropped: Q1 survives as the `dat.code` sentence, Q2–Q3 as § The class of a dat.
 - 2026-09-23 — method block IDs bare on Dan's word; this format has none per member.
 - 2026-09-22 — first written by DAT on Dan's ask for a page defining the manager, from `origin/manager-owns-do` at `3d8e1a0`.

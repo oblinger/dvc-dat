@@ -7,4 +7,16 @@ inbox: doc/DAT Track/DAT Inbox.md
 agent: DAT
 stones:
   pebbles:
+    member: titled
+    prefix: ""
+    start: 1000
+    counter: shared
+  backlog:
+    prefix: ""
+    start: 1000
+    counter: shared
+  features:
+    prefix: ""
+    start: 100
+    counter: own
 namespace: true

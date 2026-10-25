@@ -1,7 +1,7 @@
 ---
 description: "the namespace under `Dat.do`: your program's main, mounts, spec surgery — the advanced half"
 ---
-:>> [DAT](ha://DAT) → [DAT Design](ha://DAT%20Design) → [DAT API](ha://DAT%20API) → [DAT Do API](ha://p/DAT%20Do%20API) 
+:>> [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Do API](ha://p/DAT%20Do%20API) 
 # DAT Do API
 The advanced half of `Dat.do`: what a dotted name resolves to, how to make one mean something other than a Python import, and what that costs — the plain surface is [[DAT API]].
 
@@ -98,7 +98,7 @@ You are here because something in the namespace is *not* a Python import: a fold
 
 Two layers, checked in order.
 
-**The mount table**, if one is installed — names your program put there with `do.mount(...)`, by folder, file, module or value. Nothing in YAML mounts anything, and nothing is imported on your behalf: the namespace is whatever the running program imported ([[DAT Backlog#^T010|T010]] Q2, [[DAT Backlog#^T011|T011]]). For the shell, `run:` names your own main — a module that makes the mounts and ends with `sys.exit(Dat.cli_main())` — so `dat …` runs inside it; with no `run:` the bootstrap runs the library's own main, where a dotted name is a Python name and nothing else.
+**The mount table**, if one is installed — names your program put there with `do.mount(...)`, by folder, file, module or value. Nothing in YAML mounts anything, and nothing is imported on your behalf: the namespace is whatever the running program imported ([[DAT Backlog#^1008|DAT 1008]] Q2, [[DAT Backlog#^1009|DAT 1009]]). For the shell, `run:` names your own main — a module that makes the mounts and ends with `sys.exit(Dat.cli_main())` — so `dat …` runs inside it; with no `run:` the bootstrap runs the library's own main, where a dotted name is a Python name and nothing else.
 
 **The static floor**, always — the longest importable prefix of the name, imported, then `getattr` for the rest. `pkg.mod.CONST` imports `pkg.mod` and takes `CONST` off it. Nothing found raises the import's own `ImportError` or `AttributeError`, unless `default=` was given.
 
@@ -139,4 +139,4 @@ Each is one call in your program; build paths from `__file__`, since `relative_t
 | a bare `Do()` gets a world on first use | a bare `Do()` is a plain namespace; running a dat needs `Do(manager=m)` |
 
 # BRIEF
-- 2026-09-23 — rewritten to the 2.3 surface ([[DAT Backlog#^F019|F019]], [[DAT Backlog#^T017|T017]]): § The names became the `Do` module doc in Dan's member format; `do.configure` and `do.config` are gone — a different world is an assignment to `Dat.manager`; `.dataconfig.yaml` → `.datconfig.yaml`; the TOC table dropped (the class table replaces it).
+- 2026-09-23 — rewritten to the 2.3 surface ([[DAT Backlog#^103|DAT 103]], [[DAT Backlog#^1014|DAT 1014]]): § The names became the `Do` module doc in Dan's member format; `do.configure` and `do.config` are gone — a different world is an assignment to `Dat.manager`; `.dataconfig.yaml` → `.datconfig.yaml`; the TOC table dropped (the class table replaces it).

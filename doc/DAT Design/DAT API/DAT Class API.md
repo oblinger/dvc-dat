@@ -1,7 +1,7 @@
 ---
 description: "`from dvc_dat import Dat`: the `Dat` class, `Dat.do`, the spec file, the config"
 ---
-:>> [DAT](ha://DAT) → [DAT Design](ha://DAT%20Design) → [DAT API](ha://DAT%20API) → [DAT Class API](ha://p/DAT%20Class%20API) 
+:>> [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Class API](ha://p/DAT%20Class%20API) 
 # DAT Class API
 The `Dat` class — what a run makes, and everything you can do with one.
 
@@ -223,7 +223,7 @@ The file a dat holds is that template expanded once, at create — `name` is the
 
 ## Grammar — `{…}` in any template string
 
-Expanded once, when the dat is created, with the same `now` and `unique` its folder got; the expanded values are what the file holds ([[DAT Backlog#^T011|T011]] Q7).
+Expanded once, when the dat is created, with the same `now` and `unique` its folder got; the expanded values are what the file holds ([[DAT Backlog#^1009|DAT 1009]] Q7).
 
 | Form | Resolves to |
 | --- | --- |
@@ -279,4 +279,4 @@ Expanded once, when the dat is created, with the same `now` and `unique` its fol
 
 
 # BRIEF
-- 2026-09-23 — rewritten to the 2.3 + 2.4 surface ([[DAT Backlog#^F019|F019]]) in Dan's module-doc member format: `Dat` and `DatContainer` as module docs, module functions as their own table; `DataConfig` removed; `Dat.load` lost `cwd`; `Dat.manager` a plain assignable class attribute; config renamed `.datconfig.yaml` with `art_folder`. The old § Dats on disk / One dat / Strings and configuration were folded into the member blocks; § Running, § Spec file, § Grammar, § Configuration kept as reference. Decided on [[DAT Backlog#^T010|T010]], [[DAT Backlog#^T011|T011]], [[DAT Backlog#^T017|T017]], [[DAT Backlog#^F018|F018]].
+- 2026-09-23 — rewritten to the 2.3 + 2.4 surface ([[DAT Backlog#^103|DAT 103]]) in Dan's module-doc member format: `Dat` and `DatContainer` as module docs, module functions as their own table; `DataConfig` removed; `Dat.load` lost `cwd`; `Dat.manager` a plain assignable class attribute; config renamed `.datconfig.yaml` with `art_folder`. The old § Dats on disk / One dat / Strings and configuration were folded into the member blocks; § Running, § Spec file, § Grammar, § Configuration kept as reference. Decided on [[DAT Backlog#^1008|DAT 1008]], [[DAT Backlog#^1009|DAT 1009]], [[DAT Backlog#^1014|DAT 1014]], [[DAT Backlog#^102|DAT 102]].
