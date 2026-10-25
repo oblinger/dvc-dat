@@ -19,13 +19,17 @@
 import importlib, os, shutil, subprocess, sys
 from pathlib import Path
 
+from IPython.display import SVG, display
+
+from dvc_dat import Dat
 from dvc_dat.ledger import Ledger, bump
 
 demos_path = Path(globals().get("demos_path", Path.cwd()))   # survives the chdir
 os.chdir(demos_path)
 scratch_path = demos_path / "scratch/q-dats"
 shutil.rmtree(scratch_path, ignore_errors=True)   # a re-run starts clean
-for module_name in [m for m in sys.modules if m.split(".")[0] == "demo_game"]:
+for module_name in [m for m in sys.modules
+                    if m.split(".")[0] in ("demo_game", "mymodule")]:
     del sys.modules[module_name]
 sys.path[:] = [p for p in sys.path if p != str(scratch_path)]
 
@@ -38,18 +42,94 @@ for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "demo-game"]):
     subprocess.run(git_cmd + args, check=True)
 sys.path.insert(0, str(scratch_path))
 L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
+Dat.manager = None                   # the dat world reloads from this folder
+
+
+def show(name):
+    """The figure `<name>.svg` beside this notebook."""
+    display(SVG(filename=str(demos_path / f"{name}.svg")))
 
 # %% [markdown]
 # # Quick: dats
 #
-# A dat is a folder: a spec saying what to build, the files built
-# from it, and a result saying how it went. On the ledger it is a
-# value like any other. The quick tour: seal one by hand, build one
-# with a ledger function, chain three stages, change code, release.
+# A dat is a handle for a folder of arbitrary data, derived from and
+# specified by a recursive dictionary of parameters: its spec. On a
+# ledger it is also a value. The tour: one dat alone, then as a value
+# sealed by hand, built by a ledger function, chained, recomputed when
+# code moves, and run at a release.
+
+# %%
+show("q-dats")
 
 # %% [markdown]
-# ## A dat is a value
+# ## A dat is a folder with a spec
 #
+# A spec is a recursive dict of parameters; its `dat:` part is what
+# the dat system reads. `do:` names the run function, `kwargs:` its
+# arguments, `base:` a spec to inherit, `name:` a folder template.
+
+# %%
+module_path = Path("mymodule")
+(module_path / "specs").mkdir(parents=True)
+(module_path / "train.py").write_text('''\
+from pathlib import Path
+
+
+def run(dat, epochs=1, lr=0.1):
+    loss = 1.0
+    with open(Path(dat.get_path(), "log.txt"), "w") as log:
+        for epoch in range(epochs):
+            loss *= 1 - lr
+            print(f"epoch {epoch}: loss {loss:.3f}", file=log)
+    Path(dat.get_path(), "model.pt").write_bytes(b"weights")
+    dat.get_results()["loss"] = round(loss, 3)
+    dat.save()
+    return dat
+''')
+(module_path / "specs/train_base.yaml").write_text('''\
+dat:
+  do: mymodule.train.run
+  kwargs: {epochs: 10}
+''')
+(module_path / "specs/dev3.yaml").write_text('''\
+dat:
+  base: specs.train_base
+  name: runs/{YYYY}/dev3{unique}
+  do: mymodule.train.run
+  kwargs: {lr: 0.05}
+''');
+
+# %% [markdown]
+# `do` instantiates a spec: it merges the base under it, fills the
+# name template once, makes the folder, and calls the run function
+# with the dat and its kwargs. Mounting `specs/` makes
+# `specs/dev3.yaml` answer to `specs.dev3`.
+
+# %%
+do = Dat.do
+do.mount(folder="mymodule/specs", at="specs")
+dev3_dat = do("specs.dev3")
+print("dat:", repr(dev3_dat))   # dat: <Dat: runs/2026/dev3>
+print("files:", sorted(os.listdir(dev3_dat.get_path())))
+# files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'model.pt', 'run']
+print("_spec_.yaml:\n" + Path(dev3_dat.get_path(), "_spec_.yaml").read_text())
+# _spec_.yaml: kwargs {epochs: 10, lr: 0.05}; no base:; name: the template
+print("loss:", dev3_dat.get_results()["loss"])   # loss: 0.599
+
+again_dat = do("specs.dev3")
+print("dat:", repr(again_dat))   # dat: <Dat: runs/2026/dev3_2>
+
+# %% [markdown]
+# The folder holds whatever the run wrote, beside `_spec_.yaml` (the
+# spec, base merged in, stored whole) and `_result_.yaml` (what the
+# run stored); `run/` records when, where and on which commit it ran.
+# The spec keeps `name:` as its template; the folder it filled to is
+# the dat's name, and `{unique}` counts up on a second run.
+
+# %% [markdown]
+# ## A dat is also a value
+#
+# On a ledger a dat is sealed, named and found like any value.
 # `demo_game/etl/dat.py` defines `StageDat`, a `Dat` whose preds are
 # its spec keys and result metrics, and `build(rev, spec, path)`,
 # which runs the function the spec's `main` names in `path`, then
