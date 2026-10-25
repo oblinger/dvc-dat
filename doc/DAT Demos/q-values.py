@@ -294,8 +294,8 @@ measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
 (repo_path / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
 subprocess.run(git_cmd + ["commit", "-q", "-am", "quarter metres"], cwd=repo_path, check=True)
 new_length_fn = L.at().load_fn("plane.measure.length")
-print("new fn:", new_length_fn, " sandbox:", repr(new_length_fn.code))
-# → new fn: plane.measure.length@2.7.2  sandbox: <Code plane@2.7.2>
+print("new fn:", repr(new_length_fn), " sandbox:", repr(new_length_fn.code))
+# → new fn: <Fn plane.measure.length@2.7.2>  sandbox: <Code plane@2.7.2>
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → 1.25
 print("old result's code:", segment_value.dependencies["code"], " fn:", segment_value.dependencies["fn"],
       " holds:", segment_value.obj)

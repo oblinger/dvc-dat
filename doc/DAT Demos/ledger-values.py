@@ -582,8 +582,8 @@ print(git("log", "--oneline"))
 # %%
 rev = L.at()
 distance_fn = rev.load_fn("geometry.distance")
-print("fn:", distance_fn, " sandboxed:", distance_fn.code.sandboxed)
-# → fn: geometry.distance@<commit, 8 hex>  sandboxed: False  (no __version__: the last commit)
+print("fn:", repr(distance_fn), " sandboxed:", distance_fn.code.sandboxed)
+# → fn: <Fn geometry.distance@<commit, 8 hex>>  sandboxed: False  (no __version__: the last commit)
 print(distance_fn.signature)
 # → (a, b=(0, 0), *, metric='euclidean')
 print("code:", repr(distance_fn.code), " subject:", distance_fn.code.subject)
@@ -672,8 +672,8 @@ print(rev["db/mount/plane"])
 
 # %%
 length_fn = rev.load_fn("plane.measure.length")
-print("code:", length_fn.code, " sandboxed:", length_fn.code.sandboxed, " mount:", length_fn.mount)
-# → code: plane@<commit, 8 hex>  sandboxed: True  mount: plane
+print("code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed, " mount:", length_fn.mount)
+# → code: <Code plane@<commit, 8 hex>>  sandboxed: True  mount: plane
 segment_value = length_fn(a=(0, 0), b=(3, 4))
 print(segment_value.obj, sorted(segment_value.dependencies))
 # → 2.5 ['code', 'fn', 'platform']
