@@ -21,15 +21,15 @@ Every line you can type: a word runs a target, a flag asks `dat` about itself.
 
 | dat | |
 | --- | --- |
-| [[#^target\|dat TARGET …]] | Run it: call a function, fork a template, else print |
-| [[#^set\|dat TARGET --set K=V]] | Update a spec key before the fork; repeat it |
-| [[#^json\|dat TARGET --json K=J]] | The same, with the value as JSON; repeat it |
-| [[#^dry-run\|dat TARGET --dry-run]] | Print the `Dat.do(…)` call instead of making it |
-| [[#^usage\|dat TARGET --usage]] | The target's own usage, else the general one |
-| [[#^list\|dat --list PREFIX]] | Mounted names starting with PREFIX; all without it |
-| [[#^info\|dat --info]] | Version, dat folders, artifact folder, config |
-| [[#^version\|dat --version]] | The version |
-| [[#^help\|dat --help]] | The usage; `dat` alone prints it too |
+| [dat TARGET …](#^target) | Run it: call a function, fork a template, else print |
+| [dat TARGET --set K=V](#^set) | Update a spec key before the fork; repeat it |
+| [dat TARGET --json K=J](#^json) | The same, with the value as JSON; repeat it |
+| [dat TARGET --dry-run](#^dry-run) | Print the `Dat.do(…)` call instead of making it |
+| [dat TARGET --usage](#^usage) | The target's own usage, else the general one |
+| [dat --list PREFIX](#^list) | Mounted names starting with PREFIX; all without it |
+| [dat --info](#^info) | Version, dat folders, artifact folder, config |
+| [dat --version](#^version) | The version |
+| [dat --help](#^help) | The usage; `dat` alone prints it too |
 
 **dat TARGET**` [ARG …] [KEY=VALUE …]`
     Run — a plain call for a function, a fork for a template; anything else it loads to prints. Fixed words become `dat.args` and `KEY=VALUE` pairs update `dat.kwargs`, every value a YAML scalar; the return value prints. A word is a keyword iff it starts with `NAME=`; `--` ends keywords. ^target

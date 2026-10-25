@@ -38,24 +38,24 @@ A world of dats and artifacts: a list of dat folders (all searched by name, the 
 
 | DatManager                                 |                                                      |
 | ------------------------------------------ | ---------------------------------------------------- |
-| [[#^do\|do]]                               | This world's namespace and runner; its one attribute |
-| [[#^init\|DatManager]]                     | A world on a list of dat folders; reads nothing      |
-| [[#^load-dat-config\|load_dat_config]]     | A new manager from the nearest `.datconfig.yaml`     |
-| [[#^create\|create]]                       | Make a dat, as the class its `dat.kind` names        |
-| [[#^load\|load]]                           | A dat or an artifact, by name or `sha256:` URN       |
-| [[#^load-path\|load_path]]                 | Where `load` finds it, as a `Path`; builds nothing   |
-| [[#^standing\|standing]]                   | Rolling, open, sealed or referenceable, or None      |
-| [[#^save-artifact\|save_artifact]]         | Store a file or folder as an artifact; its URN       |
-| [[#^load-artifact\|load_artifact]]         | An artifact by name or URN; a dat's name refused     |
-| [[#^reindex\|reindex]]                     | Rebuild the index from the folders                   |
-| [[#^recording\|recording]]                 | Every load inside lands in `dat.dependencies`        |
-| [[#^record-dependency\|record_dependency]] | Add a dependency by hand while recording             |
-| [[#^execute\|execute]]                     | Run a dat; record its time, code and loads, unsaved  |
-| [[#^roots\|roots]]                         | A dependency map trimmed to its roots, as at a seal  |
-| [[#^code-of\|code_of]]                     | A function's branch, commit and dirty flag           |
-| [[#^exists\|exists]]                       | Is a dat or an artifact under this name or URN?      |
-| [[#^expand\|expand]]                       | The `{}` expander, through this `do`                 |
-| [[#^expand-spec\|expand_spec]]             | `expand` over every string in a spec                 |
+| [do](#^do)                               | This world's namespace and runner; its one attribute |
+| [DatManager](#^init)                     | A world on a list of dat folders; reads nothing      |
+| [load_dat_config](#^load-dat-config)     | A new manager from the nearest `.datconfig.yaml`     |
+| [create](#^create)                       | Make a dat, as the class its `dat.kind` names        |
+| [load](#^load)                           | A dat or an artifact, by name or `sha256:` URN       |
+| [load_path](#^load-path)                 | Where `load` finds it, as a `Path`; builds nothing   |
+| [standing](#^standing)                   | Rolling, open, sealed or referenceable, or None      |
+| [save_artifact](#^save-artifact)         | Store a file or folder as an artifact; its URN       |
+| [load_artifact](#^load-artifact)         | An artifact by name or URN; a dat's name refused     |
+| [reindex](#^reindex)                     | Rebuild the index from the folders                   |
+| [recording](#^recording)                 | Every load inside lands in `dat.dependencies`        |
+| [record_dependency](#^record-dependency) | Add a dependency by hand while recording             |
+| [execute](#^execute)                     | Run a dat; record its time, code and loads, unsaved  |
+| [roots](#^roots)                         | A dependency map trimmed to its roots, as at a seal  |
+| [code_of](#^code-of)                     | A function's branch, commit and dirty flag           |
+| [exists](#^exists)                       | Is a dat or an artifact under this name or URN?      |
+| [expand](#^expand)                       | The `{}` expander, through this `do`                 |
+| [expand_spec](#^expand-spec)             | `expand` over every string in a spec                 |
 
 **do**`: Do`
     This world's namespace and runner; the only public attribute. `m.do.mount(...)` names things in it, `m.do(target, ...)` runs them here. ^do
@@ -198,6 +198,6 @@ The sidecar decides the class; the manager takes none.
 | 2.4: `art/` under the first dat folder by default | 2.5: `art/` beside the config file; nesting is `ValueError`; a hand-built manager has none unless given |
 
 # BRIEF
-- 2026-09-23 — rewritten to the agreed 2.3 + 2.4 surface from the proposal module doc (now [[DAT Manager API]]) ([[DAT Backlog#^103|DAT 103]]; [[DAT Backlog#^1014|DAT 1014]] part 1, [[DAT Backlog#^102|DAT 102]] part 2), in Dan's module-doc member format (bold name + signature, 4-space-indented description). The 2.3 branch history (§ Changed from the branch, Q1–Q3 calls, § On main) was dropped: Q1 survives as the `dat.code` sentence, Q2–Q3 as § The class of a dat.
+- 2026-09-23 — rewritten to the agreed 2.3 + 2.4 surface from the proposal module doc (now [DAT Manager API](DAT%20Manager%20API.md)) ([DAT 103](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^103); [DAT 1014](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1014) part 1, [DAT 102](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^102) part 2), in Dan's module-doc member format (bold name + signature, 4-space-indented description). The 2.3 branch history (§ Changed from the branch, Q1–Q3 calls, § On main) was dropped: Q1 survives as the `dat.code` sentence, Q2–Q3 as § The class of a dat.
 - 2026-09-23 — method block IDs bare on Dan's word; this format has none per member.
 - 2026-09-22 — first written by DAT on Dan's ask for a page defining the manager, from `origin/manager-owns-do` at `3d8e1a0`.
