@@ -1,5 +1,6 @@
 """What a value, a ref and a fn print as (DAT 1036, option A): ``repr`` is ``<Type label>``, ``str`` the
-bare label; the label is the name at the head, else ``#`` + the hash's first 8."""
+bare label; the label is the name at the head, else ``#`` + the hash's first 8. A fn's label is its name
+``@`` its code's version (DAT 1037)."""
 
 import pytest
 
@@ -68,5 +69,7 @@ def test_an_unresolved_ref_prints_its_short_hash(L):
 
 def test_a_fn_prints_its_name_and_version(world):  # noqa: F811
     f = world.at().load_fn("ledger_kinds.cut")
-    version = f.subject.rpartition("/")[2][:8]
-    assert repr(f) == f"<Fn ledger_kinds.cut @{version}>" and str(f) == "ledger_kinds.cut"
+    version = f.code.version            # the pinned testrepo checkout's commit: abc1234
+    assert version == "abc1234"
+    assert repr(f) == "<Fn ledger_kinds.cut@abc1234>" and str(f) == "ledger_kinds.cut@abc1234"
+    assert repr(f.code) == "<Code ledger_kinds@abc1234>" and str(f.code) == "ledger_kinds@abc1234"

@@ -5,7 +5,7 @@ the standard library, ``site-packages`` and the dvc-dat checkout itself, its
 demo folders included (A56: the ledger's own repo is infrastructure, like
 ``site-packages``; a demo repository is its own nested checkout). A checkout is a repo; its
 name is ``[project].name`` of the ``pyproject.toml`` at its root, normalised
-(``dvc_dat`` -> ``dvc-dat``), else the checkout folder's name. ``Code`` holds
+(``dvc_dat`` -> ``dvc-dat``), else the checkout folder's name. ``Checkout`` holds
 the commit at HEAD, whether tracked files are modified (``dirty``: none whose
 path the repo's ``.gitattributes`` marks ``dat-noncode``, as ``core._code_of``), and the
 checkout ``path`` a mount's ``db/root`` resolves under. The commit is read on
@@ -33,7 +33,7 @@ except ImportError:  # pragma: no cover - 3.10
 
 
 @dataclass(frozen=True)
-class Code:
+class Checkout:
     """One repo's code as the environment has it."""
 
     version: Optional[str]
@@ -44,9 +44,9 @@ class Code:
 
 @dataclass(frozen=True)
 class Env:
-    """What a provider reports: ``code`` (repo -> ``Code``) and the platform."""
+    """What a provider reports: ``code`` (repo -> ``Checkout``) and the platform."""
 
-    code: Dict[str, Code]
+    code: Dict[str, Checkout]
     platform: str
     mounts: Optional[str] = field(default=None)
 
@@ -102,10 +102,10 @@ def repo_name(top: Path) -> str:
     return top.name
 
 
-def code_at(top: str) -> Code:
+def code_at(top: str) -> Checkout:
     commit = _git(top, "rev-parse", "HEAD")
     dirty = bool(_git(top, "status", "--porcelain", "--untracked-files=no", "--", *CODE_PATHSPEC))
-    return Code(None, commit, dirty, Path(top))
+    return Checkout(None, commit, dirty, Path(top))
 
 
 def _skip_roots() -> list:
@@ -130,7 +130,7 @@ def discover() -> Env:
         if any(d == r or d.startswith(r + os.sep) for r in skip):
             continue
         folders.add(d)
-    code: Dict[str, Code] = {}
+    code: Dict[str, Checkout] = {}
     for top in sorted({t for t in (_toplevel(d) for d in folders) if t}):
         name = repo_name(Path(top))
         if name == SELF:

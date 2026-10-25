@@ -73,6 +73,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tupl
 from .codec import sha256
 from .env import Env, current_env
 from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
+from .code import Code
 from .fn import (Fn, attach_run, drop_work, fn_subject, mounts_at, mounts_hash, path_template, run_trace,
                  save_run, seal_entry, wrap_result)
 
@@ -434,11 +435,61 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
     check_mounted_imports(mounts, modname, attr_name)
     mods = module_shas(closure(mounts, [modname]))
     rel = f[0].relative_to(m.checkout).as_posix()
-    return Fn(name=name, module=f[0], sha=file_sha(m.checkout, rel),
-              mode="sandbox", mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain)),
-              subject=fn_subject(name, mods, mounts_hash(plain)), _rev=rev, _takes_path=takes_path,
+    sha = file_sha(m.checkout, rel)
+    return Fn(name=name, module=f[0], sha=sha,
+              mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain)),
+              subject=fn_subject(name, mods, mounts_hash(plain)),
+              code=mounted_code(plain, env, m, modname, mods, sha),
+              _rev=rev, _takes_path=takes_path,
               _template=template, _modules=mods, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
+
+
+def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str, str], sha: str) -> Code:
+    """A mounted function's ``Code`` (DAT 1037): the mount at the version its root package declares.
+
+    ``modules`` are the files the loader walks, relative to the repo root: the function's static
+    closure plus the packages Python imports on the way to it, from the mount's root down."""
+    from .code import lock_of, mounted_version
+
+    files = set(mods)
+    parts = modname.split(".")
+    for i in range(len(m.prefix.split(".")), len(parts)):
+        f = m.file_of(".".join(parts[:i]))
+        if f is not None and f[1]:
+            files.add(f[0].relative_to(m.checkout).as_posix())
+    modules = sorted(files)
+    attr = root_version(plain, env, m.prefix)
+    with unguarded():                       # the ledger's own reads, also inside a sandboxed body
+        version = mounted_version(attr, m.checkout, modules, sha)
+        lock = lock_of(m.checkout)
+    co = env.code.get(m.repo)
+    mounts = {p: {"repo": r["repo"], "root": r["root"]} for p, r in mounts_at(plain).items() if "repo" in r}
+    return Code({"modules": modules, "mounts": mounts, "commit": co.commit if co is not None else None,
+                 "lock": lock, "sandboxed": True, "version": version}, unit=m.prefix)
+
+
+def root_version(plain: "Rev", env: Env, prefix: str) -> Optional[str]:
+    """The mounted root package's ``__version__``, read after importing it the way a run does: in a
+    forked child of the warm server, confined (in the worker itself, here), leaving nothing imported."""
+    if IN_WORKER:
+        return import_version(prefix)
+    return _server().version(plain, prefix, env)
+
+
+def import_version(prefix: str) -> Optional[str]:
+    """In the worker: import ``prefix`` through the mounts, confined, read ``__version__``, and drop
+    every module the import added, so a run's own loads are counted as before."""
+    before = set(sys.modules)
+    old = STATE.guard
+    STATE.guard = True
+    try:
+        v = getattr(importlib.import_module(prefix), "__version__", None)
+    finally:
+        STATE.guard = old
+        for n in set(sys.modules) - before:
+            del sys.modules[n]
+    return None if v is None else str(v)
 
 
 def sandbox_subject_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Optional[str]:
@@ -844,35 +895,31 @@ class Server:
     def alive(self) -> bool:
         return self.proc.poll() is None
 
-    def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env) -> Any:
-        from .rev import Ref
-
-        req = {"ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
-               "keys": {k: encode_key(v) for k, v in kw.items()}, "seal": seal,
-               "env": {r: (c.version, c.commit, c.dirty, str(c.path) if c.path else None) for r, c in env.code.items()}}
+    def _ask(self, req: Dict[str, Any]) -> Dict[str, Any]:
         with self.lock:
             send(self.proc.stdin, req)
             resp = recv(self.proc.stdout)
-        if resp["ok"]:
-            if seal:
-                return Ref(plain.ledger.at(), resp["subject"]).load()
-            v = pickle.loads(resp["value"])
-            top = plain.ledger.at()
-            v.__dict__["_preds"] = {k: _unship(top, x) for k, x in resp.get("preds", {}).items()}
-            return v
-        exc = None
-        if resp.get("exc") is not None:
-            try:
-                exc = pickle.loads(resp["exc"])
-            except Exception:
-                exc = None
-        if not isinstance(exc, BaseException):
-            exc = RuntimeError(f"{resp['type']}: {resp['message']}")
-        try:
-            exc.worker_traceback = resp["traceback"]  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        raise exc
+        if not resp["ok"]:
+            _raise(resp)
+        return resp
+
+    def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env) -> Any:
+        from .rev import Ref
+
+        resp = self._ask({"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
+                          "keys": {k: encode_key(v) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env)})
+        if seal:
+            return Ref(plain.ledger.at(), resp["subject"]).load()
+        v = pickle.loads(resp["value"])
+        top = plain.ledger.at()
+        v.__dict__["_preds"] = {k: _unship(top, x) for k, x in resp.get("preds", {}).items()}
+        return v
+
+    def version(self, plain: "Rev", prefix: str, env: Env) -> Optional[str]:
+        """The mounted root ``prefix``'s ``__version__``, imported in a forked child (``import_version``)."""
+        resp = self._ask({"op": "version", "ledger": str(plain.ledger.path), "rev": plain.id, "prefix": prefix,
+                          "env": _ship_env(env)})
+        return resp["version"]
 
     def close(self) -> None:
         if self.alive():
@@ -881,6 +928,27 @@ class Server:
                 self.proc.wait(timeout=5)
             except Exception:
                 self.proc.kill()
+
+
+def _ship_env(env: Env) -> Dict[str, Any]:
+    return {r: (c.version, c.commit, c.dirty, str(c.path) if c.path else None) for r, c in env.code.items()}
+
+
+def _raise(resp: Dict[str, Any]) -> None:
+    """Raise a failed reply's exception, the child's traceback on it."""
+    exc = None
+    if resp.get("exc") is not None:
+        try:
+            exc = pickle.loads(resp["exc"])
+        except Exception:
+            exc = None
+    if not isinstance(exc, BaseException):
+        exc = RuntimeError(f"{resp['type']}: {resp['message']}")
+    try:
+        exc.worker_traceback = resp["traceback"]  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    raise exc
 
 
 _SERVERS: Dict[str, Server] = {}
@@ -957,18 +1025,21 @@ def worker_main() -> None:
 
 def serve(req: Dict[str, Any], out: Any) -> None:
     """In the forked child: confine this process, run the call, reply on ``out``."""
-    from .env import Code, platform_tag, set_env_provider
+    from .env import Checkout, platform_tag, set_env_provider
     from .ledger import Ledger
     from .rev import Ref
 
     try:
-        code = {r: Code(v, c, d, Path(p) if p else None) for r, (v, c, d, p) in req["env"].items()}
+        code = {r: Checkout(v, c, d, Path(p) if p else None) for r, (v, c, d, p) in req["env"].items()}
         env = Env(code, platform_tag())
         set_env_provider(lambda env=env: env)
         ledger = Ledger(req["ledger"])
         plain = ledger.at(req["rev"])
         mounts, _rows = mounts_for(plain, env)
         install_worker(ledger, mounts)
+        if req["op"] == "version":
+            send(out, {"ok": True, "version": import_version(req["prefix"])})
+            return
         keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__" else v)
                 for k, v in req["keys"].items()}
         fn = plain.load_fn(req["name"])

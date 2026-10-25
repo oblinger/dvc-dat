@@ -58,9 +58,9 @@ def pin_env() -> None:
     """The environment every handle sees: one repo, ``loadrepo``, its checkout ``tests/load``, clean."""
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
-    from dvc_dat.ledger import Code, Env, set_env_provider
+    from dvc_dat.ledger import Checkout, Env, set_env_provider
 
-    env = Env({"loadrepo": Code(None, COMMIT, False, LOAD_DIR)}, "load-platform")
+    env = Env({"loadrepo": Checkout(None, COMMIT, False, LOAD_DIR)}, "load-platform")
     set_env_provider(lambda: env)
 
 

@@ -15,9 +15,9 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import backends  # noqa: E402
-from dvc_dat.ledger import Code, Env, set_env_provider  # noqa: E402
+from dvc_dat.ledger import Checkout, Env, set_env_provider  # noqa: E402
 
-ENV = Env({"testrepo": Code(None, "abc1234", False, HERE)}, "test-platform")
+ENV = Env({"testrepo": Checkout(None, "abc1234", False, HERE)}, "test-platform")
 
 
 class EnvBox:
@@ -30,7 +30,7 @@ class EnvBox:
         return self.env
 
     def code(self, commit="abc1234", dirty=False):
-        self.env = Env({"testrepo": Code(None, commit, dirty, HERE)}, self.env.platform)
+        self.env = Env({"testrepo": Checkout(None, commit, dirty, HERE)}, self.env.platform)
 
     def set(self, **kw):
         fields = {"code": self.env.code, "platform": self.env.platform}

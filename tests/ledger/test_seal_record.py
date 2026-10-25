@@ -18,9 +18,9 @@ CHILD = textwrap.dedent('''
     import sys
     from pathlib import Path
     sys.path.insert(0, {here!r})
-    from dvc_dat.ledger import Code, Dat, Env, set_env_provider
+    from dvc_dat.ledger import Checkout, Dat, Env, set_env_provider
     from ledger_kinds import GameDat
-    set_env_provider(lambda: Env({{"testrepo": Code(None, "abc1234", False, Path({here!r}))}},
+    set_env_provider(lambda: Env({{"testrepo": Checkout(None, "abc1234", False, Path({here!r}))}},
                                  "test-platform"))
     {body}
 ''')
