@@ -217,7 +217,7 @@ print("preds:", dict(sorted(loaded_dat.preds.items())))
 # folder from the store; it does not run anything.
 
 # %% [markdown]
-# ## In practice: one step
+# ## Execution in practice: all done in one step
 #
 # `Dat.do("specs.table12")` is steps 1 and 2: it instantiates the spec,
 # runs the dat, and returns what the run function returned.
@@ -239,7 +239,7 @@ print("files:", sorted(os.listdir(again_dat.get_path())))
 # %%
 subprocess.run(git_cmd + ["add", "mymodule"], check=True)
 subprocess.run(git_cmd + ["commit", "-q", "-m", "mymodule"], check=True)
-with L.transaction(by="human:dan", why="mount mymodule") as t:
+with L.transaction(by="human:dan", why="mount mymodule", lock=5) as t:   # bump reads, then writes
     t.add("db/mount/mymodule", "db/root", "mymodule")
     t.add("db/mount/mymodule", "db/repo", "q-dats")
     bump(t, "code/q-dats", "minor", confirm=lambda old, new: True)
