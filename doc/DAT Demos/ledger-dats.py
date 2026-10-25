@@ -117,7 +117,7 @@ from demo_game.etl.dat import StageDat, build
 # games:
 
 # %%
-with L.transaction(by="human:dan", why="four games") as t:
+with L.transaction(by="human:dan", why="four games", lock=10) as t:
     for game, court in [("G1", "north"), ("G2", "east"),
                         ("G3", "south"), ("G4", "west")]:
         t[f"game/{game}"] = {"court": court}
@@ -200,7 +200,7 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 with L.transaction(by="human:dan", why="mount the etl") as t:
     t.add("db/mount/demo_game.etl", "db/root", "demo_game/etl")
     t.add("db/mount/demo_game.etl", "db/repo", "demo-game")
-with L.transaction(by="human:dan", why="the clock's start") as t:
+with L.transaction(by="human:dan", why="the clock's start", lock=10) as t:
     bump(t, "code/demo-game", "minor",       # 0.0.0 -> 0.1.0
          confirm=lambda old, new: True)
 rev = L.at()
@@ -319,7 +319,7 @@ print("count:", detections_ref.preds["metrics.count"])        # → count: 40
 # config and each game's set, which `train` reads:
 
 # %%
-with L.transaction(by="human:dan", why="training") as t:
+with L.transaction(by="human:dan", why="training", lock=10) as t:
     t["cfg/train"] = {"epochs": "8"}
     for game, gameset in [("G1", "normie"), ("G2", "normie"),
                           ("G3", "pro"), ("G4", "pro")]:
@@ -382,7 +382,7 @@ track_path.write_text(track_path.read_text()
 
 # %%
 try:
-    with L.transaction(by="human:dan", why="tidy track") as t:
+    with L.transaction(by="human:dan", why="tidy track", lock=10) as t:
         bump(t, "code/demo-game")
 except ValueError as e:
     print("ValueError:", e)          # → ValueError: <a dirty tree>
@@ -394,7 +394,7 @@ except ValueError as e:
 git("commit", "-q", "-am", "tidy track")
 import demo_game.etl.track
 importlib.reload(demo_game.etl.track)    # sandbox workers import anew
-with L.transaction(by="human:dan", why="tidy track") as t:
+with L.transaction(by="human:dan", why="tidy track", lock=10) as t:
     bump(t, "code/demo-game")            # 0.1.1, the new commit
 rev = L.at()
 print("detections match:", detections_dat.matches(rev),
@@ -495,7 +495,7 @@ except Unindexed as e:
 # ### A release pins every clock
 
 # %%
-with L.transaction(by="human:dan",
+with L.transaction(by="human:dan", lock=10,
                    why="October release") as t:
     bump(t, "db", "minor",                   # 0.0.0 -> 0.1.0
          confirm=lambda old, new: True)

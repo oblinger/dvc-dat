@@ -9,7 +9,7 @@ process) or sandboxed (under a ``db/mount/<prefix>``, in a worker).
     from dvc_dat.ledger import Ledger, Ref, ledger_fn, ledger_class, bump, attr
     L = Ledger()                         # the nearest .datconfig.yaml
     rev = L.at()
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:dan", lock=10) as t:
         bump(t, "code/demo-game")
 
 The environment is found by discovery; ``set_env_provider``, ``Env`` and
@@ -18,7 +18,7 @@ The environment is found by discovery; ``set_env_provider``, ``Env`` and
 
 from .code import Code
 from .env import Checkout, Env, set_env_provider  # noqa: F401  (the test seam, importable by name)
-from .errors import (AliasLoop, ConfinedNetwork, ConfinedWrite, Exists, LedgerError, LockTimeout, Multiple, NotClean, NotEvaluated, SealBroken, Undeclared,
+from .errors import (AliasLoop, ConfinedNetwork, ConfinedWrite, Exists, LedgerError, LockTimeout, Multiple, NotClean, NotEvaluated, SealBroken, Undeclared, Unlocked,
                      Unindexed,
                      UnmountedImport, UntracedRead)
 from .fn import Fn, ledger_fn
@@ -30,5 +30,5 @@ from .value import Dat, Value, ledger_class
 
 __all__ = ["Ledger", "Rev", "Ref", "Row", "Transaction", "Value", "Dat", "Fn", "Code",
            "ledger_fn", "ledger_class", "bump", "attr", "LedgerError", "Multiple", "NotEvaluated", "NotClean",
-           "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "LockTimeout", "Unindexed", "Exists", "Undeclared",
+           "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
            "AliasLoop", "SealBroken"]

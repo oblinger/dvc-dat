@@ -12,7 +12,7 @@ from ledger_kinds import CALLS, Cut, Video
 @pytest.fixture
 def world(coded):
     L = coded
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         t.add("db/pred/video", "db/type", "ledger_kinds.Video")
         t["game/G1"] = {"home": "G4", "away": "G5"}
         t["game/G2"] = {"home": "G1", "away": "G3"}
@@ -120,7 +120,7 @@ def test_clean_requires_a_clean_checkout_at_the_revs_commit(world, envbox):
 
 
 def test_clean_needs_a_code_row(L):
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         t["game/G1"] = {"home": "G4"}
         t.add("db/pred/video", "db/type", "ledger_kinds.Video")
     v = Video(b"x")
@@ -132,7 +132,7 @@ def test_clean_needs_a_code_row(L):
 
 
 def test_no_code_row_runs_with_the_env_commit(L):
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         t["game/G1"] = {"home": "G4"}
         t.add("db/pred/video", "db/type", "ledger_kinds.Video")
     v = Video(b"x")

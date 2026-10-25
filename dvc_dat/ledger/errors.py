@@ -39,6 +39,11 @@ class LockTimeout(LedgerError, TimeoutError):
     """A ``lock=`` body ran past its limit, or the lock was not had within it; nothing written."""
 
 
+class Unlocked(LedgerError, RuntimeError):
+    """``t.previous_rev``, or a helper reading through it (``bump``, ``t[s] = {...}``, ``del``), in a
+    transaction opened without ``lock=``; nothing written."""
+
+
 class Unindexed(LedgerError, LookupError):
     """A where clause named a dotted predicate neither declared nor carried by any row."""
 

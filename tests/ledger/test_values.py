@@ -187,8 +187,8 @@ def test_deps_dependencies_and_alias_binding(L):
 
 def test_a_row_may_point_at_a_value(L):
     s = seal(L, Plain(b"1"), name="p")
-    with L.transaction(by="t") as t:
-        t.add("review", "pick", Ref(t.base, s))
+    with L.transaction(by="t", lock=10) as t:
+        t.add("review", "pick", Ref(t.previous_rev, s))
     got = L.at()["review", "pick"]
     assert isinstance(got, Ref) and got.subject == s and repr(got) == "<Ref p>"
 

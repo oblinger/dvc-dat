@@ -13,7 +13,10 @@ _VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
 def bump(t: Transaction, subject: str, part: str = "patch", *,
          confirm: Optional[Callable[[str, str], bool]] = None) -> str:
-    """Read ``version`` through ``t.base`` (``0.0.0`` when absent), add the next by ``part``, return it.
+    """Read ``version`` through ``t.previous_rev`` (``0.0.0`` when absent), add the next by ``part``, return it.
+
+    A read-then-write, so ``t`` must be opened with ``lock=``: unlocked, ``t.previous_rev`` raises
+    ``Unlocked`` and nothing is written.
 
     For clocks only: a subject holding a ``db/alias`` row raises ``TypeError`` naming the alias (a
     value's version is a pred; a new version is a new seal and a re-point). On ``code/<repo>`` it
@@ -23,13 +26,14 @@ def bump(t: Transaction, subject: str, part: str = "patch", *,
     """
     from .env import current_env
 
-    held = t.base._held(subject, "db/alias")
+    prev = t.previous_rev                   # Unlocked without lock=
+    held = prev._held(subject, "db/alias")
     if held:
         raise TypeError(f"{subject} is an alias; seal a new value and re-point (a value's version is a pred; "
                         f"{subject} names #{show(held[0].obj)[:8]})")
     if part not in ("patch", "minor", "major"):
         raise ValueError(f"part is 'patch', 'minor' or 'major', not {part!r}")
-    old = t.base.get(subject, "version", default="0.0.0")
+    old = prev.get(subject, "version", default="0.0.0")
     m = _VERSION.match(old) if isinstance(old, str) else None
     if m is None:
         raise ValueError(f"{subject!r} version {old!r} is not MAJOR.MINOR.PATCH")

@@ -19,7 +19,7 @@
 import shutil, subprocess, sys
 from pathlib import Path
 
-from dvc_dat.ledger import Ledger, bump
+from dvc_dat.ledger import Ledger, Unlocked, bump
 
 scratch_path = Path("scratch/q-triples").resolve()
 shutil.rmtree(scratch_path, ignore_errors=True)   # a re-run starts clean
@@ -99,7 +99,7 @@ print(rev1.get("game/G1", "court"),
 # `many` key.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:dan", lock=10) as t:      # the record write reads: lock=
     t["game/G1", "court"] = "west"                       # two levels
     t["game/G2"] = {"home": "G1", "away": "G3",          # one level
                     "officials": ["lee", "park"]}
@@ -178,7 +178,7 @@ for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "0.0.1"]):
 sys.path.insert(0, str(demo_repo_path))
 import demo_game
 
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:dan", lock=10) as t:
     bump(t, "code/demo-game")
 print(L.at()["code/demo-game"])
 # {'version': '0.0.1', 'commit': '<the demo commit>'}
@@ -191,7 +191,40 @@ with L.transaction(by="human:dan", lock=10) as t:
     print(bump(t, "code/demo-game"))   # 0.0.2
 
 # %% [markdown]
-# `bump` reads the version, then writes the next one. `lock=10`
-# holds the write lock for the whole body, so no other writer slips
-# between the read and the write; past 10 seconds the body is
-# interrupted and nothing is written.
+# `bump` reads the version through `t.previous_rev`, then writes
+# the next one. `lock=10` holds the write lock for the whole body,
+# so no other writer slips between the read and the write; past 10
+# seconds the body is interrupted and nothing is written.
+#
+# A body can read through `t.previous_rev` itself, alter, and write
+# back. Here one more official joins `game/G2`.
+
+# %%
+with L.transaction(by="human:dan", lock=10) as t:
+    g2 = t.previous_rev["game/G2"]                 # the record as it stands now
+    t["game/G2"] = {**g2, "officials": g2["officials"] + ["vance"]}   # one more, written back
+print("officials:", t.rev.all("game/G2", "officials"))
+
+# %% [markdown]
+# `t.previous_rev` is the previous revision, the top as it stands
+# while the body holds the write lock: the write is built on current
+# data, and no other writer can commit between the read and the
+# write. Without `lock=` there is no well-defined previous revision.
+# Notice the ledger refuses the read.
+
+# %%
+try:
+    with L.transaction(by="human:dan") as t:       # no lock=
+        t.previous_rev["game/G2"]
+except Unlocked as e:
+    print("Unlocked:", e)
+
+# %% [markdown]
+# `bump`, `t[s] = {...}` and `del` read through `t.previous_rev` and
+# take `lock=`; `t[s, p] = o` and `t.add` read nothing and need none.
+
+# %%
+with L.transaction(by="human:dan") as t:           # no lock=: nothing is read
+    t["game/G2", "court"] = "east"                 # an add on a one predicate
+    t.add("game/G2", "officials", "wu")            # an add on a many predicate
+print("game/G2:", t.rev["game/G2"])

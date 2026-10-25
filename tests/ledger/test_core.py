@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from dvc_dat.ledger import Ledger, LedgerError, LockTimeout, Ref, Rev, Row, bump
+from dvc_dat.ledger import Ledger, LedgerError, LockTimeout, Ref, Rev, Row, Unlocked, bump
 
 
 def write(L, *ops, by="t"):
@@ -213,18 +213,18 @@ def test_unindexed_dotted_typo(L):
 # -- the bracket write (Q29, A34, A43, A44) -------------------------------------------------------
 
 def test_record_write_is_closed_world_over_user_rows(L):
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         t["g"] = {"home": "a", "date": "d"}
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         t["g"] = {"home": "a"}
     assert t.rev["g"] == {"home": "a"}
-    with L.transaction(by="t") as t:
-        t["g"] = t.base["g"]
+    with L.transaction(by="t", lock=10) as t:
+        t["g"] = t.previous_rev["g"]
     assert [r for r in t.rev.rows(since=L.at(t.rev.id - 1)) if not r.subject.startswith("db/tx")] == []
     with pytest.raises(TypeError):
-        with L.transaction(by="t") as t:
+        with L.transaction(by="t", lock=10) as t:
             t["g"] = {"home": "a", "db/doc": "x"}
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         del t["g"]
     assert t.rev.get("g", "home") is None
 
@@ -234,9 +234,9 @@ def test_bracket_many_and_glob_refusals(L):
     with pytest.raises(TypeError):
         with L.transaction(by="t") as t:
             t["g", "o"] = "x"
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         t["g"] = {"o": ["a", "b"]}
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         t["g"] = {"o": ["b", "c"]}
     assert t.rev.all("g", "o") == ["b", "c"]
     with pytest.raises(TypeError):
@@ -264,29 +264,87 @@ def test_db_type_checked_at_commit_and_on_strict_reads(L):
 # -- bump (Q33, A29, A38) -------------------------------------------------------------------------
 
 def test_bump_patch_minor_confirm_and_backwards_add(L):
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         assert bump(t, "schema") == "0.0.1"
     with pytest.raises(ValueError):
-        with L.transaction(by="t") as t:
+        with L.transaction(by="t", lock=10) as t:
             bump(t, "schema", "minor")
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         assert bump(t, "schema", "minor", confirm=lambda a, b: True) == "0.1.0"
     write(L, ("schema", "version", "0.0.9"))
     assert L.at()["schema", "version"] == "0.0.9"
 
 
 def test_bump_code_writes_commit_and_refuses_no_checkout_or_dirty(L, envbox):
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         bump(t, "code/testrepo")
     assert t.rev["code/testrepo"] == {"version": "0.0.1", "commit": "abc1234"}
     with pytest.raises(ValueError, match="no checkout"):
-        with L.transaction(by="t") as t:
+        with L.transaction(by="t", lock=10) as t:
             bump(t, "code/elsewhere")
     envbox.code(dirty=True)
     with pytest.raises(ValueError):
-        with L.transaction(by="t") as t:
+        with L.transaction(by="t", lock=10) as t:
             bump(t, "code/testrepo")
     assert os.environ.get("X_NEVER") is None
+
+
+# -- previous_rev and the lock (DAT 1039) --------------------------------------------------------
+
+def test_previous_rev_unlocked_raises_unlocked(L):
+    with L.transaction(by="t") as t:
+        with pytest.raises(Unlocked, match="the transaction is not locked: previous_rev is the top only under lock="):
+            t.previous_rev
+        t.add("g", "home", "a")
+    assert L.at()["g", "home"] == "a"
+
+
+def test_previous_rev_before_enter_is_a_runtime_error(L):
+    t = L.transaction(by="t", lock=10)
+    with pytest.raises(RuntimeError, match="previous_rev"):
+        t.previous_rev
+
+
+def test_unlocked_bump_raises_unlocked_and_writes_nothing(L):
+    write(L, ("schema", "version", "0.0.1"))
+    top = L.at().id
+    with pytest.raises(Unlocked):
+        with L.transaction(by="t") as t:
+            bump(t, "schema")
+    assert L.at().id == top and L.at()["schema", "version"] == "0.0.1"
+
+
+def test_unlocked_record_write_and_del_raise_unlocked(L):
+    write(L, ("g", "home", "a"))
+    top = L.at().id
+    with pytest.raises(Unlocked):
+        with L.transaction(by="t") as t:
+            t["g"] = {"home": "b"}
+    with pytest.raises(Unlocked):
+        with L.transaction(by="t") as t:
+            del t["g", "home"]
+    with pytest.raises(Unlocked):
+        with L.transaction(by="t") as t:
+            del t["g"]
+    assert L.at().id == top and L.at()["g", "home"] == "a"
+
+
+def test_unlocked_pair_write_and_add_still_commit(L):
+    with L.transaction(by="t") as t:
+        t["g", "home"] = "a"
+        t.add("g", "away", "b")
+    assert L.at()["g"] == {"home": "a", "away": "b"}
+
+
+def test_locked_previous_rev_is_the_top_and_the_helpers_work(L):
+    write(L, ("g", "home", "a"), ("schema", "version", "0.0.1"))
+    before = L.at()
+    with L.transaction(by="t", lock=10) as t:
+        assert t.previous_rev.id == before.id
+        assert t.previous_rev["g"] == before["g"]
+        assert bump(t, "schema") == "0.0.2"
+        t["g"] = {**t.previous_rev["g"], "away": "b"}
+    assert L.at()["g"] == {"home": "a", "away": "b"} and L.at()["schema", "version"] == "0.0.2"
 
 
 def test_close_closes_every_thread_reader_and_a_later_read_reopens(L):

@@ -105,10 +105,10 @@ with L.transaction(by="human:dan") as t:
     t.add("db/pred/team", "db/cardinality", "many")
     t.add("db/pred/video", "db/type", "demo_game.game.Video")
     t.add("db/pred/span", "db/type", "json")
-with L.transaction(by="human:dan") as t:                 # rev 2
+with L.transaction(by="human:dan", lock=10) as t:                 # rev 2
     bump(t, "code/demo-game", "minor",       # 0.0.0 -> 0.1.0
          confirm=lambda old, new: True)
-with L.transaction(by="human:dan") as t:                 # rev 3
+with L.transaction(by="human:dan", lock=10) as t:                 # rev 3
     t["game/G1"] = {"home": "G4", "away": "G5", "court": "north"}
 video_value = Video(b"G1 wide camera, 9000 frames")
 video_value.preds.update(game="G1", camera="wide", span=[0, 9000])

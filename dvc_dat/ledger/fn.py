@@ -155,7 +155,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     vtext = ref_text(dotted(type(value)), value.hash)
     subject = hash_text(canonical({"fn": run.name, "keys": json.loads(run.enc), "trace": run.trace,
                                    "preds": canon, "value": vtext}))
-    if refuse_held and t.base._held(subject, "db/value"):
+    if refuse_held and t._snapshot()._held(subject, "db/value"):
         raise _AlreadySealed(subject)
     t._ensure_code(run.code_subject, run.code_rows)
     extra = [("db/fn", "str:" + run.name), ("db/keys", "json:" + run.enc), ("db/returns", "str:" + run.returns)]
