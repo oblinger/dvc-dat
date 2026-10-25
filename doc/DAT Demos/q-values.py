@@ -230,8 +230,8 @@ sys.path.insert(0, str(repo_path))
 
 # %%
 distance_fn = L.at().load_fn("geometry.distance")
-print("fn:", distance_fn, " code:", distance_fn.code)
-# → fn: geometry.distance@5.3.9  code: geometry@5.3.9
+print("fn:", distance_fn, " code:", repr(distance_fn.code))
+# → fn: geometry.distance@5.3.9  code: <Code geometry@5.3.9>
 hypotenuse_value = distance_fn(a=(3, 4))
 print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 # → result: 5.0  sealed at: <the seal's moment>
@@ -258,8 +258,8 @@ with L.transaction(by="human:dan") as t:
 
 length_fn = L.at().load_fn("plane.measure.length")
 segment_value = length_fn(a=(0, 0), b=(3, 4))
-print("fn:", length_fn, " code:", length_fn.code, " sandboxed:", length_fn.code.sandboxed)
-# → fn: plane.measure.length@2.7.1  code: plane@2.7.1  sandboxed: True
+print("fn:", length_fn, " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
+# → fn: plane.measure.length@2.7.1  code: <Code plane@2.7.1>  sandboxed: True
 print("result:", segment_value.obj)                 # → result: 2.5
 
 # %% [markdown]
@@ -267,23 +267,21 @@ print("result:", segment_value.obj)                 # → result: 2.5
 #
 # Loading a sandboxed function takes a snapshot of the code it runs;
 # `code` is that snapshot, the sandbox: `modules` are the files in
-# it, `version` the name the package gives it. The function's
-# `subject` is its name under the snapshot's hash. Every result
-# records the function as it ran, every module it loaded
+# it, `version` the name the package gives it. The function is looked
+# up by name inside it, and the version it shows is the snapshot's.
+# Every result records the function as it ran, every module it loaded
 # (`plane/__init__.py` too), among its dependencies.
 
 # %%
 sandbox = length_fn.code
-print("sandbox:", sandbox, " version:", sandbox.version, " modules:", sandbox.modules)
-# → sandbox: plane@2.7.1  version: 2.7.1  modules: ['plane/__init__.py', 'plane/measure.py']
-print("function identity:", length_fn.subject)     # → db/fn/plane.measure.length/bab093250d0dffef
+print("sandbox:", repr(sandbox), " version:", sandbox.version, " modules:", sandbox.modules)
+# → sandbox: <Code plane@2.7.1>  version: 2.7.1  modules: ['plane/__init__.py', 'plane/measure.py']
 print("result depends on:", segment_value.dependencies)
 # → {'fn': 'db/fn/plane.measure.length/04ebdaea96da6a7b', 'platform': <this machine>}
 
 # %% [markdown]
-# Change the code, and bump the version with it, and the function is
-# a new one, with a new identity. The old result still names the
-# version that made it.
+# Change the code, and bump the version with it, and the snapshot is
+# a new one. The old result still names the snapshot that made it.
 
 # %%
 measure_path = repo_path / "plane/measure.py"
@@ -291,9 +289,8 @@ measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
 (repo_path / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
 subprocess.run(git_cmd + ["commit", "-q", "-am", "quarter metres"], cwd=repo_path, check=True)
 new_length_fn = L.at().load_fn("plane.measure.length")
-print("new fn:", new_length_fn)                     # → new fn: plane.measure.length@2.7.2
-print("new identity:", new_length_fn.subject)
-# → new identity: db/fn/plane.measure.length/f000d89a5e3f336f
+print("new fn:", new_length_fn, " sandbox:", repr(new_length_fn.code))
+# → new fn: plane.measure.length@2.7.2  sandbox: <Code plane@2.7.2>
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → 1.25
 print("old result still names:", segment_value.dependencies["fn"], " and holds:", segment_value.obj)
 # → db/fn/plane.measure.length/04ebdaea96da6a7b 2.5
