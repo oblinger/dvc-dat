@@ -125,7 +125,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 
 
 ## Ref Interface
-A reference to one value at one moment, named without fetching a byte: the subject and the revision, nothing loaded until `load`. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is the value's name (the alias naming it written latest), else the hash's first 8 hex. Made from a recording `Rev`, it traces its reads into the dependencies like the `Rev` would.
+A reference to one value at one moment, named without fetching a byte: the subject and the revision, nothing loaded until `load`. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is `<Ref label>` and its `str` the bare label: the value's name (the alias naming it written latest), else `#` + the hash's first 8 hex (DAT 1036). Made from a recording `Rev`, it traces its reads into the dependencies like the `Rev` would.
 
 | Ref                      |                                        |
 | ------------------------ | -------------------------------------- |
@@ -150,7 +150,7 @@ A reference to one value at one moment, named without fetching a byte: the subje
     The subject after the alias chain. For a stored hint-less reference, the latest entry holding those bytes as of `rev`. ^subject
 
 **name**`: str`
-    The print name currently associated with the value: its alias at the head (the latest written), else the hash's first 8 hex; what the `Ref` prints. Unique one way: a name points at one value at a time, and re-pointing it moves it to another value; a value may carry several names (`aliases`). `subject` is what the reference resolved to. ^name
+    The print name currently associated with the value: its alias at the head (the latest written), else `#` + the hash's first 8 hex; `str(ref)`. Unique one way: a name points at one value at a time, and re-pointing it moves it to another value; a value may carry several names (`aliases`). `subject` is what the reference resolved to. ^name
 
 **aliases**`: list[str]`
     Every name aliasing the subject as of `rev`. ^aliases
@@ -238,6 +238,18 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 
 ## Value Interface
 The object itself with its provenance on it: what `run` returns, what `seal` stores and what `Ref.load` restores. A subclass says how it becomes bytes (`encode`) and back (`decode`); `@ledger_class(preds=...)` names the preds its values may carry. Until sealed, `preds` is a plain dict filled by whoever builds the value; the seal freezes it and fixes the identity. A subclass's `__init__` need not call `super().__init__`.
+
+**What a value prints as** (DAT 1036). Python's unreadable-object form: `repr` (a bare notebook cell) is `<Type label>`, `str` (`print`, f-strings) the bare label. The label is the value's name at the head, else `#` + the hash's first 8 hex, like a short git sha; a draft has no label. A `Ref` prints the same label as `<Ref …>`, a `Fn` its name and `@` + its version (the hash ending its `db/fn/<name>/<hash>` subject).
+
+```python
+v                    # <Video video/G1>     saved, named
+v                    # <Video #2db69ce1>    saved, unnamed
+str(v)               # 'video/G1'  /  '#2db69ce1'
+v                    # <Clip sealed #2db69ce1>   v.seal(), saved nowhere
+v                    # <Clip draft>         unsealed; str the same
+Ref(rev, "video/G1") # <Ref video/G1>
+f                    # <Fn clips.clip @bab09325>;  str(f) 'clips.clip'
+```
 
 | Value                      |                                                   |
 | -------------------------- | ------------------------------------------------- |
@@ -361,7 +373,7 @@ A `Value` that is a folder: it encodes as its content manifest, `{"files": {relp
 
 
 ## Fn Interface
-A value function resolved at one revision: a frozen dataclass made by `Rev.load_fn`, never by hand. Calling it is `run`. Its mode is `unsandboxed` (imported in this process) or `sandbox` (loaded from a mount and run in a worker).
+A value function resolved at one revision: a frozen dataclass made by `Rev.load_fn`, never by hand. Calling it is `run`. It prints as `<Fn clips.clip @bab09325>`, `@` + the first 8 hex of its version (its subject's hash); `str` is the name. Its mode is `unsandboxed` (imported in this process) or `sandbox` (loaded from a mount and run in a worker).
 
 | Fn | |
 | --- | --- |
@@ -563,7 +575,7 @@ def cut(rev, *, game: str, version: str) -> Cut:
     return out
 ```
 
-A function that declares `path: Path` is given a fresh folder under `$DAT_WORK` (default `~/.cache/dvc-dat/work`); it writes a dat there and returns `Dat(path)`, and the seal moves the files into the art store. The result's name is the call's `path=` (relative to the data folder, `<art store>/dats`), else the parameter's default as a path template expanded with the keys, else `anonymous/Dat{unique}`; its folder at the name is a view, hardlinks into the store, rebuilt as a new folder when the name moves. A value has one name, an alias not bound into its hash, settable as `Value(name=...)` or by assigning `v.name`; a name names one value; a value prints as its name, else a hash prefix.
+A function that declares `path: Path` is given a fresh folder under `$DAT_WORK` (default `~/.cache/dvc-dat/work`); it writes a dat there and returns `Dat(path)`, and the seal moves the files into the art store. The result's name is the call's `path=` (relative to the data folder, `<art store>/dats`), else the parameter's default as a path template expanded with the keys, else `anonymous/Dat{unique}`; its folder at the name is a view, hardlinks into the store, rebuilt as a new folder when the name moves. A value has one name, an alias not bound into its hash, settable as `Value(name=...)` or by assigning `v.name`; a name names one value; a value prints as its name, else `#` + a hash prefix (`<Video video/G1>`, `<Video #2db69ce1>`).
 
 
 

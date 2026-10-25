@@ -368,6 +368,15 @@ class Fn:
     _returns: str = field(repr=False, compare=False, default="")
     _info: Dict[str, Any] = field(repr=False, compare=False, default_factory=dict)
 
+    def __repr__(self) -> str:
+        """``<Fn clips.clip @bab09325>``: the name, then ``@`` + the first 8 hex of its version, the
+        hash ending its ``db/fn/<name>/<hash>`` subject (the code closure and the mounts) (DAT 1036)."""
+        return f"<Fn {self.name} @{self.subject.rpartition('/')[2][:8]}>"
+
+    def __str__(self) -> str:
+        """The bare name: ``clips.clip``."""
+        return self.name
+
     def _rows(self, subject: Optional[str] = None, modules: Optional[Dict[str, str]] = None) -> List[Tuple[str, str]]:
         """The ``db/fn/<name>/<hash>`` rows (A15, A31)."""
         mh = mounts_hash(self._rev._plain()) if self.mode == "sandbox" else None

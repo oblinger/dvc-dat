@@ -161,9 +161,9 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # %%
 # !just run demo_game.game.cut game=G1 version=1.5.3
 # → targets: .dat/targets.just (1 command(s))
-# → ran  <8 hex>  game=G1 version=1.5.3 video=… team=["G6", "G5"]
+# → ran  #<8 hex>  game=G1 version=1.5.3 video=… team=["G6", "G5"]
 # !just run demo_game.game.cut game=G1 version=1.5.3
-# → hit  <8 hex>  game=G1 version=1.5.3 video=… team=["G6", "G5"]
+# → hit  #<8 hex>  game=G1 version=1.5.3 video=… team=["G6", "G5"]
 
 # %% [markdown]
 # Found means computed before from the same inputs by the same code;
@@ -222,10 +222,10 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 
 # %%
 # !just values game=G1
-# → video/G1  game=G1 camera=wide span=[0, 9000]
-# → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
-# → game/G1   game=G1 version=1.5.4 video=video/G1 team=G6,G5
-# → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G6,G5
+# → video/G1   game=G1 camera=wide span=[0, 9000]
+# → #<8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
+# → game/G1    game=G1 version=1.5.4 video=video/G1 team=G6,G5
+# → #<8 hex>   game=G1 version=1.5.3 video=video/G1 team=G6,G5
 # → anonymous/Dat game=G1 stage=detect bins=16 metrics.count=40 …
 # → anonymous/Dat_2 game=G1 stage=track metrics.count=12 …
 # → model/prod game=G1 stage=model metrics.count=12 … gameset=normie
@@ -240,7 +240,7 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 
 # %%
 # !just values span:='[0, 9000]'
-# → video/G1  game=G1 camera=wide span=[0, 9000]
+# → video/G1   game=G1 camera=wide span=[0, 9000]
 
 # %% [markdown]
 # The same listing, matched on a JSON-valued pred: it is
@@ -255,9 +255,9 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 
 # %%
 # !just values kind=Cut game=G1
-# → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
-# → game/G1   game=G1 version=1.5.4 video=video/G1 team=G6,G5
-# → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G6,G5
+# → #<8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
+# → game/G1    game=G1 version=1.5.4 video=video/G1 team=G6,G5
+# → #<8 hex>   game=G1 version=1.5.3 video=video/G1 team=G6,G5
 
 # %% [markdown]
 # It is `L.at().values(kind=Cut, game="G1")`.
@@ -271,7 +271,7 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 
 # %%
 # !just value game=G1 version=1.5.4
-# → game/G1   game=G1 version=1.5.4 video=video/G1 team=G6,G5
+# → game/G1    game=G1 version=1.5.4 video=video/G1 team=G6,G5
 
 # %% [markdown]
 # It is `L.at().value(game="G1", version="1.5.4")`.
@@ -281,7 +281,7 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 
 # %%
 # !just value game=G1
-# → Multiple: game=G1 matches 7: video/G1, <8 hex>, game/G1, …
+# → Multiple: game=G1 matches 7: video/G1, #<8 hex>, game/G1, …
 
 # %% [markdown]
 # The refusal when several match: `L.at().value(game="G1")` raising
@@ -296,9 +296,9 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # →   3  human:dan  home       G4
 # →   3  human:dan  away       G5
 # →   3  human:dan  court      north
-# →   6  human:dan  db/alias   <the 1.5.3 cut, 8 hex>
+# →   6  human:dan  db/alias   #<the 1.5.3 cut, 8 hex>
 # →   7  human:dan  home       G6
-# →   9  human:dan  db/alias   <the 1.5.4 cut, 8 hex>
+# →   9  human:dan  db/alias   #<the 1.5.4 cut, 8 hex>
 # →  10  human:dan  gameset    normie
 
 # %% [markdown]
@@ -315,11 +315,11 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 
 # %%
 # !just why game/G1
-# → game/G1: <8 hex>, matches the head
+# → game/G1: #<8 hex>, matches the head
 # → dependencies: code/demo-game <8 hex>, fn <8 hex>,
 # →   game/G1 away G5, game/G1 home G6, platform darwin-arm64-py3.11,
 # →   query {"game":"G1","kind":"demo_game.game.Video"} -> 1 value(s)
-# → since <8 hex>, its last target: game/G1 home G4 -> G6
+# → since #<8 hex>, its last target: game/G1 home G4 -> G6
 
 # %% [markdown]
 # The dependencies are what it read when made; `matches` says whether each
@@ -357,9 +357,9 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 
 # %%
 # !just alias prod {cut_153_value.subject[:8]}
-# → prod: (none) -> <the 1.5.3 cut, 8 hex>
+# → prod: (none) -> #<the 1.5.3 cut, 8 hex>
 # !just alias prod {cut_154_value.subject[:8]}
-# → prod: <the 1.5.3 cut, 8 hex> -> <the 1.5.4 cut, 8 hex>
+# → prod: #<the 1.5.3 cut, 8 hex> -> #<the 1.5.4 cut, 8 hex>
 
 # %% [markdown]
 # It prints what the name pointed at before. It is `rev.get("prod", "db/alias")`,

@@ -169,7 +169,7 @@ print(dict(sorted(loaded_dat.preds.items())))
 #    "metrics.score": "0.494", "stage": "detect"}
 print(repr(loaded_dat.spec["bins"]),
       repr(loaded_dat.preds["bins"]))          # → 16 '16'
-print(rev.values(kind=StageDat, game="G1"))    # → [detect/G1]
+print(rev.values(kind=StageDat, game="G1"))    # → [<StageDat detect/G1>]
 
 # %% [markdown]
 # A dat keeps `_spec_` and `_result_` apart on disk; its preds merge
@@ -470,7 +470,7 @@ print(len(proof_refs))                         # → 1
 
 # %%
 print(rev.refs(kind=StageDat, stage="model", gameset="normie"))
-# → [anonymous/Dat_<n>, anonymous/Dat_<n>]: G1 and G2
+# → [<Ref anonymous/Dat_<n>>, <Ref …>]: G1 and G2
 print(rev.select(("game", "metrics.score"), kind=StageDat,
                  stage="model", gameset="pro"))
 # → [("G3", "0.958"), ("G3", "0.983")]: the run and the hand run

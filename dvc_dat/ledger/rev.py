@@ -115,11 +115,12 @@ def name_of(rev: "Rev", subject: str) -> Optional[str]:
 
 
 def display_name(ledger: "Ledger", subject: str) -> str:
-    """A value prints as its name at the head, else the hash's first 8 (Q36, superseding A25)."""
+    """A value's label: its name at the head, else ``#`` + the hash's first 8, like a short git sha
+    (Q36, DAT 1036)."""
     name = name_of(ledger.at(), subject)
     if name is not None:
         return name
-    return subject[:8] if is_hash(subject) else subject
+    return "#" + subject[:8] if is_hash(subject) else subject
 
 
 class Rev:
@@ -674,8 +675,9 @@ class Ref:
 
     @property
     def name(self) -> str:
-        """The print name of this value: its alias at the head (the latest written), else the hash's first 8 hex."""
-        return repr(self)
+        """The print name of this value: its alias at the head (the latest written), else ``#`` + the
+        hash's first 8 hex (DAT 1036); ``str(ref)``."""
+        return str(self)
 
     def __setattr__(self, k: str, v: Any) -> None:
         raise AttributeError("a Ref is frozen")
@@ -751,11 +753,16 @@ class Ref:
     def __hash__(self) -> int:
         return hash(self.subject if self.subject is not None else self._text())
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
+        """The bare label: the name at the head, else ``#`` + the hash's first 8 (DAT 1036)."""
         s = self.subject
         if s is None:
-            return f"ref:{self._cls}:{(self._hash or '')[:8]}"
+            return "#" + (self._hash or "")[:8]
         return display_name(self._p.ledger, s)
+
+    def __repr__(self) -> str:
+        """``<Ref video/G1>``, ``<Ref #2db69ce1>`` (DAT 1036)."""
+        return f"<Ref {self}>"
 
     def __reduce__(self) -> Any:
         raise TypeError("a Ref is bound to an open ledger and does not pickle")

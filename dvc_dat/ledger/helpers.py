@@ -26,7 +26,7 @@ def bump(t: Transaction, subject: str, part: str = "patch", *,
     held = t.base._held(subject, "db/alias")
     if held:
         raise TypeError(f"{subject} is an alias; seal a new value and re-point (a value's version is a pred; "
-                        f"{subject} names {show(held[0].obj)[:8]})")
+                        f"{subject} names #{show(held[0].obj)[:8]})")
     if part not in ("patch", "minor", "major"):
         raise ValueError(f"part is 'patch', 'minor' or 'major', not {part!r}")
     old = t.base.get(subject, "version", default="0.0.0")

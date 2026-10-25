@@ -101,9 +101,9 @@ g2_video.preds.update(game="G2", camera="wide")
 with L.transaction(by="human:dan") as t:
     g2_subject = g2_video.seal(t, name="video/G2")
 rev2 = L.at()
-print("camera=wide:", rev2.values(camera="wide"))           # → [video/G1, video/G2]
+print("camera=wide:", rev2.values(camera="wide"))           # → [<Video video/G1>, <Video video/G2>]
 print("game=G1, camera=wide:", rev2.value(game="G1", camera="wide")) # → video/G1
-print("every Video:", rev2.refs(kind=Video))                # → [video/G1, video/G2]
+print("every Video:", rev2.refs(kind=Video))                # → [<Ref video/G1>, <Ref video/G2>]
 
 # %% [markdown]
 # `values` loads every match, `value` exactly one, `refs` the
@@ -123,9 +123,9 @@ with L.transaction(by="human:dan") as t:
 rev3 = L.at()
 with L.transaction(by="human:dan", why="G2 reviewed") as t:
     t[g2_subject, "status"] = "reviewed"
-print("raw, before the update:", rev3.values(status="raw"))        # → [video/G2]
+print("raw, before the update:", rev3.values(status="raw"))        # → [<Video video/G2>]
 print("raw, after:", L.at().values(status="raw"))      # → []
-print("reviewed, after:", L.at().values(status="reviewed")) # → [video/G2]
+print("reviewed, after:", L.at().values(status="reviewed")) # → [<Video video/G2>]
 
 # %% [markdown]
 # ### Values are immutable; their names, aliases and preds are not

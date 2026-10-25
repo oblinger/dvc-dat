@@ -59,6 +59,13 @@ def short_kind(rev, name):
     return kinds[0]
 
 
+def short(subject):
+    """A subject as a value prints it (DAT 1036): a 64-hex hash as ``#`` + its first 8, else as is."""
+    if len(subject) == 64 and all(c in "0123456789abcdef" for c in subject):
+        return "#" + subject[:8]
+    return subject
+
+
 def show(rev, v):
     def text(p, o):
         if isinstance(o, list) and rev._card(p) == "many":
@@ -67,7 +74,7 @@ def show(rev, v):
             return json.dumps(o)
         return str(o)
     preds = " ".join(f"{p}={text(p, o)}" for p, o in v.preds.items())
-    return f"{str(v):<9} {preds}"
+    return f"{str(v):<10} {preds}"
 
 
 def query(rev, args):
@@ -93,7 +100,7 @@ def history(args):
     print(f"{'rev':>3}  {'by':<10} {'predicate':<10} object")
     for row in rev.rows():
         if row.subject == args[0]:
-            obj = row.object if not (isinstance(row.object, str) and len(row.object) == 64) else row.object[:8]
+            obj = short(row.object) if isinstance(row.object, str) else row.object
             sign = "" if row.added else "-"
             print(f"{row.rev.id:>3}  {rev[row.rev.tx, 'db/by']:<10} {sign + row.predicate:<10} {obj}")
 
@@ -118,7 +125,7 @@ def why(args):
     rev = Ledger().at()
     name, rest = args[0], parse(args[1:])
     v = rev.load(name)
-    print(f"{name}: {v.subject[:8]}, {'matches' if v.matches(rev) else 'does not match'} the head")
+    print(f"{name}: {short(v.subject)}, {'matches' if v.matches(rev) else 'does not match'} the head")
     print("dependencies: " + ", ".join(f"{brief(k)} {brief(t)}" for k, t in sorted(v.dependencies.items())
                                 if not k.startswith("ref:")))
     prev = rest.get("against")
@@ -128,7 +135,7 @@ def why(args):
     if prev is not None:
         other = rev.load(prev)
         moved = ", ".join(f"{k} {a} -> {b}" for k, (b, a) in v.diff(other).items())
-        print(f"since {other.subject[:8]}, its last target: {moved or 'nothing moved'}")
+        print(f"since {short(other.subject)}, its last target: {moved or 'nothing moved'}")
 
 
 def annotate(args):
@@ -148,7 +155,7 @@ def alias(args):
     old = rev.get(name, "db/alias")
     with L.transaction(by=BY) as t:
         t.add(name, "db/alias", subject)
-    print(f"{name}: {old[:8] if old else '(none)'} -> {subject[:8]}")
+    print(f"{name}: {short(old) if old else '(none)'} -> {short(subject)}")
 
 
 def index(args):

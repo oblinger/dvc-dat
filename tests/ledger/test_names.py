@@ -18,12 +18,12 @@ def seal(L, v, **kw):
 def test_a_value_has_one_name_and_a_name_one_value(L):
     a = Value.Blob("a", name="x/a")
     s = seal(L, a)
-    assert a.name == "x/a" and repr(a) == "x/a" and Ref(L.at(), "x/a").subject == s
+    assert a.name == "x/a" and repr(a) == "<Blob x/a>" and str(a) == "x/a" and Ref(L.at(), "x/a").subject == s
     a.name = "x/b"                                           # renamed: one name at a time
     assert a.name == "x/b" and Ref(L.at(), "x/a").hash is None and Ref(L.at(), "x/b").subject == s
     b = Value.Blob("b")
     seal(L, b, name="x/b")                                  # the name moves to another value
-    assert b.name == "x/b" and a.name is None and repr(a) == s[:8]
+    assert b.name == "x/b" and a.name is None and repr(a) == f"<Blob #{s[:8]}>" and str(a) == "#" + s[:8]
     assert L.at().load(s).obj == "a"                         # still reachable by hash
     with pytest.raises(ValueError):
         Value.Blob("c", name="/abs/name")

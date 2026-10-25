@@ -341,13 +341,33 @@ class Value:
         self.__dict__["_loaded_as"] = loaded_as
         self.__dict__.pop("_name", None)            # saved: the name is the ledger's now
 
-    def __repr__(self) -> str:
+    def _label(self) -> Optional[str]:
+        """What it prints as (DAT 1036): its name at the head, else ``#`` + the hash's first 8;
+        ``None`` for a draft, which has no identity yet."""
+        if not self.sealed:
+            return None
         ledger = self.rev.ledger if self.rev is not None else self.__dict__.get("_ledger")
-        if self.sealed and self.subject and ledger is not None:
+        if self.subject and ledger is not None:
             from .rev import display_name
 
             return display_name(ledger, self.subject)
-        return f"<{type(self).__name__} {'sealed, saved nowhere' if self.sealed else 'unsealed'}>"
+        return "#" + self.hash[:8]
+
+    def _saved(self) -> bool:
+        ledger = self.rev.ledger if self.rev is not None else self.__dict__.get("_ledger")
+        return bool(self.sealed and self.subject and ledger is not None)
+
+    def __repr__(self) -> str:
+        """``<Video video/G1>`` saved, ``<Video sealed #2db69ce1>`` sealed locally, ``<Video draft>``."""
+        label = self._label()
+        if label is None:
+            return f"<{type(self).__name__} draft>"
+        return f"<{type(self).__name__} {label if self._saved() else 'sealed ' + label}>"
+
+    def __str__(self) -> str:
+        """The bare label (``video/G1``, ``#2db69ce1``); a draft has none and prints as its repr."""
+        label = self._label()
+        return repr(self) if label is None else label
 
 
 def _now() -> str:
@@ -410,9 +430,6 @@ class Blob(Value):
     @classmethod
     def decode(cls, data: bytes, store: "ArtStore") -> "Blob":
         return cls(pickle.loads(data))
-
-    def __repr__(self) -> str:
-        return super().__repr__() if self.sealed else f"Value.Blob({self.obj!r})"
 
 
 class Table(Value):

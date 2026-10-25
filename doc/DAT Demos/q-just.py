@@ -100,8 +100,8 @@ with L.transaction(by="human:dan") as t:
 # !just run demo_game.game.cut game=G1 version=1.5.3
 # !just run demo_game.game.cut game=G1 version=1.5.3
 # → targets: .dat/targets.just (1 command(s))
-# → ran  <8 hex>  game=G1 version=1.5.3 video=video/G1 team=["G6", "G5"]
-# → hit  <8 hex>  game=G1 version=1.5.3 video=video/G1 team=["G6", "G5"]
+# → ran  #<8 hex>  game=G1 version=1.5.3 video=video/G1 team=["G6", "G5"]
+# → hit  #<8 hex>  game=G1 version=1.5.3 video=video/G1 team=["G6", "G5"]
 
 # %% [markdown]
 # A spec is a YAML file naming the function (`main`) and its keys;
@@ -132,16 +132,16 @@ with L.transaction(by="human:dan") as t:
 
 # %%
 # !just values kind=Cut game=G1
-# → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
-# → game/G1   game=G1 version=1.5.4 video=video/G1 team=G6,G5
-# → <8 hex>   game=G1 version=1.5.3 video=video/G1 team=G6,G5
+# → #<8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
+# → game/G1    game=G1 version=1.5.4 video=video/G1 team=G6,G5
+# → #<8 hex>   game=G1 version=1.5.3 video=video/G1 team=G6,G5
 
 # %% [markdown]
 # `just value` is the one value that matches.
 
 # %%
 # !just value game=G1 version=1.5.4
-# → game/G1   game=G1 version=1.5.4 video=video/G1 team=G6,G5
+# → game/G1    game=G1 version=1.5.4 video=video/G1 team=G6,G5
 
 # %% [markdown]
 # ## History and why
@@ -156,16 +156,16 @@ with L.transaction(by="human:dan") as t:
 # →   3  human:dan  home       G4
 # →   3  human:dan  away       G5
 # →   3  human:dan  court      north
-# →   6  human:dan  db/alias   <the 1.5.3 cut, 8 hex>
+# →   6  human:dan  db/alias   #<the 1.5.3 cut, 8 hex>
 # →   7  human:dan  home       G6
-# →   9  human:dan  db/alias   <the 1.5.4 cut, 8 hex>
+# →   9  human:dan  db/alias   #<the 1.5.4 cut, 8 hex>
 # →   9  human:dan  gameset    normie
 
 # %%
 # !just why game/G1
-# → game/G1: <8 hex>, matches the head
+# → game/G1: #<8 hex>, matches the head
 # → dependencies: code/demo-game <8 hex>, fn <8 hex>, game/G1 away G5, game/G1 home G6, platform <platform>, query {"game":"G1","kind":"demo_game.game.Video"} -> 1 value(s)
-# → since <8 hex>, its last target: game/G1 home G4 -> G6
+# → since #<8 hex>, its last target: game/G1 home G4 -> G6
 
 # %% [markdown]
 # ## Updating
@@ -180,7 +180,7 @@ with L.transaction(by="human:dan") as t:
 # !just alias prod {cut_154_value.subject[:8]}
 # !just index game
 # → game/G1 texture=hardwood
-# → prod: (none) -> <the 1.5.4 cut, 8 hex>
+# → prod: (none) -> #<the 1.5.4 cut, 8 hex>
 # → game: indexed; 7 subjects hold it
 
 # %% [markdown]
