@@ -81,7 +81,7 @@ $ cd analysis/scratch && dat mymodule.train.baseline lr=0.4
 ```yaml
 # Written by the fork, expanded once; never rewritten
 dat:
-  name: runs/2026-09/baseline_2
+  name: runs/{YYYY}-{MM}/baseline{unique}   # the template, as given
   do: mymodule.train.run
   kwargs:
     epochs: 10
@@ -102,7 +102,7 @@ dat:
   sha256: sha256:7c0a…        # this dat's own, stamped by save
 ```
 
-- **The spec on disk is the record.** Every `{…}` in the template was expanded once, when the fork created the folder — `name` is the folder it landed in, `notes` is the moment it was made, `lr: 0.5` is what ran. Nothing is expanded again, and nothing is re-supplied to reproduce it.
+- **The spec on disk is the record.** Every `{…}` in the template was expanded once, when the fork created the folder — `notes` is the moment it was made, `lr: 0.5` is what ran; `name` alone keeps its template, and the folder it filled to (`runs/2026-09/baseline_2`) is the dat's name. Nothing is expanded again, and nothing is re-supplied to reproduce it.
 - **`_result_.yaml` carries no arguments** — only what the function stored, plus when it ran, how long, which code, what it loaded, and its own content hash ([DAT Manager API](DAT%20Manager%20API.md) § What a run records).
 - **A run saves nothing; `save()` seals, once.** `run` ends with `dat.save()`, which seals the dat when the run returns; a save anywhere else adds the dependency `$MANUAL` ([DAT Class API](DAT%20Class%20API.md) § save).
 - **Arguments never ride beside a spec.** `do(d)` re-runs a dat only while it is open; `do(d, lr=0.01)` forks — the copy lands beside its parent as `baseline_2_2` — and the dat on disk is never rewritten.
