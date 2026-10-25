@@ -80,10 +80,10 @@ from demo_game.game import PlainVideo
 video_value = PlainVideo(b"G1 wide camera, 9000 frames")
 with L.transaction(by="human:dan") as t:
     video_subject = video_value.seal(t, name="video/G1")
-print(video_value)
-# → video/G1
-print(video_subject)
-# → 64 hex: from the content
+print("video:", repr(video_value))
+# → video: <PlainVideo video/G1>
+print("subject:", video_subject)
+# → subject: <64 hex>: from the content
 
 # %% [markdown]
 # `v.seal(t, name=…)` stores the value and names it in one
@@ -97,13 +97,13 @@ print(video_subject)
 rev = L.at()
 by_name = rev.load("video/G1")
 by_hash = rev.load(video_subject)
-print(type(by_name).__name__, by_name.frames)
-# → PlainVideo b'G1 wide camera, 9000 frames'
-print(by_name.subject == by_hash.subject == video_subject)
-# → True
+print("type:", type(by_name).__name__, " frames:", by_name.frames)
+# → type: PlainVideo  frames: b'G1 wide camera, 9000 frames'
+print("same subject:", by_name.subject == by_hash.subject == video_subject)
+# → same subject: True
 video_ref = Ref(rev, video_subject)
-print(video_ref, video_ref.type)
-# → video/G1 <class 'demo_game.game.PlainVideo'>
+print("ref:", repr(video_ref), " type:", video_ref.type)
+# → ref: <Ref video/G1>  type: <class 'demo_game.game.PlainVideo'>
 
 # %% [markdown]
 # `load` takes either and decodes the bytes into the class they were
@@ -117,12 +117,12 @@ with L.transaction(by="human:dan") as t:
     t.add("raw/G1/wide-camera", "db/alias", video_subject)
 rev = L.at()
 camera_ref = Ref(rev, "raw/G1/wide-camera")
-print(camera_ref.subject == video_subject)
-# → True
-print(sorted(camera_ref.aliases))
-# → ['raw/G1/wide-camera', 'video/G1']
-print(camera_ref.name)
-# → raw/G1/wide-camera: the alias written latest
+print("same subject:", camera_ref.subject == video_subject)
+# → same subject: True
+print("aliases:", sorted(camera_ref.aliases))
+# → aliases: ['raw/G1/wide-camera', 'video/G1']
+print("name:", camera_ref.name)
+# → name: raw/G1/wide-camera: the alias written latest
 
 # %% [markdown]
 # A name is an alias. A value has every alias pointing at it
@@ -137,10 +137,10 @@ print(camera_ref.name)
 # names.
 
 # %%
-print(rev["video/G1"])
-# → {'db/alias': '<the video's subject, 64 hex>'}
-print(rev.load("video/G1").subject == video_subject)
-# → True: load follows the row
+print("rows:", rev["video/G1"])
+# → rows: {'db/alias': '<the video's subject, 64 hex>'}
+print("same subject:", rev.load("video/G1").subject == video_subject)
+# → same subject: True: load follows the row
 
 # %% [markdown]
 # `rev["video/G1"]` is literal: the alias's own rows, its `db/alias`
@@ -157,12 +157,12 @@ retake_video = PlainVideo(b"G1 wide camera, retake, 9100 frames")
 with L.transaction(by="human:dan", why="the retake") as t:
     retake_subject = retake_video.seal(t, name="video/G1")
 rev = L.at()
-print(rev.load("video/G1").frames)
-# → b'G1 wide camera, retake, 9100 frames'
-print(rev.load(video_subject).frames)
-# → b'G1 wide camera, 9000 frames': the old one, by its hash
-print(sorted(Ref(rev, video_subject).aliases))
-# → ['raw/G1/wide-camera']: video/G1 moved
+print("by name:", rev.load("video/G1").frames)
+# → by name: b'G1 wide camera, retake, 9100 frames'
+print("by hash:", rev.load(video_subject).frames)
+# → by hash: b'G1 wide camera, 9000 frames': the old one
+print("old aliases:", sorted(Ref(rev, video_subject).aliases))
+# → old aliases: ['raw/G1/wide-camera']: video/G1 moved
 
 # %% [markdown]
 # A value never changes; an alias moves.
@@ -208,12 +208,12 @@ wide_video.preds.update(game="G1", camera="wide", span=[0, 9000])
 with L.transaction(by="human:dan") as t:
     wide_video.seal(t, name="video/G1",
                     provenance="import:archive")
-print(wide_video)
-# → video/G1
-print(wide_video.subject[:8])
-# → <8 hex>
-print(wide_video.preds)
-# → {'game': 'G1', 'camera': 'wide', 'span': [0, 9000]}
+print("video:", repr(wide_video))
+# → video: <Video video/G1>
+print("subject:", wide_video.subject[:8])
+# → subject: <8 hex>
+print("preds:", wide_video.preds)
+# → preds: {'game': 'G1', 'camera': 'wide', 'span': [0, 9000]}
 
 # %% [markdown]
 # Preds are set on the object before it is stored, by whoever builds
@@ -267,14 +267,14 @@ for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
 
 # %%
 rev = L.at()
-print(rev.values(game="G1"))
-# → [<Video video/G1>]
-print(rev.values(kind=Video))
-# → [<Video video/G1>, <Video video/G2>]
-print(rev.values(camera="wide"))
-# → [<Video video/G1>, <Video video/G2>]
-print(rev.value(game="G1", camera="wide"))
-# → video/G1
+print("game G1:", rev.values(game="G1"))
+# → game G1: [<Video video/G1>]
+print("videos:", rev.values(kind=Video))
+# → videos: [<Video video/G1>, <Video video/G2>]
+print("wide:", rev.values(camera="wide"))
+# → wide: [<Video video/G1>, <Video video/G2>]
+print("one value:", repr(rev.value(game="G1", camera="wide")))
+# → one value: <Video video/G1>
 
 # %% [markdown]
 # `value` means exactly one. Notice it refuses when two match,
@@ -293,19 +293,19 @@ except Multiple as e:
 
 # %%
 video_refs = rev.refs(kind=Video)
-print(video_refs)
-# → [<Ref video/G1>, <Ref video/G2>]
-print(type(video_refs[0]).__name__)
-# → Ref: no bytes fetched
+print("refs:", video_refs)
+# → refs: [<Ref video/G1>, <Ref video/G2>]
+print("type:", type(video_refs[0]).__name__)
+# → type: Ref: no bytes fetched
 [g1_ref] = rev.refs(game="G1")
-print(g1_ref.preds)
-# → {'game': 'G1', 'camera': 'wide', 'span': [0, 9000]}
-print(g1_ref.sealed_at)
-# → Rev(7)
-print(max(video_refs, key=lambda r: r.sealed_at.id))
-# → video/G2
-print(rev.select(("game", "span"), kind=Video))
-# → [('G1', [0, 9000]), ('G2', [0, 8400])]
+print("preds:", g1_ref.preds)
+# → preds: {'game': 'G1', 'camera': 'wide', 'span': [0, 9000]}
+print("sealed at:", g1_ref.sealed_at)
+# → sealed at: Rev(7)
+print("latest:", repr(max(video_refs, key=lambda r: r.sealed_at.id)))
+# → latest: <Ref video/G2>
+print("spans:", rev.select(("game", "span"), kind=Video))
+# → spans: [('G1', [0, 9000]), ('G2', [0, 8400])]
 
 # %% [markdown]
 # `values` is the main way into the value table: a where clause
@@ -334,8 +334,8 @@ print(rev.select(("game", "span"), kind=Video))
 # On the object, a sealed value's `preds` is read-only.
 
 # %%
-print(wide_video.sealed)
-# → <YYYY-MM-DDTHH:MM:SSZ>: the seal's moment
+print("sealed:", wide_video.sealed)
+# → sealed: <YYYY-MM-DDTHH:MM:SSZ>: the seal's moment
 try:
     wide_video.preds["camera"] = "tele"
 except TypeError as e:
@@ -378,8 +378,8 @@ except Undeclared as e:
 # taken out of the same object.
 
 # %%
-print(tele_video.sealed)
-# → None: nothing was written
+print("sealed:", tele_video.sealed)
+# → sealed: None: nothing was written
 del tele_video.preds["lens"]
 
 # %% [markdown]
@@ -426,12 +426,12 @@ with L.transaction(by="human:dan", why="format survey") as t:
     for video_ref in L.at().refs(kind=Video):
         t.add(video_ref.subject, "resolution", "1080p")
 rev = L.at()
-print(Ref(rev, "video/G1").preds["resolution"])
-# → 1080p
-print(len(rev.values(kind=Video, resolution="1080p")))
-# → 2
-print(rev[wide_video.subject, "db/preds"])
-# → ['game', 'camera', 'span']: the seal's own, unchanged
+print("resolution:", Ref(rev, "video/G1").preds["resolution"])
+# → resolution: 1080p
+print("1080p videos:", len(rev.values(kind=Video, resolution="1080p")))
+# → 1080p videos: 2
+print("seal's preds:", rev[wide_video.subject, "db/preds"])
+# → seal's preds: ['game', 'camera', 'span']: the seal's own, unchanged
 
 # %% [markdown]
 # `resolution` is not a pred the seal wrote, so it is annotation:
@@ -450,8 +450,8 @@ tele_video.preds["camera"] = "tlee"              # a typo
 with L.transaction(by="human:dan") as t:
     wrong_subject = tele_video.seal(t, name="video/G1-tele",
                                     provenance="import:archive")
-print(Ref(L.at(), "video/G1-tele").preds["camera"])
-# → tlee
+print("camera:", Ref(L.at(), "video/G1-tele").preds["camera"])
+# → camera: tlee
 
 # %% [markdown]
 # `camera` is a pred the seal wrote, so it cannot be edited. The fix
@@ -465,13 +465,13 @@ with L.transaction(by="human:dan", why="camera typo") as t:
     right_subject = fixed_video.seal(t, name="video/G1-tele",
                                      provenance="import:archive")
 rev = L.at()
-print(right_subject != wrong_subject,
-      fixed_video.hash == tele_video.hash)
-# → True True
-print(Ref(rev, "video/G1-tele").preds["camera"])
-# → tele
-print(rev.refs(kind=Video, camera="tlee"))
-# → [<Ref #<8 hex>>]
+print("new subject:", right_subject != wrong_subject,
+      " same bytes:", fixed_video.hash == tele_video.hash)
+# → new subject: True  same bytes: True
+print("camera:", Ref(rev, "video/G1-tele").preds["camera"])
+# → camera: tele
+print("tlee refs:", rev.refs(kind=Video, camera="tlee"))
+# → tlee refs: [<Ref #<8 hex>>]
 
 # %% [markdown]
 # The same bytes make a new subject, sharing one blob. The wrong
@@ -488,12 +488,12 @@ trimmed_video = Video(b"G1 wide camera, frames 600-9000")
 trimmed_video.preds.update(game="G1", camera="wide", span=[600, 9000])
 with L.transaction(by="human:dan") as t:
     trimmed_video.seal(t, deps=[wide_video])
-print(trimmed_video)
-# → #<8 hex>: no alias yet
+print("trimmed:", repr(trimmed_video))
+# → trimmed: <Video #<8 hex>>: no alias yet
 with L.transaction(by="human:dan", why="warm-up trimmed") as t:
     t.add("video/G1", "db/alias", trimmed_video.subject)
-print(trimmed_video, wide_video)
-# → video/G1 #<8 hex>
+print("trimmed:", repr(trimmed_video), " wide:", repr(wide_video))
+# → trimmed: <Video video/G1>  wide: <Video #<8 hex>>
 
 # %% [markdown]
 # The new version is sealed as a new value, then the alias moves to
@@ -539,8 +539,8 @@ def git(*args: str) -> str:
     return done.stdout.strip()
 
 
-print(git("init"))
-# → Initialized empty Git repository in .../values-demo/geometry/.git/
+print("git:", git("init"))
+# → git: Initialized empty Git repository in .../values-demo/geometry/.git/
 sys.path.insert(0, str(scratch_repo_path))
 
 # %% [markdown]
@@ -566,8 +566,8 @@ def distance(rev, a, b=ORIGIN, *, metric="euclidean") -> float:
 (scratch_repo_path / "geometry.py").write_text(geometry_source)
 git("add", "geometry.py")
 git("commit", "-m", "geometry: distance")
-print(git("log", "--oneline"))
-# → <7 hex> geometry: distance
+print("log:", git("log", "--oneline"))
+# → log: <7 hex> geometry: distance
 
 # %% [markdown]
 # `@ledger_fn` marks `distance` as a ledger function and leaves it a
@@ -584,27 +584,27 @@ rev = L.at()
 distance_fn = rev.load_fn("geometry.distance")
 print("fn:", repr(distance_fn), " sandboxed:", distance_fn.code.sandboxed)
 # → fn: <Fn geometry.distance@<commit, 8 hex>>  sandboxed: False  (no __version__: the last commit)
-print(distance_fn.signature)
-# → (a, b=(0, 0), *, metric='euclidean')
+print("signature:", distance_fn.signature)
+# → signature: (a, b=(0, 0), *, metric='euclidean')
 print("code:", repr(distance_fn.code), " subject:", distance_fn.code.subject)
 # → code: <Code geometry@<commit, 8 hex>>  subject: db/code/<16 hex>
 
 # %% [markdown]
 # The ledger finds the function by its dotted name at `rev` and
-# hands back an `Fn` saying which code the name resolves to: it
-# prints as its name `@` its code's version, `code.sandboxed` is
+# hands back an `Fn` saying which code the name resolves to: its
+# repr is `<Fn name@version>`, the version its code's, `code.sandboxed` is
 # False for a function installed in this process, `signature` the
 # keywords it takes. Only the code has identity, `code.subject`: the
 # function is a name looked up inside it, and has no subject.
 
 # %%
 hypotenuse_value = distance_fn(a=(3, 4))
-print(hypotenuse_value, hypotenuse_value.obj)
-# → #<8 hex> 5.0
-print(hypotenuse_value.sealed, hypotenuse_value.rev.id > rev.id)
-# → True True
-print(hypotenuse_value.dependencies["code/geometry"] == git("rev-parse", "HEAD")[:8])
-# → True
+print("result:", repr(hypotenuse_value), " obj:", hypotenuse_value.obj)
+# → result: <Blob #<8 hex>>  obj: 5.0
+print("sealed:", hypotenuse_value.sealed, " later rev:", hypotenuse_value.rev.id > rev.id)
+# → sealed: <YYYY-MM-DDTHH:MM:SSZ>  later rev: True
+print("commit matches:", hypotenuse_value.dependencies["code/geometry"] == git("rev-parse", "HEAD")[:8])
+# → commit matches: True
 
 # %% [markdown]
 # Calling the `Fn` ran `distance` and sealed its result as a value
@@ -656,8 +656,8 @@ with L.transaction(by="human:dan", why="mount plane") as t:
     t.add("db/mount/plane", "db/root", "plane")
     t.add("db/mount/plane", "db/repo", "geometry")
 rev = L.at()
-print(rev["db/mount/plane"])
-# → {'db/root': 'plane', 'db/repo': 'geometry'}
+print("mount rows:", rev["db/mount/plane"])
+# → mount rows: {'db/root': 'plane', 'db/repo': 'geometry'}
 
 # %% [markdown]
 # Mounting says where a function's source is read from. It is rows
@@ -675,10 +675,10 @@ length_fn = rev.load_fn("plane.measure.length")
 print("code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed, " mount:", length_fn.mount)
 # → code: <Code plane@<commit, 8 hex>>  sandboxed: True  mount: plane
 segment_value = length_fn(a=(0, 0), b=(3, 4))
-print(segment_value.obj, sorted(segment_value.dependencies))
-# → 2.5 ['code', 'fn', 'platform']
-print(L.at()[segment_value.dependencies["code"], "db/modules"])
-# → {'plane/measure.py': '<hash>', 'plane/units.py': '<hash>'}
+print("result:", segment_value.obj, " depends on:", sorted(segment_value.dependencies))
+# → result: 2.5  depends on: ['code', 'fn', 'platform']
+print("modules:", L.at()[segment_value.dependencies["code"], "db/modules"])
+# → modules: {'plane/measure.py': '<hash>', 'plane/units.py': '<hash>'}
 
 # %% [markdown]
 # Loaded and called like the global function, it ran in a worker
@@ -771,8 +771,8 @@ except ConfinedWrite as e:
 # %%
 rev = L.at()
 far_value = rev.run("geometry.distance", a=(6, 8))
-print(far_value.obj, far_value.sealed)
-# → 10.0 True
+print("result:", far_value.obj, " sealed:", far_value.sealed)
+# → result: 10.0  sealed: <YYYY-MM-DDTHH:MM:SSZ>
 for item in sorted(far_value.dependencies):
     print(item, "->", far_value.dependencies[item])
 # → code -> db/code/<16 hex>
@@ -802,10 +802,10 @@ for item in sorted(far_value.dependencies):
 # alone; with them, each dep by its bytes.
 
 # %%
-print(dict(sorted(wide_video.dependencies.items())))
-# → {'platform': 'darwin-arm64-py3.12'}
-print(sorted(trimmed_video.dependencies))
-# → ['platform', 'ref:demo_game.game.Video:<hash>']
+print("video deps:", dict(sorted(wide_video.dependencies.items())))
+# → video deps: {'platform': 'darwin-arm64-py3.12'}
+print("trimmed deps:", sorted(trimmed_video.dependencies))
+# → trimmed deps: ['platform', 'ref:demo_game.game.Video:<hash>']
 
 # %% [markdown]
 # ### Evaluation is memoized
@@ -815,12 +815,12 @@ print(sorted(trimmed_video.dependencies))
 # %%
 top_id = L.at().id
 again_value = L.at().run("geometry.distance", a=(6, 8))
-print(again_value.subject == far_value.subject)
-# → True: a hit
-print(L.at().id == top_id)
-# → True: nothing written
-print(again_value.rev.id == far_value.rev.id)
-# → True: the seal's rev
+print("same subject:", again_value.subject == far_value.subject)
+# → same subject: True: a hit
+print("nothing written:", L.at().id == top_id)
+# → nothing written: True
+print("same rev:", again_value.rev.id == far_value.rev.id)
+# → same rev: True: the seal's rev
 
 # %% [markdown]
 # The second call is a memo hit: same function, same keys, every
@@ -847,20 +847,20 @@ for row in entry_rev.rows(since=L.at(entry_rev.id - 1)):
 # %%
 rev = L.at()
 for memo_ref in rev.refs(fn="geometry.distance"):
-    print(memo_ref, rev[memo_ref.subject, "db/keys"])
-# → #<8 hex> {'a': [3, 4], 'b': [0, 0], 'metric': 'euclidean'}
-# → #<8 hex> {'a': [6, 8], 'b': [0, 0], 'metric': 'euclidean'}
-print(len(rev.values(fn="geometry.distance")))
-# → 2, loaded
+    print("entry:", repr(memo_ref), " keys:", rev[memo_ref.subject, "db/keys"])
+# → entry: <Ref #<8 hex>>  keys: {'a': [3, 4], 'b': [0, 0], 'metric': 'euclidean'}
+# → entry: <Ref #<8 hex>>  keys: {'a': [6, 8], 'b': [0, 0], 'metric': 'euclidean'}
+print("values:", len(rev.values(fn="geometry.distance")))
+# → values: 2, loaded
 
 # %% [markdown]
 # ### A bare return is boxed into a value
 
 # %%
-print(type(far_value).__name__, far_value.obj)
-# → Blob 10.0
-print(L.at()[far_value.subject, "db/returns"])
-# → float
+print("type:", type(far_value).__name__, " obj:", far_value.obj)
+# → type: Blob  obj: 10.0
+print("returns:", L.at()[far_value.subject, "db/returns"])
+# → returns: float
 
 # %% [markdown]
 # `distance` returns a plain `float`. `-> float` names no `Value`
@@ -896,8 +896,8 @@ git("commit", "-m", "clips")
 
 rev = L.at()
 opening_clip = rev.run("clips.clip", video="video/G1", start=0, end=8)
-print(type(opening_clip).__name__, opening_clip.frames, opening_clip.preds)
-# → Video b'G1 wide ' {'span': [0, 8]}
+print("type:", type(opening_clip).__name__, " frames:", opening_clip.frames, " preds:", opening_clip.preds)
+# → type: Video  frames: b'G1 wide '  preds: {'span': [0, 8]}
 for item in sorted(opening_clip.dependencies):
     if item.startswith(("video/", "ref:")):
         print(item, "->", opening_clip.dependencies[item])
@@ -922,11 +922,11 @@ with L.transaction(by="human:dan", why="stabilised") as t:
     stable_video.seal(t, deps=[trimmed_video], name="video/G1")
 rev = L.at()
 stable_clip = rev.run("clips.clip", video="video/G1", start=0, end=8)
-print(stable_clip.subject != opening_clip.subject, stable_clip.frames)
-# → True b'G1 stabi'
-print(sorted(opening_clip.diff(stable_clip)))
-# → ['ref:demo_game.game.Video:<stabilised>',
-#    'ref:demo_game.game.Video:<trimmed>', 'video/G1 db/alias']
+print("new subject:", stable_clip.subject != opening_clip.subject, " frames:", stable_clip.frames)
+# → new subject: True  frames: b'G1 stabi'
+print("diff:", sorted(opening_clip.diff(stable_clip)))
+# → diff: ['ref:demo_game.game.Video:<stabilised>',
+#          'ref:demo_game.game.Video:<trimmed>', 'video/G1 db/alias']
 
 # %% [markdown]
 # The binding moved, so the old entry's dependencies no longer hold: the
@@ -940,9 +940,9 @@ print(sorted(opening_clip.diff(stable_clip)))
 # %%
 rev = L.at()
 shifted_value = rev.run("geometry.distance", a=(1, 1), b=(4, 5))
-print(shifted_value.obj, shifted_value.same_as(hypotenuse_value),
-      shifted_value.subject != hypotenuse_value.subject)
-# → 5.0 True True
+print("obj:", shifted_value.obj, " same bytes:", shifted_value.same_as(hypotenuse_value),
+      " new subject:", shifted_value.subject != hypotenuse_value.subject)
+# → obj: 5.0  same bytes: True  new subject: True
 
 # %% [markdown]
 # Two questions, identical bytes: both distances are `5.0`. Two memo
@@ -961,11 +961,11 @@ restamped_video.preds.update(game="G1", camera="wide", span=[600, 8990])
 with L.transaction(by="human:dan", why="span off by ten") as t:
     restamped_video.seal(t, deps=[trimmed_video], name="video/G1")
 rev = L.at()
-print(restamped_video, stable_video)
-# → video/G1 #<8 hex>
+print("restamped:", repr(restamped_video), " stable:", repr(stable_video))
+# → restamped: <Video video/G1>  stable: <Video #<8 hex>>
 again_clip = rev.run("clips.clip", video="video/G1", start=0, end=8)
-print(again_clip.subject == stable_clip.subject)
-# → True: a hit
+print("same subject:", again_clip.subject == stable_clip.subject)
+# → same subject: True: a hit
 
 # %% [markdown]
 # `video/G1` now names identical bytes, so the binding item is
@@ -980,10 +980,10 @@ print(again_clip.subject == stable_clip.subject)
 
 # %%
 rev = L.at()
-print(opening_clip.matches(rev))
-# → False: video/G1 has moved on
-print(stable_clip.matches(rev))
-# → True: it names identical bytes
+print("opening matches:", opening_clip.matches(rev))
+# → opening matches: False: video/G1 has moved on
+print("stable matches:", stable_clip.matches(rev))
+# → stable matches: True: it names identical bytes
 
 # %% [markdown]
 # `seal="get"` looks the entry up without running; `seal=False`
@@ -992,13 +992,13 @@ print(stable_clip.matches(rev))
 # the memo entry, no second run.
 
 # %%
-print(rev.run("geometry.distance", a=(5, 12), seal="get"))
-# → None: never run
+print("get:", rev.run("geometry.distance", a=(5, 12), seal="get"))
+# → get: None: never run
 dry_value = rev.run("geometry.distance", a=(6, 8), seal=False)
-print(dry_value.sealed, dry_value.hash == far_value.hash)
-# → None True
-print(L.at().id == rev.id)
-# → True: nothing written
+print("sealed:", dry_value.sealed, " same hash:", dry_value.hash == far_value.hash)
+# → sealed: None  same hash: True
+print("nothing written:", L.at().id == rev.id)
+# → nothing written: True
 
 # %% [markdown]
 # ## Edge cases
@@ -1017,14 +1017,14 @@ with L.transaction(by="human:dan", why="tagging") as t:
     t.add(restamped_video.subject, "tag", "home-court")
     t.add(g2_video.subject, "tag", "home-court")
 rev = L.at()
-print(sorted(Ref(rev, "video/G1").preds["tag"]))
-# → ['home-court', 'opener']
-print(rev.values(tag="home-court"))
-# → [<Video video/G1>, <Video video/G2>]
-print(rev["db/pred/span", "db/type"])
-# → json
-print(wide_video.preds["span"])
-# → [0, 9000]
+print("tags:", sorted(Ref(rev, "video/G1").preds["tag"]))
+# → tags: ['home-court', 'opener']
+print("home-court:", rev.values(tag="home-court"))
+# → home-court: [<Video video/G1>, <Video video/G2>]
+print("span type:", rev["db/pred/span", "db/type"])
+# → span type: json
+print("span:", wide_video.preds["span"])
+# → span: [0, 9000]
 
 # %% [markdown]
 # `tag` is declared `many`, so a video's tags are a list and a
@@ -1056,8 +1056,8 @@ with L.transaction(by="human:dan") as t:
     for i in range(2, 10):
         t.add(f"hop-chain/{i}", "db/alias", f"hop-chain/{i - 1}")
 hop8_ref = Ref(L.at(), "hop-chain/8")
-print(hop8_ref.subject == video_value.subject)
-# → True
+print("same subject:", hop8_ref.subject == video_value.subject)
+# → same subject: True
 try:
     Ref(L.at(), "hop-chain/9")
 except AliasLoop as e:
@@ -1092,8 +1092,8 @@ except Exists as e:
 with L.transaction(by="human:dan") as t:
     t.add("review/G1", "clip", Ref(t.base, stable_clip.subject))
 pick_ref = L.at()["review/G1", "clip"]
-print(pick_ref, pick_ref.subject == stable_clip.subject)
-# → #<8 hex> True
+print("pick:", repr(pick_ref), " same subject:", pick_ref.subject == stable_clip.subject)
+# → pick: <Ref #<8 hex>>  same subject: True
 
 # %% [markdown]
 # ### A hand seal and an eval write the same rows
