@@ -16,7 +16,7 @@
 # #### Setup
 
 # %%
-import os, shutil, subprocess, sys
+import os, shutil, subprocess, sys, textwrap
 from pathlib import Path
 
 from IPython.display import SVG, display
@@ -60,14 +60,16 @@ def show(name):
 show("q-dats")
 
 # %% [markdown]
-# ## A dat is a folder with a spec
+# ## A Dat is a folder with a spec
 #
 # A spec is a recursive dict of parameters; its `dat:` part is what
 # the dat system reads. `do:` names the run function, `kwargs:` its
 # arguments, `base:` a spec to inherit, `name:` a folder template.
+#
+# #### Setup
 
 # %%
-# setup files: a run function in mult.py, two template specs in specs/
+# the files: a run function in mult.py, two template specs in specs/
 module_path = Path("mymodule")
 (module_path / "specs").mkdir(parents=True)
 (module_path / "mult.py").write_text('''\
@@ -83,7 +85,7 @@ def write_table(folder, n=10, start=1):
     return n * n
 
 
-def table(dat, n=10, start=1):
+def build_table(dat, n=10, start=1):
     """The run function: `do` calls it with the new dat and the spec's kwargs."""
     cells = write_table(dat.get_path(), n, start)
     Path(dat.get_path(), "log.txt").write_text(f"{n} x {n} from {start}\\n")
@@ -100,7 +102,7 @@ notes: shared defaults
 dat:
   base: specs.table_base
   name: tables/{YYYY}/table12{unique}
-  do: mymodule.mult.table
+  do: mymodule.mult.build_table
   kwargs: {n: 12}
 ''');
 
@@ -114,13 +116,12 @@ dat:
 # once, makes the folder and writes `_spec_.yaml`. Nothing runs.
 
 # %%
-do = Dat.do
-do.mount(folder="mymodule/specs", at="specs")
-table12_dat = Dat.create(spec="specs.table12")
+Dat.do.mount(folder="mymodule/specs", at="specs")   # the folder tree of specs: a spec is found by name
+table12_dat = Dat.create(spec="specs.table12")      # the Dat object, and its folder on disk
 table12_path = Path(table12_dat.get_path())
 print("dat:", repr(table12_dat))   # dat: <Dat: tables/2026/table12>
 print("files:", sorted(os.listdir(table12_path)))   # files: ['_spec_.yaml']
-print("_spec_.yaml:\n" + (table12_path / "_spec_.yaml").read_text())
+print("_spec_.yaml:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_text(), "    "))
 # _spec_.yaml: kwargs {start: 1, n: 12}; no base:; name: the template
 
 # %% [markdown]
@@ -129,17 +130,20 @@ print("_spec_.yaml:\n" + (table12_path / "_spec_.yaml").read_text())
 #
 # ## 2. Run
 #
-# `do(dat)` calls the run function with the dat and the spec's kwargs,
+# `Dat.do(dat)` calls the run function with the dat and the spec's kwargs,
 # in place. The folder gains whatever the run wrote, `_result_.yaml`
 # (what the run stored) and `run/` (when, where, on which commit).
 
 # %%
-do(table12_dat)
+Dat.do(table12_dat)   # executes build_table in mult.py for this dat
+
 print("files:", sorted(os.listdir(table12_path)))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
 print("cells:", table12_dat.get_results()["cells"])   # cells: 144
-print("table.csv:\n" + "\n".join((table12_path / "table.csv").read_text().splitlines()[:3]))
+print("table.csv:\n" + textwrap.indent("\n".join((table12_path / "table.csv").read_text().splitlines()[:3]), "    "))
 # table.csv: rows 1..12, 2..24, 3..36
+print("_result_.yaml:\n" + textwrap.indent((table12_path / "_result_.yaml").read_text(), "    "))
+# _result_.yaml: cells, and under dat: what the seal recorded
 
 # %% [markdown]
 # ## 3. Save it as a value
@@ -215,11 +219,11 @@ print("preds:", dict(sorted(loaded_dat.preds.items())))
 # %% [markdown]
 # ## In practice: one step
 #
-# `do("specs.table12")` is steps 1 and 2: it instantiates the spec,
+# `Dat.do("specs.table12")` is steps 1 and 2: it instantiates the spec,
 # runs the dat, and returns what the run function returned.
 
 # %%
-again_dat = do("specs.table12")
+again_dat = Dat.do("specs.table12")
 print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_2>
 print("files:", sorted(os.listdir(again_dat.get_path())))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
@@ -240,7 +244,7 @@ with L.transaction(by="human:dan", why="mount mymodule") as t:
     t.add("db/mount/mymodule", "db/repo", "q-dats")
     bump(t, "code/q-dats", "minor", confirm=lambda old, new: True)
 
-table12_spec_record = do.resolve("specs.table12")
+table12_spec_record = Dat.do.resolve("specs.table12")
 spec_dat = L.at().run("mymodule.table_dat.table", spec=table12_spec_record)
 print("dat:", repr(spec_dat))   # dat: <TableDat anonymous/Dat>: no name given
 
@@ -259,7 +263,7 @@ print("same subject:", again_spec_dat.subject == spec_dat.subject,
 # %%
 for n in (5, 9):
     L.at().run("mymodule.table_dat.table",
-               spec={"dat": {"do": "mymodule.mult.table", "kwargs": {"n": n, "start": 1}}})
+               spec={"dat": {"do": "mymodule.mult.build_table", "kwargs": {"n": n, "start": 1}}})
 print("cells:", L.at().select(("n", "cells"), kind=TableDat))
 # cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: table12 sealed from do's folder, then by the constructor
 
