@@ -5,6 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
+#       jupytext_version: 1.19.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -19,7 +20,7 @@ import os, time
 from pathlib import Path
 
 from dvc_dat.ledger import Ledger, bump
-from dvc_dat.ledger import LockTimeout
+from dvc_dat.ledger import LockTimeout, Unlocked
 
 scratch_ledger_path = Path("scratch/triples-demo/ledger").resolve()
 
@@ -383,14 +384,16 @@ print(rev["db/pred/officials"])      # {'db/cardinality': 'many'}
 # ### Writing through the bracket
 #
 # On a transaction the bracket is the mirror. `t[s, p] = o` is an
-# `add`; `t[s] = {...}` is closed world over the user rows. A third
-# game, written as a record, then rewritten without its `date`.
+# `add`; `t[s] = {...}` is closed world over the user rows. The
+# record write and `del` read what the subject holds before they
+# write, so they take `lock=` (see Transaction locking below). A
+# third game, written as a record, then rewritten without its `date`.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:dan", lock=10) as t:
     t["game/G3"] = {"home": "G2", "away": "G5",
                     "date": "2026-10-13", "court": "east"}
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:dan", lock=10) as t:
     t["game/G3"] = {"home": "G2", "away": "G5", "court": "east"}
 rev11 = t.rev
 print(rev11["game/G3"] == {"home": "G2", "away": "G5",
@@ -401,7 +404,7 @@ print(rev11["game/G3"] == {"home": "G2", "away": "G5",
 # retracts what the predicate holds.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:dan", lock=10) as t:
     t["game/G3", "date"] = "2026-10-14"
     del t["game/G3", "court"]
 rev12 = t.rev
@@ -409,8 +412,8 @@ print(rev12["game/G3", "date"])                # 2026-10-14
 print(rev12.get("game/G3", "court"))           # None: retracted
 
 # %%
-with L.transaction(by="human:dan") as t:
-    t["game/G3"] = t.base["game/G3"]
+with L.transaction(by="human:dan", lock=10) as t:
+    t["game/G3"] = t.previous_rev["game/G3"]
 noop_rev = t.rev
 print([row for row in noop_rev.all(since=rev12)
        if not row[0].startswith("db/tx/")])   # []: nothing moved
@@ -425,8 +428,8 @@ print([row for row in noop_rev.all(since=rev12)
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
-        t["game/G3"] = {**t.base["game/G3"], "db/doc": "a game"}
+    with L.transaction(by="human:dan", lock=10) as t:
+        t["game/G3"] = {**t.previous_rev["game/G3"], "db/doc": "a game"}
 except TypeError as e:
     print("TypeError:", e)               # db/doc differs
 
@@ -443,7 +446,7 @@ except TypeError as e:
     print("TypeError:", e)                 # t[s, p] = o: one only
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:dan", lock=10) as t:
     del t["game/G3"]
 print(t.rev.get("game/G3", "home"))      # None: every row retracted
 
@@ -674,11 +677,47 @@ print(new, rev["code/demo-game"])
 # 0.1.1 {'version': '0.1.1', 'commit': '<the demo commit>'}
 
 # %% [markdown]
-# `bump` reads the version through `t.base`, writes the next one,
-# and on `code/<repo>` writes `commit` beside it, read from the
-# checkout: the caller never writes `commit`. `lock=10` holds
-# the write lock for the body, so nothing slips between the read
-# and the write.
+# `bump` reads the version through `t.previous_rev`, writes the
+# next one, and on `code/<repo>` writes `commit` beside it, read
+# from the checkout: the caller never writes `commit`. `lock=10`
+# holds the write lock for the body, so nothing slips between the
+# read and the write.
+#
+# A body can do the same by hand: read through `t.previous_rev`,
+# alter, write back. Here one more official joins `game/G1`.
+
+# %%
+with L.transaction(by="human:dan", lock=10) as t:
+    g1 = t.previous_rev["game/G1"]                 # the record as it stands now
+    t["game/G1"] = {**g1, "officials": g1["officials"] + ["vance"]}   # one more, written back
+print("officials:", t.rev.all("game/G1", "officials"))
+print("previous_rev:", repr(t.previous_rev))     # the revision the body read
+
+# %% [markdown]
+# `t.previous_rev` is the previous revision, with every read a
+# revision has: the top as it stands while the body holds the write
+# lock. The write is built on current data, and no other writer can
+# commit between the read and the write. Without `lock=` another
+# writer may commit after the body reads, so there is no
+# well-defined previous revision. Notice the ledger refuses the read.
+
+# %%
+try:
+    with L.transaction(by="human:dan") as t:       # no lock=
+        t.previous_rev["game/G1"]
+except Unlocked as e:
+    print("Unlocked:", e)
+
+# %% [markdown]
+# `bump`, `t[s] = {...}` and `del` read through `t.previous_rev`, so
+# unlocked they refuse the same way and write nothing. `t[s, p] = o`
+# and `t.add` read nothing, so they need no lock.
+
+# %%
+with L.transaction(by="human:dan") as t:           # no lock=: nothing is read
+    t["game/G1", "court"] = "south"                # an add on a one predicate
+    t.add("game/G1", "officials", "wu")            # an add on a many predicate
+print("court:", t.rev["game/G1", "court"])
 
 # %%
 print(sorted(rev[rev.tx]))
@@ -696,7 +735,7 @@ print(rev[rev.tx, "db/time"])            # UTC, on every revision
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:dan", lock=10) as t:
         bump(t, "schema/tape", "minor")
 except ValueError as e:
     print("ValueError:", e)              # minor needs confirm=
@@ -707,13 +746,13 @@ except ValueError as e:
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:dan", lock=10) as t:
         bump(t, "code/dvc-dat")
 except ValueError as e:
     print("ValueError:", e)              # no checkout for code/dvc-dat
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:dan", lock=10) as t:
     print(bump(t, "schema/tape", "minor",
                confirm=lambda old, new: True))   # 0.1.0
 with L.transaction(by="human:dan") as t:
@@ -728,14 +767,15 @@ print(L.at()["schema/tape", "version"])  # 0.0.9: add went back
 
 # %%
 with L.transaction(by="agent:release", lock=5) as t:
-    v = t.base["code/demo-game", "version"]
-    c = t.base["code/demo-game", "commit"]
+    v = t.previous_rev["code/demo-game", "version"]
+    c = t.previous_rev["code/demo-game", "commit"]
     t.add("rel/demo-game", "pair", f"{v}+{c}")
 print(L.at()["rel/demo-game", "pair"])    # 0.1.1+<commit>
 
 # %% [markdown]
-# A body that reads and then writes takes `lock=`. Notice that past
-# the limit the body is interrupted and `pair` is unchanged.
+# Any read through `t.previous_rev` holds still for the whole
+# body. Notice that past the limit the body is interrupted and
+# `pair` is unchanged.
 
 # %%
 try:

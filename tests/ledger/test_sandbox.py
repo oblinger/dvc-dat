@@ -278,7 +278,7 @@ def sbx(tmp_path, monkeypatch, backend):
     import sbx  # noqa: F401  (discovery sees the checkout)
     old = set_env_provider(None)
     L = backends.make(backend, tmp_path / "ledger")
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         t.add("db/mount/sbx.stage", "db/root", "sbx/stage")
         t.add("db/mount/sbx.stage", "db/repo", "sbx-repo")
         t.add("db/mount/flatpkg", "db/root", "flat")          # a plain folder, no __init__.py
@@ -304,7 +304,7 @@ def test_sandboxed_eval_seals_records_loaded_modules_and_hits(sbx):
     assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return x + x\n")
     git(repo, "commit", "-q", "-am", "two")
-    with L.transaction(by="t") as t:
+    with L.transaction(by="t", lock=10) as t:
         bump(t, "code/sbx-repo")
     assert not v.matches(L.at())                    # the run-time import's file moved
     w = L.at().run("sbx.stage.fns.count", game="G1")

@@ -50,7 +50,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert [r.subject for r in rev.refs(s="db/pred/*", where={"db/index": "true"})] == ["db/pred/game"]
     assert ("db/pred/game", "db/index", "true") in rev
 
-    with L.transaction(by="setup") as t:                        # ADAPTED: a game and its video to run on
+    with L.transaction(by="setup", lock=10) as t:                        # ADAPTED: a game and its video to run on
         t["game/G1"] = {"home": "G4", "away": "G5"}
         raw0 = Video(read_mp4("G1.mp4"))
         raw0.preds.update(game="G1")
@@ -75,7 +75,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev.select(("game", "version"), fn="ledger_kinds.cut") == [("G1", "1.0.0")]   # tuples
     assert rev.all(since=L.at(1))            # every row in (1, rev.id]
 
-    with L.transaction(by="human:dan", why="T531") as t:
+    with L.transaction(by="human:dan", why="T531", lock=10) as t:
         assert bump(t, "code/testrepo", "patch") == "0.2.3"     # 0.2.2 -> 0.2.3, and commit from the checkout
         t["env/prod", "rev"] = "413"         # add, on a one pred
         t.add(t.tx, "checked", "G1,G4,G5")
@@ -83,8 +83,8 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert t.rev[t.rev.tx, "db/by"] == "human:dan"
 
     with L.transaction(by="agent:svp", lock=30) as t:
-        v = t.base["code/testrepo", "version"]       # nothing can move
-        mv = Ref(t.base, m.subject).preds["version"]   # a value's version is a pred  ADAPTED: m's subject
+        v = t.previous_rev["code/testrepo", "version"]       # nothing can move
+        mv = Ref(t.previous_rev, m.subject).preds["version"]   # a value's version is a pred  ADAPTED: m's subject
         t.add("rel/pipe", "pair", f"{v}+{mv}")
     assert L.at()["rel/pipe", "pair"] == "0.2.3+1.0.0"
 
@@ -169,7 +169,7 @@ def test_seal_block(L):
 
 def test_putting_an_artifact_in_block(L):
     """§ Putting an artifact in: the two doors."""
-    with L.transaction(by="setup") as t:          # ADAPTED: the game's rows the cut reads
+    with L.transaction(by="setup", lock=10) as t:          # ADAPTED: the game's rows the cut reads
         t["game/G1"] = {"home": "G4", "away": "G5"}
     raw = Video(read_mp4("G1.mp4"))
     raw.preds.update(game="G1", camera="wide")

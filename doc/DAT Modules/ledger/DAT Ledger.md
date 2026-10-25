@@ -16,7 +16,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Rev         | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [load_fn](#^load-fn), [run](#^run)                                      |
 | Ref         | [rev](#^rev), [subject](#^subject), [name](#^name), [aliases](#^aliases), [hash](#^hash), [type](#^type), [preds](#^preds), [sealed_at](#^sealed-at), [load](#^ref-load)                                                                                                                                   |
 | Row         | [rev](#^row-rev), [subject](#^row-subject), [predicate](#^predicate), [object](#^object), [added](#^added)                                                                                                                                                                                                 |
-| Transaction | [tx](#^transaction-tx), [base](#^base), [rev](#^transaction-rev), [add](#^add), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--)                                                                                                                                                      |
+| Transaction | [tx](#^transaction-tx), [previous_rev](#^previous-rev), [rev](#^transaction-rev), [add](#^add), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--)                                                                                                                                       |
 | Value       | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [sealed](#^sealed), [hash](#^value-hash), [dependencies](#^dependencies), [Dependencies](#^value-dependencies), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
 | Value.Blob  | [obj](#^obj)                                                                                                                                                                                                                                                                                               |
 | Value.Table | [table](#^table-table)                                                                                                                                                                                                                                                                                     |
@@ -201,12 +201,12 @@ A named tuple encoding a single row in the ledger: revision, subject, predicate,
 
 
 ## Transaction Interface
-The write set of one `with L.transaction(...) as t:` block; it becomes exactly one revision on exit, or nothing. `add` and `remove` append rows and read nothing; `v.seal(t)` seals a value into it; the bracket forms are read-then-write helpers over `add` and `remove` through `base`. Whatever must see the transaction's own rows is checked at commit, inside the write lock. Entered once; a verb used outside the block is `RuntimeError`.
+The write set of one `with L.transaction(...) as t:` block; it becomes exactly one revision on exit, or nothing. `add` and `remove` append rows and read nothing; `v.seal(t)` seals a value into it; the bracket forms are helpers over `add` and `remove`. A transaction has a revision's read operators through `previous_rev`, bound to the previous revision; it exists only under `lock=`, because an unlocked transaction has no well-defined previous revision (another writer may commit between open and exit). The helpers that read and then write (`t[s] = {...}`, `del`, `bump`) read through it, so they need `lock=`; unlocked they raise `Unlocked` and write nothing. Whatever must see the transaction's own rows is checked at commit, inside the write lock. Entered once; a verb used outside the block is `RuntimeError`.
 
 | Transaction | |
 | --- | --- |
 | [tx](#^transaction-tx) | A placeholder for this revision's tx subject |
-| [base](#^base) | The revision immediately prior to this transaction |
+| [previous_rev](#^previous-rev) | The previous revision, the top while `lock=` holds |
 | [rev](#^transaction-rev) | The revision the exit wrote |
 | [add](#^add) | Append an add row |
 | [__setitem__](#^--setitem--) | Assign a predicate, or a whole record |
@@ -216,23 +216,23 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 **tx**`: str`
     A placeholder subject, rewritten to `db/tx/<rev>` at commit wherever it appears as a subject or a `str` object, so the body can write rows about its own transaction. ^transaction-tx
 
-**base**`: Rev`
-    The revision immediately prior to this transaction: the committed one its reads see and its writes are decided against. Without `lock=` it is the top at entry, and others may commit after it before this one does; with `lock=` nothing commits in between, so the revision written is `base.id + 1`. `RuntimeError` before entry. ^base
+**previous_rev**`: Rev`
+    The previous revision, with every read operator a revision has: the top as it stands while `lock=` holds, so a write built on what it reads is built on current data and no other writer commits in between; the revision written is `previous_rev.id + 1`. Without `lock=` it is `Unlocked`: another writer may commit between open and exit, so there is no well-defined previous revision. `RuntimeError` before entry. ^previous-rev
 
 **rev**`: Rev`
-    The revision written: the state after this transaction, so it exists only once committed; `RuntimeError` before. Under `lock=` the number it will be is `base.id + 1`. ^transaction-rev
+    The revision written: the state after this transaction, so it exists only once committed; `RuntimeError` before. Under `lock=` the number it will be is `previous_rev.id + 1`. ^transaction-rev
 
 **add**`(subject: str, predicate: str, object) -> None`
     One add row. `object` is a `str`, a JSON `dict` or `list`, or a `Ref` to a sealed value; a `Value` is `TypeError` naming `seal`; a bare number, bool or `None` is `TypeError` (a number is its string). `predicate == "db/value"` is `TypeError`: only a seal writes it. ^add
 
 **__setitem__**`(key, value) -> None`
-    `t[s, p] = o` is `add` on a `one` predicate; a `many` or `db/` predicate is `TypeError`. `t[s] = {...}` makes the subject's user rows equal to the dict at the next revision; `t[s] = t.base[s]` writes nothing. Brackets take exact subjects; a glob is `TypeError`. ^--setitem--
+    `t[s, p] = o` is `add` on a `one` predicate and needs no lock; a `many` or `db/` predicate is `TypeError`. `t[s] = {...}` makes the subject's user rows equal to the dict at the next revision, reading what the subject holds through `previous_rev`, so it needs `lock=` (`Unlocked` without); `t[s] = t.previous_rev[s]` writes nothing. Brackets take exact subjects; a glob is `TypeError`. ^--setitem--
 
 **remove**`(subject: str, predicate: str, object) -> None`
     One remove row: the object leaves the set of a `many` predicate, or, when it is the held object of a `one` predicate, leaves nothing held. ^remove
 
 **__delitem__**`(key) -> None`
-    `del t[s, p]` retracts what `p` holds; `del t[s]` retracts every user predicate; `db/` rows survive, and a `db/` predicate is `TypeError`. ^--delitem--
+    `del t[s, p]` retracts what `p` holds; `del t[s]` retracts every user predicate; `db/` rows survive, and a `db/` predicate is `TypeError`. Both read through `previous_rev`, so they need `lock=` (`Unlocked` without). ^--delitem--
 
 
 
@@ -427,6 +427,7 @@ The package's other exports: two decorators, two helpers, and the exceptions. Ev
 | [ConfinedWrite](#^confinedwrite) | A sandboxed write outside the path folder |
 | [ConfinedNetwork](#^confinednetwork) | A sandboxed network use |
 | [LockTimeout](#^locktimeout) | A lock= body past its limit |
+| [Unlocked](#^unlocked) | `previous_rev` or a read-then-write helper without lock= |
 | [Unindexed](#^unindexed) | A query on an unknown dotted predicate |
 | [Exists](#^exists) | A write to a sealed subject's own rows |
 | [Undeclared](#^undeclared) | A pred name the class did not declare |
@@ -440,7 +441,7 @@ The package's other exports: two decorators, two helpers, and the exceptions. Ev
     Class decorator naming the preds a `Value` subclass's values may carry. A name that is empty, not a `str`, or starts `db/` is `TypeError`, as is decorating a class that is not a `Value`. Writes nothing. ^ledger-class
 
 **bump**`(t: Transaction, subject: str, part: str = "patch", *, confirm=None) -> str`
-    Reads `version` through `t.base` (`0.0.0` when absent), adds the next by `part`, and returns it. On `code/<repo>` it also adds `commit`, read from that repo's checkout; no checkout or a dirty one is `ValueError`. `minor` and `major` need `confirm(old, new)` to return `True`. A subject holding a `db/alias` is `TypeError`: a value's version is a pred, not a clock. Run it under `lock=` when the update must not be lost. ^bump
+    Reads `version` through `t.previous_rev` (`0.0.0` when absent), adds the next by `part`, and returns it. On `code/<repo>` it also adds `commit`, read from that repo's checkout; no checkout or a dirty one is `ValueError`. `minor` and `major` need `confirm(old, new)` to return `True`. A subject holding a `db/alias` is `TypeError`: a value's version is a pred, not a clock. It needs `lock=`: unlocked it is `Unlocked` and writes nothing. ^bump
 
 **attr**`(obj, path: str)`
     Walks a dotted path over mappings, sequences (integer steps) and attributes; `KeyError` at the first missing step, `TypeError` for an empty path. ^attr
@@ -471,6 +472,9 @@ The package's other exports: two decorators, two helpers, and the exceptions. Ev
 
 **LockTimeout**`(LedgerError, TimeoutError)`
     A `lock=` body ran past its limit, or the lock was not had in time; nothing written. ^locktimeout
+
+**Unlocked**`(LedgerError, RuntimeError)`
+    `t.previous_rev`, or a helper reading through it (`bump`, `t[s] = {...}`, `del t[s, p]`, `del t[s]`), in a transaction opened without `lock=`; nothing written. ^unlocked
 
 **Unindexed**`(LedgerError, LookupError)`
     A where clause or select key named a dotted predicate neither declared nor carried by any row. ^unindexed
@@ -545,7 +549,7 @@ The art store holds bytes by sha256 at `sha256/<2>/<hex>`, write-once, so the sa
 
 
 ## Concurrency
-One writer at a time: a transaction takes the write lock only at commit, and its revision is `MAX(rev) + 1` under that lock. `lock=<seconds>` holds the lock for the whole body when a read must not go stale before the write. Readers take no lock; a `Rev` is a snapshot. Two processes missing on one memo key both run and both seal: identical bytes and dependencies are one subject, the second dropped at commit; different bytes are two entries, both kept, which is the evidence a nondeterminism check needs. The load harness under `tests/load/` checks these invariants across processes on SQLite and Postgres; its measurements are in [`tests/load/README.md`](../../../tests/load/README.md).
+One writer at a time: a transaction takes the write lock only at commit, and its revision is `MAX(rev) + 1` under that lock. `lock=<seconds>` holds the lock for the whole body when a read must not go stale before the write; `t.previous_rev` and the helpers that read through it require it. Readers take no lock; a `Rev` is a snapshot. Two processes missing on one memo key both run and both seal: identical bytes and dependencies are one subject, the second dropped at commit; different bytes are two entries, both kept, which is the evidence a nondeterminism check needs. The load harness under `tests/load/` checks these invariants across processes on SQLite and Postgres; its measurements are in [`tests/load/README.md`](../../../tests/load/README.md).
 
 
 
@@ -658,7 +662,7 @@ The ledger version is the main one. It determines the revision we are on, `L.at(
 
 A sealed value never changes: an `add` or `remove` on one of its own rows is `Exists` at commit, and any other row on its subject is annotation. A new version of a value is a new seal and a new subject; the re-pointable name is an alias, `(video/G1, db/alias, <subject>)`, which moves while the values it pointed at stay, so a read at an older revision still finds the older value. An alias names a subject holding a `db/value`, and a subject holding its own `db/value` cannot be an alias.
 
-`bump(t, subject, part)` is the one writer of a version: the current one read through the transaction, the next by `part`, `minor` and `major` behind a `confirm`. A subject holding a `db/alias` row is refused: a value's version is a pred, and a new version of a value is a new seal and a re-point.
+`bump(t, subject, part)` is the one writer of a version: the current one read through `t.previous_rev` (so under `lock=`), the next by `part`, `minor` and `major` behind a `confirm`. A subject holding a `db/alias` row is refused: a value's version is a pred, and a new version of a value is a new seal and a re-point.
 
 
 

@@ -1089,8 +1089,8 @@ except Exists as e:
 # latest alias), else `#` and the hash's first eight characters.
 
 # %%
-with L.transaction(by="human:dan") as t:
-    t.add("review/G1", "clip", Ref(t.base, stable_clip.subject))
+with L.transaction(by="human:dan", lock=10) as t:
+    t.add("review/G1", "clip", Ref(t.previous_rev, stable_clip.subject))
 pick_ref = L.at()["review/G1", "clip"]
 print("pick:", repr(pick_ref), " same subject:", pick_ref.subject == stable_clip.subject)
 # → pick: <Ref #<8 hex>>  same subject: True

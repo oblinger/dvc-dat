@@ -1,9 +1,15 @@
 """``Transaction``: the write set of one ``with L.transaction(...)``, one revision on exit.
 
 ``add`` and ``remove`` append rows and read nothing; ``v.seal(t)`` seals a
-``Value`` into an immutable subject and the bracket (``t[s, p] = o``,
-``t[s] = {...}``, ``del``) is a read-then-write helper over ``add``/``remove``;
-those two read through ``t.base``. Everything that must see the transaction's
+``Value`` into an immutable subject. A transaction has a revision's read
+operators through ``t.previous_rev``, bound to the previous revision: the top
+as it stands while the write lock holds. It exists only under ``lock=``,
+because an unlocked transaction has no well-defined previous revision (another
+writer may commit between open and exit); unlocked, reading it raises
+``Unlocked``. The read-then-write helpers read through it, so they need the
+lock: the record write ``t[s] = {...}``, ``del t[s, p]``, ``del t[s]`` and
+``bump``. ``t[s, p] = o`` is an ``add`` plus a cardinality check and needs no
+lock. Everything that must see the transaction's
 own rows is checked at commit, inside the write lock, against the state the
 new revision would have (the rows are inserted, read back through the open
 write transaction, and rolled back on a refusal): ``Exists`` (a write on a
@@ -26,7 +32,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, sha256, show, strip_hint, tag
-from .errors import Exists, LockTimeout, SealBroken, Undeclared
+from .errors import Exists, LockTimeout, SealBroken, Undeclared, Unlocked
 from .value import Value, dotted
 
 if TYPE_CHECKING:
@@ -123,7 +129,8 @@ class Transaction:
             self._preds.append((k, plain))
         self._ops: List[_Op] = []
         self._state = "new"
-        self._base: Optional["Rev"] = None
+        #: The top at open, locked or not: the body's own declaration and seal checks read it.
+        self._opened: Optional["Rev"] = None
         self._rev: Optional["Rev"] = None
         self._pending: Dict[int, Tuple[Value, str]] = {}
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
@@ -141,11 +148,21 @@ class Transaction:
     # -- fields ---------------------------------------------------------------
 
     @property
-    def base(self) -> "Rev":
-        """The top when the transaction opened; under ``lock=`` it stays the top until exit."""
-        if self._base is None:
-            raise RuntimeError("a transaction has no base until its with block is entered")
-        return self._base
+    def previous_rev(self) -> "Rev":
+        """The previous revision: the top as it stands while ``lock=`` holds, with every read operator a
+        revision has. Without ``lock=`` it raises ``Unlocked``: another writer may commit between open
+        and exit, so an unlocked transaction has no well-defined previous revision."""
+        if self._opened is None:
+            raise RuntimeError("a transaction has no previous_rev until its with block is entered")
+        if self._lock is None:
+            raise Unlocked("the transaction is not locked: previous_rev is the top only under lock=")
+        return self._opened
+
+    def _snapshot(self) -> "Rev":
+        """The top at open, for the package's own declaration and seal checks; no lock required."""
+        if self._opened is None:
+            raise RuntimeError("a transaction has no snapshot until its with block is entered")
+        return self._opened
 
     @property
     def rev(self) -> "Rev":
@@ -168,14 +185,14 @@ class Transaction:
                 self._cm.__exit__(LockTimeout, LockTimeout(), None)
                 raise LockTimeout(f"write lock had only after {self._lock}s")
             try:
-                self._base = self._ledger.at()      # under the lock, before the body's clock starts
+                self._opened = self._ledger.at()      # under the lock, before the body's clock starts
             except BaseException as e:
                 self._cm.__exit__(type(e), e, e.__traceback__)
                 raise
             self._t0 = _time.monotonic()
             self._arm(left)
         else:
-            self._base = self._ledger.at()
+            self._opened = self._ledger.at()
         self._state = "open"
         return self
 
@@ -413,15 +430,15 @@ class Transaction:
         _name(predicate, "predicate")
         self._ops.append(_Op(subject, predicate, self._encode(object), False))
 
-    # -- declarations as the body sees them: t.base plus this transaction's own rows ---------------
+    # -- declarations as the body sees them: the snapshot at open plus this transaction's own rows ---------------
 
     def _decl_now(self, p: str, which: str) -> Optional[str]:
         for op in reversed(self._ops):
             if op.s == f"db/pred/{p}" and op.p == which:
                 return show(op.o) if op.added else None
         if which == "db/cardinality":
-            return self.base._card(p)
-        return self.base._type(p)
+            return self._snapshot()._card(p)
+        return self._snapshot()._type(p)
 
     def _card_now(self, p: str) -> str:
         from .rev import fixed_one
@@ -647,7 +664,7 @@ class Transaction:
             self._to_store.append(value)
         self._pending[id(value)] = (value, subject)
         self._finalize.append((value, subject, dict(trace), alias))
-        if not already and not self.base._held(subject, "db/value"):
+        if not already and not self._snapshot()._held(subject, "db/value"):
             ops: List[Tuple[str, str, bool]] = [
                 ("db/value", ref_text(dotted(type(value)), h), False),
                 ("db/kind", "str:" + dotted(type(value)), False),
@@ -664,7 +681,7 @@ class Transaction:
     def _name_value(self, subject: str, name: Optional[str]) -> None:
         """Name ``subject`` (Q36, A70): ``name db/alias subject``, every other name of it retracted, so a
         value has one name; ``None`` unnames it."""
-        for other in self.base._aliases_of(subject):
+        for other in self._snapshot()._aliases_of(subject):
             if other != name:
                 self._ops.append(_Op(other, "db/alias", "str:" + subject, False))
         if name is not None:
@@ -675,7 +692,7 @@ class Transaction:
         if subject in self._codes:
             return
         self._codes.add(subject)
-        if self.base._held(subject, "db/modules"):
+        if self._snapshot()._held(subject, "db/modules"):
             return
         for p, o in rows:
             self._ops.append(_Op(subject, p, o, True))
@@ -690,7 +707,8 @@ class Transaction:
         return s
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        """``t[s, p] = o``: an ``add`` on a one predicate. ``t[s] = {...}``: make the user rows equal (A34, A43)."""
+        """``t[s, p] = o``: an ``add`` on a one predicate, no lock needed. ``t[s] = {...}``: make the user rows
+        equal (A34, A43), read through ``previous_rev``, so it needs ``lock=``."""
         self._open("a bracket write")
         if isinstance(key, tuple):
             if len(key) != 2:
@@ -706,7 +724,7 @@ class Transaction:
         s = self._exact(key)
         if not isinstance(value, dict):
             raise TypeError(f"t[s] = record takes a dict, not {type(value).__name__}")
-        base = self.base
+        base = self.previous_rev                    # a read-then-write: Unlocked without lock=
         current = base._record_of(s)
         for p, o in value.items():
             if not isinstance(p, str) or not p:
@@ -736,7 +754,8 @@ class Transaction:
                     self._ops.append(_Op(s, p, w, True))
 
     def __delitem__(self, key: Any) -> None:
-        """``del t[s, p]``: retract what ``p`` holds on ``s``. ``del t[s]``: every user row; ``db/`` rows survive."""
+        """``del t[s, p]``: retract what ``p`` holds on ``s``. ``del t[s]``: every user row; ``db/`` rows survive.
+        Both read through ``previous_rev``, so they need ``lock=``."""
         self._open("a bracket delete")
         if isinstance(key, tuple):
             if len(key) != 2:
@@ -744,12 +763,14 @@ class Transaction:
             s, p = self._exact(key[0]), _name(key[1], "predicate")
             if p.startswith("db/"):
                 raise TypeError(f"{p!r}: machinery is not retracted through the bracket; use remove")
+            base = self.previous_rev                # a read-then-write: Unlocked without lock=
             preds = [p]
         else:
             s = self._exact(key)
-            preds = [q for q in self.base._record_of(s) if not q.startswith("db/")]
+            base = self.previous_rev
+            preds = [q for q in base._record_of(s) if not q.startswith("db/")]
         for p in preds:
-            for h in self.base._held(s, p):
+            for h in base._held(s, p):
                 self._ops.append(_Op(s, p, h.obj, False))
 
 

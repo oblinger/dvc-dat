@@ -8,7 +8,7 @@ from ledger_kinds import CALLS
 
 
 def test_a_draft_runs_on_a_dirty_or_stale_checkout(coded, envbox):
-    with coded.transaction(by="t") as t:
+    with coded.transaction(by="t", lock=10) as t:
         t["game/G1"] = {"home": "G4"}
     envbox.code(dirty=True)
     assert coded.at().run("ledger_kinds.scratchy", game="G1", seal=False).obj == {"game": "G1"}

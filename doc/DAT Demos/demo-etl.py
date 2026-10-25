@@ -199,7 +199,7 @@ show("comfort/report.py")
 # A `# same as` line is the shell form, typed in the code's repo, whose justfile imports `run` from dvc-dat (`dvc_dat.just`) and the ledger verbs from the `justfile` beside this notebook.
 
 # %%
-with L.transaction(by="human:dan", why="mount the stages") as t:
+with L.transaction(by="human:dan", why="mount the stages", lock=10) as t:
     t.add("db/mount/comfort", "db/root", "comfort")
     t.add("db/mount/comfort", "db/repo", "comfort-repo")
     bump(t, "code/comfort-repo", "minor", confirm=lambda old, new: True)   # 0.1.0, at HEAD
