@@ -265,17 +265,17 @@ print("result:", segment_value.obj)                 # → result: 2.5
 # %% [markdown]
 # #### A sandbox is a snapshot of the code
 #
-# Loading a sandboxed function takes a snapshot of the code it runs:
-# `modules` are the files in it, `sha` the checksum of the function's
-# file, `subject` the function at those bytes, and `version` the name
-# the package gives the snapshot. Every result records the function as
-# it ran, every module it loaded (`plane/__init__.py` too), among its
-# dependencies.
+# Loading a sandboxed function takes a snapshot of the code it runs;
+# `code` is that snapshot, the sandbox: `modules` are the files in
+# it, `version` the name the package gives it. The function's
+# `subject` is its name under the snapshot's hash. Every result
+# records the function as it ran, every module it loaded
+# (`plane/__init__.py` too), among its dependencies.
 
 # %%
-print("version:", length_fn.code.version, " modules:", length_fn.code.modules)
-# → version: 2.7.1  modules: ['plane/__init__.py', 'plane/measure.py']
-print("code checksum:", length_fn.sha[:12])    # → 0fc940ed13c9: the checksum of plane/measure.py
+sandbox = length_fn.code
+print("sandbox:", sandbox, " version:", sandbox.version, " modules:", sandbox.modules)
+# → sandbox: plane@2.7.1  version: 2.7.1  modules: ['plane/__init__.py', 'plane/measure.py']
 print("function identity:", length_fn.subject)     # → db/fn/plane.measure.length/bab093250d0dffef
 print("result depends on:", segment_value.dependencies)
 # → {'fn': 'db/fn/plane.measure.length/04ebdaea96da6a7b', 'platform': <this machine>}
@@ -292,8 +292,8 @@ measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
 subprocess.run(git_cmd + ["commit", "-q", "-am", "quarter metres"], cwd=repo_path, check=True)
 new_length_fn = L.at().load_fn("plane.measure.length")
 print("new fn:", new_length_fn)                     # → new fn: plane.measure.length@2.7.2
-print("new checksum:", new_length_fn.sha[:12], " new identity:", new_length_fn.subject)
-# → 286c47147df4 db/fn/plane.measure.length/f000d89a5e3f336f
+print("new identity:", new_length_fn.subject)
+# → new identity: db/fn/plane.measure.length/f000d89a5e3f336f
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → 1.25
 print("old result still names:", segment_value.dependencies["fn"], " and holds:", segment_value.obj)
 # → db/fn/plane.measure.length/04ebdaea96da6a7b 2.5
