@@ -1,19 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 1110 624" width="1110" height="624" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 1110 600" width="1110" height="600" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
 <defs><marker id="head" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#222"/></marker></defs>
-<rect width="1110" height="624" fill="#ffffff"/>
-<rect x="770" y="0" width="340" height="624" fill="#f3f3f3"/>
+<rect width="1110" height="600" fill="#ffffff"/>
+<rect x="770" y="0" width="340" height="600" fill="#f3f3f3"/>
 <text x="135" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">SOURCE TREE</text>
 <text x="460" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">TEMPLATE SPECS AND CODE</text>
 <text x="940" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">THE DAT</text>
-<rect x="30" y="96" width="210" height="150" fill="#fff" stroke="#222" stroke-width="1"/>
-<text x="40" y="118" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">mymodule/</text>
-<text x="40" y="138" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ specs/</text>
-<text x="40" y="158" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">│  ├─ table_base.yaml</text>
-<text x="40" y="178" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">│  └─ table12.yaml</text>
-<text x="40" y="198" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ mult.py</text>
-<text x="40" y="218" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">└─ ...</text>
-<text x="30" y="272" font-size="12" fill="#9a9a9a">specs are YAML files, run functions</text>
-<text x="30" y="288" font-size="12" fill="#9a9a9a">are Python; both live in the tree</text>
+<path d="M30,105 h5 l2,-2 h6 v12 h-13 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<text x="49" y="114" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">mymodule/</text>
+<path d="M50,126 h5 l2,-2 h6 v12 h-13 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<text x="69" y="135" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">specs/</text>
+<path d="M71,145 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M79,145 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="89" y="156" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">table_base.yaml</text>
+<path d="M71,166 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M79,166 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="89" y="177" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">table12.yaml</text>
+<path d="M51,187 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M59,187 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="69" y="198" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">mult.py</text>
+<text x="69" y="219" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">...</text>
+<line x1="36" y1="118" x2="36" y2="215" stroke="#222" stroke-width="1"/>
+<line x1="36" y1="131" x2="47" y2="131" stroke="#222" stroke-width="1"/>
+<line x1="36" y1="194" x2="47" y2="194" stroke="#222" stroke-width="1"/>
+<line x1="36" y1="215" x2="47" y2="215" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="139" x2="56" y2="173" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="152" x2="67" y2="152" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="173" x2="67" y2="173" stroke="#222" stroke-width="1"/>
+<text x="30" y="530" font-size="12" fill="#9a9a9a">specs are YAML files, run functions</text>
+<text x="30" y="546" font-size="12" fill="#9a9a9a">are Python; both live in the tree</text>
 <path d="M316,76 H608 V163 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 H316 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
 <path d="M594,76 v14 h14 M594,76 l14,14" fill="none" stroke="#222" stroke-width="1"/>
 <text x="316" y="68" font-size="15" fill="#000" font-weight="bold">base spec</text>
@@ -41,33 +55,47 @@
 <text x="326" y="481" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    ...            # writes table.csv</text>
 <text x="326" y="498" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    dat.get_results()["cells"] = n*n</text>
 <text x="326" y="515" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    dat.save(); return dat</text>
-<polyline points="244,158 312,122" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<polyline points="244,178 312,284" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<polyline points="244,198 312,480" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<polyline points="203.75,152 312,122" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<polyline points="182.0,173 312,284" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<polyline points="125.75,194 312,480" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <polyline points="608,275 622,275 622,172" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <text x="630" y="228" font-size="14" fill="#000" font-weight="bold" text-anchor="start">base</text>
 <polyline points="608,309 622,309 622,416" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <text x="630" y="372" font-size="14" fill="#000" font-weight="bold" text-anchor="start">do</text>
-<path d="M790,220 h110 l14,-16 h-110 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<rect x="790" y="220" width="290" height="220" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<text x="806" y="250" font-size="20" fill="#000" font-weight="bold">Dat</text>
-<text x="852" y="250" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">tables/2026/table12_2/</text>
-<rect x="806" y="274" width="258" height="150" fill="#fff" stroke="#222" stroke-width="1"/>
-<text x="816" y="296" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ _spec_.yaml</text>
-<text x="816" y="316" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ _result_.yaml</text>
-<text x="816" y="336" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ table.csv</text>
-<text x="816" y="356" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ log.txt</text>
-<text x="816" y="376" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ run/</text>
-<text x="816" y="396" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">└─ ...</text>
-<text x="940" y="496" font-size="12" fill="#9a9a9a" text-anchor="middle">_spec_.yaml: the spec as written, its {…} filled in once</text>
-<text x="940" y="512" font-size="12" fill="#9a9a9a" text-anchor="middle">_result_.yaml, run/ and the rest: what the run wrote</text>
+<path d="M790,200 h110 l14,-16 h-110 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<rect x="790" y="200" width="290" height="232" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<text x="806" y="230" font-size="20" fill="#000" font-weight="bold">Dat</text>
+<text x="852" y="230" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">tables/2026/table12_2/</text>
+<path d="M807,255 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M815,255 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="825" y="266" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">_spec_.yaml</text>
+<path d="M807,276 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M815,276 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="825" y="287" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">_result_.yaml</text>
+<path d="M807,297 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M815,297 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="825" y="308" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">table.csv</text>
+<path d="M807,318 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M815,318 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="825" y="329" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">log.txt</text>
+<path d="M806,341 h5 l2,-2 h6 v12 h-13 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<text x="825" y="350" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">run/</text>
+<text x="825" y="371" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">...</text>
+<path d="M980,252 H1046 L1056,262 V298 H980 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
+<path d="M1046,252 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
+<text x="1018.0" y="280.0" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">spec</text>
+<path d="M980,310 H1046 L1056,320 V356 H980 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
+<path d="M1046,310 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
+<text x="1018.0" y="338.0" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">result</text>
+<path d="M980,368 H1046 L1056,378 V414 H980 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
+<path d="M1046,368 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
+<text x="1018.0" y="396.0" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">table</text>
 <polyline points="636,292 786,292" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <text x="713.0" y="280" font-size="14" fill="#000" font-weight="bold" text-anchor="middle">instantiate</text>
 <text x="713.0" y="334" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">do(&quot;specs.table12&quot;)</text>
-<polyline points="608,500 786,342" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<polyline points="608,500 786,360" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <text x="729.0" y="440" font-size="14" fill="#000" font-weight="bold" text-anchor="middle">run</text>
-<text x="790" y="546" font-size="15" fill="#000" font-weight="bold">Name</text>
-<text x="790" y="566" font-size="12" fill="#9a9a9a">the name template, filled in when the dat is made</text>
-<text x="790" y="588" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">tables/{YYYY}/table12{unique}</text>
-<text x="790" y="608" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">&#8594; tables/2026/table12_2</text>
+<text x="790" y="458" font-size="11.5" fill="#9a9a9a">&#8226; <tspan font-family="Menlo, monospace">_spec_.yaml</tspan> the spec passed to instantiate</text>
+<text x="790" y="475" font-size="11.5" fill="#9a9a9a">&#8226; <tspan font-family="Menlo, monospace">_result_.yaml</tspan> what the run saved, and the run's record</text>
+<text x="790" y="492" font-size="11.5" fill="#9a9a9a">&#8226; <tspan font-family="Menlo, monospace">name</tspan> derived from the spec's template</text>
 </svg>
