@@ -223,7 +223,7 @@ print(comfort_report_value.obj)
 print(ran_since(counts_before))
 # → {'daily_comfort': 3, 'city_comfort': 3, 'comfort_report': 1}
 # same as:
-#   just run comfort.report.comfort_report cityset=cityset/representative start=2026-01-01 end=2027-01-01
+#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-01-01'" end="'2027-01-01'"
 
 # %% [markdown]
 # Everything ran: a daily comfort per city, a city comfort per city over the year, and the comfort report.
@@ -237,7 +237,7 @@ print(again_value.subject == comfort_report_value.subject)
 print(ran_since(counts_before))
 # → {'daily_comfort': 0, 'city_comfort': 0, 'comfort_report': 0}
 # same as (a hit):
-#   just run comfort.report.comfort_report cityset=cityset/representative start=2026-01-01 end=2027-01-01
+#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-01-01'" end="'2027-01-01'"
 
 # %% [markdown]
 # Asked again, nothing ran: the comfort report is a hit.
@@ -259,7 +259,7 @@ print(comfort_report_value.obj)
 print(ran_since(counts_before))
 # → {'daily_comfort': 1, 'city_comfort': 4, 'comfort_report': 1}
 # the run, same as:
-#   just run comfort.report.comfort_report cityset=cityset/representative start=2026-06-01 end=2026-09-01
+#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'"
 
 # %% [markdown]
 # Denver's daily comfort ran; Austin's, Boston's and Chicago's were hits, scored once for the year and binned again for summer.
@@ -278,7 +278,7 @@ comfort_report_value = L.at().run("comfort.report.comfort_report", cityset="city
 print(ran_since(counts_before))
 # → {'daily_comfort': 1, 'city_comfort': 1, 'comfort_report': 1}
 # the run, same as:
-#   just run comfort.report.comfort_report cityset=cityset/representative start=2026-06-01 end=2026-09-01
+#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'"
 
 # %% [markdown]
 # Boston's daily comfort ran, then its summer city comfort and the report; the other three cities were hits, since they never read `weather/Boston`.
@@ -301,7 +301,7 @@ print(comfort_report_value.obj)
 print(ran_since(counts_before))
 # → {'daily_comfort': 0, 'city_comfort': 0, 'comfort_report': 1}
 # the run, same as:
-#   just run comfort.report.comfort_report cityset=cityset/representative start=2026-06-01 end=2026-09-01
+#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'"
 
 # %% [markdown]
 # Only the comfort report ran: its run loaded `report.py`, and no other stage's run did.

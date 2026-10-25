@@ -107,6 +107,8 @@ def history(args):
 
 def brief(text):
     """A dependency item or value, short: hashes to 8 hex, a query to its answer's size."""
+    if text is None:
+        return "(none)"
     if text.startswith("ref:"):
         cls, _, h = text[4:].partition(":")
         return f"{cls.rpartition('.')[2]}:{h[:8]}"
@@ -122,6 +124,7 @@ def brief(text):
 
 
 def why(args):
+    import_checkout()                       # a mounted stage's code is checked against this checkout
     rev = Ledger().at()
     name, rest = args[0], parse(args[1:])
     v = rev.load(name)
@@ -134,7 +137,7 @@ def why(args):
         prev = moves[-2] if len(moves) > 1 else None
     if prev is not None:
         other = rev.load(prev)
-        moved = ", ".join(f"{k} {a} -> {b}" for k, (b, a) in v.diff(other).items())
+        moved = ", ".join(f"{brief(k)} {brief(a)} -> {brief(b)}" for k, (b, a) in v.diff(other).items())
         print(f"since {short(other.subject)}, its last target: {moved or 'nothing moved'}")
 
 
