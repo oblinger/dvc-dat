@@ -320,11 +320,42 @@ print("same value:", again_value.subject == far_value.subject, " nothing written
 # platform.
 
 # %% [markdown]
-# ### A new version, and a stale result
+# ### Step by step
 #
-# A function that loads the video a name points at records that
-# binding. Seal a new version under the same name and the name
-# moves; the old result no longer holds, so `run` recomputes.
+# `run` is three separable steps: load the function, run it with its
+# provenance captured, put the result on the ledger. `seal=False`
+# stops after the second, so the result can be looked at first;
+# `.seal(t)` is the third. Nothing runs twice.
+
+# %%
+distance_fn = L.at().load_fn("geometry.distance")          # (1) load the function
+draft_value = distance_fn(a=(9, 12), seal=False)           # (2) run it, provenance captured, nothing kept
+print("draft:", draft_value.obj, " sealed:", draft_value.sealed)   # → 15.0 None
+print("draft depends on:", sorted(draft_value.dependencies))       # the trace rides on the draft
+with L.transaction(by="human:dan", why="keep it") as t:    # (3) put it on the ledger
+    draft_value.seal(t)
+kept_value = L.at().run("geometry.distance", a=(9, 12))    # the same call: a hit
+print("hit:", kept_value.subject == draft_value.subject)   # → True: nothing ran
+
+# %% [markdown]
+# `seal=` says how far a call goes: `"get"` only looks, `False` runs
+# and keeps nothing, `True` also seals the result on this machine, a
+# ledger or a transaction saves it there. Left out, it saves to the
+# function's own ledger, as `run` does.
+
+# %% [markdown]
+# ## Provenance
+#
+# A value a ledger function returns records what it depended on: the
+# function at its version, the code's commit, the platform, and every
+# name and value it read. That record is its provenance.
+
+# %% [markdown]
+# ### When a name moves, a result goes stale
+#
+# A result records every name it read and the value it pointed at.
+# Seal a new video under the same name and the name moves; the old
+# result no longer matches the ledger, so `run` recomputes.
 
 # %%
 (repo_path / "clips.py").write_text('''\
@@ -358,13 +389,6 @@ print("first video, by hash:", rev4.load(video_subject).frames)     # → b'G1 w
 # clip stay, found by their hashes.
 
 # %% [markdown]
-# ## Provenance
-#
-# A value a ledger function returns records what it depended on: the
-# function at its version, the code's commit, the platform, and every
-# name and value it read. That record is its provenance.
-
-# %% [markdown]
 # ### What a result depends on
 
 # %%
@@ -387,7 +411,7 @@ print("opening clip read the first video:", opening_clip.dependencies["video/G1 
 print("retake clip read the retake:", retake_clip.dependencies["video/G1 db/alias"].endswith(retake_video.hash))   # → True: the retake
 
 # %% [markdown]
-# ### Sealing, step by step
+# ### Sealing a value by hand
 #
 # Sealing fixes a value: its bytes' hash and its preds, so it can be
 # checked but not changed. Saving puts the sealed value on the
@@ -409,33 +433,3 @@ print("G1 videos on the ledger:", L.at().values(game="G1"))   # not on the timel
 with L.transaction(by="human:dan", why="keep the highlights") as t:   # 3. keep it
     highlight_video.seal(t, name="video/G1/highlights")
 print("G1 videos on the ledger:", L.at().values(game="G1"))   # now it is
-
-# %% [markdown]
-# A ledger function does all three in one call: it runs, seals the
-# result with its provenance, and saves it. `seal=` says how far:
-# `False` only runs it, keeping nothing, so the result can be looked
-# at first; `True` also seals it here; a ledger or a transaction
-# saves it; `"get"` only looks. Left out, it saves to the function's
-# ledger.
-
-# %%
-clip_fn = L.at().load_fn("clips.clip")                    # get the function
-clip_keys = dict(video="video/G1", start=8, end=16)
-print("saved already:", clip_fn(**clip_keys, seal="get"))  # → None: never run
-draft_clip = clip_fn(**clip_keys, seal=False)             # run it, keep nothing
-print("draft:", draft_clip.frames, " sealed:", draft_clip.sealed)   # → b'e, 9100 ' None
-print("draft reads:", sorted(draft_clip.dependencies)[:3])   # its trace rides on it
-
-# %% [markdown]
-# The draft looks right, so keep it as it is: no second run. Saving
-# it writes the same entry the memoised call would have, provenance
-# and all, so the next identical call is a hit.
-
-# %%
-with L.transaction(by="human:dan", why="keep the clip") as t:
-    draft_clip.seal(t, name="video/G1/clip-8-16")          # keep the draft
-print("kept:", draft_clip.name, " subject:", draft_clip.subject)
-print("kept fn:", L.at()[draft_clip.subject, "db/fn"])     # → clips.clip
-
-kept_clip = clip_fn(**clip_keys)                          # the same call again
-print("hit:", kept_clip.subject == draft_clip.subject)    # → True: nothing ran
