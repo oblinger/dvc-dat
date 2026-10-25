@@ -1,85 +1,73 @@
-<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 960 660" width="960" height="660" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 1110 624" width="1110" height="624" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
 <defs><marker id="head" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#222"/></marker></defs>
-<rect width="960" height="660" fill="#ffffff"/>
-<rect x="0" y="0" width="420" height="660" fill="#f3f3f3"/>
-<text x="200" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">THE DAT</text>
-<text x="710" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">SOURCE CODE TREE</text>
-<path d="M40,90 h110 l14,-16 h-110 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<rect x="40" y="90" width="280" height="460" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<text x="56" y="120" font-size="20" fill="#000" font-weight="bold">Dat</text>
-<text x="102" y="120" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">runs/2026/dev3_2/</text>
-<path d="M62,150 H174 V229 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 H62 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<path d="M160,150 v14 h14" fill="none" stroke="#222" stroke-width="1"/>
-<path d="M160,150 l14,14" fill="none" stroke="#222" stroke-width="1"/>
-<text x="72" y="170" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">_spec_</text>
-<text x="72" y="187" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">.yaml</text>
-<text x="118" y="252" font-size="11" fill="#9a9a9a" text-anchor="middle">the spec, expanded once</text>
-<path d="M186,150 H298 V229 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 H186 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<path d="M284,150 v14 h14" fill="none" stroke="#222" stroke-width="1"/>
-<path d="M284,150 l14,14" fill="none" stroke="#222" stroke-width="1"/>
-<text x="196" y="170" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">_result_</text>
-<text x="196" y="187" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">.yaml</text>
-<text x="242" y="252" font-size="11" fill="#9a9a9a" text-anchor="middle">what the run stored</text>
-<rect x="62" y="290" width="112" height="56" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<path d="M160,290 v14 h14" fill="none" stroke="#222" stroke-width="1"/>
-<path d="M160,290 l14,14" fill="none" stroke="#222" stroke-width="1"/>
-<text x="72" y="310" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">model.pt</text>
-<rect x="186" y="290" width="112" height="56" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<path d="M284,290 v14 h14" fill="none" stroke="#222" stroke-width="1"/>
-<path d="M284,290 l14,14" fill="none" stroke="#222" stroke-width="1"/>
-<text x="196" y="310" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">log.txt</text>
-<text x="180" y="370" font-size="11" fill="#9a9a9a" text-anchor="middle">the files the run made</text>
-<text x="56" y="430" font-size="15" fill="#000" font-weight="bold">Name</text>
-<text x="56" y="452" font-size="11" fill="#9a9a9a">the spec&#8217;s name template, filled in once,</text>
-<text x="56" y="468" font-size="11" fill="#9a9a9a">when the dat is made</text>
-<text x="56" y="492" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">runs/{YYYY}/dev3{unique}</text>
-<text x="56" y="512" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">&#8594; runs/2026/dev3_2</text>
-<rect x="736" y="76" width="204" height="118" fill="#fff" stroke="#222" stroke-width="1"/>
-<text x="746" y="98" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">mymodule/</text>
-<text x="746" y="118" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ train.py</text>
-<text x="746" y="138" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">└─ specs/</text>
-<text x="746" y="158" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">   ├─ train_base.yaml</text>
-<text x="746" y="178" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">   └─ dev3.yaml</text>
-<path d="M722,106 h-8 v18 h8" fill="none" stroke="#222" stroke-width="1"/>
-<text x="706" y="120" font-size="14" fill="#000" font-weight="bold" text-anchor="end">DAT run functions</text>
-<path d="M722,162 h-8 v30 h8" fill="none" stroke="#222" stroke-width="1"/>
-<text x="706" y="182" font-size="14" fill="#000" font-weight="bold" text-anchor="end">DAT template specs</text>
-<path d="M480,250 H704 V341 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 H480 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<path d="M690,250 v14 h14" fill="none" stroke="#222" stroke-width="1"/>
-<path d="M690,250 l14,14" fill="none" stroke="#222" stroke-width="1"/>
-<text x="480" y="242" font-size="15" fill="#000" font-weight="bold">base spec</text>
-<text x="490" y="270" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" font-style="italic">specs/train_base.yaml</text>
-<line x1="490" y1="277" x2="694" y2="277" stroke="#ddd"/>
-<text x="490" y="294" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">dat:</text>
-<text x="490" y="311" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  do: mymodule.train.run</text>
-<text x="490" y="328" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  kwargs: {epochs: 10}</text>
-<path d="M480,400 H704 V555 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 H480 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<path d="M690,400 v14 h14" fill="none" stroke="#222" stroke-width="1"/>
-<path d="M690,400 l14,14" fill="none" stroke="#222" stroke-width="1"/>
-<text x="480" y="392" font-size="15" fill="#000" font-weight="bold">spec</text>
-<text x="490" y="420" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" font-style="italic">specs/dev3.yaml</text>
-<line x1="490" y1="427" x2="694" y2="427" stroke="#ddd"/>
-<text x="490" y="444" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">dat:</text>
-<text x="490" y="461" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  base: specs.train_base</text>
-<text x="490" y="478" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  name: runs/{YYYY}/dev3{unique}</text>
-<text x="490" y="495" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  do: mymodule.train.run</text>
-<text x="490" y="512" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  kwargs: {lr: 0.05}</text>
-<line x1="480" y1="457" x2="470" y2="457" stroke="#222" stroke-width="1.5"/>
-<line x1="470" y1="457" x2="470" y2="352" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<text x="464" y="406.5" font-size="14" fill="#000" font-weight="bold" text-anchor="end">base</text>
-<path d="M736,451 H940 V558 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 H736 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<path d="M926,451 v14 h14" fill="none" stroke="#222" stroke-width="1"/>
-<path d="M926,451 l14,14" fill="none" stroke="#222" stroke-width="1"/>
-<text x="736" y="443" font-size="15" fill="#000" font-weight="bold">run function</text>
-<text x="746" y="471" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" font-style="italic">train.py</text>
-<line x1="746" y1="478" x2="930" y2="478" stroke="#ddd"/>
-<text x="746" y="495" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">def run(dat, epochs=1,</text>
-<text x="746" y="512" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">        lr=0.1):</text>
-<text x="746" y="529" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    ...</text>
-<text x="746" y="546" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    dat.save()</text>
-<line x1="708" y1="491" x2="732" y2="495" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<text x="722.0" y="476" font-size="14" fill="#000" font-weight="bold" text-anchor="middle">do</text>
-<line x1="472" y1="528" x2="328" y2="528" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<text x="400.0" y="512" font-size="14" fill="#000" font-weight="bold" text-anchor="middle">instantiate</text>
-<text x="400.0" y="546" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">do(&quot;specs.dev3&quot;)</text>
+<rect width="1110" height="624" fill="#ffffff"/>
+<rect x="770" y="0" width="340" height="624" fill="#f3f3f3"/>
+<text x="135" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">SOURCE TREE</text>
+<text x="460" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">TEMPLATE SPECS AND CODE</text>
+<text x="940" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">THE DAT</text>
+<rect x="30" y="96" width="210" height="150" fill="#fff" stroke="#222" stroke-width="1"/>
+<text x="40" y="118" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">mymodule/</text>
+<text x="40" y="138" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ specs/</text>
+<text x="40" y="158" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">│  ├─ table_base.yaml</text>
+<text x="40" y="178" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">│  └─ table12.yaml</text>
+<text x="40" y="198" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ mult.py</text>
+<text x="40" y="218" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">└─ ...</text>
+<text x="30" y="272" font-size="12" fill="#9a9a9a">specs are YAML files, run functions</text>
+<text x="30" y="288" font-size="12" fill="#9a9a9a">are Python; both live in the tree</text>
+<path d="M316,76 H608 V163 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 H316 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<path d="M594,76 v14 h14 M594,76 l14,14" fill="none" stroke="#222" stroke-width="1"/>
+<text x="316" y="68" font-size="15" fill="#000" font-weight="bold">base spec</text>
+<text x="326" y="96" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" font-style="italic">specs/table_base.yaml</text>
+<line x1="326" y1="103" x2="598" y2="103" stroke="#ddd"/>
+<text x="326" y="120" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">dat:</text>
+<text x="326" y="137" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  kwargs: {start: 1}</text>
+<text x="326" y="154" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">notes: shared defaults</text>
+<path d="M316,214 H608 V349 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 H316 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<path d="M594,214 v14 h14 M594,214 l14,14" fill="none" stroke="#222" stroke-width="1"/>
+<text x="316" y="206" font-size="15" fill="#000" font-weight="bold">spec</text>
+<text x="326" y="234" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" font-style="italic">specs/table12.yaml</text>
+<line x1="326" y1="241" x2="598" y2="241" stroke="#ddd"/>
+<text x="326" y="258" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">dat:</text>
+<text x="326" y="275" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  base: specs.table_base</text>
+<text x="326" y="292" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  name: tables/{YYYY}/table12{unique}</text>
+<text x="326" y="309" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  do: mymodule.mult.table</text>
+<text x="326" y="326" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  kwargs: {n: 12}</text>
+<path d="M316,420 H608 V535 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 H316 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<path d="M594,420 v14 h14 M594,420 l14,14" fill="none" stroke="#222" stroke-width="1"/>
+<text x="316" y="412" font-size="15" fill="#000" font-weight="bold">run function</text>
+<text x="326" y="440" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" font-style="italic">mult.py</text>
+<line x1="326" y1="447" x2="598" y2="447" stroke="#ddd"/>
+<text x="326" y="464" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">def table(dat, n=10, start=1):</text>
+<text x="326" y="481" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    ...            # writes table.csv</text>
+<text x="326" y="498" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    dat.get_results()["cells"] = n*n</text>
+<text x="326" y="515" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    dat.save()</text>
+<polyline points="244,158 312,122" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<polyline points="244,178 312,284" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<polyline points="244,198 312,480" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<polyline points="608,275 622,275 622,172" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<text x="630" y="228" font-size="14" fill="#000" font-weight="bold" text-anchor="start">base</text>
+<polyline points="608,309 622,309 622,416" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<text x="630" y="372" font-size="14" fill="#000" font-weight="bold" text-anchor="start">do</text>
+<path d="M790,220 h110 l14,-16 h-110 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<rect x="790" y="220" width="290" height="220" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<text x="806" y="250" font-size="20" fill="#000" font-weight="bold">Dat</text>
+<text x="852" y="250" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">tables/2026/table12_2/</text>
+<rect x="806" y="274" width="258" height="150" fill="#fff" stroke="#222" stroke-width="1"/>
+<text x="816" y="296" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ _spec_.yaml</text>
+<text x="816" y="316" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ _result_.yaml</text>
+<text x="816" y="336" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ table.csv</text>
+<text x="816" y="356" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ table.png</text>
+<text x="816" y="376" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">├─ log.txt</text>
+<text x="816" y="396" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">└─ ...</text>
+<text x="940" y="496" font-size="12" fill="#9a9a9a" text-anchor="middle">_spec_.yaml: the spec, expanded once</text>
+<text x="940" y="512" font-size="12" fill="#9a9a9a" text-anchor="middle">_result_.yaml and the rest: what the run wrote</text>
+<polyline points="636,292 786,292" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<text x="713.0" y="280" font-size="14" fill="#000" font-weight="bold" text-anchor="middle">instantiate</text>
+<text x="713.0" y="334" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">do(&quot;specs.table12&quot;)</text>
+<polyline points="608,500 786,342" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<text x="729.0" y="440" font-size="14" fill="#000" font-weight="bold" text-anchor="middle">run</text>
+<text x="790" y="546" font-size="15" fill="#000" font-weight="bold">Name</text>
+<text x="790" y="566" font-size="12" fill="#9a9a9a">the template, filled in once when the dat is made</text>
+<text x="790" y="588" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">tables/{YYYY}/table12{unique}</text>
+<text x="790" y="608" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace">&#8594; tables/2026/table12_2</text>
 </svg>
