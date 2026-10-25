@@ -102,7 +102,7 @@ with L.transaction(by="human:dan") as t:
     g2_subject = g2_video.seal(t, name="video/G2")
 rev2 = L.at()
 print("camera=wide:", rev2.values(camera="wide"))           # → [<Video video/G1>, <Video video/G2>]
-print("game=G1, camera=wide:", rev2.value(game="G1", camera="wide")) # → video/G1
+print("game=G1, camera=wide:", repr(rev2.value(game="G1", camera="wide")))   # → <Video video/G1>
 print("every Video:", rev2.refs(kind=Video))                # → [<Ref video/G1>, <Ref video/G2>]
 
 # %% [markdown]
