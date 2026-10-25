@@ -2,13 +2,13 @@
 description: "2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace"
 ---
 
-| -[DAT API](DAT%20API.md)-        | : 2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace<br>→ [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](ha://p/DAT%20API) |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| -[DAT API](DAT%20API.md)-             | : 2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace<br>→ [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](ha://p/DAT%20API) |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Class API](DAT%20Class%20API.md)     | `from dvc_dat import Dat`: the `Dat` class, `Dat.do`, the spec file, the config                                                                                                                             |
-| [CLI](DAT%20CLI.md)                 | `dat TARGET …` from a shell, and the bootstrap copy                                                                                                                                                         |
+| [CLI](DAT%20CLI.md)                   | `dat TARGET …` from a shell, and the bootstrap copy                                                                                                                                                         |
 | [Do API](DAT%20Do%20API.md)           | the namespace under `Dat.do`: your program's main, mounts, spec surgery — the advanced half                                                                                                                 |
 | [Manager API](DAT%20Manager%20API.md) | `DatManager`: the one object — folders, artifacts, recording, its `do`                                                                                                                                      |
-| ...                              |                                                                                                                                                                                                             |
+| ...                                   |                                                                                                                                                                                                             |
 
 # DAT API
 The 2.16 contract of `dvc_dat`, shown once as a whole project.

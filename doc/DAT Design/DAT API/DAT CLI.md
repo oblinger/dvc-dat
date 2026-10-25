@@ -1,7 +1,7 @@
 ---
 description: "`dat TARGET …` from a shell, and the bootstrap copy"
 ---
-:>> [DAT](ha://DAT) → [DAT Design](ha://DAT%20Design) → [DAT API](ha://DAT%20API) → [DAT CLI](ha://p/DAT%20CLI) 
+:>> [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT CLI](ha://p/DAT%20CLI) 
 # DAT CLI
 `dat TARGET …` is `Dat.do(TARGET, …)` from a shell.
 
