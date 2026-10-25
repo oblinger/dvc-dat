@@ -263,13 +263,14 @@ print("fn:", length_fn, " code:", length_fn.code, " sandboxed:", length_fn.code.
 print("result:", segment_value.obj)                 # → result: 2.5
 
 # %% [markdown]
-# #### A sandbox is one version of its code
+# #### A sandbox is a snapshot of the code
 #
-# Loading a sandboxed function pins the code it runs: `version` is
-# what the package declares, `modules` the files it loads, `sha` the
-# checksum of the function's file, and `subject` names the function
-# at those bytes. Every result records the function as it ran, every
-# module it loaded (`plane/__init__.py` too), among its dependencies.
+# Loading a sandboxed function takes a snapshot of the code it runs:
+# `modules` are the files in it, `sha` the checksum of the function's
+# file, `subject` the function at those bytes, and `version` the name
+# the package gives the snapshot. Every result records the function as
+# it ran, every module it loaded (`plane/__init__.py` too), among its
+# dependencies.
 
 # %%
 print("version:", length_fn.code.version, " modules:", length_fn.code.modules)
