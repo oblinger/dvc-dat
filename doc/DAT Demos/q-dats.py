@@ -105,49 +105,55 @@ dat:
 ''');
 
 # %% [markdown]
-# `do` instantiates a spec: it merges the base under it, fills the
-# name template once, makes the folder, and calls the run function
-# with the dat and its kwargs. Mounting `specs/` makes
-# `specs/table12.yaml` answer to `specs.table12`.
+# Mounting `specs/` makes `specs/table12.yaml` answer to `specs.table12`.
+# Making a dat from a spec is three steps: instantiate, run, save.
+#
+# ## 1. Instantiate
+#
+# `Dat.create` merges the base under the spec, fills the name template
+# once, makes the folder and writes `_spec_.yaml`. Nothing runs.
 
 # %%
 do = Dat.do
 do.mount(folder="mymodule/specs", at="specs")
-table12_dat = do("specs.table12")
+table12_dat = Dat.create(spec="specs.table12")
 table12_path = Path(table12_dat.get_path())
 print("dat:", repr(table12_dat))   # dat: <Dat: tables/2026/table12>
-print("files:", sorted(os.listdir(table12_path)))
-# files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
+print("files:", sorted(os.listdir(table12_path)))   # files: ['_spec_.yaml']
 print("_spec_.yaml:\n" + (table12_path / "_spec_.yaml").read_text())
 # _spec_.yaml: kwargs {start: 1, n: 12}; no base:; name: the template
+
+# %% [markdown]
+# The spec keeps `name:` as its template; the folder it filled to is
+# the dat's name, and `{unique}` counts up when the folder is taken.
+#
+# ## 2. Run
+#
+# `do(dat)` calls the run function with the dat and the spec's kwargs,
+# in place. The folder gains whatever the run wrote, `_result_.yaml`
+# (what the run stored) and `run/` (when, where, on which commit).
+
+# %%
+do(table12_dat)
+print("files:", sorted(os.listdir(table12_path)))
+# files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
 print("cells:", table12_dat.get_results()["cells"])   # cells: 144
 print("table.csv:\n" + "\n".join((table12_path / "table.csv").read_text().splitlines()[:3]))
 # table.csv: rows 1..12, 2..24, 3..36
 
-again_dat = do("specs.table12")
-print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_2>
-
 # %% [markdown]
-# The folder holds whatever the run wrote, beside `_spec_.yaml` (the
-# spec, base merged in, stored whole) and `_result_.yaml` (what the
-# run stored); `run/` records when, where and on which commit it ran.
-# The spec keeps `name:` as its template; the folder it filled to is
-# the dat's name, and `{unique}` counts up on a second run.
-
-# %% [markdown]
-# ## A dat can also be saved as a value
+# ## 3. Save it as a value
 #
 # On a ledger a dat is a value: sealed under a name, loaded back,
-# found by its preds. Nothing runs in this section: the run happened
-# above, in `do("specs.table12")`. `path_to_table_dat` reads the
-# folder's spec kwargs and result as preds; `seal` stores the folder;
-# `load` brings it back.
+# found by its preds. Nothing runs here. `path_to_table_dat` reads
+# the folder's spec kwargs and result as preds; `seal` stores the
+# folder; `load` brings it back.
 #
 # Today this takes a class. The ledger's `Dat` is a `Value` over a
 # folder, but it is not the `Dat` that `do` returns, and `load`
 # refuses a folder whose spec names `dvc_dat.core.Dat` unless the
 # class accepts that kind; `TableDat` does, and declares the preds.
-# Whether a do-made dat should be a value by itself is DAT 1038.
+# Whether a dat should be a value by itself is DAT 1038.
 
 # %%
 (module_path / "table_dat.py").write_text('''\
@@ -190,7 +196,7 @@ def table(rev, *, spec: dict, path: Path) -> TableDat:
 ''')
 from mymodule.table_dat import TableDat, path_to_table_dat
 
-sealed_dat = path_to_table_dat(table12_path)   # the dat `do` ran above
+sealed_dat = path_to_table_dat(table12_path)   # the dat step 2 ran
 with L.transaction(by="human:dan") as t:
     sealed_dat.seal(t, name="tables/table12")
 print("dat:", repr(sealed_dat), " sealed:", sealed_dat.sealed)   # dat: <TableDat tables/table12>  sealed: <the seal's moment>
@@ -207,13 +213,24 @@ print("preds:", dict(sorted(loaded_dat.preds.items())))
 # folder from the store; it does not run anything.
 
 # %% [markdown]
-# ## The dat constructor is a ledger function
+# ## In practice: one step
 #
-# `table(rev, *, spec, path)` builds a table dat under `@ledger_fn`:
-# the spec is the question, and the answer is remembered. This is
-# where the ledger runs a dat: the function writes the table into
-# `path` and returns it as a value. A ledger function runs committed,
-# mounted code, in a sandbox.
+# `do("specs.table12")` is steps 1 and 2: it instantiates the spec,
+# runs the dat, and returns what the run function returned.
+
+# %%
+again_dat = do("specs.table12")
+print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_2>
+print("files:", sorted(os.listdir(again_dat.get_path())))
+# files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
+
+# %% [markdown]
+# All three steps at once is a ledger function: `table(rev, *, spec,
+# path)` builds a table dat under `@ledger_fn`. The spec is the
+# question, and the answer is remembered; a ledger function runs
+# committed, mounted code, in a sandbox. (Under DAT 1038 this is
+# `L.at().do(spec)`, one operator for every spec, no function of
+# your own.)
 
 # %%
 subprocess.run(git_cmd + ["add", "mymodule"], check=True)
