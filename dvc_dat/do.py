@@ -745,7 +745,7 @@ def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: S
         return 0
     try:
         fn = ledger.at().load_fn(name)
-        hit = fn(memo="get", path=alias, **keys)
+        hit = fn(seal="get", path=alias, **keys)
         value = hit or fn(path=alias, **keys)
     except Exception as e:
         if os.environ.get("DAT_DEBUG"):

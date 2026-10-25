@@ -119,8 +119,8 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 **load_fn**`(name: str) -> Fn`
     The value function a dotted name resolves to at this revision: under the longest mounted prefix it is sandboxed, otherwise it is imported in this process (unsandboxed). See [Execution Semantics](#Execution%20Semantics). ^load-fn
 
-**run**`(name: str, /, *, memo=True, clean=False, **keys) -> Value | None`
-    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `memo=True` returns that sealed result, else runs, seals and returns; `memo=False` runs and seals nothing; `memo="get"` returns the sealed result or `None` and never runs. `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit this revision's version number is bound to, its `code/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Execution Semantics](#Execution%20Semantics) and [Value Provenance](#Value%20Provenance). ^run
+**run**`(name: str, /, *, seal=<this rev's ledger>, clean=False, **keys) -> Value | None`
+    Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `seal` says where the result goes, as on [`Fn.__call__`](#^--call--): by default, the hit, else run and save it as the memo entry; `seal=False` runs and keeps nothing; `seal=True` runs and seals locally; `seal=t` saves into an open transaction; `seal="get"` returns the saved result or `None` and never runs ([Running](#Running)). `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit this revision's version number is bound to, its `code/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Execution Semantics](#Execution%20Semantics) and [Value Provenance](#Value%20Provenance). ^run
 
 
 
@@ -271,7 +271,7 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
     The hex sha256 of `encode()`, cached once sealed; after a save, the stored bytes' hash whatever the live object holds. ^value-hash
 
 **dependencies**`: Mapping[str, str]`
-    Item name to version or hash: what producing the value read. Empty until saved or evaluated. See [Value Provenance](#Value%20Provenance). ^dependencies
+    Item name to version or hash: what producing the value read. Empty for a hand-built value until saved; a run's result carries its trace here at every `seal=` level. See [Value Provenance](#Value%20Provenance). ^dependencies
 
 **Dependencies**`: Mapping[str, str]` (class attribute)
     The type of `dependencies`, for annotations. ^value-dependencies
@@ -282,8 +282,8 @@ The object itself with its provenance on it: what `run` returns, what `seal` sto
 **decode**`(data: bytes, store: ArtStore) -> Value` (classmethod)
     Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). The object from its bytes. A `decode` that also accepts `name=` is passed the alias the value is loaded by, `None` when loaded by its subject. ^decode
 
-**seal**`(to=None, *, keep=False, deps=(), name=None, provenance=None, by=None) -> str`
-    `v.seal()` fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by` (default the provenance, else `seal`). `name=` writes `(alias, db/alias, subject)` beside it. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. See [Versioning](#Versioning). ^seal
+**seal**`(to=True, *, keep=False, deps=(), name=None, provenance=None, by=None) -> str`
+    `to` takes what a run's `seal=` takes, so `f(seal=x)` and a later `v.seal(x)` end in one place. `v.seal()`, the same as `v.seal(True)`, fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by` (default the provenance, else `seal`). `name=` writes `(alias, db/alias, subject)` beside it. A run's result (`seal=False` or `True`) carries its trace: `v.seal(t)` or `v.seal(L)` writes the memo entry the run would have written, so the next identical call hits, after the code check of [Running](#Running) (`NotEvaluated`); `deps=` and `provenance=` on it are `TypeError`. `v.seal(False)` and `v.seal("get")` are `TypeError`: nothing to do to an object. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. See [Versioning](#Versioning). ^seal
 
 **same_as**`(other: Value | None) -> bool`
     `self.hash == other.hash`; `False` for `None`. ^same-as
@@ -373,7 +373,7 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
 | [mount](#^mount) | The mounted prefix, in sandbox mode |
 | [env](#^env) | The environment it resolved in |
 | [signature](#^signature) | The keys it takes |
-| [__call__](#^--call--) | Evaluate: a memo hit, or run and seal |
+| [__call__](#^--call--) | Evaluate: a memo hit, or run and send the result where `seal=` says |
 
 **name**`: str`
     The dotted name it was resolved by. ^fn-name
@@ -399,8 +399,8 @@ A value function resolved at one revision: a frozen dataclass made by `Rev.load_
 **signature**`: inspect.Signature`
     The keys the function takes, without the leading `Rev` and without `path`. ^signature
 
-**__call__**`(*, memo=True, clean=False, path=None, kwargs=None, **keys) -> Value | None`
-    `memo=True` hands back a memo hit, else runs the body, seals the result and returns it; `memo=False` runs and seals nothing; `memo="get"` returns a hit or `None` and never runs; anything else is `ValueError`. The control options are exactly `memo`, `clean`, `path` and `kwargs`, never keys and never hashed. Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. An unsandboxed run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
+**__call__**`(*, seal=<the fn's ledger>, clean=False, path=None, kwargs=None, **keys) -> Value | None`
+    `seal` is where the result goes ([Running](#Running)). A `Ledger` (by default the one the function was loaded from) hands back a memo hit, else runs the body and saves the result as the memo entry in a transaction of its own; an open `Transaction` on that ledger does the same into it, the value's subject fixed at once and its revision at commit; `False` runs and keeps nothing, the trace on the result; `True` runs and seals locally (`v.seal()`); `"get"` returns a hit or `None` and never runs. Another ledger, or anything else, is `ValueError`. With `seal=t`, `path=` must be relative: it is the name the entry is saved under. The control options are exactly `seal`, `clean`, `path` and `kwargs`, never keys and never hashed. Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. An unsandboxed run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `code/<repo>` commit, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
 
 
 
@@ -579,15 +579,32 @@ A function that declares `path: Path` is given a fresh folder under `$DAT_WORK` 
 
 
 ## Running
-**run.** `run(name, **keys)` looks up the function by name (`load_fn`), then looks for a result already computed: every entry whose `db/fn` (the dotted name) and `db/keys` (the bound keys, defaults included, as canonical JSON) match, newest seal first, and hands back the first whose dependencies still hold at the revision asked ([Value Provenance](#Value%20Provenance)). That is the memoization. A miss runs the body with a recording `Rev`, in the child for a sandboxed function, and the result comes back with its dependencies. `memo=False` runs without sealing; `memo="get"` looks up and never runs. A correction to a row a function read makes its result stale, and the next ask re-derives it; a changed byte in a module a sandboxed run loaded does the same through the `fn` row, whatever commit it names.
+**run.** `run(name, **keys)` looks up the function by name (`load_fn`), then looks for a result already computed: every entry whose `db/fn` (the dotted name) and `db/keys` (the bound keys, defaults included, as canonical JSON) match, newest seal first, and hands back the first whose dependencies still hold at the revision asked ([Value Provenance](#Value%20Provenance)). That is the memoization. A miss runs the body with a recording `Rev`, in the child for a sandboxed function, and the result comes back with its dependencies. `seal=` says where the result goes; a later `v.seal(x)` takes the same `x`, so a run looked at first can be kept without running again.
 
-**Value.** The return of a run is a value: the object the function built, with its preds and, once sealed, its provenance. Sealing is the act of capturing it: the identity is fixed from the dependencies, the preds and the bytes; saving then writes it into the ledger. So a value is in one of three states, and a result of `run` goes through all three before it is returned.
+| Level | You want | Retained | Call | Later, on the object | Next identical call |
+|---|---|---|---|---|---|
+| get | a saved result if one exists; never compute | nothing new | `f(**keys, seal="get")` → value or `None` | — | — |
+| draft | run it, keep nothing; look first | the object in memory, trace attached | `f(**keys, seal=False)` | `.seal()`, `.seal(L)`, `.seal(t)` | recomputes |
+| sealed | run it and freeze it, off the ledger | hash, content in the kept folder, trace, frozen preds | `f(**keys, seal=True)` | `.seal(L)`, `.seal(t)` | recomputes |
+| saved | run it and put it on the ledger | the memo entry on the timeline, keyed by fn + keys | `f(**keys, seal=L)` (own transaction; the default is the fn's ledger) or `seal=t` (into that transaction) | — | hits: returns the saved value |
+
+```python
+draft = clip_fn(**keys, seal=False)   # run; keep nothing
+draft.seal(L)                         # saved; the next call hits
+with L.transaction(by="human:dan") as t:
+    saved = clip_fn(**keys, seal=t)   # saved with t's other rows
+    t[saved.subject, "status"] = "reviewed"
+```
+
+Every run attaches its trace (the `fn` subject, the keys, `code/<repo>`, `platform`, every read) to its result, so a draft or a locally sealed result saved later writes the full memo entry, `db/fn`, `db/keys` and the `db/deps/*` rows, exactly as the memoised call would. Saving an unsandboxed run's result later checks the code then: the run must not have been on a dirty checkout, and the checkout must now be clean and at the commit the trace names, else `NotEvaluated`; a sandboxed result needs no check, its `fn` item being the bytes it loaded. A hand-built value has no trace and seals as before, recording code and platform; it is found by name or pred, never by fn + keys. A result the body sealed itself is refused at every saving level (`TypeError`): the caller's `seal=` is the retention policy. A correction to a row a function read makes its result stale, and the next ask re-derives it; a changed byte in a module a sandboxed run loaded does the same through the `fn` row, whatever commit it names.
+
+**Value.** The return of a run is a value: the object the function built, with its preds and, once sealed, its provenance. Sealing is the act of capturing it: the identity is fixed from the dependencies, the preds and the bytes; saving then writes it into the ledger. So a value is in one of three states, and a result of `run` goes as far through them as its `seal=` says before it is returned.
 
 | State | What is fixed | Where it lives | How |
 | --- | --- | --- | --- |
 | built | nothing: `preds` and the bytes may still change | memory, or its work folder for a `Dat` | the constructor, or the body of a value function |
 | sealed | its identity: the subject hashing dependencies, preds and bytes; `preds` read-only | the same place, with a seal record in the kept folder | `v.seal()` (`keep=True` copies the bytes into the kept cache) |
-| saved | the rows at a revision, the bytes in the art store | the ledger | `v.seal(t)` or `v.seal(L)`; a run seals and saves its own result |
+| saved | the rows at a revision, the bytes in the art store | the ledger | `v.seal(t)` or `v.seal(L)`; a run saves its own result by default (`seal=`) |
 
 **Value.seal.** A sealed value that is never saved is still a value with a fixed identity, usable as a dep. `v.seal()` alone writes a seal record to this machine's kept folder (`$DAT_KEPT`, else `~/.cache/dvc-dat/kept`); a later `v.seal(t)` saves the state it was sealed in, its dependencies the environment of the seal, not of the save. A value not kept whose bytes changed in between is `SealBroken`. `Dat.sealed_at_path` reopens such a seal in another process. `just sealed` lists the seals never saved; `just sealed purge` drops them. A saved value never changes; a new version is a new seal ([Versioning](#Versioning)).
 

@@ -370,12 +370,12 @@ def test_a_mount_root_without_init_imports_namespace_style(sbx):
     assert L.at().run("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # the package case
 
 
-def test_memo_false_keeps_preds_and_runs_on_a_dirty_tree(sbx):
+def test_a_draft_keeps_preds_and_runs_on_a_dirty_tree(sbx):
     L, repo = sbx
-    v = L.at().run("sbx.stage.kinds.tagged", game="G1", memo=False)
+    v = L.at().run("sbx.stage.kinds.tagged", game="G1", seal=False)
     assert not v.sealed and v.preds == {"game": "G1"} and v.dependencies["fn"].startswith("db/fn/")
     (repo / "sbx/other.py").write_text("X = 3\n")              # dirty
-    assert L.at().run("sbx.stage.fns.count", game="G1", memo=False).obj == {"n": 6}
+    assert L.at().run("sbx.stage.fns.count", game="G1", seal=False).obj == {"n": 6}
     assert L.at().run("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # a miss runs dirty (Q39)
     with pytest.raises(NotClean, match="uncommitted changes"):
         L.at().run("sbx.stage.fns.count", game="G1", clean=True)
@@ -405,13 +405,13 @@ def test_a_committed_edit_recomputes_with_no_bump(sbx):
 
 def test_each_call_is_a_fresh_process(sbx):
     L, _repo = sbx
-    a = L.at().run("sbx.stage.fns.pid", game="G1", memo=False).obj
-    b = L.at().run("sbx.stage.fns.pid", game="G1", memo=False).obj
+    a = L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj
+    b = L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj
     assert a["calls"] == b["calls"] == 1 and a["pid"] != b["pid"]
     assert sandbox._server().alive()
     with pytest.raises(RuntimeError, match=r"ended \(exit code 3\) before it replied"):
         L.at().run("sbx.stage.fns.die", game="G1")
-    assert L.at().run("sbx.stage.fns.pid", game="G1", memo=False).obj["calls"] == 1   # the server lives on
+    assert L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1   # the server lives on
 
 
 def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
@@ -521,3 +521,21 @@ def test_reads_confined_to_the_mounts_the_dats_and_the_work_folder(sbx, tmp_path
         L.at().run("sbx.stage.reads.library_data", game="G1")
     with pytest.raises(UntracedRead, match="/etc/hosts"):    # a mounted module's own load
         L.at().run("sbx.stage.eager.f", game="G1")
+
+
+def test_a_sandboxed_draft_saved_later_is_the_memo_entry(sbx):
+    L, _repo = sbx
+    d = L.at().run("sbx.stage.fns.count", game="G1", seal=False)
+    assert d.subject is None and "_run" in d.__dict__
+    d.seal(L)
+    assert L.at()[d.subject, "db/provenance"] == "eval:sandbox"
+    assert L.at().run("sbx.stage.fns.count", game="G1", seal="get").subject == d.subject
+
+
+def test_a_sandboxed_run_saves_into_a_transaction(sbx):
+    L, _repo = sbx
+    with L.transaction(by="t") as t:
+        v = L.at().run("sbx.stage.fns.count", game="G1", seal=t)
+        t[v.subject, "status"] = "ok"
+    assert L.at()[v.subject, "status"] == "ok" and L.at()[v.subject, "db/fn"] == "sbx.stage.fns.count"
+    assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject

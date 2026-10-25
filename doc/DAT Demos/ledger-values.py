@@ -980,14 +980,15 @@ print(stable_clip.matches(rev))
 # → True: it names identical bytes
 
 # %% [markdown]
-# `memo="get"` looks the entry up without running; `memo=False`
+# `seal="get"` looks the entry up without running; `seal=False`
 # runs without sealing, and its bytes are what a memoized call would
-# return.
+# return. Its trace rides on it: `dry_value.seal(L)` would save it as
+# the memo entry, no second run.
 
 # %%
-print(rev.run("geometry.distance", a=(5, 12), memo="get"))
+print(rev.run("geometry.distance", a=(5, 12), seal="get"))
 # → None: never run
-dry_value = rev.run("geometry.distance", a=(6, 8), memo=False)
+dry_value = rev.run("geometry.distance", a=(6, 8), seal=False)
 print(dry_value.sealed, dry_value.hash == far_value.hash)
 # → None True
 print(L.at().id == rev.id)

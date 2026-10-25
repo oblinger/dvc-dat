@@ -94,8 +94,8 @@ def placed(rev, *, game: str, path: Path = "games/{game}") -> Dat:
 
 
 @ledger_fn
-def controls(rev, *, memo: int, clean: str, kwargs: dict, n: int = 0) -> dict:
-    return {"memo": memo, "clean": clean, "kwargs": kwargs, "n": n}
+def controls(rev, *, seal: int, clean: str, kwargs: dict, n: int = 0) -> dict:
+    return {"seal": seal, "clean": clean, "kwargs": kwargs, "n": n}
 
 
 @ledger_fn
@@ -121,7 +121,7 @@ def via_refs_rev(rev, *, game: str) -> dict:
 
 @ledger_fn
 def maybe(rev, *, game: str) -> dict:
-    hit = rev.run("ledger_kinds.cut", game=game, memo="get")
+    hit = rev.run("ledger_kinds.cut", game=game, seal="get")
     return {"had": hit is not None}
 
 

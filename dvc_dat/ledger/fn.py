@@ -8,8 +8,13 @@ mounted tree and run in a worker (``sandbox``); otherwise a base function,
 resolved in this process. Calling the ``Fn`` is ``run``: a memo lookup over
 every entry at the top whose ``db/fn`` and ``db/keys`` rows match, each
 candidate's dependencies matched against the rev, the latest-sealed match winning
-(Q20, A20); on a miss, run, trace its reads, seal with ``db/fn``,
-``db/keys`` and ``db/provenance eval:unsandboxed|eval:sandbox``.
+(Q20, A20); on a miss, run, trace its reads, and send the result where ``seal=``
+says (DAT 1028): ``"get"`` never runs; ``False`` keeps nothing; ``True`` seals it
+locally; a ``Ledger`` (the default: the fn's own) or an open ``Transaction`` saves
+it as the memo entry, ``db/fn``, ``db/keys`` and ``db/provenance
+eval:unsandboxed|eval:sandbox``. Every run attaches its trace to the result
+(``RunTrace``, ``v.__dict__["_run"]``), so a draft sealed later with ``v.seal(L)``
+or ``v.seal(t)`` becomes the same memo entry.
 """
 
 from __future__ import annotations
@@ -33,9 +38,137 @@ if TYPE_CHECKING:
 
 #: The control options of a call (Q41): never keys, never hashed. A function may declare one as a
 #: key and is then called through ``kwargs=``; a declared ``path`` is the folder it builds (Q36).
-RESERVED_KEYS = ("memo", "clean", "path", "kwargs")
+RESERVED_KEYS = ("seal", "clean", "path", "kwargs")
 #: The name a folder-producing miss gets with neither ``path=`` nor a template (as ``Dat.create``).
 ANONYMOUS = "anonymous/Dat{unique}"
+
+
+class _Own:
+    """``seal=``'s default: the ledger the function was loaded from."""
+
+    def __repr__(self) -> str:
+        return "<the fn's ledger>"
+
+
+#: The default of ``seal=`` (``Fn.__call__``, ``Rev.run``): save to the fn's own ledger.
+OWN: Any = _Own()
+
+
+def ledger_key(ledger: Any) -> str:
+    """One ledger, however it was opened: its DSN, or its folder's real path."""
+    from .pgstore import is_dsn
+
+    text = str(ledger.path)
+    return text if is_dsn(text) else os.path.realpath(text)
+
+
+@dataclass(frozen=True)
+class RunTrace:
+    """What one run knew, kept on its unsaved result (``v.__dict__["_run"]``): enough for a later
+    ``v.seal(L)`` / ``v.seal(t)`` to write the memo entry a memoised run writes (DAT 1028).
+
+    ``trace`` is the dependencies (fn subject, platform, ``code/<repo>``, every read); ``fn_rows``
+    the ``db/fn/<name>/<hash>`` rows; ``repo`` and ``dirty`` the checkout that vouches for an
+    unsandboxed run (``repo`` ``None`` outside any), for the code check at a late save."""
+
+    name: str
+    enc: str
+    trace: Dict[str, str]
+    provenance: str
+    fn_subject: str
+    fn_rows: Tuple[Tuple[str, str], ...]
+    ledger: str
+    mode: str
+    repo: Optional[str] = None
+    dirty: bool = False
+
+    def record(self) -> Dict[str, Any]:
+        """As JSON, for a ``v.seal()`` seal record."""
+        d = dict(self.__dict__)
+        d["fn_rows"] = [list(r) for r in self.fn_rows]
+        return d
+
+    @classmethod
+    def from_record(cls, d: Dict[str, Any]) -> "RunTrace":
+        d = dict(d)
+        d["fn_rows"] = tuple(tuple(r) for r in d["fn_rows"])
+        return cls(**d)
+
+
+def run_trace(fn: "Fn", plain: "Rev", trace: Dict[str, str], enc: str, provenance: str,
+              modules: Optional[Dict[str, str]] = None, repo: Optional[str] = None,
+              dirty: bool = False) -> RunTrace:
+    fsub = trace.get("fn", fn.subject)
+    return RunTrace(name=fn.name, enc=enc, trace=dict(trace), provenance=provenance, fn_subject=fsub,
+                    fn_rows=tuple(fn._rows(fsub, modules)), ledger=ledger_key(plain.ledger), mode=fn.mode,
+                    repo=repo, dirty=dirty)
+
+
+def attach_run(value: Value, run: RunTrace) -> Value:
+    """A draft: its trace on it, as ``dependencies`` and as the ``RunTrace`` a later save uses."""
+    value.dependencies = dict(run.trace)  # type: ignore[misc]
+    if not value.sealed:                    # a body's own v.seal() is refused at any save
+        value.__dict__["_run"] = run
+    return value
+
+
+def check_late_code(run: RunTrace, env: Env) -> None:
+    """A late save of an unsandboxed run (DAT 1028): the code that ran is vouched for by a clean
+    checkout at the commit the trace names, as a memoised run's ``_check_code``; ``NotEvaluated``."""
+    if run.mode == "sandbox":
+        return                              # the fn item records the bytes it loaded
+    if run.repo is None:
+        raise NotEvaluated(f"{run.name}: its code is outside any git checkout, so no commit can vouch "
+                           "for a result")
+    if run.dirty:
+        raise NotEvaluated(f"{run.name}: it ran on a checkout of {run.repo} with uncommitted changes; "
+                           "the result would carry false provenance")
+    code = env.code.get(run.repo)
+    if code is None or code.dirty:
+        raise NotEvaluated(f"{run.name}: the checkout of {run.repo} has uncommitted changes (or is "
+                           "gone); a result would carry false provenance")
+    want = run.trace.get(f"code/{run.repo}", "")
+    if not (code.commit and want and code.commit.startswith(want)):
+        raise NotEvaluated(f"{run.name}: it ran at {run.repo} {want or '?'}; the checkout is at "
+                           f"{(code.commit or '?')[:8]}")
+
+
+def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
+             refuse_held: bool = False) -> str:
+    """Write ``value`` as ``run``'s memo entry into the open transaction ``t``; its subject.
+
+    The entry ``seal_entry`` always wrote: ``db/fn``, ``db/keys``, the trace as ``db/deps/*``,
+    ``db/value``, under ``<hash of (fn, keys, trace, preds, value)>``. ``refuse_held``: an
+    identical entry already on the ledger raises ``_AlreadySealed`` (the caller loads it)."""
+    from .txn import _Op
+
+    if value.sealed and value.subject is None and "_run" not in value.__dict__:
+        raise TypeError(f"{run.name} returned a {type(value).__name__} sealed by v.seal(); run seals its "
+                        "own result, so return it unsealed")
+    t._open("seal")
+    if ledger_key(t._ledger) != run.ledger:
+        raise ValueError(f"{run.name}: the result ran against {run.ledger}; its memo entry goes there, "
+                         f"not to {ledger_key(t._ledger)}")
+    pred_rows, canon = t._encode_preds(value)
+    vtext = ref_text(dotted(type(value)), value.hash)
+    subject = hash_text(canonical({"fn": run.name, "keys": json.loads(run.enc), "trace": run.trace,
+                                   "preds": canon, "value": vtext}))
+    if refuse_held and t.base._held(subject, "db/value"):
+        raise _AlreadySealed(subject)
+    fsub = run.fn_subject
+    if fsub not in t._fns and not t.base._held(fsub, "db/name"):
+        t._fns.add(fsub)
+        for p, o in run.fn_rows:
+            t._ops.append(_Op(fsub, p, o, True))
+    extra = [("db/fn", "str:" + run.name), ("db/keys", "json:" + run.enc)]
+    if value.sealed and value.subject is None:
+        extra.append(("db/sealed-at", "str:" + str(value.sealed)))
+    if name is None:
+        name = value.__dict__.get("_name")
+    value.__dict__["_run"] = run            # an abandoned transaction leaves a draft that can be saved again
+    t._seal(value, subject, run.trace, run.provenance, pred_rows, extra, name)
+    t._freeze(value, subject, run.trace)
+    return subject
 
 
 def ledger_fn(func: Callable) -> Callable:
@@ -256,20 +389,47 @@ class Fn:
                 out[k] = v
         return out
 
-    def __call__(self, *, memo: Any = True, clean: bool = False, path: Any = None,
+    def __call__(self, *, seal: Any = OWN, clean: bool = False, path: Any = None,
                  kwargs: Optional[Dict[str, Any]] = None, **keys: Any) -> Optional[Value]:
         """``f(k=v, ...)`` or ``f(kwargs={...})``: eval. The control options (Q41), never keys:
 
-        ``memo``: ``True``, the memoised Value, or run, seal, return; ``False``, run, seal nothing;
-        ``"get"``, lookup only. ``clean=True``: the code must be a clean representation of a version,
+        ``seal``: where the result goes (DAT 1028). ``"get"``: the saved result if one holds, else
+        ``None``; never runs. ``False``: run, keep nothing; the trace is on the result. ``True``: run,
+        seal it locally (``v.seal()``), off the ledger. A ``Ledger`` (default: the one the fn was loaded
+        from): the saved result if one holds, else run and save it as the memo entry in a transaction of
+        its own. An open ``Transaction`` on that ledger: the same, saved into it. A later ``v.seal(L)``
+        or ``v.seal(t)`` of a ``False``/``True`` result writes the same memo entry.
+        ``clean=True``: the code must be a clean representation of a version,
         the checkout clean and at the commit the rev's ``code/<repo>`` row names, else ``NotClean``
         (Q39), before any lookup; ``False`` (default): a sandboxed call runs at HEAD, clean or dirty.
         ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder
         there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
         (Q36). A hit asked for under a new name takes that name. ``kwargs``: the function's whole key
         set, for a key that is also a control option's name; inline keys beside it are ``TypeError``."""
-        if not (memo is True or memo is False or memo == "get"):
-            raise ValueError(f"memo is True, False or 'get', not {memo!r}")
+        from .ledger import Ledger
+        from .txn import Transaction
+
+        rev = self._rev
+        plain = rev._plain()
+        if seal is OWN:
+            level: Any = "save"
+        elif seal is True or seal is False:
+            level = seal
+        elif isinstance(seal, str) and seal == "get":
+            level = "get"
+        elif isinstance(seal, Ledger):
+            if ledger_key(seal) != ledger_key(plain.ledger):
+                raise ValueError(f"{self.name}: seal= names a ledger other than the one it was loaded from "
+                                 f"({plain.ledger.path}); its memo entries live there")
+            level = "save"
+        elif isinstance(seal, Transaction):
+            seal._open("seal")
+            if ledger_key(seal._ledger) != ledger_key(plain.ledger):
+                raise ValueError(f"{self.name}: seal= is a transaction on another ledger than the one it was "
+                                 f"loaded from ({plain.ledger.path})")
+            level = seal
+        else:
+            raise ValueError(f"seal is 'get', False, True, a Ledger or an open Transaction, not {seal!r}")
         if not isinstance(clean, bool):
             raise TypeError(f"clean is True or False, not {clean!r}")
         if path is not None and not isinstance(path, (str, os.PathLike)):
@@ -281,26 +441,40 @@ class Fn:
             if not isinstance(kwargs, dict) or not all(isinstance(k, str) for k in kwargs):
                 raise TypeError(f"kwargs is a dict of str keys, not {kwargs!r}")
             keys = dict(kwargs)
-        rev = self._rev
-        plain = rev._plain()
         if clean:
             check_clean(self, plain, current_env())
         kw = self._bind(keys)
         enc = canonical(encode_keys(kw))
         item = f"eval:{self.name}{enc}"
         target = None if path is None else os.fspath(path)
-        if memo is not False:
+        if level not in (True, False):
             hit = lookup(plain, self.name, enc)
-            if hit is not None or memo == "get":
+            if hit is not None or level == "get":
                 rev._record(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
                 return place(plain.ledger, hit, target) if hit is not None and target is not None else hit
+        into = level if isinstance(level, Transaction) else None
+        # False: a draft; True: the memo entry in a transaction of its own; a Transaction: into it
+        save: Any = True if isinstance(level, str) and level == "save" else (into if into is not None else False)
+        if into is not None and target is None and self._takes_path:
+            target = fresh_name(plain.ledger, self._template or ANONYMOUS, kw)
+        name = target if into is not None and target is not None and not os.path.isabs(target) else None
+        if into is not None and target is not None and name is None:
+            raise ValueError(f"{self.name}: path={target!r} is absolute; with seal=t the result is saved at "
+                             "commit, so it takes a name (a relative path) or none")
         if self.mode == "sandbox":
             from .sandbox import run_sandboxed
 
-            value = run_sandboxed(self, plain, kw, enc, memo is not False)
+            value = run_sandboxed(self, plain, kw, enc, save, name)
         else:
-            value = self._run_base(plain, kw, enc, memo is not False)
+            value = self._run_base(plain, kw, enc, save, name)
+        if level is True:
+            if value.sealed:
+                raise TypeError(f"{self.name} returned a {type(value).__name__} sealed by v.seal(); run seals "
+                                "its own result, so return it unsealed")
+            value.seal()
         rev._record(item, ref_text(dotted(type(value)), value.hash))
+        if into is not None:
+            return value
         if target is None and self._takes_path and isinstance(value, Dat):
             target = fresh_name(plain.ledger, self._template or ANONYMOUS, kw)
         return place(plain.ledger, value, target) if target is not None else value
@@ -316,13 +490,16 @@ class Fn:
                                "carry false provenance")
         return repo         # a code/<repo> commit row pins a version, not where evals may run
 
-    def _run_base(self, plain: "Rev", kw: Dict[str, Any], enc: str, seal: bool) -> Value:
+    def _run_base(self, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
+                  name: Optional[str] = None) -> Value:
+        """Run in this process. ``save``: ``False``, a draft carrying its ``RunTrace``; ``True``, the
+        memo entry in a transaction of its own; a ``Transaction``, the memo entry in it (named ``name``)."""
         from .rev import Rev
         from .txn import code_token
 
         env = current_env()
         repo = repo_of(env, self.module)
-        if seal:                                    # memo=False simply runs (Eval § 2)
+        if save is not False:                       # a draft simply runs (Eval § 2)
             self._check_code(plain, env, repo)
         rec: Dict[str, str] = {}
         work = work_folder() if self._takes_path else None
@@ -335,10 +512,12 @@ class Fn:
             trace.update({"fn": self.subject, "platform": env.platform})
             if repo is not None:
                 trace[f"code/{repo}"] = code_token(env.code[repo].commit)
-            if not seal:
-                value.dependencies = trace  # type: ignore[misc]
-                return value
-            value = seal_entry(self, plain, value, trace, enc, "eval:unsandboxed")
+            if save is False:
+                dirty = bool(repo is not None and env.code[repo].dirty)
+                return attach_run(value, run_trace(self, plain, trace, enc, "eval:unsandboxed",
+                                                   repo=repo, dirty=dirty))
+            value = seal_entry(self, plain, value, trace, enc, "eval:unsandboxed", into=save, name=name,
+                               repo=repo)
             return value
         finally:
             drop_work(work, value)
@@ -386,15 +565,15 @@ def fresh_name(ledger: Any, template: str, keys: Dict[str, Any]) -> str:
 
 def place(ledger: Any, value: Value, target: str) -> Value:
     """``path=`` on a result (Q36, A70): relative, the value's name, its folder (a ``Dat``) rebuilt at
-    ``<data folder>/<name>`` as a view; absolute, the folder made there, no name. Unsealed
-    (``memo=False``): the name is set on the object, saved with it."""
+    ``<data folder>/<name>`` as a view; absolute, the folder made there, no name. Unsaved
+    (``seal=False`` or ``True``): the name is set on the object, saved with it."""
     if os.path.isabs(target):
         if isinstance(value, Dat) and value.subject is not None:
             art = ledger._store.art
             value._forget()
             value.path = Dat._materialise(art.get(value.hash), art, target)
         elif isinstance(value, Dat):
-            raise ValueError(f"path={target!r}: an unsaved Dat stays where it was built (memo=False)")
+            raise ValueError(f"path={target!r}: an unsaved Dat stays where it was built (seal=False or True)")
         return value
     if value.subject is None:
         value.name = target
@@ -417,12 +596,13 @@ def work_folder() -> Path:
 
 
 def drop_work(work: Optional[Path], value: Any) -> None:
-    """Remove an eval's folder once the call is done, sealed or not; an unsealed ``Dat`` that
-    still lives in it (``memo=False``) keeps it, since the folder is that value."""
+    """Remove an eval's folder once the call is done, sealed or not; a ``Dat`` not yet on the ledger
+    that still lives in it (a draft, or one saved into a transaction still open) keeps it, since the
+    folder is that value."""
 
     if work is None or not work.exists():
         return
-    if isinstance(value, Dat) and value.subject is None:
+    if isinstance(value, Dat) and value.rev is None:        # unsaved, or saved by a transaction still open
         p = os.path.realpath(value.path)
         if p == os.path.realpath(work) or p.startswith(os.path.realpath(work) + os.sep):
             return
@@ -444,31 +624,23 @@ class _AlreadySealed(Exception):
 
 
 def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: str, provenance: str,
-               modules: Optional[Dict[str, str]] = None) -> Value:
-    """Seal an eval's result as a memo entry, or hand back the identical entry already sealed."""
+               modules: Optional[Dict[str, str]] = None, into: Any = True, name: Optional[str] = None,
+               repo: Optional[str] = None) -> Value:
+    """Seal an eval's result as a memo entry: into the open transaction ``into``, or (``True``) in a
+    transaction of its own, handing back the identical entry when one is sealed already."""
     from .rev import Ref
 
-    ledger = plain.ledger
     if value.sealed and value.subject is None:
         raise TypeError(f"{fn.name} returned a {type(value).__name__} sealed by v.seal(); run seals its own "
                         "result, so return it unsealed")
-    vtext = ref_text(dotted(type(value)), value.hash)
+    run = run_trace(fn, plain, trace, enc, provenance, modules, repo=repo)
+    if into is not True:
+        save_run(into, value, run, name)
+        return value
+    ledger = plain.ledger
     try:
         with ledger.transaction(by=f"eval:{fn.name}") as t:
-            pred_rows, canon = t._encode_preds(value)
-            subject = hash_text(canonical({"fn": fn.name, "keys": json.loads(enc), "trace": trace,
-                                           "preds": canon, "value": vtext}))
-            if t.base._held(subject, "db/value"):
-                raise _AlreadySealed(subject)
-            fsub = trace.get("fn", fn.subject)
-            if fsub not in t._fns and not t.base._held(fsub, "db/name"):
-                t._fns.add(fsub)
-                from .txn import _Op
-
-                for p, o in fn._rows(fsub, modules):
-                    t._ops.append(_Op(fsub, p, o, True))
-            t._seal(value, subject, trace, provenance, pred_rows,
-                    [("db/fn", "str:" + fn.name), ("db/keys", "json:" + enc)], None)
+            save_run(t, value, run, None, refuse_held=True)
     except _AlreadySealed as e:
         return Ref(ledger.at(), e.subject).load()
     return value
