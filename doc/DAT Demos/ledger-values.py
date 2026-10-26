@@ -763,7 +763,7 @@ except ConfinedWrite as e:
 # Evaluating a ledger function is a lookup of the function by name
 # followed by a call, with tracing: every read the run makes is
 # recorded, so the result carries its provenance, and the result is
-# kept, so the same question is answered from the ledger next time.
+# kept, so the same call is answered from the ledger next time.
 
 # %% [markdown]
 # ### Evaluation is a lookup, a call and a trace
@@ -829,8 +829,8 @@ print("same rev:", again_value.rev.id == far_value.rev.id)
 
 # %% [markdown]
 # A memo entry is the seal's rows plus two of its own: `db/fn`, the
-# code that ran, and `db/keys`, the question. Notice the defaults,
-# `b` and `metric`, are part of the question.
+# code that ran, and `db/keys`, the memo key. Notice the defaults,
+# `b` and `metric`, are part of the memo key.
 
 # %%
 entry_rev = far_value.rev
@@ -913,7 +913,7 @@ for item in sorted(opening_clip.dependencies):
 
 # %% [markdown]
 # A new version of the video, stabilised, and `video/G1` re-pointed
-# at it. Notice the same question now misses.
+# at it. Notice the same keys now miss.
 
 # %%
 stable_video = Video(b"G1 stabilised, frames 600-9000")
@@ -945,7 +945,7 @@ print("obj:", shifted_value.obj, " same bytes:", shifted_value.same_as(hypotenus
 # → obj: 5.0  same bytes: True  new subject: True
 
 # %% [markdown]
-# Two questions, identical bytes: both distances are `5.0`. Two memo
+# Two memo keys, identical bytes: both distances are `5.0`. Two memo
 # entries, two subjects, one blob. `same_as` compares only the bytes
 # hash, so two values from different derivations, or with different
 # preds, can be the same bytes.

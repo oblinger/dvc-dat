@@ -13,6 +13,17 @@
 # ---
 
 # %% [markdown]
+# > **Plan** (what this sheet teaches; delete once the sections
+# > carry it on their own)
+# >
+# > A dat is a folder made from a spec. The sheet makes one in three
+# > steps (instantiate, run, save), then all three at once,
+# > remembered on the ledger by `L.at().run`, then finds dats by their
+# > preds. In a ledger project names come from the ledger's mounts
+# > alone: `L.at().resolve(name)` says what a dotted name denotes, and
+# > `Dat.create`, `Dat.do` and `L.at().run` all name through it.
+
+# %% [markdown]
 # #### Setup
 
 # %%
@@ -101,15 +112,36 @@ notes: shared defaults
 ''')
 (module_path / "specs/table12.yaml").write_text('''\
 dat:
-  base: specs.table_base
+  base: mymodule.specs.table_base
   name: tables/{YYYY}/table12{unique}
   do: mymodule.mult.build_table
   kwargs: {n: 12}
-''');
+''')
+subprocess.run(git_cmd + ["add", "mymodule"], check=True)
+subprocess.run(git_cmd + ["commit", "-q", "-m", "mymodule"], check=True)
+import mymodule                      # discovery finds the checkout, the repo q-dats
+with L.transaction(by="human:dan", why="mount mymodule") as t:
+    t.add("db/mount/mymodule", "db/root", "mymodule")   # the folder the prefix names
+    t.add("db/mount/mymodule", "db/repo", "q-dats")     # in this repo's checkout
 
 # %% [markdown]
-# Mounting `specs/` makes `specs/table12.yaml` answer to `specs.table12`.
-# Making a dat from a spec is three steps: instantiate, run, save.
+# Mounting `mymodule` is two rows on the ledger, and it is the
+# project's one namespace: `mymodule/specs/table12.yaml` answers to
+# `mymodule.specs.table12`, and `build_table` in `mymodule/mult.py`
+# to `mymodule.mult.build_table`. `L.at().resolve(name)` is what a
+# dotted name denotes on the ledger: a spec file's dict, a function's
+# `Fn`, read off the file and never imported.
+
+# %%
+print("spec:", L.at().resolve("mymodule.specs.table12"))
+# → spec: {'dat': {'base': 'mymodule.specs.table_base', 'name': …, 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
+run_fn = L.at().resolve("mymodule.mult.build_table")
+print("fn:", repr(run_fn), " kind:", run_fn.kind)   # fn: <Fn mymodule.mult.build_table@0.1.0>  kind: dat
+
+# %% [markdown]
+# `build_table` carries no decorator, so its kind is `dat`: a dat's
+# run function, run through a spec. Making a dat from a spec is three
+# steps: instantiate, run, save.
 #
 # ## 1. Instantiate
 #
@@ -117,8 +149,7 @@ dat:
 # once, makes the folder and writes `_spec_.yaml`. Nothing runs.
 
 # %%
-Dat.do.mount(folder="mymodule/specs", at="specs")   # the folder tree of specs: a spec is found by name
-table12_dat = Dat.create(spec="specs.table12")      # the Dat object, and its folder on disk
+table12_dat = Dat.create(spec="mymodule.specs.table12")   # the Dat object, and its folder on disk
 table12_path = Path(table12_dat.get_path())
 print("dat:", repr(table12_dat))   # dat: <Dat: tables/2026/table12>
 print("files:", sorted(os.listdir(table12_path)))   # files: ['_spec_.yaml']
@@ -175,56 +206,49 @@ print("found:", L.at().values(kind=Dat), L.at().value(n=12))   # found: [<Dat ta
 # %% [markdown]
 # ## Execution in practice: all done in one step
 #
-# `Dat.do("specs.table12")` is steps 1 and 2: it instantiates the spec,
-# runs the dat, and returns what the run function returned. It is a
-# plain dat: no ledger, a new folder every time.
+# `Dat.do("mymodule.specs.table12")` is steps 1 and 2: it instantiates
+# the spec, runs the dat, and returns what the run function returned.
+# It is a plain dat: nothing remembered, a new folder every time.
 
 # %%
-again_dat = Dat.do("specs.table12")
+again_dat = Dat.do("mymodule.specs.table12")
 print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_2>
 print("files:", sorted(os.listdir(again_dat.get_path())))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
 
 # %% [markdown]
-# All three steps at once, remembered, is `L.at().dat_run`: the run
-# function executed for a dat, taking what `Dat.do` takes, through the
-# ledger. The spec is the question and the run function's code is part
-# of the answer's record: mounted, it runs in a sandboxed worker and
-# its code is the files it loaded. The same spec asked again is found,
-# not run.
+# All three steps at once, remembered, is `L.at().run`: a run on the
+# ledger, the same call a ledger function gets. The spec is the memo
+# key and the run function's code is part of the result's record:
+# mounted, it runs in a sandboxed worker and its code is the files it
+# loaded. The same spec asked again is found, not run.
 
 # %%
-subprocess.run(git_cmd + ["add", "mymodule"], check=True)
-subprocess.run(git_cmd + ["commit", "-q", "-m", "mymodule"], check=True)
-with L.transaction(by="human:dan", why="mount mymodule") as t:
-    t.add("db/mount/mymodule", "db/root", "mymodule")   # mymodule's code is the mount's: its files, hashed
-    t.add("db/mount/mymodule", "db/repo", "q-dats")
-
-table12_value = L.at().dat_run("specs.table12")
+table12_value = L.at().run("mymodule.specs.table12")
 print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: named by the spec's template
 
 top_id = L.at().id
-again_value = L.at().dat_run("specs.table12")
+again_value = L.at().run("mymodule.specs.table12")
 print("hit:", again_value.subject == table12_value.subject,
       " nothing written:", L.at().id == top_id)   # hit: True  nothing written: True
 print("db/fn:", L.at()[table12_value.subject, "db/fn"])   # db/fn: mymodule.mult.build_table
 print("db/repo/q-dats/mymodule:", L.at()["db/repo/q-dats/mymodule", "version"])   # db/repo/q-dats/mymodule: 0.1.0: the first clean run wrote the clock
-print("question:", Dat.do.resolve("specs.table12"))   # the spec, its base merged in: what do and L.at().dat_run start from
-# question: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
+print("db/keys:", L.at()[table12_value.subject, "db/keys"])   # the memo key
+# → db/keys: {'dat': {'do': 'mymodule.mult.build_table', 'kind': 'dvc_dat.core.Dat', 'kwargs': {'n': 12, 'start': 1}}, 'notes': 'shared defaults'}
 
 # %% [markdown]
-# The question is that spec with every `{}` expanded and `name:`
-# left out; the second call is a memo hit, nothing runs and nothing
-# is written.
+# The memo key is the spec with its base merged in, every `{}`
+# expanded and `name:` left out; the second call is a memo hit,
+# nothing runs and nothing is written.
 
 # %% [markdown]
 # ## Finding dats
 
 # %%
 for n in (5, 9):
-    L.at().dat_run("specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.do
+    L.at().run("mymodule.specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.do
 print("cells:", L.at().select(("n", "cells"), kind=Dat))
-# cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: table/12 sealed from step 2's folder, then by L.at().dat_run
+# cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: table/12 sealed from step 2's folder, then by L.at().run
 
 # %% [markdown]
 # Spec kwargs and results are preds, so a query over them is an

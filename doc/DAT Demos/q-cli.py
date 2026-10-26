@@ -13,6 +13,16 @@
 # ---
 
 # %% [markdown]
+# > **Plan** (what this sheet teaches; delete once the sections
+# > carry it on their own)
+# >
+# > A ledger project is worked from a shell with `just <verb>`; each
+# > verb is one API call, shown beside it as `# same as:`. Running
+# > (`just run`, a declared command), finding (`values`, `value`,
+# > `history`, `why`), updating (`set`, `index`), releasing (`bump`),
+# > and the namespace (`mounts`). Names are the ledger's mounts.
+
+# %% [markdown]
 # #### Setup
 
 # %%
@@ -68,7 +78,7 @@ notes: shared defaults
 ''')
 (module_path / "specs/table12.yaml").write_text('''\
 dat:
-  base: specs.table_base
+  base: mymodule.specs.table_base
   name: tables/{YYYY}/table12{unique}
   do: mymodule.mult.build_table
   kwargs: {n: 12}
@@ -79,8 +89,6 @@ Path("q_cli_main.py").write_text('''\
 import sys
 
 from dvc_dat import Dat
-
-Dat.do.mount(folder="mymodule/specs", at="specs")
 
 if __name__ == "__main__":
     sys.exit(Dat.cli_main())
@@ -111,7 +119,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # A project's `justfile` imports dvc-dat's `run` and a set of ledger
 # verbs. Each verb is syntactic sugar for one API call, shown beside
 # every command below as `# same as:`, so a shell line and a Python
-# line are the same question. `just --list` is the menu; `[run]` holds
+# line are the same call. `just --list` is the menu; `[run]` holds
 # the commands the project's code declares.
 
 # %%
@@ -133,21 +141,22 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # %% [markdown]
 # ## Running
 #
-# The project is q-dats's `mymodule`. Its main, which `run` execs,
-# mounted its specs:
+# The project is q-dats's `mymodule`, mounted on the ledger in Setup:
 #
 # ```python
-# Dat.do.mount(folder="mymodule/specs", at="specs")   # the project's main, which run execs
+# t.add("db/mount/mymodule", "db/root", "mymodule")
+# t.add("db/mount/mymodule", "db/repo", "q-cli")
 # ```
 #
-# `just run` of a spec makes the dat, runs it and seals it as a value;
-# `alias=` names it. The spec's name is the question. `mymodule` is
-# mounted, so its run function runs in a sandboxed worker, and its code
-# is the files that run loaded.
+# Those rows are the project's names: `mymodule/specs/table12.yaml`
+# is `mymodule.specs.table12`. `just run` of a spec makes the dat,
+# runs it and seals it as a value; `alias=` names it. The spec is the
+# memo key. `mymodule` is mounted, so its run function runs in a
+# sandboxed worker, and its code is the files that run loaded.
 
 # %%
-# !just run specs.table12 alias=table/12
-# same as: L.at().dat_run("specs.table12", path="table/12")
+# !just run mymodule.specs.table12 alias=table/12
+# same as: L.at().run("mymodule.specs.table12", path="table/12")
 # → ran  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
@@ -155,17 +164,17 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # instead of re-running.
 
 # %%
-# !just run specs.table12 alias=table/12
-# same as: L.at().dat_run("specs.table12", path="table/12"), a memo hit
+# !just run mymodule.specs.table12 alias=table/12
+# same as: L.at().run("mymodule.specs.table12", path="table/12"), a memo hit
 # → hit  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
-# A spec with `command: true` is its own verb: `just table12` is
-# `just run specs.table12`.
+# A mounted spec with `command: true` is its own verb: `just table12`
+# is `just run mymodule.specs.table12`.
 
 # %%
 # !just table12
-# same as: just run specs.table12, i.e. L.at().dat_run("specs.table12")
+# same as: L.at().run("mymodule.specs.table12")
 # → hit  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
@@ -248,7 +257,7 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 
 # %%
 # !git commit -qam "mymodule 0.1.1"
-# !just run specs.table12
+# !just run mymodule.specs.table12
 # !just history db/repo/q-cli/mymodule
 # same as: [r for r in L.at().rows() if r.subject == "db/repo/q-cli/mymodule"]
 # !just history db/repo/q-cli
@@ -273,15 +282,15 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # %% [markdown]
 # ## Other commands
 #
-# `just mounts` lists the mounted names and what each loads to:
+# `just mounts` lists the names the project mounts, the ledger's
+# `db/mount` prefixes beside dvc-dat's own `dt`:
 
 # %%
 # !just mounts
-# same as: dvc_dat.dat_tools.cmd_list(""), in the namespace q_cli_main mounted
+# same as: dvc_dat.dat_tools.cmd_list(""), in Dat.manager.do
 # → Base names matching: '*'
 # →   dt                        -->  <module>
-# →   specs/table12             -->  {'dat': {'base': 'specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}, 'command': True}
-# →   specs/table_base          -->  {'dat': {'kwargs': {'start': 1}}, 'notes': 'shared defaults'}
+# →   mymodule                  -->  <module>
 
 # %% [markdown]
 # The rest, not run here:

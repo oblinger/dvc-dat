@@ -229,7 +229,7 @@ sys.path.insert(0, str(repo_path))
 # ### Accessing and using Python functions
 
 # %%
-distance_fn = L.at().load_fn("geometry.distance")
+distance_fn = L.at().resolve("geometry.distance")
 print("fn:", repr(distance_fn), " code:", repr(distance_fn.code))
 # → fn: <Fn geometry.distance@5.3.9>  code: <Code geometry@5.3.9>
 hypotenuse_value = distance_fn(a=(3, 4))
@@ -237,7 +237,8 @@ print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 # → result: 5.0  sealed at: <the seal's moment>
 
 # %% [markdown]
-# `load_fn` finds the function; calling it runs it and seals the
+# `L.at().resolve(name)` is what a dotted name denotes on the ledger;
+# for a function, an `Fn`. Calling it runs it and seals the
 # plain `float` it returns as a value (`.obj` unboxes it). A
 # function's repr is `<Fn name@version>`; `code` is the code it
 # is loaded from, the package `geometry` at the version it declares.
@@ -256,7 +257,7 @@ with L.transaction(by="human:dan") as t:
     t.add("db/mount/plane", "db/root", "plane")
     t.add("db/mount/plane", "db/repo", "geometry")
 
-length_fn = L.at().load_fn("plane.measure.length")
+length_fn = L.at().resolve("plane.measure.length")
 segment_value = length_fn(a=(0, 0), b=(3, 4))
 print("fn:", repr(length_fn), " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
 # → fn: <Fn plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
@@ -298,7 +299,7 @@ measure_path = repo_path / "plane/measure.py"
 measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
 (repo_path / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
 subprocess.run(git_cmd + ["commit", "-q", "-am", "quarter metres"], cwd=repo_path, check=True)
-new_length_fn = L.at().load_fn("plane.measure.length")
+new_length_fn = L.at().resolve("plane.measure.length")
 print("new fn:", repr(new_length_fn), " sandbox:", repr(new_length_fn.code))
 # → new fn: <Fn plane.measure.length@2.7.2>  sandbox: <Code plane@2.7.2>
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → new result: 1.25
@@ -336,7 +337,7 @@ print("same value:", again_value.subject == far_value.subject, " nothing written
 # `.seal(t)` is the third. Nothing runs twice.
 
 # %%
-distance_fn = L.at().load_fn("geometry.distance")          # (1) load the function
+distance_fn = L.at().resolve("geometry.distance")          # (1) load the function
 draft_value = distance_fn(a=(9, 12), seal=False)           # (2) run it, provenance captured, nothing kept
 print("draft:", draft_value.obj, " sealed:", draft_value.sealed)   # → 15.0 None
 print("draft depends on:", sorted(draft_value.dependencies))       # the trace rides on the draft

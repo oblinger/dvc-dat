@@ -212,7 +212,7 @@ print("sandboxed:", report_fn.code.sandboxed, " code:", report_fn.code)
 # %% [markdown]
 # ### Asking for the comfort report
 #
-# `rev.run(name, **keys)` returns the stage's result, running it only when no sealed result whose dependencies hold answers the same question.
+# `rev.run(name, **keys)` returns the stage's result, running it only when no sealed result whose dependencies hold was sealed for the same keys.
 # The first report covers the whole year.
 
 # %%
@@ -254,7 +254,7 @@ print(ran_since(counts_before))
 # ## Summer, and one more city
 #
 # Two changes at once: Denver joins the set, and the report is asked for summer, June through August.
-# A new range is a new question for every city comfort; the daily comfort under it does not depend on the range, so only the new city's runs.
+# A new range is a new memo key for every city comfort; the daily comfort under it does not depend on the range, so only the new city's runs.
 
 # %%
 with L.transaction(by="human:dan", why="Denver joins") as t:
@@ -313,7 +313,7 @@ print(ran_since(counts_before))
 
 # %% [markdown]
 # Only the comfort report ran: its run loaded `report.py`, and no other stage's run did.
-# No version bump was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a new question, and a miss runs at HEAD, clean or dirty (F520 Q39).
+# No version bump was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a miss, and a miss runs at HEAD, clean or dirty (F520 Q39).
 
 # %% [markdown]
 # ## Reading a result's dependencies back
