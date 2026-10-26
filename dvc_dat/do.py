@@ -508,11 +508,13 @@ DESCRIPTION
     The return value prints on stdout when it is not None.
 
     With a `ledger:` line in the config, `x TARGET KEY=VALUE ...` runs
-    through the ledger instead: rev.run of the ledger function TARGET names
-    (a dotted function, a mounted name, or a spec file whose `main` names
-    it, the line's keys over the file's), found if computed before from the
-    same inputs by the same code, else run and sealed; it prints `hit` or
-    `ran` and the value.  alias=NAME names the result.
+    through the ledger instead, found if computed before from the same
+    inputs by the same code, else run and sealed; it prints `hit` or `ran`
+    and the value, and alias=NAME names it.  A dat spec (a mounted name or
+    a spec file whose `dat:` names its run function) is rev.do: the
+    KEY=VALUE pairs update its dat.kwargs.  A ledger function (a dotted
+    function, a mounted name, or a spec file whose `main` names it, the
+    line's keys over the file's) is rev.run.
 
     A function marked @command (dvc_dat.just), or a spec with `command:`,
     also runs as `just NAME` once the justfile has
@@ -696,16 +698,18 @@ RESERVED_RUN_KEYS = ("alias",)                # control options on a ledger run,
 
 
 def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: Spec, flags: set) -> int:
-    """`x TARGET k=v ...` with a ledger: `rev.run` -- found if computed before, else run and sealed.
+    """`x TARGET k=v ...` with a ledger: found if computed before, else run and sealed.
 
-    TARGET is a spec file (`.yaml`/`.json`, its `main` naming the function, its
-    other keys the keys), a mounted name loading to a ledger function or such a
-    spec, or a dotted ledger function.  Line keys override the file's; `--set` /
-    `--json` update a spec's keys.  `alias=NAME` names the result (`path=`).
+    TARGET is a dat spec -- a mounted name or a spec file (`.yaml`/`.json`) with a
+    `dat:` part -- run by `rev.do`, the line's keys updating its `dat.kwargs`; or a
+    ledger function, run by `rev.run`: a spec file or mounted spec whose `main`
+    names it (its other keys the keys, the line's over the file's), a mounted
+    name loading to it, or its dotted name.  `--set` / `--json` update a spec's
+    keys.  `alias=NAME` names the result (`path=`).
     """
     target, fixed = args[0], args[1:]
     if fixed:
-        return _fail(f"a ledger function takes keywords only (KEY=VALUE); got {fixed!r}")
+        return _fail(f"a run through the ledger takes keywords only (KEY=VALUE); got {fixed!r}")
     keys: Dict[str, Any] = {}
     spec: Any = None
     if os.path.isfile(target) and target.endswith((".yaml", ".yml", ".json")):
@@ -729,9 +733,13 @@ def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: S
             else:
                 return _fail(f"{target!r} is not a ledger function (@ledger_fn) or a spec "
                              f"whose main names one; with a ledger, run evaluates through it")
+    if isinstance(spec, dict) and not isinstance(spec.get("main"), str) and isinstance(spec.get("dat"), dict):
+        return _cmd_eval_dat(ledger, name if name is not None and not overrides else
+                             merge_dicts(do.resolve(copy.deepcopy(spec)), overrides), kwargs, flags)
     if spec is not None:
         if not isinstance(spec, dict) or not isinstance(spec.get("main"), str):
-            return _fail(f"{target}: a spec run through the ledger names its function in `main`")
+            return _fail(f"{target}: a spec run through the ledger is a dat spec (`dat:` naming its run "
+                         "function in `do`) or names a ledger function in `main`")
         spec = merge_dicts(copy.deepcopy(spec), overrides)
         name = spec["main"]
         keys = {k: v for k, v in spec.items() if k not in ("main", "command")}
@@ -747,6 +755,28 @@ def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: S
         fn = ledger.at().load_fn(name)
         hit = fn(seal="get", path=alias, **keys)
         value = hit or fn(path=alias, **keys)
+    except Exception as e:
+        if os.environ.get("DAT_DEBUG"):
+            raise
+        return _fail(_message(e))
+    preds = " ".join(f"{p}={json.dumps(o) if isinstance(o, (dict, list)) else o}"
+                     for p, o in value.preds.items())
+    print(f"{'hit' if hit else 'ran'}  {value}" + (f"  {preds}" if preds else ""))
+    return 0
+
+
+def _cmd_eval_dat(ledger: Any, target: Any, kwargs: Dict[str, Any], flags: set) -> int:
+    """`x SPEC k=v ...` with a ledger: `rev.do(SPEC, **kwargs)`, the dat found or made, run and sealed."""
+    keys = dict(kwargs)
+    alias = keys.pop("alias", None)
+    if "dry-run" in flags:
+        shown = [repr(target)] + [f"{k}={v!r}" for k, v in keys.items()]
+        print(f"rev.do({', '.join(shown)})" + (f", then named {alias!r}" if alias else ""))
+        return 0
+    try:
+        rev = ledger.at()
+        hit = rev.do(target, seal="get", path=alias, **keys)
+        value = hit or rev.do(target, path=alias, **keys)
     except Exception as e:
         if os.environ.get("DAT_DEBUG"):
             raise

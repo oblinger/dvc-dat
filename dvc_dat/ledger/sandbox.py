@@ -443,6 +443,34 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
 
 
+def load_mounted_run(rev: "Rev", name: str, prefix: str, info: Dict[str, str], obj: Any, src: Path,
+                     returns: str, template: Optional[str]) -> Fn:
+    """``rev.do``'s run function under a mount: named by the mount's ``Code`` (its static closure, the
+    mount rows hashed in), as ``load_sandboxed`` names a ledger function; it runs in this process, so the
+    module imported here must be the mounted file, else ``NotEvaluated``."""
+    plain = rev._plain()
+    env = current_env()
+    repo = info.get("repo")
+    code = env.code.get(repo or "")
+    if code is None or code.path is None:
+        raise NotEvaluated(f"{name!r} is under the mount {prefix!r} of repo {repo!r}, which has no checkout in "
+                           "this environment")
+    mounts, _rows = mounts_for(plain, env)
+    m = _mount_of(mounts, name)
+    assert m is not None
+    modname, _, attr_name = name.rpartition(".")
+    f = m.file_of(modname)
+    if f is None or os.path.realpath(f[0]) != os.path.realpath(src):
+        raise NotEvaluated(f"{name!r}: rev.do runs it in this process, which imports it from {src}; the mount "
+                           f"{prefix!r} holds {f[0] if f is not None else 'no such module'}")
+    mods = module_shas(closure(mounts, [modname]))
+    return Fn(name=name, module=f[0], mount=m.prefix, signature=inspect.Signature(),
+              env=Env(env.code, env.platform, mounts_hash(plain)),
+              code=mounted_code(plain, env, m, modname, mods),
+              _rev=rev, _obj=obj, _template=template, _returns=returns,
+              _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
+
+
 def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str, str]) -> Code:
     """A mounted function's ``Code`` (DAT 1037): the mount at the version its root package declares.
 

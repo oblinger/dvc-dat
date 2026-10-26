@@ -6,21 +6,19 @@ with ``@ledger_class(preds=...)``, which pred names its values may carry.
 it; the seal (``v.seal(t)`` or an ``run``) freezes it into a
 read-only mapping and fixes ``subject``, ``rev`` and ``dependencies`` (Q25 (D)). A
 subclass's own ``__init__`` need not call ``super().__init__``. Shipped
-subclasses: ``Value.Blob`` (any Python object, pickled), ``Value.Table`` (parquet), ``Dat``
-(a folder, encoded as its content manifest).
+subclasses: ``Value.Blob`` (any Python object, pickled), ``Value.Table`` (parquet), and
+``dvc_dat.core.Dat`` (a dat: its folder, encoded as its content manifest, DAT 1038).
 """
 
 from __future__ import annotations
 
 import io
-import json
-import os
 import pickle
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterable, Mapping, Optional, Tuple
 
-from .codec import canonical, sha256
+from .codec import sha256
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -139,6 +137,14 @@ class Value:
     def _after_seal(self, store: "ArtStore", name: Optional[str] = None) -> None:
         """Hook run once the value is sealed (a ``Dat`` moves to its stored folder, at its name if named)."""
 
+    def _pred_names(self) -> Tuple[str, ...]:
+        """The pred names this value may carry: its class's ``@ledger_class(preds=...)`` (a ``Dat`` adds
+        its folder's own)."""
+        return tuple(type(self)._ledger_preds)
+
+    def _sealable(self) -> None:
+        """Hook: refuse a value that may not be sealed as it stands (a ``Dat`` never saved)."""
+
     def seal(self, to: Any = True, *, keep: bool = False, deps: Iterable[Any] = (), name: Optional[str] = None,
              provenance: Optional[str] = None, by: Optional[str] = None) -> str:
         """Fix the value's identity; with a transaction or a ledger, save it too. ``to`` takes what
@@ -200,7 +206,8 @@ class Value:
             raise TypeError(f"a run's result carries its trace ({run.name}); deps= and provenance= are a "
                             "hand seal's")
         provenance = check_provenance(provenance)
-        declared = type(self)._ledger_preds
+        self._sealable()
+        declared = self._pred_names()
         extra = [k for k in self.preds if k not in declared]
         if extra:
             raise Undeclared(f"{', '.join(map(repr, extra))}: not a pred of {dotted(type(self))} "
@@ -459,184 +466,3 @@ Blob.__qualname__ = "Value.Blob"
 Table.__qualname__ = "Value.Table"
 Value.Blob = Blob      # type: ignore[attr-defined]
 Value.Table = Table    # type: ignore[attr-defined]
-
-
-class Dat(Value):
-    """A folder: encodes as its content manifest, ``{"files": {relpath: sha256}}``; the files go to the store.
-
-    Each file is hashed in 1 MiB blocks and never held in memory; the per-file hashes are cached
-    on the object, keyed by each file's (size, mtime, inode), so ``encode``, ``_parts`` and a save
-    walk the folder but hash a file once. The files of a saved or loaded ``Dat`` are hardlinks
-    into the art store where the filesystem allows: write a new folder, never edit one in place.
-    """
-
-    def __init__(self, path: Any, *, name: Optional[str] = None) -> None:
-        self.path = Path(path)
-        super().__init__(name=name)
-
-    def _walk(self) -> Iterator[Tuple[str, Path]]:
-        """``(relpath, path)`` of every file in the value, in sorted order (``__pycache__`` skipped)."""
-        for root, dirs, names in os.walk(self.path):
-            dirs[:] = sorted(d for d in dirs if d != "__pycache__")
-            for n in sorted(names):
-                p = Path(root, n)
-                yield p.relative_to(self.path).as_posix(), p
-
-    def _manifest(self) -> Dict[str, str]:
-        """``{relpath: sha256}`` of the folder, rehashing only files whose (size, mtime, inode) moved."""
-        from .store import file_sha
-
-        cache = self.__dict__.get("_shas") or {}
-        new: Dict[str, Tuple[tuple, str]] = {}
-        for rel, p in self._walk():
-            st = p.stat()
-            sig = (st.st_size, st.st_mtime_ns, st.st_ino, st.st_dev)
-            hit = cache.get(rel)
-            new[rel] = (sig, hit[1] if hit is not None and hit[0] == sig else file_sha(p))
-        self.__dict__["_shas"] = new
-        return {rel: h for rel, (_sig, h) in sorted(new.items())}
-
-    def _forget(self) -> None:
-        self.__dict__.pop("_shas", None)
-
-    def _seal_path(self) -> Optional[str]:
-        return str(self.path.resolve())
-
-    def _seal_bytes(self, data: bytes) -> int:
-        return sum(sig[0] for sig, _h in (self.__dict__.get("_shas") or {}).values())
-
-    @classmethod
-    def sealed_at_path(cls, path: Any, *, name: Optional[str] = None) -> Optional["Dat"]:
-        """The ``Dat`` sealed last at the folder ``path`` by ``v.seal()`` in any process and not saved
-        since, reopened from its seal record (``kept``); ``None`` when no record names the folder.
-
-        ``v.seal(t)`` on it saves it exactly as the sealing process would have: the same subject (its
-        deps, provenance, environment and time are the record's), ``SealBroken`` when a byte of the
-        folder changed since unless kept, the kept bytes when kept. The object is made as ``kind(path)``,
-        ``kind`` the class the record names (a subclass of this one). ``name`` is the alias it will be
-        saved under: a value sealed with it as a dep before it is saved binds the dep through that
-        name at its own save, which refuses until the name holds these bytes.
-        """
-        import importlib
-
-        from .kept import Kept
-
-        record = Kept().for_path(path)
-        if record is None:
-            return None
-        mod, _, attr = record["kind"].rpartition(".")
-        try:
-            kind = getattr(importlib.import_module(mod), attr)
-        except (ImportError, AttributeError, ValueError):
-            raise ImportError(f"{path}: sealed as {record['kind']}, which does not import") from None
-        if not (isinstance(kind, type) and issubclass(kind, cls)):
-            raise TypeError(f"{path}: sealed as {record['kind']}, not a {cls.__name__}")
-        obj = kind(Path(record["path"]))       # a Dat is made from its folder, as by hand
-        obj._reopen(record, name)
-        return obj
-
-    def _present(self) -> bool:
-        """Is the folder this value was loaded into still there, the same folder (a stat)?"""
-        import stat
-
-        try:
-            st = self.path.stat()
-        except OSError:
-            return False
-        return stat.S_ISDIR(st.st_mode) and self.__dict__.get("_dir_id") in (None, (st.st_dev, st.st_ino))
-
-    def encode(self) -> bytes:
-        return canonical({"files": self._manifest()}).encode()
-
-    def _parts(self) -> List["Part"]:
-        seen: Dict[str, Path] = {}
-        manifest = self._manifest()
-        for rel, p in self._walk():
-            seen.setdefault(manifest[rel], p)
-        return list(seen.items())
-
-    @classmethod
-    def kind_ok(cls, kind: str) -> bool:
-        """Does a folder whose ``_spec_`` names ``dat.kind`` ``kind`` load as this class (beside the
-        class its ``db/value`` row names)? Default: the class's dotted name or its bare name."""
-        return kind in (dotted(cls), cls.__name__)
-
-    @staticmethod
-    def spec_kind(path: Path) -> Optional[str]:
-        """The ``dat.kind`` a folder's ``_spec_.yaml`` (or ``_spec_.json``) names, if any."""
-        for name in ("_spec_.yaml", "_spec_.json"):
-            p = Path(path) / name
-            if p.is_file():
-                import yaml
-
-                spec = yaml.safe_load(p.read_text()) or {}
-                dat = spec.get("dat") if isinstance(spec, dict) else None
-                kind = dat.get("kind") if isinstance(dat, dict) else None
-                return kind if isinstance(kind, str) else None
-        return None
-
-    @staticmethod
-    def _materialise(data: bytes, store: "ArtStore", name: Optional[str] = None) -> Path:
-        """The folder of a manifest, under ``<store root>/dats/`` (the data folder): at ``<name>`` when a
-        name is given (an absolute path: there), else at the manifest hash's first 16 hex. Files are
-        placed by ``store.get_to`` (hardlinks on the same filesystem); a named folder holding other
-        content is replaced by a new folder, never edited in place."""
-        from .sandbox import unguarded             # the store's own write, also inside a sandboxed body
-
-        manifest = json.loads(data.decode())
-        files: Dict[str, str] = manifest["files"]
-        if name is not None and os.path.isabs(name):
-            dest = Path(name)
-        elif name is not None:
-            dest = store.root / "dats" / Path(*Path(check_name(name)).parts)
-        else:
-            dest = store.root / "dats" / sha256(data)[:16]
-        with unguarded():
-            if name is not None and dest.exists() and not _holds(dest, files, store):
-                import shutil
-
-                old = dest.with_name(f"{dest.name}.old-{os.getpid()}-{id(data):x}")
-                dest.rename(old)
-                shutil.rmtree(old, ignore_errors=True)
-            for rel, h in files.items():
-                p = dest / rel
-                if not p.exists():
-                    store.get_to(h, p)
-            dest.mkdir(parents=True, exist_ok=True)
-        return dest
-
-    @classmethod
-    def decode(cls, data: bytes, store: "ArtStore", *, name: Optional[str] = None) -> "Dat":
-        obj = cls.__new__(cls)
-        obj.path = cls._materialise(data, store, name)
-        return obj
-
-    def _after_seal(self, store: "ArtStore", name: Optional[str] = None) -> None:
-        self._forget()
-        self.path = self._materialise(store.get(self.hash), store, name)   # the manifest as stored
-
-    def _at_name(self, store: "ArtStore", name: str) -> None:
-        self._forget()
-        self.path = self._materialise(store.get(self.hash), store, name)
-
-
-def _holds(dest: Path, files: Mapping[str, str], store: "ArtStore") -> bool:
-    """Does the folder hold exactly these files with these hashes (a linked file is checked by inode)?"""
-    from .store import file_sha
-
-    found = set()
-    for root, _dirs, names in os.walk(dest):
-        for n in names:
-            found.add(Path(root, n).relative_to(dest).as_posix())
-    if found != set(files):
-        return False
-    for rel, h in files.items():
-        p, blob = dest / rel, store.path(h)
-        try:
-            if os.path.samefile(p, blob):
-                continue
-        except OSError:
-            pass
-        if file_sha(p) != h:
-            return False
-    return True

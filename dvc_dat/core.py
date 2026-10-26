@@ -2,7 +2,9 @@
 
 A Dat is a folder carrying a `_spec_.yaml` that is a complete, argumentless recipe
 for itself, plus a `_result_.yaml` holding what running it produced.  The do-system
-(`dvc_dat.do`) runs specs; this module stores and loads them.
+(`dvc_dat.do`) runs specs; this module stores and loads them.  A Dat is also a
+ledger `Value` (DAT 1038): its folder is its bytes, by the folder codec below, so
+`dat.seal(t)` saves it and `rev.load(name)` brings it back with no subclass.
 """
 
 import contextlib
@@ -23,11 +25,12 @@ import weakref
 from copy import deepcopy
 import sys
 from datetime import datetime, timezone
-from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Tuple, Type, TypeVar, Union
 
 import yaml
+
+from .ledger.value import FrozenPreds, Value, check_name
 
 logger = logging.getLogger(__name__)
 
@@ -420,10 +423,6 @@ PathLike = Union[str, Path]
 SpecValue = Union[str, int, float, bool, None, "SpecDict", List[Any]]
 SpecDict = Dict[str, SpecValue]
 DatType = TypeVar("DatType", bound="Dat")
-
-
-class _DataState(Enum):
-    NOT_LOADED = auto()
 
 
 # =============================================================================
@@ -1408,7 +1407,7 @@ class DatManager:
         if code is not None:
             Dat.set(run.get_results(), DAT_CODE, code)
         _write_run(run)
-        dat._run = run
+        dat._run_dat = run
         return run
 
     def _class_of(self, kind: Optional[str]) -> Type["Dat"]:
@@ -1552,14 +1551,24 @@ class _DatMeta(type):
         _default_manager = value
 
 
-class Dat(metaclass=_DatMeta):
-    """A folder of data described by its `_spec_.yaml`.
+class Dat(Value, metaclass=_DatMeta):
+    """A folder of data described by its `_spec_.yaml`; on a ledger, a value.
 
     The spec is the complete recipe: `dat.do` names the function, `dat.args` and
     `dat.kwargs` its arguments, `dat.name` the path template, `dat.base` what it
     inherited from.  Every `{}` reference in it was expanded once, when the dat was
     created, and `get_spec()` returns it as written.  `get_results()` is the
     mutable `_result_.yaml`.
+
+    A dat is a ledger `Value` (DAT 1038): its bytes are its folder's content
+    manifest, `{"files": {relpath: sha256}}`, the files themselves going to the
+    art store, so `dat.seal(t, name=...)` saves the folder of a saved dat and
+    `rev.load(name)` rebuilds it, as a view in the ledger's data folder.  Its
+    `preds` default to the scalar `dat.kwargs` of its spec and the scalar
+    top-level entries of its results (`dat:` aside), read from the folder;
+    `@ledger_class(preds=...)` on a subclass adds names.  `Dat(path)` is the dat
+    already in the folder `path`, its spec and results read from there (a
+    folder with no spec is a plain folder value).
 
     Subclasses override `validate_spec` to check or coerce a spec on create and load
     (a schema library inside it is the subclass's choice and dependency).
@@ -1581,19 +1590,55 @@ class Dat(metaclass=_DatMeta):
         path: Union[str, Path],
         spec: Optional[SpecDict] = None,
         result: Optional[SpecDict] = None,
+        *,
+        name: Optional[str] = None,
     ) -> None:
-        if spec is None or not isinstance(path, (str, Path)):
+        if not isinstance(path, (str, Path)):
             raise TypeError(
-                f"{type(self).__name__}(...) is not how a dat is made: "
-                f"Dat.create(spec=...) makes one on disk, Dat.load(path) reads one")
+                f"{type(self).__name__}(path): a dat is the folder at a path, not {path!r}; "
+                f"Dat.create(spec=...) makes one on disk, Dat.load(name) finds one")
         self._path = os.path.abspath(str(path))
+        if spec is None:
+            spec, result = _read_folder(self._path)
         self._spec = spec
         self._result = result or {}
         self._manager = None
         self._running = False           # inside its own execute
         self._save_asked = False        # save() was called while running
-        self._run: Optional["Dat"] = None   # the run sub-dat, once known
+        self._run_dat: Optional["Dat"] = None   # the run sub-dat, once known
         self._written = _standing_of(self._spec, self._result)   # as last written
+        if name is not None:
+            self.name = name
+
+    @classmethod
+    def _from_folder(cls: Type[DatType], path: Union[str, Path]) -> DatType:
+        """The dat in `path` as this class (a ledger load): `cls(path)`, the spec and results read from
+        the folder, as `DatManager` calls a kind with `(path, spec, result)`."""
+        return cls(path)
+
+    @property
+    def path(self) -> Path:
+        """The dat's folder, `get_path()` as a `Path`; after a ledger seal or load, its view in the
+        ledger's data folder."""
+        return Path(self._path)
+
+    @path.setter
+    def path(self, value: Union[str, Path]) -> None:
+        self._path = os.path.abspath(os.fspath(value))
+
+    def _move_to(self, path: Path) -> None:
+        """Point this object at the folder `path`, which holds the same files (a view)."""
+        if self._manager is not None:
+            self._manager._dat_cache.pop(self._path, None)
+        self.path = path
+        self._run_dat = None
+
+    def __getstate__(self) -> Dict[str, Any]:
+        """Pickled without its world or its run sub-dat (both are found again from the folder)."""
+        state = dict(self.__dict__)
+        state["_manager"] = None
+        state["_run_dat"] = None
+        return state
 
     @property
     def run(self) -> Optional["Dat"]:
@@ -1603,11 +1648,11 @@ class Dat(metaclass=_DatMeta):
         never run (one filled by hand, or written before 3.0, which holds its
         run's record in its own results).  A run is not content: it is outside
         the dat's hash, and nothing may depend on it."""
-        if self._run is None:
+        if self._run_dat is None:
             path = os.path.join(self._path, RUN_FOLDER)
             if os.path.exists(os.path.join(path, SPEC_YAML)):
-                self._run = self._world()._load(path, dat_class=Dat, cache_after_load=False)
-        return self._run
+                self._run_dat = self._world()._load(path, dat_class=Dat, cache_after_load=False)
+        return self._run_dat
 
     def _world(self) -> DatManager:
         """The manager that loaded this dat, else the default one."""
@@ -1835,11 +1880,209 @@ class Dat(metaclass=_DatMeta):
             manager._index_dat(moved, None)
         return moved
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """`<Dat: tables/table12>` (its name in its dat folder); once a value is sealed from it, its label
+        as every value prints (`<Dat table/12>`, `<Dat sealed #2db69ce1>`, DAT 1036)."""
+        if self.sealed:
+            return Value.__repr__(self)
         return f"<{type(self).__name__}: {self.get_path_name()}>"
 
-    def __str__(self):
-        return self.__repr__()
+    # -- the value: preds and the folder codec (DAT 1038) ----------------------
+
+    @property
+    def preds(self) -> Dict[str, Any]:  # type: ignore[override]
+        """Unsealed, the folder's facts (`_default_preds`, read afresh on each access) under every pred
+        written by hand, which wins; sealed, the read-only mapping the seal fixed."""
+        d = self.__dict__.get("_preds")
+        if isinstance(d, FrozenPreds):
+            return d
+        if not isinstance(d, _DatPreds):
+            d = self.__dict__["_preds"] = _DatPreds(d or {})
+        d._refresh(self._default_preds())
+        return d
+
+    @preds.setter
+    def preds(self, value: Any) -> None:
+        if self.sealed:
+            raise TypeError("cannot modify a sealed value's preds")
+        self.__dict__["_preds"] = _DatPreds(dict(value))
+
+    def _default_preds(self) -> Dict[str, Any]:
+        """A dat's own preds: the scalar entries of its spec's `dat.kwargs`, then the scalar top-level
+        entries of `_result_.yaml` other than `dat:` (a result entry wins a clash), read from the folder."""
+        spec, result = _read_folder(self._path)
+        dat = spec.get("dat")
+        kwargs = dat.get("kwargs") if isinstance(dat, dict) else None
+        out: Dict[str, Any] = {}
+        for source in (kwargs if isinstance(kwargs, dict) else {}, result):
+            for k, v in source.items():
+                if source is result and k == "dat":
+                    continue
+                if isinstance(k, str) and k and not k.startswith("db/") and isinstance(v, (str, int, float, bool)):
+                    out[k] = v
+        return out
+
+    def _pred_names(self) -> Tuple[str, ...]:
+        """The class's declared names, then the folder's own (`_default_preds`)."""
+        declared = type(self)._ledger_preds
+        return tuple(declared) + tuple(k for k in self._default_preds() if k not in declared)
+
+    def _sealable(self) -> None:
+        """A folder whose `_spec_` names a `dat.kind` is a dat, and seals as a value only once saved:
+        an open one (never saved, or a checkpoint) is `ValueError`."""
+        spec, result = _read_folder(self._path)
+        dat = spec.get("dat")
+        if isinstance(dat, dict) and dat.get("kind") is not None and _standing_of(spec, result) == OPEN:
+            raise ValueError(f"{self!r} is open: a dat seals as a value once saved; dat.save() first "
+                             "(a run function's dat.save() does it when the run returns)")
+
+    def _walk(self) -> Iterator[Tuple[str, Path]]:
+        """`(relpath, path)` of every file in the value, in sorted order (`__pycache__` skipped)."""
+        for root, dirs, names in os.walk(self._path):
+            dirs[:] = sorted(d for d in dirs if d != "__pycache__")
+            for n in sorted(names):
+                p = Path(root, n)
+                yield p.relative_to(self._path).as_posix(), p
+
+    def _manifest(self) -> Dict[str, str]:
+        """`{relpath: sha256}` of the folder, rehashing only files whose (size, mtime, inode) moved.
+
+        Each file is hashed in 1 MiB blocks and never held in memory; the per-file hashes are cached
+        on the object, so `encode`, `_parts` and a save walk the folder but hash a file once."""
+        from .ledger.store import file_sha
+
+        cache = self.__dict__.get("_shas") or {}
+        new: Dict[str, Tuple[tuple, str]] = {}
+        for rel, p in self._walk():
+            st = p.stat()
+            sig = (st.st_size, st.st_mtime_ns, st.st_ino, st.st_dev)
+            hit = cache.get(rel)
+            new[rel] = (sig, hit[1] if hit is not None and hit[0] == sig else file_sha(p))
+        self.__dict__["_shas"] = new
+        return {rel: h for rel, (_sig, h) in sorted(new.items())}
+
+    def _forget(self) -> None:
+        self.__dict__.pop("_shas", None)
+
+    def _seal_path(self) -> Optional[str]:
+        return str(Path(self._path).resolve())
+
+    def _seal_bytes(self, data: bytes) -> int:
+        return sum(sig[0] for sig, _h in (self.__dict__.get("_shas") or {}).values())
+
+    @classmethod
+    def sealed_at_path(cls, path: Any, *, name: Optional[str] = None) -> Optional["Dat"]:
+        """The `Dat` sealed last at the folder `path` by `v.seal()` in any process and not saved
+        since, reopened from its seal record (`kept`); `None` when no record names the folder.
+
+        `v.seal(t)` on it saves it exactly as the sealing process would have: the same subject (its
+        deps, provenance, environment and time are the record's), `SealBroken` when a byte of the
+        folder changed since unless kept, the kept bytes when kept. The object is the class the
+        record names (a subclass of this one), made from its folder. `name` is the alias it will be
+        saved under: a value sealed with it as a dep before it is saved binds the dep through that
+        name at its own save, which refuses until the name holds these bytes.
+        """
+        from .ledger.kept import Kept
+
+        record = Kept().for_path(path)
+        if record is None:
+            return None
+        try:
+            kind = _import_dotted(record["kind"])
+        except (ImportError, AttributeError, ValueError):
+            raise ImportError(f"{path}: sealed as {record['kind']}, which does not import") from None
+        if not (isinstance(kind, type) and issubclass(kind, cls)):
+            raise TypeError(f"{path}: sealed as {record['kind']}, not a {cls.__name__}")
+        obj = kind._from_folder(Path(record["path"]))
+        obj._reopen(record, name)
+        return obj
+
+    def _present(self) -> bool:
+        """Is the folder this value was loaded into still there, the same folder (a stat)?"""
+        import stat
+
+        try:
+            st = os.stat(self._path)
+        except OSError:
+            return False
+        return stat.S_ISDIR(st.st_mode) and self.__dict__.get("_dir_id") in (None, (st.st_dev, st.st_ino))
+
+    def encode(self) -> bytes:
+        """The folder's content manifest, `{"files": {relpath: sha256}}`, canonical JSON."""
+        from .ledger.codec import canonical
+
+        return canonical({"files": self._manifest()}).encode()
+
+    def _parts(self) -> List[Tuple[str, Path]]:
+        seen: Dict[str, Path] = {}
+        manifest = self._manifest()
+        for rel, p in self._walk():
+            seen.setdefault(manifest[rel], p)
+        return list(seen.items())
+
+    @classmethod
+    def kind_ok(cls, kind: str) -> bool:
+        """Does a folder whose `_spec_` names `dat.kind` `kind` load as this class, the class its
+        `db/value` row names?  Default: `kind` names this class or a subclass (dotted, or a bare name
+        written before 2.3)."""
+        if kind in (_kind_name(cls), cls.__name__):
+            return True
+        try:
+            named = _import_dotted(kind) if "." in kind else _find_subclass_by_name(cls, kind)
+        except (ImportError, AttributeError, ValueError):
+            return False
+        return isinstance(named, type) and issubclass(named, cls)
+
+    @staticmethod
+    def spec_kind(path: Union[str, Path]) -> Optional[str]:
+        """The `dat.kind` a folder's `_spec_.yaml` (or `_spec_.json`) names, if any."""
+        spec, _result = _read_folder(str(path))
+        dat = spec.get("dat")
+        kind = dat.get("kind") if isinstance(dat, dict) else None
+        return kind if isinstance(kind, str) else None
+
+    @staticmethod
+    def _materialise(data: bytes, store: Any, name: Optional[str] = None) -> Path:
+        """The folder of a manifest, under `<store root>/dats/` (the data folder): at `<name>` when a
+        name is given (an absolute path: there), else at the manifest hash's first 16 hex. Files are
+        placed by `store.get_to` (hardlinks on the same filesystem); a named folder holding other
+        content is replaced by a new folder, never edited in place."""
+        from .ledger.codec import sha256
+        from .ledger.sandbox import unguarded     # the store's own write, also inside a sandboxed body
+
+        manifest = json.loads(data.decode())
+        files: Dict[str, str] = manifest["files"]
+        if name is not None and os.path.isabs(name):
+            dest = Path(name)
+        elif name is not None:
+            dest = store.root / "dats" / Path(*Path(check_name(name)).parts)
+        else:
+            dest = store.root / "dats" / sha256(data)[:16]
+        with unguarded():
+            if name is not None and dest.exists() and not _holds(dest, files, store):
+                old = dest.with_name(f"{dest.name}.old-{os.getpid()}-{id(data):x}")
+                dest.rename(old)
+                shutil.rmtree(old, ignore_errors=True)
+            for rel, h in files.items():
+                p = dest / rel
+                if not p.exists():
+                    store.get_to(h, p)
+            dest.mkdir(parents=True, exist_ok=True)
+        return dest
+
+    @classmethod
+    def decode(cls, data: bytes, store: Any, *, name: Optional[str] = None) -> "Dat":
+        """The dat a manifest names: its folder rebuilt in the data folder (at `name` when loaded by
+        one), its spec and results read from there."""
+        return cls._from_folder(cls._materialise(data, store, name))
+
+    def _after_seal(self, store: Any, name: Optional[str] = None) -> None:
+        self._forget()
+        self._move_to(self._materialise(store.get(self.hash), store, name))   # the manifest as stored
+
+    def _at_name(self, store: Any, name: str) -> None:
+        self._forget()
+        self._move_to(self._materialise(store.get(self.hash), store, name))
 
     @staticmethod
     def get(source: Union["Dat", dict], keys: Union[str, List[str]],
@@ -1856,23 +2099,18 @@ class Dat(metaclass=_DatMeta):
 class DatContainer(Dat, Generic[DatType]):
     """A Dat whose folder holds other Dats, exposed through `get_dats()` / `get_dat_paths()`."""
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._dat_paths: Union[_DataState, List[str]] = _DataState.NOT_LOADED
-        self._dats: Union[_DataState, List[DatType]] = _DataState.NOT_LOADED
-
     def get_dat_paths(self) -> List[str]:
         """Lazy loaded list of full paths for the contained Dats."""
-        if self._dat_paths is _DataState.NOT_LOADED:
-            self._dat_paths = DatContainer._find_dats_under(self._path)
-        return self._dat_paths
+        if "_dat_paths" not in self.__dict__:
+            self.__dict__["_dat_paths"] = DatContainer._find_dats_under(self._path)
+        return self.__dict__["_dat_paths"]
 
     def get_dats(self) -> List[DatType]:
         """The contained Dats (all stay in memory until this container is released)."""
-        if self._dats is _DataState.NOT_LOADED:
+        if "_dats" not in self.__dict__:
             manager = self._world()
-            self._dats = [manager.load(p) for p in self.get_dat_paths()]  # type: ignore
-        return self._dats  # type: ignore
+            self.__dict__["_dats"] = [manager.load(p) for p in self.get_dat_paths()]
+        return self.__dict__["_dats"]
 
     @staticmethod
     def _find_dats_under(root_path: Union[str, Path]):
@@ -1888,6 +2126,107 @@ class DatContainer(Dat, Generic[DatType]):
         assert os.path.abspath(results[0]) == os.path.abspath(root_path)
         del results[0]
         return results
+
+
+# =============================================================================
+# The folder codec's helpers
+# =============================================================================
+
+def _read_folder(path: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """`(spec, results)` as the folder holds them now: `_spec_.yaml` (or `.json`) and
+    `_result_.yaml`, each `{}` when absent."""
+    spec: Any = {}
+    if os.path.exists(spec_path := os.path.join(path, SPEC_YAML)):
+        with open(spec_path) as f:
+            spec = yaml.safe_load(f) or {}
+    elif os.path.exists(spec_path := os.path.join(path, SPEC_JSON)):
+        with open(spec_path) as f:
+            spec = json.load(f)
+    if not isinstance(spec, dict):
+        raise TypeError(f"{spec_path}: a spec is a mapping, got {type(spec).__name__}")
+    result: Any = {}
+    if os.path.exists(result_path := os.path.join(path, RESULT_YAML)):
+        with open(result_path) as f:
+            result = yaml.safe_load(f) or {}
+    return spec, result if isinstance(result, dict) else {}
+
+
+class _DatPreds(dict):
+    """An unsealed dat's preds: the folder's own under every key written by hand (or deleted), which wins."""
+
+    def __init__(self, explicit: Dict[str, Any]) -> None:
+        super().__init__(explicit)
+        self._explicit = set(explicit)
+        self._dropped: set = set()
+
+    def __setitem__(self, k: str, v: Any) -> None:
+        self._explicit.add(k)
+        self._dropped.discard(k)
+        super().__setitem__(k, v)
+
+    def __delitem__(self, k: str) -> None:
+        super().__delitem__(k)
+        self._explicit.discard(k)
+        self._dropped.add(k)
+
+    def update(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[override]
+        for k, v in dict(*args, **kwargs).items():
+            self[k] = v
+
+    def __ior__(self, other: Any) -> "_DatPreds":  # type: ignore[override]
+        self.update(other)
+        return self
+
+    def setdefault(self, k: str, v: Any = None) -> Any:
+        if k not in self:
+            self[k] = v
+        return self[k]
+
+    def pop(self, k: str, *default: Any) -> Any:
+        if k in self:
+            v = dict.__getitem__(self, k)
+            del self[k]
+            return v
+        if default:
+            return default[0]
+        raise KeyError(k)
+
+    def popitem(self) -> Tuple[str, Any]:
+        k = next(reversed(list(self)))
+        return k, self.pop(k)
+
+    def clear(self) -> None:
+        for k in list(self):
+            del self[k]
+
+    def _refresh(self, defaults: Dict[str, Any]) -> None:
+        for k in [k for k in self if k not in self._explicit]:
+            dict.__delitem__(self, k)
+        for k, v in defaults.items():
+            if k not in self._explicit and k not in self._dropped:
+                dict.__setitem__(self, k, v)
+
+
+def _holds(dest: Path, files: Dict[str, str], store: Any) -> bool:
+    """Does the folder hold exactly these files with these hashes (a linked file is checked by inode)?"""
+    from .ledger.store import file_sha
+
+    found = set()
+    for root, _dirs, names in os.walk(dest):
+        for n in names:
+            found.add(Path(root, n).relative_to(dest).as_posix())
+    if found != set(files):
+        return False
+    for rel, h in files.items():
+        p, blob = dest / rel, store.path(h)
+        try:
+            if os.path.samefile(p, blob):
+                continue
+        except OSError:
+            pass
+        if file_sha(p) != h:
+            return False
+    return True
 
 
 # =============================================================================

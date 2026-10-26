@@ -59,7 +59,9 @@ Dats, specs, and the one call that runs them. The world they live in is [DAT Man
 
 
 ## Dat Interface
-A folder holding `_spec_.yaml` — a complete, argumentless recipe, expanded once at create and never rewritten — and `_result_.yaml`, what running it produced. The class is chosen by the spec's `dat.kind`; subclass `Dat` to give a kind its own rules. There is no `Dat(spec)`: the constructor is internal, writes nothing, and a bare call raises a `TypeError` naming `create` and `load`.
+A folder holding `_spec_.yaml` — a complete, argumentless recipe, expanded once at create and never rewritten — and `_result_.yaml`, what running it produced. The class is chosen by the spec's `dat.kind`; subclass `Dat` to give a kind its own rules. `Dat(path)` is the dat already in a folder, its spec and results read from there, writing nothing; `create` makes one, `load` finds one by name.
+
+Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Value`, so `seal`, `preds`, `subject`, `sealed` and `hash` are on every dat, and `dvc_dat.ledger.Dat` is this class. A saved dat seals with `dat.seal(t, name=...)`, its folder's files going to the ledger's art store and its `db/value` row naming `dat.kind`; `preds` default to the spec's scalar `dat.kwargs` and the results' scalar top-level entries; `L.at().do(spec)` is `Dat.do(spec)` remembered. The ledger side is [DAT Ledger § Dat Interface](../../DAT%20Modules/ledger/DAT%20Ledger.md#Dat%20Interface). Two words: a dat's *standing* (`sealed` by `save()`) is the dat world's; `dat.sealed` (a moment, or `None`) is the ledger's.
 
 | Dat | |
 | --- | --- |
@@ -84,6 +86,7 @@ A folder holding `_spec_.yaml` — a complete, argumentless recipe, expanded onc
 | [set](#^set) | Dotted-key write, making mappings on the way |
 | [merge_dicts](#^merge-dicts) | The merge `dat.base` uses |
 | [cli_main](#^cli-main) | The `dat` command line, for your own main |
+| seal, preds, subject, hash | A dat is a ledger `Value` ([DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md#Value%20Interface)) |
 
 **manager**`: DatManager`
     A plain class attribute: `None` until first use, when the getter builds the default world with `DatManager.load_dat_config()`. Assign a manager to replace the default world (`Dat.manager = Store(dat_folders=[...], do=Dat.do)` keeps the mounts). Every subclass sees the same object. `dat.manager` on an instance is the manager that loaded it, else this one — a run's function loads through `dat.manager`. ^manager
@@ -185,6 +188,8 @@ A dat whose folder holds dats.
 | a **template spec** (dict, or a name loading to one) | create the dat, run it | fork, then the forked spec creates the dat, which runs |
 | a **`Dat`** | re-run in place while open or rolling; refused once sealed | fork a new dat from its spec; the dat on disk is never rewritten |
 
+`Dat.do` records nothing: a template makes a fresh folder every time. On a ledger, `rev.do(target, **kwargs)` takes the same targets (a template spec, its name, or a run function's dotted name) and remembers the answer: the dat made, run and sealed as a value once, then found ([DAT Ledger § do](../../DAT%20Modules/ledger/DAT%20Ledger.md#Rev%20Interface)).
+
 A run is `Dat.manager.execute(dat)`: `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do` names, inside a recording, with `run/work/` as the working directory; `dat.dependencies` lands in the results beside whatever the function put in `dat.get_results()`, and reaches `_result_.yaml` when the dat is saved; `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and `dat.content` are the run's, in the sub-dat `run/` (`dat.run`), outside the hash. **Nothing about arguments is recorded in the results — the spec is the record.** A template with no `dat.do` just creates the dat and returns it; `dat.target_exists: use` on an existing folder returns that dat without running. In-place iteration (profiling, a report you re-run): a fixed `dat.name` plus `dat.target_exists: overwrite`.
 
 
@@ -209,7 +214,7 @@ The file a dat holds is that template expanded once, at create — `name` is the
 
 | Key | Meaning |
 | --- | --- |
-| `dat.kind` | The `Dat` subclass name (default `Dat`) |
+| `dat.kind` | The `Dat` subclass, by dotted name (written `dvc_dat.core.Dat` by default); on a ledger, also the kind of the dat's `db/value` row |
 | `dat.base` | What to inherit from: a name, a spec, or a list (later wins); removed once merged |
 | `dat.name` | In a template: where to put the dat, under the dat folder, `{}` grammar (`runs/{YYYY}-{MM}/{unique}`). On disk: the folder it landed in |
 | `dat.do` | Dotted name of the function to run |

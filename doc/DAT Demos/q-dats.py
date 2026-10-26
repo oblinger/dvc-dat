@@ -150,78 +150,34 @@ print("_result_.yaml:\n" + textwrap.indent((table12_path / "_result_.yaml").read
 # ## 3. Save it as a value
 #
 # On a ledger a dat is a value: sealed under a name, loaded back,
-# found by its preds. Nothing runs here. `path_to_table_dat` reads
-# the folder's spec kwargs and result as preds; `seal` stores the
-# folder; `load` brings it back.
-#
-# Today this takes a class. The ledger's `Dat` is a `Value` over a
-# folder, but it is not the `Dat` that `do` returns, and `load`
-# refuses a folder whose spec names `dvc_dat.core.Dat` unless the
-# class accepts that kind; `TableDat` does, and declares the preds.
-# Whether a dat should be a value by itself is DAT 1038.
+# found by its preds. Nothing runs here. Its preds are its spec's
+# `kwargs` and its result's entries, read from the folder.
 
 # %%
-(module_path / "table_dat.py").write_text('''\
-from pathlib import Path
-
-import yaml
-
-from dvc_dat.ledger import Dat, ledger_class, ledger_fn
-
-from mymodule.mult import write_table
-
-
-@ledger_class(preds=("n", "start", "cells"))
-class TableDat(Dat):
-    """A dat that is a value: the folder `_spec_.yaml`, `_result_.yaml`, `table.csv`."""
-
-    @classmethod
-    def kind_ok(cls, kind):
-        """`do` made it, so its `_spec_` says `dvc_dat.core.Dat`."""
-        return kind == "dvc_dat.core.Dat" or super().kind_ok(kind)
-
-
-def path_to_table_dat(path) -> TableDat:
-    """The dat already in `path`, as a value; nothing runs. Its kwargs and result are its preds."""
-    spec = yaml.safe_load(Path(path, "_spec_.yaml").read_text())
-    result = yaml.safe_load(Path(path, "_result_.yaml").read_text())
-    table_dat = TableDat(Path(path))
-    table_dat.preds.update(spec["dat"]["kwargs"])
-    table_dat.preds["cells"] = result["cells"]
-    return table_dat
-
-
-@ledger_fn
-def table(rev, *, spec: dict, path: Path) -> TableDat:
-    """The table constructor: the run itself. `spec` is the question, `path` the folder it fills."""
-    cells = write_table(path, **spec["dat"]["kwargs"])
-    (path / "_spec_.yaml").write_text(yaml.safe_dump(spec))
-    (path / "_result_.yaml").write_text(yaml.safe_dump({"cells": cells}))
-    return path_to_table_dat(path)
-''')
-from mymodule.table_dat import TableDat, path_to_table_dat
-
-sealed_dat = path_to_table_dat(table12_path)   # the dat step 2 ran
 with L.transaction(by="human:dan") as t:
-    sealed_dat.seal(t, name="tables/table12")
-print("dat:", repr(sealed_dat), " sealed:", sealed_dat.sealed)   # dat: <TableDat tables/table12>  sealed: <the seal's moment>
+    table12_dat.seal(t, name="table/12")   # the folder's files go to the art store; the row names the kind, dvc_dat.core.Dat
+print("dat:", repr(table12_dat), " sealed:", table12_dat.sealed)   # dat: <Dat table/12>  sealed: <the seal's moment>
 
-loaded_dat = L.at().load("tables/table12")
-print("files:", sorted(p.name for p in loaded_dat.path.iterdir()))
+loaded_dat = L.at().load("table/12")       # the folder rebuilt from the store; nothing runs
+print("files:", sorted(os.listdir(loaded_dat.get_path())))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
+print("cells:", loaded_dat.get_results()["cells"])   # cells: 144
 print("preds:", dict(sorted(loaded_dat.preds.items())))
 # preds: {'cells': '144', 'n': '12', 'start': '1'}
+print("found:", L.at().values(kind=Dat), L.at().value(n=12))   # found: [<Dat table/12>] table/12
 
 # %% [markdown]
 # Sealing sent the files to the art store by their hashes; the
 # manifest naming them is the value's bytes. `load` rebuilds the
-# folder from the store; it does not run anything.
+# folder from the store, a view in the ledger's data folder; it does
+# not run anything.
 
 # %% [markdown]
 # ## Execution in practice: all done in one step
 #
 # `Dat.do("specs.table12")` is steps 1 and 2: it instantiates the spec,
-# runs the dat, and returns what the run function returned.
+# runs the dat, and returns what the run function returned. It is a
+# plain dat: no ledger, a new folder every time.
 
 # %%
 again_dat = Dat.do("specs.table12")
@@ -230,43 +186,43 @@ print("files:", sorted(os.listdir(again_dat.get_path())))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
 
 # %% [markdown]
-# All three steps at once is a ledger function: `table(rev, *, spec,
-# path)` builds a table dat under `@ledger_fn`. The spec is the
-# question, and the answer is remembered; a ledger function runs
-# committed, mounted code, in a sandbox. (Under DAT 1038 this is
-# `L.at().do(spec)`, one operator for every spec, no function of
-# your own.)
+# All three steps at once, remembered, is `L.at().do`: the target
+# `Dat.do` takes, through the ledger. The spec is the question and the
+# run function's code is part of the answer's record, so a ledger run
+# needs committed code. The same spec asked again is found, not run.
 
 # %%
 subprocess.run(git_cmd + ["add", "mymodule"], check=True)
 subprocess.run(git_cmd + ["commit", "-q", "-m", "mymodule"], check=True)
 with L.transaction(by="human:dan", why="mount mymodule") as t:
-    t.add("db/mount/mymodule", "db/root", "mymodule")
+    t.add("db/mount/mymodule", "db/root", "mymodule")   # mymodule's code is the mount's: its files, hashed
     t.add("db/mount/mymodule", "db/repo", "q-dats")
 
-table12_spec_record = Dat.do.resolve("specs.table12")
-spec_dat = L.at().run("mymodule.table_dat.table", spec=table12_spec_record)
-print("dat:", repr(spec_dat))   # dat: <TableDat anonymous/Dat>: no name given
+table12_value = L.at().do("specs.table12")
+print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: named by the spec's template
 
 top_id = L.at().id
-again_spec_dat = L.at().run("mymodule.table_dat.table", spec=table12_spec_record)
-print("same subject:", again_spec_dat.subject == spec_dat.subject,
-      " nothing written:", L.at().id == top_id)   # same subject: True  nothing written: True: a hit
+again_value = L.at().do("specs.table12")
+print("hit:", again_value.subject == table12_value.subject,
+      " nothing written:", L.at().id == top_id)   # hit: True  nothing written: True
+print("db/fn:", L.at()[table12_value.subject, "db/fn"])   # db/fn: mymodule.mult.build_table
 print("db/repo/q-dats/mymodule:", L.at()["db/repo/q-dats/mymodule", "version"])   # db/repo/q-dats/mymodule: 0.1.0: the first clean run wrote the clock
+print("question:", Dat.do.resolve("specs.table12"))   # the spec, its base merged in: what do and L.at().do start from
+# question: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
 
 # %% [markdown]
-# The same spec is the same question: the second run is a memo hit,
-# nothing runs and nothing is written.
+# The question is that spec with every `{}` expanded and `name:`
+# left out; the second call is a memo hit, nothing runs and nothing
+# is written.
 
 # %% [markdown]
 # ## Finding dats
 
 # %%
 for n in (5, 9):
-    L.at().run("mymodule.table_dat.table",
-               spec={"dat": {"do": "mymodule.mult.build_table", "kwargs": {"n": n, "start": 1}}})
-print("cells:", L.at().select(("n", "cells"), kind=TableDat))
-# cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: table12 sealed from do's folder, then by the constructor
+    L.at().do("specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.do
+print("cells:", L.at().select(("n", "cells"), kind=Dat))
+# cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: table/12 sealed from step 2's folder, then by L.at().do
 
 # %% [markdown]
 # Spec kwargs and results are preds, so a query over them is an

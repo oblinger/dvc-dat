@@ -9,8 +9,8 @@ run goes through it, so dependencies are captured rather than declared.
 The code is `dvc_dat/core.py` (`Dat`, `DatContainer`, `DatManager`) and
 `dvc_dat/do.py` (`Do`), exported as `from dvc_dat import Dat,
 DatContainer, DatManager, Do`. Part of the
-[architecture](../DAT%20Architecture.md); the ledger's own folder value
-is a different class, [`ledger.Dat`](ledger/DAT%20Ledger.md).
+[architecture](../DAT%20Architecture.md); a `Dat` is also a ledger value,
+`ledger.Dat` the same class ([DAT Ledger](ledger/DAT%20Ledger.md), DAT 1038).
 
 ## Public surface
 

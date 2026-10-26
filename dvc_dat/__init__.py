@@ -11,8 +11,9 @@ The package exports four classes; everything else hangs off them. The ledger,
 the dat's record in time, is its own subpackage: `from dvc_dat.ledger import Ledger`.
 """
 
-__version__ = "2.27.0"
+__version__ = "2.28.0"
 
+from . import ledger  # noqa: F401  (first: core's Dat is a ledger Value, and the ledger names Dat)
 from .core import Dat, DatContainer, DatManager
 from .do import Do
 

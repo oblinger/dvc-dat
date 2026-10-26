@@ -175,3 +175,22 @@ class Blobby(Value):
 @ledger_class(preds=("game", "take"))
 class GameDat(Dat):
     """A folder value with preds: the seal-record tests reopen it in another process."""
+
+
+def build_table(dat, n=10, start=1):
+    """A dat's run function (``Dat.do`` / ``rev.do``): ``table.csv``, ``cells`` in the results, saved."""
+    _count("build_table")
+    Path(dat.get_path(), "table.csv").write_text(f"{n} from {start}\n")
+    dat.get_results()["cells"] = n * n
+    dat.save()
+    return dat
+
+
+def never_saves(dat, n=1):
+    """A run function that leaves its dat open."""
+    Path(dat.get_path(), "x.txt").write_text(str(n))
+
+
+@ledger_class(preds=("note",))
+class NotedDat(Dat):
+    """A dat kind declaring one pred of its own beside its folder's."""

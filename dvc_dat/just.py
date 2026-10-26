@@ -11,7 +11,9 @@ A function is a command when `@command` marks it; a spec (a mounted mapping)
 when its `command:` key is `true` or `{args: …, help: …}`.  Each mounted name
 that is a command, or each command defined in a mounted module, gets one
 recipe in `.dat/targets.just` beside `.datconfig.yaml`: `just <name> k=v …` is
-`just run <target> k=v …`.  A project's justfile opts in with
+`just run <target> k=v …`, `<name>` the last part of the target (a spec
+mounted from a folder, `specs/table12`, is `just table12`, running
+`specs.table12`).  A project's justfile opts in with
 `import? '.dat/targets.just'`; the `run` recipe rewrites the file when it is
 older than the config, the justfile or a mounted source, and says on stderr
 what it wrote and what it skipped.  A name the justfile already has (a hand
@@ -103,7 +105,8 @@ def commands(do: Any) -> Tuple[Dict[str, Tuple[str, Dict[str, str]]], List[str]]
                 continue
             obj = do.load(key, default=None)
             if (decl := declared(obj, key)):
-                add(key, key, decl)
+                dotted = key.replace("/", ".")         # a folder mount's `specs/table12` is `specs.table12`
+                add(dotted.rpartition(".")[2], dotted, decl)
         except Exception as e:   # a name that does not load is not a command; say so
             skipped.append(f"{key} (does not load: {e})")
     return found, skipped

@@ -36,7 +36,7 @@ os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"   # `
 os.environ["PYTHONPATH"] = str(scratch_path)      # the verbs import mymodule
 sys.path.insert(0, str(scratch_path))
 
-# the same mymodule as q-dats; table_dat.table also carries @command
+# the same mymodule as q-dats; specs/table12.yaml also carries command: true
 module_path = Path("mymodule")
 (module_path / "specs").mkdir(parents=True)
 (module_path / "__init__.py").write_text('__version__ = "0.1.0"\n')   # the version `just bump mymodule` edits
@@ -72,48 +72,8 @@ dat:
   name: tables/{YYYY}/table12{unique}
   do: mymodule.mult.build_table
   kwargs: {n: 12}
+command: true
 ''')
-(module_path / "table_dat.py").write_text('''\
-from pathlib import Path
-
-import yaml
-
-from dvc_dat.just import command
-from dvc_dat.ledger import Dat, ledger_class, ledger_fn
-
-from mymodule.mult import write_table
-
-
-@ledger_class(preds=("n", "start", "cells"))
-class TableDat(Dat):
-    """A dat that is a value: the folder `_spec_.yaml`, `_result_.yaml`, `table.csv`."""
-
-    @classmethod
-    def kind_ok(cls, kind):
-        """`do` made it, so its `_spec_` says `dvc_dat.core.Dat`."""
-        return kind == "dvc_dat.core.Dat" or super().kind_ok(kind)
-
-
-def path_to_table_dat(path) -> TableDat:
-    """The dat already in `path`, as a value; nothing runs. Its kwargs and result are its preds."""
-    spec = yaml.safe_load(Path(path, "_spec_.yaml").read_text())
-    result = yaml.safe_load(Path(path, "_result_.yaml").read_text())
-    table_dat = TableDat(Path(path))
-    table_dat.preds.update(spec["dat"]["kwargs"])
-    table_dat.preds["cells"] = result["cells"]
-    return table_dat
-
-
-@command(args="spec=…", help="the table dat a spec names")
-@ledger_fn
-def table(rev, *, spec: dict, path: Path) -> TableDat:
-    """The table constructor: the run itself. `spec` is the question, `path` the folder it fills."""
-    cells = write_table(path, **spec["dat"]["kwargs"])
-    (path / "_spec_.yaml").write_text(yaml.safe_dump(spec))
-    (path / "_result_.yaml").write_text(yaml.safe_dump({"cells": cells}))
-    return path_to_table_dat(path)
-''')
-
 Path("q_cli_main.py").write_text('''\
 """The project's main: `just run` execs it (`run:` in .datconfig.yaml)."""
 import sys
@@ -121,7 +81,6 @@ import sys
 from dvc_dat import Dat
 
 Dat.do.mount(folder="mymodule/specs", at="specs")
-Dat.do.mount(module="mymodule.table_dat", at="table")
 
 if __name__ == "__main__":
     sys.exit(Dat.cli_main())
@@ -139,8 +98,8 @@ for args in (["init", "-q"], ["config", "user.name", "demo"], ["config", "user.e
              ["add", "."], ["commit", "-q", "-m", "q-cli"]):
     subprocess.run(["git", *args], check=True)
 
-import mymodule.table_dat                         # discovery finds the checkout, the repo q-cli
-with L.transaction(by="human:dan", why="mount mymodule") as t:   # sandboxed: code = the module bytes a run loads
+import mymodule.mult                              # discovery finds the checkout, the repo q-cli
+with L.transaction(by="human:dan", why="mount mymodule") as t:   # mymodule's code is the mount's: its files, hashed
     t.add("db/mount/mymodule", "db/root", "mymodule")
     t.add("db/mount/mymodule", "db/repo", "q-cli")
     t.add("db", "version", "3.1.4")
@@ -169,46 +128,43 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # →     why name *args         # a value's dependencies, whether they hold at the head, and what moved since the alias's last target
 # →
 # →     [run]
-# →     table *args            # spec=…  the table dat a spec names
+# →     table12 *args
 
 # %% [markdown]
 # ## Running
 #
 # The project is q-dats's `mymodule`. Its main, which `run` execs,
-# mounted it:
+# mounted its specs:
 #
 # ```python
-# Dat.do.mount(folder="mymodule/specs", at="specs")       # the project's main, which run execs
-# Dat.do.mount(module="mymodule.table_dat", at="table")   # table_dat's @command functions become verbs
-# # the run function: table in mymodule/table_dat.py, the table dat a spec names
+# Dat.do.mount(folder="mymodule/specs", at="specs")   # the project's main, which run execs
 # ```
 #
-# `just run` runs a ledger function and seals its result as a value;
-# `alias=` names it. A spec's name (`specs.table12`) is not a ledger
-# key yet, so the spec itself is the key, written as YAML.
+# `just run` of a spec makes the dat, runs it and seals it as a value;
+# `alias=` names it. The spec's name is the question.
 
 # %%
-# !just run mymodule.table_dat.table spec="{dat: {do: mymodule.mult.build_table, kwargs: {n: 12, start: 1}}}" alias=table/12
-# same as: L.at().run("mymodule.table_dat.table", spec={"dat": {"do": "mymodule.mult.build_table", "kwargs": {"n": 12, "start": 1}}}, path="table/12")
-# → ran  table/12  n=12 start=1 cells=144
+# !just run specs.table12 alias=table/12
+# same as: L.at().do("specs.table12", path="table/12")
+# → ran  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
 # Asked again with the same spec and code, it finds the value
 # instead of re-running.
 
 # %%
-# !just run mymodule.table_dat.table spec="{dat: {do: mymodule.mult.build_table, kwargs: {n: 12, start: 1}}}" alias=table/12
-# same as: the same L.at().run(...), a memo hit
-# → hit  table/12  n=12 start=1 cells=144
+# !just run specs.table12 alias=table/12
+# same as: the same L.at().do(...), a memo hit
+# → hit  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
-# A function marked `@command` is its own verb: `just table` is
-# `just run table.table`, the mounted name of the same function.
+# A spec with `command: true` is its own verb: `just table12` is
+# `just run specs.table12`.
 
 # %%
-# !just table spec="{dat: {do: mymodule.mult.build_table, kwargs: {n: 12, start: 1}}}"
-# same as: just run table.table spec=…, i.e. L.at().run("mymodule.table_dat.table", spec=…)
-# → hit  table/12  n=12 start=1 cells=144
+# !just table12
+# same as: just run specs.table12, i.e. L.at().do("specs.table12")
+# → hit  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
 # ## Finding computed values
@@ -217,9 +173,9 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # narrows to one class. A value prints by its name if it has one.
 
 # %%
-# !just values kind=TableDat
-# same as: L.at().values(kind="mymodule.table_dat.TableDat")
-# → table/12   n=12 start=1 cells=144
+# !just values kind=Dat
+# same as: L.at().values(kind=Dat)
+# → table/12   start=1 n=12 cells=144
 
 # %% [markdown]
 # `just value` is the one value that matches.
@@ -227,7 +183,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # %%
 # !just value n=12
 # same as: L.at().value(n="12")
-# → table/12   n=12 start=1 cells=144
+# → table/12   start=1 n=12 cells=144
 
 # %% [markdown]
 # `just history` is every row a subject has held, with who wrote it:
@@ -247,7 +203,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # !just why table/12
 # same as: v = L.at().load("table/12"); v.matches(L.at()), v.dependencies
 # → table/12: #<8 hex>, matches the head
-# → dependencies: code <8 hex>, fn mymodule.table_dat.table, platform <platform>
+# → dependencies: code <8 hex>, code/q-cli <8 hex>, fn mymodule.mult.build_table, platform <platform>
 
 # %% [markdown]
 # ## Updating
@@ -288,17 +244,17 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 
 # %%
 # !git commit -qam "mymodule 0.1.1"
-# !just run mymodule.table_dat.table spec="{dat: {do: mymodule.mult.build_table, kwargs: {n: 12, start: 1}}}"
+# !just run specs.table12
 # !just history db/repo/q-cli/mymodule
 # same as: [r for r in L.at().rows() if r.subject == "db/repo/q-cli/mymodule"]
 # !just history db/repo/q-cli
-# → ran  anonymous/Dat  n=12 start=1 cells=144
+# → ran  tables/2026/table12  start=1 n=12 cells=144
 # → rev  by         predicate  object
-# →   2  eval:mymodule.table_dat.table version    0.1.0
-# →   7  eval:mymodule.table_dat.table version    0.1.1
+# →   2  eval:mymodule.mult.build_table version    0.1.0
+# →   7  eval:mymodule.mult.build_table version    0.1.1
 # → rev  by         predicate  object
-# →   2  eval:mymodule.table_dat.table commit     <40 hex>
-# →   7  eval:mymodule.table_dat.table commit     <40 hex>
+# →   2  eval:mymodule.mult.build_table commit     <40 hex>
+# →   7  eval:mymodule.mult.build_table commit     <40 hex>
 
 # %% [markdown]
 # A bump of `db`, the ledger's own clock, is a release: a row on the
@@ -320,9 +276,8 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # same as: dvc_dat.dat_tools.cmd_list(""), in the namespace q_cli_main mounted
 # → Base names matching: '*'
 # →   dt                        -->  <module>
-# →   specs/table12             -->  {'dat': {'base': 'specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
+# →   specs/table12             -->  {'dat': {'base': 'specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}, 'command': True}
 # →   specs/table_base          -->  {'dat': {'kwargs': {'start': 1}}, 'notes': 'shared defaults'}
-# →   table                     -->  <module>
 
 # %% [markdown]
 # The rest, not run here:

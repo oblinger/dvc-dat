@@ -13,14 +13,14 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Methods     |                                                                                                                                                                                                                                                                                                            |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ledger      | [path](#^path), [at](#^at), [transaction](#^transaction), [close](#^close)                                                                                                                                                                                                                                 |
-| Rev         | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [load_fn](#^load-fn), [run](#^run)                                      |
+| Rev         | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [load_fn](#^load-fn), [run](#^run), [do](#^do)                           |
 | Ref         | [rev](#^rev), [subject](#^subject), [name](#^name), [aliases](#^aliases), [hash](#^hash), [type](#^type), [preds](#^preds), [sealed_at](#^sealed-at), [load](#^ref-load)                                                                                                                                   |
 | Row         | [rev](#^row-rev), [subject](#^row-subject), [predicate](#^predicate), [object](#^object), [added](#^added)                                                                                                                                                                                                 |
 | Transaction | [tx](#^transaction-tx), [previous_rev](#^previous-rev), [rev](#^transaction-rev), [add](#^add), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--)                                                                                                                                       |
 | Value       | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [sealed](#^sealed), [hash](#^value-hash), [dependencies](#^dependencies), [Dependencies](#^value-dependencies), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
 | Value.Blob  | [obj](#^obj)                                                                                                                                                                                                                                                                                               |
 | Value.Table | [table](#^table-table)                                                                                                                                                                                                                                                                                     |
-| Dat         | [path](#^dat-path), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind)                                                                                                                                                                             |
+| Dat         | [path](#^dat-path), [preds](#^dat-preds), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind)                                                                                                                                                       |
 | Fn          | [name](#^fn-name), [module](#^module), [code](#^fn-code), [mount](#^mount), [env](#^env), [signature](#^signature), [()](#^--call--)                                                                                                                                                                       |
 
 
@@ -76,6 +76,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 | [load](#^load)                 | One value by subject or alias                              |
 | [load_fn](#^load-fn)           | A value function resolved at this revision                 |
 | [run](#^run)                   | Evaluate a value function, memoised (`just run`)           |
+| [do](#^do)                     | Make, run and seal a dat from a spec, memoised (`just run <spec>`) |
 
 **id**`: int`
     The revision this view reads as of; revision 0 is the empty ledger. ^id
@@ -121,6 +122,9 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 
 **run**`(name: str, /, *, seal=<this rev's ledger>, clean=False, **keys) -> Value | None`
     Calls the value function `name` with `keys` and returns its result, handing back an already-sealed result instead of running when one from the same code and keys still holds at this revision. `seal` says where the result goes, as on [`Fn.__call__`](#^--call--): by default, the hit, else run and save it as the memo entry; `seal=False` runs and keeps nothing; `seal=True` runs and seals locally; `seal=t` saves into an open transaction; `seal="get"` returns the saved result or `None` and never runs ([Running](#Running)). `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit of the latest clean run this revision records, its `db/repo/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. A name that is not a `str` is `TypeError`. See [Execution Semantics](#Execution%20Semantics) and [Value Provenance](#Value%20Provenance). ^run
+
+**do**`(target, /, *, seal=<this rev's ledger>, clean=False, path=None, **kwargs) -> Dat | None`
+    `Dat.do(target, **kwargs)` through the ledger (DAT 1038): the sealed dat when this question was answered by this code before, else the dat created, run and sealed as the memo entry. `target` is what `Dat.do` takes: a mounted spec name, a spec dict, or a run function's dotted name (the spec `{dat: {do: <name>}}`); `kwargs` update the spec's `dat.kwargs`. The question, `db/keys`, is the spec with its `dat.base` merged, the kwargs merged, `dat.kind` set and every `{}` expanded, `dat.name` removed; `db/fn` is the run function's dotted name and `db/returns` the dat's class; the code is the module holding the run function, named as a value function's is (its static closure installed, the mount's under a `db/mount`), so the `db/code/<16 hex>` item and the version clocks apply. A miss creates the dat in a work folder, runs it in this process (`manager.execute`), which needs the code in a clean checkout (`NotEvaluated`), and seals the folder the run function saved; a run that leaves its dat open is `ValueError`. The dat's name is `path=`, else the spec's `dat.name` template (`{unique}` counting up in the data folder), else `anonymous/Dat`; a hit is handed back at its name, its folder a view there. `seal`, `clean` and `path` as on [`run`](#^run). A run function that is a `@ledger_fn` is `TypeError` (`run` runs it). The dat's recorded dependencies that are names on the ledger enter its trace as alias reads. See [Running](#Running). ^do
 
 
 
@@ -342,31 +346,35 @@ A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted
 
 
 ## Dat Interface
-A `Value` that is a folder: it encodes as its content manifest, `{"files": {relpath: sha256}}`, and its files are its parts, streamed into the art store one at a time, so memory is bounded by the manifest, not the folder. This is the ledger's own folder value, not the dat manager's `dvc_dat.Dat`: it hashes every file in the folder (`__pycache__` skipped) and reads no `_spec_.yaml` except to check its `dat.kind` on load. Each file is hashed in 1 MiB blocks; the per-file hashes are cached on the object, keyed by size, mtime and inode, so only a changed file is hashed again.
+`dvc_dat.ledger.Dat` is `dvc_dat.Dat`, one class (DAT 1038): a dat, the folder that is its own recipe ([DAT Dat](../DAT%20Dat.md)), is a `Value` whose bytes are the folder. It encodes as its content manifest, `{"files": {relpath: sha256}}`, and its files are its parts, streamed into the art store one at a time, so memory is bounded by the manifest, not the folder. Every file in the folder is hashed (`__pycache__` skipped), `_spec_.yaml`, `_result_.yaml` and `run/` included; each in 1 MiB blocks, the per-file hashes cached on the object, keyed by size, mtime and inode, so only a changed file is hashed again. The `db/value` row's kind and the folder's `dat.kind` are the same dotted name, `dvc_dat.core.Dat` or the subclass. A dat made by `Dat.create` or `Dat.do` seals with no subclass once saved: `dat.seal(t, name="table/12")` stores its files and writes its row, and `rev.load("table/12")` returns a `Dat` whose `get_spec()`, `get_results()` and `get_path()` read the rebuilt folder. A folder whose `_spec_` names a `dat.kind` and was never saved (standing `open`) is `ValueError` naming `dat.save()`; a folder with no spec is a plain folder value.
 
 | Dat | |
 | --- | --- |
-| [Dat](#^dat) | Wrap a folder |
+| [Dat](#^dat) | The dat in a folder |
 | [path](#^dat-path) | The folder |
+| [preds](#^dat-preds) | The folder's facts, under the hand-written ones |
 | [sealed_at_path](#^sealed-at-path) | Reopen a folder sealed in another process |
 | [decode](#^dat-decode) | Materialise the folder from its manifest |
 | [kind_ok](#^kind-ok) | Whether a folder's dat.kind loads as this class |
 | [spec_kind](#^spec-kind) | The dat.kind a folder's spec names |
 
-**Dat**`(path)`
-    A value whose bytes are the manifest of the folder at `path`. ^dat
+**Dat**`(path, *, name: str | None = None)`
+    The dat already in the folder `path`: its spec and results read from `_spec_.yaml` and `_result_.yaml` (each `{}` when absent); a value whose bytes are the folder's manifest. `name` is the name a save gives it. `Dat.create(spec=...)` and `Dat.load(name)` make one through the dat manager ([DAT Class API](../../DAT%20Design/DAT%20API/DAT%20Class%20API.md)). ^dat
 
 **path**`: Path`
-    The folder. After a save it is the stored copy under `art/dats/<16 hex>/`; after a load by an alias, `art/dats/<alias>/`. Those files are hardlinks into the art store where the filesystem allows: write a new folder and seal it, never edit one in place. ^dat-path
+    The folder, `get_path()` as a `Path`. After a save it is the stored copy under `art/dats/<16 hex>/`, or `art/dats/<name>/` when named; after a load by an alias, `art/dats/<alias>/`. Those files are hardlinks into the art store where the filesystem allows: write a new folder and seal it, never edit one in place. ^dat-path
+
+**preds**`: dict`
+    Unsealed: the scalar entries of the spec's `dat.kwargs`, then the scalar top-level entries of `_result_.yaml` other than `dat:` (a result entry wins a clash), read from the folder on every access, under every pred written by hand, which wins. Sealed: the read-only mapping the seal fixed. The names are the class's `@ledger_class(preds=...)` plus the folder's own; the `dat:` record of the results (dependencies, standing, sha256) is never a pred. ^dat-preds
 
 **sealed_at_path**`(path, *, name: str | None = None) -> Dat | None` (classmethod)
     The last seal record of the folder `path` not saved since, reopened in this process as the sealing process left it; `None` with no record. `v.seal(t)` on it saves exactly what the sealing process would have saved: the same subject, `SealBroken` on a changed byte unless kept. The record's class must be a subclass of the class called on, else `TypeError`. ^sealed-at-path
 
 **decode**`(data: bytes, store: ArtStore, *, name: str | None = None) -> Dat` (classmethod)
-    The folder of a manifest, placed under `<art>/dats/<name>/` when loaded by a name, else `<art>/dats/<first 16 hex of the manifest hash>/`; each file is placed by `ArtStore.get_to`. A named folder holding other content (the alias was re-pointed) is replaced. ^dat-decode
+    The folder of a manifest, placed under `<art>/dats/<name>/` when loaded by a name, else `<art>/dats/<first 16 hex of the manifest hash>/`; each file is placed by `ArtStore.get_to`. A named folder holding other content (the alias was re-pointed) is replaced. The dat's spec and results are read from the placed folder. ^dat-decode
 
 **kind_ok**`(kind: str) -> bool` (classmethod)
-    Whether a folder whose `_spec_` names `dat.kind` `kind` loads as this class beside the class its `db/value` row names. The default accepts the class's dotted or bare name; a subclass widens it. ^kind-ok
+    Whether a folder whose `_spec_` names `dat.kind` `kind` loads as this class, the class its `db/value` row names. The default accepts this class or a subclass, by dotted name (or a bare name written before 2.3); a subclass widens it. ^kind-ok
 
 **spec_kind**`(path: Path) -> str | None` (static)
     The `dat.kind` the folder's `_spec_.yaml` (or `_spec_.json`) names, if any. ^spec-kind
@@ -578,7 +586,7 @@ def cut(rev, *, game: str, version: str) -> Cut:
     return out
 ```
 
-A function that declares `path: Path` is given a fresh folder under `$DAT_WORK` (default `~/.cache/dvc-dat/work`); it writes a dat there and returns `Dat(path)`, and the seal moves the files into the art store. The result's name is the call's `path=` (relative to the data folder, `<art store>/dats`), else the parameter's default as a path template expanded with the keys, else `anonymous/Dat{unique}`; its folder at the name is a view, hardlinks into the store, rebuilt as a new folder when the name moves. A value has one name, an alias not bound into its hash, settable as `Value(name=...)` or by assigning `v.name`; a name names one value; a value prints as its name, else `#` + a hash prefix (`<Video video/G1>`, `<Video #2db69ce1>`).
+A function that declares `path: Path` is given a fresh folder under `$DAT_WORK` (default `~/.cache/dvc-dat/work`); it writes a folder there and returns `Dat(path)`, and the seal moves the files into the art store. A dat made from a spec needs no function of its own: `rev.do(spec)` ([Running](#Running)). The result's name is the call's `path=` (relative to the data folder, `<art store>/dats`), else the parameter's default as a path template expanded with the keys, else `anonymous/Dat{unique}`; its folder at the name is a view, hardlinks into the store, rebuilt as a new folder when the name moves. A value has one name, an alias not bound into its hash, settable as `Value(name=...)` or by assigning `v.name`; a name names one value; a value prints as its name, else `#` + a hash prefix (`<Video video/G1>`, `<Video #2db69ce1>`).
 
 
 
@@ -594,6 +602,8 @@ A function that declares `path: Path` is given a fresh folder under `$DAT_WORK` 
 
 
 ## Running
+**A dat is a value.** `Dat.do` makes one outside the ledger: a fresh folder every time, nothing recorded. `rev.do` makes or finds one inside it: `rev.do(target, **kwargs)` takes what `Dat.do` takes, and is a memo lookup over the question (the expanded spec, `dat.name` removed) and the run function's code, else a create, a run and a seal of the folder as the memo entry ([`do`](#^do)). `just run specs.table12` in a ledger project is `rev.do("specs.table12")`; any dat saved by hand seals as `dat.seal(t)`.
+
 **run.** `run(name, **keys)` looks up the function by name (`load_fn`), then looks for a result already computed: every entry whose `db/fn` (the dotted name) and `db/keys` (the bound keys, defaults included, as canonical JSON) match, newest seal first, and hands back the first whose dependencies still hold at the revision asked ([Value Provenance](#Value%20Provenance)). That is the memoization. A miss runs the body with a recording `Rev`, in the child for a sandboxed function, and the result comes back with its dependencies. `seal=` says where the result goes; a later `v.seal(x)` takes the same `x`, so a run looked at first can be kept without running again.
 
 | Level | You want | Retained | Call | Later, on the object | Next identical call |
@@ -623,7 +633,7 @@ Every run attaches its trace (the `code` subject and the `fn` name, the keys, `c
 
 **Value.seal.** A sealed value that is never saved is still a value with a fixed identity, usable as a dep. `v.seal()` alone writes a seal record to this machine's kept folder (`$DAT_KEPT`, else `~/.cache/dvc-dat/kept`); a later `v.seal(t)` saves the state it was sealed in, its dependencies the environment of the seal, not of the save. A value not kept whose bytes changed in between is `SealBroken`. `Dat.sealed_at_path` reopens such a seal in another process. `just sealed` lists the seals never saved; `just sealed purge` drops them. A saved value never changes; a new version is a new seal ([Versioning](#Versioning)).
 
-A save writes the value's own rows once, under a subject hashing the dependencies, preds and bytes (for a run, the function and keys too): `db/value`, `db/kind`, `db/provenance` (`eval:unsandboxed` or `eval:sandbox` for a run, written in a transaction `by="eval:<name>"`; `seal` or the caller's for a hand seal), `db/preds`, `db/fn`, `db/keys` and `db/returns` for a run, `db/sealed-at` for a value sealed before the save, one `db/deps/<item>` per dependency item, and one row per pred (per member for a `many` pred). A subject already saved is not written again: the seal is idempotent. A save involving a function whose code is at a declared version from a clean checkout also moves that package's `db/repo/<repo>/<package>` clock and the repo's `db/repo/<repo>` commit ([Versioning](#Versioning)). A hand seal's dependencies are declared, from its `deps` and the environment ([Value Provenance](#Value%20Provenance)); `seal` refuses a provenance beginning `eval:`, so a consumer that needs proof the dependencies were traced rather than declared asks for an `eval:` value.
+A save writes the value's own rows once, under a subject hashing the dependencies, preds and bytes (for a run, the function and keys too): `db/value`, `db/kind`, `db/provenance` (`eval:unsandboxed` or `eval:sandbox` for a run, `rev.do`'s included, written in a transaction `by="eval:<name>"`; `seal` or the caller's for a hand seal), `db/preds` (for a dat, its class's names and its folder's own), `db/fn`, `db/keys` and `db/returns` for a run, `db/sealed-at` for a value sealed before the save, one `db/deps/<item>` per dependency item, and one row per pred (per member for a `many` pred). A subject already saved is not written again: the seal is idempotent. A save involving a function whose code is at a declared version from a clean checkout also moves that package's `db/repo/<repo>/<package>` clock and the repo's `db/repo/<repo>` commit ([Versioning](#Versioning)). A hand seal's dependencies are declared, from its `deps` and the environment ([Value Provenance](#Value%20Provenance)); `seal` refuses a provenance beginning `eval:`, so a consumer that needs proof the dependencies were traced rather than declared asks for an `eval:` value.
 
 
 
