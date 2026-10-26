@@ -42,7 +42,7 @@
 <text x="326" y="234" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" font-style="italic">specs/table12.yaml</text>
 <line x1="326" y1="241" x2="598" y2="241" stroke="#ddd"/>
 <text x="326" y="258" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">dat:</text>
-<text x="326" y="275" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  base: specs.table_base</text>
+<text x="326" y="275" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  base: mymodule.specs.table_base</text>
 <text x="326" y="292" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  name: tables/{YYYY}/table12{unique}</text>
 <text x="326" y="309" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  do: mymodule.mult.build_table</text>
 <text x="326" y="326" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  kwargs: {n: 12}</text>
@@ -92,7 +92,7 @@
 <text x="1018.0" y="396.0" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">table</text>
 <polyline points="636,292 786,292" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <text x="713.0" y="280" font-size="14" fill="#000" font-weight="bold" text-anchor="middle">instantiate</text>
-<text x="713.0" y="334" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">do(&quot;specs.table12&quot;)</text>
+<text x="713.0" y="334" font-size="11" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">do(&quot;mymodule.specs.table12&quot;)</text>
 <polyline points="608,500 786,360" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <text x="729.0" y="440" font-size="14" fill="#000" font-weight="bold" text-anchor="middle">run</text>
 <text x="790" y="458" font-size="11.5" fill="#9a9a9a">&#8226; <tspan font-family="Menlo, monospace">_spec_.yaml</tspan> the spec passed to instantiate</text>

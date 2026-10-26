@@ -62,7 +62,7 @@ sys.path.insert(0, str(scratch_project_path))
 # them, so its subject is fixed by its content; and its preds are
 # its spec keys and its result metrics under one namespace, so dats
 # are found the way every value is found. A dat that is computed is
-# the result of a ledger function: built once per question, and
+# the result of a ledger function: built once per memo key, and
 # built again only where something it read has moved.
 
 # %% [markdown]
@@ -189,7 +189,7 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 # ```python
 # @ledger_fn
 # def dat(rev, *, spec: dict, path: Path, **kwargs) -> StageDat:
-#     """The dat constructor: `spec` the question, `path` the folder."""
+#     """The dat constructor: `spec` the memo key, `path` the folder."""
 #     return build(rev, spec, path, **kwargs)
 # ```
 #
@@ -222,7 +222,7 @@ print("db/repo/demo-game/demo_game.etl:", L.at()["db/repo/demo-game/demo_game.et
 # → db/repo/demo-game/demo_game.etl: 0.1.0: this first clean run wrote the clock
 
 # %% [markdown]
-# The spec is the whole question: one key, a JSON object (A38), in
+# The spec is the whole memo key: one key, a JSON object (A38), in
 # the one `db/keys` row, numbers kept native. `path` is not a key
 # (Q36): the run bound it to a fresh scratch folder, the function
 # built the dat there, and the seal moved the folder into the art
@@ -258,7 +258,7 @@ print("same subject:", again_dat.subject == spec_dat.subject)   # → same subje
 print("nothing written:", L.at().id == top_id)           # → nothing written: True
 
 # %% [markdown]
-# The same spec is the same question, and every dependency item holds:
+# The same spec is the same memo key, and every dependency item holds:
 # a memo hit, nothing run, nothing written. Asked another way, the
 # stage function `detections`, which fixes the spec but the game:
 
@@ -271,7 +271,7 @@ detections_ref = Ref(L.at(), detections_dat.subject)
 print("count:", detections_ref.preds["metrics.count"])        # → count: 40
 
 # %% [markdown]
-# Another function is another question, so it ran; the spec it
+# Another function is another memo key, so it ran; the spec it
 # built is the same, so the bytes are. `same_as` compares only the
 # bytes hash: two memo entries, two subjects, one blob in the art
 # store.

@@ -51,5 +51,5 @@ def build(rev, spec: dict, path: Path, **kwargs) -> StageDat:
 
 @ledger_fn
 def dat(rev, *, spec: dict, path: Path, **kwargs) -> StageDat:
-    """The dat constructor: `spec` the question, `path` the folder."""
+    """The dat constructor: `spec` the memo key, `path` the folder."""
     return build(rev, spec, path, **kwargs)
