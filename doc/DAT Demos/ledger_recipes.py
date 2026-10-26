@@ -142,23 +142,23 @@ def why(args):
 
 
 def set_recipe(args):
+    """Rows on a subject: `k=v` a fact, `k:=v` JSON; `alias=TARGET` is the name's `db/alias` row."""
     L = Ledger()
     subject, kw = args[0], parse(args[1:])
+    target = kw.pop("alias", None)
+    rev = L.at()
+    if target is not None:
+        aim = target if len(target) == 64 else rev.refs(s=f"{target}*", one=True).subject
+        old = rev.get(subject, "db/alias")
     with L.transaction(by=BY) as t:
         for p, o in kw.items():
             t[subject, p] = o
-    print(subject, " ".join(f"{p}={o}" for p, o in kw.items()))
-
-
-def alias(args):
-    L = Ledger()
-    name, target = args
-    rev = L.at()
-    subject = target if len(target) == 64 else rev.refs(s=f"{target}*", one=True).subject
-    old = rev.get(name, "db/alias")
-    with L.transaction(by=BY) as t:
-        t.add(name, "db/alias", subject)
-    print(f"{name}: {short(old) if old else '(none)'} -> {short(subject)}")
+        if target is not None:
+            t.add(subject, "db/alias", aim)
+    if kw:
+        print(subject, " ".join(f"{p}={o}" for p, o in kw.items()))
+    if target is not None:
+        print(f"{subject}: {short(old) if old else '(none)'} -> {short(aim)}")
 
 
 def index(args):
@@ -197,7 +197,7 @@ def bump_recipe(args):
 
 
 RECIPES = {"values": values, "value": value, "history": history, "why": why, "set": set_recipe,
-           "alias": alias, "index": index, "bump": bump_recipe}
+           "index": index, "bump": bump_recipe}
 
 if __name__ == "__main__":
     try:

@@ -158,13 +158,12 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # %%
 # !just --list --color never
 # → Available recipes:
-# →     alias name target      # point a name at a value (a hash prefix is expanded)
 # →     bump name part="patch" # bump a version: <module> edits its __version__ in the source; db is the ledger's release (a/b: a ledger clock); minor and major ask for yes
 # →     history subject        # every row a subject has held, with each revision's db/by
 # →     index pred             # declare a pred indexed
 # →     mounts *args           # mounts [PREFIX]: the mounted names, with what each loads to
 # →     run *args              # run TARGET [ARG ...] [KEY=VALUE ...]: a mounted name, a dotted function, a spec
-# →     set subject *args      # a row on a subject: t[s, p] = o
+# →     set subject *args      # rows on a subject: k=v a fact, k:=v JSON, alias=TARGET the name's value (a hash prefix is expanded)
 # →     value *args            # exactly one value matching the preds
 # →     values *args           # the values matching k=v / k:=v preds (kind=<short class name> narrows)
 # →     why name *args         # a value's dependencies, whether they hold at the head, and what moved since the alias's last target
@@ -254,14 +253,15 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # ## Updating
 #
 # A write adds a row; nothing changes in place. `set` adds one fact
-# to a subject, `alias` points a name at a value and prints what it
-# pointed at before, and `index` makes a predicate fast to list by.
+# to a subject; a name is one more row on its subject (`db/alias`), so
+# `set table/prod alias=<hash prefix>` points it at a value and prints
+# what it pointed at before. `index` makes a predicate fast to list by.
 
 # %%
 table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # !just set table/12 checked=yes
 # same as: with L.transaction(by="human:$USER") as t: t["table/12", "checked"] = "yes"
-# !just alias table/prod {table12_prefix}
+# !just set table/prod alias={table12_prefix}
 # same as: with L.transaction(by=…) as t: t.add("table/prod", "db/alias", subject)
 # !just index n
 # same as: with L.transaction(by=…) as t: t.add("db/pred/n", "db/index", "true")
