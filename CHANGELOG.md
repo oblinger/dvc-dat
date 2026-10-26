@@ -6,6 +6,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.31.1 — 2026-10-26
+
+- **A sandboxed dat body names through the ledger's mounts (DAT 1047).** The worker's dat world now has a `LedgerDo` bound to the run's revision instead of a plain `Do`, so inside a mounted run function `Dat.manager.do.load(name)`, `do.resolve` (a spec's `dat.base`), `{}` expansion and an `execute` `dat.do` lookup walk the same `db/mount` rows the caller resolved the run through, read from the worker's checkout; a mounted yaml or json comes back a dict, a mounted function its `Fn`. Before, they imported or failed. `mount` in the body is refused (`TypeError`), as in the caller's ledger project; the import guard is unchanged. The body sees the ledger's namespace whatever the caller's world has, so one memo key means one lookup. A project with no ledger is unchanged.
+
 ## 2.31.0 — 2026-10-26
 
 - **`by` on a transaction is a string or a JSON document (DAT 1024).** `Ledger.transaction(by=...)` and `v.seal(L, by=...)` take a non-empty `str` or a non-empty JSON `dict`; a dict is stored as the `db/tx/<rev> db/by` row under the `json:` tag in canonical JSON and read back as the dict, so a federated identity (a host, a user and its administrators) is structured data rather than an encoded string. A `str` is stored as before; the `eval:` prefix convention applies to strings only. An empty `str` or `dict`, a list, or anything else is `TypeError`, as an empty `str` was. The ledger-just recipes' `history` prints a dict `by` as its canonical JSON.

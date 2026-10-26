@@ -908,7 +908,10 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
 class _WorkerWorld(DatManager):
     """The dat world of a dat run in the worker (DAT 1045): the caller's dat folders and art folder. Its
     index (a dat's hash to its name) is the dat world's own machinery, so its writes stand outside the
-    guard, as the ledger's do."""
+    guard, as the ledger's do. Its ``do`` is a ``LedgerDo`` bound to the run's rev (DAT 1047): a name the
+    body looks up (``Dat.manager.do.load``, a spec's ``base``/``do``, ``{}`` expansion) walks the same
+    ``db/mount`` rows the caller resolved the run through, read from the worker's checkout; ``mount`` is
+    refused."""
 
     @contextmanager
     def _index_update(self) -> Iterator[Dict[str, Dict[str, str]]]:
@@ -1193,8 +1196,10 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             return
         if req.get("world") is not None:            # a dat's run function: the caller's dat world
             w = req["world"]
+            from .namespace import LedgerDo
+
             Dat.manager = _WorkerWorld(dat_folders=w["dat_folders"], art_folder=w["art_folder"],
-                                       index=w["index"], verify=w["verify"])
+                                       index=w["index"], verify=w["verify"], do=LedgerDo(rev=plain))
             STATE.reads = STATE.reads + [os.path.realpath(f) for f in w["dat_folders"]] + (
                 [os.path.realpath(w["art_folder"])] if w["art_folder"] else [])
         keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__"
