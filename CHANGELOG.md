@@ -6,6 +6,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.29.1 — 2026-10-26
+
+- **Discovery no longer reports a deleted checkout when a live one shares its name (DAT 1023).** `env.discover()` skips module folders and checkouts that no longer exist; before, a deleted checkout's modules lingering in `sys.modules`, with its toplevel cached, could win the name (a notebook re-run resolved the previous run's deleted scratch checkout, `commit=None`). Of two existing checkouts with one name, the one the most recently imported module was loaded from wins, not the one whose path sorts last.
+
 ## 2.29.0 — 2026-10-26
 
 - **`rev.do` is now `rev.dat_run`, and a mounted dat run function runs in the sandbox worker (DAT 1045).** `rev.dat_run(target, **kwargs)` is the run function executed for a dat through the ledger, parallel to `rev.run` for a `@ledger_fn`; `rev.do` is gone, with no alias. A run function under a `db/mount` now runs as a mounted ledger function does: imported in a forked `python -I` child from the mounted tree (never in the calling process), its body confined to the mounts, the dats and its work folder, its `code` item the modules it loaded, provenance `eval:sandbox`. It no longer records `code/<repo>`, so a commit that changes no file the run loaded leaves the next call a hit, and the in-process import no longer has to be the mounted file. The child builds its dat world from the caller's dat folders, art folder and index; names mounted with `Dat.do.mount` are resolved before the spec is shipped. An installed (unmounted) run function still runs in the calling process, recording `code/<repo>`.

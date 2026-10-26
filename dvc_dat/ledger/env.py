@@ -119,24 +119,34 @@ def _skip_roots() -> list:
 
 
 def discover() -> Env:
-    """The default provider: git over the folders of the modules this process imported."""
+    """The default provider: git over the folders of the modules this process imported.
+
+    A folder that no longer exists is skipped (DAT 1023): a deleted checkout's modules stay in
+    ``sys.modules`` and its toplevel in the ``_toplevel`` cache, so without the check a re-run's previous,
+    deleted scratch checkout was reported. Of two existing checkouts sharing a name, the one the most
+    recently imported module was loaded from wins (``sys.modules`` is in import order), not the one whose
+    path sorts last."""
     skip = _skip_roots()
-    folders = set()
-    for m in list(sys.modules.values()):
+    folders: Dict[str, int] = {}                # folder -> order of the latest module imported from it
+    for i, m in enumerate(list(sys.modules.values())):
         f = getattr(m, "__file__", None)
         if not f:
             continue
         d = os.path.dirname(os.path.realpath(f))
         if any(d == r or d.startswith(r + os.sep) for r in skip):
             continue
-        folders.add(d)
-    code: Dict[str, Checkout] = {}
-    for top in sorted({t for t in (_toplevel(d) for d in folders) if t}):
+        folders[d] = i
+    tops: Dict[str, int] = {}                   # checkout -> order of the latest module imported from it
+    for d, i in folders.items():
+        t = _toplevel(d) if os.path.isdir(d) else None
+        if t and os.path.isdir(t):
+            tops[t] = max(i, tops.get(t, -1))
+    chosen: Dict[str, str] = {}
+    for top in sorted(tops, key=lambda t: (tops[t], t)):
         name = repo_name(Path(top))
-        if name == SELF:
-            continue            # dvc-dat itself, its demos included (A56)
-        code[name] = code_at(top)
-    return Env(code, platform_tag())
+        if name != SELF:                        # dvc-dat itself, its demos included (A56)
+            chosen[name] = top                  # a later import overrides an earlier same-named checkout
+    return Env({name: code_at(top) for name, top in sorted(chosen.items())}, platform_tag())
 
 
 def repo_of(env: Env, path: Optional[Path]) -> Optional[str]:

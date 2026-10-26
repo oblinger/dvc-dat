@@ -70,3 +70,52 @@ def test_a_dat_noncode_path_leaves_the_checkout_clean(tmp_path, monkeypatch):
         assert dirty() is True
     finally:
         del sys.modules["noncodemod"]
+
+
+def _twin(run, modname):
+    """A checkout ``<run>/twin`` holding ``modname``: named by its folder (no pyproject), as two scratch
+    runs of one demo are, so a deleted one still carries the name."""
+    folder = run / "twin"
+    folder.mkdir(parents=True)
+    (folder / f"{modname}.py").write_text("")
+    git(folder, "init", "-q")
+    git(folder, "add", ".")
+    git(folder, "commit", "-q", "-m", "x")
+    return folder
+
+
+def test_a_deleted_checkout_is_not_discovered_when_a_live_one_shares_its_name(tmp_path, monkeypatch):
+    """DAT 1023: a re-run's previous scratch checkout, deleted, still has modules in ``sys.modules``;
+    discovery reports the live checkout of that name, never the deleted one (whichever sorts last)."""
+    import shutil
+
+    old = _twin(tmp_path / "run-b", "twin_old_1023")       # sorts after the live one
+    live = _twin(tmp_path / "run-a", "twin_new_1023")
+    monkeypatch.syspath_prepend(str(old))
+    import twin_old_1023  # noqa: F401
+    try:
+        assert discover().code["twin"].path == old              # the first run, while its checkout exists
+        monkeypatch.syspath_prepend(str(live))
+        import twin_new_1023  # noqa: F401
+        shutil.rmtree(old)                                      # the re-run deletes the previous scratch
+        co = discover().code["twin"]
+        assert co.path == live and co.commit is not None
+    finally:
+        sys.modules.pop("twin_old_1023", None)
+        sys.modules.pop("twin_new_1023", None)
+
+
+def test_two_live_checkouts_sharing_a_name_resolve_to_the_latest_imported(tmp_path, monkeypatch):
+    """DAT 1023: of two existing same-named checkouts, the one the most recently imported module was
+    loaded from wins, not the one whose path sorts last."""
+    first = _twin(tmp_path / "run-b", "twin_first_1023")
+    second = _twin(tmp_path / "run-a", "twin_second_1023")
+    monkeypatch.syspath_prepend(str(first))
+    monkeypatch.syspath_prepend(str(second))
+    import twin_first_1023  # noqa: F401
+    import twin_second_1023  # noqa: F401
+    try:
+        assert discover().code["twin"].path == second
+    finally:
+        sys.modules.pop("twin_first_1023", None)
+        sys.modules.pop("twin_second_1023", None)
