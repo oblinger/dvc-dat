@@ -16,106 +16,145 @@
 # #### Setup
 
 # %%
-import math, os, random, shutil, subprocess, sys
-from datetime import date, timedelta
+import os, shutil, subprocess, sys
 from importlib.resources import files
+from pathlib import Path
+
+from dvc_dat.ledger import Ledger, bump
+
+demos_path = Path(globals().get("demos_path", Path.cwd()))   # survives the chdir
+os.chdir(demos_path)
+scratch_path = demos_path / "scratch/q-cli"       # the project; its folder (and pyproject) name it q-cli
+shutil.rmtree(scratch_path, ignore_errors=True)   # a re-run starts clean
+for module_name in [m for m in sys.modules if m.split(".")[0] in ("mymodule", "q_cli_main")]:
+    del sys.modules[module_name]
+sys.path[:] = [p for p in sys.path if p != str(scratch_path)]
+
+scratch_path.mkdir(parents=True)
+os.chdir(scratch_path)
+os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"   # `just run` execs this venv's python3
+os.environ["PYTHONPATH"] = str(scratch_path)      # the verbs import mymodule
+sys.path.insert(0, str(scratch_path))
+
+# the same mymodule as q-dats; table_dat.table also carries @command
+module_path = Path("mymodule")
+(module_path / "specs").mkdir(parents=True)
+(module_path / "__init__.py").write_text("")   # a package, so `bump code` finds its checkout
+(module_path / "mult.py").write_text('''\
+import csv
+from pathlib import Path
+
+
+def write_table(folder, n=10, start=1):
+    """`table.csv`, the n x n multiplication table from `start`; its cell count."""
+    numbers = range(start, start + n)
+    with open(Path(folder, "table.csv"), "w", newline="") as f:
+        csv.writer(f).writerows([[a * b for b in numbers] for a in numbers])
+    return n * n
+
+
+def build_table(dat, n=10, start=1):
+    """The run function: `do` calls it with the new dat and the spec's kwargs."""
+    cells = write_table(dat.get_path(), n, start)
+    Path(dat.get_path(), "log.txt").write_text(f"{n} x {n} from {start}\\n")
+    dat.get_results()["cells"] = cells
+    dat.save()
+    return dat
+''')
+(module_path / "specs/table_base.yaml").write_text('''\
+dat:
+  kwargs: {start: 1}
+notes: shared defaults
+''')
+(module_path / "specs/table12.yaml").write_text('''\
+dat:
+  base: specs.table_base
+  name: tables/{YYYY}/table12{unique}
+  do: mymodule.mult.build_table
+  kwargs: {n: 12}
+''')
+(module_path / "table_dat.py").write_text('''\
 from pathlib import Path
 
 import yaml
 
-from dvc_dat.ledger import Ledger, bump
+from dvc_dat.just import command
+from dvc_dat.ledger import Dat, ledger_class, ledger_fn
 
-demo_dir_path = globals().get("demo_dir_path", Path.cwd())  # survives a re-run
-os.chdir(demo_dir_path)
-scratch_path = Path("scratch/q-cli").resolve()
-shutil.rmtree(scratch_path, ignore_errors=True)   # a re-run starts clean
-for module_name in [m for m in sys.modules if m.split(".")[0] in ("demo_game", "demo_main", "comfort")]:
-    sys.modules.pop(module_name)
-sys.path[:] = [p for p in sys.path if "scratch/q-cli" not in p]
+from mymodule.mult import write_table
 
-shutil.copytree("demo_game", scratch_path,
-                ignore=shutil.ignore_patterns("__pycache__"))
-shutil.copytree("comfort-repo/comfort", scratch_path / "comfort",   # the ETL stages
-                ignore=shutil.ignore_patterns("__pycache__"))
-os.chdir(scratch_path)
-os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"
-os.environ["PYTHONPATH"] = str(scratch_path)      # the recipes import demo_game
-sys.path.insert(0, str(scratch_path))
 
+@ledger_class(preds=("n", "start", "cells"))
+class TableDat(Dat):
+    """A dat that is a value: the folder `_spec_.yaml`, `_result_.yaml`, `table.csv`."""
+
+    @classmethod
+    def kind_ok(cls, kind):
+        """`do` made it, so its `_spec_` says `dvc_dat.core.Dat`."""
+        return kind == "dvc_dat.core.Dat" or super().kind_ok(kind)
+
+
+def path_to_table_dat(path) -> TableDat:
+    """The dat already in `path`, as a value; nothing runs. Its kwargs and result are its preds."""
+    spec = yaml.safe_load(Path(path, "_spec_.yaml").read_text())
+    result = yaml.safe_load(Path(path, "_result_.yaml").read_text())
+    table_dat = TableDat(Path(path))
+    table_dat.preds.update(spec["dat"]["kwargs"])
+    table_dat.preds["cells"] = result["cells"]
+    return table_dat
+
+
+@command(args="spec=…", help="the table dat a spec names")
+@ledger_fn
+def table(rev, *, spec: dict, path: Path) -> TableDat:
+    """The table constructor: the run itself. `spec` is the question, `path` the folder it fills."""
+    cells = write_table(path, **spec["dat"]["kwargs"])
+    (path / "_spec_.yaml").write_text(yaml.safe_dump(spec))
+    (path / "_result_.yaml").write_text(yaml.safe_dump({"cells": cells}))
+    return path_to_table_dat(path)
+''')
+
+Path("q_cli_main.py").write_text('''\
+"""The project's main: `just run` execs it (`run:` in .datconfig.yaml)."""
+import sys
+
+from dvc_dat import Dat
+
+Dat.do.mount(folder="mymodule/specs", at="specs")
+Dat.do.mount(module="mymodule.table_dat", at="table")
+
+if __name__ == "__main__":
+    sys.exit(Dat.cli_main())
+''')
 L = Ledger(create=True)                           # .datconfig.yaml + .dat/ledger
 with open(".datconfig.yaml", "a") as config_file:
-    config_file.write("run: python3 -m demo_main\n")
+    config_file.write("run: python3 -m q_cli_main\n")
 Path("justfile").write_text(
     f"import '{files('dvc_dat') / 'dvc_dat.just'}'  # run\n"
     "import '../../justfile'  # the demo's ledger verbs\n"
     "import? '.dat/targets.just'  # the declared commands\n")
-Path("model-G1.yaml").write_text(
-    yaml.safe_dump({"main": "demo_game.etl.model.train", "game": "G1"}))
-Path(".gitignore").write_text(".dat/\n__pycache__/\n")
+Path("pyproject.toml").write_text('[project]\nname = "q-cli"\nversion = "0.1.0"\n')
+Path(".gitignore").write_text(".dat/\ndata/\n__pycache__/\n")
 git_cmd = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.com"]
-for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "demo-game"]):
-    subprocess.run(git_cmd + args, cwd=scratch_path, check=True)
+for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "q-cli"]):
+    subprocess.run(git_cmd + args, check=True)
 
-# the data: one game, its video, a 1.5.3 cut, a home correction, a 1.5.4 cut
-from demo_game.game import Video
-
-with L.transaction(by="human:dan") as t:
+import mymodule.table_dat                         # discovery finds the checkout code/q-cli names
+with L.transaction(by="human:dan", why="mount mymodule", lock=10) as t:   # sandboxed: code = the module bytes a run loads
+    t.add("db/mount/mymodule", "db/root", "mymodule")
+    t.add("db/mount/mymodule", "db/repo", "q-cli")
     t.add("db", "version", "3.1.4")
-    t.add("db/pred/team", "db/cardinality", "many")
-    t.add("db/pred/video", "db/type", "demo_game.game.Video")
-    t.add("db/pred/span", "db/type", "json")
-with L.transaction(by="human:dan", lock=10) as t:
-    bump(t, "code/demo-game", "minor", confirm=lambda old, new: True)
-with L.transaction(by="human:dan", lock=10) as t:
-    t["game/G1"] = {"home": "G4", "away": "G5", "court": "north"}
-video_value = Video(b"G1 wide camera, 9000 frames")
-video_value.preds.update(game="G1", camera="wide", span=[0, 9000])
-with L.transaction(by="human:dan") as t:
-    video_value.seal(t, name="video/G1", provenance="import:archive")
-cut_153_value = L.at().run("demo_game.game.cut", game="G1", version="1.5.3")
-with L.transaction(by="human:dan") as t:
-    t.add("game/G1", "db/alias", cut_153_value.subject)
-with L.transaction(by="human:dan", why="home was G6") as t:
-    t["game/G1", "home"] = "G6"
-cut_154_value = L.at().run("demo_game.game.cut", game="G1", version="1.5.4")
-with L.transaction(by="human:dan") as t:
-    t.add("game/G1", "db/alias", cut_154_value.subject)
-    t["cfg/train", "epochs"] = "8"
-    t["game/G1", "gameset"] = "normie"
-
-# the ETL data: three cities' year of weather, each found by weather/<city>, and a city set
-from comfort.values import Days
-
-MEAN_F = {"Austin": 69, "Boston": 52, "Chicago": 50}
-for seed, city in enumerate(MEAN_F, start=1):
-    rng = random.Random(seed)
-    days = []
-    for n in range(365):
-        season = -math.cos(2 * math.pi * (n - 15) / 365)    # -1 mid-January, +1 mid-July
-        temp = round(MEAN_F[city] + 20 * season + rng.uniform(-8, 8))
-        days.append([(date(2026, 1, 1) + timedelta(n)).isoformat(), temp, rng.randrange(20, 90)])
-    weather_value = Days(days)
-    weather_value.preds["city"] = city
-    with L.transaction(by="human:dan", why=f"{city}'s data") as t:
-        weather_value.seal(t, name=f"weather/{city}")
-with L.transaction(by="human:dan", why="the city set") as t:
-    t.add("db/pred/contains", "db/cardinality", "many")
-    for city in MEAN_F:
-        t.add("cityset/representative", "contains", city)
-with L.transaction(by="human:dan", why="mount the stages") as t:   # sandboxed: code = the module bytes a run loads
-    t.add("db/mount/comfort", "db/root", "comfort")
-    t.add("db/mount/comfort", "db/repo", "demo-game")
+    bump(t, "code/q-cli", "minor", confirm=lambda old, new: True)
 just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True)   # writes .dat/targets.just, the declared commands
 
 # %% [markdown]
 # # Quick: the CLI
 #
 # A project's `justfile` imports dvc-dat's `run` and a set of ledger
-# verbs, so from a shell every workflow is `just <verb>`, and each verb
-# is one ledger call. The ledger holds **values** (stored objects named
-# by the hash of their content), each carrying **predicates**, facts
-# about it. `just --list` is the menu; `[run]` holds the commands the
-# project's code declares.
+# verbs. Each verb is syntactic sugar for one API call, shown beside
+# every command below as `# same as:`, so a shell line and a Python
+# line are the same question. `just --list` is the menu; `[run]` holds
+# the commands the project's code declares.
 
 # %%
 # !just --list --color never
@@ -132,173 +171,104 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # →     why name *args            # a value's dependencies, whether they hold at the head, and what moved since the alias's last target
 # →
 # →     [run]
-# →     train *args               # game=…  train the model on one game's tracks
+# →     table *args               # spec=…  the table dat a spec names
 
 # %% [markdown]
 # ## Running
 #
-# `just run` executes a function and returns its result as a value,
-# sealed with what it read. Asked again with the same inputs and
-# code, it finds the value instead of re-running.
-
-# %%
-# !just run demo_game.game.cut game=G1 version=1.5.3
-# !just run demo_game.game.cut game=G1 version=1.5.3
-# → ran  #<8 hex>  game=G1 version=1.5.3 video=video/G1 team=["G6", "G5"]
-# → hit  #<8 hex>  game=G1 version=1.5.3 video=video/G1 team=["G6", "G5"]
-
-# %% [markdown]
-# A spec is a YAML file naming the function (`main`) and its keys;
-# `alias=` names the result.
-
-# %%
-# !cat model-G1.yaml
-# !just run model-G1.yaml alias=model/prod
-# → game: G1
-# → main: demo_game.etl.model.train
-# → ran  model/prod  game=G1 stage=model metrics.count=12 metrics.score=0.927 gameset=normie
-
-# %% [markdown]
-# A function marked `@command` is its own verb: `just train` is
-# `just run` of `model.train`. Same question as the spec, so a hit.
-
-# %%
-# !just train game=G1
-# → hit  model/prod  game=G1 stage=model metrics.count=12 metrics.score=0.927 gameset=normie
-
-# %% [markdown]
-# ## An ETL pipeline
+# The project is q-dats's `mymodule`. Its main, which `run` execs,
+# mounted it:
 #
-# Three stages, each a function calling the one below it: `daily_comfort`
-# scores a city's year of weather, `city_comfort` bins one city's days by
-# comfort over a date range, `comfort_report` sums a city set's cities
-# (the package `comfort/`, from demo-etl). One `just run` of the report
-# runs every stage it needs. A bare `2026-01-01` is a YAML date, which a
-# ledger key refuses, so the dates are quoted.
+# ```python
+# Dat.do.mount(folder="mymodule/specs", at="specs")       # the project's main, which run execs
+# Dat.do.mount(module="mymodule.table_dat", at="table")   # table_dat's @command functions become verbs
+# # the run function: table in mymodule/table_dat.py, the table dat a spec names
+# ```
+#
+# `just run` runs a ledger function and seals its result as a value;
+# `alias=` names it. A spec's name (`specs.table12`) is not a ledger
+# key yet, so the spec itself is the key, written as YAML.
 
 # %%
-# !just run comfort.report.comfort_report cityset=cityset/representative start="'2026-01-01'" end="'2027-01-01'"
-# !just run comfort.report.comfort_report cityset=cityset/representative start="'2026-01-01'" end="'2027-01-01'"
-# !just values fn=comfort.stages.daily_comfort
-# → ran  #<8 hex>
-# → hit  #<8 hex>
-# → #<8 hex>  city=Austin
-# → #<8 hex>  city=Boston
-# → #<8 hex>  city=Chicago
+# !just run mymodule.table_dat.table spec="{dat: {do: mymodule.mult.build_table, kwargs: {n: 12, start: 1}}}" alias=table/12
+# same as: L.at().run("mymodule.table_dat.table", spec={"dat": {"do": "mymodule.mult.build_table", "kwargs": {"n": 12, "start": 1}}}, path="table/12")
+# → ran  table/12  n=12 start=1 cells=144
 
 # %% [markdown]
-# Ran, then a hit; `values fn=` lists what one stage has sealed: a
-# daily comfort per city. Summer is a new range, so each city comfort
-# reruns; the daily comforts do not depend on the range, so they are
-# hits (the same three).
+# Asked again with the same spec and code, it finds the value
+# instead of re-running.
 
 # %%
-# !just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'" alias=report/summer
-# !just values fn=comfort.stages.daily_comfort
-# !just values fn=comfort.stages.city_comfort
-print("summer:", L.at().load("report/summer").obj)   # the report itself
-# → ran  report/summer
-# → #<8 hex>  city=Austin
-# → #<8 hex>  city=Boston
-# → #<8 hex>  city=Chicago
-# → #<8 hex>  city=Austin
-# → #<8 hex>  city=Boston
-# → #<8 hex>  city=Chicago
-# → #<8 hex>  city=Austin
-# → #<8 hex>  city=Boston
-# → #<8 hex>  city=Chicago
-# → summer: {'comfortable': '117/276 days', 'top': ['Boston', 'Chicago']}
+# !just run mymodule.table_dat.table spec="{dat: {do: mymodule.mult.build_table, kwargs: {n: 12, start: 1}}}" alias=table/12
+# same as: the same L.at().run(...), a memo hit
+# → hit  table/12  n=12 start=1 cells=144
 
 # %% [markdown]
-# A code edit: the report keeps one top city, not two. The stages are
-# mounted (Setup), so a stage's code is the bytes of the modules its run
-# loaded: only the report loaded `report.py`, so only the report reruns,
-# and no `bump` is needed.
+# A function marked `@command` is its own verb: `just table` is
+# `just run table.table`, the mounted name of the same function.
 
 # %%
-# !sed -i '' 's/\[:2\]/[:1]/' comfort/report.py
-# !git -c user.name=demo -c user.email=demo@example.com commit -qam "report: one top city"
-# !just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'" alias=report/summer
-# !just values fn=comfort.stages.city_comfort | wc -l   # still six: no city comfort reran
-# !just values fn=comfort.report.comfort_report
-# → ran  report/summer
-# →        6
-# → #<8 hex>
-# → #<8 hex>
-# → report/summer
+# !just table spec="{dat: {do: mymodule.mult.build_table, kwargs: {n: 12, start: 1}}}"
+# same as: just run table.table spec=…, i.e. L.at().run("mymodule.table_dat.table", spec=…)
+# → hit  table/12  n=12 start=1 cells=144
 
 # %% [markdown]
-# `just why` on the summer report: what it was computed from (each city
-# comfort, the set's rows, its code), whether that all still holds, and
-# what moved since the alias's last target: the code alone.
-
-# %%
-# !just why report/summer
-# → report/summer: #<8 hex>, matches the head
-# → dependencies: code <8 hex>, eval:comfort.stages.city_comfort{"city":"Austin",…} ComfortCounts:<8 hex>, (Boston, Chicago the same), fn comfort.report.comfort_report, platform <platform>, query {"__call__":"all","args":["cityset/representative","contains"],"since":null} -> 3 value(s)
-# → since #<8 hex>, its last target: code <8 hex> -> <8 hex>
-
-# %% [markdown]
-# ## Looking
+# ## Finding computed values
 #
 # `just values` lists every value whose predicates match; `kind=`
 # narrows to one class. A value prints by its name if it has one.
 
 # %%
-# !just values kind=Cut game=G1
-# → #<8 hex>   game=G1 version=1.5.3 video=video/G1 team=G4,G5
-# → game/G1    game=G1 version=1.5.4 video=video/G1 team=G6,G5
-# → #<8 hex>   game=G1 version=1.5.3 video=video/G1 team=G6,G5
+# !just values kind=TableDat
+# same as: L.at().values(kind="mymodule.table_dat.TableDat")
+# → table/12   n=12 start=1 cells=144
 
 # %% [markdown]
 # `just value` is the one value that matches.
 
 # %%
-# !just value game=G1 version=1.5.4
-# → game/G1    game=G1 version=1.5.4 video=video/G1 team=G6,G5
+# !just value n=12
+# same as: L.at().value(n="12")
+# → table/12   n=12 start=1 cells=144
 
 # %% [markdown]
-# `just history` is every predicate a subject has held, with who
-# wrote it and when.
+# `just history` is every row a subject has held, with who wrote it:
+# `table/12` got its alias from the run.
 
 # %%
-# !just history game/G1
+# !just history table/12
+# same as: [r for r in L.at().rows() if r.subject == "table/12"]
 # → rev  by         predicate  object
-# →   3  human:dan  home       G4
-# →   3  human:dan  away       G5
-# →   3  human:dan  court      north
-# →   6  human:dan  db/alias   #<the 1.5.3 cut, 8 hex>
-# →   7  human:dan  home       G6
-# →   9  human:dan  db/alias   #<the 1.5.4 cut, 8 hex>
-# →   9  human:dan  gameset    normie
+# →   3  name       db/alias   #<8 hex>
 
 # %% [markdown]
-# `just why` on the 1.5.4 cut: it no longer matches, since `demo_game`
-# is installed code, identified by the checkout's commit
-# (`code/demo-game`), and the report edit above committed. Its name moved
-# from the 1.5.3 cut, whose difference is the home team.
+# `just why` is what a value was computed from, and whether that all
+# still holds.
 
 # %%
-# !just why game/G1
-# → game/G1: #<8 hex>, does not match the head
-# → dependencies: code <8 hex>, code/demo-game <8 hex>, fn demo_game.game.cut, game/G1 away G5, game/G1 home G6, platform <platform>, query {"game":"G1","kind":"demo_game.game.Video"} -> 1 value(s)
-# → since #<8 hex>, its last target: game/G1 home G4 -> G6
+# !just why table/12
+# same as: v = L.at().load("table/12"); v.matches(L.at()), v.dependencies
+# → table/12: #<8 hex>, matches the head
+# → dependencies: code <8 hex>, fn mymodule.table_dat.table, platform <platform>
 
 # %% [markdown]
 # ## Updating
 #
-# A write adds a predicate; nothing changes in place. `set`
-# adds one fact to a subject, `alias` points a name at a value and
-# prints what it pointed at before, and `index` makes a predicate
-# fast to list by.
+# A write adds a row; nothing changes in place. `set` adds one fact
+# to a subject, `alias` points a name at a value and prints what it
+# pointed at before, and `index` makes a predicate fast to list by.
 
 # %%
-# !just set game/G1 texture=hardwood
-# !just alias prod {cut_154_value.subject[:8]}
-# !just index game
-# → game/G1 texture=hardwood
-# → prod: (none) -> #<the 1.5.4 cut, 8 hex>
-# → game: indexed; 7 subjects hold it
+table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
+# !just set table/12 checked=yes
+# same as: with L.transaction(by="human:$USER") as t: t["table/12", "checked"] = "yes"
+# !just alias table/prod {table12_prefix}
+# same as: with L.transaction(by=…) as t: t.add("table/prod", "db/alias", subject)
+# !just index n
+# same as: with L.transaction(by=…) as t: t.add("db/pred/n", "db/index", "true")
+# → table/12 checked=yes
+# → table/prod: (none) -> #<8 hex>
+# → n: indexed; 1 subjects hold it
 
 # %% [markdown]
 # ## Releasing
@@ -309,8 +279,10 @@ print("summer:", L.at().load("report/summer").obj)   # the report itself
 
 # %%
 # !just bump code
+# same as: with L.transaction(by=…, lock=10) as t: bump(t, "code/q-cli", "patch")
 # !echo yes | just bump db minor
-# → code/demo-game: 0.1.0 -> 0.1.1 at <8 hex>
+# same as: with L.transaction(by=…, lock=10, why="release") as t: bump(t, "db", "minor", confirm=…)
+# → code/q-cli: 0.1.0 -> 0.1.1 at <8 hex>
 # → db: 3.1.4 -> 3.2.0? yes
 # → db: 3.1.4 -> 3.2.0, a release
 
@@ -321,9 +293,12 @@ print("summer:", L.at().load("report/summer").obj)   # the report itself
 
 # %%
 # !just mounts
+# same as: dvc_dat.dat_tools.cmd_list(""), in the namespace q_cli_main mounted
 # → Base names matching: '*'
 # →   dt                        -->  <module>
-# →   model                     -->  <module>
+# →   specs/table12             -->  {'dat': {'base': 'specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
+# →   specs/table_base          -->  {'dat': {'kwargs': {'start': 1}}, 'notes': 'shared defaults'}
+# →   table                     -->  <module>
 
 # %% [markdown]
 # The rest, not run here:

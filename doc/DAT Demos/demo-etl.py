@@ -28,6 +28,7 @@
 
 # %%
 import math
+import os
 import random
 import shutil
 import subprocess
@@ -81,6 +82,7 @@ commit("comfort: the stages", "comfort")
 (repo_path / "justfile").write_text(
     f"import '{files('dvc_dat') / 'dvc_dat.just'}'  # run\n"
     f"import '{Path('justfile').resolve()}'  # the demo's ledger verbs\n")
+os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"   # `just run` execs this venv's python3
 sys.path.insert(0, str(repo_path))
 L = Ledger(scratch_path / "ledger", create=True)
 
@@ -241,6 +243,11 @@ print(ran_since(counts_before))
 
 # %% [markdown]
 # Asked again, nothing ran: the comfort report is a hit.
+# In practice a pipeline is asked for from the shell, and `just run` is this same `rev.run` call: here, a third hit.
+
+# %%
+# !cd {repo_path} && just run comfort.report.comfort_report cityset=cityset/representative start="'2026-01-01'" end="'2027-01-01'"
+# → hit  #<8 hex>
 
 # %% [markdown]
 # ## Summer, and one more city
@@ -253,13 +260,13 @@ with L.transaction(by="human:dan", why="Denver joins") as t:
     t.add("cityset/representative", "contains", "Denver")
 counts_before = entry_counts()
 comfort_report_value = L.at().run("comfort.report.comfort_report", cityset="cityset/representative",
-                                  start="2026-06-01", end="2026-09-01")
+                                  start="2026-06-01", end="2026-09-01", path="report/summer")
 print(comfort_report_value.obj)
 # → {'comfortable': '175/368 days', 'top': ['Denver', 'Boston']}
 print(ran_since(counts_before))
 # → {'daily_comfort': 1, 'city_comfort': 4, 'comfort_report': 1}
 # the run, same as:
-#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'"
+#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'" alias=report/summer
 
 # %% [markdown]
 # Denver's daily comfort ran; Austin's, Boston's and Chicago's were hits, scored once for the year and binned again for summer.
@@ -274,11 +281,11 @@ print(ran_since(counts_before))
 seal_weather("Boston", seed=22)                 # Boston re-reported
 counts_before = entry_counts()
 comfort_report_value = L.at().run("comfort.report.comfort_report", cityset="cityset/representative",
-                                  start="2026-06-01", end="2026-09-01")
+                                  start="2026-06-01", end="2026-09-01", path="report/summer")
 print(ran_since(counts_before))
 # → {'daily_comfort': 1, 'city_comfort': 1, 'comfort_report': 1}
 # the run, same as:
-#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'"
+#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'" alias=report/summer
 
 # %% [markdown]
 # Boston's daily comfort ran, then its summer city comfort and the report; the other three cities were hits, since they never read `weather/Boston`.
@@ -295,13 +302,13 @@ report_path.write_text(report_source)
 commit("report: the one most comfortable city", "comfort/report.py")
 counts_before = entry_counts()
 comfort_report_value = L.at().run("comfort.report.comfort_report", cityset="cityset/representative",
-                                  start="2026-06-01", end="2026-09-01")
+                                  start="2026-06-01", end="2026-09-01", path="report/summer")
 print(comfort_report_value.obj)
 # → {'comfortable': '182/368 days', 'top': ['Boston']}
 print(ran_since(counts_before))
 # → {'daily_comfort': 0, 'city_comfort': 0, 'comfort_report': 1}
 # the run, same as:
-#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'"
+#   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-06-01'" end="'2026-09-01'" alias=report/summer
 
 # %% [markdown]
 # Only the comfort report ran: its run loaded `report.py`, and no other stage's run did.
@@ -325,6 +332,15 @@ for item in sorted(comfort_report_value.dependencies):
 #   q:{"__call__":"all","args":["cityset/representative","contains"],"since":null}
 print(sorted(L.at()[comfort_report_value.dependencies["code"], "db/modules"]))
 # → ['comfort/__init__.py', 'comfort/report.py', 'comfort/values.py']
+
+# %% [markdown]
+# `just why` reads the same back from the shell: the summer report's dependencies one level down, whether they still hold, and what moved since `report/summer`'s last target (the Boston change's report): the code alone.
+
+# %%
+# !cd {repo_path} && just why report/summer
+# → report/summer: #<8 hex>, matches the head
+# → dependencies: code <8 hex>, eval:comfort.stages.city_comfort{"city":"Austin","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, eval:comfort.stages.city_comfort{"city":"Boston","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, eval:comfort.stages.city_comfort{"city":"Chicago","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, eval:comfort.stages.city_comfort{"city":"Denver","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, fn comfort.report.comfort_report, platform <platform>, query {"__call__":"all","args":["cityset/representative","contains"],"since":null} -> 4 value(s)
+# → since #<8 hex>, its last target: code <8 hex> -> <8 hex>
 
 # %%
 # clean up
