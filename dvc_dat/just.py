@@ -94,6 +94,10 @@ def commands(do: Any) -> Tuple[Dict[str, Tuple[str, Dict[str, str]]], List[str]]
         else:
             found[name] = (target, decl)
 
+    if hasattr(do, "_commands"):                    # a ledger project: read off the mounted files
+        for target, decl, _file in do._commands():
+            add(target.rpartition(".")[2], target, decl)
+        return found, skipped
     values = set(do._registered_values or ())
     for key in sorted(set(do.keys()) | values):
         try:
@@ -130,7 +134,7 @@ def render(found: Dict[str, Tuple[str, Dict[str, str]]]) -> str:
 
 def _sources(do: Any) -> List[Path]:
     """The files a mounted name loads from, as far as they are known."""
-    out = []
+    out = [f for _t, _d, f in do._commands()] if hasattr(do, "_commands") else []
     for key, location in list(do._base_locations.items()):
         if isinstance(location, str) and os.path.exists(location):
             out.append(Path(location))

@@ -13,7 +13,7 @@ KEYS = dict(game="G1")
 
 
 def fn(L):
-    return L.at().load_fn("ledger_kinds.cut")
+    return L.at().resolve("ledger_kinds.cut")
 
 
 def entry_rows(L, subject):
@@ -181,7 +181,7 @@ def test_a_hand_built_value_seals_as_before(world):
 
 
 def test_a_body_sealed_result_is_refused_at_every_saving_level(world):
-    f = world.at().load_fn("ledger_kinds.sealed_early")
+    f = world.at().resolve("ledger_kinds.sealed_early")
     for x in (True, world):
         with pytest.raises(TypeError, match="run seals its own"):
             f(seal=x, game="G1")

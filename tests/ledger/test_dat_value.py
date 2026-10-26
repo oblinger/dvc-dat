@@ -1,5 +1,5 @@
-"""DAT 1038: a dat is a value. The core ``Dat`` seals, loads and is found with no subclass; ``rev.dat_run``
-makes, runs and seals one through the ledger, memoised."""
+"""DAT 1038: a dat is a value. The core ``Dat`` seals, loads and is found with no subclass; ``rev.run`` of
+a spec makes, runs and seals one through the ledger, memoised (DAT 1046: one ``run``)."""
 
 import os
 
@@ -98,12 +98,12 @@ def test_a_subclass_declares_preds_beside_the_folders(L, world):
     assert [v.subject for v in L.at().values(kind=NotedDat)] == [back.subject]
 
 
-def test_rev_dat_run_runs_once_then_hits(coded, world, tmp_path):
+def test_rev_run_of_a_spec_runs_once_then_hits(coded, world, tmp_path):
     CALLS.clear()
-    first = coded.at().dat_run(SPEC)
+    first = coded.at().run(SPEC)
     assert CALLS == {"build_table": 1} and str(first) == "tables/table"
     top = coded.at().id
-    again = coded.at().dat_run(SPEC)
+    again = coded.at().run(SPEC)
     assert CALLS == {"build_table": 1} and again.subject == first.subject and coded.at().id == top
     assert again.path == first.path and (again.path / "table.csv").is_file()
     assert not list((tmp_path / "data").rglob("_spec_.yaml"))         # one folder: the view in the data folder
@@ -112,34 +112,48 @@ def test_rev_dat_run_runs_once_then_hits(coded, world, tmp_path):
     assert rows.get(first.subject, "db/returns") == "dvc_dat.core.Dat"
     keys = rows.get(first.subject, "db/keys")
     assert keys == {"dat": {"do": "ledger_kinds.build_table", "kind": "dvc_dat.core.Dat",
-                            "kwargs": {"n": 12, "start": 1}}}             # the spec, dat.name removed
+                            "kwargs": {"n": 12, "start": 1}}}             # the memo key: the spec, dat.name removed
     assert first.dependencies["code"].startswith("db/code/") and first.dependencies["fn"] == "ledger_kinds.build_table"
     assert rows.get(first.subject, "db/provenance") == "eval:unsandboxed"     # installed: in this process
     assert first.dependencies["code/testrepo"] == "abc1234"
 
 
-def test_rev_dat_run_kwargs_are_the_specs_and_path_names_it(coded, world):
+def test_rev_run_kwargs_fork_the_spec_and_path_names_it(coded, world):
     CALLS.clear()
-    five = coded.at().dat_run(SPEC, n=5, path="t/five")
+    five = coded.at().run(SPEC, n=5, path="t/five")
     assert str(five) == "t/five" and dict(five.preds) == {"n": "5", "start": "1", "cells": "25"}
-    assert coded.at().dat_run(SPEC, n=5, seal="get").subject == five.subject and CALLS == {"build_table": 1}
-    assert coded.at().dat_run(SPEC, n=6, seal="get") is None
+    assert coded.at().run(SPEC, n=5, seal="get").subject == five.subject and CALLS == {"build_table": 1}
+    assert coded.at().run(SPEC, n=6, seal="get") is None
 
 
-def test_rev_dat_run_takes_a_mounted_spec_name(coded, world):
-    world.do.mount(value=SPEC, at="tspecs.table")
-    a = coded.at().dat_run("tspecs.table")
-    assert coded.at().dat_run(SPEC).subject == a.subject                   # the same question
+def test_rev_run_takes_a_spec_by_name_or_its_run_function_by_name(coded, world):
+    CALLS.clear()
+    a = coded.at().run("ledger_kinds.TABLE_SPEC")                       # a dict, by its dotted name
+    assert coded.at().run(SPEC).subject == a.subject                    # the same memo key: dat.name is not in it
+    b = coded.at().run("ledger_kinds.build_table", n=12, start=1)       # the spec {dat: {do: <name>}}
+    assert b.subject == a.subject and CALLS == {"build_table": 1}
 
 
-def test_rev_dat_run_of_a_ledger_function_is_refused(coded, world):
+def test_rev_resolve_hands_back_what_a_name_denotes(coded):
+    from dvc_dat.ledger import Fn
+    import ledger_kinds
+
+    rev = coded.at()
+    assert rev.resolve("ledger_kinds.TABLE_SPEC") == ledger_kinds.TABLE_SPEC
+    cut_fn = rev.resolve("ledger_kinds.cut")
+    assert isinstance(cut_fn, Fn) and cut_fn.kind == "ledger" and cut_fn.code.sandboxed is False
+    assert rev.resolve("ledger_kinds.build_table") is ledger_kinds.build_table   # installed, undecorated: itself
+    assert rev.resolve("ledger_kinds.NotedDat") is NotedDat              # anything else: the object
+
+
+def test_a_spec_naming_a_ledger_function_is_refused(coded, world):
     with pytest.raises(TypeError, match="rev.run"):
-        coded.at().dat_run({"dat": {"do": "ledger_kinds.cut"}})
+        coded.at().run({"dat": {"do": "ledger_kinds.cut"}})
 
 
-def test_rev_dat_run_of_a_dat_left_open_is_refused(coded, world):
+def test_a_run_leaving_its_dat_open_is_refused(coded, world):
     with pytest.raises(ValueError, match=r"dat\.save\(\)"):
-        coded.at().dat_run({"dat": {"do": "ledger_kinds.never_saves"}})
+        coded.at().run({"dat": {"do": "ledger_kinds.never_saves"}})
 
 
 def test_plain_do_is_unchanged(coded, world, tmp_path):
@@ -155,3 +169,22 @@ def test_a_dat_container_still_lists_its_dats(world):
     assert [d.get_path_name() for d in box.get_dats()] == ["box/one"]
 
 
+def test_a_ledger_project_gets_the_ledgers_do_and_a_plain_one_the_plain_do(tmp_path):
+    from dvc_dat import Do
+    from dvc_dat.ledger import Ledger, LedgerDo
+
+    led, plain = tmp_path / "led", tmp_path / "plain"
+    led.mkdir()
+    plain.mkdir()
+    (led / ".datconfig.yaml").write_text("ledger: .dat/ledger\n")
+    Ledger(led / ".dat" / "ledger", create=True)
+    (plain / ".datconfig.yaml").write_text("dat_folders: data\n")
+    m = DatManager.load_dat_config(led)
+    assert isinstance(m.do, LedgerDo) and m.do.load("os.path.join") is os.path.join
+    assert m.do.load("dt.list") is not None                             # the world's own names stay
+    with pytest.raises(TypeError, match="db/mount"):
+        m.do.mount(value={"dat": {}}, at="specs.x")
+    p = DatManager.load_dat_config(plain)
+    assert type(p.do) is Do
+    p.do.mount(value={"dat": {}}, at="specs.x")
+    assert p.do.load("specs.x") == {"dat": {}}

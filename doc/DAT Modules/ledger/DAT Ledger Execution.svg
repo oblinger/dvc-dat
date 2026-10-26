@@ -115,8 +115,8 @@
     <path d="M860,252 L1088,558"/>
   </g>
   <text x="345" y="612" font-size="12" fill="#37474f">imports</text>
-  <text x="690" y="520" font-size="13" fill="#37474f" font-style="italic">load_fn</text>
-  <text x="800" y="345" font-size="13" fill="#37474f" font-style="italic">load_fn</text>
+  <text x="690" y="520" font-size="13" fill="#37474f" font-style="italic">resolve</text>
+  <text x="800" y="345" font-size="13" fill="#37474f" font-style="italic">resolve</text>
 
   <!-- ===== the ledger (right) ===== -->
   <g stroke="#37474f" stroke-width="2">

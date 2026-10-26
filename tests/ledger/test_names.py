@@ -85,5 +85,5 @@ def test_kwargs_carries_keys_named_like_control_options(world):
         world.at().run("ledger_kinds.controls", n=1, kwargs={"seal": 3, "clean": "x", "kwargs": {}})
     with pytest.raises(TypeError, match="control option"):
         world.at().run("ledger_kinds.folder", kwargs={"game": "G1", "path": "x"})
-    f = world.at().load_fn("ledger_kinds.cut")
+    f = world.at().resolve("ledger_kinds.cut")
     assert f(kwargs={"game": "G1"}).subject == f(game="G1").subject

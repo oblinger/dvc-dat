@@ -205,7 +205,7 @@ show("comfort/report.py")
 with L.transaction(by="human:dan", why="mount the stages") as t:
     t.add("db/mount/comfort", "db/root", "comfort")
     t.add("db/mount/comfort", "db/repo", "comfort-repo")
-report_fn = L.at().load_fn("comfort.report.comfort_report")
+report_fn = L.at().resolve("comfort.report.comfort_report")
 print("sandboxed:", report_fn.code.sandboxed, " code:", report_fn.code)
 # → sandboxed: True  code: comfort@0.1.0
 

@@ -23,7 +23,6 @@ from .fold import Held, fold
 from .value import FrozenPreds, Value, dotted, takes_name
 
 if TYPE_CHECKING:
-    from .fn import Fn
     from .ledger import Ledger
 
 #: Predicates whose cardinality is fixed at ``one``: every ``db/`` predicate, and the user clocks.
@@ -574,45 +573,39 @@ class Rev:
         """``Ref(rev, subject).load()``: an alias resolves; reading through one records the binding (A35)."""
         return Ref(self, subject).load()
 
-    def load_fn(self, name: str) -> "Fn":
-        """The revision function a dotted name resolves to here: through the mounts (sandbox) or in process."""
-        from .fn import load_fn
-
-        return load_fn(self, name)
-
-    def dat_run(self, target: Any, /, *, seal: Any = OWN, clean: bool = False, path: Any = None,
-                **kwargs: Any) -> Optional[Value]:
-        """The run function executed for a dat, through the ledger (DAT 1038, 1045), as ``run`` executes a
-        ``@ledger_fn``: inside, what ``Dat.do(target, **kwargs)`` does (create the dat, ``execute`` it),
-        memoised. The sealed dat if this question was answered by this code before, else the dat
-        created, run and sealed as the memo entry.
-
-        ``target`` is what ``Dat.do`` takes: a mounted spec name, a spec dict, or a run function's dotted
-        name; ``kwargs`` update the spec's ``dat.kwargs``. The question is the expanded spec with
-        ``dat.name`` removed; the code, the run function's. A run function under a ``db/mount`` runs in
-        the sandbox worker, confined, its code the modules it loaded (provenance ``eval:sandbox``);
-        an installed one runs in this process. ``seal`` and ``clean`` as on ``run``; ``path`` the dat's
-        name in the data folder (else the spec's ``dat.name`` template, else ``anonymous/Dat``), its
-        folder there a view. A run function that is a ``@ledger_fn`` is ``TypeError``: ``run`` runs it.
-        ``just run <spec>`` in a ledger project is this call."""
-        from .rundat import dat_run
+    def resolve(self, name: str) -> Any:
+        """What the dotted ``name`` denotes at this revision, through the ledger's namespace (DAT 1046): the
+        ``db/mount`` rows longest prefix first, a mounted ``.yaml``/``.json`` read from the checkout as a
+        dict, a mounted function its ``Fn`` (read off the file, never imported here; ``kind`` ``"ledger"``
+        for a ``@ledger_fn``, ``"dat"`` for an undecorated run function), a mounted module-level literal its
+        value; a name under no mount imported, a ``@ledger_fn`` its ``Fn``. ``ImportError`` /
+        ``KeyError`` when nothing answers."""
         from .sandbox import unguarded
 
-        with unguarded():
-            return dat_run(self, target, seal=seal, clean=clean, path=path, kwargs=kwargs)
+        with unguarded():                          # in a sandboxed body: the ledger's own machinery
+            from .namespace import resolve_name
 
-    def run(self, name: str, /, *, seal: Any = OWN, clean: bool = False, **keys: Any) -> Optional[Value]:
-        """The API form of ``just run NAME KEY=VALUE``: ``load_fn(name)(seal=seal, clean=clean, **keys)``.
+            return resolve_name(self, name)
 
-        ``seal`` as ``Fn.__call__``'s (``"get"``, ``False``, ``True``, a ``Ledger``, a ``Transaction``);
-        left out, the memo entry on this rev's ledger."""
-        if not isinstance(name, str):
-            raise TypeError("run takes a dotted name; a function object would resolve in this process")
+    def run(self, target: Any, /, *, seal: Any = OWN, clean: bool = False, path: Any = None,
+            **kwargs: Any) -> Optional[Value]:
+        """The API form of ``just run TARGET KEY=VALUE``: the result found if computed before by this code,
+        else run and sealed as the memo entry (DAT 1046).
+
+        ``target`` is a dotted name (through ``resolve``) or a spec dict. A ledger function's name: its
+        ``Fn`` called with ``kwargs`` as its keys. A spec, a spec's name or a dat's run function's name
+        (the spec ``{dat: {do: <name>}}``): a dat, ``kwargs`` merged into its ``dat.kwargs``; the memo key
+        is the spec with ``dat.base`` merged, ``dat.kind`` set, every ``{}`` expanded and ``dat.name``
+        removed; a miss creates the dat in a work folder and runs it there, in the sandbox worker when its
+        run function is mounted (provenance ``eval:sandbox``), here when installed (``eval:unsandboxed``,
+        a clean checkout to save). ``seal``, ``clean`` and ``path`` as ``Fn.__call__``'s; a dat's name is
+        ``path=``, else its ``dat.name`` template, else ``anonymous/Dat{unique}``."""
         from .sandbox import unguarded
 
         with unguarded():                          # in a sandboxed body: the lookup and seal are the ledger's
-            return self.load_fn(name)(seal=seal, clean=clean, **keys)
+            from .rundat import run
 
+            return run(self, target, seal=seal, clean=clean, path=path, kwargs=kwargs)
 
 
 def describe(s: Any, kind: Any, fn: Any, where: Optional[Dict[str, Any]], preds: Dict[str, Any]) -> str:

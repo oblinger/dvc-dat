@@ -2,10 +2,14 @@
 
 ``@ledger_fn`` declares and returns the function unchanged (A52): a plain call
 runs the body and returns an unsealed ``Value``, recording nothing.
-``rev.load_fn(name)`` resolves a dotted name at a revision: under a mounted
-prefix (``db/mount/<prefix>`` rows) it is a sandboxed function, loaded from the
-mounted tree and run in a worker (``sandbox``); otherwise a base function,
-resolved in this process. Calling the ``Fn`` is ``run``: a memo lookup over
+``rev.resolve(name)`` resolves a dotted name at a revision; a function comes
+back an ``Fn``: under a mounted prefix (``db/mount/<prefix>`` rows) a sandboxed
+function, read off the mounted file and run in a worker (``sandbox``);
+otherwise an installed one, resolved in this process. Its ``kind`` is
+``"ledger"`` for a ``@ledger_fn`` (its keys are its memo key and it receives
+them) and ``"dat"`` for an undecorated function, a dat's run function (its memo
+key is the expanded spec, and it receives the dat made from it; DAT 1046).
+Calling the ``Fn`` is ``run``: a memo lookup over
 every entry at the top whose ``db/fn`` and ``db/keys`` rows match, each
 candidate's dependencies matched against the rev, the latest-sealed match winning
 (Q20, A20); on a miss, run, trace its reads, and send the result where ``seal=``
@@ -318,23 +322,19 @@ def signature_of(name: str, obj: Callable) -> Tuple[inspect.Signature, bool, Opt
     return sig.replace(parameters=keep, return_annotation=inspect.Signature.empty), folder is not None, template
 
 
-def load_fn(rev: "Rev", name: str) -> "Fn":
-    if not isinstance(name, str) or "." not in name:
-        raise TypeError(f"a revision function is named by a dotted str, not {name!r}")
-    plain = rev._plain()
-    for prefix, info in sorted(mounts_at(plain).items(), key=lambda kv: -len(kv[0])):
-        if name.startswith(prefix + "."):
-            from .sandbox import load_sandboxed
-
-            return load_sandboxed(rev, name, prefix, info)
-    obj = resolve_in_process(name)
-    if not callable(obj) or not getattr(obj, "__ledger_fn__", False):
-        raise TypeError(f"{name!r} is not a ledger function (mark it @ledger_fn)")
+def installed_fn(rev: "Rev", name: str, obj: Any) -> "Fn":
+    """The ``Fn`` of a function resolved in this process (no mount): ``kind`` ``"ledger"`` when it is a
+    ``@ledger_fn``, else ``"dat"`` (a dat's run function), its ``Code`` the static closure of its module."""
+    if not callable(obj):
+        raise TypeError(f"{name!r} is {obj!r}, not a function")
     modname, src = source_of(name, obj)
-    sig, takes_path, template = signature_of(name, obj)
     env = current_env()
-    return Fn(name=name, module=src, mount=None, signature=sig, env=env,
-              code=installed_code(modname, src, env),
+    code = installed_code(modname, src, env)
+    if not getattr(obj, "__ledger_fn__", False):
+        return Fn(name=name, module=src, mount=None, signature=inspect.Signature(), env=env, code=code,
+                  _rev=rev, _obj=obj, _takes_path=True, kind="dat")
+    sig, takes_path, template = signature_of(name, obj)
+    return Fn(name=name, module=src, mount=None, signature=sig, env=env, code=code,
               _rev=rev, _obj=obj, _takes_path=takes_path, _template=template, _returns=returns_text(obj))
 
 
@@ -392,7 +392,9 @@ def installed_code(modname: str, src: Path, env: Env) -> Code:
 class Fn:
     """A revision function, resolved at ``_rev``; calling it is ``run``. Not on the timeline: no subject.
     ``name`` is the dotted string it was loaded by; ``code`` the snapshot it is looked up in, which alone
-    has identity (``code.subject``, DAT 1037)."""
+    has identity (``code.subject``, DAT 1037). ``kind`` is read off the function: ``"ledger"`` for a
+    ``@ledger_fn``, ``"dat"`` for an undecorated one, a dat's run function, which runs only through a
+    spec (``rev.run(spec)``; its keys are the expanded spec, DAT 1046)."""
 
     name: str
     module: Path
@@ -406,6 +408,7 @@ class Fn:
     _template: Optional[str] = field(repr=False, compare=False, default=None)
     _returns: str = field(repr=False, compare=False, default="")
     _info: Dict[str, Any] = field(repr=False, compare=False, default_factory=dict)
+    kind: str = "ledger"
 
     def __repr__(self) -> str:
         """``<Fn plane.measure.length@2.7.1>``: the name, ``@`` its code's version (DAT 1036, 1037)."""
@@ -416,6 +419,12 @@ class Fn:
         return f"{self.name}@{self.code.version}"
 
     def _bind(self, keys: Dict[str, Any]) -> Dict[str, Any]:
+        if self.kind == "dat":
+            dat = keys.get("dat")
+            if not isinstance(dat, dict) or dat.get("do") != self.name:
+                raise TypeError(f"{self.name} is a dat's run function: it runs through a spec, "
+                                f"rev.run({self.name!r}, **kwargs) or rev.run(spec)")
+            return dict(keys)
         if self._takes_path and "path" in keys:
             raise TypeError(f"{self.name}: 'path' is the folder it builds, a control option (path=), never a key")
         bound = self.signature.bind(**keys)
@@ -467,12 +476,13 @@ class Fn:
             hit = lookup(plain, self.name, enc)
             if hit is not None or level == "get":
                 rev._record(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
-                return place(plain.ledger, hit, target) if hit is not None and target is not None else hit
+                at = target if target is not None or hit is None or self.kind != "dat" else hit.name
+                return place(plain.ledger, hit, at) if hit is not None and at is not None else hit
         into = level if isinstance(level, Transaction) else None
         # False: a draft; True: the memo entry in a transaction of its own; a Transaction: into it
         save: Any = True if isinstance(level, str) and level == "save" else (into if into is not None else False)
         if into is not None and target is None and self._takes_path:
-            target = fresh_name(plain.ledger, self._template or ANONYMOUS, kw)
+            target = fresh_name(plain.ledger, self._template or ANONYMOUS, self._name_keys(kw))
         name = target if into is not None and target is not None and not os.path.isabs(target) else None
         if into is not None and target is not None and name is None:
             raise ValueError(f"{self.name}: path={target!r} is absolute; with seal=t the result is saved at "
@@ -492,8 +502,23 @@ class Fn:
         if into is not None:
             return value
         if target is None and self._takes_path and isinstance(value, Dat):
-            target = fresh_name(plain.ledger, self._template or ANONYMOUS, kw)
+            target = fresh_name(plain.ledger, self._template or ANONYMOUS, self._name_keys(kw))
         return place(plain.ledger, value, target) if target is not None else value
+
+    def _name_keys(self, kw: Dict[str, Any]) -> Dict[str, Any]:
+        """What a path template expands with: the keys; for a dat, its spec's ``dat.kwargs``."""
+        if self.kind == "dat":
+            return dict(Dat.get(kw, "dat.kwargs", None) or {})
+        return kw
+
+    def _function(self) -> Callable:
+        """The function itself, for a plain ``Dat.do`` run (nothing memoised): installed, the object;
+        mounted, imported in this process through the mounts as of ``_rev`` (``sandbox.import_mounted``)."""
+        if self._obj is not None:
+            return self._obj
+        from .sandbox import import_mounted
+
+        return import_mounted(self)
 
     def _check_code(self, plain: "Rev", env: Env, repo: Optional[str]) -> str:
         """The base-mode gate, always (no byte record of what ran): code in a clean checkout."""
@@ -517,6 +542,8 @@ class Fn:
         repo = repo_of(env, self.module)
         if save is not False:                       # a draft simply runs (Eval § 2)
             self._check_code(plain, env, repo)
+        if self.kind == "dat":
+            return self._run_dat(plain, kw, enc, save, name, env, repo)
         rec: Dict[str, str] = {}
         work = work_folder() if self._takes_path else None
         args = dict(kw, path=work) if work is not None else kw
@@ -537,6 +564,59 @@ class Fn:
             return value
         finally:
             drop_work(work, value)
+
+    def _run_dat(self, plain: "Rev", spec: Dict[str, Any], enc: str, save: Any, name: Optional[str],
+                 env: Env, repo: Optional[str]) -> Value:
+        """A dat's run function, run here (``_run_base``): the dat made from the spec in a work folder and
+        run (``manager.execute``), its recorded dependencies that are ledger names entered as alias reads."""
+        from .txn import code_token
+
+        rec: Dict[str, str] = {}
+        work = work_folder()
+        value: Any = None
+        manager = Dat.manager
+        try:
+            dat = manager.create(dat_spec(spec, self._template), path=str(work / "dat"))
+            manager.execute(dat)
+            value = dat
+            alias_reads(plain, dat, rec)
+            trace = dict(rec)
+            trace.update({"code": self.code.subject, "fn": self.name, "platform": env.platform})
+            if repo is not None:
+                trace[f"code/{repo}"] = code_token(env.code[repo].commit if repo in env.code else None)
+            if save is False:
+                dirty = bool(repo is not None and repo in env.code and env.code[repo].dirty)
+                value = attach_run(dat, run_trace(self, plain, trace, enc, "eval:unsandboxed", self.code,
+                                                  repo=repo, dirty=dirty))
+            else:
+                value = seal_entry(self, plain, dat, trace, enc, "eval:unsandboxed", self.code, into=save,
+                                   name=name, repo=repo)
+        finally:
+            drop_work(work, value)
+            if not work.exists():                       # its folder is gone: so is the dat world's index of it
+                manager._index_forget(str(work / "dat"))
+        return value
+
+
+def dat_spec(keys: Dict[str, Any], template: Optional[str]) -> Dict[str, Any]:
+    """The spec a dat is created from: its memo key (the expanded spec) with its ``dat.name`` template back."""
+    import copy
+
+    spec = copy.deepcopy(keys)
+    if template is not None:
+        spec["dat"]["name"] = template
+    return spec
+
+
+def alias_reads(plain: "Rev", dat: Dat, rec: Dict[str, str]) -> None:
+    """The dat's recorded dependencies that are names on the ledger, recorded as the bindings they read."""
+    from .rev import Ref, Rev
+
+    recording = Rev(plain.ledger, plain.id, _rec=rec)
+    head = plain.ledger.at()
+    for dep in sorted(Dat.get(dat.get_results(), "dat.dependencies", None) or {}):
+        if head._held(dep, "db/alias"):
+            Ref(recording, dep)                     # records `<dep> db/alias`, the binding it read
 
 
 def seal_level(name: str, plain: "Rev", seal: Any, clean: Any, path: Any) -> Any:

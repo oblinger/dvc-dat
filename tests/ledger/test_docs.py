@@ -61,7 +61,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev.run("ledger_kinds.cut", game="G1", seal=False).sealed is None   # run, no seal
     assert rev.run("ledger_kinds.cut", game="G1", seal="get").subject == m.subject   # or None
 
-    f = rev.load_fn("ledger_kinds.cut")           # Fn: resolved at rev
+    f = rev.resolve("ledger_kinds.cut")           # Fn: resolved at rev
     assert f(game="G1").subject == m.subject  # == rev.run(...)  ADAPTED: G1, the game that exists
     assert f.module.name == "ledger_kinds.py" and f.code.subject.startswith("db/code/") and f.code.sandboxed is False and f.env.platform
 
