@@ -6,11 +6,12 @@ everything held or handed back is a ``Value``; a sealed computation is a memo
 entry findable by ``Rev.run``. SQLite backend; ``run`` unsandboxed (in this
 process) or sandboxed (under a ``db/mount/<prefix>``, in a worker).
 
-    from dvc_dat.ledger import Ledger, Ref, ledger_fn, ledger_class, bump, attr
+    from dvc_dat.ledger import Ledger, Ref, ledger_fn, ledger_class, bump, bump_source, attr
     L = Ledger()                         # the nearest .datconfig.yaml
     rev = L.at()
-    with L.transaction(by="human:dan", lock=10) as t:
-        bump(t, "code/demo-game")
+    with L.transaction(by="human:dan", lock=10, why="release") as t:
+        bump(t, "db", "minor", confirm=lambda old, new: True)
+    bump_source("demo_game")             # __version__ in the source; the next clean run moves code/demo-game
 
 The environment is found by discovery; ``set_env_provider``, ``Env`` and
 ``Checkout`` are the test suite's seam only (A51), importable by name.
@@ -22,13 +23,13 @@ from .errors import (AliasLoop, ConfinedNetwork, ConfinedWrite, Exists, LedgerEr
                      Unindexed,
                      UnmountedImport, UntracedRead)
 from .fn import Fn, ledger_fn
-from .helpers import bump
+from .helpers import SourceBump, bump, bump_source
 from .ledger import Ledger
 from .rev import Ref, Rev, Row
 from .txn import Transaction, attr
 from .value import Dat, Value, ledger_class
 
 __all__ = ["Ledger", "Rev", "Ref", "Row", "Transaction", "Value", "Dat", "Fn", "Code",
-           "ledger_fn", "ledger_class", "bump", "attr", "LedgerError", "Multiple", "NotEvaluated", "NotClean",
+           "ledger_fn", "ledger_class", "bump", "bump_source", "SourceBump", "attr", "LedgerError", "Multiple", "NotEvaluated", "NotClean",
            "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
            "AliasLoop", "SealBroken"]

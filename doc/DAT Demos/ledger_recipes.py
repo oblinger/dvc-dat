@@ -3,7 +3,7 @@
 Each recipe is one ledger call; running a function or a spec is not here but
 `just run` (dvc_dat.just), the one way to run. What a Python caller spells out the recipe
 supplies: the ledger (`Ledger()`), `by=human:$USER`, `confirm=` (a typed
-`yes`), the repo (`code` is the checkout the recipe runs in), short kind
+`yes`), the checkout's packages on `sys.path` (`bump <module>`), short kind
 names, hash prefixes, and `k=v` (a string) / `k:=v` (JSON) arguments.
 """
 
@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from dvc_dat.ledger import Ledger, LedgerError, bump
+from dvc_dat.ledger import Ledger, LedgerError, bump, bump_source
 
 BY = f"human:{os.environ.get('USER', 'dan')}"
 
@@ -180,19 +180,20 @@ def confirm(subject):
 
 
 def bump_recipe(args):
+    name, part = args[0], (args[1] if len(args) > 1 else "patch")
+    ask = None if part == "patch" else confirm(name)
+    if name == "db":
+        L = Ledger()
+        old = L.at().get("db", "version", default="0.0.0")
+        with L.transaction(by=BY, lock=10, why="release") as t:
+            new = bump(t, "db", part, confirm=ask)
+        print(f"db: {old} -> {new}, a release")
+        return
     import_checkout()
-    from dvc_dat.ledger.env import repo_name
-    subject, part = args[0], (args[1] if len(args) > 1 else "patch")
-    if subject == "code":
-        subject = f"code/{repo_name(checkout())}"
-    L = Ledger()
-    old = L.at().get(subject, "version", default="0.0.0")
-    extra = {"why": "release"} if subject == "db" else {}
-    with L.transaction(by=BY, lock=10, **extra) as t:
-        new = bump(t, subject, part, confirm=None if part == "patch" else confirm(subject))
-    commit = t.rev.get(subject, "commit")
-    tail = f" at {commit[:8]}" if subject.startswith("code/") else ", a release" if subject == "db" else ""
-    print(f"{subject}: {old} -> {new}{tail}")
+    b = bump_source(name, part, confirm=ask)
+    rel = os.path.relpath(b.path)
+    print(f"{name}: {b.old} -> {b.new} in {rel}")
+    print(f'commit it: git commit -am "{name} {b.new}"')
 
 
 RECIPES = {"values": values, "value": value, "history": history, "why": why, "set": set_recipe,
@@ -201,6 +202,6 @@ RECIPES = {"values": values, "value": value, "history": history, "why": why, "se
 if __name__ == "__main__":
     try:
         RECIPES[sys.argv[1]](sys.argv[2:])
-    except (LedgerError, LookupError, TypeError, ValueError, RuntimeError) as e:
+    except (LedgerError, LookupError, TypeError, ValueError, RuntimeError, ImportError) as e:
         print(f"{type(e).__name__}: {e}")
         sys.exit(1)

@@ -191,13 +191,15 @@ def test_a_changed_module_changes_the_subject(mounted):
     before = L.at().load_fn("plane.measure.length").code
     (repo / "plane/measure.py").write_text(FN.replace("0.5", "0.25"))
     after = L.at().load_fn("plane.measure.length").code
-    assert after.subject != before.subject and after.version == before.version == "2.7.1"
+    assert after.subject != before.subject and before.version == "2.7.1"
+    assert re.fullmatch(r"[0-9a-f]{8}\+dirty", after.version)          # uncommitted: no declared version (DAT 1043)
 
 
 def test_two_functions_in_one_snapshot_share_its_subject(mounted):
     L, repo = mounted
     (repo / "plane/measure.py").write_text(FN + FN.split("@ledger_fn")[1].replace("length", "width")
                                            .replace("def ", "@ledger_fn\ndef ", 1))
+    git(repo, "commit", "-q", "-am", "width")
     length, width = L.at().load_fn("plane.measure.length"), L.at().load_fn("plane.measure.width")
     assert length.code.subject == width.code.subject and length.name != width.name
     assert str(width) == "plane.measure.width@2.7.1"

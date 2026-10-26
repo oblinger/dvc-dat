@@ -24,11 +24,13 @@ from __future__ import annotations
 import ctypes
 import datetime as _dt
 import json
+import re
 import signal
 import tempfile
 import threading
 import time as _time
 import uuid
+import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, sha256, show, strip_hint, tag
@@ -98,6 +100,15 @@ def check_provenance(provenance: Optional[str]) -> str:
     return provenance
 
 
+_SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+
+
+def _semver(text: Any) -> Optional[Tuple[int, int, int]]:
+    """``MAJOR.MINOR.PATCH`` as a tuple of ints, else ``None``."""
+    m = _SEMVER.match(text) if isinstance(text, str) else None
+    return (int(m[1]), int(m[2]), int(m[3])) if m else None
+
+
 def code_token(env_commit: Optional[str]) -> str:
     """The ``code/<repo>`` dependency item: the environment's commit, 8 hex (T034): the commit the code
     ran at, whatever commit the ``code/<repo>`` row pins its version to. The version is not in the
@@ -135,6 +146,7 @@ class Transaction:
         self._pending: Dict[int, Tuple[Value, str]] = {}
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
         self._codes: set = set()
+        self._clocks: set = set()
         #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
         self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
         self._to_store: List[Value] = []
@@ -536,7 +548,12 @@ class Transaction:
         pending = {s: v.hash for v, s in self._pending.values()}
         for d in deps:
             if isinstance(d, Fn):
+                from .fn import clock_of
+
                 self._ensure_code(d.code.subject, d.code._rows())
+                clock = clock_of(d, d.code)
+                if clock is not None:
+                    self._advance_clock(*clock)
                 trace.update(code=d.code.subject, fn=d.name)
                 continue
             if isinstance(d, SealedFn):
@@ -696,6 +713,31 @@ class Transaction:
             return
         for p, o in rows:
             self._ops.append(_Op(subject, p, o, True))
+
+    def _advance_clock(self, repo: str, version: str, commit: str) -> None:
+        """Move the ``code/<repo>`` clock to ``version`` (DAT 1043): the version a run was exposed to.
+
+        Only a plain ``MAJOR.MINOR.PATCH`` moves it: a dirty checkout's ``<commit 8>+dirty``, a bare
+        commit or a ``#hash`` never does. Read through the snapshot at open: absent or lower, this
+        transaction adds ``version`` and ``commit`` (once per repo); equal, nothing; higher on the row,
+        a warning and nothing (the clock never moves back)."""
+        if repo in self._clocks:
+            return
+        self._clocks.add(repo)
+        seen = _semver(version)
+        if seen is None:
+            return
+        subject = f"code/{repo}"
+        row = self._snapshot().get(subject, "version", default=None)
+        held = _semver(row) if isinstance(row, str) else None
+        if held is not None and held == seen:
+            return
+        if held is not None and held > seen:
+            warnings.warn(f"{subject}: the run's code is {version}, below the ledger's {row}; the clock keeps "
+                          f"{row}", stacklevel=2)
+            return
+        self.add(subject, "version", version)
+        self.add(subject, "commit", commit)
 
     # -- the bracket ----------------------------------------------------------
 

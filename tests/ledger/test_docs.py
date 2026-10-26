@@ -76,7 +76,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev.all(since=L.at(1))            # every row in (1, rev.id]
 
     with L.transaction(by="human:dan", why="T531", lock=10) as t:
-        assert bump(t, "code/testrepo", "patch") == "0.2.3"     # 0.2.2 -> 0.2.3, and commit from the checkout
+        t.add("code/testrepo", "version", "0.2.3")   # ADAPTED: bump(t, "code/...") is gone; a code version lives in its source (DAT 1043)
         t["env/prod", "rev"] = "413"         # add, on a one pred
         t.add(t.tx, "checked", "G1,G4,G5")
     assert t.rev.id == L.at().id
