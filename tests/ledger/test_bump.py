@@ -86,11 +86,11 @@ def test_installed_version_is_the_attr_only_from_a_clean_checkout(installed):
 def test_mounted_version_under_a_dirty_checkout(mounted):
     L, repo = mounted
     (repo / "code_anchor.py").write_text("# edited\n")        # tracked, not loaded by plane
-    f = L.at().load_fn("plane.measure.length")
+    f = L.at().resolve("plane.measure.length")
     assert re.fullmatch(r"[0-9a-f]{8}\+dirty", f.code.version)
     assert git(repo, "rev-parse", "HEAD").startswith(f.code.version[:8])
     git(repo, "commit", "-q", "-am", "edit")
-    assert L.at().load_fn("plane.measure.length").code.version == "2.7.1"
+    assert L.at().resolve("plane.measure.length").code.version == "2.7.1"
 
 
 def test_a_clean_seal_moves_the_clock_once(mounted):
@@ -164,7 +164,7 @@ def test_a_lower_version_on_one_package_warns_and_keeps_its_row(mounted):
         warnings.simplefilter("error")
         L.at().run("bare.calc.length", a=(0, 0), b=(3, 4))
     assert L.at()["db/repo/code-repo/bare", "version"] == "0.4.0"
-    f = L.at().load_fn("plane.measure.length")
+    f = L.at().resolve("plane.measure.length")
     with pytest.warns(UserWarning, match=re.escape(msg)):
         with L.transaction(by="t") as t:                       # a hand seal, in this process
             Value.Blob({"x": 3}).seal(t, deps=[f])
@@ -196,11 +196,11 @@ def test_clean_reads_the_repos_commit_row(mounted):
 
 def test_codes_package_is_the_root_whose_version_it_read(mounted, installed):
     L, repo = mounted
-    assert L.at().load_fn("plane.measure.length").code.package == "plane"
-    assert L.at().load_fn("bare.calc.length").code.package is None        # named by its commit
+    assert L.at().resolve("plane.measure.length").code.package == "plane"
+    assert L.at().resolve("bare.calc.length").code.package is None        # named by its commit
     (repo / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')     # dirty
-    assert L.at().load_fn("plane.measure.length").code.package is None
-    assert L.at().load_fn("geom1037.dist.distance").code.package == "geom1037"
+    assert L.at().resolve("plane.measure.length").code.package is None
+    assert L.at().resolve("geom1037.dist.distance").code.package == "geom1037"
 
 
 def test_a_hand_seal_with_no_code_writes_no_clock(mounted):
@@ -214,7 +214,7 @@ def test_a_hand_seal_with_no_code_writes_no_clock(mounted):
 
 def test_a_hand_seal_with_an_fn_dep_moves_the_clock(mounted):
     L, repo = mounted
-    f = L.at().load_fn("plane.measure.length")
+    f = L.at().resolve("plane.measure.length")
     with L.transaction(by="t") as t:
         Value.Blob({"x": 2}).seal(t, deps=[f])
     assert L.at()["db/repo/code-repo/plane", "version"] == "2.7.1"

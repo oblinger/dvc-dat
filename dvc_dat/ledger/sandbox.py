@@ -33,10 +33,10 @@ store) run ``unguarded``. The same hook refuses a host-name lookup or an interne
 send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
 A nested eval runs in-process and its loads count toward its own entry (Q37 (ii)).
 
-A dat's run function under a mount (``rev.dat_run``, DAT 1045) runs the same way
-(``run_dat_sandboxed``): the parent resolves the question and ships the expanded
-spec, the run function's dotted name and the caller's dat world (its dat folders,
-art folder and index, readable in the child); the child imports the function from
+A dat's run function under a mount (an ``Fn`` of kind ``"dat"``, DAT 1045, 1046)
+runs through the same call: its keys are the spec, expanded in the parent, and the
+caller's dat world (its dat folders, art folder and index, readable in the child)
+crosses the pipe beside them; in the child ``run_here`` imports the function from
 the mounts, creates the dat in its work folder and ``execute``s it, the body
 confined as a ledger function's, the dat world's index writes its own machinery.
 
@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import ast
 import atexit
+import dataclasses
 import functools
 import importlib
 import importlib.abc
@@ -85,8 +86,8 @@ from .env import Env, current_env
 from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
 from ..core import Dat, DatManager
-from .fn import (Fn, attach_run, drop_work, mounts_at, mounts_hash, path_template, run_trace,
-                 save_run, seal_entry, wrap_result)
+from .fn import (Fn, alias_reads, attach_run, dat_spec, drop_work, mounts_at, mounts_hash, path_template,
+                 run_trace, save_run, seal_entry, wrap_result)
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -213,7 +214,7 @@ def _imports_of_node(node: Any, dotted: str, is_pkg: bool) -> Set[str]:
 
 
 def check_mounted_imports(mounts: List[Mount], modname: str, func: str) -> None:
-    """At load (Module § load_fn): ``UnmountedImport`` when the function's module, or a mounted module it
+    """At load (``rev.resolve``): ``UnmountedImport`` when the function's module, or a mounted module it
     reaches on load, imports a repo module under no mount. The worker's finder still checks at run time."""
     todo: List[Tuple[str, Optional[str]]] = [(modname, func)]
     seen: Set[str] = set()
@@ -415,10 +416,8 @@ def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, boo
     folder = next((p for p in rest if p.name == "path"), None)
     keep = [p for p in rest if p.name != "path"]
     template = path_template(folder.default) if folder is not None else None
-    decorated = any((isinstance(d, ast.Name) and d.id == "ledger_fn")
-                    or (isinstance(d, ast.Attribute) and d.attr == "ledger_fn") for d in fdef.decorator_list)
     returns = ast.unparse(fdef.returns) if fdef.returns is not None else ""
-    return inspect.Signature(keep), folder is not None, template, returns, decorated
+    return inspect.Signature(keep), folder is not None, template, returns, _decorated(fdef)
 
 
 def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Fn:
@@ -436,58 +435,30 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
     f = m.file_of(modname)
     if f is None:
         raise ImportError(f"{name!r}: no module {modname!r} under {m.path}")
-    tree = ast.parse(f[0].read_text())
-    fdef = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == attr_name), None)
-    if fdef is None:
-        raise ImportError(f"{name!r}: no function {attr_name!r} in {f[0]}")
-    sig, takes_path, template, returns, decorated = _signature(fdef, name)
-    if not decorated:
-        raise TypeError(f"{name!r} is not a ledger function (mark it @ledger_fn)")
-    check_mounted_imports(mounts, modname, attr_name)
-    mods = module_shas(closure(mounts, [modname]))
+    with unguarded():                               # the ledger's own reads, also inside a sandboxed body
+        tree = ast.parse(f[0].read_text())
+        fdef = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == attr_name), None)
+        if fdef is None:
+            raise ImportError(f"{name!r}: no function {attr_name!r} in {f[0]}")
+        decorated = _decorated(fdef)
+        if decorated:
+            sig, takes_path, template, returns, _ = _signature(fdef, name)
+        else:                                       # a dat's run function: its keys are a spec (DAT 1046)
+            sig, takes_path, template, returns = inspect.Signature(), True, None, ""
+        check_mounted_imports(mounts, modname, attr_name)
+        mods = module_shas(closure(mounts, [modname]))
     return Fn(name=name, module=f[0],
               mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain)),
               code=mounted_code(plain, env, m, modname, mods),
               _rev=rev, _takes_path=takes_path, _template=template, _returns=returns,
-              _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
+              _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name},
+              kind="ledger" if decorated else "dat")
 
 
-def load_mounted_run(rev: "Rev", name: str, returns: str, template: Optional[str]) -> Fn:
-    """``rev.dat_run``'s run function under a mount (DAT 1045): found in the mounted file, nothing imported
-    here, named by the mount's ``Code`` (its static closure, the mount rows hashed in) as ``load_sandboxed``
-    names a ledger function; it runs in the worker (``run_dat_sandboxed``)."""
-    plain = rev._plain()
-    env = current_env()
-    prefix, info = max(((p, i) for p, i in mounts_at(plain).items() if name.startswith(p + ".")),
-                       key=lambda pi: len(pi[0]))
-    repo = info.get("repo")
-    code = env.code.get(repo or "")
-    if code is None or code.path is None:
-        raise NotEvaluated(f"{name!r} is under the mount {prefix!r} of repo {repo!r}, which has no checkout in "
-                           "this environment")
-    mounts, _rows = mounts_for(plain, env)
-    m = _mount_of(mounts, name)
-    assert m is not None
-    modname, _, attr_name = name.rpartition(".")
-    with unguarded():                               # the ledger's own reads, also inside a sandboxed body
-        f = m.file_of(modname)
-        if f is None:
-            raise ImportError(f"{name!r}: no module {modname!r} under {m.path}")
-        tree = ast.parse(f[0].read_text())
-        fdef = next((n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-                     and n.name == attr_name), None)
-        if fdef is None:
-            raise ImportError(f"{name!r}: no function {attr_name!r} in {f[0]}")
-        if any((isinstance(d, ast.Name) and d.id == "ledger_fn")
-               or (isinstance(d, ast.Attribute) and d.attr == "ledger_fn") for d in fdef.decorator_list):
-            raise TypeError(f"rev.dat_run: {name} is a ledger function; rev.run({name!r}, ...) runs it")
-        check_mounted_imports(mounts, modname, attr_name)
-        mods = module_shas(closure(mounts, [modname]))
-    return Fn(name=name, module=f[0], mount=m.prefix, signature=inspect.Signature(),
-              env=Env(env.code, env.platform, mounts_hash(plain)),
-              code=mounted_code(plain, env, m, modname, mods),
-              _rev=rev, _template=template, _returns=returns,
-              _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
+def _decorated(fdef: ast.FunctionDef) -> bool:
+    """Is the function marked ``@ledger_fn`` (by name or attribute), read off its source."""
+    return any((isinstance(d, ast.Name) and d.id == "ledger_fn")
+               or (isinstance(d, ast.Attribute) and d.attr == "ledger_fn") for d in fdef.decorator_list)
 
 
 def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str, str]) -> Code:
@@ -579,29 +550,6 @@ def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
     return draft
 
 
-def run_dat_sandboxed(fn: Fn, plain: "Rev", spec: Dict[str, Any], enc: str, save: Any,
-                      name: Optional[str] = None) -> Any:
-    """``rev.dat_run``'s miss for a mounted run function (DAT 1045): the dat made from ``spec`` (the expanded
-    question, its ``dat.do`` the run function's dotted name) and run in the worker, as ``run_sandboxed``
-    runs a ledger function that takes a ``path``; ``save`` as there."""
-    from ..core import Dat
-
-    env = current_env()
-    if fn._info["repo"] not in env.code:
-        raise NotEvaluated(f"{fn.name}: repo {fn._info['repo']!r} has no checkout in this environment")
-    if IN_WORKER:
-        return run_dat_here(fn, plain, spec, enc, save, name)
-    world = Dat.manager
-    if save is True or save is False:
-        return _server().dat_run(fn, plain, spec, enc, world, save, env)
-    draft = _server().dat_run(fn, plain, spec, enc, world, False, env)
-    run = draft.__dict__.get("_run")
-    if run is None:
-        raise TypeError(f"{fn.name} left its dat sealed by v.seal(); dat_run seals it, so leave it unsealed")
-    save_run(save, draft, run, name)
-    return draft
-
-
 # -- the worker's own machinery -----------------------------------------------------------------------
 
 class _Frame:
@@ -650,8 +598,15 @@ def _importer() -> str:
 
 
 class MountFinder(importlib.abc.MetaPathFinder):
+    """The worker's finder: ``STATE.mounts``, a repo module under no mount refused. Given ``mounts``,
+    the in-process finder of ``import_mounted``: those mounts, nothing refused."""
+
+    def __init__(self, mounts: Optional[List[Mount]] = None) -> None:
+        self.mounts = mounts
+
     def find_spec(self, fullname: str, path: Any = None, target: Any = None) -> Any:
-        m = _mount_of(STATE.mounts, fullname)
+        mounts = STATE.mounts if self.mounts is None else self.mounts
+        m = _mount_of(mounts, fullname)
         if m is not None:
             f = m.file_of(fullname)
             if f is None:
@@ -666,10 +621,12 @@ class MountFinder(importlib.abc.MetaPathFinder):
             return importlib.util.spec_from_file_location(
                 fullname, str(f[0]), loader=loader,
                 submodule_search_locations=[str(f[0].parent)] if f[1] else None)
-        if any(mm.prefix.startswith(fullname + ".") for mm in STATE.mounts):
+        if any(mm.prefix.startswith(fullname + ".") for mm in mounts):
             spec = importlib.machinery.ModuleSpec(fullname, None, is_package=True)
             spec.submodule_search_locations = []
             return spec
+        if self.mounts is not None:
+            return None
         parts = fullname.split(".")
         for mm in STATE.mounts:
             base = mm.checkout.joinpath(*parts)
@@ -677,6 +634,31 @@ class MountFinder(importlib.abc.MetaPathFinder):
                     or (mm.checkout / parts[0]).is_dir() and len(parts) > 1 and base.exists()):
                 raise UnmountedImport(f"{fullname} from {_importer()}; mount it or move it")
         return None
+
+
+@contextmanager
+def _mounted_imports(mounts: List[Mount]) -> Iterator[None]:
+    finder = MountFinder(mounts)
+    sys.meta_path.insert(0, finder)
+    try:
+        yield
+    finally:
+        sys.meta_path.remove(finder)
+
+
+def import_mounted(fn: Fn) -> Any:
+    """A mounted dat's run function imported in this process, for a plain ``Dat.do`` run in a ledger
+    project (nothing memoised, nothing confined, as ``Dat.do`` always ran): its module loaded from the
+    mounts as of ``fn``'s rev, which stay importable while it runs."""
+    mounts, _rows = mounts_for(fn._rev._plain(), current_env())
+    with _mounted_imports(mounts):
+        func = getattr(importlib.import_module(fn._info["modname"]), fn._info["attr"])
+
+    @functools.wraps(func)
+    def call(*args: Any, **kwargs: Any) -> Any:
+        with _mounted_imports(mounts):
+            return func(*args, **kwargs)
+    return call
 
 
 def _interpreter_roots() -> List[str]:
@@ -871,6 +853,10 @@ def install_worker(ledger: Any, mounts: List[Mount]) -> None:
 
 
 def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name: Optional[str] = None) -> Any:
+    """In the worker: import the function from the mounts and run it, confined, then seal (``_close_run``).
+    A ledger function gets the recording ``Rev``, its keys and, when it takes one, its ``path`` folder; a
+    dat's run function (``fn.kind == "dat"``) gets the dat made from its keys, the spec, in the work
+    folder, run by the dat world's ``execute`` (DAT 1046)."""
     from .rev import Rev
 
     outer_guard = STATE.guard
@@ -886,21 +872,33 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
         with _body(work) as frame:
             cwd = os.getcwd()
             try:
-                if work is not None:
+                if work is not None and fn.kind != "dat":
                     os.chdir(work)                  # a relative path resolves in the dat being produced
                 STATE.guard = True                  # the module's own load is confined like the body
                 try:
                     obj = getattr(importlib.import_module(modname), attr_name)
-                    if not getattr(obj, "__ledger_fn__", False):
+                    if fn.kind == "dat":
+                        if not callable(obj) or getattr(obj, "__ledger_fn__", False):
+                            raise TypeError(f"{fn.name} is {obj!r}, not a dat's run function")
+                    elif not getattr(obj, "__ledger_fn__", False):
                         raise TypeError(f"{fn.name!r} is not a ledger function (mark it @ledger_fn)")
-                    args = dict(kw, path=work) if work is not None else kw
-                    out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+                    else:
+                        args = dict(kw, path=work) if work is not None else kw
+                        out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
                 finally:
                     STATE.guard = False
                     os.chdir(cwd)
+                if fn.kind == "dat":
+                    out = _run_dat(fn, obj, kw, work)
             except BaseException:
                 drop_work(work, None)
                 raise
+        if fn.kind == "dat":
+            alias_reads(plain, out, rec)
+            value = _close_run(fn, plain, rec, frame.loaded, mounts, rows, env, enc, save, name, out, work)
+            if work is not None and not work.exists():  # its folder is gone: so is the dat world's index of it
+                Dat.manager._index_forget(str(work / "dat"))
+            return value
         value = wrap_result(fn.name, obj, out)
         return _close_run(fn, plain, rec, frame.loaded, mounts, rows, env, enc, save, name, value, work)
     finally:
@@ -919,67 +917,33 @@ class _WorkerWorld(DatManager):
                 yield index
 
 
-def run_dat_here(fn: Fn, plain: "Rev", spec: Dict[str, Any], enc: str, save: Any,
-                 name: Optional[str] = None) -> Any:
-    """In the worker: ``Dat.manager.create(spec)`` in a work folder, ``execute`` it with the run function
-    imported from the mounts and its body confined (writes only in the work folder), then the dat sealed
-    as ``run_here`` seals a ledger function's folder."""
-    from .rev import Ref, Rev
+def _run_dat(fn: Fn, run: Any, spec: Dict[str, Any], work: Path) -> Dat:
+    """The dat branch of ``run_here``: ``Dat.manager.create`` from the spec in ``work``, then ``execute`` with
+    ``run`` (imported from the mounts) as its ``dat.do``, its body confined (writes only in the work
+    folder); the world's own machinery around it unguarded."""
+    manager = Dat.manager
 
-    outer_guard = STATE.guard
-    STATE.guard = False
+    @functools.wraps(run)
+    def confined(*args: Any, **kwargs: Any) -> Any:
+        old = STATE.guard
+        STATE.guard = True
+        try:
+            return run(*args, **kwargs)
+        finally:
+            STATE.guard = old
+    registered = manager.do._registered_values or {}
+    before = registered.get(fn.name, _NONE)
+    manager.do._reg_value(fn.name, confined)       # execute loads dat.do through the world
     try:
-        env = current_env()
-        mounts, rows = mounts_for(plain, env)
-        STATE.mounts = mounts
-        modname, attr_name = fn._info["modname"], fn._info["attr"]
-        manager = Dat.manager
-        work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None))
-        rec: Dict[str, str] = {}
-        registered = manager.do._registered_values or {}
-        before = registered.get(fn.name, _NONE)
-        with _body(work) as frame:
-            try:
-                STATE.guard = True                  # the module's own load is confined like the body
-                try:
-                    run = getattr(importlib.import_module(modname), attr_name)
-                finally:
-                    STATE.guard = False
-                if not callable(run) or getattr(run, "__ledger_fn__", False):
-                    raise TypeError(f"rev.dat_run: {fn.name} is {run!r}, not a dat's run function")
-
-                @functools.wraps(run)
-                def confined(*args: Any, **kwargs: Any) -> Any:
-                    old = STATE.guard
-                    STATE.guard = True
-                    try:
-                        return run(*args, **kwargs)
-                    finally:
-                        STATE.guard = old
-                manager.do._reg_value(fn.name, confined)       # execute loads dat.do through the world
-                try:
-                    dat = manager.create(spec, path=str(work / "dat"))
-                    manager.execute(dat)
-                finally:
-                    values = manager.do._registered_values or {}
-                    if before is _NONE:
-                        values.pop(fn.name, None)
-                    else:
-                        values[fn.name] = before
-            except BaseException:
-                drop_work(work, None)
-                raise
-        recording = Rev(plain.ledger, plain.id, _rec=rec)
-        head = plain.ledger.at()
-        for dep in sorted(Dat.get(dat.get_results(), "dat.dependencies", None) or {}):
-            if head._held(dep, "db/alias"):
-                Ref(recording, dep)                 # records `<dep> db/alias`, the binding it read
-        value = _close_run(fn, plain, rec, frame.loaded, mounts, rows, env, enc, save, name, dat, work)
-        if not work.exists():                       # its folder is gone: so is the dat world's index of it
-            manager._index_forget(str(work / "dat"))
-        return value
+        dat = manager.create(dat_spec(spec, fn._template), path=str(work / "dat"))
+        manager.execute(dat)
     finally:
-        STATE.guard = outer_guard
+        values = manager.do._registered_values or {}
+        if before is _NONE:
+            values.pop(fn.name, None)
+        else:
+            values[fn.name] = before
+    return dat
 
 
 _NONE = object()
@@ -1076,20 +1040,16 @@ class Server:
         return resp
 
     def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env) -> Any:
-        resp = self._ask({"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
-                          "keys": {k: encode_key(v) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env)})
-        return _result(plain, resp, seal)
-
-    def dat_run(self, fn: Fn, plain: "Rev", spec: Dict[str, Any], enc: str, world: DatManager, seal: bool,
-                env: Env) -> Any:
-        """``rev.dat_run``'s miss in a forked child (DAT 1045): the spec, the run function's name and the
-        caller's dat world (its folders, built afresh there as a ``DatManager``) cross the pipe."""
-        resp = self._ask({"op": "dat_run", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
-                          "spec": spec, "enc": enc, "returns": fn._returns, "template": fn._template, "seal": seal,
-                          "env": _ship_env(env),
-                          "world": {"dat_folders": list(world._dat_folders), "art_folder": world._art_folder,
-                                    "index": world._index_file, "verify": world._verify}})
-        return _result(plain, resp, seal)
+        """One call in a forked child. A dat's run function (DAT 1045, 1046) also ships its template, its
+        class and the caller's dat world (its folders, built afresh there as a ``DatManager``)."""
+        req = {"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
+               "keys": {k: encode_key(v) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env)}
+        if fn.kind == "dat":
+            world = Dat.manager
+            req.update({"template": fn._template, "returns": fn._returns,
+                        "world": {"dat_folders": list(world._dat_folders), "art_folder": world._art_folder,
+                                  "index": world._index_file, "verify": world._verify}})
+        return _result(plain, self._ask(req), seal)
 
     def version(self, plain: "Rev", prefix: str, env: Env) -> Optional[str]:
         """The mounted root ``prefix``'s ``__version__``, imported in a forked child (``import_version``)."""
@@ -1169,7 +1129,7 @@ atexit.register(shutdown)
 def _warm() -> None:
     """What every child shares, loaded once before any fork: the ledger's machinery (never a mounted
     module, never CUDA) and the installed distributions' map."""
-    from . import kept, ledger, rev, store, trace, txn, value  # noqa: F401
+    from . import kept, ledger, namespace, rev, rundat, store, trace, txn, value  # noqa: F401
     from .. import just  # noqa: F401 - `@command` on a mounted function imports it in the body
     _dist_map()
 
@@ -1231,22 +1191,22 @@ def serve(req: Dict[str, Any], out: Any) -> None:
         if req["op"] == "version":
             send(out, {"ok": True, "version": import_version(req["prefix"])})
             return
-        if req["op"] == "dat_run":
+        if req.get("world") is not None:            # a dat's run function: the caller's dat world
             w = req["world"]
             Dat.manager = _WorkerWorld(dat_folders=w["dat_folders"], art_folder=w["art_folder"],
                                        index=w["index"], verify=w["verify"])
             STATE.reads = STATE.reads + [os.path.realpath(f) for f in w["dat_folders"]] + (
                 [os.path.realpath(w["art_folder"])] if w["art_folder"] else [])
-            fn = load_mounted_run(plain, req["name"], req["returns"], req["template"])
-            with warnings.catch_warnings(record=True) as caught:  # the caller's, not the worker's stderr
-                value = run_dat_here(fn, plain, req["spec"], req["enc"], req["seal"])
-        else:
-            keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__"
-                        else v) for k, v in req["keys"].items()}
-            fn = plain.load_fn(req["name"])
-            kw = fn._bind(keys)
-            with warnings.catch_warnings(record=True) as caught:  # the caller's, not the worker's stderr
-                value = run_here(fn, plain, kw, _enc(kw), req["seal"])
+        keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__"
+                    else v) for k, v in req["keys"].items()}
+        fn = plain.resolve(req["name"])
+        if not isinstance(fn, Fn):
+            raise TypeError(f"{req['name']!r} resolves to {fn!r} in the worker, not a function")
+        if fn.kind == "dat":
+            fn = dataclasses.replace(fn, _template=req.get("template"), _returns=req.get("returns") or "")
+        kw = fn._bind(keys)
+        with warnings.catch_warnings(record=True) as caught:  # the caller's, not the worker's stderr
+            value = run_here(fn, plain, kw, _enc(kw), req["seal"])
         said = [(_warning_class(w.category), str(w.message)) for w in caught]
         if req["seal"]:
             send(out, {"ok": True, "subject": value.subject, "warnings": said})

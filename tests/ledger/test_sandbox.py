@@ -61,7 +61,17 @@ PKG = {
         def scribble(dat, n=1):
             Path("/tmp/ledger-sandbox-dat-scribble.txt").write_text("x")
             dat.save()
+
+        TABLE = {"dat": {"do": "sbx.stage.runs.table", "kwargs": {"n": 3}}}
     '''),
+    "sbx/stage/specs/base.yaml": "dat:\n  kwargs: {n: 3}\n",
+    "sbx/stage/specs/table.yaml": textwrap.dedent('''
+        dat:
+          base: sbx.stage.specs.base
+          name: tables/y{unique}
+          do: sbx.stage.runs.table
+    '''),
+    "sbx/stage/specs/table3.json": '{"dat": {"do": "sbx.stage.runs.table", "kwargs": {"n": 3}}}',
     "sbx/stage/fns.py": textwrap.dedent('''
         import importlib
         from pathlib import Path
@@ -307,7 +317,7 @@ def sbx(tmp_path, monkeypatch, backend):
 
 def test_sandboxed_eval_seals_records_loaded_modules_and_hits(sbx):
     L, repo = sbx
-    f = L.at().load_fn("sbx.stage.fns.count")
+    f = L.at().resolve("sbx.stage.fns.count")
     assert f.code.sandboxed and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
     v = L.at().run("sbx.stage.fns.count", game="G1")
     assert v.sealed and v.obj == {"n": 6} and L.at()[v.subject, "db/provenance"] == "eval:sandbox"
@@ -376,7 +386,7 @@ def test_salt_item(sbx):
 
 def test_a_mount_root_without_init_imports_namespace_style(sbx):
     L, _repo = sbx
-    f = L.at().load_fn("flatpkg.calc.area")
+    f = L.at().resolve("flatpkg.calc.area")
     assert f.code.sandboxed and f.mount == "flatpkg"
     v = L.at().run("flatpkg.calc.area", side=3)
     assert v.obj == {"area": 9}
@@ -445,11 +455,11 @@ def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
     assert not v.matches(L.at())                    # a new install of a loaded distribution: a new value
 
 
-def test_load_fn_refuses_an_unmounted_import_at_load(sbx):
+def test_resolve_refuses_an_unmounted_import_at_load(sbx):
     L, _repo = sbx
     with pytest.raises(UnmountedImport, match="sbx.other from sbx.stage.fns; mount it or move it"):
-        L.at().load_fn("sbx.stage.fns.borrow")
-    assert L.at().load_fn("sbx.stage.fns.snoop").code.sandboxed   # same module, no such import
+        L.at().resolve("sbx.stage.fns.borrow")
+    assert L.at().resolve("sbx.stage.fns.snoop").code.sandboxed   # same module, no such import
 
 
 def test_network_refused(sbx):
@@ -555,7 +565,7 @@ def test_a_sandboxed_run_saves_into_a_transaction(sbx):
     assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject
 
 
-# -- DAT 1045: rev.dat_run of a mounted run function runs in the worker --------------------------------
+# -- DAT 1045, 1046: rev.run of a spec whose run function is mounted runs in the worker -----------------
 
 @pytest.fixture
 def world(tmp_path):
@@ -577,7 +587,7 @@ def test_a_mounted_dat_run_runs_in_the_worker_and_hits_after_a_commit(sbx, world
     import os
 
     L, repo = sbx
-    v = L.at().dat_run(RUN)
+    v = L.at().run(RUN)
     assert str(v) == "tables/t" and (v.path / "t.txt").read_text() == "6"
     assert v.get_results()["out"] == 6 and v.get_results()["pid"] != os.getpid()
     assert "sbx.stage.runs" not in sys.modules                     # never imported here
@@ -589,39 +599,94 @@ def test_a_mounted_dat_run_runs_in_the_worker_and_hits_after_a_commit(sbx, world
     (repo / "sbx/other.py").write_text("X = 2\n")                    # a commit the run never read
     git(repo, "commit", "-q", "-am", "other")
     top = L.at().id
-    again = L.at().dat_run(RUN)
+    again = L.at().run(RUN)
     assert again.subject == v.subject and L.at().id == top            # a hit: nothing written
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return x + x\n")
     git(repo, "commit", "-q", "-am", "helper")
-    moved = L.at().dat_run(RUN)
+    moved = L.at().run(RUN)
     assert moved.subject != v.subject and str(moved) == "tables/t_2"  # a loaded module's bytes moved
+
+
+def test_one_memo_key_by_every_route_through_the_mounts(sbx, world):
+    L, _repo = sbx
+    v = L.at().run(RUN)
+    top = L.at().id
+    for target, kwargs in [("sbx.stage.specs.table", {}),           # a yaml spec, its base merged
+                           ("sbx.stage.specs.table3", {}),          # a json spec
+                           ("sbx.stage.runs.TABLE", {}),            # a literal in a mounted module
+                           ("sbx.stage.runs.table", {"n": 3}),      # the run function: {dat: {do: <name>}}
+                           ({"dat": {"do": "sbx.stage.runs.table"}}, {"n": 3})]:   # a spec dict, kwargs merged
+        hit = L.at().run(target, **kwargs)
+        assert hit.subject == v.subject and L.at().id == top, target
+    assert "sbx.stage.runs" not in sys.modules
+    assert L.at().run("sbx.stage.specs.table", n=4).subject != v.subject   # kwargs fork the spec
+
+
+def test_resolve_hands_back_a_dict_an_fn_or_the_object(sbx):
+    import os.path
+
+    from dvc_dat.ledger import Fn
+
+    L, _repo = sbx
+    rev = L.at()
+    assert rev.resolve("sbx.stage.specs.table") == {"dat": {"base": "sbx.stage.specs.base",
+                                                            "name": "tables/y{unique}",
+                                                            "do": "sbx.stage.runs.table"}}
+    assert rev.resolve("sbx.stage.specs.base.dat.kwargs") == {"n": 3}      # a dotted tail walks into the file
+    run_fn, ledger_fn_ = rev.resolve("sbx.stage.runs.table"), rev.resolve("sbx.stage.fns.count")
+    assert isinstance(run_fn, Fn) and run_fn.kind == "dat" and run_fn.code.sandboxed
+    assert isinstance(ledger_fn_, Fn) and ledger_fn_.kind == "ledger" and ledger_fn_.code.sandboxed
+    assert rev.resolve("sbx.stage.runs.TABLE")["dat"]["kwargs"] == {"n": 3}
+    assert rev.resolve("os.path.join") is os.path.join                  # under no mount: imported
+    with pytest.raises(ImportError):
+        rev.resolve("sbx.stage.specs.nothing")                          # a mounted prefix owns its names
+    with pytest.raises(TypeError, match="runs through a spec"):
+        run_fn(n=3)
+    assert "sbx.stage.runs" not in sys.modules
 
 
 def test_a_mounted_dat_run_draft_and_transaction(sbx, world):
     L, _repo = sbx
-    d = L.at().dat_run(RUN, n=4, seal=False)
+    d = L.at().run(RUN, n=4, seal=False)
     assert d.subject is None and (d.path / "t.txt").read_text() == "8" and "_run" in d.__dict__
     d.seal(L)
     assert L.at()[d.subject, "db/provenance"] == "eval:sandbox"
-    assert L.at().dat_run(RUN, n=4, seal="get").subject == d.subject
+    assert L.at().run(RUN, n=4, seal="get").subject == d.subject
     with L.transaction(by="t") as t:
-        v = L.at().dat_run(RUN, n=5, seal=t, path="t/five")
+        v = L.at().run(RUN, n=5, seal=t, path="t/five")
     assert L.at().load("t/five").subject == v.subject and L.at()[v.subject, "db/provenance"] == "eval:sandbox"
 
 
 def test_a_mounted_dat_runs_body_is_confined(sbx, world):
     L, _repo = sbx
     with pytest.raises(ConfinedWrite, match="ledger-sandbox-dat-scribble"):
-        L.at().dat_run({"dat": {"do": "sbx.stage.runs.scribble"}})
+        L.at().run({"dat": {"do": "sbx.stage.runs.scribble"}})
 
 
-def test_a_mounted_ledger_function_is_refused_by_dat_run(sbx, world):
+def test_a_spec_naming_a_mounted_ledger_function_is_refused(sbx, world):
     L, _repo = sbx
     with pytest.raises(TypeError, match="rev.run"):
-        L.at().dat_run({"dat": {"do": "sbx.stage.fns.count"}})
+        L.at().run({"dat": {"do": "sbx.stage.fns.count"}})
 
 
-def test_rev_do_is_gone():
+def test_a_ledger_projects_do_names_through_the_mounts(sbx, tmp_path):
+    """``Dat.manager.do`` of a ledger project (a ``LedgerDo``): a plain ``Dat.do`` of a mounted spec runs
+    here, nothing memoised, as ``Dat.do`` always ran; ``mount`` is refused."""
+    from dvc_dat import Dat, DatManager
+    from dvc_dat.ledger import LedgerDo
+
+    L, _repo = sbx
+    m = DatManager(dat_folders=[str(tmp_path / "data")], do=LedgerDo(L))
+    dat = m.create("sbx.stage.specs.table")                             # the spec, through the mounts
+    m.do(dat)                                                           # its run function, here
+    assert dat.get_path_name() == "tables/y" and dat.get_results()["out"] == 6
+    assert dat.subject is None and L.at().values(kind=Dat) == []
+    with pytest.raises(TypeError, match="db/mount"):
+        m.do.mount(value={"dat": {}}, at="x")
+
+
+def test_rev_has_one_run_and_resolve():
     from dvc_dat.ledger import Rev
 
-    assert not hasattr(Rev, "do") and callable(Rev.dat_run)
+    assert not hasattr(Rev, "do") and not hasattr(Rev, "dat_run") and not hasattr(Rev, "load_fn")
+    assert callable(Rev.run) and callable(Rev.resolve)

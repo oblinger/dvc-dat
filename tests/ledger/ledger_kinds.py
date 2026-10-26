@@ -1,5 +1,5 @@
 """Value kinds and value functions the ledger tests seal and evaluate (module level: ``Ref.type``
-resolves a class by its dotted name, ``load_fn`` a function by its)."""
+resolves a class by its dotted name, ``rev.resolve`` a function by its)."""
 
 from pathlib import Path
 
@@ -178,12 +178,16 @@ class GameDat(Dat):
 
 
 def build_table(dat, n=10, start=1):
-    """A dat's run function (``Dat.do`` / ``rev.dat_run``): ``table.csv``, ``cells`` in the results, saved."""
+    """A dat's run function (``Dat.do`` / ``rev.run``): ``table.csv``, ``cells`` in the results, saved."""
     _count("build_table")
     Path(dat.get_path(), "table.csv").write_text(f"{n} from {start}\n")
     dat.get_results()["cells"] = n * n
     dat.save()
     return dat
+
+
+#: A spec by its dotted name, imported (``rev.run("ledger_kinds.TABLE_SPEC")``).
+TABLE_SPEC = {"dat": {"do": "ledger_kinds.build_table", "kwargs": {"n": 12, "start": 1}}}
 
 
 def never_saves(dat, n=1):

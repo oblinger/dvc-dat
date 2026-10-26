@@ -581,7 +581,7 @@ print("log:", git("log", "--oneline"))
 
 # %%
 rev = L.at()
-distance_fn = rev.load_fn("geometry.distance")
+distance_fn = rev.resolve("geometry.distance")
 print("fn:", repr(distance_fn), " sandboxed:", distance_fn.code.sandboxed)
 # → fn: <Fn geometry.distance@<commit, 8 hex>>  sandboxed: False  (no __version__: the last commit)
 print("signature:", distance_fn.signature)
@@ -590,8 +590,8 @@ print("code:", repr(distance_fn.code), " subject:", distance_fn.code.subject)
 # → code: <Code geometry@<commit, 8 hex>>  subject: db/code/<16 hex>
 
 # %% [markdown]
-# The ledger finds the function by its dotted name at `rev` and
-# hands back an `Fn` saying which code the name resolves to: its
+# `rev.resolve(name)` is what a dotted name denotes at `rev`; for a
+# function, an `Fn` saying which code the name resolves to: its
 # repr is `<Fn name@version>`, the version its code's, `code.sandboxed` is
 # False for a function installed in this process, `signature` the
 # keywords it takes. Only the code has identity, `code.subject`: the
@@ -671,7 +671,7 @@ print("mount rows:", rev["db/mount/plane"])
 # #### A function under a mount
 
 # %%
-length_fn = rev.load_fn("plane.measure.length")
+length_fn = rev.resolve("plane.measure.length")
 print("code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed, " mount:", length_fn.mount)
 # → code: <Code plane@<commit, 8 hex>>  sandboxed: True  mount: plane
 segment_value = length_fn(a=(0, 0), b=(3, 4))
@@ -718,7 +718,7 @@ git("add", "plane/reach.py")
 git("commit", "-m", "plane: reach")
 
 try:
-    from_origin_fn = rev.load_fn("plane.reach.from_origin")
+    from_origin_fn = rev.resolve("plane.reach.from_origin")
     from_origin_fn(p=(3, 4))
 except UnmountedImport as e:
     print("UnmountedImport:", e)
@@ -739,7 +739,7 @@ except UnmountedImport as e:
 
 # %%
 try:
-    note_fn = rev.load_fn("plane.reach.note")
+    note_fn = rev.resolve("plane.reach.note")
     note_fn(text="hello")
 except ConfinedWrite as e:
     print("ConfinedWrite:", e)
@@ -781,7 +781,7 @@ for item in sorted(far_value.dependencies):
 # → platform -> darwin-arm64-py3.12
 
 # %% [markdown]
-# `rev.run(name, **keys)` is `rev.load_fn(name)` and then the
+# `rev.run(name, **keys)` is `rev.resolve(name)` and then the
 # call, as in Ledger functions. What makes it more than a call is
 # the dependencies, traced during the run, not declared, item by item:
 #
@@ -1098,7 +1098,7 @@ print("pick:", repr(pick_ref), " same subject:", pick_ref.subject == stable_clip
 # %% [markdown]
 # ### A hand seal and an eval write the same rows
 #
-# A hand seal and `run` (calling the `Fn` that `load_fn` hands back
+# A hand seal and `run` (calling the `Fn` that `resolve` hands back
 # is `run`) write the same rows, so every read above treats a value
 # the same way whichever door sealed it; an eval's entry adds only
 # `db/fn` and `db/keys`.

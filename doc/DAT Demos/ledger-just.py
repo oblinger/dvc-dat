@@ -66,7 +66,9 @@ shutil.copytree("demo_game", scratch_project_path,
 os.chdir(scratch_project_path)
 L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
 with open(".datconfig.yaml", "a") as config_file:
-    config_file.write("run: python3 -m demo_main\n")  # mounts, then cli
+    config_file.write("mounts:\n"                       # db/mount rows:
+                      "  demo_game.etl: demo_game/etl\n"  # the ETL stages
+                      "run: python3 -m demo_main\n")     # the main: cli
 dvc_dat_just_path = files("dvc_dat") / "dvc_dat.just"
 Path("justfile").write_text(
     f"import '{dvc_dat_just_path}'  # run, mounts\n"
@@ -190,7 +192,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # `rev.run("demo_game.etl.model.train", game="G1", path="model/prod")`:
 # `path=` names the result and builds its folder there (Q36).
 #
-# The file's contents are the whole question; a key on the line
+# The file's contents are the whole set of keys; a key on the line
 # overrides the file's. Handing the model to prod is the name, the
 # seal being the eval's own.
 #
@@ -205,12 +207,13 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # → hit  model/prod  game=G1 stage=model metrics.count=12 …
 
 # %% [markdown]
-# `train` carries `@command(args="game=…", help="…")`, and
-# `demo_main.py`, the project's main (`run:` in `.datconfig.yaml`),
-# mounts its module; `run` writes one recipe per mounted command into
-# `.dat/targets.just`, which the justfile imports. It is
-# `just run model.train game=G1`: the same question as the spec, so a
-# hit. Anything not marked stays `just run <target>`.
+# `train` carries `@command(args="game=…", help="…")`, and its
+# module is under the ledger's mount of `demo_game.etl` (`mounts:`
+# in `.datconfig.yaml`); `run` reads the commands off the mounted
+# files and writes one recipe per command into `.dat/targets.just`,
+# which the justfile imports. It is
+# `just run demo_game.etl.model.train game=G1`: the same keys as the
+# spec, so a hit. Anything not marked stays `just run <target>`.
 
 # %% [markdown]
 # ## Listing values by predicate
@@ -470,6 +473,8 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # %%
 # !cat .datconfig.yaml
 # → ledger: .dat/ledger
+# → mounts:
+# →   demo_game.etl: demo_game/etl
 # → run: python3 -m demo_main
 
 # %% [markdown]

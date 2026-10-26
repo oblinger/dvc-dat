@@ -628,8 +628,8 @@ class DatManager:
             default = True
         self.do = Do(manager=self) if do is None else do
         self.do._manager = self
-        self.do.mount(module=dat_tools, at="dt")
-        self.do.mount(value=dat_tools.cmd_list, at="dt.list")
+        self.do._reg_module("dt", dat_tools, allow_redefine=True)     # the world's own names, any `do`
+        self.do._reg_value("dt.list", dat_tools.cmd_list)
         if default:
             Dat.manager = self
 
@@ -646,6 +646,10 @@ class DatManager:
         beside the file, a sibling of `data/`; `index:` moves the store's index
         file.  An unknown key is `ValueError`.
         `do` as in the constructor.
+
+        A `ledger:` key makes the namespace the ledger's (DAT 1046): `do` is a
+        `LedgerDo`, its names the ledger's `db/mount` rows at the head, and
+        `mount` refused; an adopted `do` that is not one is not kept.
 
         A `manager:` key names the class to build, dotted (`mylab.store.Store`):
         a subclass of the class this is called on, imported once the config
@@ -696,10 +700,21 @@ class DatManager:
             if not (isinstance(index, str) and index):
                 raise ValueError(f"{config_path}: index is a file, got {index!r}")
             extra_values["index"] = os.path.join(root, index)
+        make_default = False
+        if values.get("ledger") and config_path is not None:
+            from .do import _DefaultDo
+            from .ledger.namespace import LedgerDo
+
+            adopted = do._current() if isinstance(do, _DefaultDo) else do
+            make_default = do is not None and (isinstance(do, _DefaultDo) or (
+                _default_manager is not None and do is _default_manager.do))
+            do = adopted if isinstance(adopted, LedgerDo) else LedgerDo(config=config_path)
         manager = klass(dat_folders=[os.path.join(root, f) for f in folders],
                         art_folder=os.path.join(root, art_folder), do=do, verify=verify,
                         **extra_values)
         manager._config_dir = root
+        if make_default:
+            Dat.manager = manager
         return manager
 
     def expand(self, text: str, vars: Optional[Dict[str, Any]] = None) -> Any:
@@ -1355,6 +1370,12 @@ class DatManager:
             return dat
         if isinstance(fn, str):
             fn = self.do.load(fn)
+        from .ledger.fn import Fn
+        if isinstance(fn, Fn):                  # a ledger project's name for a function (DAT 1046)
+            if fn.kind != "dat":
+                raise TypeError(f"{DAT_DO} in {dat!r} is the ledger function {fn.name}; "
+                                f"rev.run({fn.name!r}, ...) runs it")
+            fn = fn._function()                 # a plain run: here, nothing memoised
         if not callable(fn):
             raise TypeError(f"{DAT_DO} in {dat!r} is {fn!r}, not callable")
         if dat._standing() in _FROZEN:
