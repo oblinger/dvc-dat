@@ -95,7 +95,7 @@
     <text x="388" y="140" text-anchor="middle">at()</text>
     <text x="392" y="262">transaction()</text>
     <text x="808" y="140" text-anchor="middle">refs()</text>
-    <text x="1005" y="30" text-anchor="middle">load_fn() · eval()</text>
+    <text x="1005" y="30" text-anchor="middle">resolve() · run()</text>
     <text x="1022" y="290">load()</text>
     <text x="1222" y="300">returns, sealed</text>
     <text x="1422" y="300">sandbox mode</text>

@@ -68,7 +68,7 @@ def test_an_unresolved_ref_prints_its_short_hash(L):
 
 
 def test_a_fn_prints_its_name_and_version(world):  # noqa: F811
-    f = world.at().load_fn("ledger_kinds.cut")
+    f = world.at().resolve("ledger_kinds.cut")
     version = f.code.version            # the pinned testrepo checkout's commit: abc1234
     assert version == "abc1234"
     assert repr(f) == "<Fn ledger_kinds.cut@abc1234>" and str(f) == "ledger_kinds.cut@abc1234"

@@ -118,7 +118,7 @@ def test_7_a_recorded_miss_holds_while_still_missing(coded):
 
 
 def test_8_base_fn_hashes_the_static_closure(coded):
-    f = coded.at().load_fn("ledger_kinds.via_ref")
+    f = coded.at().resolve("ledger_kinds.via_ref")
     assert set(f.code.modules) == {"ledger_kinds.py", "ledger_helper.py"}
     v = Plain(b"x")
     seal(coded, v, name="n")

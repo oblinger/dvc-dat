@@ -20,7 +20,7 @@ commit that touched the loaded files, else HEAD; installed: the checkout's HEAD)
 package's ``__version__``; else the last commit that touched the loaded files (8 hex, ``+dirty`` when one
 differs from HEAD); else ``#`` + 8 hex of the hash. Clean or outside any checkout (a wheel), installed:
 ``__version__`` on the top-level package; else the version of the distribution providing it; else the
-short commit of the checkout holding it; else ``#`` + 8 hex of the hash. A ``Code`` is computed at ``load_fn`` and attached to the
+short commit of the checkout holding it; else ``#`` + 8 hex of the hash. A ``Code`` is computed at ``rev.resolve`` and attached to the
 ``Fn``; a run's memo entry writes its identity as the ``db/code/<hash 16>`` item (``db/modules``,
 ``db/mounts``); the description is not written to the ledger yet.
 """

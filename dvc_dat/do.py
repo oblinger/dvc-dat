@@ -12,6 +12,10 @@ with a `do` of its own.  A dotted name is a mounted name, else exactly what
 `do.mount(...)` calls in the program; `.datconfig.yaml` holds none.  Importing
 never reads the filesystem; the first use builds `Dat.manager` from the
 nearest `.datconfig.yaml`.
+
+In a project whose `.datconfig.yaml` names a ledger, `Dat.manager.do` is a
+`LedgerDo` (`dvc_dat.ledger.namespace`, DAT 1046): the same interface, its
+names the ledger's `db/mount` rows, and `mount` refused.
 """
 
 import copy
@@ -175,7 +179,7 @@ class Do:
         try:
             result = self._load_mounted(dotted_name)
             if result is _DO_NULL:
-                result = self._load_static(dotted_name)
+                result = self._load_unmounted(dotted_name)
         except (ImportError, AttributeError, KeyError):
             if default is not _DO_NULL:
                 return default
@@ -236,6 +240,10 @@ class Do:
             raise KeyError(f"do.load: {name!r} is missing from {source!r}")
         result = _parse_yaml_prefix(result)
         return copy.deepcopy(result) if isinstance(result, dict) else result
+
+    def _load_unmounted(self, dotted_name: str) -> Any:
+        """A name no mount holds: imported (a `LedgerDo` walks the ledger's mounts first)."""
+        return self._load_static(dotted_name)
 
     @staticmethod
     def _load_static(dotted_name: str) -> Any:
@@ -507,14 +515,14 @@ DESCRIPTION
     a dat, and that dat runs.  A TARGET that is a callable is simply called.
     The return value prints on stdout when it is not None.
 
-    With a `ledger:` line in the config, `x TARGET KEY=VALUE ...` runs
-    through the ledger instead, found if computed before from the same
+    With a `ledger:` line in the config, `x TARGET KEY=VALUE ...` is
+    rev.run(TARGET, KEY=VALUE, ...): found if computed before from the same
     inputs by the same code, else run and sealed; it prints `hit` or `ran`
-    and the value, and alias=NAME names it.  A dat spec (a mounted name or
-    a spec file whose `dat:` names its run function) is rev.dat_run: the
-    KEY=VALUE pairs update its dat.kwargs.  A ledger function (a dotted
-    function, a mounted name, or a spec file whose `main` names it, the
-    line's keys over the file's) is rev.run.
+    and the value, and alias=NAME names it.  TARGET is a dotted name
+    through the ledger's mounts or a spec file: a ledger function (its
+    keys the KEY=VALUE pairs), a dat spec or a dat's run function (the
+    pairs update its dat.kwargs), or a spec whose `main` names a ledger
+    function (the line's keys over the file's).
 
     A function marked @command (dvc_dat.just), or a spec with `command:`,
     also runs as `just NAME` once the justfile has
@@ -698,85 +706,58 @@ RESERVED_RUN_KEYS = ("alias",)                # control options on a ledger run,
 
 
 def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: Spec, flags: set) -> int:
-    """`x TARGET k=v ...` with a ledger: found if computed before, else run and sealed.
+    """`x TARGET k=v ...` with a ledger: `rev.run(TARGET, **kwargs)`, found if computed before, else run
+    and sealed (DAT 1046).
 
-    TARGET is a dat spec -- a mounted name or a spec file (`.yaml`/`.json`) with a
-    `dat:` part -- run by `rev.dat_run`, the line's keys updating its `dat.kwargs`; or a
-    ledger function, run by `rev.run`: a spec file or mounted spec whose `main`
-    names it (its other keys the keys, the line's over the file's), a mounted
-    name loading to it, or its dotted name.  `--set` / `--json` update a spec's
-    keys.  `alias=NAME` names the result (`path=`).
+    TARGET is what `rev.run` takes: a dotted name through the ledger's mounts (a ledger function, a
+    spec, or a dat's run function, its keys updating the spec's `dat.kwargs`), or a spec file
+    (`.yaml`/`.json`).  A spec whose `main` names a ledger function is that function, its other keys
+    the keys, the line's over the file's.  `--set` / `--json` update a spec's keys.  `alias=NAME`
+    names the result (`path=`).
     """
     target, fixed = args[0], args[1:]
     if fixed:
         return _fail(f"a run through the ledger takes keywords only (KEY=VALUE); got {fixed!r}")
-    keys: Dict[str, Any] = {}
+    rev = ledger.at()
     spec: Any = None
-    if os.path.isfile(target) and target.endswith((".yaml", ".yml", ".json")):
-        try:
+    is_file = os.path.isfile(target) and target.endswith((".yaml", ".yml", ".json"))
+    try:
+        if is_file:
             with open(target) as f:
                 spec = json.load(f) if target.endswith(".json") else yaml.safe_load(f)
-        except Exception as e:
-            return _fail(f"{target}: {_message(e)}")
-        name = None
-    else:
-        name = target
-        try:
-            obj = do._load_mounted(target)
-        except KeyError as e:
-            return _fail(f"cannot load {target!r}: {_message(e)}", code=2)
-        if obj is not _DO_NULL:                 # a mounted name; else the dotted name is the function's
+            if not isinstance(spec, dict):
+                return _fail(f"{target}: a spec is a mapping, not {type(spec).__name__}")
+        else:
+            obj = rev.resolve(target)
             if isinstance(obj, dict):
                 spec = obj
-            elif callable(obj) and getattr(obj, "__ledger_fn__", False):
-                name = do.name_of(obj)
-            else:
-                return _fail(f"{target!r} is not a ledger function (@ledger_fn) or a spec "
-                             f"whose main names one; with a ledger, run evaluates through it")
-    if isinstance(spec, dict) and not isinstance(spec.get("main"), str) and isinstance(spec.get("dat"), dict):
-        return _cmd_eval_dat(ledger, name if name is not None and not overrides else
-                             merge_dicts(do.resolve(copy.deepcopy(spec)), overrides), kwargs, flags)
-    if spec is not None:
-        if not isinstance(spec, dict) or not isinstance(spec.get("main"), str):
-            return _fail(f"{target}: a spec run through the ledger is a dat spec (`dat:` naming its run "
-                         "function in `do`) or names a ledger function in `main`")
-        spec = merge_dicts(copy.deepcopy(spec), overrides)
-        name = spec["main"]
-        keys = {k: v for k, v in spec.items() if k not in ("main", "command")}
-    elif overrides:
-        return _fail(f"--set/--json need a spec; {target!r} is a function")
-    keys.update(kwargs)
-    alias = keys.pop("alias", None)
-    if "dry-run" in flags:
-        shown = [repr(name)] + [f"{k}={v!r}" for k, v in keys.items()]
-        print(f"rev.run({', '.join(shown)})" + (f", then named {alias!r}" if alias else ""))
-        return 0
-    try:
-        fn = ledger.at().load_fn(name)
-        hit = fn(seal="get", path=alias, **keys)
-        value = hit or fn(path=alias, **keys)
+            elif overrides:
+                return _fail(f"--set/--json need a spec; {target!r} is {type(obj).__name__}")
     except Exception as e:
         if os.environ.get("DAT_DEBUG"):
             raise
-        return _fail(_message(e))
-    preds = " ".join(f"{p}={json.dumps(o) if isinstance(o, (dict, list)) else o}"
-                     for p, o in value.preds.items())
-    print(f"{'hit' if hit else 'ran'}  {value}" + (f"  {preds}" if preds else ""))
-    return 0
-
-
-def _cmd_eval_dat(ledger: Any, target: Any, kwargs: Dict[str, Any], flags: set) -> int:
-    """`x SPEC k=v ...` with a ledger: `rev.dat_run(SPEC, **kwargs)`, the dat found or made, run and sealed."""
-    keys = dict(kwargs)
+        return _fail(f"cannot load {target!r}: {_message(e)}", code=2)
+    run_target: Any = target
+    keys: Dict[str, Any] = {}
+    if spec is not None:
+        spec = merge_dicts(copy.deepcopy(spec), overrides)
+        if isinstance(spec.get("main"), str):
+            run_target = spec["main"]
+            keys = {k: v for k, v in spec.items() if k not in ("main", "command")}
+        elif isinstance(spec.get("dat"), dict):
+            run_target = spec if (is_file or overrides) else target
+        else:
+            return _fail(f"{target}: a spec run through the ledger is a dat spec (`dat:` naming its run "
+                         "function in `do`) or names a ledger function in `main`")
+    keys.update(kwargs)
     alias = keys.pop("alias", None)
     if "dry-run" in flags:
-        shown = [repr(target)] + [f"{k}={v!r}" for k, v in keys.items()]
-        print(f"rev.dat_run({', '.join(shown)})" + (f", then named {alias!r}" if alias else ""))
+        shown = [repr(run_target)] + [f"{k}={v!r}" for k, v in keys.items()]
+        print(f"rev.run({', '.join(shown)})" + (f", then named {alias!r}" if alias else ""))
         return 0
     try:
-        rev = ledger.at()
-        hit = rev.dat_run(target, seal="get", path=alias, **keys)
-        value = hit or rev.dat_run(target, path=alias, **keys)
+        hit = rev.run(run_target, seal="get", path=alias, **keys)
+        value = hit or rev.run(run_target, path=alias, **keys)
     except Exception as e:
         if os.environ.get("DAT_DEBUG"):
             raise
