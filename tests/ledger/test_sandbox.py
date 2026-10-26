@@ -8,7 +8,7 @@ import backends
 import pytest
 
 from dvc_dat.ledger import (ConfinedNetwork, ConfinedWrite, LedgerError, NotClean, NotEvaluated, UnmountedImport,
-                             UntracedRead, bump, set_env_provider)
+                             UntracedRead, set_env_provider)
 from dvc_dat.ledger import sandbox
 from dvc_dat.ledger.codec import sha256
 from dvc_dat.ledger.sandbox import _ledger_endpoints, shutdown
@@ -284,7 +284,7 @@ def sbx(tmp_path, monkeypatch, backend):
         t.add("db/mount/flatpkg", "db/root", "flat")          # a plain folder, no __init__.py
         t.add("db/mount/flatpkg", "db/repo", "sbx-repo")
         t["game/G1"] = {"n": "3"}
-        bump(t, "code/sbx-repo")
+        t.add("code/sbx-repo", "commit", git(repo, "rev-parse", "HEAD"))     # what clean=True binds to
     yield L, repo
     shutdown()
     set_env_provider(old)
@@ -304,8 +304,6 @@ def test_sandboxed_eval_seals_records_loaded_modules_and_hits(sbx):
     assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return x + x\n")
     git(repo, "commit", "-q", "-am", "two")
-    with L.transaction(by="t", lock=10) as t:
-        bump(t, "code/sbx-repo")
     assert not v.matches(L.at())                    # the run-time import's file moved
     w = L.at().run("sbx.stage.fns.count", game="G1")
     assert w.same_as(v) and w.subject != v.subject and list(v.diff(w)) == ["code"]

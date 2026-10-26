@@ -44,7 +44,7 @@ alias name target:
 index pred:
     @{{python}} "{{recipes}}" index "$@"
 
-# bump a clock: `code` is this checkout's code/<repo>; minor and major ask for `yes`
+# bump a version: <module> edits its __version__ in the source; db is the ledger's release (a/b: a ledger clock); minor and major ask for yes
 [no-cd]
-bump subject part="patch":
+bump name part="patch":
     @{{python}} "{{recipes}}" bump "$@"

@@ -12,11 +12,14 @@ commit is pinned by a result's ``code/<repo>`` row, so neither moves the hash. I
 ``<unit>@<version>``: the unit is the mount prefix for mounted code (``plane``, ``algs.ocr``) and the
 function's top-level package for installed code (``geometry``). Immutable: accessors only.
 
-The version is read as a module attribute after import, never parsed from source. Mounted: the root
+The version is read as a module attribute after import, never parsed from source, and a declared
+version counts only from a clean checkout (DAT 1043): when the checkout holding the code has modified
+tracked files, the version is ``<commit 8>+dirty`` whatever ``__version__`` says (mounted: the last
+commit that touched the loaded files, else HEAD; installed: the checkout's HEAD). Clean, mounted: the root
 package's ``__version__``; else the last commit that touched the loaded files (8 hex, ``+dirty`` when one
-differs from HEAD); else ``#`` + 8 hex of the hash. Installed: ``__version__`` on the top-level package;
-else the version of the distribution providing it; else the short commit of the checkout holding it
-(``+dirty``); else ``#`` + 8 hex of the hash. A ``Code`` is computed at ``load_fn`` and attached to the
+differs from HEAD); else ``#`` + 8 hex of the hash. Clean or outside any checkout (a wheel), installed:
+``__version__`` on the top-level package; else the version of the distribution providing it; else the
+short commit of the checkout holding it; else ``#`` + 8 hex of the hash. A ``Code`` is computed at ``load_fn`` and attached to the
 ``Fn``; a run's memo entry writes its identity as the ``db/code/<hash 16>`` item (``db/modules``,
 ``db/mounts``); the description is not written to the ledger yet.
 """
@@ -31,7 +34,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .codec import canonical, sha256
-from .env import Env, _git
+from .env import Env, _git, code_at
 from .value import Value
 
 if TYPE_CHECKING:
@@ -140,11 +143,16 @@ def lock_of(checkout: Optional[Path]) -> Optional[str]:
 
 
 def mounted_version(attr: Any, checkout: Path, files: Sequence[str], ident: str) -> str:
-    """The mounted ladder: the root's ``__version__``; else the last commit touching ``files``
-    (``+dirty``); else ``#`` + 8 hex of ``ident`` (the code's hash)."""
-    if attr is not None:
-        return str(attr)
+    """The mounted ladder: a dirty checkout, ``<commit 8>+dirty`` (the last commit touching ``files``,
+    else HEAD); else the root's ``__version__``; else the last commit touching ``files`` (``+dirty``);
+    else ``#`` + 8 hex of ``ident`` (the code's hash)."""
     last = _git(str(checkout), "log", "-1", "--format=%h", f"--abbrev={SHORT}", "--", *files)
+    if attr is not None:
+        co = code_at(str(checkout))
+        if not co.dirty:
+            return str(attr)
+        head = last or (co.commit or "")[:SHORT]
+        return head[:SHORT] + "+dirty" if head else "#" + ident[:SHORT]
     if last:
         dirty = _git(str(checkout), "status", "--porcelain", "--", *files)
         return last[:SHORT] + ("+dirty" if dirty else "")
@@ -157,9 +165,12 @@ def _top_dists() -> Mapping[str, List[str]]:
 
 
 def installed_version(top: str, env: Env, repo: Optional[str], ident: str) -> str:
-    """The installed ladder: ``__version__`` on the top-level package; else its distribution's version;
-    else the short commit of the checkout holding it (``+dirty``); else ``#`` + 8 hex of ``ident`` (the
-    code's hash)."""
+    """The installed ladder: a dirty checkout, its short commit ``+dirty``; else ``__version__`` on the
+    top-level package; else its distribution's version; else the short commit of the checkout holding it;
+    else ``#`` + 8 hex of ``ident`` (the code's hash)."""
+    co = env.code.get(repo) if repo else None
+    if co is not None and co.commit and co.dirty:
+        return co.commit[:SHORT] + "+dirty"
     mod = sys.modules.get(top) or importlib.import_module(top)
     attr = getattr(mod, "__version__", None)
     if attr is not None:
@@ -169,7 +180,6 @@ def installed_version(top: str, env: Env, repo: Optional[str], ident: str) -> st
             return md.version(dist)
         except md.PackageNotFoundError:
             continue
-    co = env.code.get(repo) if repo else None
     if co is not None and co.commit:
-        return co.commit[:SHORT] + ("+dirty" if co.dirty else "")
+        return co.commit[:SHORT]
     return "#" + ident[:SHORT]

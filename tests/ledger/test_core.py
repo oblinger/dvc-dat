@@ -1,6 +1,5 @@
 """Contracts of the core: the constructor, transactions, the row reads, the bracket, db/type, bump."""
 
-import os
 
 import pytest
 
@@ -261,7 +260,7 @@ def test_db_type_checked_at_commit_and_on_strict_reads(L):
         write(L, ("db/pred/n", "db/type", "json"), ("g", "n", "text"))
 
 
-# -- bump (Q33, A29, A38) -------------------------------------------------------------------------
+# -- bump (Q33, A38, DAT 1043) -------------------------------------------------------------------------
 
 def test_bump_patch_minor_confirm_and_backwards_add(L):
     with L.transaction(by="t", lock=10) as t:
@@ -275,18 +274,11 @@ def test_bump_patch_minor_confirm_and_backwards_add(L):
     assert L.at()["schema", "version"] == "0.0.9"
 
 
-def test_bump_code_writes_commit_and_refuses_no_checkout_or_dirty(L, envbox):
-    with L.transaction(by="t", lock=10) as t:
-        bump(t, "code/testrepo")
-    assert t.rev["code/testrepo"] == {"version": "0.0.1", "commit": "abc1234"}
-    with pytest.raises(ValueError, match="no checkout"):
-        with L.transaction(by="t", lock=10) as t:
-            bump(t, "code/elsewhere")
-    envbox.code(dirty=True)
-    with pytest.raises(ValueError):
+def test_bump_refuses_a_code_subject(L):
+    with pytest.raises(TypeError, match="a code version lives in its source"):
         with L.transaction(by="t", lock=10) as t:
             bump(t, "code/testrepo")
-    assert os.environ.get("X_NEVER") is None
+    assert L.at().get("code/testrepo", "version") is None
 
 
 # -- previous_rev and the lock (DAT 1039) --------------------------------------------------------

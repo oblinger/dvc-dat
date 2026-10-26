@@ -20,7 +20,7 @@ import os, shutil, subprocess, sys
 from importlib.resources import files
 from pathlib import Path
 
-from dvc_dat.ledger import Ledger, bump
+from dvc_dat.ledger import Ledger
 
 demos_path = Path(globals().get("demos_path", Path.cwd()))   # survives the chdir
 os.chdir(demos_path)
@@ -39,7 +39,7 @@ sys.path.insert(0, str(scratch_path))
 # the same mymodule as q-dats; table_dat.table also carries @command
 module_path = Path("mymodule")
 (module_path / "specs").mkdir(parents=True)
-(module_path / "__init__.py").write_text("")   # a package, so `bump code` finds its checkout
+(module_path / "__init__.py").write_text('__version__ = "0.1.0"\n')   # the version `just bump mymodule` edits
 (module_path / "mult.py").write_text('''\
 import csv
 from pathlib import Path
@@ -135,16 +135,15 @@ Path("justfile").write_text(
     "import? '.dat/targets.just'  # the declared commands\n")
 Path("pyproject.toml").write_text('[project]\nname = "q-cli"\nversion = "0.1.0"\n')
 Path(".gitignore").write_text(".dat/\ndata/\n__pycache__/\n")
-git_cmd = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.com"]
-for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "q-cli"]):
-    subprocess.run(git_cmd + args, check=True)
+for args in (["init", "-q"], ["config", "user.name", "demo"], ["config", "user.email", "demo@example.com"],
+             ["add", "."], ["commit", "-q", "-m", "q-cli"]):
+    subprocess.run(["git", *args], check=True)
 
 import mymodule.table_dat                         # discovery finds the checkout code/q-cli names
-with L.transaction(by="human:dan", why="mount mymodule", lock=10) as t:   # sandboxed: code = the module bytes a run loads
+with L.transaction(by="human:dan", why="mount mymodule") as t:   # sandboxed: code = the module bytes a run loads
     t.add("db/mount/mymodule", "db/root", "mymodule")
     t.add("db/mount/mymodule", "db/repo", "q-cli")
     t.add("db", "version", "3.1.4")
-    bump(t, "code/q-cli", "minor", confirm=lambda old, new: True)
 just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True)   # writes .dat/targets.just, the declared commands
 
 # %% [markdown]
@@ -159,19 +158,19 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # %%
 # !just --list --color never
 # → Available recipes:
-# →     alias name target         # point a name at a value (a hash prefix is expanded)
-# →     bump subject part="patch" # bump a clock: `code` is this checkout's code/<repo>; minor and major ask for `yes`
-# →     history subject           # every row a subject has held, with each revision's db/by
-# →     index pred                # declare a pred indexed
-# →     mounts *args              # mounts [PREFIX]: the mounted names, with what each loads to
-# →     run *args                 # run TARGET [ARG ...] [KEY=VALUE ...]: a mounted name, a dotted function, a spec
-# →     set subject *args         # a row on a subject: t[s, p] = o
-# →     value *args               # exactly one value matching the preds
-# →     values *args              # the values matching k=v / k:=v preds (kind=<short class name> narrows)
-# →     why name *args            # a value's dependencies, whether they hold at the head, and what moved since the alias's last target
+# →     alias name target      # point a name at a value (a hash prefix is expanded)
+# →     bump name part="patch" # bump a version: <module> edits its __version__ in the source; db is the ledger's release (a/b: a ledger clock); minor and major ask for yes
+# →     history subject        # every row a subject has held, with each revision's db/by
+# →     index pred             # declare a pred indexed
+# →     mounts *args           # mounts [PREFIX]: the mounted names, with what each loads to
+# →     run *args              # run TARGET [ARG ...] [KEY=VALUE ...]: a mounted name, a dotted function, a spec
+# →     set subject *args      # a row on a subject: t[s, p] = o
+# →     value *args            # exactly one value matching the preds
+# →     values *args           # the values matching k=v / k:=v preds (kind=<short class name> narrows)
+# →     why name *args         # a value's dependencies, whether they hold at the head, and what moved since the alias's last target
 # →
 # →     [run]
-# →     table *args               # spec=…  the table dat a spec names
+# →     table *args            # spec=…  the table dat a spec names
 
 # %% [markdown]
 # ## Running
@@ -273,16 +272,40 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # %% [markdown]
 # ## Releasing
 #
-# A version is a clock on a subject; `just bump` advances it. `code`
-# is this repo, and the commit is recorded beside the version. A
-# bump of `db`, the ledger's own clock, is a release.
+# A code version lives in its source: `just bump mymodule` edits the
+# `__version__` line in `mymodule/__init__.py` and does nothing else,
+# not even commit.
 
 # %%
-# !just bump code
-# same as: with L.transaction(by=…, lock=10) as t: bump(t, "code/q-cli", "patch")
+# !just bump mymodule
+# same as: bump_source("mymodule", "patch")
+# → mymodule: 0.1.0 -> 0.1.1 in mymodule/__init__.py
+# → commit it: git commit -am "mymodule 0.1.1"
+
+# %% [markdown]
+# The ledger's `code/q-cli` clock is the version runs were exposed to.
+# The first run (rev 2) put `0.1.0` there; after the commit, the next
+# run from the clean checkout moves it to `0.1.1`, the commit beside it.
+
+# %%
+# !git commit -qam "mymodule 0.1.1"
+# !just run mymodule.table_dat.table spec="{dat: {do: mymodule.mult.build_table, kwargs: {n: 12, start: 1}}}"
+# !just history code/q-cli
+# same as: [r for r in L.at().rows() if r.subject == "code/q-cli"]
+# → ran  anonymous/Dat  n=12 start=1 cells=144
+# → rev  by         predicate  object
+# →   2  eval:mymodule.table_dat.table version    0.1.0
+# →   2  eval:mymodule.table_dat.table commit     <40 hex>
+# →   7  eval:mymodule.table_dat.table version    0.1.1
+# →   7  eval:mymodule.table_dat.table commit     <40 hex>
+
+# %% [markdown]
+# A bump of `db`, the ledger's own clock, is a release: a row on the
+# ledger, behind a typed `yes` for minor and major.
+
+# %%
 # !echo yes | just bump db minor
 # same as: with L.transaction(by=…, lock=10, why="release") as t: bump(t, "db", "minor", confirm=…)
-# → code/q-cli: 0.1.0 -> 0.1.1 at <8 hex>
 # → db: 3.1.4 -> 3.2.0? yes
 # → db: 3.1.4 -> 3.2.0, a release
 

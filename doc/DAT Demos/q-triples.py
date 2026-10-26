@@ -23,7 +23,8 @@ from dvc_dat.ledger import Ledger, Unlocked, bump
 
 scratch_path = Path("scratch/q-triples").resolve()
 shutil.rmtree(scratch_path, ignore_errors=True)   # a re-run starts clean
-sys.modules.pop("demo_game", None)
+for module_name in [m for m in sys.modules if m.split(".")[0] == "demo_game"]:
+    del sys.modules[module_name]
 
 # %% [markdown]
 # # Quick: triples
@@ -164,31 +165,37 @@ except TypeError as e:
 # %% [markdown]
 # ## Connecting to code
 #
-# A `code/<repo>` subject is a version clock tied to a git checkout.
-# `bump` raises the version and writes the commit beside it, read
-# from the checkout of that repo this process imported.
+# A `code/<repo>` subject is a version clock tied to a git checkout:
+# the version of that repo's code that runs were exposed to. The
+# version lives in the source, as `__version__`; the first run from a
+# clean checkout writes it, with the commit beside it.
 
 # %%
 demo_repo_path = scratch_path / "demo-game"
 (demo_repo_path / "demo_game").mkdir(parents=True, exist_ok=True)
-(demo_repo_path / "demo_game/__init__.py").write_text("")
+(demo_repo_path / "demo_game/__init__.py").write_text('__version__ = "0.1.0"\n')
+(demo_repo_path / "demo_game/hello.py").write_text(
+    "from dvc_dat.ledger import ledger_fn\n\n\n"
+    "@ledger_fn\ndef hello(rev, *, game: str) -> str:\n    return f\"hello {rev['game/' + game, 'court']}\"\n")
 git_cmd = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.com"]
-for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "0.0.1"]):
+for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "0.1.0"]):
     subprocess.run(git_cmd + args, cwd=demo_repo_path, check=True)
 sys.path.insert(0, str(demo_repo_path))
-import demo_game
+import demo_game.hello
 
-with L.transaction(by="human:dan", lock=10) as t:
-    bump(t, "code/demo-game")
-print(L.at()["code/demo-game"])
-# {'version': '0.0.1', 'commit': '<the demo commit>'}
+greeting = L.at().run("demo_game.hello.hello", game="G1")
+print("greeting:", greeting.obj)   # greeting: hello west: G1's court now
+print("code/demo-game:", L.at()["code/demo-game"])
+# code/demo-game: {'version': '0.1.0', 'commit': '<the demo commit>'}
 
 # %% [markdown]
 # ## Locking the ledger
+#
+# `bump` raises any other clock, here a schema's.
 
 # %%
 with L.transaction(by="human:dan", lock=10) as t:
-    print(bump(t, "code/demo-game"))   # 0.0.2
+    print("schema/tape:", bump(t, "schema/tape"))   # schema/tape: 0.0.1
 
 # %% [markdown]
 # `bump` reads the version through `t.previous_rev`, then writes

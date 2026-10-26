@@ -33,8 +33,8 @@
 # >    has held; `why` lists what a value was computed from.
 # > 3. **Updating values** — `set` adds a predicate to a subject;
 # >    `alias` points a name at a value; `index` makes a predicate fast
-# >    to list by; `bump` moves a version predicate (a release is a bump
-# >    of the ledger's own).
+# >    to list by; `bump` edits a module's `__version__` in its source,
+# >    or moves the ledger's own version (a release).
 # >
 # > A predicate on the command line is `k=v` (v a string) or `k:=v`
 # > (v JSON: a number, a list), the same two spellings `just` itself
@@ -56,7 +56,7 @@ from pathlib import Path
 
 import yaml
 
-from dvc_dat.ledger import Ledger, Ref, bump
+from dvc_dat.ledger import Ledger, Ref
 from dvc_dat.ledger import LedgerError, Multiple
 
 # %%
@@ -90,6 +90,8 @@ spec_record = {"main": "demo_game.etl.model.train", "game": "G1"}
 Path("model-G1.yaml").write_text(yaml.safe_dump(spec_record))
 Path(".gitignore").write_text(".dat/\n")
 git("init", "-q")
+git("config", "user.name", "demo")
+git("config", "user.email", "demo@example.com")
 git("add", ".")
 git("commit", "-q", "-m", "demo-game")
 sys.path.insert(0, str(scratch_project_path))
@@ -106,26 +108,23 @@ with L.transaction(by="human:dan") as t:
     t.add("db/pred/video", "db/type", "demo_game.game.Video")
     t.add("db/pred/span", "db/type", "json")
 with L.transaction(by="human:dan", lock=10) as t:                 # rev 2
-    bump(t, "code/demo-game", "minor",       # 0.0.0 -> 0.1.0
-         confirm=lambda old, new: True)
-with L.transaction(by="human:dan", lock=10) as t:                 # rev 3
     t["game/G1"] = {"home": "G4", "away": "G5", "court": "north"}
 video_value = Video(b"G1 wide camera, 9000 frames")
 video_value.preds.update(game="G1", camera="wide", span=[0, 9000])
-with L.transaction(by="human:dan") as t:                 # rev 4
+with L.transaction(by="human:dan") as t:                 # rev 3
     video_value.seal(t, name="video/G1",
                      provenance="import:archive")
-cut_153_value = L.at().run("demo_game.game.cut",       # rev 5
+cut_153_value = L.at().run("demo_game.game.cut",       # rev 4, and code/demo-game 0.1.0
                             game="G1", version="1.5.3")
-with L.transaction(by="human:dan") as t:                 # rev 6
+with L.transaction(by="human:dan") as t:                 # rev 5
     t.add("game/G1", "db/alias", cut_153_value.subject)
 with L.transaction(by="human:dan", why="home was G6") as t:
-    t["game/G1", "home"] = "G6"                          # rev 7
-cut_154_value = L.at().run("demo_game.game.cut",       # rev 8
+    t["game/G1", "home"] = "G6"                          # rev 6
+cut_154_value = L.at().run("demo_game.game.cut",       # rev 7
                             game="G1", version="1.5.4")
-with L.transaction(by="human:dan") as t:                 # rev 9
+with L.transaction(by="human:dan") as t:                 # rev 8
     t.add("game/G1", "db/alias", cut_154_value.subject)
-with L.transaction(by="human:dan") as t:                 # rev 10
+with L.transaction(by="human:dan") as t:                 # rev 9
     t["cfg/train", "epochs"] = "8"             # what train reads
     t["game/G1", "gameset"] = "normie"
 
@@ -293,13 +292,13 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # %%
 # !just history game/G1
 # → rev  by         predicate  object
-# →   3  human:dan  home       G4
-# →   3  human:dan  away       G5
-# →   3  human:dan  court      north
-# →   6  human:dan  db/alias   #<the 1.5.3 cut, 8 hex>
-# →   7  human:dan  home       G6
-# →   9  human:dan  db/alias   #<the 1.5.4 cut, 8 hex>
-# →  10  human:dan  gameset    normie
+# →   2  human:dan  home       G4
+# →   2  human:dan  away       G5
+# →   2  human:dan  court      north
+# →   5  human:dan  db/alias   #<the 1.5.3 cut, 8 hex>
+# →   6  human:dan  home       G6
+# →   8  human:dan  db/alias   #<the 1.5.4 cut, 8 hex>
+# →   9  human:dan  gameset    normie
 
 # %% [markdown]
 # Each line carries the revision it was written at and who wrote it.
@@ -386,23 +385,35 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # covers.
 #
 # ### A version bump
-# A version is a clock on any subject; `just bump <subject>` advances it.
+# A code version lives in its source; `just bump <module>` edits its `__version__` line.
 
 # %%
-# !just bump code
-# → code/demo-game: 0.1.0 -> 0.1.1 at <8 hex>
-# !echo yes | just bump code minor
-# → code/demo-game: 0.1.1 -> 0.2.0? yes
-# → code/demo-game: 0.1.1 -> 0.2.0 at <8 hex>
+# !just bump demo_game
+# → demo_game: 0.1.0 -> 0.1.1 in demo_game/__init__.py
+# → commit it: git commit -am "demo_game 0.1.1"
 
 # %% [markdown]
-# `code` names the repo the justfile sits in; the commit is recorded
-# beside the version. It is `bump(t, "code/demo-game", part, confirm=…)`.
+# It is `bump_source("demo_game", "patch")`: one line rewritten,
+# nothing committed, nothing written to the ledger. A minor or major
+# move waits for `yes`, which is `confirm=`.
 #
-# A minor or major move waits for `yes`, which is
-# `confirm=`. A project's own version-sync line follows in the
-# recipe (Q4 (A)).
-#
+# The ledger's `code/demo-game` clock is the version runs were
+# exposed to. The first cut (rev 4) put `0.1.0` there; after the
+# commit, the next run from the clean checkout moves it, the commit
+# beside it.
+
+# %%
+# !git commit -qam "demo_game 0.1.1"
+# !just run demo_game.game.cut game=G1 version=1.5.5
+# !just history code/demo-game
+# → ran  #<8 hex>  game=G1 version=1.5.5 video=video/G1 team=["G6", "G5"]
+# → rev  by         predicate  object
+# →   4  eval:demo_game.game.cut version    0.1.0
+# →   4  eval:demo_game.game.cut commit     <40 hex>
+# →  21  eval:demo_game.game.cut version    0.1.1
+# →  21  eval:demo_game.game.cut commit     <40 hex>
+
+# %% [markdown]
 # ### A release of the ledger
 # A release is a bump of the ledger's own clock; the revision names this moment.
 
@@ -443,7 +454,6 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # - **`confirm=`** — a `yes` typed at the prompt, for a minor or
 #   major `bump`.
 # - **`why=`** — on `just bump db`, the release.
-# - **The repo** — `code` is `code/<the repo the justfile sits in>`.
 # - **The environment** — discovered from the checkout the recipe
 #   runs in, never passed.
 # - **Keys and preds** — `k=v` a string, `k:=v` JSON.
@@ -453,7 +463,6 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # - **Hit or ran** — `seal="get"` before `run`.
 # - **Printing** — each value in its alias form with its preds; a
 #   moved alias with its old target.
-# - **Project policy** — a version-sync line after `just bump code`.
 
 # %% [markdown]
 # ## Footnote: which ledger

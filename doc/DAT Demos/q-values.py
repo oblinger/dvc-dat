@@ -261,6 +261,12 @@ segment_value = length_fn(a=(0, 0), b=(3, 4))
 print("fn:", repr(length_fn), " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
 # → fn: <Fn plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
 print("result:", segment_value.obj)                 # → result: 2.5
+# → UserWarning: code/geometry: the run's code is 2.7.1, below the ledger's 5.3.9; the clock keeps 5.3.9
+
+# %% [markdown]
+# Notice the warning: `geometry` and `plane` share one checkout, so
+# one `code/geometry` clock (DAT 1043). The first run wrote `5.3.9`;
+# `plane`'s `2.7.1` is below it, and the clock never moves back.
 
 # %% [markdown]
 # #### A sandbox is a snapshot of the code
@@ -297,6 +303,7 @@ new_length_fn = L.at().load_fn("plane.measure.length")
 print("new fn:", repr(new_length_fn), " sandbox:", repr(new_length_fn.code))
 # → new fn: <Fn plane.measure.length@2.7.2>  sandbox: <Code plane@2.7.2>
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → 1.25
+# → UserWarning: code/geometry: the run's code is 2.7.2, below the ledger's 5.3.9; the clock keeps 5.3.9
 print("old result's code:", segment_value.dependencies["code"], " fn:", segment_value.dependencies["fn"],
       " holds:", segment_value.obj)
 # → old result's code: db/code/04ebdaea96da6a7b  fn: plane.measure.length  holds: 2.5

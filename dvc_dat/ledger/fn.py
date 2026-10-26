@@ -70,7 +70,9 @@ class RunTrace:
 
     ``trace`` is the dependencies (``code``, ``fn``, platform, ``code/<repo>``, every read); ``code_rows``
     the ``db/code/<hash 16>`` item's rows; ``repo`` and ``dirty`` the checkout that vouches for an
-    unsandboxed run (``repo`` ``None`` outside any), for the code check at a late save."""
+    unsandboxed run (``repo`` ``None`` outside any), for the code check at a late save. ``clock`` is
+    ``(repo, version, commit)`` of the code that ran, sandboxed or not, for the ``code/<repo>`` clock a
+    seal advances (DAT 1043); ``None`` outside any checkout."""
 
     name: str
     enc: str
@@ -83,18 +85,30 @@ class RunTrace:
     repo: Optional[str] = None
     dirty: bool = False
     returns: str = ""
+    clock: Optional[Tuple[str, str, str]] = None
 
     def record(self) -> Dict[str, Any]:
         """As JSON, for a ``v.seal()`` seal record."""
         d = dict(self.__dict__)
         d["code_rows"] = [list(r) for r in self.code_rows]
+        d["clock"] = list(self.clock) if self.clock is not None else None
         return d
 
     @classmethod
     def from_record(cls, d: Dict[str, Any]) -> "RunTrace":
         d = dict(d)
         d["code_rows"] = tuple(tuple(r) for r in d["code_rows"])
+        d["clock"] = tuple(d["clock"]) if d.get("clock") else None
         return cls(**d)
+
+
+def clock_of(fn: "Fn", code: Code) -> Optional[Tuple[str, str, str]]:
+    """``(repo, version, commit)`` of ``code`` as ``fn`` ran it: the repo its checkout is (the mount's for
+    sandboxed code), the code's version and the checkout's commit at load; ``None`` outside any checkout."""
+    repo = fn._info.get("repo") if fn.code.sandboxed else repo_of(fn.env, fn.module)
+    if not repo or not code.commit:
+        return None
+    return (repo, code.version, code.commit)
 
 
 def run_trace(fn: "Fn", plain: "Rev", trace: Dict[str, str], enc: str, provenance: str,
@@ -102,7 +116,7 @@ def run_trace(fn: "Fn", plain: "Rev", trace: Dict[str, str], enc: str, provenanc
     """``code`` is what ran: ``fn.code``, with a sandboxed run's run-time loads beside its own."""
     return RunTrace(name=fn.name, enc=enc, trace=dict(trace), provenance=provenance, code_subject=code.subject,
                     code_rows=tuple(code._rows()), ledger=ledger_key(plain.ledger), sandboxed=fn.code.sandboxed,
-                    repo=repo, dirty=dirty, returns=fn._returns)
+                    repo=repo, dirty=dirty, returns=fn._returns, clock=clock_of(fn, code))
 
 
 def attach_run(value: Value, run: RunTrace) -> Value:
@@ -158,6 +172,8 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     if refuse_held and t._snapshot()._held(subject, "db/value"):
         raise _AlreadySealed(subject)
     t._ensure_code(run.code_subject, run.code_rows)
+    if run.clock is not None:
+        t._advance_clock(*run.clock)
     extra = [("db/fn", "str:" + run.name), ("db/keys", "json:" + run.enc), ("db/returns", "str:" + run.returns)]
     if value.sealed and value.subject is None:
         extra.append(("db/sealed-at", "str:" + str(value.sealed)))
@@ -545,7 +561,7 @@ def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
     c = plain.get(f"code/{repo}", "commit")
     if c is None:
         raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} names no code/{repo} commit "
-                       "(bump it)")
+                       "(the first clean run of code with a __version__ writes it)")
     if not (code.commit and (code.commit.startswith(c) or c.startswith(code.commit))):
         raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} binds code/{repo} to {c[:8]}; "
                        f"the checkout is at {(code.commit or '?')[:8]}")
