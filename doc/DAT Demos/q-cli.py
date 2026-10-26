@@ -121,12 +121,12 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # !just --list --color never
 # → Available recipes:
 # →     alias name target         # point a name at a value (a hash prefix is expanded)
-# →     annotate subject *args    # a row on a subject: t[s, p] = o
 # →     bump subject part="patch" # bump a clock: `code` is this checkout's code/<repo>; minor and major ask for `yes`
 # →     history subject           # every row a subject has held, with each revision's db/by
 # →     index pred                # declare a pred indexed
 # →     mounts *args              # mounts [PREFIX]: the mounted names, with what each loads to
 # →     run *args                 # run TARGET [ARG ...] [KEY=VALUE ...]: a mounted name, a dotted function, a spec
+# →     set subject *args         # a row on a subject: t[s, p] = o
 # →     value *args               # exactly one value matching the preds
 # →     values *args              # the values matching k=v / k:=v preds (kind=<short class name> narrows)
 # →     why name *args            # a value's dependencies, whether they hold at the head, and what moved since the alias's last target
@@ -287,13 +287,13 @@ print("summer:", L.at().load("report/summer").obj)   # the report itself
 # %% [markdown]
 # ## Updating
 #
-# A write adds a predicate; nothing changes in place. `annotate`
+# A write adds a predicate; nothing changes in place. `set`
 # adds one fact to a subject, `alias` points a name at a value and
 # prints what it pointed at before, and `index` makes a predicate
 # fast to list by.
 
 # %%
-# !just annotate game/G1 texture=hardwood
+# !just set game/G1 texture=hardwood
 # !just alias prod {cut_154_value.subject[:8]}
 # !just index game
 # → game/G1 texture=hardwood

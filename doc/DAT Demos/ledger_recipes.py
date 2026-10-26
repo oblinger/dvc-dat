@@ -141,7 +141,7 @@ def why(args):
         print(f"since {short(other.subject)}, its last target: {moved or 'nothing moved'}")
 
 
-def annotate(args):
+def set_recipe(args):
     L = Ledger()
     subject, kw = args[0], parse(args[1:])
     with L.transaction(by=BY) as t:
@@ -195,7 +195,7 @@ def bump_recipe(args):
     print(f"{subject}: {old} -> {new}{tail}")
 
 
-RECIPES = {"values": values, "value": value, "history": history, "why": why, "annotate": annotate,
+RECIPES = {"values": values, "value": value, "history": history, "why": why, "set": set_recipe,
            "alias": alias, "index": index, "bump": bump_recipe}
 
 if __name__ == "__main__":
