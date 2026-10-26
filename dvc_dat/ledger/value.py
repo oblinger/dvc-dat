@@ -16,7 +16,7 @@ import io
 import pickle
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterable, Mapping, Optional, Tuple
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterable, Mapping, Optional, Tuple, Union
 
 from .codec import sha256
 
@@ -146,7 +146,7 @@ class Value:
         """Hook: refuse a value that may not be sealed as it stands (a ``Dat`` never saved)."""
 
     def seal(self, to: Any = True, *, keep: bool = False, deps: Iterable[Any] = (), name: Optional[str] = None,
-             provenance: Optional[str] = None, by: Optional[str] = None) -> str:
+             provenance: Optional[str] = None, by: Optional[Union[str, Dict[str, Any]]] = None) -> str:
         """Fix the value's identity; with a transaction or a ledger, save it too. ``to`` takes what
         ``seal=`` on a run takes (DAT 1028), so ``f(seal=x)`` and a later ``v.seal(x)`` end in one place.
 
@@ -157,7 +157,8 @@ class Value:
         into the kept cache, so the source may change.
         ``to`` a ``Transaction`` saves into it: the subject is ``<hash of (dependencies, preds, bytes)>``
         and lands with that revision or not at all. ``to`` a ``Ledger`` opens and commits a
-        one-value transaction of its own, written ``by`` (default: the provenance, else ``seal``).
+        one-value transaction of its own, written ``by`` (a ``str`` or a JSON ``dict``; default: the
+        provenance, else ``seal``).
         Saving a value sealed earlier saves the state it was sealed in (its deps, provenance and
         environment), and refuses with ``SealBroken`` when its bytes changed since, unless kept.
         A run's result (``seal=False`` or ``True``) carries its trace: saving it writes the memo entry
@@ -184,7 +185,7 @@ class Value:
             local = self.__dict__.get("_local")
             run = self.__dict__.get("_run")
             default = (f"eval:{run.name}" if run is not None else None) or (local and local["provenance"]) or "seal"
-            with to.transaction(by=by or provenance or default) as t:
+            with to.transaction(by=by if by is not None else provenance or default) as t:
                 return t._seal_value(self, deps=tuple(deps), name=name, provenance=provenance)
         raise TypeError(f"seal takes True (the default), a Transaction or a Ledger, not {type(to).__name__}")
 

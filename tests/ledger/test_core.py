@@ -94,6 +94,27 @@ def test_every_transaction_is_stamped_and_time_is_refused(L):
         L.transaction(by="t", time=True)
 
 
+def test_by_is_a_str_or_a_json_dict_read_back_as_written(L):
+    who = {"host": "github.com", "user": "dan", "admins": ["root"]}
+    with L.transaction(by=who) as t:
+        t.add("s", "p", "1")
+    assert t.rev[t.rev.tx, "db/by"] == who                      # a dict, not an encoded string
+    raw = [r.object for r in t.rev.rows(t.rev.tx, "db/by")]
+    assert raw == [who]
+    stored = L._store.rows(t.rev.id, subject=t.rev.tx, predicate="db/by")
+    assert [r[4] for r in stored] == ['json:{"admins":["root"],"host":"github.com","user":"dan"}']
+    with L.transaction(by="eval:x") as t2:                      # a str stays a str, eval: and all
+        pass
+    assert t2.rev[t2.rev.tx, "db/by"] == "eval:x"
+
+
+@pytest.mark.parametrize("by", ["", {}, [], ["a"], None, 3, {"x": object()}])
+def test_by_anything_else_is_refused_and_writes_nothing(L, by):
+    with pytest.raises(TypeError, match="by"):
+        L.transaction(by=by)
+    assert L.at().id == 0
+
+
 def test_an_exception_writes_nothing(L):
     with pytest.raises(RuntimeError):
         with L.transaction(by="t") as t:
