@@ -62,6 +62,22 @@ PKG = {
             Path("/tmp/ledger-sandbox-dat-scribble.txt").write_text("x")
             dat.save()
 
+        def names(dat):
+            from dvc_dat import Dat
+            do, r = Dat.manager.do, dat.get_results()
+            r["kind"] = type(do).__name__
+            r["base"] = do.load("sbx.stage.specs.base")                # a mounted yaml
+            r["literal"] = do.load("sbx.stage.runs.TABLE")["dat"]["kwargs"]
+            r["fn"] = do.load("sbx.stage.runs.table").kind             # a mounted run function: its Fn
+            r["spec"] = do.resolve("sbx.stage.specs.table")["dat"]               # its base merged
+            r["expanded"] = Dat.manager.expand_spec({"n": "{sbx.stage.runs.TABLE}"})["n"]["dat"]["kwargs"]
+            try:
+                do.mount(value={}, at="x")
+                r["mount"] = "allowed"
+            except TypeError as e:
+                r["mount"] = "db/mount" in str(e)
+            dat.save()
+
         TABLE = {"dat": {"do": "sbx.stage.runs.table", "kwargs": {"n": 3}}}
     '''),
     "sbx/stage/specs/base.yaml": "dat:\n  kwargs: {n: 3}\n",
@@ -667,6 +683,22 @@ def test_a_spec_naming_a_mounted_ledger_function_is_refused(sbx, world):
     L, _repo = sbx
     with pytest.raises(TypeError, match="rev.run"):
         L.at().run({"dat": {"do": "sbx.stage.fns.count"}})
+
+
+def test_a_sandboxed_dat_body_names_through_the_ledger_mounts(sbx, world):
+    """DAT 1047: inside a sandboxed dat body ``Dat.manager.do`` is a ``LedgerDo`` at the run's rev, so a
+    mounted spec, literal or function resolves through the mounts the caller used; ``mount`` is refused.
+    The caller's own world (here a plain ``Do``) is not what the body sees."""
+    from dvc_dat.do import Do
+
+    L, _repo = sbx
+    assert type(world.do) is Do
+    r = L.at().run({"dat": {"do": "sbx.stage.runs.names"}}).get_results()
+    assert r["kind"] == "LedgerDo" and r["mount"] is True
+    assert r["base"] == {"dat": {"kwargs": {"n": 3}}} and r["literal"] == {"n": 3} and r["fn"] == "dat"
+    assert r["spec"] == {"kwargs": {"n": 3}, "name": "tables/y{unique}", "do": "sbx.stage.runs.table"}
+    assert r["expanded"] == {"n": 3}
+    assert "sbx.stage.runs" not in sys.modules
 
 
 def test_a_ledger_projects_do_names_through_the_mounts(sbx, tmp_path):
