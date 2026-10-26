@@ -33,6 +33,13 @@ store) run ``unguarded``. The same hook refuses a host-name lookup or an interne
 send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
 A nested eval runs in-process and its loads count toward its own entry (Q37 (ii)).
 
+A dat's run function under a mount (``rev.dat_run``, DAT 1045) runs the same way
+(``run_dat_sandboxed``): the parent resolves the question and ships the expanded
+spec, the run function's dotted name and the caller's dat world (its dat folders,
+art folder and index, readable in the child); the child imports the function from
+the mounts, creates the dat in its work folder and ``execute``s it, the body
+confined as a ledger function's, the dat world's index writes its own machinery.
+
 The ``code`` item (Q37 (A); Dan 2026-10-21; DAT 1037): exactly the modules the run loaded
 (beside the function's ``Code``), hashed with the mount rows into ``db/code/<hash 16>``; the
 ``fn`` item beside it is the function's dotted name. A mounted module (and
@@ -52,6 +59,7 @@ from __future__ import annotations
 
 import ast
 import atexit
+import functools
 import importlib
 import importlib.abc
 import importlib.machinery
@@ -76,6 +84,7 @@ from .codec import sha256
 from .env import Env, current_env
 from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
+from ..core import Dat, DatManager
 from .fn import (Fn, attach_run, drop_work, mounts_at, mounts_hash, path_template, run_trace,
                  save_run, seal_entry, wrap_result)
 
@@ -443,13 +452,14 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
 
 
-def load_mounted_run(rev: "Rev", name: str, prefix: str, info: Dict[str, str], obj: Any, src: Path,
-                     returns: str, template: Optional[str]) -> Fn:
-    """``rev.do``'s run function under a mount: named by the mount's ``Code`` (its static closure, the
-    mount rows hashed in), as ``load_sandboxed`` names a ledger function; it runs in this process, so the
-    module imported here must be the mounted file, else ``NotEvaluated``."""
+def load_mounted_run(rev: "Rev", name: str, returns: str, template: Optional[str]) -> Fn:
+    """``rev.dat_run``'s run function under a mount (DAT 1045): found in the mounted file, nothing imported
+    here, named by the mount's ``Code`` (its static closure, the mount rows hashed in) as ``load_sandboxed``
+    names a ledger function; it runs in the worker (``run_dat_sandboxed``)."""
     plain = rev._plain()
     env = current_env()
+    prefix, info = max(((p, i) for p, i in mounts_at(plain).items() if name.startswith(p + ".")),
+                       key=lambda pi: len(pi[0]))
     repo = info.get("repo")
     code = env.code.get(repo or "")
     if code is None or code.path is None:
@@ -459,15 +469,24 @@ def load_mounted_run(rev: "Rev", name: str, prefix: str, info: Dict[str, str], o
     m = _mount_of(mounts, name)
     assert m is not None
     modname, _, attr_name = name.rpartition(".")
-    f = m.file_of(modname)
-    if f is None or os.path.realpath(f[0]) != os.path.realpath(src):
-        raise NotEvaluated(f"{name!r}: rev.do runs it in this process, which imports it from {src}; the mount "
-                           f"{prefix!r} holds {f[0] if f is not None else 'no such module'}")
-    mods = module_shas(closure(mounts, [modname]))
+    with unguarded():                               # the ledger's own reads, also inside a sandboxed body
+        f = m.file_of(modname)
+        if f is None:
+            raise ImportError(f"{name!r}: no module {modname!r} under {m.path}")
+        tree = ast.parse(f[0].read_text())
+        fdef = next((n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                     and n.name == attr_name), None)
+        if fdef is None:
+            raise ImportError(f"{name!r}: no function {attr_name!r} in {f[0]}")
+        if any((isinstance(d, ast.Name) and d.id == "ledger_fn")
+               or (isinstance(d, ast.Attribute) and d.attr == "ledger_fn") for d in fdef.decorator_list):
+            raise TypeError(f"rev.dat_run: {name} is a ledger function; rev.run({name!r}, ...) runs it")
+        check_mounted_imports(mounts, modname, attr_name)
+        mods = module_shas(closure(mounts, [modname]))
     return Fn(name=name, module=f[0], mount=m.prefix, signature=inspect.Signature(),
               env=Env(env.code, env.platform, mounts_hash(plain)),
               code=mounted_code(plain, env, m, modname, mods),
-              _rev=rev, _obj=obj, _template=template, _returns=returns,
+              _rev=rev, _template=template, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name})
 
 
@@ -560,6 +579,29 @@ def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
     return draft
 
 
+def run_dat_sandboxed(fn: Fn, plain: "Rev", spec: Dict[str, Any], enc: str, save: Any,
+                      name: Optional[str] = None) -> Any:
+    """``rev.dat_run``'s miss for a mounted run function (DAT 1045): the dat made from ``spec`` (the expanded
+    question, its ``dat.do`` the run function's dotted name) and run in the worker, as ``run_sandboxed``
+    runs a ledger function that takes a ``path``; ``save`` as there."""
+    from ..core import Dat
+
+    env = current_env()
+    if fn._info["repo"] not in env.code:
+        raise NotEvaluated(f"{fn.name}: repo {fn._info['repo']!r} has no checkout in this environment")
+    if IN_WORKER:
+        return run_dat_here(fn, plain, spec, enc, save, name)
+    world = Dat.manager
+    if save is True or save is False:
+        return _server().dat_run(fn, plain, spec, enc, world, save, env)
+    draft = _server().dat_run(fn, plain, spec, enc, world, False, env)
+    run = draft.__dict__.get("_run")
+    if run is None:
+        raise TypeError(f"{fn.name} left its dat sealed by v.seal(); dat_run seals it, so leave it unsealed")
+    save_run(save, draft, run, name)
+    return draft
+
+
 # -- the worker's own machinery -----------------------------------------------------------------------
 
 class _Frame:
@@ -568,6 +610,7 @@ class _Frame:
     def __init__(self) -> None:
         self.before: Set[str] = set(sys.modules)
         self.claimed: Set[str] = set()
+        self.loaded: Set[str] = set()
 
 
 class _State:
@@ -839,52 +882,148 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
         modname, attr_name = fn._info["modname"], fn._info["attr"]
         work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None)) \
             if fn._takes_path else None
-        STATE.frames.append(_Frame())
-        STATE.works.append(os.path.realpath(work) if work is not None else None)
         rec: Dict[str, str] = {}
-        cwd = os.getcwd()
-        try:
-            if work is not None:
-                os.chdir(work)                      # a relative path resolves in the dat being produced
-            STATE.guard = True                      # the module's own load is confined like the body
+        with _body(work) as frame:
+            cwd = os.getcwd()
             try:
-                obj = getattr(importlib.import_module(modname), attr_name)
-                if not getattr(obj, "__ledger_fn__", False):
-                    raise TypeError(f"{fn.name!r} is not a ledger function (mark it @ledger_fn)")
-                args = dict(kw, path=work) if work is not None else kw
-                out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
-            finally:
-                STATE.guard = False
-                os.chdir(cwd)
-        except BaseException:
-            drop_work(work, None)
-            raise
-        finally:
-            frame = STATE.frames.pop()
-            STATE.works.pop()
-            new = set(sys.modules) - frame.before
-            loaded = new - frame.claimed
-            if STATE.frames:
-                STATE.frames[-1].claimed |= new     # a nested body's loads are its own entry's (Q37 (ii))
+                if work is not None:
+                    os.chdir(work)                  # a relative path resolves in the dat being produced
+                STATE.guard = True                  # the module's own load is confined like the body
+                try:
+                    obj = getattr(importlib.import_module(modname), attr_name)
+                    if not getattr(obj, "__ledger_fn__", False):
+                        raise TypeError(f"{fn.name!r} is not a ledger function (mark it @ledger_fn)")
+                    args = dict(kw, path=work) if work is not None else kw
+                    out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+                finally:
+                    STATE.guard = False
+                    os.chdir(cwd)
+            except BaseException:
+                drop_work(work, None)
+                raise
         value = wrap_result(fn.name, obj, out)
-        mounted = sorted(n for n in loaded if _mount_of(mounts, n) is not None)
-        mods = module_shas(closure(mounts, [modname, *mounted]))
-        mods = dict(sorted({**mods, **third_party_items(loaded)}.items()))
-        ran = fn.code._with_modules(mods)
-        trace = dict(rec)
-        trace.update({"code": ran.subject, "fn": fn.name, "platform": env.platform})
-        salt = rows.get(fn._info["prefix"], {}).get("salt")
-        if salt is not None:
-            trace["salt"] = salt
-        if save is False:
-            attach_run(value, run_trace(fn, plain, trace, enc, "eval:sandbox", ran))
-            drop_work(work, value)
-            return value
-        sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", ran, into=save, name=name)
-        drop_work(work, sealed)
-        return sealed
+        return _close_run(fn, plain, rec, frame.loaded, mounts, rows, env, enc, save, name, value, work)
     finally:
         STATE.guard = outer_guard
+
+
+class _WorkerWorld(DatManager):
+    """The dat world of a dat run in the worker (DAT 1045): the caller's dat folders and art folder. Its
+    index (a dat's hash to its name) is the dat world's own machinery, so its writes stand outside the
+    guard, as the ledger's do."""
+
+    @contextmanager
+    def _index_update(self) -> Iterator[Dict[str, Dict[str, str]]]:
+        with unguarded():
+            with super()._index_update() as index:
+                yield index
+
+
+def run_dat_here(fn: Fn, plain: "Rev", spec: Dict[str, Any], enc: str, save: Any,
+                 name: Optional[str] = None) -> Any:
+    """In the worker: ``Dat.manager.create(spec)`` in a work folder, ``execute`` it with the run function
+    imported from the mounts and its body confined (writes only in the work folder), then the dat sealed
+    as ``run_here`` seals a ledger function's folder."""
+    from .rev import Ref, Rev
+
+    outer_guard = STATE.guard
+    STATE.guard = False
+    try:
+        env = current_env()
+        mounts, rows = mounts_for(plain, env)
+        STATE.mounts = mounts
+        modname, attr_name = fn._info["modname"], fn._info["attr"]
+        manager = Dat.manager
+        work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None))
+        rec: Dict[str, str] = {}
+        registered = manager.do._registered_values or {}
+        before = registered.get(fn.name, _NONE)
+        with _body(work) as frame:
+            try:
+                STATE.guard = True                  # the module's own load is confined like the body
+                try:
+                    run = getattr(importlib.import_module(modname), attr_name)
+                finally:
+                    STATE.guard = False
+                if not callable(run) or getattr(run, "__ledger_fn__", False):
+                    raise TypeError(f"rev.dat_run: {fn.name} is {run!r}, not a dat's run function")
+
+                @functools.wraps(run)
+                def confined(*args: Any, **kwargs: Any) -> Any:
+                    old = STATE.guard
+                    STATE.guard = True
+                    try:
+                        return run(*args, **kwargs)
+                    finally:
+                        STATE.guard = old
+                manager.do._reg_value(fn.name, confined)       # execute loads dat.do through the world
+                try:
+                    dat = manager.create(spec, path=str(work / "dat"))
+                    manager.execute(dat)
+                finally:
+                    values = manager.do._registered_values or {}
+                    if before is _NONE:
+                        values.pop(fn.name, None)
+                    else:
+                        values[fn.name] = before
+            except BaseException:
+                drop_work(work, None)
+                raise
+        recording = Rev(plain.ledger, plain.id, _rec=rec)
+        head = plain.ledger.at()
+        for dep in sorted(Dat.get(dat.get_results(), "dat.dependencies", None) or {}):
+            if head._held(dep, "db/alias"):
+                Ref(recording, dep)                 # records `<dep> db/alias`, the binding it read
+        value = _close_run(fn, plain, rec, frame.loaded, mounts, rows, env, enc, save, name, dat, work)
+        if not work.exists():                       # its folder is gone: so is the dat world's index of it
+            manager._index_forget(str(work / "dat"))
+        return value
+    finally:
+        STATE.guard = outer_guard
+
+
+_NONE = object()
+
+
+@contextmanager
+def _body(work: Optional[Path]) -> Iterator[_Frame]:
+    """One running body: its frame (the modules it loads, ``frame.loaded`` once done) and its path folder,
+    the one place it writes."""
+    frame = _Frame()
+    STATE.frames.append(frame)
+    STATE.works.append(os.path.realpath(work) if work is not None else None)
+    try:
+        yield frame
+    finally:
+        STATE.frames.pop()
+        STATE.works.pop()
+        new = set(sys.modules) - frame.before
+        frame.loaded = new - frame.claimed
+        if STATE.frames:
+            STATE.frames[-1].claimed |= new         # a nested body's loads are its own entry's (Q37 (ii))
+
+
+def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], loaded: Set[str], mounts: List[Mount],
+               rows: Dict[str, Dict[str, str]], env: Env, enc: str, save: Any, name: Optional[str],
+               value: Any, work: Optional[Path]) -> Any:
+    """A run's code (the modules it loaded, beside ``fn``'s), its trace, and the result: a draft carrying
+    its ``RunTrace`` (``save`` False) or the memo entry, provenance ``eval:sandbox``."""
+    mounted = sorted(n for n in loaded if _mount_of(mounts, n) is not None)
+    mods = module_shas(closure(mounts, [fn._info["modname"], *mounted]))
+    mods = dict(sorted({**mods, **third_party_items(loaded)}.items()))
+    ran = fn.code._with_modules(mods)
+    trace = dict(rec)
+    trace.update({"code": ran.subject, "fn": fn.name, "platform": env.platform})
+    salt = rows.get(fn._info["prefix"], {}).get("salt")
+    if salt is not None:
+        trace["salt"] = salt
+    if save is False:
+        attach_run(value, run_trace(fn, plain, trace, enc, "eval:sandbox", ran))
+        drop_work(work, value)
+        return value
+    sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", ran, into=save, name=name)
+    drop_work(work, sealed)
+    return sealed
 
 
 # -- the parent's view of a worker ---------------------------------------------------------------------
@@ -937,18 +1076,20 @@ class Server:
         return resp
 
     def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env) -> Any:
-        from .rev import Ref
-
         resp = self._ask({"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
                           "keys": {k: encode_key(v) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env)})
-        for category, message in resp.get("warnings", ()):   # what the run warned, in the worker (DAT 1044)
-            warnings.warn(message, category, stacklevel=3)
-        if seal:
-            return Ref(plain.ledger.at(), resp["subject"]).load()
-        v = pickle.loads(resp["value"])
-        top = plain.ledger.at()
-        v.__dict__["_preds"] = {k: _unship(top, x) for k, x in resp.get("preds", {}).items()}
-        return v
+        return _result(plain, resp, seal)
+
+    def dat_run(self, fn: Fn, plain: "Rev", spec: Dict[str, Any], enc: str, world: DatManager, seal: bool,
+                env: Env) -> Any:
+        """``rev.dat_run``'s miss in a forked child (DAT 1045): the spec, the run function's name and the
+        caller's dat world (its folders, built afresh there as a ``DatManager``) cross the pipe."""
+        resp = self._ask({"op": "dat_run", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
+                          "spec": spec, "enc": enc, "returns": fn._returns, "template": fn._template, "seal": seal,
+                          "env": _ship_env(env),
+                          "world": {"dat_folders": list(world._dat_folders), "art_folder": world._art_folder,
+                                    "index": world._index_file, "verify": world._verify}})
+        return _result(plain, resp, seal)
 
     def version(self, plain: "Rev", prefix: str, env: Env) -> Optional[str]:
         """The mounted root ``prefix``'s ``__version__``, imported in a forked child (``import_version``)."""
@@ -963,6 +1104,21 @@ class Server:
                 self.proc.wait(timeout=5)
             except Exception:
                 self.proc.kill()
+
+
+def _result(plain: "Rev", resp: Dict[str, Any], seal: bool) -> Any:
+    """A child's reply as the call's value: the sealed entry loaded, or the draft unpickled with its preds;
+    what the run warned is warned here (DAT 1044)."""
+    from .rev import Ref
+
+    for category, message in resp.get("warnings", ()):
+        warnings.warn(message, category, stacklevel=4)
+    if seal:
+        return Ref(plain.ledger.at(), resp["subject"]).load()
+    v = pickle.loads(resp["value"])
+    top = plain.ledger.at()
+    v.__dict__["_preds"] = {k: _unship(top, x) for k, x in resp.get("preds", {}).items()}
+    return v
 
 
 def _ship_env(env: Env) -> Dict[str, Any]:
@@ -1075,12 +1231,22 @@ def serve(req: Dict[str, Any], out: Any) -> None:
         if req["op"] == "version":
             send(out, {"ok": True, "version": import_version(req["prefix"])})
             return
-        keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__" else v)
-                for k, v in req["keys"].items()}
-        fn = plain.load_fn(req["name"])
-        kw = fn._bind(keys)
-        with warnings.catch_warnings(record=True) as caught:      # the caller's, not the worker's stderr
-            value = run_here(fn, plain, kw, _enc(kw), req["seal"])
+        if req["op"] == "dat_run":
+            w = req["world"]
+            Dat.manager = _WorkerWorld(dat_folders=w["dat_folders"], art_folder=w["art_folder"],
+                                       index=w["index"], verify=w["verify"])
+            STATE.reads = STATE.reads + [os.path.realpath(f) for f in w["dat_folders"]] + (
+                [os.path.realpath(w["art_folder"])] if w["art_folder"] else [])
+            fn = load_mounted_run(plain, req["name"], req["returns"], req["template"])
+            with warnings.catch_warnings(record=True) as caught:  # the caller's, not the worker's stderr
+                value = run_dat_here(fn, plain, req["spec"], req["enc"], req["seal"])
+        else:
+            keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__"
+                        else v) for k, v in req["keys"].items()}
+            fn = plain.load_fn(req["name"])
+            kw = fn._bind(keys)
+            with warnings.catch_warnings(record=True) as caught:  # the caller's, not the worker's stderr
+                value = run_here(fn, plain, kw, _enc(kw), req["seal"])
         said = [(_warning_class(w.category), str(w.message)) for w in caught]
         if req["seal"]:
             send(out, {"ok": True, "subject": value.subject, "warnings": said})

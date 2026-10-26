@@ -47,6 +47,21 @@ PKG = {
             return v
     '''),
     "sbx/stage/helper.py": "def double(x):\n    return 2 * x\n",
+    "sbx/stage/runs.py": textwrap.dedent('''
+        import os
+        from pathlib import Path
+
+        def table(dat, n=1):
+            from sbx.stage import helper
+            Path(dat.get_path(), "t.txt").write_text(str(helper.double(n)))
+            dat.get_results()["out"] = helper.double(n)
+            dat.get_results()["pid"] = os.getpid()
+            dat.save()
+
+        def scribble(dat, n=1):
+            Path("/tmp/ledger-sandbox-dat-scribble.txt").write_text("x")
+            dat.save()
+    '''),
     "sbx/stage/fns.py": textwrap.dedent('''
         import importlib
         from pathlib import Path
@@ -538,3 +553,75 @@ def test_a_sandboxed_run_saves_into_a_transaction(sbx):
         t[v.subject, "status"] = "ok"
     assert L.at()[v.subject, "status"] == "ok" and L.at()[v.subject, "db/fn"] == "sbx.stage.fns.count"
     assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject
+
+
+# -- DAT 1045: rev.dat_run of a mounted run function runs in the worker --------------------------------
+
+@pytest.fixture
+def world(tmp_path):
+    """The default dat world in this test's folder; the one before it restored after."""
+    from dvc_dat import Dat, DatManager, core
+
+    before = core._default_manager
+    Dat.manager = DatManager(dat_folders=[str(tmp_path / "data")])
+    yield Dat.manager
+    core._default_manager = before
+    if before is not None:
+        Dat.manager = before
+
+
+RUN = {"dat": {"do": "sbx.stage.runs.table", "name": "tables/t{unique}", "kwargs": {"n": 3}}}
+
+
+def test_a_mounted_dat_run_runs_in_the_worker_and_hits_after_a_commit(sbx, world):
+    import os
+
+    L, repo = sbx
+    v = L.at().dat_run(RUN)
+    assert str(v) == "tables/t" and (v.path / "t.txt").read_text() == "6"
+    assert v.get_results()["out"] == 6 and v.get_results()["pid"] != os.getpid()
+    assert "sbx.stage.runs" not in sys.modules                     # never imported here
+    rows = L.at()
+    assert rows[v.subject, "db/provenance"] == "eval:sandbox" and rows[v.subject, "db/fn"] == "sbx.stage.runs.table"
+    assert "code/sbx-repo" not in v.dependencies
+    mods = rows[v.dependencies["code"], "db/modules"]
+    assert {"sbx/stage/runs.py", "sbx/stage/helper.py"} <= set(mods)    # what the run loaded
+    (repo / "sbx/other.py").write_text("X = 2\n")                    # a commit the run never read
+    git(repo, "commit", "-q", "-am", "other")
+    top = L.at().id
+    again = L.at().dat_run(RUN)
+    assert again.subject == v.subject and L.at().id == top            # a hit: nothing written
+    (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return x + x\n")
+    git(repo, "commit", "-q", "-am", "helper")
+    moved = L.at().dat_run(RUN)
+    assert moved.subject != v.subject and str(moved) == "tables/t_2"  # a loaded module's bytes moved
+
+
+def test_a_mounted_dat_run_draft_and_transaction(sbx, world):
+    L, _repo = sbx
+    d = L.at().dat_run(RUN, n=4, seal=False)
+    assert d.subject is None and (d.path / "t.txt").read_text() == "8" and "_run" in d.__dict__
+    d.seal(L)
+    assert L.at()[d.subject, "db/provenance"] == "eval:sandbox"
+    assert L.at().dat_run(RUN, n=4, seal="get").subject == d.subject
+    with L.transaction(by="t") as t:
+        v = L.at().dat_run(RUN, n=5, seal=t, path="t/five")
+    assert L.at().load("t/five").subject == v.subject and L.at()[v.subject, "db/provenance"] == "eval:sandbox"
+
+
+def test_a_mounted_dat_runs_body_is_confined(sbx, world):
+    L, _repo = sbx
+    with pytest.raises(ConfinedWrite, match="ledger-sandbox-dat-scribble"):
+        L.at().dat_run({"dat": {"do": "sbx.stage.runs.scribble"}})
+
+
+def test_a_mounted_ledger_function_is_refused_by_dat_run(sbx, world):
+    L, _repo = sbx
+    with pytest.raises(TypeError, match="rev.run"):
+        L.at().dat_run({"dat": {"do": "sbx.stage.fns.count"}})
+
+
+def test_rev_do_is_gone():
+    from dvc_dat.ledger import Rev
+
+    assert not hasattr(Rev, "do") and callable(Rev.dat_run)

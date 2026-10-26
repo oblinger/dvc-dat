@@ -178,7 +178,7 @@ class GameDat(Dat):
 
 
 def build_table(dat, n=10, start=1):
-    """A dat's run function (``Dat.do`` / ``rev.do``): ``table.csv``, ``cells`` in the results, saved."""
+    """A dat's run function (``Dat.do`` / ``rev.dat_run``): ``table.csv``, ``cells`` in the results, saved."""
     _count("build_table")
     Path(dat.get_path(), "table.csv").write_text(f"{n} from {start}\n")
     dat.get_results()["cells"] = n * n
