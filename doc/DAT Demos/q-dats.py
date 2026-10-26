@@ -186,10 +186,12 @@ print("files:", sorted(os.listdir(again_dat.get_path())))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
 
 # %% [markdown]
-# All three steps at once, remembered, is `L.at().do`: the target
-# `Dat.do` takes, through the ledger. The spec is the question and the
-# run function's code is part of the answer's record, so a ledger run
-# needs committed code. The same spec asked again is found, not run.
+# All three steps at once, remembered, is `L.at().dat_run`: the run
+# function executed for a dat, taking what `Dat.do` takes, through the
+# ledger. The spec is the question and the run function's code is part
+# of the answer's record: mounted, it runs in a sandboxed worker and
+# its code is the files it loaded. The same spec asked again is found,
+# not run.
 
 # %%
 subprocess.run(git_cmd + ["add", "mymodule"], check=True)
@@ -198,16 +200,16 @@ with L.transaction(by="human:dan", why="mount mymodule") as t:
     t.add("db/mount/mymodule", "db/root", "mymodule")   # mymodule's code is the mount's: its files, hashed
     t.add("db/mount/mymodule", "db/repo", "q-dats")
 
-table12_value = L.at().do("specs.table12")
+table12_value = L.at().dat_run("specs.table12")
 print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: named by the spec's template
 
 top_id = L.at().id
-again_value = L.at().do("specs.table12")
+again_value = L.at().dat_run("specs.table12")
 print("hit:", again_value.subject == table12_value.subject,
       " nothing written:", L.at().id == top_id)   # hit: True  nothing written: True
 print("db/fn:", L.at()[table12_value.subject, "db/fn"])   # db/fn: mymodule.mult.build_table
 print("db/repo/q-dats/mymodule:", L.at()["db/repo/q-dats/mymodule", "version"])   # db/repo/q-dats/mymodule: 0.1.0: the first clean run wrote the clock
-print("question:", Dat.do.resolve("specs.table12"))   # the spec, its base merged in: what do and L.at().do start from
+print("question:", Dat.do.resolve("specs.table12"))   # the spec, its base merged in: what do and L.at().dat_run start from
 # question: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
 
 # %% [markdown]
@@ -220,9 +222,9 @@ print("question:", Dat.do.resolve("specs.table12"))   # the spec, its base merge
 
 # %%
 for n in (5, 9):
-    L.at().do("specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.do
+    L.at().dat_run("specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.do
 print("cells:", L.at().select(("n", "cells"), kind=Dat))
-# cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: table/12 sealed from step 2's folder, then by L.at().do
+# cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: table/12 sealed from step 2's folder, then by L.at().dat_run
 
 # %% [markdown]
 # Spec kwargs and results are preds, so a query over them is an

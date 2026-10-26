@@ -141,11 +141,13 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # ```
 #
 # `just run` of a spec makes the dat, runs it and seals it as a value;
-# `alias=` names it. The spec's name is the question.
+# `alias=` names it. The spec's name is the question. `mymodule` is
+# mounted, so its run function runs in a sandboxed worker, and its code
+# is the files that run loaded.
 
 # %%
 # !just run specs.table12 alias=table/12
-# same as: L.at().do("specs.table12", path="table/12")
+# same as: L.at().dat_run("specs.table12", path="table/12")
 # → ran  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
@@ -154,7 +156,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 
 # %%
 # !just run specs.table12 alias=table/12
-# same as: the same L.at().do(...), a memo hit
+# same as: L.at().dat_run("specs.table12", path="table/12"), a memo hit
 # → hit  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
@@ -163,7 +165,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 
 # %%
 # !just table12
-# same as: just run specs.table12, i.e. L.at().do("specs.table12")
+# same as: just run specs.table12, i.e. L.at().dat_run("specs.table12")
 # → hit  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
@@ -197,13 +199,15 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 
 # %% [markdown]
 # `just why` is what a value was computed from, and whether that all
-# still holds.
+# still holds. A sandboxed run names no commit: `code` is the bytes of
+# the files it loaded, so a commit that leaves them alone leaves the
+# value current.
 
 # %%
 # !just why table/12
 # same as: v = L.at().load("table/12"); v.matches(L.at()), v.dependencies
 # → table/12: #<8 hex>, matches the head
-# → dependencies: code <8 hex>, code/q-cli <8 hex>, fn mymodule.mult.build_table, platform <platform>
+# → dependencies: code <8 hex>, fn mymodule.mult.build_table, platform <platform>
 
 # %% [markdown]
 # ## Updating
