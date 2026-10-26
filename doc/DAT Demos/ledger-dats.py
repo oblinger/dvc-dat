@@ -193,19 +193,18 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 #     return build(rev, spec, path, **kwargs)
 # ```
 #
-# `demo_game.etl` is mounted, so `dat` runs in the sandbox; the
-# code clock starts with it.
+# `demo_game.etl` is mounted, so `dat` runs in the sandbox. Its
+# version is `demo_game/etl/__init__.py`'s `__version__`, and the
+# ledger's `code/demo-game` clock starts at the first clean run.
 
 # %%
 with L.transaction(by="human:dan", why="mount the etl") as t:
     t.add("db/mount/demo_game.etl", "db/root", "demo_game/etl")
     t.add("db/mount/demo_game.etl", "db/repo", "demo-game")
-with L.transaction(by="human:dan", why="the clock's start", lock=10) as t:
-    bump(t, "code/demo-game", "minor",       # 0.0.0 -> 0.1.0
-         confirm=lambda old, new: True)
 rev = L.at()
 dat_fn = rev.load_fn("demo_game.etl.dat.dat")
 print("sandboxed:", dat_fn.code.sandboxed, " mount:", dat_fn.mount)     # → sandboxed: True  mount: demo_game.etl
+print("code:", dat_fn.code)     # → code: demo_game.etl@0.1.0
 
 # %%
 spec_dat = rev.run("demo_game.etl.dat.dat",
@@ -218,6 +217,8 @@ print("keys:", L.at()[spec_dat.subject, "db/keys"])
 # → keys: {"spec": {"bins": 16, "game": "G1",
 #             "main": "demo_game.etl.detect.find",
 #             "stage": "detect"}}
+print("code/demo-game:", L.at()["code/demo-game", "version"])
+# → code/demo-game: 0.1.0: this first clean run wrote the clock
 
 # %% [markdown]
 # The spec is the whole question: one key, a JSON object (A38), in
@@ -371,40 +372,36 @@ print("G1 counts:", L.at().select(("stage", "metrics.count"), kind=StageDat,
 rev = L.at()
 tracks_dat = rev.run("demo_game.etl.track.tracks",
                       game="G1")                   # a hit
-pre_bump_rev = rev
+pre_edit_rev = rev
 track_path = scratch_project_path / "demo_game/etl/track.py"
 track_path.write_text(track_path.read_text()
                       + "\n# tidied: no change in behaviour\n")
 
 # %% [markdown]
-# Notice `bump` refuses while the edit is uncommitted: there is no
-# commit for it to pin, and nothing is written.
+# A declared version counts only from a clean checkout. Notice the
+# uncommitted edit: the code is named by its commit, marked dirty,
+# so no run on it can move the `code/demo-game` clock.
 
 # %%
-try:
-    with L.transaction(by="human:dan", why="tidy track", lock=10) as t:
-        bump(t, "code/demo-game")
-except ValueError as e:
-    print("ValueError:", e)          # → ValueError: <a dirty tree>
+print("track code:", L.at().load_fn("demo_game.etl.track.tracks").code)
+# → track code: demo_game.etl@<8 hex>+dirty
 
 # %% [markdown]
-# Commit it, re-import, and bump.
+# Commit it and re-import.
 
 # %%
 git("commit", "-q", "-am", "tidy track")
 import demo_game.etl.track
 importlib.reload(demo_game.etl.track)    # sandbox workers import anew
-with L.transaction(by="human:dan", why="tidy track", lock=10) as t:
-    bump(t, "code/demo-game")            # 0.1.1, the new commit
 rev = L.at()
+print("track code:", rev.load_fn("demo_game.etl.track.tracks").code)   # → track code: demo_game.etl@0.1.0
 print("detections match:", detections_dat.matches(rev),
       " tracks match:", tracks_dat.matches(rev))   # → detections match: True  tracks match: False
 print("model matches:", model_dat.matches(rev))     # → model matches: False, for now
 
 # %% [markdown]
-# A sandboxed value's dependencies pin the modules a stage loaded, not the repo's
-# version, so the bump alone moves nothing: `detections` still
-# matches. `track.py` changed, so the tracks' `code` item moved. The
+# A sandboxed value's dependencies pin the modules a stage loaded,
+# not the repo's commit, so `detections` still matches. `track.py` changed, so the tracks' `code` item moved. The
 # model reads as stale too: `matches` never runs a stage (A42), and
 # its nested `tracks` item has no entry that holds at this rev yet.
 
@@ -418,6 +415,8 @@ print("same subject:", model_hit_dat.subject == model_dat.subject)   # → same 
 print("model matches:", model_dat.matches(L.at()))             # → model matches: True, now
 print("diff:", tracks_dat.diff(retracked_dat))
 # → diff: {"code": ("db/code/<a>", "db/code/<b>")}
+print("code/demo-game:", L.at()["code/demo-game", "version"])
+# → code/demo-game: 0.1.0: no version moved, so neither did the clock
 
 # %% [markdown]
 # Asking for the model re-derived the tracks (their code moved) and
@@ -502,11 +501,11 @@ with L.transaction(by="human:dan", lock=10,
 release_rev = L.at("0.1.0")
 print("release rev:", release_rev.id == t.rev.id,
       " version:", release_rev["db", "version"])          # → release rev: True  version: 0.1.0
-print("code version:", release_rev["code/demo-game", "version"])     # → code version: 0.1.1
+print("code version:", release_rev["code/demo-game", "version"])     # → code version: 0.1.0
 print("epochs:", release_rev["cfg/train", "epochs"])           # → epochs: 8
 print("subjects since:", sorted({row.subject
-                                 for row in release_rev.rows(since=pre_bump_rev)}))
-# → subjects since: the bump, the re-derived tracks, the hand run, the release
+                                 for row in release_rev.rows(since=pre_edit_rev)}))
+# → subjects since: the re-derived tracks, the hand run, the release
 #   and their db/tx/<n> subjects
 
 # %% [markdown]
@@ -550,13 +549,13 @@ print("diff:", old_model_dat.diff(now_model_dat))
 # `0.1.0` the config said 8 epochs, so the model sealed under that
 # binding is the hit, and nothing runs.
 #
-# G4 was never trained, and `pre_bump_rev` says `code/demo-game` is
+# G4 was never trained, and `pre_edit_rev` says `code/demo-game` is
 # the first commit while the checkout is at the second. Notice a
 # miss there asked with `clean=True` refuses to run.
 
 # %%
 try:
-    pre_bump_rev.run("demo_game.etl.model.train", game="G4",
+    pre_edit_rev.run("demo_game.etl.model.train", game="G4",
                       clean=True)
 except NotClean as e:
     print("NotClean:", e)       # → NotClean: … binds code/demo-game

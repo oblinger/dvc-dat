@@ -140,3 +140,12 @@ def test_a_hand_seal_with_an_fn_dep_moves_the_clock(mounted):
     with L.transaction(by="t") as t:
         Value.Blob({"x": 2}).seal(t, deps=[f])
     assert L.at()["code/code-repo", "version"] == "2.7.1"
+
+
+def test_bump_source_takes_the_innermost_version(pkg):
+    (pkg / "bumpme/inner").mkdir()
+    (pkg / "bumpme/inner/__init__.py").write_text('__version__ = "4.0.0"\n')    # a mount root's own
+    (pkg / "bumpme/inner/leaf.py").write_text("Y = 2\n")
+    b = bump_source("bumpme.inner.leaf")
+    assert (b.old, b.new, b.path) == ("4.0.0", "4.0.1", pkg / "bumpme/inner/__init__.py")
+    assert '__version__ = "0.1.0"' in (pkg / "bumpme/__init__.py").read_text()

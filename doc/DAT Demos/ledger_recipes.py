@@ -182,17 +182,17 @@ def confirm(subject):
 def bump_recipe(args):
     name, part = args[0], (args[1] if len(args) > 1 else "patch")
     ask = None if part == "patch" else confirm(name)
-    if name == "db":
+    if name == "db" or "/" in name:         # a ledger clock (db: the release); a module has no slash
         L = Ledger()
-        old = L.at().get("db", "version", default="0.0.0")
-        with L.transaction(by=BY, lock=10, why="release") as t:
-            new = bump(t, "db", part, confirm=ask)
-        print(f"db: {old} -> {new}, a release")
+        old = L.at().get(name, "version", default="0.0.0")
+        extra = {"why": "release"} if name == "db" else {}
+        with L.transaction(by=BY, lock=10, **extra) as t:
+            new = bump(t, name, part, confirm=ask)
+        print(f"{name}: {old} -> {new}" + (", a release" if name == "db" else ""))
         return
     import_checkout()
     b = bump_source(name, part, confirm=ask)
-    rel = os.path.relpath(b.path)
-    print(f"{name}: {b.old} -> {b.new} in {rel}")
+    print(f"{name}: {b.old} -> {b.new} in {os.path.relpath(b.path)}")
     print(f'commit it: git commit -am "{name} {b.new}"')
 
 

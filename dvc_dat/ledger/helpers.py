@@ -78,30 +78,41 @@ def bump_source(module: str, part: str = "patch", *,
                 confirm: Optional[Callable[[str, str], bool]] = None) -> SourceBump:
     """Raise ``module``'s ``__version__`` by ``part`` in its source: one line rewritten, nothing else.
 
-    ``module`` is a dotted name importable in this process; the version lives on its top-level package
-    (its ``__init__.py``, or the module file itself for a single-file module) as one line
-    ``__version__ = "X.Y.Z"``. ``minor`` and ``major`` need ``confirm(old, new)`` to answer ``True``, as
+    ``module`` is a dotted name importable in this process. The version is the innermost one on its
+    dotted path: the module's own file, then each enclosing package's ``__init__.py`` up to the
+    top-level package, the first holding one line ``__version__ = "X.Y.Z"`` (so ``demo_game.etl``, a
+    mount's root declaring its own, finds ``demo_game/etl/__init__.py``; ``mymodule.mult`` finds
+    ``mymodule/__init__.py``). ``minor`` and ``major`` need ``confirm(old, new)`` to answer ``True``, as
     ``bump``. Never commits and never touches a ledger: the first clean run after the commit moves the
     ``code/<repo>`` clock (DAT 1043). ``repo`` is the checkout's name by discovery, ``None`` outside one.
     Refusals, nothing written: ``ModuleNotFoundError`` for a module that does not resolve, ``ValueError``
-    for no ``__version__`` line or one that is not ``MAJOR.MINOR.PATCH``."""
+    for no ``__version__`` line (naming the top-level package's file) or one that is not
+    ``MAJOR.MINOR.PATCH``."""
     from .env import _git, repo_name
 
     if not isinstance(module, str) or not module:
         raise TypeError(f"a module is a dotted str, not {module!r}")
-    top = module.split(".")[0]
-    try:
-        spec = importlib.util.find_spec(module)
-    except ModuleNotFoundError as e:
-        raise ModuleNotFoundError(f"no module named {e.name or module!r}", name=e.name or module) from None
-    if spec is None:
-        raise ModuleNotFoundError(f"no module named {module!r}", name=module)
-    root = importlib.util.find_spec(top)
-    if root is None or not root.origin or not Path(root.origin).is_file():
-        raise ModuleNotFoundError(f"{top!r} has no source file to bump", name=top)
-    path = Path(root.origin)
-    text = path.read_text()
-    m = _ASSIGN.search(text)
+    parts = module.split(".")
+    found = None
+    path = None
+    for i in range(len(parts), 0, -1):
+        name = ".".join(parts[:i])
+        try:
+            spec = importlib.util.find_spec(name)
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(f"no module named {e.name or name!r}", name=e.name or name) from None
+        if spec is None:
+            raise ModuleNotFoundError(f"no module named {name!r}", name=name)
+        if not spec.origin or not Path(spec.origin).is_file():
+            continue                        # a namespace package: no file to hold a version
+        path = Path(spec.origin)
+        text = path.read_text()
+        found = _ASSIGN.search(text)
+        if found is not None:
+            break
+    if path is None:
+        raise ModuleNotFoundError(f"{module!r} has no source file to bump", name=module)
+    m = found
     if m is None:
         raise ValueError(f'{path}: no __version__ = "X.Y.Z" line to bump; add one')
     old = m[3]

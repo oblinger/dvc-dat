@@ -40,7 +40,7 @@ from pathlib import Path
 
 from IPython.display import SVG, Code, display
 
-from dvc_dat.ledger import Ledger, bump
+from dvc_dat.ledger import Ledger
 
 for module_name in [m for m in sys.modules if m == "comfort" or m.startswith("comfort.")]:
     del sys.modules[module_name]                  # a re-run: forget the last run's code repo
@@ -198,17 +198,16 @@ show("comfort/report.py")
 # ### Mounting the code
 #
 # Mounting `comfort` makes its stages sandboxed: each call runs in a fresh process of its own, and its code is the hash of every module file the run loaded.
+# Its version is `comfort.__version__`, in the source; the first run from the clean checkout writes it to the ledger's `code/comfort-repo` clock.
 # A `# same as` line is the shell form, typed in the code's repo, whose justfile imports `run` from dvc-dat (`dvc_dat.just`) and the ledger verbs from the `justfile` beside this notebook.
 
 # %%
-with L.transaction(by="human:dan", why="mount the stages", lock=10) as t:
+with L.transaction(by="human:dan", why="mount the stages") as t:
     t.add("db/mount/comfort", "db/root", "comfort")
     t.add("db/mount/comfort", "db/repo", "comfort-repo")
-    bump(t, "code/comfort-repo", "minor", confirm=lambda old, new: True)   # 0.1.0, at HEAD
-print("sandboxed:", L.at().load_fn("comfort.report.comfort_report").code.sandboxed)
-# → sandboxed: True
-# the bump, same as:
-#   echo yes | just bump code minor
+report_fn = L.at().load_fn("comfort.report.comfort_report")
+print("sandboxed:", report_fn.code.sandboxed, " code:", report_fn.code)
+# → sandboxed: True  code: comfort@0.1.0
 
 # %% [markdown]
 # ### Asking for the comfort report
@@ -224,6 +223,8 @@ print(comfort_report_value.obj)
 # → {'comfortable': '213/1095 days', 'top': ['Austin', 'Boston']}
 print(ran_since(counts_before))
 # → {'daily_comfort': 3, 'city_comfort': 3, 'comfort_report': 1}
+print("code/comfort-repo:", L.at()["code/comfort-repo", "version"])
+# → code/comfort-repo: 0.1.0: the clock, written by this first clean run
 # same as:
 #   just run comfort.report.comfort_report cityset=cityset/representative start="'2026-01-01'" end="'2027-01-01'"
 
@@ -312,7 +313,7 @@ print(ran_since(counts_before))
 
 # %% [markdown]
 # Only the comfort report ran: its run loaded `report.py`, and no other stage's run did.
-# No `bump` was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a new question, and a miss runs at HEAD, clean or dirty (F520 Q39).
+# No version bump was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a new question, and a miss runs at HEAD, clean or dirty (F520 Q39).
 
 # %% [markdown]
 # ## Reading a result's dependencies back

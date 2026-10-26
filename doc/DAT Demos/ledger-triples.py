@@ -643,14 +643,15 @@ with L.transaction(by="human:dan") as t:
 #
 # Every value function runs in a git checkout, the ledger records
 # which commit, and the notebook makes a tiny one of its own; no
-# value function runs here, so one empty package is enough.
+# value function runs here, so one package declaring its
+# `__version__` is enough.
 
 # %%
 import subprocess, sys
 
 demo_repo_path = (project_path.parent / "demo-game").resolve()
 (demo_repo_path / "demo_game").mkdir(parents=True, exist_ok=True)
-(demo_repo_path / "demo_game/__init__.py").write_text("")
+(demo_repo_path / "demo_game/__init__.py").write_text('__version__ = "0.1.0"\n')
 git_cmd = ["git", "-c", "user.name=demo",
            "-c", "user.email=demo@example.com"]
 for args in (["init", "-q"], ["add", "."],
@@ -660,28 +661,40 @@ sys.path.insert(0, str(demo_repo_path))
 import demo_game                       # discovery sees it imported
 
 # %% [markdown]
-# ### Transaction locking: `bump` under `lock=`
+# ### The code clock
 #
-# `bump` on `code/<repo>` reads the commit by git discovery over
-# the modules this process imported.
+# `code/demo-game` is a clock: the version of that repo's code that
+# runs were exposed to, with the commit beside it. The first run from
+# a clean checkout writes both ([Ledger: dats](ledger-dats.ipynb)
+# shows it); this sheet runs nothing, so it adds the two rows such a
+# run writes.
 
 # %%
+demo_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=demo_repo_path, check=True,
+                             capture_output=True, text=True).stdout.strip()
 with L.transaction(by="human:dan") as t:
-    t.add("code/demo-game", "version", "0.1.0")  # the clock's start
-with L.transaction(by="human:dan", lock=10,
-                   why="T531 re-baseline") as t:
-    new = bump(t, "code/demo-game")       # patch: 0.1.0 -> 0.1.1
-    t.add(t.tx, "checked", "G1,G4,G5")
-rev = t.rev
-print(new, rev["code/demo-game"])
-# 0.1.1 {'version': '0.1.1', 'commit': '<the demo commit>'}
+    t.add("code/demo-game", "version", demo_game.__version__)
+    t.add("code/demo-game", "commit", demo_commit)
+print("code/demo-game:", L.at()["code/demo-game"])
+# code/demo-game: {'version': '0.1.0', 'commit': '<the demo commit>'}
 
 # %% [markdown]
-# `bump` reads the version through `t.previous_rev`, writes the
-# next one, and on `code/<repo>` writes `commit` beside it, read
-# from the checkout: the caller never writes `commit`. `lock=10`
-# holds the write lock for the body, so nothing slips between the
-# read and the write.
+# ### Transaction locking: `bump` under `lock=`
+#
+# `bump` raises every other clock, here a schema's.
+
+# %%
+with L.transaction(by="human:dan", lock=10,
+                   why="T531 re-baseline") as t:
+    new = bump(t, "schema/tape")          # patch: 0.0.0 -> 0.0.1
+    t.add(t.tx, "checked", "G1,G4,G5")
+rev = t.rev
+print("schema/tape:", new)   # schema/tape: 0.0.1
+
+# %% [markdown]
+# `bump` reads the version through `t.previous_rev` and writes the
+# next one. `lock=10` holds the write lock for the body, so nothing
+# slips between the read and the write.
 #
 # A body can do the same by hand: read through `t.previous_rev`,
 # alter, write back. Here one more official joins `game/G1`.
@@ -741,15 +754,15 @@ except ValueError as e:
     print("ValueError:", e)              # minor needs confirm=
 
 # %% [markdown]
-# `code/dvc-dat` has no checkout in this environment. Notice the
-# message names the repo.
+# A code version lives in its source, so `bump` refuses a
+# `code/<repo>` subject. Notice the message says where to bump it.
 
 # %%
 try:
     with L.transaction(by="human:dan", lock=10) as t:
         bump(t, "code/dvc-dat")
-except ValueError as e:
-    print("ValueError:", e)              # no checkout for code/dvc-dat
+except TypeError as e:
+    print("TypeError:", e)               # code/dvc-dat: a code version lives in its source; …
 
 # %%
 with L.transaction(by="human:dan", lock=10) as t:
@@ -770,7 +783,7 @@ with L.transaction(by="agent:release", lock=5) as t:
     v = t.previous_rev["code/demo-game", "version"]
     c = t.previous_rev["code/demo-game", "commit"]
     t.add("rel/demo-game", "pair", f"{v}+{c}")
-print(L.at()["rel/demo-game", "pair"])    # 0.1.1+<commit>
+print(L.at()["rel/demo-game", "pair"])    # 0.1.0+<commit>
 
 # %% [markdown]
 # Any read through `t.previous_rev` holds still for the whole
@@ -784,7 +797,7 @@ try:
         time.sleep(2)                     # past the limit
 except LockTimeout as e:
     print("LockTimeout:", e)
-print(L.at()["rel/demo-game", "pair"])    # 0.1.1+<commit>
+print(L.at()["rel/demo-game", "pair"])    # 0.1.0+<commit>
 
 # %%
 rev = L.at()

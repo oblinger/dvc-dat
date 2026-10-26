@@ -22,7 +22,7 @@ from pathlib import Path
 from IPython.display import SVG, display
 
 from dvc_dat import Dat
-from dvc_dat.ledger import Ledger, bump
+from dvc_dat.ledger import Ledger
 
 demos_path = Path(globals().get("demos_path", Path.cwd()))   # survives the chdir
 os.chdir(demos_path)
@@ -72,6 +72,7 @@ show("q-dats")
 # the files: a run function in mult.py, two template specs in specs/
 module_path = Path("mymodule")
 (module_path / "specs").mkdir(parents=True)
+(module_path / "__init__.py").write_text('__version__ = "0.1.0"\n')   # the code's version, in its source
 (module_path / "mult.py").write_text('''\
 import csv
 from pathlib import Path
@@ -239,10 +240,9 @@ print("files:", sorted(os.listdir(again_dat.get_path())))
 # %%
 subprocess.run(git_cmd + ["add", "mymodule"], check=True)
 subprocess.run(git_cmd + ["commit", "-q", "-m", "mymodule"], check=True)
-with L.transaction(by="human:dan", why="mount mymodule", lock=5) as t:   # bump reads, then writes
+with L.transaction(by="human:dan", why="mount mymodule") as t:
     t.add("db/mount/mymodule", "db/root", "mymodule")
     t.add("db/mount/mymodule", "db/repo", "q-dats")
-    bump(t, "code/q-dats", "minor", confirm=lambda old, new: True)
 
 table12_spec_record = Dat.do.resolve("specs.table12")
 spec_dat = L.at().run("mymodule.table_dat.table", spec=table12_spec_record)
@@ -252,6 +252,7 @@ top_id = L.at().id
 again_spec_dat = L.at().run("mymodule.table_dat.table", spec=table12_spec_record)
 print("same subject:", again_spec_dat.subject == spec_dat.subject,
       " nothing written:", L.at().id == top_id)   # same subject: True  nothing written: True: a hit
+print("code/q-dats:", L.at()["code/q-dats", "version"])   # code/q-dats: 0.1.0: the first clean run wrote the clock
 
 # %% [markdown]
 # The same spec is the same question: the second run is a memo hit,
