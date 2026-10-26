@@ -195,7 +195,8 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 #
 # `demo_game.etl` is mounted, so `dat` runs in the sandbox. Its
 # version is `demo_game/etl/__init__.py`'s `__version__`, and the
-# ledger's `code/demo-game` clock starts at the first clean run.
+# ledger's `db/repo/demo-game/demo_game.etl` clock starts at the first
+# clean run, with the commit beside it in `db/repo/demo-game`.
 
 # %%
 with L.transaction(by="human:dan", why="mount the etl") as t:
@@ -217,8 +218,8 @@ print("keys:", L.at()[spec_dat.subject, "db/keys"])
 # → keys: {"spec": {"bins": 16, "game": "G1",
 #             "main": "demo_game.etl.detect.find",
 #             "stage": "detect"}}
-print("code/demo-game:", L.at()["code/demo-game", "version"])
-# → code/demo-game: 0.1.0: this first clean run wrote the clock
+print("db/repo/demo-game/demo_game.etl:", L.at()["db/repo/demo-game/demo_game.etl", "version"])
+# → db/repo/demo-game/demo_game.etl: 0.1.0: this first clean run wrote the clock
 
 # %% [markdown]
 # The spec is the whole question: one key, a JSON object (A38), in
@@ -380,7 +381,7 @@ track_path.write_text(track_path.read_text()
 # %% [markdown]
 # A declared version counts only from a clean checkout. Notice the
 # uncommitted edit: the code is named by its commit, marked dirty,
-# so no run on it can move the `code/demo-game` clock.
+# so no run on it can move the `db/repo/demo-game/demo_game.etl` clock.
 
 # %%
 print("track code:", L.at().load_fn("demo_game.etl.track.tracks").code)
@@ -415,8 +416,8 @@ print("same subject:", model_hit_dat.subject == model_dat.subject)   # → same 
 print("model matches:", model_dat.matches(L.at()))             # → model matches: True, now
 print("diff:", tracks_dat.diff(retracked_dat))
 # → diff: {"code": ("db/code/<a>", "db/code/<b>")}
-print("code/demo-game:", L.at()["code/demo-game", "version"])
-# → code/demo-game: 0.1.0: no version moved, so neither did the clock
+print("db/repo/demo-game/demo_game.etl:", L.at()["db/repo/demo-game/demo_game.etl", "version"])
+# → db/repo/demo-game/demo_game.etl: 0.1.0: no version moved, so neither did the clock
 
 # %% [markdown]
 # Asking for the model re-derived the tracks (their code moved) and
@@ -501,12 +502,12 @@ with L.transaction(by="human:dan", lock=10,
 release_rev = L.at("0.1.0")
 print("release rev:", release_rev.id == t.rev.id,
       " version:", release_rev["db", "version"])          # → release rev: True  version: 0.1.0
-print("code version:", release_rev["code/demo-game", "version"])     # → code version: 0.1.0
+print("code version:", release_rev["db/repo/demo-game/demo_game.etl", "version"])     # → code version: 0.1.0
 print("epochs:", release_rev["cfg/train", "epochs"])           # → epochs: 8
 print("subjects since:", sorted({row.subject
                                  for row in release_rev.rows(since=pre_edit_rev)}))
-# → subjects since: the re-derived tracks, the hand run, the release
-#   and their db/tx/<n> subjects
+# → subjects since: the re-derived tracks, the hand run, the release,
+#   db/repo/demo-game (the clean re-run's commit) and their db/tx/<n> subjects
 
 # %% [markdown]
 # A release is a bump of `db`'s own `version`: one revision, named
@@ -549,7 +550,7 @@ print("diff:", old_model_dat.diff(now_model_dat))
 # `0.1.0` the config said 8 epochs, so the model sealed under that
 # binding is the hit, and nothing runs.
 #
-# G4 was never trained, and `pre_edit_rev` says `code/demo-game` is
+# G4 was never trained, and `pre_edit_rev` says `db/repo/demo-game` is
 # the first commit while the checkout is at the second. Notice a
 # miss there asked with `clean=True` refuses to run.
 
@@ -558,14 +559,14 @@ try:
     pre_edit_rev.run("demo_game.etl.model.train", game="G4",
                       clean=True)
 except NotClean as e:
-    print("NotClean:", e)       # → NotClean: … binds code/demo-game
+    print("NotClean:", e)       # → NotClean: … binds db/repo/demo-game
 
 # %% [markdown]
 # A revision can be read forever. A sandboxed miss runs at HEAD,
 # clean or dirty, and its `code` item records the bytes of every
 # module it loaded, which is its identity. `clean=True` is for a
 # reader who must say which version ran: the checkout clean and at
-# the revision's `code/<repo>` commit, else `NotClean` (a
+# the revision's `db/repo/<repo>` commit, else `NotClean` (a
 # `NotEvaluated`), raised before anything runs.
 
 # %% [markdown]

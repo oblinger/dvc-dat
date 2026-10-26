@@ -16,7 +16,7 @@ class NotEvaluated(LedgerError, RuntimeError):
 
 class NotClean(NotEvaluated):
     """A ``clean=True`` call whose code is not a clean representation of a version: the checkout
-    is dirty, or not at the commit the rev's ``code/<repo>`` row names (or the rev names none)."""
+    is dirty, or not at the commit the rev's ``db/repo/<repo>`` row names (or the rev names none)."""
 
 
 class UnmountedImport(LedgerError, ImportError):

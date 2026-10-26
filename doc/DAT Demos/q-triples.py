@@ -165,10 +165,10 @@ except TypeError as e:
 # %% [markdown]
 # ## Connecting to code
 #
-# A `code/<repo>` subject is a version clock tied to a git checkout:
-# the version of that repo's code that runs were exposed to. The
-# version lives in the source, as `__version__`; the first run from a
-# clean checkout writes it, with the commit beside it.
+# A `db/repo/<repo>/<package>` subject is a version clock tied to a git
+# checkout: the version of that package's code that runs were exposed
+# to. The version lives in the source, as `__version__`; the first run
+# from a clean checkout writes it, and its commit to `db/repo/<repo>`.
 
 # %%
 demo_repo_path = scratch_path / "demo-game"
@@ -185,8 +185,10 @@ import demo_game.hello
 
 greeting = L.at().run("demo_game.hello.hello", game="G1")
 print("greeting:", greeting.obj)   # greeting: hello west: G1's court now
-print("code/demo-game:", L.at()["code/demo-game"])
-# code/demo-game: {'version': '0.1.0', 'commit': '<the demo commit>'}
+print("db/repo/demo-game/demo_game:", L.at()["db/repo/demo-game/demo_game"])
+# db/repo/demo-game/demo_game: {'version': '0.1.0'}
+print("db/repo/demo-game:", L.at()["db/repo/demo-game"])
+# db/repo/demo-game: {'commit': '<the demo commit>'}
 
 # %% [markdown]
 # ## Locking the ledger

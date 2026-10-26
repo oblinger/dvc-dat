@@ -110,9 +110,9 @@ def _semver(text: Any) -> Optional[Tuple[int, int, int]]:
 
 
 def code_token(env_commit: Optional[str]) -> str:
-    """The ``code/<repo>`` dependency item: the environment's commit, 8 hex (T034): the commit the code
-    ran at, whatever commit the ``code/<repo>`` row pins its version to. The version is not in the
-    item; it stays readable from the ``code/<repo>`` rows at the revision."""
+    """The ``code/<repo>`` dependency item (a label, not a subject): the environment's commit, 8 hex
+    (T034), the commit the code ran at, whatever the ``db/repo/<repo>`` commit row says. The version is
+    not in the item; it stays readable from the ``db/repo/<repo>/<package>`` clocks (DAT 1044)."""
     return (env_commit or "")[:8]
 
 
@@ -147,6 +147,7 @@ class Transaction:
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
         self._codes: set = set()
         self._clocks: set = set()
+        self._commits: Dict[str, str] = {}
         #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
         self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
         self._to_store: List[Value] = []
@@ -714,30 +715,33 @@ class Transaction:
         for p, o in rows:
             self._ops.append(_Op(subject, p, o, True))
 
-    def _advance_clock(self, repo: str, version: str, commit: str) -> None:
-        """Move the ``code/<repo>`` clock to ``version`` (DAT 1043): the version a run was exposed to.
+    def _advance_clock(self, repo: str, package: str, version: str, commit: str) -> None:
+        """Move the clocks of a clean run (DAT 1043, 1044): ``db/repo/<repo>/<package> version``, the version
+        the run was exposed to, one per versioned package; ``db/repo/<repo> commit``, the latest clean run
+        of any package in the repo. Written by the ledger alone, never by a person (``bump_source`` edits
+        the source).
 
-        Only a plain ``MAJOR.MINOR.PATCH`` moves it: a dirty checkout's ``<commit 8>+dirty``, a bare
-        commit or a ``#hash`` never does. Read through the snapshot at open: absent or lower, this
-        transaction adds ``version`` and ``commit`` (once per repo); equal, nothing; higher on the row,
-        a warning and nothing (the clock never moves back)."""
-        if repo in self._clocks:
+        Only a plain ``MAJOR.MINOR.PATCH`` counts: a dirty checkout's ``<commit 8>+dirty``, a bare commit
+        or a ``#hash`` moves neither. Read through the snapshot at open. The version, per package: absent
+        or lower, this transaction adds it; equal, nothing; higher on the row, a warning and nothing (the
+        clock never moves back). The commit: added whenever it differs from the row."""
+        if _semver(version) is None or (repo, package) in self._clocks:
             return
-        self._clocks.add(repo)
+        self._clocks.add((repo, package))
         seen = _semver(version)
-        if seen is None:
-            return
-        subject = f"code/{repo}"
+        subject = f"db/repo/{repo}/{package}"
         row = self._snapshot().get(subject, "version", default=None)
         held = _semver(row) if isinstance(row, str) else None
-        if held is not None and held == seen:
-            return
         if held is not None and held > seen:
             warnings.warn(f"{subject}: the run's code is {version}, below the ledger's {row}; the clock keeps "
                           f"{row}", stacklevel=2)
-            return
-        self.add(subject, "version", version)
-        self.add(subject, "commit", commit)
+        elif held is None or held < seen:
+            self.add(subject, "version", version)
+        if self._commits.get(repo) != commit:
+            self._commits[repo] = commit
+            if self._snapshot().get(f"db/repo/{repo}", "commit", default=None) != commit or \
+                    any(op.s == f"db/repo/{repo}" and op.p == "commit" for op in self._ops):
+                self.add(f"db/repo/{repo}", "commit", commit)
 
     # -- the bracket ----------------------------------------------------------
 

@@ -252,7 +252,7 @@ top_id = L.at().id
 again_spec_dat = L.at().run("mymodule.table_dat.table", spec=table12_spec_record)
 print("same subject:", again_spec_dat.subject == spec_dat.subject,
       " nothing written:", L.at().id == top_id)   # same subject: True  nothing written: True: a hit
-print("code/q-dats:", L.at()["code/q-dats", "version"])   # code/q-dats: 0.1.0: the first clean run wrote the clock
+print("db/repo/q-dats/mymodule:", L.at()["db/repo/q-dats/mymodule", "version"])   # db/repo/q-dats/mymodule: 0.1.0: the first clean run wrote the clock
 
 # %% [markdown]
 # The same spec is the same question: the second run is a memo hit,

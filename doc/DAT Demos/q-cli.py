@@ -139,7 +139,7 @@ for args in (["init", "-q"], ["config", "user.name", "demo"], ["config", "user.e
              ["add", "."], ["commit", "-q", "-m", "q-cli"]):
     subprocess.run(["git", *args], check=True)
 
-import mymodule.table_dat                         # discovery finds the checkout code/q-cli names
+import mymodule.table_dat                         # discovery finds the checkout, the repo q-cli
 with L.transaction(by="human:dan", why="mount mymodule") as t:   # sandboxed: code = the module bytes a run loads
     t.add("db/mount/mymodule", "db/root", "mymodule")
     t.add("db/mount/mymodule", "db/repo", "q-cli")
@@ -283,20 +283,21 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # → commit it: git commit -am "mymodule 0.1.1"
 
 # %% [markdown]
-# The ledger's `code/q-cli` clock is the version runs were exposed to.
-# The first run (rev 2) put `0.1.0` there; after the commit, the next
-# run from the clean checkout moves it to `0.1.1`, the commit beside it.
+# The ledger's `db/repo/q-cli/mymodule` clock is the version of `mymodule` runs were exposed to.
+# The first run (rev 2) put `0.1.0` there; after the commit, the next run from the clean checkout moves it to `0.1.1`, and `db/repo/q-cli` to that run's commit.
 
 # %%
 # !git commit -qam "mymodule 0.1.1"
 # !just run mymodule.table_dat.table spec="{dat: {do: mymodule.mult.build_table, kwargs: {n: 12, start: 1}}}"
-# !just history code/q-cli
-# same as: [r for r in L.at().rows() if r.subject == "code/q-cli"]
+# !just history db/repo/q-cli/mymodule
+# same as: [r for r in L.at().rows() if r.subject == "db/repo/q-cli/mymodule"]
+# !just history db/repo/q-cli
 # → ran  anonymous/Dat  n=12 start=1 cells=144
 # → rev  by         predicate  object
 # →   2  eval:mymodule.table_dat.table version    0.1.0
-# →   2  eval:mymodule.table_dat.table commit     <40 hex>
 # →   7  eval:mymodule.table_dat.table version    0.1.1
+# → rev  by         predicate  object
+# →   2  eval:mymodule.table_dat.table commit     <40 hex>
 # →   7  eval:mymodule.table_dat.table commit     <40 hex>
 
 # %% [markdown]

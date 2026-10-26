@@ -43,7 +43,7 @@ sys.path entry> -> sha256`` of the file (the standard library, an editable
 source). dvc-dat and what the server holds before the fork (the standard
 library pieces the ledger uses, pyyaml) are infrastructure, like dvc-dat (A56).
 A lookup re-hashes exactly those as they are now: a mounted file on disk
-(whatever commit the rev's ``code/<repo>`` row names), a third-party one as
+(whatever commit the rev's ``db/repo/<repo>`` row names), a third-party one as
 installed. Any byte changed in a loaded module is a different entry.
 ``fn.code.subject`` before any run is the static closure.
 """
@@ -67,6 +67,7 @@ import sys
 import tempfile
 import threading
 import traceback
+import warnings
 from pathlib import Path
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple
@@ -467,7 +468,8 @@ def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str,
     mounts = {p: {"repo": r["repo"], "root": r["root"]} for p, r in mounts_at(plain).items() if "repo" in r}
     return Code({"modules": files, "mounts_hash": mh, "mounts": mounts,
                  "commit": co.commit if co is not None else None,
-                 "lock": lock, "sandboxed": True, "version": version}, unit=m.prefix)
+                 "lock": lock, "sandboxed": True, "version": version,
+                 "package": m.prefix if attr is not None and version == str(attr) else None}, unit=m.prefix)
 
 
 def root_version(plain: "Rev", env: Env, prefix: str) -> Optional[str]:
@@ -911,6 +913,8 @@ class Server:
 
         resp = self._ask({"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
                           "keys": {k: encode_key(v) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env)})
+        for category, message in resp.get("warnings", ()):   # what the run warned, in the worker (DAT 1044)
+            warnings.warn(message, category, stacklevel=3)
         if seal:
             return Ref(plain.ledger.at(), resp["subject"]).load()
         v = pickle.loads(resp["value"])
@@ -1047,12 +1051,14 @@ def serve(req: Dict[str, Any], out: Any) -> None:
                 for k, v in req["keys"].items()}
         fn = plain.load_fn(req["name"])
         kw = fn._bind(keys)
-        value = run_here(fn, plain, kw, _enc(kw), req["seal"])
+        with warnings.catch_warnings(record=True) as caught:      # the caller's, not the worker's stderr
+            value = run_here(fn, plain, kw, _enc(kw), req["seal"])
+        said = [(_warning_class(w.category), str(w.message)) for w in caught]
         if req["seal"]:
-            send(out, {"ok": True, "subject": value.subject})
+            send(out, {"ok": True, "subject": value.subject, "warnings": said})
         else:
             preds = {k: _ship(v) for k, v in value.__dict__.pop("_preds", {}).items()}
-            send(out, {"ok": True, "value": pickle.dumps(value), "preds": preds})
+            send(out, {"ok": True, "value": pickle.dumps(value), "preds": preds, "warnings": said})
     except BaseException as e:  # noqa: BLE001 - every failure goes back to the parent
         try:
             blob = pickle.dumps(e)
@@ -1060,6 +1066,12 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             blob = None
         send(out, {"ok": False, "exc": blob, "type": type(e).__name__, "message": str(e),
                    "traceback": traceback.format_exc()})
+
+
+def _warning_class(category: Any) -> Any:
+    """A warning's class as it crosses the pipe: a built-in one as itself, any other as ``UserWarning``
+    (a mounted module's class would not unpickle in the caller)."""
+    return category if getattr(category, "__module__", None) == "builtins" else UserWarning
 
 
 def _ship(v: Any) -> Any:

@@ -2,7 +2,7 @@
 
 The environment provider (the test seam, A51) is pinned so ``run`` is
 deterministic: one repo, ``testrepo``, at commit ``abc1234``, clean, its
-checkout this folder; ``coded`` writes the matching ``code/testrepo`` rows.
+checkout this folder; ``coded`` writes the matching ``db/repo/testrepo`` clocks.
 """
 
 import sys
@@ -71,6 +71,6 @@ def pytest_sessionfinish(session, exitstatus):
 @pytest.fixture
 def coded(L):
     with L.transaction(by="test") as t:
-        t.add("code/testrepo", "version", "1.0.0")
-        t.add("code/testrepo", "commit", "abc1234")
+        t.add("db/repo/testrepo/ledger_kinds", "version", "1.0.0")
+        t.add("db/repo/testrepo", "commit", "abc1234")
     return L

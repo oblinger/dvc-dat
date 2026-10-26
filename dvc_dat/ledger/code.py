@@ -7,8 +7,9 @@ checkout (``code.sandboxed``). Only the snapshot has identity; a function is a n
 ``subject`` ``db/code/<hash 16>``, the 16 hex the memo key carried as ``db/fn/<name>/<hash 16>`` before.
 Beside it, fixed at load and not hashed, the description: ``mounts`` (``prefix -> {repo, root}``; empty for
 installed code), ``commit`` (the checkout's at load), ``lock`` (the blob id of that checkout's
-``uv.lock``), ``sandboxed`` and ``version``. The version is a name over the hash, never the identity, and a
-commit is pinned by a result's ``code/<repo>`` row, so neither moves the hash. Its name is
+``uv.lock``), ``sandboxed``, ``version`` and ``package`` (the dotted root whose declared version it is, or
+``None``). The version is a name over the hash, never the identity, and the commit is a result's
+``code/<repo>`` dependency item, so neither moves the hash. Its name is
 ``<unit>@<version>``: the unit is the mount prefix for mounted code (``plane``, ``algs.ocr``) and the
 function's top-level package for installed code (``geometry``). Immutable: accessors only.
 
@@ -62,7 +63,7 @@ class Code(Value):
             "modules": dict(sorted(manifest["modules"].items())), "mounts_hash": manifest["mounts_hash"],
             "mounts": {k: dict(v) for k, v in manifest["mounts"].items()},
             "commit": manifest["commit"], "lock": manifest["lock"], "sandboxed": bool(manifest["sandboxed"]),
-            "version": str(manifest["version"])}
+            "version": str(manifest["version"]), "package": manifest.get("package")}
         self.__dict__["_unit"] = unit
         self.__dict__["_hash"] = sha256(self.encode())
 
@@ -106,6 +107,13 @@ class Code(Value):
     def version(self) -> str:
         """The name after ``@``: ``2.7.1``, ``4be21c7e+dirty``, ``#2db69ce1``."""
         return str(self._manifest["version"])
+
+    @property
+    def package(self) -> Optional[str]:
+        """The dotted root whose declared version ``version`` is (DAT 1044): the unit (``plane``,
+        ``demo_game.etl``, ``geometry``), the ``<package>`` of the ``db/repo/<repo>/<package>`` clock a clean
+        run moves; ``None`` when the version came from a commit or the hash (or a dirty checkout)."""
+        return self._manifest["package"]
 
     def encode(self) -> bytes:
         """The identity: ``{"modules": relpath -> sha256, "mounts": <mounts hash or None>}``, canonical."""
@@ -164,13 +172,8 @@ def _top_dists() -> Mapping[str, List[str]]:
     return md.packages_distributions()
 
 
-def installed_version(top: str, env: Env, repo: Optional[str], ident: str) -> str:
-    """The installed ladder: a dirty checkout, its short commit ``+dirty``; else ``__version__`` on the
-    top-level package; else its distribution's version; else the short commit of the checkout holding it;
-    else ``#`` + 8 hex of ``ident`` (the code's hash)."""
-    co = env.code.get(repo) if repo else None
-    if co is not None and co.commit and co.dirty:
-        return co.commit[:SHORT] + "+dirty"
+def declared_version(top: str) -> Optional[str]:
+    """``__version__`` on the top-level package ``top``, else its distribution's version, else ``None``."""
     mod = sys.modules.get(top) or importlib.import_module(top)
     attr = getattr(mod, "__version__", None)
     if attr is not None:
@@ -180,6 +183,19 @@ def installed_version(top: str, env: Env, repo: Optional[str], ident: str) -> st
             return md.version(dist)
         except md.PackageNotFoundError:
             continue
+    return None
+
+
+def installed_version(top: str, env: Env, repo: Optional[str], ident: str) -> str:
+    """The installed ladder: a dirty checkout, its short commit ``+dirty``; else ``__version__`` on the
+    top-level package; else its distribution's version; else the short commit of the checkout holding it;
+    else ``#`` + 8 hex of ``ident`` (the code's hash)."""
+    co = env.code.get(repo) if repo else None
+    if co is not None and co.commit and co.dirty:
+        return co.commit[:SHORT] + "+dirty"
+    declared = declared_version(top)
+    if declared is not None:
+        return declared
     if co is not None and co.commit:
         return co.commit[:SHORT]
     return "#" + ident[:SHORT]

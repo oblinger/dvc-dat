@@ -91,7 +91,7 @@ def test_code_commit_pins_the_version_and_the_env_commit_decides(world, envbox):
     a = world.at().run("ledger_kinds.cut", game="G1")
     assert a.dependencies["code/testrepo"] == "abc1234"
     with world.transaction(by="t") as t:
-        t.add("code/testrepo", "version", "1.0.1")        # version moves, commit does not
+        t.add("db/repo/testrepo/ledger_kinds", "version", "1.0.1")   # version moves, commit does not
     assert a.matches(world.at())
     envbox.code(commit="def5678")                          # a later commit: the row no longer gates (Q7 (C))
     assert not a.matches(world.at())                       # a hit holds at the commit it ran at
@@ -109,7 +109,7 @@ def test_clean_requires_a_clean_checkout_at_the_revs_commit(world, envbox):
     a = world.at().run("ledger_kinds.cut", game="G1", clean=True)      # clean, at the row's commit
     assert world.at().run("ledger_kinds.cut", game="G1", clean=True).subject == a.subject
     envbox.code(commit="def5678")
-    with pytest.raises(NotClean, match="binds code/testrepo to abc1234"):
+    with pytest.raises(NotClean, match="binds db/repo/testrepo to abc1234"):
         world.at().run("ledger_kinds.cut", game="G1", clean=True)        # refused before the lookup
     envbox.code(dirty=True)
     with pytest.raises(NotClean, match="uncommitted changes") as e:
@@ -127,7 +127,7 @@ def test_clean_needs_a_code_row(L):
     v.preds.update(game="G1")
     with L.transaction(by="t") as t:
         v.seal(t)
-    with pytest.raises(NotClean, match="names no code/testrepo commit"):
+    with pytest.raises(NotClean, match="names no db/repo/testrepo commit"):
         L.at().run("ledger_kinds.cut", game="G1", clean=True)
 
 
