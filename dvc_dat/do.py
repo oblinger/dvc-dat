@@ -511,7 +511,7 @@ DESCRIPTION
     through the ledger instead, found if computed before from the same
     inputs by the same code, else run and sealed; it prints `hit` or `ran`
     and the value, and alias=NAME names it.  A dat spec (a mounted name or
-    a spec file whose `dat:` names its run function) is rev.do: the
+    a spec file whose `dat:` names its run function) is rev.dat_run: the
     KEY=VALUE pairs update its dat.kwargs.  A ledger function (a dotted
     function, a mounted name, or a spec file whose `main` names it, the
     line's keys over the file's) is rev.run.
@@ -701,7 +701,7 @@ def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: S
     """`x TARGET k=v ...` with a ledger: found if computed before, else run and sealed.
 
     TARGET is a dat spec -- a mounted name or a spec file (`.yaml`/`.json`) with a
-    `dat:` part -- run by `rev.do`, the line's keys updating its `dat.kwargs`; or a
+    `dat:` part -- run by `rev.dat_run`, the line's keys updating its `dat.kwargs`; or a
     ledger function, run by `rev.run`: a spec file or mounted spec whose `main`
     names it (its other keys the keys, the line's over the file's), a mounted
     name loading to it, or its dotted name.  `--set` / `--json` update a spec's
@@ -766,17 +766,17 @@ def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: S
 
 
 def _cmd_eval_dat(ledger: Any, target: Any, kwargs: Dict[str, Any], flags: set) -> int:
-    """`x SPEC k=v ...` with a ledger: `rev.do(SPEC, **kwargs)`, the dat found or made, run and sealed."""
+    """`x SPEC k=v ...` with a ledger: `rev.dat_run(SPEC, **kwargs)`, the dat found or made, run and sealed."""
     keys = dict(kwargs)
     alias = keys.pop("alias", None)
     if "dry-run" in flags:
         shown = [repr(target)] + [f"{k}={v!r}" for k, v in keys.items()]
-        print(f"rev.do({', '.join(shown)})" + (f", then named {alias!r}" if alias else ""))
+        print(f"rev.dat_run({', '.join(shown)})" + (f", then named {alias!r}" if alias else ""))
         return 0
     try:
         rev = ledger.at()
-        hit = rev.do(target, seal="get", path=alias, **keys)
-        value = hit or rev.do(target, path=alias, **keys)
+        hit = rev.dat_run(target, seal="get", path=alias, **keys)
+        value = hit or rev.dat_run(target, path=alias, **keys)
     except Exception as e:
         if os.environ.get("DAT_DEBUG"):
             raise

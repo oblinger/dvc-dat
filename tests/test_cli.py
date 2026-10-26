@@ -483,8 +483,8 @@ def make_dat_spec_project(root: Path) -> None:
 
 
 @needs_just
-class TestLedgerDo:
-    """With `ledger:` in the config, `just run <dat spec>` is `rev.do` (DAT 1038)."""
+class TestLedgerDatRun:
+    """With `ledger:` in the config, `just run <dat spec>` is `rev.dat_run` (DAT 1038)."""
 
     def test_a_spec_runs_then_hits(self, tmp_path):
         make_dat_spec_project(tmp_path)
@@ -510,10 +510,10 @@ class TestLedgerDo:
         done = subprocess.run(["just", "twice"], cwd=str(tmp_path), capture_output=True, text=True, env=_env())
         assert done.returncode == 0 and done.stdout.startswith("hit  twice/n"), done.stderr
 
-    def test_dry_run_shows_the_do(self, tmp_path):
+    def test_dry_run_shows_the_dat_run(self, tmp_path):
         make_dat_spec_project(tmp_path)
         code, out, _ = run_x("specs.twice", "n=3", "--dry-run", cwd=tmp_path)
-        assert (code, out) == (0, "rev.do('specs.twice', n=3)")
+        assert (code, out) == (0, "rev.dat_run('specs.twice', n=3)")
 
 
 @needs_just

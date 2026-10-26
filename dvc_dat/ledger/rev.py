@@ -580,22 +580,26 @@ class Rev:
 
         return load_fn(self, name)
 
-    def do(self, target: Any, /, *, seal: Any = OWN, clean: bool = False, path: Any = None,
-           **kwargs: Any) -> Optional[Value]:
-        """``Dat.do(target, **kwargs)`` through the ledger (DAT 1038): the sealed dat if this question was
-        answered by this code before, else the dat created, run and sealed as the memo entry.
+    def dat_run(self, target: Any, /, *, seal: Any = OWN, clean: bool = False, path: Any = None,
+                **kwargs: Any) -> Optional[Value]:
+        """The run function executed for a dat, through the ledger (DAT 1038, 1045), as ``run`` executes a
+        ``@ledger_fn``: inside, what ``Dat.do(target, **kwargs)`` does (create the dat, ``execute`` it),
+        memoised. The sealed dat if this question was answered by this code before, else the dat
+        created, run and sealed as the memo entry.
 
         ``target`` is what ``Dat.do`` takes: a mounted spec name, a spec dict, or a run function's dotted
         name; ``kwargs`` update the spec's ``dat.kwargs``. The question is the expanded spec with
-        ``dat.name`` removed; the code, the module holding the run function. ``seal`` and ``clean`` as
-        on ``run``; ``path`` the dat's name in the data folder (else the spec's ``dat.name`` template,
-        else ``anonymous/Dat``), its folder there a view. A run function that is a ``@ledger_fn`` is
-        ``TypeError``: ``run`` runs it. ``just run <spec>`` in a ledger project is this call."""
-        from .rundat import do_dat
+        ``dat.name`` removed; the code, the run function's. A run function under a ``db/mount`` runs in
+        the sandbox worker, confined, its code the modules it loaded (provenance ``eval:sandbox``);
+        an installed one runs in this process. ``seal`` and ``clean`` as on ``run``; ``path`` the dat's
+        name in the data folder (else the spec's ``dat.name`` template, else ``anonymous/Dat``), its
+        folder there a view. A run function that is a ``@ledger_fn`` is ``TypeError``: ``run`` runs it.
+        ``just run <spec>`` in a ledger project is this call."""
+        from .rundat import dat_run
         from .sandbox import unguarded
 
         with unguarded():
-            return do_dat(self, target, seal=seal, clean=clean, path=path, kwargs=kwargs)
+            return dat_run(self, target, seal=seal, clean=clean, path=path, kwargs=kwargs)
 
     def run(self, name: str, /, *, seal: Any = OWN, clean: bool = False, **keys: Any) -> Optional[Value]:
         """The API form of ``just run NAME KEY=VALUE``: ``load_fn(name)(seal=seal, clean=clean, **keys)``.

@@ -1,4 +1,4 @@
-"""DAT 1038: a dat is a value. The core ``Dat`` seals, loads and is found with no subclass; ``rev.do``
+"""DAT 1038: a dat is a value. The core ``Dat`` seals, loads and is found with no subclass; ``rev.dat_run``
 makes, runs and seals one through the ledger, memoised."""
 
 import os
@@ -98,12 +98,12 @@ def test_a_subclass_declares_preds_beside_the_folders(L, world):
     assert [v.subject for v in L.at().values(kind=NotedDat)] == [back.subject]
 
 
-def test_rev_do_runs_once_then_hits(coded, world, tmp_path):
+def test_rev_dat_run_runs_once_then_hits(coded, world, tmp_path):
     CALLS.clear()
-    first = coded.at().do(SPEC)
+    first = coded.at().dat_run(SPEC)
     assert CALLS == {"build_table": 1} and str(first) == "tables/table"
     top = coded.at().id
-    again = coded.at().do(SPEC)
+    again = coded.at().dat_run(SPEC)
     assert CALLS == {"build_table": 1} and again.subject == first.subject and coded.at().id == top
     assert again.path == first.path and (again.path / "table.csv").is_file()
     assert not list((tmp_path / "data").rglob("_spec_.yaml"))         # one folder: the view in the data folder
@@ -114,30 +114,32 @@ def test_rev_do_runs_once_then_hits(coded, world, tmp_path):
     assert keys == {"dat": {"do": "ledger_kinds.build_table", "kind": "dvc_dat.core.Dat",
                             "kwargs": {"n": 12, "start": 1}}}             # the spec, dat.name removed
     assert first.dependencies["code"].startswith("db/code/") and first.dependencies["fn"] == "ledger_kinds.build_table"
+    assert rows.get(first.subject, "db/provenance") == "eval:unsandboxed"     # installed: in this process
+    assert first.dependencies["code/testrepo"] == "abc1234"
 
 
-def test_rev_do_kwargs_are_the_specs_and_path_names_it(coded, world):
+def test_rev_dat_run_kwargs_are_the_specs_and_path_names_it(coded, world):
     CALLS.clear()
-    five = coded.at().do(SPEC, n=5, path="t/five")
+    five = coded.at().dat_run(SPEC, n=5, path="t/five")
     assert str(five) == "t/five" and dict(five.preds) == {"n": "5", "start": "1", "cells": "25"}
-    assert coded.at().do(SPEC, n=5, seal="get").subject == five.subject and CALLS == {"build_table": 1}
-    assert coded.at().do(SPEC, n=6, seal="get") is None
+    assert coded.at().dat_run(SPEC, n=5, seal="get").subject == five.subject and CALLS == {"build_table": 1}
+    assert coded.at().dat_run(SPEC, n=6, seal="get") is None
 
 
-def test_rev_do_takes_a_mounted_spec_name(coded, world):
+def test_rev_dat_run_takes_a_mounted_spec_name(coded, world):
     world.do.mount(value=SPEC, at="tspecs.table")
-    a = coded.at().do("tspecs.table")
-    assert coded.at().do(SPEC).subject == a.subject                   # the same question
+    a = coded.at().dat_run("tspecs.table")
+    assert coded.at().dat_run(SPEC).subject == a.subject                   # the same question
 
 
-def test_rev_do_of_a_ledger_function_is_refused(coded, world):
+def test_rev_dat_run_of_a_ledger_function_is_refused(coded, world):
     with pytest.raises(TypeError, match="rev.run"):
-        coded.at().do({"dat": {"do": "ledger_kinds.cut"}})
+        coded.at().dat_run({"dat": {"do": "ledger_kinds.cut"}})
 
 
-def test_rev_do_of_a_dat_left_open_is_refused(coded, world):
+def test_rev_dat_run_of_a_dat_left_open_is_refused(coded, world):
     with pytest.raises(ValueError, match=r"dat\.save\(\)"):
-        coded.at().do({"dat": {"do": "ledger_kinds.never_saves"}})
+        coded.at().dat_run({"dat": {"do": "ledger_kinds.never_saves"}})
 
 
 def test_plain_do_is_unchanged(coded, world, tmp_path):
