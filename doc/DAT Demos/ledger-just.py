@@ -31,8 +31,8 @@
 # > 2. **Listing values by predicate** — `values` lists values by predicate;
 # >    `value` gets exactly one; `history` lists every predicate a subject
 # >    has held; `why` lists what a value was computed from.
-# > 3. **Updating values** — `set` adds a predicate to a subject;
-# >    `alias` points a name at a value; `index` makes a predicate fast
+# > 3. **Updating values** — `set` adds a predicate to a subject, a
+# >    name's `alias=` among them; `index` makes a predicate fast
 # >    to list by; `bump` edits a module's `__version__` in its source,
 # >    or moves the ledger's own version (a release).
 # >
@@ -352,12 +352,13 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # code, by `v.seal(t)`.
 #
 # ### A name for a value
-# `just alias <name> <value>` points a name at a value.
+# A name is one more row on its subject, `db/alias`, so
+# `just set <name> alias=<value>` points it at a value.
 
 # %%
-# !just alias prod {cut_153_value.subject[:8]}
+# !just set prod alias={cut_153_value.subject[:8]}
 # → prod: (none) -> #<the 1.5.3 cut, 8 hex>
-# !just alias prod {cut_154_value.subject[:8]}
+# !just set prod alias={cut_154_value.subject[:8]}
 # → prod: #<the 1.5.3 cut, 8 hex> -> #<the 1.5.4 cut, 8 hex>
 
 # %% [markdown]

@@ -29,15 +29,10 @@ history subject:
 why name *args:
     @{{python}} "{{recipes}}" why "$@"
 
-# a row on a subject: t[s, p] = o
+# rows on a subject: k=v a fact, k:=v JSON, alias=TARGET the name's value (a hash prefix is expanded)
 [no-cd]
 set subject *args:
     @{{python}} "{{recipes}}" set "$@"
-
-# point a name at a value (a hash prefix is expanded)
-[no-cd]
-alias name target:
-    @{{python}} "{{recipes}}" alias "$@"
 
 # declare a pred indexed
 [no-cd]
