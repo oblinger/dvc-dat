@@ -16,7 +16,7 @@ This page covers the dat half of `dvc_dat`: `Dat`, `DatManager` and `DatContaine
 
 
 ## Dat Interface
-A folder of data described by its `_spec_.yaml`, held in memory as the spec as written, the mutable results, and the path. A dat is made by `Dat.create` or `DatManager.create` and read by `Dat.load` or `DatManager.load`; `Dat(path, spec, result)` is the constructor those call, and a `TypeError` without a spec. Subclasses are the dat's kinds: `dat.kind` in the spec names one, and a subclass overrides `validate_spec` to check its own fields. The class-level members act on the default world, `Dat.manager`; an instance acts on the manager that loaded it.
+A folder of data described by its `_spec_.yaml`, held in memory as the spec as written, the mutable results, and the path. A dat is made by `Dat.create` or `DatManager.create` and read by `Dat.load` or `DatManager.load`; `Dat(path, spec, result)` is the constructor those call, and `Dat(path)` alone is the dat already in that folder, its spec and results read from there (`{}` each when absent). A dat is also a ledger value, one class (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Value` and carries the folder codec, so `seal`, `preds`, `subject`, `sealed` and `hash` are on every dat; its bytes are the folder's manifest, its preds default to the spec's scalar `dat.kwargs` and the results' scalar top-level entries, and a dat seals as a value once saved ([DAT Ledger § Dat Interface](ledger/DAT%20Ledger.md#Dat%20Interface)). Subclasses are the dat's kinds: `dat.kind` in the spec names one, and a subclass overrides `validate_spec` to check its own fields. The class-level members act on the default world, `Dat.manager`; an instance acts on the manager that loaded it.
 
 | Dat | |
 | --- | --- |
@@ -371,5 +371,5 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 
 # BRIEF
 - Hand-written against `dvc_dat/core.py` and `dvc_dat/do.py` at 2.18.0; the code is the authority, and every name and signature here was read from it. The figure is hand-written SVG; edit it beside this page.
-- [dat.md](dat.md) is the terse per-file list of the same surface and stays as it is; keep the two in step when the surface changes. The ledger's `ledger.Dat` is a different class, documented under [DAT Ledger](ledger/DAT%20Ledger.md).
+- [dat.md](dat.md) is the terse per-file list of the same surface and stays as it is; keep the two in step when the surface changes. `dvc_dat.ledger.Dat` is this class since 2.28.0 (DAT 1038); its value side is documented under [DAT Ledger](ledger/DAT%20Ledger.md).
 - Block IDs: the package section owns `^do`, so `Dat.do` is `^dat-do`; a prefix with the package name would carry an underscore, which breaks an Obsidian block link.

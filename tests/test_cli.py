@@ -454,6 +454,68 @@ class TestLedgerRun:
         assert (code, out) == (0, "rev.run('proj_fns.double', n=3)")
 
 
+def make_dat_spec_project(root: Path) -> None:
+    """The ledger project with a dat spec mounted at `specs.twice` (a declared command) and its run
+    function in `proj_runs`."""
+    make_ledger_project(root)
+    (root / "proj_runs.py").write_text(
+        "from pathlib import Path\n"
+        "\n"
+        "def twice(dat, n=1):\n"
+        "    Path(dat.get_path(), 'out.txt').write_text(str(2 * n))\n"
+        "    dat.get_results()['out'] = 2 * n\n"
+        "    dat.save()\n"
+    )
+    (root / "specs").mkdir()
+    (root / "specs" / "twice.yaml").write_text(
+        "dat:\n  name: twice/n{unique}\n  do: proj_runs.twice\n  kwargs: {n: 1}\ncommand: true\n")
+    (root / "ledger_main.py").write_text(
+        "import sys\n"
+        "from dvc_dat import Dat\n"
+        "Dat.do.mount(module='proj_fns', at='fns')\n"
+        "Dat.do.mount(folder='specs', at='specs')\n"
+        "if __name__ == '__main__':\n"
+        "    sys.exit(Dat.cli_main())\n"
+    )
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    for args in (["add", "."], ["commit", "-q", "-m", "specs"]):
+        subprocess.run(git + args, cwd=str(root), check=True, capture_output=True)
+
+
+@needs_just
+class TestLedgerDo:
+    """With `ledger:` in the config, `just run <dat spec>` is `rev.do` (DAT 1038)."""
+
+    def test_a_spec_runs_then_hits(self, tmp_path):
+        make_dat_spec_project(tmp_path)
+        code, out, err = run_x("specs.twice", "n=3", cwd=tmp_path)
+        assert code == 0 and out.split() == ["ran", "twice/n", "n=3", "out=6"], err
+        code, out, err = run_x("specs.twice", "n=3", cwd=tmp_path)
+        assert code == 0 and out.split() == ["hit", "twice/n", "n=3", "out=6"], err
+        code, out, err = run_x("specs.twice", "n=4", cwd=tmp_path)
+        assert code == 0 and out.split()[:2] == ["ran", "twice/n_2"], err
+
+    def test_alias_names_the_dat(self, tmp_path):
+        make_dat_spec_project(tmp_path)
+        code, out, err = run_x("specs.twice", "n=5", "alias=ten", cwd=tmp_path)
+        assert code == 0 and out.split()[:2] == ["ran", "ten"], err
+        from dvc_dat.ledger import Ledger
+        assert Ledger(tmp_path / ".dat" / "ledger").at().load("ten").get_results()["out"] == 10
+
+    def test_a_spec_with_command_is_a_recipe(self, tmp_path):
+        make_dat_spec_project(tmp_path)
+        assert run_x("specs.twice", cwd=tmp_path)[0] == 0
+        text = (tmp_path / ".dat" / "targets.just").read_text()
+        assert "twice *args:" in text and "run 'specs.twice'" in text
+        done = subprocess.run(["just", "twice"], cwd=str(tmp_path), capture_output=True, text=True, env=_env())
+        assert done.returncode == 0 and done.stdout.startswith("hit  twice/n"), done.stderr
+
+    def test_dry_run_shows_the_do(self, tmp_path):
+        make_dat_spec_project(tmp_path)
+        code, out, _ = run_x("specs.twice", "n=3", "--dry-run", cwd=tmp_path)
+        assert (code, out) == (0, "rev.do('specs.twice', n=3)")
+
+
 @needs_just
 class TestTargets:
     """`.dat/targets.just`: one recipe per mounted `@command` (A64, A65, A67)."""

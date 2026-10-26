@@ -29,12 +29,15 @@ def test_the_work_folder_goes_after_the_call_in_both_modes(coded):
 
 
 def test_a_dat_spec_kind_is_checked_against_the_row(L, tmp_path):
+    saved = yaml.safe_dump({"dat": {"standing": "sealed"}})     # a dat seals as a value once saved
     good = tmp_path / "good"
     good.mkdir()
-    (good / "_spec_.yaml").write_text(yaml.safe_dump({"dat": {"kind": "dvc_dat.ledger.value.Dat"}}))
+    (good / "_spec_.yaml").write_text(yaml.safe_dump({"dat": {"kind": "dvc_dat.core.Dat"}}))
+    (good / "_result_.yaml").write_text(saved)
     bad = tmp_path / "bad"
     bad.mkdir()
     (bad / "_spec_.yaml").write_text(yaml.safe_dump({"dat": {"kind": "elsewhere.Other"}}))
+    (bad / "_result_.yaml").write_text(saved)
     with L.transaction(by="t") as t:
         sg = Dat(good).seal(t)
         sb = Dat(bad).seal(t)

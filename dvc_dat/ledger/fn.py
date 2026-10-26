@@ -32,7 +32,8 @@ from .codec import canonical, hash_text, ref_text, sha256
 from .env import Env, current_env, repo_of
 from .errors import NotClean, NotEvaluated
 from .code import Code
-from .value import Dat, Blob, Value, dotted
+from .value import Blob, Value, dotted
+from ..core import Dat
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -164,6 +165,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
         raise TypeError(f"{run.name} returned a {type(value).__name__} sealed by v.seal(); run seals its "
                         "own result, so return it unsealed")
     t._open("seal")
+    value._sealable()
     if ledger_key(t._ledger) != run.ledger:
         raise ValueError(f"{run.name}: the result ran against {run.ledger}; its memo entry goes there, "
                          f"not to {ledger_key(t._ledger)}")
@@ -328,15 +330,21 @@ def load_fn(rev: "Rev", name: str) -> "Fn":
     obj = resolve_in_process(name)
     if not callable(obj) or not getattr(obj, "__ledger_fn__", False):
         raise TypeError(f"{name!r} is not a ledger function (mark it @ledger_fn)")
+    modname, src = source_of(name, obj)
+    sig, takes_path, template = signature_of(name, obj)
+    env = current_env()
+    return Fn(name=name, module=src, mount=None, signature=sig, env=env,
+              code=installed_code(modname, src, env),
+              _rev=rev, _obj=obj, _takes_path=takes_path, _template=template, _returns=returns_text(obj))
+
+
+def source_of(name: str, obj: Any) -> Tuple[str, Path]:
+    """The module name and source file of a function resolved in this process."""
     modname = getattr(obj, "__module__", None) or name.rpartition(".")[0]
     src = inspect.getsourcefile(obj)
     if not src or not os.path.exists(src):
         raise ImportError(f"{name!r}: no source file to hash")
-    sig, takes_path, template = signature_of(name, obj)
-    env = current_env()
-    return Fn(name=name, module=Path(src), mount=None, signature=sig, env=env,
-              code=installed_code(modname, Path(src), env),
-              _rev=rev, _obj=obj, _takes_path=takes_path, _template=template, _returns=returns_text(obj))
+    return modname, Path(src)
 
 
 def _closure_files(modname: str, src: Path, env: Env) -> Tuple[Path, Path, List[Path]]:
@@ -437,34 +445,11 @@ class Fn:
         there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
         (Q36). A hit asked for under a new name takes that name. ``kwargs``: the function's whole key
         set, for a key that is also a control option's name; inline keys beside it are ``TypeError``."""
-        from .ledger import Ledger
         from .txn import Transaction
 
         rev = self._rev
         plain = rev._plain()
-        if seal is OWN:
-            level: Any = "save"
-        elif seal is True or seal is False:
-            level = seal
-        elif isinstance(seal, str) and seal == "get":
-            level = "get"
-        elif isinstance(seal, Ledger):
-            if ledger_key(seal) != ledger_key(plain.ledger):
-                raise ValueError(f"{self.name}: seal= names a ledger other than the one it was loaded from "
-                                 f"({plain.ledger.path}); its memo entries live there")
-            level = "save"
-        elif isinstance(seal, Transaction):
-            seal._open("seal")
-            if ledger_key(seal._ledger) != ledger_key(plain.ledger):
-                raise ValueError(f"{self.name}: seal= is a transaction on another ledger than the one it was "
-                                 f"loaded from ({plain.ledger.path})")
-            level = seal
-        else:
-            raise ValueError(f"seal is 'get', False, True, a Ledger or an open Transaction, not {seal!r}")
-        if not isinstance(clean, bool):
-            raise TypeError(f"clean is True or False, not {clean!r}")
-        if path is not None and not isinstance(path, (str, os.PathLike)):
-            raise TypeError(f"path is a str or a path, not {type(path).__name__}")
+        level = seal_level(self.name, plain, seal, clean, path)
         if kwargs is not None:
             if keys:
                 raise TypeError(f"{self.name}: the keys go inline or in kwargs=, never both "
@@ -552,6 +537,38 @@ class Fn:
             return value
         finally:
             drop_work(work, value)
+
+
+def seal_level(name: str, plain: "Rev", seal: Any, clean: Any, path: Any) -> Any:
+    """``seal=`` of a run as a level: ``"save"`` (the fn's ledger), ``True``, ``False``, ``"get"``, or the
+    open ``Transaction``; ``clean`` and ``path`` checked for type on the way."""
+    from .ledger import Ledger
+    from .txn import Transaction
+
+    if seal is OWN:
+        level: Any = "save"
+    elif seal is True or seal is False:
+        level = seal
+    elif isinstance(seal, str) and seal == "get":
+        level = "get"
+    elif isinstance(seal, Ledger):
+        if ledger_key(seal) != ledger_key(plain.ledger):
+            raise ValueError(f"{name}: seal= names a ledger other than the one it was loaded from "
+                             f"({plain.ledger.path}); its memo entries live there")
+        level = "save"
+    elif isinstance(seal, Transaction):
+        seal._open("seal")
+        if ledger_key(seal._ledger) != ledger_key(plain.ledger):
+            raise ValueError(f"{name}: seal= is a transaction on another ledger than the one it was "
+                             f"loaded from ({plain.ledger.path})")
+        level = seal
+    else:
+        raise ValueError(f"seal is 'get', False, True, a Ledger or an open Transaction, not {seal!r}")
+    if not isinstance(clean, bool):
+        raise TypeError(f"clean is True or False, not {clean!r}")
+    if path is not None and not isinstance(path, (str, os.PathLike)):
+        raise TypeError(f"path is a str or a path, not {type(path).__name__}")
+    return level
 
 
 def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
@@ -719,6 +736,9 @@ def code_holds(rev: "Rev", subject: str, name: Optional[str]) -> bool:
 
         return sandbox_code_at(rev, name, json.loads(show(mods[0].obj))) == subject
     try:
-        return load_fn(rev, name).code.subject == subject
+        if any(name.startswith(prefix + ".") for prefix in mounts_at(rev._plain())):
+            return False                        # mounted since: the code is the mount's now
+        modname, src = source_of(name, resolve_in_process(name))
+        return installed_code(modname, src, current_env()).subject == subject
     except (ImportError, TypeError):
         return False

@@ -27,7 +27,8 @@ from .helpers import SourceBump, bump, bump_source
 from .ledger import Ledger
 from .rev import Ref, Rev, Row
 from .txn import Transaction, attr
-from .value import Dat, Value, ledger_class
+from .value import Value, ledger_class
+from ..core import Dat                  # one class: a dat is a Value (DAT 1038)
 
 __all__ = ["Ledger", "Rev", "Ref", "Row", "Transaction", "Value", "Dat", "Fn", "Code",
            "ledger_fn", "ledger_class", "bump", "bump_source", "SourceBump", "attr", "LedgerError", "Multiple", "NotEvaluated", "NotClean",

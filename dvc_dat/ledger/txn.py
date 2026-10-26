@@ -484,7 +484,7 @@ class Transaction:
         from .kept import SealedRef
         from .rev import Ref
 
-        declared = type(value)._ledger_preds
+        declared = value._pred_names()
         extra = [k for k in value.preds if k not in declared]
         if extra:
             raise Undeclared(f"{', '.join(map(repr, extra))}: not a pred of {dotted(type(value))} "
@@ -615,6 +615,7 @@ class Transaction:
             raise TypeError(f"seal takes a Value, not {type(value).__name__} (wrap it: Value.Blob(obj))")
         if value.subject is not None:
             raise ValueError(f"{value!r} is sealed already; a different value is a new object")
+        value._sealable()
         local = value.__dict__.get("_local")
         run = value.__dict__.get("_run")
         if run is not None:                             # a run's result: its memo entry (DAT 1028)
@@ -687,7 +688,7 @@ class Transaction:
                 ("db/value", ref_text(dotted(type(value)), h), False),
                 ("db/kind", "str:" + dotted(type(value)), False),
                 ("db/provenance", "str:" + provenance, False),
-                ("db/preds", "json:" + canonical(list(type(value)._ledger_preds)), False)]
+                ("db/preds", "json:" + canonical(list(value._pred_names())), False)]
             ops += [(p, o, False) for p, o in extra]
             ops += [(f"db/deps/{k}", "str:" + v, False) for k, v in sorted(trace.items())]
             ops += [(p, o, True) for p, o in pred_rows]

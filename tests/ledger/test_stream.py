@@ -107,7 +107,8 @@ def test_decode_without_name_still_loads():
 def test_kind_ok_lets_a_class_accept_a_foreign_dat_kind(L, tmp_path):
     import ledger_kinds
 
-    src = folder(tmp_path / "s", **{"_spec_.yaml": "dat:\n  kind: GameDat\n"})
+    src = folder(tmp_path / "s", **{"_spec_.yaml": "dat:\n  kind: GameDat\n",
+                                    "_result_.yaml": "dat:\n  standing: sealed\n"})
     d = ledger_kinds.Dat2(src)
     d.seal(L, name="g/1")
     with pytest.raises(TypeError, match="dat.kind GameDat"):
