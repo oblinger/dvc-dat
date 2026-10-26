@@ -102,7 +102,9 @@ def history(args):
         if row.subject == args[0]:
             obj = short(row.object) if isinstance(row.object, str) else row.object
             sign = "" if row.added else "-"
-            print(f"{row.rev.id:>3}  {rev[row.rev.tx, 'db/by']:<10} {sign + row.predicate:<10} {obj}")
+            by = rev[row.rev.tx, "db/by"]       # a str, or a JSON dict printed canonically (DAT 1024)
+            by = by if isinstance(by, str) else json.dumps(by, sort_keys=True, separators=(",", ":"))
+            print(f"{row.rev.id:>3}  {by:<10} {sign + row.predicate:<10} {obj}")
 
 
 def brief(text):

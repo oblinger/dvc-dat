@@ -166,9 +166,11 @@ class Ledger:
             return found[-1]
         raise TypeError(f"at takes None, an int revision or a version string M.m.p, not {which!r}")
 
-    def transaction(self, *, by: str, lock: Optional[float] = None, **preds: Any) -> Transaction:
+    def transaction(self, *, by: Union[str, Dict[str, Any]], lock: Optional[float] = None,
+                    **preds: Any) -> Transaction:
         """A write set that becomes one revision on exit; use it only as ``with ... as t:``. Its
-        ``db/tx/<rev>`` carries ``db/by``, ``db/time`` (UTC, every transaction) and the keywords."""
+        ``db/tx/<rev>`` carries ``db/by``, ``db/time`` (UTC, every transaction) and the keywords.
+        ``by`` is a non-empty ``str`` or a JSON ``dict`` (DAT 1024), read back as written."""
         return Transaction(self, by, lock, preds)
 
 

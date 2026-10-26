@@ -89,6 +89,20 @@ def _name(x: Any, what: str) -> str:
     return x
 
 
+def by_text(by: Any) -> str:
+    """The ``db/by`` row object of a writer (DAT 1024): a non-empty ``str`` as ``str:<by>``, a non-empty
+    ``dict`` as ``json:<canonical document>``, so a structured identity (a hosted user is a host, a user
+    and its administrators) needs no encoding inside a string. The ``eval:`` prefix is a string's alone."""
+    if isinstance(by, str) and by:
+        return "str:" + by
+    if isinstance(by, dict) and by:
+        try:
+            return "json:" + canonical(by)
+        except (TypeError, ValueError) as e:
+            raise TypeError(f"by is not a JSON document: {e}") from None
+    raise TypeError(f"by is a non-empty str or JSON dict, not {by!r}")
+
+
 def check_provenance(provenance: Optional[str]) -> str:
     """A hand seal's provenance: a non-empty str, ``seal`` by default, never ``eval:``."""
     if provenance is None:
@@ -119,9 +133,10 @@ def code_token(env_commit: Optional[str]) -> str:
 class Transaction:
     """The write set open under one ``with L.transaction(...)``."""
 
-    def __init__(self, ledger: "Ledger", by: str, lock: Optional[float], preds: Dict[str, Any]) -> None:
+    def __init__(self, ledger: "Ledger", by: "str | Dict[str, Any]", lock: Optional[float],
+                 preds: Dict[str, Any]) -> None:
         self._ledger = ledger
-        self._by = _name(by, "by")
+        self._by = by_text(by)
         if lock is not None and (isinstance(lock, bool) or not isinstance(lock, (int, float)) or lock <= 0):
             raise TypeError(f"lock is a positive number of seconds, not {lock!r}")
         if "time" in preds:
@@ -351,7 +366,7 @@ class Transaction:
             kept.append(op)
         if rev == 1:
             rows.append(("db", "db/format", "str:" + FORMAT, True))
-        rows.append((txs, "db/by", "str:" + self._by, True))
+        rows.append((txs, "db/by", self._by, True))
         stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         rows.append((txs, "db/time", "str:" + stamp, True))
         rows.extend((txs, k, o, True) for k, o in self._preds)

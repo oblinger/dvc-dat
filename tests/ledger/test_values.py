@@ -208,6 +208,12 @@ def test_seal_on_a_ledger_commits_its_own_transaction(L):
     assert now[now.tx, "db/by"] == "human:dan"
 
 
+def test_seal_on_a_ledger_takes_a_json_by(L):
+    Plain(b"hosted").seal(L, name="note/hosted", by={"host": "h", "user": "u"})
+    now = L.at()
+    assert now[now.tx, "db/by"] == {"host": "h", "user": "u"}
+
+
 def test_seal_on_a_transaction_joins_it(L):
     top = L.at().id
     with L.transaction(by="t") as t:
