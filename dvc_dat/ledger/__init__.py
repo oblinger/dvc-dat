@@ -11,7 +11,7 @@ process) or sandboxed (under a ``db/mount/<prefix>``, in a worker).
     rev = L.at()
     with L.transaction(by="human:dan", lock=10, why="release") as t:
         bump(t, "db", "minor", confirm=lambda old, new: True)
-    bump_source("demo_game")             # __version__ in the source; the next clean run moves code/demo-game
+    bump_source("demo_game")             # __version__ in the source; the next clean run moves db/repo/demo-game/demo_game
 
 The environment is found by discovery; ``set_env_provider``, ``Env`` and
 ``Checkout`` are the test suite's seam only (A51), importable by name.

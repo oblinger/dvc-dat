@@ -71,8 +71,9 @@ class RunTrace:
     ``trace`` is the dependencies (``code``, ``fn``, platform, ``code/<repo>``, every read); ``code_rows``
     the ``db/code/<hash 16>`` item's rows; ``repo`` and ``dirty`` the checkout that vouches for an
     unsandboxed run (``repo`` ``None`` outside any), for the code check at a late save. ``clock`` is
-    ``(repo, version, commit)`` of the code that ran, sandboxed or not, for the ``code/<repo>`` clock a
-    seal advances (DAT 1043); ``None`` outside any checkout."""
+    ``(repo, package, version, commit)`` of the code that ran, sandboxed or not, for the
+    ``db/repo/<repo>/<package>`` version and ``db/repo/<repo>`` commit a seal advances (DAT 1043, 1044);
+    ``None`` outside any checkout or when the code declares no version."""
 
     name: str
     enc: str
@@ -85,7 +86,7 @@ class RunTrace:
     repo: Optional[str] = None
     dirty: bool = False
     returns: str = ""
-    clock: Optional[Tuple[str, str, str]] = None
+    clock: Optional[Tuple[str, str, str, str]] = None
 
     def record(self) -> Dict[str, Any]:
         """As JSON, for a ``v.seal()`` seal record."""
@@ -102,13 +103,14 @@ class RunTrace:
         return cls(**d)
 
 
-def clock_of(fn: "Fn", code: Code) -> Optional[Tuple[str, str, str]]:
-    """``(repo, version, commit)`` of ``code`` as ``fn`` ran it: the repo its checkout is (the mount's for
-    sandboxed code), the code's version and the checkout's commit at load; ``None`` outside any checkout."""
+def clock_of(fn: "Fn", code: Code) -> Optional[Tuple[str, str, str, str]]:
+    """``(repo, package, version, commit)`` of ``code`` as ``fn`` ran it: the repo its checkout is (the
+    mount's for sandboxed code), the package whose declared version it is (``code.package``), that version
+    and the checkout's commit at load; ``None`` outside any checkout or with no declared version."""
     repo = fn._info.get("repo") if fn.code.sandboxed else repo_of(fn.env, fn.module)
-    if not repo or not code.commit:
+    if not repo or not code.commit or code.package is None:
         return None
-    return (repo, code.version, code.commit)
+    return (repo, code.package, code.version, code.commit)
 
 
 def run_trace(fn: "Fn", plain: "Rev", trace: Dict[str, str], enc: str, provenance: str,
@@ -357,7 +359,7 @@ def installed_code(modname: str, src: Path, env: Env) -> Code:
     carries; ``modules`` the static import closure within its checkout (Q37 (iii)), relative to the
     top-level package's parent, each by its sha256 (outside any checkout, the module file alone); never
     sandboxed, no mounts."""
-    from .code import identity_hash, installed_version, lock_of
+    from .code import declared_version, identity_hash, installed_version, lock_of
     from .sandbox import unguarded
 
     with unguarded():                       # the ledger's own reads, also inside a sandboxed body
@@ -370,10 +372,12 @@ def installed_code(modname: str, src: Path, env: Env) -> Code:
         co = env.code.get(repo) if repo else None
         top = modname.split(".")[0]
         version = installed_version(top, env, repo, identity_hash(modules, None))
+        declared = version == declared_version(top)
         lock = lock_of(co.path) if co is not None else None
     return Code({"modules": modules, "mounts_hash": None, "mounts": {},
                  "commit": co.commit if co is not None else None,
-                 "lock": lock, "sandboxed": False, "version": version}, unit=top)
+                 "lock": lock, "sandboxed": False, "version": version,
+                 "package": top if declared else None}, unit=top)
 
 
 @dataclass(frozen=True)
@@ -427,7 +431,7 @@ class Fn:
         its own. An open ``Transaction`` on that ledger: the same, saved into it. A later ``v.seal(L)``
         or ``v.seal(t)`` of a ``False``/``True`` result writes the same memo entry.
         ``clean=True``: the code must be a clean representation of a version,
-        the checkout clean and at the commit the rev's ``code/<repo>`` row names, else ``NotClean``
+        the checkout clean and at the commit the rev's ``db/repo/<repo>`` row names, else ``NotClean``
         (Q39), before any lookup; ``False`` (default): a sandboxed call runs at HEAD, clean or dirty.
         ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder
         there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
@@ -515,7 +519,7 @@ class Fn:
         if code.dirty:
             raise NotEvaluated(f"{self.name}: the checkout of {repo} has uncommitted changes; a result would "
                                "carry false provenance")
-        return repo         # a code/<repo> commit row pins a version, not where evals may run
+        return repo         # a db/repo/<repo> commit row names a clean run, not where evals may run
 
     def _run_base(self, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
                   name: Optional[str] = None) -> Value:
@@ -551,19 +555,19 @@ class Fn:
 
 
 def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
-    """``clean=True`` (Q39): the checkout clean and at the commit ``plain``'s ``code/<repo>`` row names."""
+    """``clean=True`` (Q39): the checkout clean and at the commit ``plain``'s ``db/repo/<repo>`` row names."""
     repo = fn._info.get("repo") if fn.code.sandboxed else repo_of(env, fn.module)
     code = env.code.get(repo) if repo else None
     if code is None:
         raise NotClean(f"{fn.name}: clean=True, and its code ({fn.module}) is in no git checkout here")
     if code.dirty:
         raise NotClean(f"{fn.name}: clean=True, and the checkout of {repo} has uncommitted changes")
-    c = plain.get(f"code/{repo}", "commit")
+    c = plain.get(f"db/repo/{repo}", "commit")
     if c is None:
-        raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} names no code/{repo} commit "
+        raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} names no db/repo/{repo} commit "
                        "(the first clean run of code with a __version__ writes it)")
     if not (code.commit and (code.commit.startswith(c) or c.startswith(code.commit))):
-        raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} binds code/{repo} to {c[:8]}; "
+        raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} binds db/repo/{repo} to {c[:8]}; "
                        f"the checkout is at {(code.commit or '?')[:8]}")
 
 

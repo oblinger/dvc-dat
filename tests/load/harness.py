@@ -95,10 +95,9 @@ def setup(path: Any) -> int:
 
     L = Ledger(path, create=True)
     rev = L.at()
-    if rev.get("code/loadrepo", "commit") != COMMIT:
+    if rev.get("db/repo/loadrepo", "commit") != COMMIT:
         with L.transaction(by="load:setup") as t:
-            t.add("code/loadrepo", "version", "1.0.0")
-            t.add("code/loadrepo", "commit", COMMIT)
+            t.add("db/repo/loadrepo", "commit", COMMIT)
             t.add("db/pred/made", "db/cardinality", "many")
             t["load/config", "salt"] = SALTS[0]
     return L.at().id

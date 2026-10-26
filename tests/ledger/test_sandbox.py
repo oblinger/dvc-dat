@@ -284,7 +284,7 @@ def sbx(tmp_path, monkeypatch, backend):
         t.add("db/mount/flatpkg", "db/root", "flat")          # a plain folder, no __init__.py
         t.add("db/mount/flatpkg", "db/repo", "sbx-repo")
         t["game/G1"] = {"n": "3"}
-        t.add("code/sbx-repo", "commit", git(repo, "rev-parse", "HEAD"))     # what clean=True binds to
+        t.add("db/repo/sbx-repo", "commit", git(repo, "rev-parse", "HEAD"))     # what clean=True binds to
     yield L, repo
     shutdown()
     set_env_provider(old)
@@ -343,7 +343,7 @@ def test_refusals(sbx):
     old = L.at(1)
     (repo / "sbx/other.py").write_text("X = 2\n")
     git(repo, "commit", "-q", "-am", "elsewhere")
-    with pytest.raises(NotClean, match="binds code/sbx-repo to"):
+    with pytest.raises(NotClean, match="binds db/repo/sbx-repo to"):
         old.run("sbx.stage.fns.count", game="G1", clean=True)
     assert old.run("sbx.stage.fns.count", game="G1").obj == {"n": 6}   # no gate: it runs at HEAD (Q39)
 

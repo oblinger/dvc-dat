@@ -3,7 +3,7 @@
 Lines are as written on the page except where a comment marked ADAPTED says what changed and why;
 the page's `# result` comments become asserts below them. The page's stand-ins (`Video(read_mp4(...))`,
 `cut_by_hand`, `demo_game.identity.train`) are the test kinds in ``ledger_kinds``; the environment is the
-suite's pinned one (repo `testrepo`), so `code/demo-game` reads `code/testrepo`.
+suite's pinned one (repo `testrepo`); `model/demo` stands for a versioned subject.
 """
 
 import backends
@@ -25,8 +25,8 @@ def cut_by_hand(raw):
 def L(tmp_path, backend):
     L = backends.make(backend, tmp_path / "doc")     # ADAPTED: `Ledger(tmp, create=True)`, per store
     with L.transaction(by="setup") as t:
-        t.add("code/testrepo", "version", "0.2.2")
-        t.add("code/testrepo", "commit", "abc1234")
+        t.add("model/demo", "version", "0.2.2")
+        t.add("model/demo", "commit", "abc1234")
         t.add("db/pred/version", "db/cardinality", "one")
         t.add("db/pred/version", "db/doc", "what bump moves")
         t.add("db/pred/game", "db/index", "true")
@@ -41,11 +41,11 @@ def test_usage_block(L, tmp_path, monkeypatch):
     monkeypatch.setenv("DAT_LEDGER", str(L.path))     # ADAPTED: `Ledger()` finds this ledger
     L = Ledger()                             # nearest .datconfig.yaml
     rev = L.at()                             # one snapshot per session
-    assert rev["code/testrepo", "version"] == "0.2.2"          # "0.2.2"; one or raise
-    assert rev["code/testrepo"] == {"version": "0.2.2", "commit": "abc1234"}   # its record, a dict
+    assert rev["model/demo", "version"] == "0.2.2"          # "0.2.2"; one or raise
+    assert rev["model/demo"] == {"version": "0.2.2", "commit": "abc1234"}   # its record, a dict
     assert rev.get("model/shot", "db/value") is None           # a Ref, or None
-    assert rev.rows("code/testrepo", "version", "0.2.1") == []      # [Row]: when, unfolded
-    assert [(r.rev.id, r.object, r.added) for r in rev.rows("code/testrepo", "version")] == [(1, "0.2.2", True)]
+    assert rev.rows("model/demo", "version", "0.2.1") == []      # [Row]: when, unfolded
+    assert [(r.rev.id, r.object, r.added) for r in rev.rows("model/demo", "version")] == [(1, "0.2.2", True)]
     assert rev.rows(since=L.at(0))                              # [Row], unfolded (A48)
     assert [r.subject for r in rev.refs(s="db/pred/*", where={"db/index": "true"})] == ["db/pred/game"]
     assert ("db/pred/game", "db/index", "true") in rev
@@ -76,14 +76,14 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev.all(since=L.at(1))            # every row in (1, rev.id]
 
     with L.transaction(by="human:dan", why="T531", lock=10) as t:
-        t.add("code/testrepo", "version", "0.2.3")   # ADAPTED: bump(t, "code/...") is gone; a code version lives in its source (DAT 1043)
+        assert bump(t, "model/demo") == "0.2.3"   # ADAPTED: a code version lives in its source (DAT 1043, 1044)
         t["env/prod", "rev"] = "413"         # add, on a one pred
         t.add(t.tx, "checked", "G1,G4,G5")
     assert t.rev.id == L.at().id
     assert t.rev[t.rev.tx, "db/by"] == "human:dan"
 
     with L.transaction(by="agent:svp", lock=30) as t:
-        v = t.previous_rev["code/testrepo", "version"]       # nothing can move
+        v = t.previous_rev["model/demo", "version"]       # nothing can move
         mv = Ref(t.previous_rev, m.subject).preds["version"]   # a value's version is a pred  ADAPTED: m's subject
         t.add("rel/pipe", "pair", f"{v}+{mv}")
     assert L.at()["rel/pipe", "pair"] == "0.2.3+1.0.0"
@@ -117,14 +117,14 @@ def test_all_block(L):
     with L.transaction(by="setup") as t:
         v.seal(t, name="model/shot")
     rev = L.at()
-    assert ("code/testrepo", "version", "0.2.2") in rev.all()   # list of rows: (subject, predicate, object)
-    assert rev.all("code/testrepo") == [("version", "0.2.2"), ("commit", "abc1234")]
+    assert ("model/demo", "version", "0.2.2") in rev.all()   # list of rows: (subject, predicate, object)
+    assert rev.all("model/demo") == [("version", "0.2.2"), ("commit", "abc1234")]
     assert rev.all("db/pred/version") == [("db/cardinality", "one"), ("db/doc", "what bump moves")]
     assert rev.all("model/shot", "db/value") == []    # ADAPTED: model/shot is an alias; the value row is
     assert isinstance(rev.all(v.subject, "db/value")[0], Ref)   #   on its subject: [Ref(...)], unloaded
     assert rev.all("db/pred/game", "db/index", "true") == [Rev(L, 1)]   # [Rev]
     assert rev.all(since=L.at(1))            # rows asserted in (1, id]: the delta
-    assert rev["code/testrepo"] == {"version": "0.2.2", "commit": "abc1234"}   # the record
+    assert rev["model/demo"] == {"version": "0.2.2", "commit": "abc1234"}   # the record
 
 
 def test_seal_block(L):

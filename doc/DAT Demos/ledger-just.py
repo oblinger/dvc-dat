@@ -114,7 +114,7 @@ video_value.preds.update(game="G1", camera="wide", span=[0, 9000])
 with L.transaction(by="human:dan") as t:                 # rev 3
     video_value.seal(t, name="video/G1",
                      provenance="import:archive")
-cut_153_value = L.at().run("demo_game.game.cut",       # rev 4, and code/demo-game 0.1.0
+cut_153_value = L.at().run("demo_game.game.cut",       # rev 4, and db/repo/demo-game/demo_game 0.1.0
                             game="G1", version="1.5.3")
 with L.transaction(by="human:dan") as t:                 # rev 5
     t.add("game/G1", "db/alias", cut_153_value.subject)
@@ -398,21 +398,19 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # nothing committed, nothing written to the ledger. A minor or major
 # move waits for `yes`, which is `confirm=`.
 #
-# The ledger's `code/demo-game` clock is the version runs were
-# exposed to. The first cut (rev 4) put `0.1.0` there; after the
-# commit, the next run from the clean checkout moves it, the commit
-# beside it.
+# The ledger's `db/repo/demo-game/demo_game` clock is the version of
+# `demo_game` runs were exposed to. The first cut (rev 4) put `0.1.0`
+# there; after the commit, the next run from the clean checkout moves
+# it, and `db/repo/demo-game` to that run's commit.
 
 # %%
 # !git commit -qam "demo_game 0.1.1"
 # !just run demo_game.game.cut game=G1 version=1.5.5
-# !just history code/demo-game
+# !just history db/repo/demo-game/demo_game
 # → ran  #<8 hex>  game=G1 version=1.5.5 video=video/G1 team=["G6", "G5"]
 # → rev  by         predicate  object
 # →   4  eval:demo_game.game.cut version    0.1.0
-# →   4  eval:demo_game.game.cut commit     <40 hex>
 # →  21  eval:demo_game.game.cut version    0.1.1
-# →  21  eval:demo_game.game.cut commit     <40 hex>
 
 # %% [markdown]
 # ### A release of the ledger

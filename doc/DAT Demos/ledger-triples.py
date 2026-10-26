@@ -32,7 +32,7 @@ scratch_ledger_path = Path("scratch/triples-demo/ledger").resolve()
 # transaction, every read is a function of one revision. No `run`
 # and no value functions here: the running example is plain
 # metadata about games (`game/G1`: teams, date, court, officials)
-# and a few clock subjects (`code/demo-game`, `schema/tape`).
+# and a few clock subjects (`db/repo/demo-game/demo_game`, `schema/tape`).
 
 # %% [markdown]
 # ## One constructor
@@ -663,20 +663,22 @@ import demo_game                       # discovery sees it imported
 # %% [markdown]
 # ### The code clock
 #
-# `code/demo-game` is a clock: the version of that repo's code that
-# runs were exposed to, with the commit beside it. The first run from
-# a clean checkout writes both ([Ledger: dats](ledger-dats.ipynb)
-# shows it); this sheet runs nothing, so it adds the two rows such a
-# run writes.
+# `db/repo/demo-game/demo_game` is a clock: the version of that
+# package's code that runs were exposed to; `db/repo/demo-game` holds
+# the commit of the latest clean run. The first run from a clean
+# checkout writes both ([Ledger: dats](ledger-dats.ipynb) shows it);
+# this sheet runs nothing, so it adds the two rows such a run writes.
 
 # %%
 demo_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=demo_repo_path, check=True,
                              capture_output=True, text=True).stdout.strip()
 with L.transaction(by="human:dan") as t:
-    t.add("code/demo-game", "version", demo_game.__version__)
-    t.add("code/demo-game", "commit", demo_commit)
-print("code/demo-game:", L.at()["code/demo-game"])
-# code/demo-game: {'version': '0.1.0', 'commit': '<the demo commit>'}
+    t.add("db/repo/demo-game/demo_game", "version", demo_game.__version__)
+    t.add("db/repo/demo-game", "commit", demo_commit)
+print("db/repo/demo-game/demo_game:", L.at()["db/repo/demo-game/demo_game"])
+# db/repo/demo-game/demo_game: {'version': '0.1.0'}
+print("db/repo/demo-game:", L.at()["db/repo/demo-game"])
+# db/repo/demo-game: {'commit': '<the demo commit>'}
 
 # %% [markdown]
 # ### Transaction locking: `bump` under `lock=`
@@ -755,14 +757,14 @@ except ValueError as e:
 
 # %% [markdown]
 # A code version lives in its source, so `bump` refuses a
-# `code/<repo>` subject. Notice the message says where to bump it.
+# `db/repo/` subject. Notice the message says where to bump it.
 
 # %%
 try:
     with L.transaction(by="human:dan", lock=10) as t:
-        bump(t, "code/dvc-dat")
+        bump(t, "db/repo/dvc-dat/dvc_dat")
 except TypeError as e:
-    print("TypeError:", e)               # code/dvc-dat: a code version lives in its source; …
+    print("TypeError:", e)               # db/repo/dvc-dat/dvc_dat: a code version lives in its source; …
 
 # %%
 with L.transaction(by="human:dan", lock=10) as t:
@@ -780,8 +782,8 @@ print(L.at()["schema/tape", "version"])  # 0.0.9: add went back
 
 # %%
 with L.transaction(by="agent:release", lock=5) as t:
-    v = t.previous_rev["code/demo-game", "version"]
-    c = t.previous_rev["code/demo-game", "commit"]
+    v = t.previous_rev["db/repo/demo-game/demo_game", "version"]
+    c = t.previous_rev["db/repo/demo-game", "commit"]
     t.add("rel/demo-game", "pair", f"{v}+{c}")
 print(L.at()["rel/demo-game", "pair"])    # 0.1.0+<commit>
 
@@ -801,7 +803,7 @@ print(L.at()["rel/demo-game", "pair"])    # 0.1.0+<commit>
 
 # %%
 rev = L.at()
-when = [r.rev for r in rev.rows("code/demo-game", "version", "0.1.0") if r.added]
+when = [r.rev for r in rev.rows("db/repo/demo-game/demo_game", "version", "0.1.0") if r.added]
 print(when)                               # [Rev(...)]: when it was set
 print(when[0][when[0].tx, "db/by"])       # human:dan: by whom
 

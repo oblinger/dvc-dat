@@ -23,14 +23,15 @@ def bump(t: Transaction, subject: str, part: str = "patch", *,
     ``Unlocked`` and nothing is written.
 
     For clocks only: a subject holding a ``db/alias`` row raises ``TypeError`` naming the alias (a
-    value's version is a pred; a new version is a new seal and a re-point), and so does a ``code/<repo>``
+    value's version is a pred; a new version is a new seal and a re-point), and so does a ``db/repo/``
     subject: a code version lives in its source (``bump_source``), and the first clean run after it moves
-    the ``code/<repo>`` clock (DAT 1043). ``minor`` and ``major`` need ``confirm(old, new)`` to answer
+    the ``db/repo/<repo>/<package>`` clock, which the ledger alone writes (DAT 1043, 1044). ``minor`` and ``major`` need ``confirm(old, new)`` to answer
     ``True``; without ``confirm`` they are refused (A38). Nothing is written on any refusal.
     """
-    if subject.startswith("code/"):
+    if subject.startswith("db/repo/"):
         raise TypeError(f"{subject}: a code version lives in its source; just bump <module> [part] edits "
-                        "__version__ there, and the next clean run records it")
+                        "__version__ there, and the next clean run records it in db/repo/<repo>/<package> "
+                        "(the commit in db/repo/<repo>)")
     prev = t.previous_rev                   # Unlocked without lock=
     held = prev._held(subject, "db/alias")
     if held:
@@ -65,13 +66,16 @@ _ASSIGN = re.compile(r"""^(__version__\s*=\s*)(['"])([^'"]*)\2(.*)$""", re.M)
 
 @dataclass(frozen=True)
 class SourceBump:
-    """What ``bump_source`` did: ``module`` went ``old -> new`` in the file at ``path``, in checkout ``repo``."""
+    """What ``bump_source`` did: ``module``'s version went ``old -> new`` in the file at ``path``, in checkout
+    ``repo``; ``package`` is the dotted root whose ``__version__`` that file declares, the ``<package>`` of
+    the ``db/repo/<repo>/<package>`` clock the next clean run moves."""
 
     module: str
     old: str
     new: str
     path: Path
     repo: Optional[str]
+    package: str
 
 
 def bump_source(module: str, part: str = "patch", *,
@@ -84,7 +88,7 @@ def bump_source(module: str, part: str = "patch", *,
     mount's root declaring its own, finds ``demo_game/etl/__init__.py``; ``mymodule.mult`` finds
     ``mymodule/__init__.py``). ``minor`` and ``major`` need ``confirm(old, new)`` to answer ``True``, as
     ``bump``. Never commits and never touches a ledger: the first clean run after the commit moves the
-    ``code/<repo>`` clock (DAT 1043). ``repo`` is the checkout's name by discovery, ``None`` outside one.
+    ``db/repo/<repo>/<package>`` clock (DAT 1043, 1044). ``repo`` is the checkout's name by discovery, ``None`` outside one.
     Refusals, nothing written: ``ModuleNotFoundError`` for a module that does not resolve, ``ValueError``
     for no ``__version__`` line (naming the top-level package's file) or one that is not
     ``MAJOR.MINOR.PATCH``."""
@@ -119,4 +123,4 @@ def bump_source(module: str, part: str = "patch", *,
     new = _next(module, old, part, confirm)
     path.write_text(text[:m.start(3)] + new + text[m.end(3):])
     top_dir = _git(str(path.parent), "rev-parse", "--show-toplevel")
-    return SourceBump(module, old, new, path, repo_name(Path(top_dir)) if top_dir else None)
+    return SourceBump(module, old, new, path, repo_name(Path(top_dir)) if top_dir else None, name)
