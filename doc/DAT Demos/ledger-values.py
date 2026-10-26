@@ -353,7 +353,7 @@ try:
 except Exists as e:
     print("Exists:", e)
 # → Exists: <12 hex>… is sealed: 'camera' is one of its own predicates,
-#   written once (add refused); annotate with another predicate, or
+#   written once (add refused); add another predicate, or
 #   seal anew and re-point
 
 # %% [markdown]
@@ -1077,7 +1077,7 @@ try:
 except Exists as e:
     print("Exists:", e)
 # → Exists: <12 hex>… is sealed: 'camera' is one of its own predicates,
-#   written once (remove refused); annotate with another predicate, or
+#   written once (remove refused); add another predicate, or
 #   seal anew and re-point
 
 # %% [markdown]

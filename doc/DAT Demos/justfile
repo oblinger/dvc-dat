@@ -31,8 +31,8 @@ why name *args:
 
 # a row on a subject: t[s, p] = o
 [no-cd]
-annotate subject *args:
-    @{{python}} "{{recipes}}" annotate "$@"
+set subject *args:
+    @{{python}} "{{recipes}}" set "$@"
 
 # point a name at a value (a hash prefix is expanded)
 [no-cd]

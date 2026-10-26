@@ -31,7 +31,7 @@
 # > 2. **Listing values by predicate** — `values` lists values by predicate;
 # >    `value` gets exactly one; `history` lists every predicate a subject
 # >    has held; `why` lists what a value was computed from.
-# > 3. **Updating values** — `annotate` adds a predicate to a subject;
+# > 3. **Updating values** — `set` adds a predicate to a subject;
 # >    `alias` points a name at a value; `index` makes a predicate fast
 # >    to list by; `bump` moves a version predicate (a release is a bump
 # >    of the ledger's own).
@@ -336,10 +336,10 @@ with L.transaction(by="human:dan") as t:                 # rev 10
 # A write adds a predicate to a subject; nothing is changed in place.
 #
 # ### A predicate on a subject
-# `just annotate <subject> k=v` adds one predicate to a subject.
+# `just set <subject> k=v` adds one predicate to a subject.
 
 # %%
-# !just annotate game/G1 texture=hardwood
+# !just set game/G1 texture=hardwood
 # → game/G1 texture=hardwood
 
 # %% [markdown]

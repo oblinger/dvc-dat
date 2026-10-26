@@ -370,7 +370,7 @@ class Transaction:
                 if names is not None and is_seal_predicate(op.p, names):
                     verb = "add" if op.added else "remove"
                     raise Exists(f"{op.s[:12]}… is sealed: {op.p!r} is one of its own predicates, written once "
-                                 f"({verb} refused); annotate with another predicate, or seal anew and re-point")
+                                 f"({verb} refused); add another predicate, or seal anew and re-point")
             if op.p == "db/alias" and op.added:
                 if R._held(op.s, "db/value"):
                     raise TypeError(f"{op.s[:16]!r} holds its own db/value: a name is never a sealed subject; "
