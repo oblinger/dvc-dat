@@ -5,19 +5,19 @@ The core ideas of dvc_dat: dats, specs, results and the do system.
 A **dat** is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
 itself. `_result_.yaml` holds only what running it produced.
 
-`dvc_dat` has one namespace and one runner, both reached through `do`:
+`dvc_dat` has one namespace, `do`, and one run, `Dat.manager.run`:
 
 ```python
 from dvc_dat import Dat
 
-do = Dat.do   # the shortcut; follows Dat.manager
+do = Dat.do   # the namespace shortcut; follows Dat.manager
 
 # a dotted name -> a Python object; the first call builds
 # Dat.manager from the nearest .datconfig.yaml
 template = do.load("catalog.experiment")
 
 # fork the template, run the fork
-result = do("catalog.experiment", epochs=200)
+result = Dat.manager.run("catalog.experiment", epochs=200)
 
 # a path -> the dat on disk
 dat = Dat.load("runs/2026-09/exp")
@@ -39,13 +39,13 @@ opens one.
 
 ## Arguments fork a spec; they never ride beside it
 
-`do(template, *args, **kwargs)` does not pass the arguments to a function. It
+`Dat.manager.run(template, *args, **kwargs)` does not pass the arguments to a function. It
 writes them into a *new* spec — keyword arguments update `dat.kwargs` key by
 key, positional arguments replace `dat.args` — creates the dat that spec
 describes, and then runs that dat with no call-site arguments at all:
 
 ```python
-do("catalog.experiment", 3, epochs=200)
+Dat.manager.run("catalog.experiment", 3, epochs=200)
 
 # the new dat's _spec_.yaml carries
 #   dat: {args: [3], kwargs: {epochs: 200}}
@@ -56,7 +56,7 @@ do("catalog.experiment", 3, epochs=200)
 The consequence is the point: **the spec is the record.** Nothing about the
 arguments goes into `_result_.yaml`, and no sealed dat is ever rewritten by a
 run. Handing a dat arguments forks a new one and leaves the original
-byte-identical; `do(dat)` with none re-runs it in place while it is open.
+byte-identical; `Dat.manager.run(dat)` with none re-runs it in place while it is open.
 
 ## The seal
 
@@ -75,7 +75,7 @@ another entry already depends on is dropped.
 
 A dat is its functional content: the recipe in `_spec_.yaml`, the files the
 run wrote, and `_result_.yaml`. The run that made it is a **sub-dat**,
-`run/` inside the dat, made fresh by every `execute` (a rolling dat's is
+`run/` inside the dat, made fresh by every run (a rolling dat's is
 replaced each time it runs). Its results hold the execution: `dat.run_at`,
 `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` (the branch, commit and
 dirty flag of the git checkout holding the code's source, blind to paths its
@@ -162,10 +162,10 @@ never by parsing a path.
 
 A **world** is a `DatManager`: a list of dat folders and the namespace that
 names things in them. A manager owns its `do` — a `Do` bound to it, carrying
-its mounts, its `load` and its runner — and everything the manager does (a
+its mounts and its `load` — and everything the manager does (a
 dotted spec, `dat.base`, `{}` expansion, resolving a name to a folder, every
-run) goes through that `do` and no other. `do` is the manager's only public
-attribute; its folders are its own business.
+run) goes through that `do` and no other. Running is the manager's own
+`m.run(...)`; its folders are its own business.
 
 ```python
 from dvc_dat import Dat, DatManager
@@ -173,7 +173,7 @@ from dvc_dat import Dat, DatManager
 # a world on a list of folders; nothing is read from disk
 m = DatManager(dat_folders=["/work/dats"])
 m.do.mount(folder="catalog", at="catalog", relative_to=root)
-m.do("catalog.experiment", lr=0.5)   # created and run inside m
+m.run("catalog.experiment", lr=0.5)  # created and run inside m
 m.load("runs/experiment1")           # searched in m's folders
 m.expand_spec(spec)                  # dat.base merged, {} filled, through m's namespace
 ```
@@ -189,7 +189,7 @@ folder first on `sys.path`, and returns a new manager.
 
 **`Dat.manager` is the process's default world** — a plain class attribute.
 `import dvc_dat` touches no filesystem; the first read of `Dat.manager` (a
-`do(...)`, a `Dat.load`, any use at all) fills it with
+`Dat.manager.run(...)`, a `Dat.load`, any use at all) fills it with
 `DatManager.load_dat_config()`. `Dat.create` / `Dat.load` trampoline to it,
 every subclass shares it (`Run.manager is Dat.manager`), and the
 module-level `do` forwards to `Dat.manager.do`, whichever manager that is.
@@ -198,10 +198,8 @@ Nothing in an ordinary program configures anything:
 ```python
 from dvc_dat import Dat
 
-do = Dat.do
-
 # finds .datconfig.yaml on the way
-do("mypkg.train.baseline", lr=0.5)
+Dat.manager.run("mypkg.train.baseline", lr=0.5)
 ```
 
 To replace the default world, assign it. Mounts belong to the namespace
@@ -221,13 +219,16 @@ A manager takes no class: `m.create(spec)` and `m.load(name)` build the class
 the spec's `dat.kind` names. `Run.load(name)` and `Run.create(...)` are the
 typed forms on the default world — the result is a `Run`, or a `TypeError`.
 
-Every run in a world goes through `m.execute(dat)`: `m.do(...)`, and each
-`do(...)` a running function makes, land there. A subclass of `DatManager`
-that overrides `execute` and calls `super().execute(dat)` wraps every run.
+`m.run(target, ...)` is the one way to run a dat outside a ledger: a dat
+runs in place, a spec or its name is forked, created and run, a callable is
+called. It is fixed; a project wanting other run machinery subclasses the
+manager, not `Dat`. Every run in a world goes through the manager's private
+`_execute(dat)`: `m.run(...)`, each `m.run(...)` a running function makes,
+and a ledger's dat runs land there, so a subclass of `DatManager` that
+overrides `_execute` and calls `super()._execute(dat)` wraps every run.
 
 A bare `Do()` is a namespace with no world: it mounts and loads, and a
-manager built with `do=` adopts it; running anything in it before then is a
-`RuntimeError`.
+manager built with `do=` adopts it. It is not callable.
 
 The command line (`just run`) needs no special handling (see
 [Command Line](cli.md)); a long-lived service that starts in one directory
@@ -293,12 +294,12 @@ its index lives in the first dat folder.
 ## Dependencies by capture
 
 Every load goes through a manager, so a run's inputs are whatever it
-loaded. `execute` runs the function inside `m.recording(dat)`, and every
+loaded. A run calls the function inside `m.recording(dat)`, and every
 `load` (and `save_artifact`) inside that block lands in `dat.dependencies` in
 `_result_.yaml`, name to hash. A dat's hash is its `dat.sha256`, the
 content hash its seal stamps over the whole folder — `unsealed` for a dat
 still open — and `dat.verify()` tells you whether an input is still exactly
-what the run saw. A nested `do()` records its own loads, and
+what the run saw. A nested `Dat.manager.run()` records its own loads, and
 the outer run records the inner dat as one entry, by its final hash. A load that reaches
 around the manager is not a dependency unless the run says so:
 

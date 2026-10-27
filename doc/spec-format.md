@@ -69,10 +69,10 @@ The function `dat.do` names is called as:
 fn(dat, *spec.dat.args, **spec.dat.kwargs)
 ```
 
-Its return value is the value of the `do(...)` call. A spec with no `dat.do`
+Its return value is the value of the `Dat.manager.run(...)` call. A spec with no `dat.do`
 creates the dat and returns it.
 
-`do(template, *args, **kwargs)` **forks**: keyword arguments update
+`Dat.manager.run(template, *args, **kwargs)` **forks**: keyword arguments update
 `dat.kwargs` key by key and positional arguments replace `dat.args`, the
 updated spec is written as the new dat's `_spec_.yaml`, and the new dat then
 runs with no call-site arguments. So the arguments of every run are on disk, in
@@ -290,7 +290,7 @@ Arguments are **not** recorded here. They are in the spec.
 
 ## The run sub-dat
 
-Every `execute` makes `run/` inside the dat, a dat of its own with a minimal
+Every run makes `run/` inside the dat, a dat of its own with a minimal
 `_spec_.yaml` and a `_result_.yaml` holding the execution — when, how long,
 where, and which code: the branch, commit and dirty flag (tracked files) of
 the git checkout holding the source of the function `dat.do` names. A path

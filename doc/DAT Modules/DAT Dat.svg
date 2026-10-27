@@ -37,11 +37,11 @@
     <text x="610" y="100" font-size="23" font-weight="bold">Do</text>
     <text x="610" y="124" font-size="15" fill="#607d8b">class · manager.do, one per world</text>
     <text x="610" y="152" font-size="15">dotted name → object</text>
-    <text x="610" y="174" font-size="15">mount · load · name_of · do()</text>
+    <text x="610" y="174" font-size="15">mount · load · name_of</text>
 
     <text x="1010" y="100" font-size="23" font-weight="bold">DatManager</text>
     <text x="1010" y="124" font-size="15" fill="#607d8b">class · a world of dats</text>
-    <text x="1010" y="152" font-size="15">create · load · execute</text>
+    <text x="1010" y="152" font-size="15">create · load · run</text>
     <text x="1010" y="174" font-size="15">recording · save_artifact</text>
     <text x="1010" y="198" font-size="15" font-style="italic" fill="#2e7d32">governed by The manager is the world</text>
 
@@ -120,8 +120,8 @@
 
   <!-- edge labels -->
   <g font-size="16" fill="#37474f">
-    <text x="415" y="124" text-anchor="middle">do()</text>
-    <text x="805" y="124" text-anchor="middle">execute()</text>
+    <text x="415" y="124" text-anchor="middle">Dat.do</text>
+    <text x="805" y="124" text-anchor="middle">names</text>
     <text x="1232" y="124" text-anchor="middle" font-size="15">load_dat_config()</text>
     <text x="770" y="264" text-anchor="end">create(): _spec_.yaml</text>
     <text x="1022" y="282">calls, cwd run/work/</text>

@@ -49,25 +49,25 @@ class TestLoad:
         assert isinstance(do.load("hello_again.hella"), Callable)
 
     def test_do(self):
-        assert do("hello_world") == "hello world!"
+        assert Dat.manager.run("hello_world") == "hello world!"
 
     def test_do_with_args_and_return_value(self):
-        assert do("hello_again.salutation",
+        assert Dat.manager.run("hello_again.salutation",
                   name="hello", emphasis=True, lucky_number=7) == \
                (7, "hello, My lucky number is 7")
 
     def test_do_on_a_configuration_file(self, capsys):
-        do("hello_config", "Martin")
+        Dat.manager.run("hello_config", "Martin")
         assert capsys.readouterr().out == "   Martin, My lucky number is 7\n"
 
     def test_do_on_a_shadowed_config(self, capsys):
-        do("hello_shadowed_config")
+        Dat.manager.run("hello_shadowed_config")
         assert capsys.readouterr().out == "   Hello, My lucky number is 777\n"
 
     def test_combining_configs_and_code(self):
         result = "a  jackpot   ccc  D  e  fff  g  h  JACKPOT JACKPOT JACKPOT   j  k" + \
             "  lll  m  N  ooo  jackpot   q  rrr  S  t  uuu  v  jackpot   XXX  y"
-        assert do("my_letters") == result
+        assert Dat.manager.run("my_letters") == result
 
     def test_yaml_constant_loading(self):
         value = {'datasets': ['regression_games', 'baller10', 'volley10', 'arron4'],
@@ -94,7 +94,7 @@ nested:
 
     def test_yaml_string_spec_from_file(self, capsys):
         """Test YAML string spec loaded from a .py file works correctly."""
-        do("hello_yaml_config")
+        Dat.manager.run("hello_yaml_config")
         output = capsys.readouterr().out
         assert "YAML GREETER" in output or "888" in output
 
@@ -154,19 +154,19 @@ class TestRegisteringStuff:
     def test_registering_simple_functions(self, empty_do):
         do_ = empty_do
         do_.mount(at="foo", value=lambda: "bar")
-        assert do_("foo") == "bar"
+        assert do_.manager.run("foo") == "bar"
 
     def test_registering_do_fns(self, empty_do):
         do_ = empty_do
         do_.mount(at="foo.bar", value=lambda: "baz")
-        assert do_("foo.bar") == "baz"
+        assert do_.manager.run("foo.bar") == "baz"
 
     def test_registering_modules_paths(self, empty_do):
         do_ = empty_do
         path = os.path.join(os.path.dirname(__file__),
                             "test_mounted_folder/script/hello_world.py")
         do_.mount(at="xxx", module=path)
-        assert do_("xxx.__main__") == "hello world!"
+        assert do_.manager.run("xxx.__main__") == "hello world!"
         do_.mount(at="yyy", module="dvc_dat")  # The already loaded 'dvc_dat' module
         from dvc_dat import Dat
         assert do_.load("yyy.Dat") == Dat
@@ -195,10 +195,10 @@ class TestDatCallArgs:
         do_ = empty_do
         do_.mount(at="foo", value=foo)
         do_.mount(at="bar", value={"dat": {"do": "foo"}})
-        assert do_("bar", 1, 2, 3) == [1, 2, 3]
+        assert do_.manager.run("bar", 1, 2, 3) == [1, 2, 3]
         do_.mount(at="baz", value={"dat": {"do": "foo", "args": [4, 5, 6]}})
-        assert do_("baz") == [4, 5, 6]
-        assert do_("baz", 1, 2, 3) == [1, 2, 3]   # 1.x appended: [4, 5, 6, 1, 2, 3]
+        assert do_.manager.run("baz") == [4, 5, 6]
+        assert do_.manager.run("baz", 1, 2, 3) == [1, 2, 3]   # 1.x appended: [4, 5, 6, 1, 2, 3]
 
     def test_call_kwargs(self, empty_do):
         def foo(_dat, *_args, **kwargs):
@@ -206,10 +206,85 @@ class TestDatCallArgs:
         do_ = empty_do
         do_.mount(at="foo", value=foo)
         do_.mount(at="bar", value={"dat": {"do": "foo"}})
-        assert do_("bar", a=1, b=2, c=3) == {"a": 1, "b": 2, "c": 3}
+        assert do_.manager.run("bar", a=1, b=2, c=3) == {"a": 1, "b": 2, "c": 3}
         do_.mount(at="baz", value={"dat": {"do": "foo", "kwargs": {"c": 33, "d": 44}}})
-        assert do_("baz") == {"c": 33, "d": 44}
-        assert do_("baz", a=1, b=2, c=3) == {"a": 1, "b": 2, "c": 3, "d": 44}
+        assert do_.manager.run("baz") == {"c": 33, "d": 44}
+        assert do_.manager.run("baz", a=1, b=2, c=3) == {"a": 1, "b": 2, "c": 3, "d": 44}
+
+
+class TestManagerRun:
+    """DAT 1049: `Dat.manager.run(target, ...)` is the one run; `Dat.do` is the namespace only."""
+
+    @pytest.fixture
+    def m(self, tmp_path):
+        m = DatManager(dat_folders=[str(tmp_path)])
+        m.do.mount(at="echo", value=lambda dat, *a, **k: {"name": dat.get_path_name(),
+                                                         "args": list(a), "kwargs": dict(k)})
+        m.do.mount(at="tmpl", value={"dat": {"do": "echo", "name": "runs/t", "kwargs": {"x": 1}}})
+        return m
+
+    def test_a_dat_runs_in_place_and_dat_run_is_the_record(self, m):
+        dat = m.create({"dat": {"do": "echo", "args": [3]}}, path="in_place")
+        assert m.run(dat) == {"name": "in_place", "args": [3], "kwargs": {}}
+        assert isinstance(dat.run, Dat)                          # still the record, not a verb
+        record = dat.run.get_results()["dat"]
+        assert "run_at" in record and "run_time" in record
+
+    def test_a_dat_with_arguments_forks_beside_it(self, m):
+        dat = m.create({"dat": {"do": "echo", "args": [3]}}, path="parent")
+        out = m.run(dat, 9, y=2)
+        assert out == {"name": "parent_2", "args": [9], "kwargs": {"y": 2}}
+        assert dat.run is None                                   # the parent never ran
+
+    def test_a_sealed_dat_is_refused(self, m):
+        m.do.mount(at="saves", value=lambda dat: dat.save())
+        dat = m.create({"dat": {"do": "saves"}}, path="sealed")
+        m.run(dat)
+        with pytest.raises(Exception, match="In <Dat") as e:
+            m.run(dat)
+        assert isinstance(e.value.__cause__, RuntimeError) and "sealed" in str(e.value.__cause__)
+
+    def test_a_spec_name_creates_and_runs(self, m):
+        assert m.run("tmpl") == {"name": "runs/t", "args": [], "kwargs": {"x": 1}}
+
+    def test_a_spec_name_with_arguments_forks_the_spec(self, m):
+        assert m.run("tmpl", 7, y=2) == {"name": "runs/t", "args": [7], "kwargs": {"x": 1, "y": 2}}
+
+    def test_a_spec_dict_creates_and_runs(self, m):
+        spec = {"dat": {"do": "echo", "name": "runs/d"}}
+        assert m.run(spec, z=0) == {"name": "runs/d", "args": [], "kwargs": {"z": 0}}
+
+    def test_a_spec_with_no_do_returns_the_dat(self, m):
+        dat = m.run({"dat": {"name": "runs/plain"}})
+        assert isinstance(dat, Dat) and dat.get_path_name() == "runs/plain" and dat.run is None
+
+    def test_target_exists_use_returns_the_dat_unrun(self, m):
+        first = m.run({"dat": {"name": "runs/u"}})
+        again = m.run({"dat": {"do": "echo", "name": "runs/u", "target_exists": "use"}})
+        assert again.get_path() == first.get_path() and again.run is None
+
+    def test_a_callable_is_called(self, m):
+        assert m.run(lambda a, b=0: a + b, 1, b=2) == 3
+
+    def test_a_callable_name_is_called(self, m):
+        m.do.mount(at="add", value=lambda a, b=0: a + b)
+        assert m.run("add", 1, b=2) == 3
+
+    def test_anything_else_is_refused(self, m):
+        with pytest.raises(Exception, match="In 42") as e:
+            m.run(42)
+        assert isinstance(e.value.__cause__, TypeError)
+
+    def test_the_default_world_runs_through_dat_manager_run(self):
+        assert Dat.manager.run("hello_world") == "hello world!"
+
+    def test_dat_do_is_the_namespace_and_not_callable(self, m):
+        with pytest.raises(TypeError, match="not callable"):
+            Dat.do("hello_world")
+        with pytest.raises(TypeError, match="not callable"):
+            m.do("tmpl")
+        assert Dat.do.load("hello_world") is not None           # the namespace stays
+        assert not hasattr(DatManager, "execute")
 
 
 class TestCleanup:

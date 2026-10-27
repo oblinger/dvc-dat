@@ -28,7 +28,7 @@
   <g fill="#263238" text-anchor="middle">
     <text x="260" y="158" font-size="24" font-weight="bold">DatManager</text>
     <text x="260" y="184" font-size="15" fill="#607d8b">class · dat folders, the do namespace</text>
-    <text x="260" y="212" font-size="15">do · load · artifacts by hash</text>
+    <text x="260" y="212" font-size="15">do · run · load · artifacts by hash</text>
 
     <text x="260" y="404" font-size="24" font-weight="bold">dat folder</text>
     <text x="260" y="430" font-size="15" fill="#607d8b">Dat (class) · its own recipe</text>
@@ -70,7 +70,7 @@
   </g>
 
   <g font-size="16" fill="#37474f">
-    <text x="272" y="305">do() · load()</text>
+    <text x="272" y="305">run() · load()</text>
     <text x="1038" y="163" text-anchor="middle">one call each</text>
     <text x="1010" y="292">eval</text>
     <text x="527" y="433" text-anchor="middle">writes</text>

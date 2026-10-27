@@ -98,7 +98,7 @@ def df_sales():
 
 class TestDoIsWorking:
     def test_load_do(self):
-        assert isinstance(do("cube_hello", show=False), DataFrame)
+        assert isinstance(Dat.manager.run("cube_hello", show=False), DataFrame)
 
 
 class TestCube:
@@ -186,22 +186,22 @@ class TestGetExcel:
 
 class TestMetricsMatrix:
     def test_dat_report(self, df_sales):
-        df = do("rpt.simple")
+        df = Dat.manager.run("rpt.simple")
         # print(df.shape)
         assert df.shape == (48, 6), "Couldn't create metrics matrix"
 
     def test_default_report(self, df_sales):
-        df = do("rpt")
+        df = Dat.manager.run("rpt")
         print(df.shape)
         assert df.shape == (48, 6), "Couldn't create metrics matrix"
 
     def test_my_test(self, df_sales):
-        df = do("rpt.my_test")
+        df = Dat.manager.run("rpt.my_test")
         print(df.shape)
         assert df.shape == (16, 6), "Couldn't create metrics matrix"
 
     def test_fully_manual(self, df_sales):
-        df = do("rpt.fully_manual")
+        df = Dat.manager.run("rpt.fully_manual")
         print(df.shape)
         assert df.shape == (48, 6), "Couldn't create metrics matrix"
 

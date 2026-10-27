@@ -30,7 +30,7 @@ means the same thing from every directory under the project, whether or not
 
 | Command | Does |
 |---------|------|
-| `x TARGET [ARG ...] [KEY=VALUE ...]` | `do(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
+| `x TARGET [ARG ...] [KEY=VALUE ...]` | `Dat.manager.run(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
 | `just mounts [PREFIX]` · `x --list [PREFIX]` | Every mounted name that starts with `PREFIX`, with what it loads to. The library mounts `dt` (`dvc_dat.dat_tools`) itself; `x dt.list` is the same command. |
 | `x --info` | The version, the dat and artifact folders, the config folder and the `.datconfig.yaml` in force. |
 | `x --version` | The version. |
@@ -51,13 +51,13 @@ arguments become the new spec's `dat.args`, the `KEY=VALUE` pairs update its
 Every fixed argument and every `KEY=VALUE` value is read as **JSON, else the text exactly as typed** — the one `k=v` grammar of every dat command line (`dvc_dat.do.arg_value`):
 
 ```bash
-# do("train", 7, True)
+# Dat.manager.run("train", 7, True)
 x train 7 true
 
-# do("train", epochs=7, lr=0.01)
+# Dat.manager.run("train", epochs=7, lr=0.01)
 x train epochs=7 lr=0.01
 
-# do("train", tags=["a", "b"], cfg={"a": 1}, name="7", seed=None)
+# Dat.manager.run("train", tags=["a", "b"], cfg={"a": 1}, name="7", seed=None)
 x train 'tags=["a","b"]' 'cfg={"a":1}' name='"7"' seed=null
 
 # not JSON, so the string as typed: a bare word, a date, an empty value
@@ -80,7 +80,7 @@ The `TARGET` itself is never parsed.
 |--------|------|
 | `--set DOTTED.KEY=VALUE` | Set one spec key of a template before it forks; repeat the flag for more. The value is JSON, else the text as typed. |
 | `--json DOTTED.KEY=JSON` | The same, with the value parsed as JSON; repeatable, and mixes freely with `--set`. |
-| `--dry-run` | Print the `do(...)` call this line would make, and any `--set` / `--json` updates, without making it. |
+| `--dry-run` | Print the `Dat.manager.run(...)` call this line would make, and any `--set` / `--json` updates, without making it. |
 | `--usage` | Print `TARGET`'s own usage — a `<base>.usage` value, else the spec's `usage` key — else the general usage. |
 
 `--set` / `--json` update a **template spec**; using them on a target that is

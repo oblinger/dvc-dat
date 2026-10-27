@@ -17,7 +17,7 @@
 # # dvc-dat walkthrough
 #
 # One small project, built in a temp folder, run top to bottom against dvc-dat 2.12:
-# a mounted folder of YAML templates, a `dat.base` chain, `do()` and a keyword
+# a mounted folder of YAML templates, a `dat.base` chain, `Dat.manager.run()` and a keyword
 # fork, loading a dat, the `merge_dicts` recipe, and the command-line main.
 # Nothing is written outside the temp folder. The reference is in
 # [`doc/`](../index.md).
@@ -85,7 +85,7 @@ print(*sorted(FILES), sep="\n")
 #
 # `DatManager.load_dat_config(PROJECT, do=do)` reads that config and becomes
 # the default world, `Dat.manager` (a program run from inside the project needs
-# no call: the first `do` finds the nearest `.datconfig.yaml`). It also puts the
+# no call: the first use of `Dat.manager` finds the nearest `.datconfig.yaml`). It also puts the
 # project first on `sys.path`, so importing `mypkg.main` makes its mounts,
 # exactly as a notebook would import any program's main.
 
@@ -102,14 +102,14 @@ do.load("catalog.experiment")      # the template as written
 # %% [markdown]
 # ## Run a template, then fork it
 #
-# `do(template)` creates a dat from the template and runs it as
+# `Dat.manager.run(template)` creates a dat from the template and runs it as
 # `fn(dat, *dat.args, **dat.kwargs)`. Keyword arguments fork: they are written
 # into the new dat's `dat.kwargs`, so the spec on disk is the record of the run. A run saves nothing by itself:
 # `train` ends with `dat.save()`, which seals the dat when the run returns.
 
 # %%
-d1 = do("catalog.experiment")
-d2 = do("catalog.experiment", epochs=50)
+d1 = Dat.manager.run("catalog.experiment")
+d2 = Dat.manager.run("catalog.experiment", epochs=50)
 for d in (d1, d2):
     print(d.get_path_name(), d.get_spec()["dat"]["kwargs"], d.get_results()["loss"])
 
@@ -132,12 +132,12 @@ print((Path(d.get_path()) / "_result_.yaml").read_text())
 #
 # A created dat's spec never changes. A variation is a new dat made from an edited
 # copy. The copy's `dat.name` is the folder the original landed in, so ask for
-# `increment` (or pass `path=`) to land beside it. `do(dat)` runs a dat as it is.
+# `increment` (or pass `path=`) to land beside it. `Dat.manager.run(dat)` runs a dat as it is.
 
 # %%
 spec = merge_dicts(d.get_spec(), {"dat": {"target_exists": "increment"},
                                   "model": {"width": 256}})
-d3 = do(Dat.create(spec=spec))
+d3 = Dat.manager.run(Dat.create(spec=spec))
 print(d3.get_path_name(), d3.get_spec()["model"], d3.get_results()["loss"])
 
 

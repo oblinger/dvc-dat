@@ -46,10 +46,14 @@ DatContainer, DatManager, Do`. Part of the
   sha256=None)` (`RuntimeError` when nothing records), `roots(deps)`,
   `code_of(fn) -> {branch, commit, dirty} | None`; `dirty` skips paths
   the repo's `.gitattributes` marks `dat-noncode` (`CODE_PATHSPEC`).
-- `execute(dat)`: run `fn(dat, *args, **kwargs)` for `dat.do`, inside
-  `recording(dat)`, in a fresh `run/` sub-dat with `run/work/` as cwd;
-  a sealed dat `RuntimeError`; a non-callable `dat.do` `TypeError`; a
-  `referenceable` demand unmet `RuntimeError`.
+- `run(target, *args, **kwargs)`: the one run, fixed (2.35). A
+  callable is called; a template spec (or its name) is forked into a new
+  dat that runs; a `Dat` runs in place, or forks with arguments. A dat's
+  run (private `_execute`) calls `fn(dat, *args, **kwargs)` for
+  `dat.do`, inside `recording(dat)`, in a fresh `run/` sub-dat with
+  `run/work/` as cwd; a sealed dat `RuntimeError`; a non-callable
+  `dat.do` `TypeError`; a `referenceable` demand unmet `RuntimeError`;
+  each re-raised as `Exception("In <target>")`.
 - `expand(text, vars=None)`, `expand_spec(spec, vars=None)`: the `{}`
   grammar through this manager's `do`; `expand_spec` first merges the
   spec over its `dat.base` chain.
@@ -58,7 +62,7 @@ DatContainer, DatManager, Do`. Part of the
 `Dat`:
 
 - `Dat.manager` (class, assignable; built on first read from
-  `load_dat_config()`), `Dat.do` (forwards to `Dat.manager.do`).
+  `load_dat_config()`), `Dat.do` (forwards to `Dat.manager.do`; not callable).
 - `Dat.load(name_or_path, *, cache_after_load=True)`,
   `Dat.create(path=None, spec=None)`: in the default world; a
   `dat.kind` outside `cls` is `TypeError`.
@@ -77,8 +81,7 @@ DatContainer, DatManager, Do`. Part of the
 `DatContainer(Dat)`: `get_dat_paths()` and `get_dats()`, the dats in
 its folder, lazily, a child's `run/` skipped.
 
-`Do`: `do(target, *args, **kwargs)` runs a callable, forks a template
-spec into a new dat and runs it, or re-runs or forks a `Dat`;
+`Do` (a namespace, not callable):
 `load(dotted, *, default, kind)`, `name_of(obj)`,
 `keys()`, `mount(*, folder, file, module, value, at, relative_to)`
 (`ValueError` when a mounted name would shadow an importable one).
@@ -91,7 +94,7 @@ Module functions: `merge_dicts`, `expand`, `expand_spec`.
   except `dat.name`, which keeps the path template (never the path it
   expanded to), and call-site arguments go into a new spec.
 - A sealed (or referenceable) dat is never rewritten: `save` and
-  `execute` refuse it.
+  `run` refuse it.
 - `dat.sha256` hashes the folder without `run/`; a run is not content.
 - Standing is the least of the inputs', capped at `sealed` by dirty
   code or code outside a checkout.

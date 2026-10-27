@@ -240,7 +240,7 @@ class TestArguments:
 
     def test_print_shows_the_call(self):
         code, out, _ = dat("echo_args", "7", "k=1", "--dry-run")
-        assert (code, out) == (0, "do('echo_args', 7, k=1)")
+        assert (code, out) == (0, "Dat.manager.run('echo_args', 7, k=1)")
 
     def test_set(self):
         line = ["my_letters", "--set", "dat.title=Re-configured letterator",

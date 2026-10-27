@@ -568,7 +568,7 @@ class Fn:
     def _run_dat(self, plain: "Rev", spec: Dict[str, Any], enc: str, save: Any, name: Optional[str],
                  env: Env, repo: Optional[str]) -> Value:
         """A dat's run function, run here (``_run_base``): the dat made from the spec in a work folder and
-        run (``manager.execute``), its recorded dependencies that are ledger names entered as alias reads."""
+        run (``manager._execute``), its recorded dependencies that are ledger names entered as alias reads."""
         from .txn import code_token
 
         rec: Dict[str, str] = {}
@@ -577,7 +577,7 @@ class Fn:
         manager = Dat.manager
         try:
             dat = manager.create(dat_spec(spec, self._template), path=str(work / "dat"))
-            manager.execute(dat)
+            manager._execute(dat)
             value = dat
             alias_reads(plain, dat, rec)
             trace = dict(rec)

@@ -54,7 +54,7 @@ class TestForkRule:
         do.mount(at="v2_kw", value={
             "dat": {"do": "v2_echo", "name": name, "target_exists": "overwrite"}})
 
-        assert do("v2_kw", alpha=1, beta="two") == \
+        assert Dat.manager.run("v2_kw", alpha=1, beta="two") == \
             {"args": [], "kwargs": {"alpha": 1, "beta": "two"}}
 
         spec = stored(Dat.load(name))
@@ -73,7 +73,7 @@ class TestForkRule:
             "dat": {"do": "v2_echo", "name": name, "target_exists": "overwrite",
                     "kwargs": {"c": 33, "d": 44}}})
 
-        assert do("v2_kw2", a=1, c=3) == {"args": [], "kwargs": {"c": 3, "d": 44, "a": 1}}
+        assert Dat.manager.run("v2_kw2", a=1, c=3) == {"args": [], "kwargs": {"c": 3, "d": 44, "a": 1}}
         assert stored(Dat.load(name))["dat"]["kwargs"] == {"c": 3, "d": 44, "a": 1}
 
     def test_positional_args_replace_the_templates_args(self):
@@ -82,8 +82,8 @@ class TestForkRule:
             "dat": {"do": "v2_echo", "name": name, "target_exists": "overwrite",
                     "args": [4, 5, 6]}})
 
-        assert do("v2_args") == {"args": [4, 5, 6], "kwargs": {}}
-        assert do("v2_args", 1, 2) == {"args": [1, 2], "kwargs": {}}   # not [4,5,6,1,2]
+        assert Dat.manager.run("v2_args") == {"args": [4, 5, 6], "kwargs": {}}
+        assert Dat.manager.run("v2_args", 1, 2) == {"args": [1, 2], "kwargs": {}}   # not [4,5,6,1,2]
         assert stored(Dat.load(name))["dat"]["args"] == [1, 2]
 
     def test_a_sealed_dat_does_not_rerun_and_forks_when_given_arguments(self):
@@ -93,20 +93,20 @@ class TestForkRule:
             if Dat.manager.exists(stale):
                 Dat.load(stale).delete()
 
-        assert do("v2_forkable", 1) == {"args": [1], "kwargs": {}}
+        assert Dat.manager.run("v2_forkable", 1) == {"args": [1], "kwargs": {}}
         dat = Dat.load(f"{V2}/forkable")
         spec_file = Path(dat.get_path(), SPEC_YAML)
         before = spec_file.read_bytes()
 
         # No arguments: a sealed dat does not run again.
         with pytest.raises(Exception) as err:
-            do(dat)
+            Dat.manager.run(dat)
         assert "sealed" in str(err.value.__cause__)
         assert spec_file.read_bytes() == before
         assert not Dat.manager.exists(f"{V2}/forkable_2")
 
         # Arguments: a new dat, and the original spec is untouched.
-        assert do(dat, 9) == {"args": [9], "kwargs": {}}
+        assert Dat.manager.run(dat, 9) == {"args": [9], "kwargs": {}}
         assert spec_file.read_bytes() == before
         forked = Dat.load(f"{V2}/forkable_2")
         assert forked.get_path() != dat.get_path()
@@ -117,12 +117,12 @@ class TestForkRule:
         do.mount(at="v2_dev", value={
             "dat": {"do": "v2_echo", "name": name, "target_exists": "overwrite"}})
 
-        do("v2_dev")
+        Dat.manager.run("v2_dev")
         first = Dat.load(name).get_path()
         marker = Path(first, "left_over.txt")
         marker.write_text("from the previous run")
 
-        do("v2_dev")
+        Dat.manager.run("v2_dev")
         assert Dat.load(name).get_path() == first
         assert not marker.exists()   # the folder is squashed, not merged
 
@@ -133,8 +133,8 @@ class TestForkRule:
         if Dat.manager.exists(name):
             Dat.load(name).delete()
 
-        assert do("v2_use", 1) == {"args": [1], "kwargs": {}}
-        again = do("v2_use", 2)
+        assert Dat.manager.run("v2_use", 1) == {"args": [1], "kwargs": {}}
+        again = Dat.manager.run("v2_use", 2)
         assert isinstance(again, Dat)
         assert stored(again)["dat"]["args"] == [1]   # the first run's spec, not re-run
 
@@ -271,11 +271,11 @@ class TestGetSpec:
 
     def test_a_fork_from_a_dat_lands_beside_it(self):
         template = {"dat": {"do": "v2_echo", "name": f"{V2}/parent{{unique}}"}}
-        do(template, 1)
+        Dat.manager.run(template, 1)
         parent = Dat.load(f"{V2}/parent")
         assert parent.get_spec()["dat"]["name"] == f"{V2}/parent{{unique}}"   # the template (Q36)
         assert parent.get_path_name() == f"{V2}/parent"                      # its expansion, the folder
-        do(parent, 2)
+        Dat.manager.run(parent, 2)
         child = Dat.load(f"{V2}/parent_2")
         assert child.get_spec()["dat"]["args"] == [2]
         assert child.get_spec()["dat"]["target_exists"] == "increment"
@@ -363,7 +363,7 @@ class TestExplicitConfig:
         do_before = do._current()
         Dat.manager = DatManager.load_dat_config(tmp_path, do=do)
         import explicit_main  # noqa: F401  -- the config folder is on sys.path now
-        assert do("v2_greeter") == "hi"             # its mounts landed on `do`
+        assert Dat.manager.run("v2_greeter") == "hi"             # its mounts landed on `do`
         assert sys.path[0] == os.path.realpath(tmp_path)
         assert do._current() is do_before          # the namespace kept its identity
         assert do.load("v2_echo") is echo          # ... and the mounts made before

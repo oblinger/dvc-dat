@@ -1,10 +1,11 @@
-"""The do-system: `do` maps dotted names to Python objects and runs dats.
+"""The do-system: `do` maps dotted names to Python objects.
 
-    do(target, *args, **kwargs)   # run: a dat, a template spec, or a plain callable
     do.load("pkg.mod.fn")         # the object a dotted name imports to
     do.name_of(obj)               # the dotted name that loads back to obj
     do.mount(folder=..., at=...)  # add names to the namespace, in code
 
+Running is the manager's: `Dat.manager.run(target, *args, **kwargs)` runs a
+dat, a template spec or a plain callable, loading names through this namespace.
 `do` is the process's default namespace: it forwards to `Dat.manager.do`,
 whichever manager that is.  `DatManager(dat_folders=[...])` is another world
 with a `do` of its own.  A dotted name is a mounted name, else exactly what
@@ -47,14 +48,12 @@ Spec = Dict[str, Any]
 
 
 class Do:
-    """A do namespace and runner, bound to the `DatManager` whose world it names.
+    """A do namespace, bound to the `DatManager` whose world it names.
 
     Every manager builds its own, reached as `manager.do`; the module-level `do`
     forwards to `Dat.manager.do`.  A bare `Do()` is a plain namespace of Python
-    objects: it mounts, loads, names and calls plain callables with no manager
-    at all.  Running a dat (a spec or a `Dat`) is the one thing that needs a
-    world -- `Do(manager=m)`, or a manager built with `do=` adopts it -- and is
-    `RuntimeError` without one.
+    objects: it mounts, loads and names with no manager at all.  It is not
+    callable: running is `manager.run(target, ...)`, which loads names here.
     """
 
     _base_locations: Dict[str, str]
@@ -77,43 +76,7 @@ class Do:
                                "DatManager(dat_folders=[...], do=this_do)")
         return self._manager
 
-    # -- running -------------------------------------------------------------
-
-    def __call__(self, target: Union[str, Spec, Dat, Callable], *args, **kwargs) -> Any:
-        """Run `target`.
-
-        - a **callable** (or a name that loads to one) is called with `args`/`kwargs`;
-        - a **template spec** (dict, or a name that loads to one) is forked — `args`
-          replace `dat.args`, `kwargs` update `dat.kwargs` — the new spec creates a
-          dat, and that dat runs with no call-site arguments;
-        - a **Dat** re-runs in place when no arguments are given -- refused once it
-          is sealed -- and forks a new dat from its spec when they are.  A run
-          saves nothing; `dat.save()` seals the dat.
-
-        A run calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do`
-        names; the return value is the call's value, and `dat.run_at` /
-        `dat.run_time` land in the results.  A template with no `dat.do` just
-        creates the dat and returns it.
-        """
-        obj = self.load(target) if isinstance(target, str) else target
-        try:
-            if isinstance(obj, Dat):
-                if not args and not kwargs:
-                    return self.manager.execute(obj)
-                obj = copy.deepcopy(obj.get_spec())
-                if Dat.get(obj, DAT_TARGET_EXISTS, "error") == "error":
-                    Dat.set(obj, DAT_TARGET_EXISTS, "increment")   # a fork lands beside its parent
-            elif callable(obj):
-                return obj(*args, **kwargs)
-            if not isinstance(obj, dict):
-                raise TypeError(f"do: cannot run {obj!r}; expected a callable, a spec or a Dat")
-            spec = self._fork_spec(obj, args, kwargs)
-            dat, skip_execution = self._dat_from_template(spec)
-            if skip_execution:
-                return dat
-            return self.manager.execute(dat)
-        except Exception as e:
-            raise Exception(f"In {target!r}") from e
+    # -- forking (Dat.manager.run) ------------------------------------------
 
     @staticmethod
     def _fork_spec(spec: Spec, args: Iterable[Any] = (),
@@ -473,9 +436,6 @@ class _DefaultDo:
         from . import core
         return core._default_manager.do if core._default_manager is not None else None
 
-    def __call__(self, *args, **kwargs) -> Any:
-        return Dat.manager.do(*args, **kwargs)
-
     def __getattr__(self, name: str) -> Any:
         return getattr(Dat.manager.do, name)
 
@@ -509,7 +469,7 @@ DESCRIPTION
     position is always a TARGET; the commands that ask about the command
     line itself are flags.
 
-    `x TARGET ...` calls do(TARGET, *ARGS, **KWARGS).  A TARGET that is a
+    `x TARGET ...` calls Dat.manager.run(TARGET, *ARGS, **KWARGS).  A TARGET that is a
     template spec is forked: the fixed ARGs become its dat.args and the
     KEY=VALUE pairs update its dat.kwargs, key by key; the forked spec creates
     a dat, and that dat runs.  A TARGET that is a callable is simply called.
@@ -539,7 +499,7 @@ OPTIONS
                 Update one spec key of a template before it forks; each
                 repeats, one KEY=VALUE per flag
 
-    --dry-run   Print the python do() call instead of making it
+    --dry-run   Print the python Dat.manager.run() call instead of making it
     --usage     Print TARGET's own usage (a <base>.usage value, or the spec's
                 usage key), else this message
 
@@ -648,14 +608,14 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
     elif "dry-run" in flags:
         shown = ([repr(target)] + [repr(a) for a in fixed]
                  + [f"{k}={v!r}" for k, v in kwargs.items()])
-        print(f"do({', '.join(shown)})")
+        print(f"Dat.manager.run({', '.join(shown)})")
         if overrides:
             print(f"  with the spec updated by --set/--json: {overrides!r}")
         return 0
     try:
         if isinstance(cmd, dict):
             spec = merge_dicts(do._merge_bases(cmd), overrides)
-            result = do(spec, *fixed, **kwargs)
+            result = Dat.manager.run(spec, *fixed, **kwargs)
         elif overrides:
             return _fail(f"--set/--json need a template spec; "
                          f"{target!r} is {type(cmd).__name__}")
@@ -663,7 +623,7 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
             print(cmd)
             return 0
         else:
-            result = do(target, *fixed, **kwargs)
+            result = Dat.manager.run(target, *fixed, **kwargs)
     except Exception as e:
         if os.environ.get("DAT_DEBUG"):
             raise

@@ -20,8 +20,9 @@
 # > parameters. Dat creation is three steps: look up the spec,
 # > expand it (merge its base, fill its `{}`), instantiate the Dat
 # > and its folder; each run by hand, the last producing the dat.
-# > Then `Dat.create`, the shorthand doing all three in one call. Then `Dat.do`, which
-# > runs a dat. Then a ledger: `L.at().run` is a run remembered, its
+# > Then `Dat.create`, the shorthand doing all three in one call. Then
+# > `Dat.manager.run`, the one way to run a dat, and `dat.run`, the
+# > record it leaves. Then a ledger: `L.at().run` is a run remembered, its
 # > spec the memo key, the same spec asked again found, not run; a
 # > dat sealed as a value; dats found by their preds.
 
@@ -81,7 +82,7 @@ def write_table(folder, n=10, start=1):
 
 
 def build_table(dat, n=10, start=1):
-    """The run function: `do` calls it with the new dat and the spec's kwargs."""
+    """The run function: `Dat.manager.run` calls it with the new dat and the spec's kwargs."""
     cells = write_table(dat.get_path(), n, start)
     Path(dat.get_path(), "log.txt").write_text(f"{n} x {n} from {start}\\n")
     dat.get_results()["cells"] = cells
@@ -178,14 +179,13 @@ print("shorthand _spec_.yaml:\n" + textwrap.indent((shorthand_path / "_spec_.yam
 # %% [markdown]
 # ## Running a dat
 #
-# `do` is DAT's verb for running a dat: `Dat.do(dat)` calls the run
-# function with the dat and the spec's kwargs, in place (1.x's
-# `Dat.run()`; `dat.run` is now the run's record, not a verb).
-# `save()` in the run function seals the folder, its results in
-# `_result_.yaml`; `run/` holds when, where and on which commit.
+# `Dat.manager.run(dat)` is the one way to run a dat: it calls the
+# spec's run function with the dat and the spec's kwargs, in place,
+# and records the run in `dat.run`. `save()` in the run function
+# seals the folder, its results in `_result_.yaml`.
 
 # %%
-Dat.do(table12_dat)   # executes build_table in mult.py for this dat
+Dat.manager.run(table12_dat)   # calls build_table in mult.py with this dat and n=12, start=1
 
 print("files:", sorted(os.listdir(table12_path)))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
@@ -196,11 +196,24 @@ print("_result_.yaml:\n" + textwrap.indent((table12_path / "_result_.yaml").read
 # _result_.yaml: cells, and under dat: what the seal recorded
 
 # %% [markdown]
-# `Dat.do(name)` is `Dat.create` then `Dat.do(dat)`: it returns what
-# the run function returned, a new folder every call.
+# `dat.run` is the run's record, a sub-dat in the dat's `run/`
+# folder: when and where it ran, on which commit, how long it took
+# and the hash it sealed. It is outside the dat's own hash.
 
 # %%
-again_dat = Dat.do("mymodule.specs.table12")   # same as: Dat.do(Dat.create(spec="mymodule.specs.table12"))
+run_results = table12_dat.run.get_results()["dat"]
+print("run:", repr(table12_dat.run))   # run: <Dat: tables/2026/table12/run>
+print("run_at:", run_results["run_at"])   # run_at: when the run started
+print("run_time:", run_results["run_time"])   # run_time: how long build_table took
+print("code:", run_results["code"])   # code: the branch, commit and dirty flag of the checkout holding mult.py
+
+# %% [markdown]
+# Given a name, `Dat.manager.run` creates the dat from the spec
+# first: it returns what the run function returned, a new folder
+# every call.
+
+# %%
+again_dat = Dat.manager.run("mymodule.specs.table12")   # same as: Dat.manager.run(Dat.create(spec="mymodule.specs.table12"))
 print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_3>
 print("files:", sorted(os.listdir(again_dat.get_path())))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
@@ -318,7 +331,7 @@ print("preds:", dict(sorted(loaded_dat.preds.items())))
 
 # %%
 for n in (5, 9):
-    L.at().run("mymodule.specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.do
+    L.at().run("mymodule.specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.manager.run
 print("found:", L.at().values(kind=Dat))
 # → found: [<Dat tables/2026/table12>, <Dat table/12>, <Dat tables/2026/table12_2>, <Dat tables/2026/table12_3>]
 print("cells:", L.at().select(("n", "cells"), kind=Dat))
