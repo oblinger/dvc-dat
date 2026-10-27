@@ -46,7 +46,7 @@ with L.transaction(by="human:dan", why="season opener") as t:
     t.add("game/G1", "away", "G5")
     t.add("game/G1", "court", "north")
 rev1 = t.rev
-print(rev1.id, rev1.get("game/G1", "court"))   # 1 north
+print("rev1 id, court:", rev1.id, rev1.get("game/G1", "court"))   # 1 north
 
 # %% [markdown]
 # `by` is required; `why` and any other keyword are rows on the
@@ -62,10 +62,10 @@ print(rev1.id, rev1.get("game/G1", "court"))   # 1 north
 with L.transaction(by="human:dan") as t:
     t.add("game/G1", "court", "south")
 rev2 = t.rev
-print(rev2.get("game/G1", "court"))   # south: the latest add
-print(rev1.get("game/G1", "court"))   # north: rev1 never changes
+print("rev2 court:", rev2.get("game/G1", "court"))   # south: the latest add
+print("rev1 court:", rev1.get("game/G1", "court"))   # north: rev1 never changes
 for r in rev2.rows("game/G1", "court"):
-    print(r)                          # both rows are still stored
+    print("row:", r)                   # both rows are still stored
 #    1 + game/G1   court   north
 #    2 + game/G1   court   south
 
@@ -83,10 +83,10 @@ with L.transaction(by="human:dan") as t:
     t.add("game/G1", "officials", "kim")    # many: accumulates
     t.add("game/G1", "officials", "ortiz")
 rev3 = t.rev
-print(rev3.get("game/G1", "court"))         # east
-print(rev3.all("game/G1", "officials"))     # ['kim', 'ortiz']
-print(rev1.get("game/G1", "court"),
-      rev1.all("game/G1", "officials"))     # north []: looking back
+print("rev3 court:", rev3.get("game/G1", "court"))           # east
+print("rev3 officials:", rev3.all("game/G1", "officials"))   # ['kim', 'ortiz']
+print("rev1 court, officials:", rev1.get("game/G1", "court"),
+      rev1.all("game/G1", "officials"))                        # north []: looking back
 
 # %% [markdown]
 # The declaration is itself a row, on `db/pred/officials`. Any
@@ -105,8 +105,8 @@ with L.transaction(by="human:dan", lock=10) as t:      # the record write reads:
     t["game/G2"] = {"home": "G1", "away": "G3",          # one level
                     "officials": ["lee", "park"]}
 rev = t.rev
-print(rev["game/G1", "court"])   # west
-print(rev["game/G2"])
+print("court:", rev["game/G1", "court"])   # west
+print("game/G2:", rev["game/G2"])
 # {'home': 'G1', 'away': 'G3', 'officials': ['lee', 'park']}
 
 # %% [markdown]
@@ -123,7 +123,7 @@ print(rev["game/G2"])
 with L.transaction(by="human:dan") as t:        # no lock=: nothing is read
     t.update("game/G2", {"court": "north"})      # one add; the rest stays
 print("game/G2:", t.rev["game/G2"])
-# → game/G2: {'home': 'G1', 'away': 'G3',
+#   game/G2: {'home': 'G1', 'away': 'G3',
 #    'officials': ['lee', 'park'], 'court': 'north'}
 
 # %% [markdown]
@@ -132,13 +132,13 @@ print("game/G2:", t.rev["game/G2"])
 # which the dict omits, so it reads first and takes `lock=`.
 
 # %% [markdown]
-# ## Triple reads
+# ## Reading triple data
 
 # %%
-print(rev.get("game/G1", "score", default="tbd"))   # tbd: no raise
-print(("game/G1", "home", "G4") in rev)             # True
-print(rev.all("game/G1", "officials"))              # ['kim', 'ortiz']
-print(len(rev.rows("game/G1", "court")))            # 4: the history
+print("score:", rev.get("game/G1", "score", default="tbd"))   # tbd: no raise
+print("has home G4:", ("game/G1", "home", "G4") in rev)      # True
+print("officials:", rev.all("game/G1", "officials"))         # ['kim', 'ortiz']
+print("court rows:", len(rev.rows("game/G1", "court")))      # 4: the history
 
 # %% [markdown]
 # `get` answers a default instead of raising, `in` tests one triple,
@@ -163,7 +163,7 @@ with L.transaction(by="human:dan") as t:
 with L.transaction(by="human:dan") as t:
     t["env/prod", "rev"] = str(rev2.id)
 prod_rev = L.at(L.at()["env/prod", "rev"])
-print(prod_rev.id, prod_rev.get("game/G1", "court"))   # 2 south
+print("prod id, court:", prod_rev.id, prod_rev.get("game/G1", "court"))   # 2 south
 
 # %% [markdown]
 # A name is any subject's `rev` row; `L.at` takes the id it holds.
