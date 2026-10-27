@@ -137,13 +137,25 @@ print("game/G2:", t.rev["game/G2"])
 # %%
 print("score:", rev.get("game/G1", "score", default="tbd"))   # tbd: no raise
 print("has home G4:", ("game/G1", "home", "G4") in rev)      # True
-print("officials:", rev.all("game/G1", "officials"))         # ['kim', 'ortiz']
-print("court rows:", len(rev.rows("game/G1", "court")))      # 4: the history
+print("G1 officials:", rev.all("game/G1", "officials"))      # ['kim', 'ortiz']
+print("G2 officials:", rev.all("game/G2", "officials"))      # ['lee', 'park']
+print("G2:", rev.all("game/G2"))                             # one position fixed: its (predicate, object) pairs
+#   [('home', 'G1'), ('away', 'G3'), ('officials', 'lee'), ('officials', 'park')]
+print("courts:", rev.all("game/*", "court"))                 # a glob subject: (subject, object) pairs
+#   [('game/G1', 'west')]
+for r in rev.rows("game/G1", "court"):                       # the unfolded history, removes included
+    print("row:", r)
+#   row:    1 + game/G1  court  north
+#   row:    2 + game/G1  court  south
+#   row:    3 + game/G1  court  east
+#   row:    4 + game/G1  court  west
 
 # %% [markdown]
 # `get` answers a default instead of raising, `in` tests one triple,
-# `all` lists what a pattern leaves open, and `rows` is the unfolded
-# history.
+# `all` lists what a pattern leaves open: with two positions fixed
+# the objects, with one the (predicate, object) pairs, and a glob in
+# the subject binds the subject too. `rows` is the unfolded history
+# of a pattern.
 
 # %% [markdown]
 # ## Declaring an index
