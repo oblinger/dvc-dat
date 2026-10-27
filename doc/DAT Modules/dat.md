@@ -51,7 +51,8 @@ DatContainer, DatManager, Do`. Part of the
   a sealed dat `RuntimeError`; a non-callable `dat.do` `TypeError`; a
   `referenceable` demand unmet `RuntimeError`.
 - `expand(text, vars=None)`, `expand_spec(spec, vars=None)`: the `{}`
-  grammar through this manager's `do`.
+  grammar through this manager's `do`; `expand_spec` first merges the
+  spec over its `dat.base` chain.
 - `do`: the manager's `Do`, its only other public attribute.
 
 `Dat`:
@@ -78,7 +79,7 @@ its folder, lazily, a child's `run/` skipped.
 
 `Do`: `do(target, *args, **kwargs)` runs a callable, forks a template
 spec into a new dat and runs it, or re-runs or forks a `Dat`;
-`merge_bases(spec)`, `load(dotted, *, default, kind)`, `name_of(obj)`,
+`load(dotted, *, default, kind)`, `name_of(obj)`,
 `keys()`, `mount(*, folder, file, module, value, at, relative_to)`
 (`ValueError` when a mounted name would shadow an importable one).
 

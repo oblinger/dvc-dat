@@ -722,7 +722,16 @@ class DatManager:
         return expand(text, vars, resolver=self.do.load)
 
     def expand_spec(self, spec: Any, vars: Optional[Dict[str, Any]] = None) -> Any:
-        """`expand_spec`, with dotted names resolved through this manager's `do`."""
+        """A copy of `spec` merged over its `dat.base` chain, then with every `{…}`
+        filled; dotted names (bases and references alike) resolve through this
+        manager's `do`.
+
+        `dat.base` is a name, a spec, or a list of them, later entries winning,
+        merged recursively and dropped from the result.  A spec that is not a dict
+        has no bases and is only filled.
+        """
+        if isinstance(spec, dict):
+            spec = self.do._merge_bases(deepcopy(spec))
         return expand_spec(spec, vars, resolver=self.do.load)
 
     def create(
@@ -763,7 +772,7 @@ class DatManager:
 
         path = self._resolve_path(expanded_path)
         own = Dat.get(spec, DAT_NAME, None)
-        spec = self.expand_spec(spec, names)
+        spec = expand_spec(spec, names, resolver=self.do.load)  # bases merged in _spec_of
         if own is not None:
             Dat.set(spec, DAT_NAME, own)            # the template, never its expansion (Q36)
         if _within(os.path.realpath(path), self._dat_folders[0]):
@@ -793,7 +802,7 @@ class DatManager:
             spec = self.do.load(spec)
         if not isinstance(spec, dict):
             raise TypeError(f"Dat.create: spec must be a dict or a dotted name, not {spec!r}")
-        spec = self.do.merge_bases(deepcopy(spec))
+        spec = self.do._merge_bases(deepcopy(spec))
         if not isinstance(spec.setdefault("dat", {}), dict):
             raise TypeError(f"Dat.create: spec['dat'] is a mapping, got {spec['dat']!r}")
         return spec

@@ -57,7 +57,6 @@ One world's namespace and runner. `manager.do` is built with its manager or adop
 | [manager](#^manager) | The world this namespace belongs to |
 | [__call__](#^call) | Run in this world; arguments fork |
 | [load](#^load) | The object a dotted name resolves to |
-| [merge_bases](#^merge-bases) | A spec merged over its `dat.base` chain |
 | [name_of](#^name-of) | The dotted name `load` takes back to `obj` |
 | [mount](#^mount) | Add one mount: folder, file, module or value |
 | [keys](#^keys) | Every mounted base name |
@@ -70,9 +69,6 @@ One world's namespace and runner. `manager.do` is built with its manager or adop
 
 **load**`(name: str, *, default: Any = …, kind: str | None = None) -> Any`
     The object `name` resolves to: mount table first, then the static floor. `ImportError` / `AttributeError` / `KeyError` propagate raw unless `default` is given. A mounted `.py` / `.yaml` / `.json` file comes back as loaded. ^load
-
-**merge_bases**`(spec: dict | str) -> dict`
-    A spec, or the name of one, merged over its `dat.base` (a name, a spec or a list, later entries winning), recursively, with `dat.base` dropped — what `create` stores. ^merge-bases
 
 **name_of**`(obj: Any) -> str`
     The dotted name `load` takes back to a module, class or function. `ValueError` for anything it cannot name. ^name-of

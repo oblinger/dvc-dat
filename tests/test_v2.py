@@ -144,7 +144,7 @@ class TestBaseList:
         do.mount(at="v2_base_a", value={"dat": {}, "x": 1, "shared": "from_a"})
         do.mount(at="v2_base_b", value={"dat": {}, "y": 2, "shared": "from_b"})
 
-        spec = do.merge_bases({"dat": {"base": ["v2_base_a", "v2_base_b"]}, "z": 3})
+        spec = Dat.manager.expand_spec({"dat": {"base": ["v2_base_a", "v2_base_b"]}, "z": 3})
         assert (spec["x"], spec["y"], spec["z"]) == (1, 2, 3)
         assert spec["shared"] == "from_b"      # the later entry wins
         assert "base" not in spec["dat"]
@@ -160,9 +160,17 @@ class TestBaseList:
         assert "base" not in spec["dat"]
         assert spec["shared"] == "from_b" and spec["x"] == 1 and spec["y"] == 2
 
+    def test_expand_spec_merges_the_base_then_fills_its_references(self):
+        do.mount(at="v2_base_tmpl", value={"dat": {"kwargs": {"who": "{who}"}}})
+        spec = Dat.manager.expand_spec({"dat": {"base": "v2_base_tmpl"}}, {"who": "dat"})
+        assert spec == {"dat": {"kwargs": {"who": "dat"}}}
+
+    def test_merge_bases_is_not_a_do_verb(self):
+        assert not hasattr(Do, "merge_bases") and not hasattr(do, "merge_bases")
+
     def test_a_falsy_override_still_overrides(self):
         do.mount(at="v2_base_truthy", value={"dat": {}, "flag": True, "count": 7})
-        spec = do.merge_bases({"dat": {"base": "v2_base_truthy"}, "flag": False, "count": 0})
+        spec = Dat.manager.expand_spec({"dat": {"base": "v2_base_truthy"}, "flag": False, "count": 0})
         assert spec["flag"] is False and spec["count"] == 0
 
 
