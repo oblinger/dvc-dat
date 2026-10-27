@@ -91,9 +91,10 @@ L.at().ns.mounts()
 # {'plane': {'root': 'plane', 'repo': 'geometry'}}
 with L.transaction(by="human:dan") as t:
     t.ns.mount("plane", root="plane", repo="geometry")
+    t.ns.mount("mymodule", root="mymodule")   # this project's repo
 ```
 
-`mounts()` is the `db/mount` rows, `{prefix: {"root": ..., "repo": ...}}`. `t.ns.mount(at, *, root, repo)` writes the two rows `db/mount/<at> db/root` and `db/repo` through `t.update`, and needs no `lock=`; `t.ns.load` reads `previous_rev`, so it does. `mount` anywhere else — `rev.ns`, `Dat.ns` in a ledger project — is `TypeError` naming `t.ns.mount`. Full ledger reference: [DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md).
+`mounts()` is the `db/mount` rows, `{prefix: {"root": ..., "repo": ...}}`. `t.ns.mount(at, *, root, repo=None)` writes the two rows `db/mount/<at> db/root` and `db/repo` through `t.update`, and needs no `lock=`; `repo` defaults to the project's own repository, the git checkout holding the `.datconfig.yaml` the manager loaded, named as discovery names repos, and with no such file is `ValueError`; `t.ns.load` reads `previous_rev`, so it does. `mount` anywhere else — `rev.ns`, `Dat.ns` in a ledger project — is `TypeError` naming `t.ns.mount`. Full ledger reference: [DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 
 
@@ -150,7 +151,7 @@ Each is one call in your program; build paths from `__file__`, since `relative_t
 | `do.keys()` | `ns.mounts()`, the mount table |
 | `rev.resolve(name)` | `rev.ns.load(name)` |
 | `LedgerDo` | `LedgerNamespace` |
-| `t.update("db/mount/<p>", {"db/root": ..., "db/repo": ...})` | `t.ns.mount("<p>", root=..., repo=...)` (the `update` still works) |
+| `t.update("db/mount/<p>", {"db/root": ..., "db/repo": ...})` | `t.ns.mount("<p>", root=...)`, `repo=` only for another repo (the `update` still works) |
 
 ## 2.3 – 2.8
 

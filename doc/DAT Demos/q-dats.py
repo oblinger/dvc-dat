@@ -244,7 +244,7 @@ print(".datconfig.yaml:", Path(".datconfig.yaml").read_text().splitlines())
 # → .datconfig.yaml: ['dat_folders: data', 'ledger: .dat/ledger']
 import mymodule                      # discovery finds the checkout, the repo q-dats
 with L.transaction(by="human:dan", why="mount mymodule") as t:
-    t.ns.mount("mymodule", root="mymodule", repo="q-dats")   # the two db/mount rows: the folder the prefix names, in this repo's checkout
+    t.ns.mount("mymodule", root="mymodule")   # the two db/mount rows: the folder, and the repo, by default this project's, q-dats
 try:
     Dat.ns.mount(folder="mymodule", at="mymodule")
 except TypeError as e:

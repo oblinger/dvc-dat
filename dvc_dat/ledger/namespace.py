@@ -51,6 +51,25 @@ def resolve_name(rev: "Rev", name: str) -> Any:
     return obj
 
 
+def project_repo() -> str:
+    """The project's own repository: the git checkout holding the ``.datconfig.yaml`` the manager loaded
+    (``DatManager.load_dat_config``), named as discovery names repos (``env.repo_name``), so the
+    ``db/repo/<name>`` rows agree. ``ValueError`` when there is no such file or it is in no checkout."""
+    import os
+
+    from ..core import Dat
+    from .env import _git, repo_name
+
+    config = getattr(Dat.manager, "_config_file", None)
+    if config is None:
+        raise ValueError("t.ns.mount: no repo= and no .datconfig.yaml; the default repo is the git checkout "
+                         "holding the project's .datconfig.yaml, so pass repo=<name> or load a project")
+    top = _git(os.path.dirname(os.path.realpath(config)), "rev-parse", "--show-toplevel")
+    if not top:
+        raise ValueError(f"t.ns.mount: no repo= and {config} is in no git checkout; pass repo=<name>")
+    return repo_name(Path(top))
+
+
 def mount_root(name: str, prefix: str, info: Dict[str, str]) -> Path:
     """The mount's tree in this environment's checkout of its repo; ``NotEvaluated`` with none."""
     from .env import current_env
@@ -228,14 +247,17 @@ class LedgerNamespace(Namespace):
 
     def mount(self, at: Optional[str] = None, *, root: Optional[str] = None,  # type: ignore[override]
               repo: Optional[str] = None, **kwargs: Any) -> None:
-        """``t.ns.mount(at, root=..., repo=...)``: the ``db/mount/<at>`` rows ``db/root`` and ``db/repo``,
-        written through ``t.update``. Only a transaction's namespace mounts."""
+        """``t.ns.mount(at, root=..., repo=None)``: the ``db/mount/<at>`` rows ``db/root`` and ``db/repo``,
+        written through ``t.update``. ``repo`` defaults to the project's own repository (``project_repo``).
+        Only a transaction's namespace mounts."""
         if self._txn is None:
             raise TypeError("a ledger project names things through its db/mount rows (`mounts:` in "
-                            ".datconfig.yaml, or t.ns.mount(at, root=..., repo=...) in a transaction); "
+                            ".datconfig.yaml, or t.ns.mount(at, root=...) in a transaction); "
                             "Dat.ns.mount is the namespace of a project with no ledger")
         if kwargs:
-            raise TypeError(f"t.ns.mount(at, *, root, repo) takes no {', '.join(sorted(kwargs))}")
+            raise TypeError(f"t.ns.mount(at, *, root, repo=None) takes no {', '.join(sorted(kwargs))}")
+        if repo is None:
+            repo = project_repo()
         for key, v in (("at", at), ("root", root), ("repo", repo)):
             if not isinstance(v, str) or not v:
                 raise TypeError(f"t.ns.mount: {key} is a non-empty str, got {v!r}")
@@ -255,4 +277,4 @@ class LedgerNamespace(Namespace):
         return list(mounted_commands(self.rev()))
 
 
-__all__ = ["LedgerNamespace", "resolve_name", "mounted_commands"]
+__all__ = ["LedgerNamespace", "resolve_name", "mounted_commands", "project_repo"]

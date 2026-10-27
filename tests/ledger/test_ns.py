@@ -33,6 +33,8 @@ def test_mount_is_refused_off_a_transaction_and_without_its_rows(L):
     with L.transaction(by="t") as t:
         with pytest.raises(TypeError, match="root"):
             t.ns.mount("pkg", repo="r")
+        with pytest.raises(TypeError, match="repo"):
+            t.ns.mount("pkg", root="pkg", repo="")
         with pytest.raises(TypeError, match="folder"):
             t.ns.mount(at="pkg", folder="pkg")
         t.add("x", "y", "z")
@@ -90,3 +92,43 @@ def test_a_transaction_reads_values_at_the_previous_revision(world):
         assert len(t.refs(kind=Video)) == 2
         assert sorted(t.select(("game",), kind=Video)) == [("G1",), ("G2",)]
         t.add("note/1", "text", "x")
+
+
+def _project(tmp_path, name, *, git=True):
+    import subprocess
+
+    root = tmp_path / "proj"
+    (root / "data").mkdir(parents=True)
+    (root / ".datconfig.yaml").write_text("dat_folders: data\n")
+    (root / "pyproject.toml").write_text(f'[project]\nname = "{name}"\nversion = "0.1.0"\n')
+    if git:
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+    return root
+
+
+def test_t_ns_mount_defaults_repo_to_the_project_repository(L, tmp_path, monkeypatch):
+    from dvc_dat import core
+
+    root = _project(tmp_path, "My_Proj")
+    monkeypatch.setattr(core, "_default_manager", DatManager.load_dat_config(root))
+    with L.transaction(by="t") as t:
+        t.ns.mount("pkg", root="pkg")                         # repo: the checkout holding .datconfig.yaml
+        t.ns.mount("other", root="o", repo="elsewhere")       # a separate repo still names it
+    assert L.at().ns.mounts() == {"pkg": {"root": "pkg", "repo": "my-proj"},
+                                  "other": {"root": "o", "repo": "elsewhere"}}
+
+
+def test_t_ns_mount_without_repo_needs_a_project_in_a_checkout(L, tmp_path, monkeypatch):
+    from dvc_dat import core
+
+    (tmp_path / "bare").mkdir()
+    monkeypatch.setattr(core, "_default_manager", DatManager(dat_folders=[str(tmp_path / "bare")]))
+    with pytest.raises(ValueError, match=r"repo=.*\.datconfig\.yaml"):
+        with L.transaction(by="t") as t:
+            t.ns.mount("pkg", root="pkg")
+    root = _project(tmp_path, "loose", git=False)
+    monkeypatch.setattr(core, "_default_manager", DatManager.load_dat_config(root))
+    with pytest.raises(ValueError, match="no git checkout"):
+        with L.transaction(by="t") as t:
+            t.ns.mount("pkg", root="pkg")
+    assert L.at().ns.mounts() == {}
