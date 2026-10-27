@@ -1,6 +1,6 @@
 """The ledger's namespace: a dotted name resolved through the ``db/mount`` rows at a revision (DAT 1046).
 
-``resolve_name(rev, name)`` is ``rev.resolve(name)``. The ``db/mount/<prefix>``
+``resolve_name(rev, name)`` is ``rev.ns.load(name)``. The ``db/mount/<prefix>``
 rows as of the rev are walked longest prefix first; under a mount the name is a
 path in the mount's tree in the checkout discovery reports for its ``db/repo``:
 a ``.yaml``/``.yml``/``.json`` file is read and comes back a dict (a dotted
@@ -11,11 +11,11 @@ literal (``NAME = {...}``) its value. A name under no mount is imported, and a
 ``@ledger_fn`` it imports to comes back its ``Fn``, an undecorated function
 itself.
 
-``LedgerDo`` is ``Dat.manager.do`` in a project whose ``.datconfig.yaml`` names
-a ledger: the ``Do`` interface (``load``, the ``dat.base`` merge and ``{}`` expansion, the
+``LedgerNamespace`` is ``rev.ns``, ``t.ns``, and ``Dat.manager.ns`` in a project whose
+``.datconfig.yaml`` names a ledger: the ``Namespace`` interface (``load``, the ``dat.base`` merge and ``{}`` expansion, the
 ``dat.do`` lookup in a run) answered from these mounts, at the head, or at
-the rev it was made for. Its ``mount`` is refused: in a ledger project the mounts
-are rows.
+the rev it was made for. In a ledger project the mounts are rows: ``t.ns.mount``
+writes them, and ``mount`` anywhere else is refused.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, Un
 
 import yaml
 
-from ..do import Do
+from ..do import Namespace
 from .errors import NotEvaluated
 from .fn import Fn, installed_fn, mounts_at
 
@@ -45,7 +45,7 @@ def resolve_name(rev: "Rev", name: str) -> Any:
     for prefix, info in sorted(mounts_at(plain).items(), key=lambda kv: -len(kv[0])):
         if name == prefix or name.startswith(prefix + "."):
             return _mounted(rev, name, prefix, info)
-    obj = Do._load_static(name)
+    obj = Namespace._load_static(name)
     if callable(obj) and getattr(obj, "__ledger_fn__", False):
         return installed_fn(rev, name, obj)
     return obj
@@ -177,29 +177,39 @@ def mounted_commands(rev: "Rev") -> Iterator[Tuple[str, Dict[str, str], Path]]:
                         yield target, {"args": args, "help": help}, py
 
 
-class LedgerDo(Do):
-    """``Dat.manager.do`` in a ledger project (DAT 1046): names resolve through the ledger's mounts.
+class LedgerNamespace(Namespace):
+    """The namespace of a ledger (DAT 1046, 1051): names resolve through its ``db/mount`` rows.
 
-    Bound to ``rev`` when given, else to the head of ``ledger`` (opened on first use from ``config``,
-    the ``.datconfig.yaml`` naming it, as ``just run`` opens it). ``load`` is ``Do.load`` with the
-    ledger's namespace (``resolve_name``) where a plain ``Do`` imports; ``mount`` is refused."""
+    ``rev.ns`` is the one at a revision, ``t.ns`` the one at a transaction's ``previous_rev``, and
+    ``Dat.manager.ns`` in a project whose ``.datconfig.yaml`` names a ledger the one at the head
+    (the ledger opened on first use from ``config``, as ``just run`` opens it). ``load`` is
+    ``Namespace.load`` with the ledger's namespace (``resolve_name``) where a plain ``Namespace``
+    imports; ``mounts()`` is the ``db/mount`` rows. ``mount`` writes those rows through a
+    transaction's ``t.ns``, and is refused anywhere else."""
 
     def __init__(self, ledger: Any = None, *, rev: Optional["Rev"] = None,
-                 config: Union[str, Path, None] = None, manager: Any = None) -> None:
+                 config: Union[str, Path, None] = None, manager: Any = None,
+                 txn: Any = None, unguarded: bool = False) -> None:
         super().__init__(manager)
         self._ledger = ledger
         self._rev = rev
         self._config = config
+        self._txn = txn
+        self._unguarded = unguarded
 
     def __repr__(self) -> str:
         where = f"rev {self._rev.id}" if self._rev is not None else (
+            "transaction" if self._txn is not None else
             repr(self._ledger) if self._ledger is not None else str(self._config))
-        return f"<LedgerDo {where}>"
+        return f"<LedgerNamespace {where}>"
 
     def rev(self) -> "Rev":
-        """The revision names resolve at: the one it was made for, else the ledger's head now."""
+        """The revision names resolve at: the one it was made for (a transaction's ``previous_rev``),
+        else the ledger's head now."""
         if self._rev is not None:
             return self._rev
+        if self._txn is not None:
+            return self._txn.previous_rev
         if self._ledger is None:
             from ..do import _ledger_of
 
@@ -209,20 +219,40 @@ class LedgerDo(Do):
         return self._ledger.at()
 
     def _load_unmounted(self, dotted_name: str) -> Any:
-        return resolve_name(self.rev(), dotted_name)
+        if not self._unguarded:
+            return resolve_name(self.rev(), dotted_name)
+        from .sandbox import unguarded
 
-    def mount(self, **kwargs: Any) -> None:  # type: ignore[override]
-        raise TypeError("a ledger project names things through its db/mount rows (`mounts:` in "
-                        ".datconfig.yaml, or t.add('db/mount/<prefix>', 'db/root', ...)); Dat.do.mount is "
-                        "the namespace of a project with no ledger")
+        with unguarded():                          # rev.ns in a sandboxed body: the ledger's own machinery
+            return resolve_name(self.rev(), dotted_name)
 
-    def keys(self) -> List[str]:  # type: ignore[override]
+    def mount(self, at: Optional[str] = None, *, root: Optional[str] = None,  # type: ignore[override]
+              repo: Optional[str] = None, **kwargs: Any) -> None:
+        """``t.ns.mount(at, root=..., repo=...)``: the ``db/mount/<at>`` rows ``db/root`` and ``db/repo``,
+        written through ``t.update``. Only a transaction's namespace mounts."""
+        if self._txn is None:
+            raise TypeError("a ledger project names things through its db/mount rows (`mounts:` in "
+                            ".datconfig.yaml, or t.ns.mount(at, root=..., repo=...) in a transaction); "
+                            "Dat.ns.mount is the namespace of a project with no ledger")
+        if kwargs:
+            raise TypeError(f"t.ns.mount(at, *, root, repo) takes no {', '.join(sorted(kwargs))}")
+        for key, v in (("at", at), ("root", root), ("repo", repo)):
+            if not isinstance(v, str) or not v:
+                raise TypeError(f"t.ns.mount: {key} is a non-empty str, got {v!r}")
+        self._txn.update(f"db/mount/{at}", {"db/root": root, "db/repo": repo})
+
+    def mounts(self) -> Dict[str, Dict[str, str]]:  # type: ignore[override]
+        """The mount table at this revision: ``{prefix: {"root": ..., "repo": ...}}``, the ``db/mount``
+        rows."""
+        return mounts_at(self.rev()._plain())
+
+    def _mounted_names(self) -> List[str]:
         """The manager's own names and the ledger's mount prefixes."""
-        return sorted(set(super().keys()) | set(mounts_at(self.rev()._plain())))
+        return sorted(set(super()._mounted_names()) | set(self.mounts()))
 
     def _commands(self) -> List[Tuple[str, Dict[str, str], Path]]:
         """The ``@command`` functions in the mounted trees (``just.commands``)."""
         return list(mounted_commands(self.rev()))
 
 
-__all__ = ["LedgerDo", "resolve_name", "mounted_commands"]
+__all__ = ["LedgerNamespace", "resolve_name", "mounted_commands"]

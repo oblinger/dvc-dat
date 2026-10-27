@@ -1,5 +1,5 @@
 ---
-description: "`from dvc_dat import Dat`: the `Dat` class, `Dat.manager.run`, `Dat.do`, the spec file, the config"
+description: "`from dvc_dat import Dat`: the `Dat` class, `Dat.manager.run`, `Dat.ns`, the spec file, the config"
 ---
 :>> [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Class API](ha://p/DAT%20Class%20API) 
 # DAT Class API
@@ -53,7 +53,7 @@ Run.create(path="scratch/bad",
 # AssertionError: lr out of range -- and no folder was made
 ```
 
-Dats, specs, and the one call that runs them. The world they live in is [DAT Manager API](DAT%20Manager%20API.md); the namespace behind a dotted name is [DAT Do API](DAT%20Do%20API.md); nothing on this page needs either.
+Dats, specs, and the one call that runs them. The world they live in is [DAT Manager API](DAT%20Manager%20API.md); the namespace behind a dotted name is [DAT Namespace API](DAT%20Namespace%20API.md); nothing on this page needs either.
 
 
 
@@ -88,10 +88,10 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
 | seal, preds, subject, hash | A dat is a ledger `Value` ([DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md#Value%20Interface)) |
 
 **manager**`: DatManager`
-    A plain class attribute: `None` until first use, when the getter builds the default world with `DatManager.load_dat_config()`. Assign a manager to replace the default world (`Dat.manager = Store(dat_folders=[...], do=Dat.do)` keeps the mounts). Every subclass sees the same object. `dat.manager` on an instance is the manager that loaded it, else this one — a run's function loads through `dat.manager`. ^manager
+    A plain class attribute: `None` until first use, when the getter builds the default world with `DatManager.load_dat_config()`. Assign a manager to replace the default world (`Dat.manager = Store(dat_folders=[...], ns=Dat.ns)` keeps the mounts). Every subclass sees the same object. `dat.manager` on an instance is the manager that loaded it, else this one — a run's function loads through `dat.manager`. ^manager
 
-**do**`: Do`
-    The default world's namespace: a forwarder to `Dat.manager.do`, whichever manager that is when it is used. `Dat.do.mount(...)` and `Dat.do.load(...)` name things; `do = Dat.do` binds a shortcut that follows a later reassignment of `Dat.manager`. It is not callable: `Dat.manager.run("x", lr=0.5)` runs ([Running](#Running); 2.35, DAT 1049). ^do
+**ns**`: Namespace`
+    The default world's namespace: a forwarder to `Dat.manager.ns`, whichever manager that is when it is used. `Dat.ns.mount(...)` and `Dat.ns.load(...)` name things; `ns = Dat.ns` binds a shortcut that follows a later reassignment of `Dat.manager`. It is not callable: `Dat.manager.run("x", lr=0.5)` runs ([Running](#Running); 2.35, DAT 1049). ^do
 
 **create**`(path: str | None = None, spec: dict | str | None = None) -> Dat`
     Classmethod. `Dat.manager.create(spec, path=path)`, typed: a `dat.kind` naming a class outside `cls` is `TypeError`, checked before any folder is made; with no `dat.kind`, the class it is called on is written. `spec` is a dict or a dotted name; `path` is a template under the first dat folder, default `dat.name`, else `anonymous/Dat{unique}`, with `dat.target_exists` settling a collision. ^create
@@ -151,7 +151,7 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
     Staticmethod. Nested mappings key by key, later wins. Two lists of mappings that all carry a `name` merge by name: a later entry merges into its namesake, a new name appends, `{name: X, remove: true}` deletes. Anything else, any other list included, is replaced whole. A variation of a dat `d`: `Dat.create(spec=Dat.merge_dicts(d.get_spec(), {"dat": {"target_exists": "increment"}, …}))` — without `increment` it lands on `d`'s own `dat.name` and raises `FileExistsError`. ^merge-dicts
 
 **cli_main**`(argv: list[str] | None = None, *, config: str | None = None) -> int`
-    Staticmethod. The `dat` command line, for your own main: `run: python -m mypkg.main` in the config, and `sys.exit(Dat.cli_main())` when `DAT_CLI_CONFIG` is set. The bootstrap sets that one variable — the config file it found — for the program it launches; `cli_main` reads it and does `Dat.manager = DatManager.load_dat_config(config, do=Dat.do)`, so mounts your main made before the call survive. `argv` defaults to `sys.argv`; `config` hands the CLI a config from code; returns the exit status. ^cli-main
+    Staticmethod. The `dat` command line, for your own main: `run: python -m mypkg.main` in the config, and `sys.exit(Dat.cli_main())` when `DAT_CLI_CONFIG` is set. The bootstrap sets that one variable — the config file it found — for the program it launches; `cli_main` reads it and does `Dat.manager = DatManager.load_dat_config(config, ns=Dat.ns)`, so mounts your main made before the call survive. `argv` defaults to `sys.argv`; `config` hands the CLI a config from code; returns the exit status. ^cli-main
 
 
 
@@ -172,7 +172,7 @@ A dat whose folder holds dats.
 
 
 ## dvc_dat Interface
-`from dvc_dat import Dat, DatContainer, DatManager, Do` is the whole export; everything else hangs off those classes. `dvc_dat.__version__` is `"2.35.0"`.
+`from dvc_dat import Dat, DatContainer, DatManager, Namespace` is the whole export; everything else hangs off those classes. `dvc_dat.__version__` is `"2.37.0"`.
 
 
 
@@ -234,7 +234,7 @@ Expanded once, when the dat is created, with the same `now` and `unique` its fol
 | Form | Resolves to |
 | --- | --- |
 | `{YYYY} {YY} {MM} {DD} {HH} {mm} {SS} {now} {cwd} {unique}` | The built-ins (undotted names are reserved for them and for `vars`) |
-| `{pkg.mod.NAME}` inside a longer string | `Dat.do.load("pkg.mod.NAME")`, which must be a string or a number — `"{cfg.root}/x"` concatenates |
+| `{pkg.mod.NAME}` inside a longer string | `Dat.ns.load("pkg.mod.NAME")`, which must be a string or a number — `"{cfg.root}/x"` concatenates |
 | `"{pkg.CONFIG}"` as a whole value | The object itself, inlined as data — quote it in YAML, or the parser reads a mapping; a class or other object here is a `TypeError` at create |
 | `{meta.commit}` naming a function or method | Called with no arguments; its value expands (2.16). A class or callable object is not called |
 | `{meta.tag("v", n=2)}` | Called with those arguments — Python literals only, no `{` inside (2.16) |
@@ -251,11 +251,11 @@ Expanded once, when the dat is created, with the same `now` and `unique` its fol
 | `art_folder` | Where artifacts live (default `art/` beside the config file); never inside a dat folder, nor one inside it — [DAT Manager API](DAT%20Manager%20API.md) § Artifacts on disk |
 | `verify` | Optional, `true`: every load re-hashes and refuses a mismatch — [DAT Manager API](DAT%20Manager%20API.md) § load |
 | `manager` | Optional: the `DatManager` subclass to build, dotted; its `CONFIG_KEYS` may appear as keys too — [DAT Manager API](DAT%20Manager%20API.md) § The config file |
-| `run` | Optional. The command a copy of `bin/dat` hands its arguments to — `uv run dat`, or your program's own main when it mounts names ([DAT Do API](DAT%20Do%20API.md)); default `.venv/bin/python -m dvc_dat` beside the config, else `python3 -m dvc_dat` |
+| `run` | Optional. The command a copy of `bin/dat` hands its arguments to — `uv run dat`, or your program's own main when it mounts names ([DAT Namespace API](DAT%20Namespace%20API.md)); default `.venv/bin/python -m dvc_dat` beside the config, else `python3 -m dvc_dat` |
 
 `DatManager.load_dat_config(start)` walks up from `start` (default the working directory); `.datconfig.override.yaml` wins over it; `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment win over both (`DAT_RUN` overrides `run`, in `bin/dat` only). The bootstrap hands its child the file it found as `DAT_CLI_CONFIG`, which `cli_main()` alone reads. An unknown key is an error.
 
-**You never configure anything.** `import dvc_dat` reads no filesystem; the first use of `Dat.manager` — `Dat.manager.run(…)`, `Dat.load(…)`, `Dat.create(…)` — builds the default world from the working directory, and the config folder goes first on `sys.path`, so the project's own modules resolve from any directory, installed or not. An empty `.datconfig.yaml` is a complete config: it marks the project root, `data/` is the dat folder, and dotted names mean what `import` means. A different world is one assignment: `Dat.manager = DatManager.load_dat_config(path, do=dat.do)` ([DAT Manager API](DAT%20Manager%20API.md) § The default world).
+**You never configure anything.** `import dvc_dat` reads no filesystem; the first use of `Dat.manager` — `Dat.manager.run(…)`, `Dat.load(…)`, `Dat.create(…)` — builds the default world from the working directory, and the config folder goes first on `sys.path`, so the project's own modules resolve from any directory, installed or not. An empty `.datconfig.yaml` is a complete config: it marks the project root, `data/` is the dat folder, and dotted names mean what `import` means. A different world is one assignment: `Dat.manager = DatManager.load_dat_config(path, ns=dat.do)` ([DAT Manager API](DAT%20Manager%20API.md) § The default world).
 
 
 

@@ -23,6 +23,7 @@ from .fold import Held, fold
 from .value import FrozenPreds, Value, dotted, takes_name
 
 if TYPE_CHECKING:
+    from .namespace import LedgerNamespace
     from .ledger import Ledger
 
 #: Predicates whose cardinality is fixed at ``one``: every ``db/`` predicate, and the user clocks.
@@ -573,26 +574,25 @@ class Rev:
         """``Ref(rev, subject).load()``: an alias resolves; reading through one records the binding (A35)."""
         return Ref(self, subject).load()
 
-    def resolve(self, name: str) -> Any:
-        """What the dotted ``name`` denotes at this revision, through the ledger's namespace (DAT 1046): the
-        ``db/mount`` rows longest prefix first, a mounted ``.yaml``/``.json`` read from the checkout as a
-        dict, a mounted function its ``Fn`` (read off the file, never imported here; ``kind`` ``"ledger"``
-        for a ``@ledger_fn``, ``"dat"`` for an undecorated run function), a mounted module-level literal its
-        value; a name under no mount imported, a ``@ledger_fn`` its ``Fn``. ``ImportError`` /
-        ``KeyError`` when nothing answers."""
-        from .sandbox import unguarded
+    @property
+    def ns(self) -> "LedgerNamespace":
+        """The ledger's namespace at this revision (DAT 1051): ``rev.ns.load(name)`` is what the dotted
+        ``name`` denotes here: the ``db/mount`` rows longest prefix first, a mounted ``.yaml``/``.json``
+        read from the checkout as a dict, a mounted function its ``Fn`` (read off the file, never
+        imported here; ``kind`` ``"ledger"`` for a ``@ledger_fn``, ``"dat"`` for an undecorated run
+        function), a mounted module-level literal its value; a name under no mount imported, a
+        ``@ledger_fn`` its ``Fn``. ``ImportError`` / ``KeyError`` when nothing answers.
+        ``rev.ns.mounts()`` is the mount table, ``{prefix: {"root", "repo"}}``."""
+        from .namespace import LedgerNamespace
 
-        with unguarded():                          # in a sandboxed body: the ledger's own machinery
-            from .namespace import resolve_name
-
-            return resolve_name(self, name)
+        return LedgerNamespace(rev=self, unguarded=True)
 
     def run(self, target: Any, /, *, seal: Any = OWN, clean: bool = False, path: Any = None,
             **kwargs: Any) -> Optional[Value]:
         """The API form of ``just run TARGET KEY=VALUE``: the result found if computed before by this code,
         else run and sealed as the memo entry (DAT 1046).
 
-        ``target`` is a dotted name (through ``resolve``) or a spec dict. A ledger function's name: its
+        ``target`` is a dotted name (through ``rev.ns.load``) or a spec dict. A ledger function's name: its
         ``Fn`` called with ``kwargs`` as its keys. A spec, a spec's name or a dat's run function's name
         (the spec ``{dat: {do: <name>}}``): a dat, ``kwargs`` merged into its ``dat.kwargs``; the memo key
         is the spec with ``dat.base`` merged, ``dat.kind`` set, every ``{}`` expanded and ``dat.name``

@@ -39,6 +39,7 @@ from .value import Value, dotted
 
 if TYPE_CHECKING:
     from .ledger import Ledger
+    from .namespace import LedgerNamespace
     from .rev import Rev
 
 #: What ``(db, db/format)`` says: the software format, written by a ledger's first transaction.
@@ -185,6 +186,15 @@ class Transaction:
         if self._lock is None:
             raise Unlocked("the transaction is not locked: previous_rev is the top only under lock=")
         return self._opened
+
+    @property
+    def ns(self) -> "LedgerNamespace":
+        """The ledger's namespace at ``previous_rev`` (DAT 1051): ``t.ns.load(name)`` as ``rev.ns.load``
+        (it reads, so it needs ``lock=``), and ``t.ns.mount(at, root=..., repo=...)`` writes the
+        ``db/mount/<at>`` rows ``db/root`` and ``db/repo`` through ``t.update`` (no lock needed)."""
+        from .namespace import LedgerNamespace
+
+        return LedgerNamespace(txn=self, unguarded=True)
 
     def _snapshot(self) -> "Rev":
         """The top at open, for the package's own declaration and seal checks; no lock required."""

@@ -1,4 +1,4 @@
-"""Contracts of functions and run unsandboxed: ledger_fn, rev.resolve, the memo, the dependencies, NotEvaluated."""
+"""Contracts of functions and run unsandboxed: ledger_fn, rev.ns.load, the memo, the dependencies, NotEvaluated."""
 
 import re
 
@@ -35,15 +35,15 @@ def test_ledger_fn_needs_an_annotation_and_stays_callable(world):
 
 
 def f_code(world):
-    return world.at().resolve("ledger_kinds.cut").code.subject
+    return world.at().ns.load("ledger_kinds.cut").code.subject
 
 
 def test_resolve_fields(world):
-    f = world.at().resolve("ledger_kinds.cut")
+    f = world.at().ns.load("ledger_kinds.cut")
     assert f.code.sandboxed is False and f.mount is None and str(f.signature) == "(*, game: str, version: str = '1.0.0')"
     assert f.name == "ledger_kinds.cut" and re.fullmatch(r"db/code/[0-9a-f]{16}", f.code.subject)
     assert not hasattr(f, "subject") and not hasattr(f, "sha")
-    assert f.kind == "ledger" and world.at().resolve("ledger_kinds.Video") is ledger_kinds.Video
+    assert f.kind == "ledger" and world.at().ns.load("ledger_kinds.Video") is ledger_kinds.Video
 
 
 def test_eval_seals_once_and_hits(world):

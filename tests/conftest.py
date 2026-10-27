@@ -14,9 +14,9 @@ sys.path.insert(0, str(tests_dir.parent))
 
 from dvc_dat import Dat, DatManager  # noqa: E402
 
-do = Dat.do
+ns = Dat.ns
 
-Dat.manager = DatManager.load_dat_config(tests_dir, do=do)
+Dat.manager = DatManager.load_dat_config(tests_dir, ns=ns)
 import mounts  # noqa: E402,F401  -- the test namespace; a program imports its own
 
 

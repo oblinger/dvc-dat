@@ -119,12 +119,12 @@ is a call: its return value is what lands in the spec.
 | `{now}` | timestamp `yy-mm-dd_HH-MM-SS` |
 | `{cwd}` | the working directory, full path |
 | `{unique}` | empty, then `_2`, `_3`, … |
-| `{a.b.c}` | whatever `do.load("a.b.c")` returns — called, when that is a function or method |
-| `{a.b.c(1, "x", k=2)}` | `do.load("a.b.c")` called with those arguments |
+| `{a.b.c}` | whatever `ns.load("a.b.c")` returns — called, when that is a function or method |
+| `{a.b.c(1, "x", k=2)}` | `ns.load("a.b.c")` called with those arguments |
 | `{{` `}}` | a literal `{` and `}` |
 
 **Calls.** A dotted name that resolves to a function or method — a Python
-function, a builtin, a method, a function mounted with `do.mount(value=fn)` —
+function, a builtin, a method, a function mounted with `ns.mount(value=fn)` —
 is called with no arguments: `{meta.commit}` puts the commit in the spec.
 Parentheses call it with arguments, which are Python literals only (numbers,
 strings, `True` `False` `None`, and lists, tuples or dicts of them — no names,
@@ -211,9 +211,9 @@ for a spec hydrated by hand:
 ```python
 from dvc_dat import Dat
 
-do, merge_dicts = Dat.do, Dat.merge_dicts
+ns, merge_dicts = Dat.ns, Dat.merge_dicts
 
-spec = merge_dicts(do.load("configs.bb.base"), {"gameset": "G7"})
+spec = merge_dicts(ns.load("configs.bb.base"), {"gameset": "G7"})
 Dat.create(spec=spec)
 ```
 

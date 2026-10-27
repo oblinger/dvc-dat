@@ -1,4 +1,4 @@
-"""The 2.0 contract: specs that fork, one `do`, one `{}` expander, `validate_spec`."""
+"""The 2.0 contract: specs that fork, one `ns`, one `{}` expander, `validate_spec`."""
 import os
 import re
 import shutil
@@ -13,10 +13,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from dvc_dat import Dat, DatManager, Do  # noqa: E402
+from dvc_dat import Dat, DatManager, Namespace  # noqa: E402
 from dvc_dat.core import expand, expand_spec  # noqa: E402
 
-do, merge_dicts = Dat.do, Dat.merge_dicts
+ns, merge_dicts = Dat.ns, Dat.merge_dicts
 from dvc_dat.core import DAT_CONFIG_FILE, SPEC_YAML, RESULT_YAML  # noqa: E402
 
 V2 = "v2tests"
@@ -29,7 +29,7 @@ def echo(_dat, *args, **kwargs):
     return {"args": list(args), "kwargs": dict(kwargs)}
 
 
-do.mount(at="v2_echo", value=echo)
+ns.mount(at="v2_echo", value=echo)
 
 
 def stored(dat_or_path, file_name=SPEC_YAML):
@@ -51,7 +51,7 @@ class TestForkRule:
 
     def test_kwargs_land_in_the_new_spec_not_in_the_results(self):
         name = f"{V2}/fork_kwargs"
-        do.mount(at="v2_kw", value={
+        ns.mount(at="v2_kw", value={
             "dat": {"do": "v2_echo", "name": name, "target_exists": "overwrite"}})
 
         assert Dat.manager.run("v2_kw", alpha=1, beta="two") == \
@@ -69,7 +69,7 @@ class TestForkRule:
 
     def test_kwargs_update_the_templates_kwargs_key_by_key(self):
         name = f"{V2}/fork_kwargs_merge"
-        do.mount(at="v2_kw2", value={
+        ns.mount(at="v2_kw2", value={
             "dat": {"do": "v2_echo", "name": name, "target_exists": "overwrite",
                     "kwargs": {"c": 33, "d": 44}}})
 
@@ -78,7 +78,7 @@ class TestForkRule:
 
     def test_positional_args_replace_the_templates_args(self):
         name = f"{V2}/fork_args"
-        do.mount(at="v2_args", value={
+        ns.mount(at="v2_args", value={
             "dat": {"do": "v2_echo", "name": name, "target_exists": "overwrite",
                     "args": [4, 5, 6]}})
 
@@ -87,7 +87,7 @@ class TestForkRule:
         assert stored(Dat.load(name))["dat"]["args"] == [1, 2]
 
     def test_a_sealed_dat_does_not_rerun_and_forks_when_given_arguments(self):
-        do.mount(at="v2_forkable", value={
+        ns.mount(at="v2_forkable", value={
             "dat": {"do": "v2_echo", "name": f"{V2}/forkable{{unique}}"}})
         for stale in (f"{V2}/forkable", f"{V2}/forkable_2"):
             if Dat.manager.exists(stale):
@@ -114,7 +114,7 @@ class TestForkRule:
 
     def test_overwrite_with_a_fixed_name_reruns_into_the_same_folder(self):
         name = f"{V2}/dev"
-        do.mount(at="v2_dev", value={
+        ns.mount(at="v2_dev", value={
             "dat": {"do": "v2_echo", "name": name, "target_exists": "overwrite"}})
 
         Dat.manager.run("v2_dev")
@@ -128,7 +128,7 @@ class TestForkRule:
 
     def test_target_exists_use_returns_the_existing_dat_without_running(self):
         name = f"{V2}/use_me"
-        do.mount(at="v2_use", value={
+        ns.mount(at="v2_use", value={
             "dat": {"do": "v2_echo", "name": name, "target_exists": "use"}})
         if Dat.manager.exists(name):
             Dat.load(name).delete()
@@ -141,8 +141,8 @@ class TestForkRule:
 
 class TestBaseList:
     def test_base_accepts_a_list_merged_left_to_right(self):
-        do.mount(at="v2_base_a", value={"dat": {}, "x": 1, "shared": "from_a"})
-        do.mount(at="v2_base_b", value={"dat": {}, "y": 2, "shared": "from_b"})
+        ns.mount(at="v2_base_a", value={"dat": {}, "x": 1, "shared": "from_a"})
+        ns.mount(at="v2_base_b", value={"dat": {}, "y": 2, "shared": "from_b"})
 
         spec = Dat.manager.expand_spec({"dat": {"base": ["v2_base_a", "v2_base_b"]}, "z": 3})
         assert (spec["x"], spec["y"], spec["z"]) == (1, 2, 3)
@@ -151,8 +151,8 @@ class TestBaseList:
 
     def test_the_stored_spec_has_no_base(self):
         name = f"{V2}/based"
-        do.mount(at="v2_base_a", value={"dat": {}, "x": 1, "shared": "from_a"})
-        do.mount(at="v2_base_b", value={"dat": {}, "y": 2, "shared": "from_b"})
+        ns.mount(at="v2_base_a", value={"dat": {}, "x": 1, "shared": "from_a"})
+        ns.mount(at="v2_base_b", value={"dat": {}, "y": 2, "shared": "from_b"})
 
         dat = Dat.create(path=name, spec={
             "dat": {"base": ["v2_base_a", "v2_base_b"], "target_exists": "overwrite"}})
@@ -161,15 +161,15 @@ class TestBaseList:
         assert spec["shared"] == "from_b" and spec["x"] == 1 and spec["y"] == 2
 
     def test_expand_spec_merges_the_base_then_fills_its_references(self):
-        do.mount(at="v2_base_tmpl", value={"dat": {"kwargs": {"who": "{who}"}}})
+        ns.mount(at="v2_base_tmpl", value={"dat": {"kwargs": {"who": "{who}"}}})
         spec = Dat.manager.expand_spec({"dat": {"base": "v2_base_tmpl"}}, {"who": "dat"})
         assert spec == {"dat": {"kwargs": {"who": "dat"}}}
 
     def test_merge_bases_is_not_a_do_verb(self):
-        assert not hasattr(Do, "merge_bases") and not hasattr(do, "merge_bases")
+        assert not hasattr(Namespace, "merge_bases") and not hasattr(ns, "merge_bases")
 
     def test_a_falsy_override_still_overrides(self):
-        do.mount(at="v2_base_truthy", value={"dat": {}, "flag": True, "count": 7})
+        ns.mount(at="v2_base_truthy", value={"dat": {}, "flag": True, "count": 7})
         spec = Dat.manager.expand_spec({"dat": {"base": "v2_base_truthy"}, "flag": False, "count": 0})
         assert spec["flag"] is False and spec["count"] == 0
 
@@ -227,8 +227,8 @@ class TestExpand:
 
             def __call__(self):
                 raise AssertionError("a callable object is never called")
-        do.mount(value=lambda: "c2dbdc6", at="v2_meta.commit")
-        do.mount(value=Proxy(), at="v2_asset.proxy")
+        ns.mount(value=lambda: "c2dbdc6", at="v2_meta.commit")
+        ns.mount(value=Proxy(), at="v2_asset.proxy")
         assert expand("{v2_meta.commit}") == "c2dbdc6"
         assert isinstance(expand("{v2_asset.proxy}"), Proxy)
 
@@ -321,30 +321,30 @@ class TestValidateSpec:
 
 class TestStaticResolution:
     def test_an_importable_dotted_name_needs_no_mount(self):
-        assert do.load("os.path.join") is os.path.join
-        assert do.load("dvc_dat.core.Dat") is Dat
+        assert ns.load("os.path.join") is os.path.join
+        assert ns.load("dvc_dat.core.Dat") is Dat
 
     def test_what_is_missing_raises_what_python_raises(self):
         with pytest.raises(AttributeError):
-            do.load("os.path.nope")
+            ns.load("os.path.nope")
         with pytest.raises(ImportError):
-            do.load("nope_pkg_2026.x")
+            ns.load("nope_pkg_2026.x")
 
     def test_default_swallows_both(self):
-        assert do.load("os.path.nope", default="fallback") == "fallback"
-        assert do.load("nope_pkg_2026.x", default=None) is None
+        assert ns.load("os.path.nope", default="fallback") == "fallback"
+        assert ns.load("nope_pkg_2026.x", default=None) is None
 
     def test_kind_mismatch_is_a_type_error(self):
         with pytest.raises(TypeError):
-            do.load("os.path.join", kind=dict)
+            ns.load("os.path.join", kind=dict)
 
     def test_name_of_round_trips_through_load(self):
-        assert do.load(do.name_of(os.path.join)) is os.path.join
-        assert do.name_of(Dat) == "dvc_dat.core.Dat"
-        assert do.load(do.name_of(Dat)) is Dat
-        assert do.name_of(os.path) == "posixpath"
+        assert ns.load(ns.name_of(os.path.join)) is os.path.join
+        assert ns.name_of(Dat) == "dvc_dat.core.Dat"
+        assert ns.load(ns.name_of(Dat)) is Dat
+        assert ns.name_of(os.path) == "posixpath"
         with pytest.raises(ValueError):
-            do.name_of(lambda: None)
+            ns.name_of(lambda: None)
 
 
 class TestExplicitConfig:
@@ -354,19 +354,19 @@ class TestExplicitConfig:
         (tmp_path / "mounted" / "v2_greeter.py").write_text(
             "def __main__():\n    return 'hi'\n")
         (tmp_path / "explicit_main.py").write_text(
-            "from pathlib import Path\nfrom dvc_dat import Dat\ndo = Dat.do\n"
-            "do.mount(folder=str(Path(__file__).parent / 'mounted'))\n")
+            "from pathlib import Path\nfrom dvc_dat import Dat\nns = Dat.ns\n"
+            "ns.mount(folder=str(Path(__file__).parent / 'mounted'))\n")
         (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: sync/\n")
 
-        assert do.load("v2_greeter", default=None) is None
+        assert ns.load("v2_greeter", default=None) is None
 
-        do_before = do._current()
-        Dat.manager = DatManager.load_dat_config(tmp_path, do=do)
+        do_before = ns._current()
+        Dat.manager = DatManager.load_dat_config(tmp_path, ns=ns)
         import explicit_main  # noqa: F401  -- the config folder is on sys.path now
-        assert Dat.manager.run("v2_greeter") == "hi"             # its mounts landed on `do`
+        assert Dat.manager.run("v2_greeter") == "hi"             # its mounts landed on `ns`
         assert sys.path[0] == os.path.realpath(tmp_path)
-        assert do._current() is do_before          # the namespace kept its identity
-        assert do.load("v2_echo") is echo          # ... and the mounts made before
+        assert ns._current() is do_before          # the namespace kept its identity
+        assert ns.load("v2_echo") is echo          # ... and the mounts made before
         assert Dat.manager._dat_folders == [os.path.join(os.path.realpath(tmp_path), "sync")]
 
     def test_load_dat_config_accepts_a_config_file(self, tmp_path):
@@ -380,7 +380,7 @@ class TestExplicitConfig:
     def test_importing_dvc_dat_reads_no_config(self, tmp_path):
         result = subprocess.run(
             [sys.executable, "-c",
-             "import dvc_dat; print(dvc_dat.core._default_manager, dvc_dat.Dat.do._current())"],
+             "import dvc_dat; print(dvc_dat.core._default_manager, dvc_dat.Dat.ns._current())"],
             cwd=tmp_path, capture_output=True, text=True,
             env={**os.environ, "PYTHONPATH": str(REPO_ROOT)})
         assert result.returncode == 0, result.stderr
@@ -403,17 +403,17 @@ def test_first_use_installs_the_config(tmp_path):
     (pkg / "__init__.py").write_text("")
     (pkg / "job.py").write_text("def run(dat):\n    return 'ran'\n")
     (tmp_path / "lazy_main.py").write_text(
-        "from dvc_dat import Dat\ndo = Dat.do\nimport lazypkg.job\n"
-        "do.mount(module=lazypkg.job, at='lazy')\n")
+        "from dvc_dat import Dat\nns = Dat.ns\nimport lazypkg.job\n"
+        "ns.mount(module=lazypkg.job, at='lazy')\n")
     (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: warehouse\n")
     (tmp_path / "notes").mkdir()                # a subfolder: cwd is not the root
 
     probe = (
-        "from dvc_dat import Dat\ndo = Dat.do\n"
+        "from dvc_dat import Dat\nns = Dat.ns\n"
         "import lazy_main\n"                    # the program's own mounts
-        "fn = do.load('lazy.run')\n"            # the alias, nothing configured
+        "fn = ns.load('lazy.run')\n"            # the alias, nothing configured
         "assert fn(None) == 'ran'\n"
-        "assert do.load('lazypkg.job.run') is fn\n"   # the static floor agrees
+        "assert ns.load('lazypkg.job.run') is fn\n"   # the static floor agrees
         "print(Dat.manager._dat_folders[0])\n"
     )
     result = subprocess.run(
@@ -427,7 +427,7 @@ def test_first_use_installs_the_config(tmp_path):
 def test_increment_on_a_plain_name_counts_up(tmp_path, restore_manager):
     """`target_exists: increment` on a name with no `{unique}` appends `_2`, `_3`
     instead of spinning forever (found 2026-09-22)."""
-    Dat.manager = DatManager(dat_folders=[str(tmp_path / "data")], do=do)
+    Dat.manager = DatManager(dat_folders=[str(tmp_path / "data")], ns=ns)
     spec ={"dat": {"kind": "Dat", "name": "plain", "target_exists": "increment"}}
     assert Dat.create(spec=spec).get_path_name() == "plain"
     assert Dat.create(spec=spec).get_path_name() == "plain_2"

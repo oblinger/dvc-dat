@@ -1,6 +1,6 @@
 from dvc_dat import Dat   # noqa
 
-do = Dat.do
+ns = Dat.ns
 
 """Silly configurable tool for applying rules to a sequence of letters."""
 __main__ = {
@@ -19,7 +19,7 @@ def run(dat):
     for idx in range(spec["start"], spec["end"]):
         text = chr(idx)
         for step, rule_name in spec["rules"]:
-            fn = do.load(rule_name)
+            fn = ns.load(rule_name)
             if idx % step == 0:
                 text = fn(idx, text)
         results.append(text)

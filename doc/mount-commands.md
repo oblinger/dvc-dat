@@ -2,13 +2,13 @@
 # Mounts
 Mounts: how a dotted name resolves, and how to mount names that are not imports.
 
-A dotted name is a Python name: `do.load` imports the longest importable
+A dotted name is a Python name: `ns.load` imports the longest importable
 prefix and `getattr`s the rest, so `os.path.join` and `mypkg.models.Trainer`
 work with nothing mounted at all. A **mount** is for the names that are *not*
 imports — a folder of YAML templates, a file outside the import path, a
 literal value — and for giving an importable thing a shorter name.
 
-Mounts are made in code, by `do.mount(...)`, by your own program — the
+Mounts are made in code, by `ns.mount(...)`, by your own program — the
 namespace is whatever the running program imported. For the shell, your
 program's main does the mounting and hands the command line to `Dat.cli_main()`,
 and `.datconfig.yaml` names that main as `run:`:
@@ -28,8 +28,8 @@ from dvc_dat import Dat
 
 ROOT = Path(__file__).parent.parent
 
-Dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
-Dat.do.mount(module="tests.fixtures", at="fixtures")
+Dat.ns.mount(folder=str(ROOT / "catalog"), at="catalog")
+Dat.ns.mount(module="tests.fixtures", at="fixtures")
 
 if __name__ == "__main__":
     # launched by the dat bootstrap
@@ -37,10 +37,10 @@ if __name__ == "__main__":
         sys.exit(Dat.cli_main())
 ```
 
-The mounts land on the process's default `do` — the namespace of
-`Dat.manager` — so a `do = Dat.do` bound earlier sees them,
+The mounts land on the process's default `ns` — the namespace of
+`Dat.manager` — so an `ns = Dat.ns` bound earlier sees them,
 and mounts made before the config is installed survive it. A second
-`DatManager(dat_folders=[...])` has a `do` of its own, and `m.do.mount(...)` lands
+`DatManager(dat_folders=[...])` has an `ns` of its own, and `m.ns.mount(...)` lands
 there and nowhere else (see [Core Concepts](concepts.md)). A notebook gets the same
 namespace by importing `mypkg.main`; the config's folder is first on
 `sys.path`, so that import works from any directory. With no `run:` the
@@ -49,7 +49,7 @@ nothing else.
 
 ## Mount forms
 
-`do.mount(*, folder | file | module | value, at="", relative_to=".")` —
+`ns.mount(*, folder | file | module | value, at="", relative_to=".")` —
 exactly one source. `at` is the name it answers to; omitted, the mount lands
 at the namespace root. A relative `folder` or `file` resolves against
 `relative_to`, which defaults to the working directory — build paths from
@@ -60,7 +60,7 @@ at the namespace root. A relative `folder` or `file` resolves against
 Mount a directory tree. Files become dotted paths.
 
 ```python
-do.mount(folder=str(ROOT / "catalog"), at="catalog")
+ns.mount(folder=str(ROOT / "catalog"), at="catalog")
 ```
 
 Given:
@@ -87,7 +87,7 @@ Mount a Python module — by import name, by file path, or the module object
 itself. Its attributes become names.
 
 ```python
-do.mount(module="tests.fixtures", at="fixtures")
+ns.mount(module="tests.fixtures", at="fixtures")
 ```
 
 Given:
@@ -116,7 +116,7 @@ Mount a single file at a name. `at` is required — without it the entry is
 registered under the empty name and cannot be reached.
 
 ```python
-do.mount(file=str(ROOT / "scripts" / "helper.py"), at="helper")
+ns.mount(file=str(ROOT / "scripts" / "helper.py"), at="helper")
 ```
 
 - `helper` → loads `scripts/helper.py`
@@ -130,7 +130,7 @@ YAML and JSON files load as data; Python files load as a module.
 Mount a literal value.
 
 ```python
-do.mount(value={"pi": 3.14159, "e": 2.71828}, at="constants")
+ns.mount(value={"pi": 3.14159, "e": 2.71828}, at="constants")
 ```
 
 You get:
@@ -159,12 +159,12 @@ name: YAML Greeter
 | A short name for a Python module | `module` |
 | Single standalone script | `file` |
 | Inline constants or an inline spec | `value` |
-| An importable object | *nothing — `do.load` imports it* |
+| An importable object | *nothing — `ns.load` imports it* |
 
 A mounted name never shadows an importable one. `mount` raises `ValueError`
 when a top-level name it would add is a module or package Python can import
 from somewhere else: `at`'s first part, or, with no `at`, each top-level file
-or folder of the mounted folder. So `do.mount(folder=…, at="json")` is
+or folder of the mounted folder. So `ns.mount(folder=…, at="json")` is
 refused, and so is a root-level folder mount holding a `helpers.py` while an
 installed `helpers` exists. Mounting a module at its own name, or a package's
 own folder at its name, is not a clash — paths are compared as real paths,
@@ -189,10 +189,10 @@ from dvc_dat import Dat
 
 SRC = Path(__file__).parent.parent
 
-Dat.do.mount(folder=str(SRC / "myproject" / "catalog"), at="catalog")
-Dat.do.mount(module="tests.fixtures", at="fixtures")
-Dat.do.mount(folder=str(SRC / "scripts"), at="scripts")
-Dat.do.mount(value={"debug": False, "version": "2.0.0"}, at="config")
+Dat.ns.mount(folder=str(SRC / "myproject" / "catalog"), at="catalog")
+Dat.ns.mount(module="tests.fixtures", at="fixtures")
+Dat.ns.mount(folder=str(SRC / "scripts"), at="scripts")
+Dat.ns.mount(value={"debug": False, "version": "2.0.0"}, at="config")
 
 if __name__ == "__main__":
     # launched by the dat bootstrap
@@ -205,19 +205,19 @@ Usage, from a program that has imported `myproject.main`:
 ```python
 from dvc_dat import Dat
 
-do = Dat.do
+ns = Dat.ns
 
 # Load a template; the config installs itself on first use
-spec = do.load("catalog.experiment")
+spec = ns.load("catalog.experiment")
 
 # Get a fixture
-fixture = do.load("fixtures.simple")
+fixture = ns.load("fixtures.simple")
 
 # Fork a script's spec and run it
 Dat.manager.run("scripts.process", input="data.csv")
 
 # Access a constant
-version = do.load("config.version")
+version = ns.load("config.version")
 ```
 
 ## See Also

@@ -214,7 +214,7 @@ def _imports_of_node(node: Any, dotted: str, is_pkg: bool) -> Set[str]:
 
 
 def check_mounted_imports(mounts: List[Mount], modname: str, func: str) -> None:
-    """At load (``rev.resolve``): ``UnmountedImport`` when the function's module, or a mounted module it
+    """At load (``rev.ns.load``): ``UnmountedImport`` when the function's module, or a mounted module it
     reaches on load, imports a repo module under no mount. The worker's finder still checks at run time."""
     todo: List[Tuple[str, Optional[str]]] = [(modname, func)]
     seen: Set[str] = set()
@@ -647,8 +647,8 @@ def _mounted_imports(mounts: List[Mount]) -> Iterator[None]:
 
 
 def import_mounted(fn: Fn) -> Any:
-    """A mounted dat's run function imported in this process, for a plain ``Dat.do`` run in a ledger
-    project (nothing memoised, nothing confined, as ``Dat.do`` always ran): its module loaded from the
+    """A mounted dat's run function imported in this process, for a plain ``Dat.ns`` run in a ledger
+    project (nothing memoised, nothing confined, as ``Dat.ns`` always ran): its module loaded from the
     mounts as of ``fn``'s rev, which stay importable while it runs."""
     mounts, _rows = mounts_for(fn._rev._plain(), current_env())
     with _mounted_imports(mounts):
@@ -908,8 +908,8 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
 class _WorkerWorld(DatManager):
     """The dat world of a dat run in the worker (DAT 1045): the caller's dat folders and art folder. Its
     index (a dat's hash to its name) is the dat world's own machinery, so its writes stand outside the
-    guard, as the ledger's do. Its ``do`` is a ``LedgerDo`` bound to the run's rev (DAT 1047): a name the
-    body looks up (``Dat.manager.do.load``, a spec's ``base``/``do``, ``{}`` expansion) walks the same
+    guard, as the ledger's own. Its ``ns`` is a ``LedgerNamespace`` bound to the run's rev (DAT 1047): a name the
+    body looks up (``Dat.manager.ns.load``, a spec's ``base``/``do``, ``{}`` expansion) walks the same
     ``db/mount`` rows the caller resolved the run through, read from the worker's checkout; ``mount`` is
     refused."""
 
@@ -934,14 +934,14 @@ def _run_dat(fn: Fn, run: Any, spec: Dict[str, Any], work: Path) -> Dat:
             return run(*args, **kwargs)
         finally:
             STATE.guard = old
-    registered = manager.do._registered_values or {}
+    registered = manager.ns._registered_values or {}
     before = registered.get(fn.name, _NONE)
-    manager.do._reg_value(fn.name, confined)       # _execute loads dat.do through the world
+    manager.ns._reg_value(fn.name, confined)       # _execute loads dat.do through the world
     try:
         dat = manager.create(dat_spec(spec, fn._template), path=str(work / "dat"))
         manager._execute(dat)
     finally:
-        values = manager.do._registered_values or {}
+        values = manager.ns._registered_values or {}
         if before is _NONE:
             values.pop(fn.name, None)
         else:
@@ -1196,15 +1196,15 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             return
         if req.get("world") is not None:            # a dat's run function: the caller's dat world
             w = req["world"]
-            from .namespace import LedgerDo
+            from .namespace import LedgerNamespace
 
             Dat.manager = _WorkerWorld(dat_folders=w["dat_folders"], art_folder=w["art_folder"],
-                                       index=w["index"], verify=w["verify"], do=LedgerDo(rev=plain))
+                                       index=w["index"], verify=w["verify"], ns=LedgerNamespace(rev=plain))
             STATE.reads = STATE.reads + [os.path.realpath(f) for f in w["dat_folders"]] + (
                 [os.path.realpath(w["art_folder"])] if w["art_folder"] else [])
         keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__"
                     else v) for k, v in req["keys"].items()}
-        fn = plain.resolve(req["name"])
+        fn = plain.ns.load(req["name"])
         if not isinstance(fn, Fn):
             raise TypeError(f"{req['name']!r} resolves to {fn!r} in the worker, not a function")
         if fn.kind == "dat":

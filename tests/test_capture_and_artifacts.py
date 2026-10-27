@@ -169,12 +169,12 @@ class TestArtifacts:
 class TestType:
     def test_a_class_is_recorded_by_its_dotted_name_and_built_at_load(self, m, clip, tmp_path):
         m.save_artifact(clip, type=VideoClip, name="video/G1")
-        assert sidecar(tmp_path, "video/G1")["type"] == m.do.name_of(VideoClip)
+        assert sidecar(tmp_path, "video/G1")["type"] == m.ns.name_of(VideoClip)
         video = m.load("video/G1")
         assert isinstance(video, VideoClip) and video.path.name == "G1.mp4"
 
     def test_a_mounted_factory_is_named_by_its_mount(self, m, folder):
-        m.do.mount(value=lambda path: sorted(os.listdir(path)), at="listing.of")
+        m.ns.mount(value=lambda path: sorted(os.listdir(path)), at="listing.of")
         m.save_artifact(folder, type="listing.of", name="assets/lock")
         assert m.load("assets/lock") == [ART_FILE, "a.txt", "sub"]
 
@@ -373,9 +373,9 @@ def inner_fn(dat):
 class TestCapture:
     @pytest.fixture
     def world(self, m, clip):
-        m.do.mount(value=uses_both, at="uses_both")
-        m.do.mount(value=outer, at="outer")
-        m.do.mount(value=inner_fn, at="inner_fn")
+        m.ns.mount(value=uses_both, at="uses_both")
+        m.ns.mount(value=outer, at="outer")
+        m.ns.mount(value=inner_fn, at="inner_fn")
         self.digest = m.save_artifact(clip, name="video/G1")
         m.create({"dat": {}}, path="prev").save()
         return m
@@ -395,7 +395,7 @@ class TestCapture:
         assert dat.get_results()["dat"]["dependencies"] == {self.digest: self.digest}
 
     def test_a_run_with_no_loads_says_so(self, world):
-        world.do.mount(value=lambda dat: dat.save(), at="quiet")
+        world.ns.mount(value=lambda dat: dat.save(), at="quiet")
         dat = world.create({"dat": {"do": "quiet"}}, path="quiet_run")
         world.run(dat)
         assert stored_results(dat)["dat"]["dependencies"] == {}
@@ -439,7 +439,7 @@ class TestCapture:
                 with self.recording(dat):
                     return super()._execute(dat)
         m = Store(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "art"))
-        m.do.mount(value=lambda dat: dat.save(), at="quiet")
+        m.ns.mount(value=lambda dat: dat.save(), at="quiet")
         dat = m.create({"dat": {"do": "quiet"}}, path="wrapped")
         m.run(dat)
         assert stored_results(dat)["dat"]["dependencies"] == {}
@@ -487,7 +487,7 @@ class TestSeal:
         assert stored_results(dat)["dat"]["dependencies"] == {"$MANUAL": "manual"}
 
     def test_run_does_not_save(self, m, clean_code):
-        m.do.mount(value=lambda dat: "ran", at="plain")
+        m.ns.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="unsaved")
         assert m.run(dat) == "ran"
         assert not Path(dat.get_path(), RESULT_YAML).exists()
@@ -505,7 +505,7 @@ class TestSeal:
             dat.save()
             seen["inside"] = m.standing("inside")
             seen["checkpoint"] = stored_results(dat)["dat"]["sha256"]
-        m.do.mount(value=fn, at="saves")
+        m.ns.mount(value=fn, at="saves")
         dat = m.create({"dat": {"do": "saves"}}, path="inside")
         m.run(dat)
         assert seen["inside"] == "open" and seen["checkpoint"]
@@ -517,12 +517,12 @@ class TestSeal:
         assert run["run_time"] and run["content"] == results["sha256"]
 
     def test_an_open_dat_runs_again_in_place(self, m):
-        m.do.mount(value=lambda dat: "ran", at="plain")
+        m.ns.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="twice")
         assert m.run(dat) == "ran" and m.run(dat) == "ran"
 
     def test_run_refuses_a_sealed_dat(self, m):
-        m.do.mount(value=lambda dat: dat.save(), at="saves")
+        m.ns.mount(value=lambda dat: dat.save(), at="saves")
         dat = m.create({"dat": {"do": "saves"}}, path="ran_once")
         m.run(dat)
         with pytest.raises(RuntimeError, match="sealed"):
@@ -546,7 +546,7 @@ class TestSeal:
 class TestStanding:
     @pytest.fixture
     def w(self, m, clip):
-        m.do.mount(value=lambda dat, src: (dat.manager.load(src), dat.save()), at="reads")
+        m.ns.mount(value=lambda dat, src: (dat.manager.load(src), dat.save()), at="reads")
         m.create({"dat": {}}, path="base").save()          # hand-sealed: referenceable
         m.create({"dat": {"standing": "rolling"}}, path="roll").save()
         m.create({"dat": {}}, path="draft")                 # never saved: open
@@ -562,7 +562,7 @@ class TestStanding:
         assert stored_results(dat)["dat"]["standing"] == "rolling" == w.standing("roll")
 
     def test_a_rolling_dat_runs_again(self, m):
-        m.do.mount(value=lambda dat: dat.save(), at="saves")
+        m.ns.mount(value=lambda dat: dat.save(), at="saves")
         dat = m.create({"dat": {"do": "saves", "standing": "rolling"}}, path="roll")
         m.run(dat)
         m.run(dat)
@@ -754,7 +754,7 @@ class TestTheRun:
     sub-dat `run/`, outside the hash."""
 
     def test_the_run_is_a_sub_dat_with_the_execution_facts(self, m, clean_code):
-        m.do.mount(value=lambda dat: "ran", at="plain")
+        m.ns.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="runs/one")
         m.run(dat)
         run = dat.run
@@ -772,7 +772,7 @@ class TestTheRun:
             Path(dat.get_path(), "out.txt").write_text("deterministic")
             dat.get_results()["loss"] = 0.5
             dat.save()
-        m.do.mount(value=fn, at="det")
+        m.ns.mount(value=fn, at="det")
         m.run({"dat": {"do": "det", "name": "runs/a"}})
         m.run({"dat": {"do": "det", "name": "runs/b"}})
         a, b = m.load("runs/a"), m.load("runs/b")
@@ -788,7 +788,7 @@ class TestTheRun:
             Path("scratch.bin").write_bytes(b"x" * 10)
             seen["cwd"] = os.getcwd()
             dat.save()
-        m.do.mount(value=fn, at="scratch")
+        m.ns.mount(value=fn, at="scratch")
         here = os.getcwd()
         m.run({"dat": {"do": "scratch", "name": "runs/s"}})
         dat = m.load("runs/s")
@@ -801,7 +801,7 @@ class TestTheRun:
         assert dat.verify()                                 # run/ is not content
 
     def test_a_rolling_dat_replaces_its_run(self, m, clean_code):
-        m.do.mount(value=lambda dat: dat.save(), at="roll")
+        m.ns.mount(value=lambda dat: dat.save(), at="roll")
         dat = m.create({"dat": {"do": "roll", "standing": "rolling"}}, path="runs/roll")
         m.run(dat)
         first = stored_results(dat.run)["dat"]
@@ -845,7 +845,7 @@ class TestTheRun:
             dat.save()
 
     def test_copy_without_the_run(self, m, clean_code):
-        m.do.mount(value=lambda dat: dat.save(), at="plain")
+        m.ns.mount(value=lambda dat: dat.save(), at="plain")
         m.run({"dat": {"do": "plain", "name": "runs/src"}})
         dat = m.load("runs/src")
         full = dat.copy("runs/full")
@@ -856,7 +856,7 @@ class TestTheRun:
 
     def test_a_container_does_not_list_its_dats_runs(self, m, clean_code):
         from dvc_dat import DatContainer
-        m.do.mount(value=lambda dat: dat.save(), at="plain")
+        m.ns.mount(value=lambda dat: dat.save(), at="plain")
         m.create({"dat": {"kind": "dvc_dat.core.DatContainer"}}, path="box")
         m.run({"dat": {"do": "plain", "name": "box/child"}})
         box = m.load("box")
@@ -864,7 +864,7 @@ class TestTheRun:
         assert [os.path.basename(p) for p in box.get_dat_paths()] == ["child"]
 
     def test_the_run_is_read_back_from_disk(self, m, clean_code):
-        m.do.mount(value=lambda dat: dat.save(), at="plain")
+        m.ns.mount(value=lambda dat: dat.save(), at="plain")
         m.run({"dat": {"do": "plain", "name": "runs/disk"}})
         made = m.load("runs/disk")
         fresh = DatManager(dat_folders=m._dat_folders, art_folder=m._art_folder)
@@ -873,7 +873,7 @@ class TestTheRun:
         assert fresh.standing("runs/disk") == "referenceable"
 
     def test_the_name_is_an_address_not_content(self, m, clean_code):
-        m.do.mount(value=lambda dat: dat.save(), at="plain")
+        m.ns.mount(value=lambda dat: dat.save(), at="plain")
         m.run({"dat": {"do": "plain", "name": "runs/named"}})
         dat = m.load("runs/named")
         assert stored_results(dat)["dat"]["hash"] == "functional"
@@ -890,7 +890,7 @@ class TestTheRun:
 
     def test_hash_dat_takes_a_path_and_still_leaves_the_run_out(self, m, clean_code):
         import dvc_dat.core as core
-        m.do.mount(value=lambda dat: dat.save(), at="plain")
+        m.ns.mount(value=lambda dat: dat.save(), at="plain")
         m.run({"dat": {"do": "plain", "name": "runs/pathed"}})
         dat = m.load("runs/pathed")
         stored = stored_results(dat)

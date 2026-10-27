@@ -5,17 +5,17 @@ Data artifact management with metadata and provenance for ML experimentation.
 ## Overview
 
 A **dat** is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
-itself; `_result_.yaml` holds only what running it produced. `do` is the one
+itself; `_result_.yaml` holds only what running it produced. `ns` is the one
 namespace; `Dat.manager.run` is the one run.
 
 ```python
 from dvc_dat import Dat
 
-do = Dat.do   # the namespace; follows Dat.manager
+ns = Dat.ns   # the namespace; follows Dat.manager
 
 # Importing reads no files; the first use finds .datconfig.yaml.
-# A dotted name resolves through do.mount names, then by import.
-template = do.load("catalog.experiment")
+# A dotted name resolves through ns.mount names, then by import.
+template = ns.load("catalog.experiment")
 
 # Arguments fork a spec: they are written into the new dat's
 # _spec_.yaml, and the run reads them back from there.

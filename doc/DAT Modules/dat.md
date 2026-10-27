@@ -4,11 +4,11 @@ A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe
 for itself and whose `_result_.yaml` holds what running it produced,
 sealed under a content hash. A `DatManager` is a world of dats: the
 folders it searches and writes, the artifact store beside them, and a
-`do` namespace that names things and runs specs; every load inside a
+`ns` namespace that names things and runs specs; every load inside a
 run goes through it, so dependencies are captured rather than declared.
 The code is `dvc_dat/core.py` (`Dat`, `DatContainer`, `DatManager`) and
-`dvc_dat/do.py` (`Do`), exported as `from dvc_dat import Dat,
-DatContainer, DatManager, Do`. Part of the
+`dvc_dat/do.py` (`Namespace`), exported as `from dvc_dat import Dat,
+DatContainer, DatManager, Namespace`. Part of the
 [architecture](../DAT%20Architecture.md); a `Dat` is also a ledger value,
 `ledger.Dat` the same class ([DAT Ledger](ledger/DAT%20Ledger.md), DAT 1038).
 
@@ -16,11 +16,11 @@ DatContainer, DatManager, Do`. Part of the
 
 `DatManager`:
 
-- `DatManager(*, dat_folders, art_folder=None, index=None, do=None,
+- `DatManager(*, dat_folders, art_folder=None, index=None, ns=None,
   verify=False)`: dat folders searched in order, the first written to;
   `dat_folders` not a non-empty list, or an artifact folder nested with
   a dat folder, is `TypeError`/`ValueError`. Reads nothing from disk.
-- `DatManager.load_dat_config(start=None, *, do=None) -> DatManager`:
+- `DatManager.load_dat_config(start=None, *, ns=None) -> DatManager`:
   from the nearest `.datconfig.yaml` walking up from `start`, then
   `.datconfig.override.yaml`, then `DAT_FOLDERS` (one folder, not split) / `DAT_ART_FOLDER`; an
   unknown key `ValueError`; `manager:` names a subclass to build.
@@ -55,14 +55,14 @@ DatContainer, DatManager, Do`. Part of the
   `dat.do` `TypeError`; a `referenceable` demand unmet `RuntimeError`;
   each re-raised as `Exception("In <target>")`.
 - `expand(text, vars=None)`, `expand_spec(spec, vars=None)`: the `{}`
-  grammar through this manager's `do`; `expand_spec` first merges the
+  grammar through this manager's `ns`; `expand_spec` first merges the
   spec over its `dat.base` chain.
-- `do`: the manager's `Do`, its only other public attribute.
+- `ns`: the manager's `Namespace`, its only other public attribute.
 
 `Dat`:
 
 - `Dat.manager` (class, assignable; built on first read from
-  `load_dat_config()`), `Dat.do` (forwards to `Dat.manager.do`; not callable).
+  `load_dat_config()`), `Dat.ns` (forwards to `Dat.manager.ns`; not callable).
 - `Dat.load(name_or_path, *, cache_after_load=True)`,
   `Dat.create(path=None, spec=None)`: in the default world; a
   `dat.kind` outside `cls` is `TypeError`.
@@ -81,9 +81,9 @@ DatContainer, DatManager, Do`. Part of the
 `DatContainer(Dat)`: `get_dat_paths()` and `get_dats()`, the dats in
 its folder, lazily, a child's `run/` skipped.
 
-`Do` (a namespace, not callable):
+`Namespace` (a namespace, not callable):
 `load(dotted, *, default, kind)`, `name_of(obj)`,
-`keys()`, `mount(*, folder, file, module, value, at, relative_to)`
+`mounts()`, `mount(*, folder, file, module, value, at, relative_to)`
 (`ValueError` when a mounted name would shadow an importable one).
 
 Module functions: `merge_dicts`, `expand`, `expand_spec`.

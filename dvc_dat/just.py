@@ -81,7 +81,7 @@ def declared(obj: Any, where: str = "spec") -> Optional[Dict[str, str]]:
     return None
 
 
-def commands(do: Any) -> Tuple[Dict[str, Tuple[str, Dict[str, str]]], List[str]]:
+def commands(ns: Any) -> Tuple[Dict[str, Tuple[str, Dict[str, str]]], List[str]]:
     """`{recipe name: (target, decl)}` for every command the namespace mounts, and what was skipped."""
     found: Dict[str, Tuple[str, Dict[str, str]]] = {}
     skipped: List[str] = []
@@ -94,20 +94,20 @@ def commands(do: Any) -> Tuple[Dict[str, Tuple[str, Dict[str, str]]], List[str]]
         else:
             found[name] = (target, decl)
 
-    if hasattr(do, "_commands"):                    # a ledger project: read off the mounted files
-        for target, decl, _file in do._commands():
+    if hasattr(ns, "_commands"):                    # a ledger project: read off the mounted files
+        for target, decl, _file in ns._commands():
             add(target.rpartition(".")[2], target, decl)
         return found, skipped
-    values = set(do._registered_values or ())
-    for key in sorted(set(do.keys()) | values):
+    values = set(ns._registered_values or ())
+    for key in sorted(set(ns._mounted_names()) | values):
         try:
-            base = None if key in values else do._get_base(key, default=None)
+            base = None if key in values else ns._get_base(key, default=None)
             if isinstance(base, ModuleType):
                 for attr, obj in sorted(vars(base).items()):
                     if getattr(obj, "__module__", None) == base.__name__ and (decl := declared(obj)):
                         add(attr, f"{key}.{attr}", decl)
                 continue
-            obj = do.load(key, default=None)
+            obj = ns.load(key, default=None)
             if (decl := declared(obj, key)):
                 dotted = key.replace("/", ".")         # a folder mount's `specs/table12` is `specs.table12`
                 add(dotted.rpartition(".")[2], dotted, decl)
@@ -132,13 +132,13 @@ def render(found: Dict[str, Tuple[str, Dict[str, str]]]) -> str:
     return "".join(out)
 
 
-def _sources(do: Any) -> List[Path]:
+def _sources(ns: Any) -> List[Path]:
     """The files a mounted name loads from, as far as they are known."""
-    out = [f for _t, _d, f in do._commands()] if hasattr(do, "_commands") else []
-    for key, location in list(do._base_locations.items()):
+    out = [f for _t, _d, f in ns._commands()] if hasattr(ns, "_commands") else []
+    for key, location in list(ns._base_locations.items()):
         if isinstance(location, str) and os.path.exists(location):
             out.append(Path(location))
-        obj = do._base_objects.get(key) if hasattr(do, "_base_objects") else None
+        obj = ns._base_objects.get(key) if hasattr(ns, "_base_objects") else None
         if isinstance(obj, ModuleType) and getattr(obj, "__file__", None):
             out.append(Path(obj.__file__))
     main = sys.modules.get("__main__")
@@ -154,7 +154,7 @@ def _mtime(path: Path) -> float:
         return 0.0
 
 
-def refresh(do: Any, config_dir: Path, justfile: Path, *, err: Any = None) -> bool:
+def refresh(ns: Any, config_dir: Path, justfile: Path, *, err: Any = None) -> bool:
     """Rewrite `<config_dir>/.dat/targets.just` when it is stale; True when written.
 
     Only a justfile that imports `.dat/targets.just` gets one.  Stale is missing,
@@ -167,10 +167,10 @@ def refresh(do: Any, config_dir: Path, justfile: Path, *, err: Any = None) -> bo
     target = config_dir / TARGETS
     if target.exists():
         newest = max([_mtime(config_dir / ".datconfig.yaml"), _mtime(justfile)]
-                     + [_mtime(p) for p in _sources(do)])
+                     + [_mtime(p) for p in _sources(ns)])
         if _mtime(target) >= newest:
             return False
-    found, skipped = commands(do)
+    found, skipped = commands(ns)
     generated = set(_GENERATED.findall(target.read_text())) if target.exists() else set()
     summary = subprocess.run([os.environ.get("JUST", "just"), "-f", str(justfile), "--summary"],
                              capture_output=True, text=True)

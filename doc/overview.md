@@ -9,14 +9,14 @@ The dvc_dat API reference: what the package exports and how each part is called.
 - **[Mount Commands](mount-commands.md)** — configuring the do-system
 
 A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
-itself. `Dat.manager` is the default world; `Dat.manager.run` runs, and `do` is its namespace.
+itself. `Dat.manager` is the default world; `Dat.manager.run` runs, and `ns` is its namespace.
 
 ## What the package exports
 
 ```python
-from dvc_dat import Dat, DatContainer, DatManager, Do
+from dvc_dat import Dat, DatContainer, DatManager, Namespace
 
-do = Dat.do     # the namespace shortcut; follows Dat.manager
+ns = Dat.ns     # the namespace shortcut; follows Dat.manager
 ```
 
 | Name | What it is |
@@ -24,18 +24,18 @@ do = Dat.do     # the namespace shortcut; follows Dat.manager
 | `Dat` | A dat folder: its spec, its results, its path |
 | `DatContainer` | A dat whose folder holds other dats |
 | `DatManager` | Creates, finds, loads and runs dats; `Dat.manager` is the default, assign to replace |
-| `Do` | A namespace; every manager has one |
+| `Namespace` | A namespace; every manager has one |
 
 Everything else hangs off those four:
 
 | Name | What it is |
 |------|------------|
-| `Dat.do` | The default world's namespace, forwarding to `Dat.manager.do`; not callable |
+| `Dat.ns` | The default world's namespace, forwarding to `Dat.manager.ns`; not callable |
 | `Dat.cli_main` | The command line (`just run`) for a program's own main |
 | `Dat.merge_dicts` | The zipper merge `dat.base` uses |
 | `Dat.manager.expand` / `expand_spec` | The `{}` grammar |
 
-## Running — `Dat.manager.run`; loading — `do`
+## Running — `Dat.manager.run`; loading — `ns`
 
 ```python
 Dat.manager.run(TARGET, *args, **kwargs)
@@ -47,7 +47,7 @@ Dat.manager.run(TARGET, *args, **kwargs)
 | a **spec** (dict) | forked with the arguments, created, run |
 | a **Dat**, no arguments | re-run in place; refused once sealed (a rolling dat runs again) |
 | a **Dat**, with arguments | forked into a new dat; the original is untouched |
-| a **string** | `do.load`-ed first, then one of the above |
+| a **string** | `ns.load`-ed first, then one of the above |
 
 The run itself is `fn(dat, *spec.dat.args, **spec.dat.kwargs)`, where `fn` is
 what `dat.do` names, run with `run/work/` as the working directory.
@@ -57,12 +57,12 @@ land in the run sub-dat, `dat.run`, which is outside the dat's hash.
 
 | Method | Description |
 |--------|-------------|
-| `do.load(NAME, default=, kind=)` | The object a dotted name names |
-| `do.name_of(OBJ) -> str` | The name `load` takes back to `OBJ` |
-| `do.mount(at=, folder=/file=/module=/value=)` | Add one name to the namespace; your program calls it |
-| `do.keys()` | Every mounted base name |
+| `ns.load(NAME, default=, kind=)` | The object a dotted name names |
+| `ns.name_of(OBJ) -> str` | The name `load` takes back to `OBJ` |
+| `ns.mount(at=, folder=/file=/module=/value=)` | Add one name to the namespace; your program calls it |
+| `ns.mounts()` | The mount table, `{prefix: location}` |
 
-`do.load` checks mounts first, then imports the longest importable prefix of
+`ns.load` checks mounts first, then imports the longest importable prefix of
 the name and `getattr`s the rest. With nothing found it raises what Python
 raises — `ImportError`, `AttributeError` or `KeyError` — unless `default=` is
 given.
@@ -75,7 +75,7 @@ given.
 | `Dat.load(NAME) -> Dat` | Load a dat by name or path |
 | `Dat.validate_spec(SPEC) -> SPEC` | Classmethod hook, run on create and load |
 | `Dat.manager` | The default world; built on first use by `DatManager.load_dat_config()`, replaced by assignment |
-| `DatManager(dat_folders=[...], art_folder=None, index=None, do=None, verify=False)` | A world on a list of folders, keyword-only; nothing read from disk |
+| `DatManager(dat_folders=[...], art_folder=None, index=None, ns=None, verify=False)` | A world on a list of folders, keyword-only; nothing read from disk |
 | `DatManager.load_dat_config(START) -> DatManager` | A new manager from the `.datconfig.yaml` above `START` |
 | `Dat.manager.exists(NAME) -> bool` | True iff a dat or artifact is stored under the name or URN |
 | `Dat.save_artifact(SOURCE, type=None, name=None, link=False) -> str` | Store a file or folder as an artifact, keywords only; returns its URN `"sha256:<hex>"`; stored bytes get a second name, nothing copied |

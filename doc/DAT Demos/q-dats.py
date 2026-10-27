@@ -103,7 +103,7 @@ dat:
 ''')
 subprocess.run(git_cmd + ["add", "mymodule"], check=True)
 subprocess.run(git_cmd + ["commit", "-q", "-m", "mymodule"], check=True)
-Dat.do.mount(folder="mymodule", at="mymodule")   # mymodule's files join the dat world's namespace:
+Dat.ns.mount(folder="mymodule", at="mymodule")   # mymodule's files join the dat world's namespace:
 # mymodule/specs/table12.yaml answers to mymodule.specs.table12, build_table in mult.py to mymodule.mult.build_table
 
 
@@ -128,7 +128,7 @@ show("q-dats")
 #
 # A dat is created in three steps:
 #
-# 1. **Look up** its spec by name: `Dat.do.load(name)` is the object
+# 1. **Look up** its spec by name: `Dat.ns.load(name)` is the object
 #    a dotted name names, here the spec file's dict as written.
 # 2. **Expand** it: `Dat.manager.expand_spec(spec)` merges the spec
 #    over its `dat.base`, which it drops, then fills every template
@@ -137,7 +137,7 @@ show("q-dats")
 #    object, its folder made and `_spec_.yaml` written. Nothing runs.
 
 # %%
-spec = Dat.do.load("mymodule.specs.table12")    # 1. the spec as written
+spec = Dat.ns.load("mymodule.specs.table12")    # 1. the spec as written
 expanded_spec = Dat.manager.expand_spec(spec)   # 2. dat.base merged in, every {…} filled
 table12_dat = Dat.create(spec=expanded_spec)    # 3. the Dat and its folder
 
@@ -231,9 +231,9 @@ print("files:", sorted(os.listdir(again_dat.get_path())))
 # `Ledger(create=True)` makes the ledger in this folder and adds
 # `ledger:` to `.datconfig.yaml`; the reloaded dat world names
 # through it. In a ledger project names come from the ledger's
-# mounts alone and `Dat.do.mount` is refused, so `mymodule` is
-# mounted as two `db/mount` rows; the earlier mount went with the
-# old world.
+# mounts alone and `Dat.ns.mount` is refused, so `mymodule` is
+# mounted with `t.ns.mount`, which writes two `db/mount` rows; the
+# earlier mount went with the old world.
 #
 # #### Setup
 
@@ -244,9 +244,9 @@ print(".datconfig.yaml:", Path(".datconfig.yaml").read_text().splitlines())
 # → .datconfig.yaml: ['dat_folders: data', 'ledger: .dat/ledger']
 import mymodule                      # discovery finds the checkout, the repo q-dats
 with L.transaction(by="human:dan", why="mount mymodule") as t:
-    t.update("db/mount/mymodule", {"db/root": "mymodule", "db/repo": "q-dats"})   # an add per key: the folder the prefix names, in this repo's checkout
+    t.ns.mount("mymodule", root="mymodule", repo="q-dats")   # the two db/mount rows: the folder the prefix names, in this repo's checkout
 try:
-    Dat.do.mount(folder="mymodule", at="mymodule")
+    Dat.ns.mount(folder="mymodule", at="mymodule")
 except TypeError as e:
     print("refused:", str(e).split(" (")[0])
 # → refused: a ledger project names things through its db/mount rows
@@ -267,15 +267,15 @@ print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: the spec'
 # #### What the run did, piece by piece
 #
 # The run took the three creation steps, through the ledger's
-# mounts: `Dat.do.load` read the spec off the mounted file, never
+# mounts: `Dat.ns.load` read the spec off the mounted file, never
 # imported; `expand_spec` merged its base and filled its `{}`. The
 # expanded spec, `dat.name` removed and `dat.kind` set, is the memo
 # key, stored as the value's `db/keys`.
 
 # %%
 # print results
-print("SPEC:    ", Dat.do.load("mymodule.specs.table12"))
-print("EXPANDED:", Dat.manager.expand_spec(Dat.do.load("mymodule.specs.table12")))
+print("SPEC:    ", Dat.ns.load("mymodule.specs.table12"))
+print("EXPANDED:", Dat.manager.expand_spec(Dat.ns.load("mymodule.specs.table12")))
 print("DB/KEYS: ", L.at()[table12_value.subject, "db/keys"])   # the memo key
 
 # %% [markdown]
@@ -287,7 +287,7 @@ print("DB/KEYS: ", L.at()[table12_value.subject, "db/keys"])   # the memo key
 
 # %%
 # print results
-run_fn = Dat.do.load("mymodule.mult.build_table")
+run_fn = Dat.ns.load("mymodule.mult.build_table")
 print("FN:      ", repr(run_fn), " kind:", run_fn.kind, " sandboxed:", run_fn.code.sandboxed)
 print("DB/FN:   ", L.at()[table12_value.subject, "db/fn"])
 print("VERSION: ", L.at()["db/repo/q-dats/mymodule", "version"])   # db/repo/q-dats/mymodule

@@ -73,7 +73,7 @@ def make_project(root: Path, python: str = None) -> Path:
         "import sys\n"
         "from pathlib import Path\n"
         "from dvc_dat import Dat\n"
-        "Dat.do.mount(folder=str(Path(__file__).parent / 'scripts'))\n"
+        "Dat.ns.mount(folder=str(Path(__file__).parent / 'scripts'))\n"
         "if __name__ == '__main__':\n"
         "    if os.environ.get('DAT_CLI_CONFIG'):   # launched by `just run`\n"
         "        sys.exit(Dat.cli_main())\n"

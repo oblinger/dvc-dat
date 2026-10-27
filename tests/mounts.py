@@ -5,13 +5,13 @@ from pathlib import Path
 
 from dvc_dat import Dat
 
-do = Dat.do
+ns = Dat.ns
 
 HERE = Path(__file__).parent
 
-do.mount(folder=str(HERE / "test_mounted_folder" / "dat_tools_examples"))
-do.mount(folder=str(HERE / "test_mounted_folder" / "script"))
-do.mount(folder=str(HERE / "test_mounted_folder"))
+ns.mount(folder=str(HERE / "test_mounted_folder" / "dat_tools_examples"))
+ns.mount(folder=str(HERE / "test_mounted_folder" / "script"))
+ns.mount(folder=str(HERE / "test_mounted_folder"))
 
 if __name__ == "__main__":
     sys.exit(Dat.cli_main())

@@ -5,16 +5,16 @@ The core ideas of dvc_dat: dats, specs, results and the do system.
 A **dat** is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
 itself. `_result_.yaml` holds only what running it produced.
 
-`dvc_dat` has one namespace, `do`, and one run, `Dat.manager.run`:
+`dvc_dat` has one namespace, `ns`, and one run, `Dat.manager.run`:
 
 ```python
 from dvc_dat import Dat
 
-do = Dat.do   # the namespace shortcut; follows Dat.manager
+ns = Dat.ns   # the namespace shortcut; follows Dat.manager
 
 # a dotted name -> a Python object; the first call builds
 # Dat.manager from the nearest .datconfig.yaml
-template = do.load("catalog.experiment")
+template = ns.load("catalog.experiment")
 
 # fork the template, run the fork
 result = Dat.manager.run("catalog.experiment", epochs=200)
@@ -26,11 +26,11 @@ dat = Dat.load("runs/2026-09/exp")
 ## Two kinds of name
 
 **Dotted names** (`catalog.experiment`, `os.path.join`) name source code:
-templates, functions, constants. `do.load` resolves them — first against the
-names the program mounted with `do.mount(...)` (in code; `.datconfig.yaml`
+templates, functions, constants. `ns.load` resolves them — first against the
+names the program mounted with `ns.mount(...)` (in code; `.datconfig.yaml`
 holds no mounts), then by import: the longest importable
 prefix of the name is imported and the rest is `getattr`-ed. So any importable
-object has a name whether or not it was mounted, and `do.name_of(obj)` gives the
+object has a name whether or not it was mounted, and `ns.name_of(obj)` gives the
 name that loads back to it.
 
 **Slash paths** (`runs/experiment1`) name dat folders. They are relative to
@@ -135,7 +135,7 @@ spec. `merge_dicts` is the same zipper merge `dat.base` uses:
 ```python
 from dvc_dat import Dat
 
-do, merge_dicts = Dat.do, Dat.merge_dicts
+ns, merge_dicts = Dat.ns, Dat.merge_dicts
 
 # d's dat.name is its path template; increment lands beside it
 spec = merge_dicts(d.get_spec(),
@@ -144,7 +144,7 @@ spec = merge_dicts(d.get_spec(),
 Dat.create(spec=spec)
 ```
 
-Edit the dict *before* instantiating whenever you can: `do.load` a template,
+Edit the dict *before* instantiating whenever you can: `ns.load` a template,
 change it, then `Dat.create` it. There is no `fork` method; a consumer that
 wants one defines it over `merge_dicts`.
 
@@ -161,10 +161,10 @@ never by parsing a path.
 ## The manager is the world; `Dat.manager` is the default one
 
 A **world** is a `DatManager`: a list of dat folders and the namespace that
-names things in them. A manager owns its `do` — a `Do` bound to it, carrying
+names things in them. A manager owns its `ns` — a `Namespace` bound to it, carrying
 its mounts and its `load` — and everything the manager does (a
 dotted spec, `dat.base`, `{}` expansion, resolving a name to a folder, every
-run) goes through that `do` and no other. Running is the manager's own
+run) goes through that `ns` and no other. Running is the manager's own
 `m.run(...)`; its folders are its own business.
 
 ```python
@@ -172,7 +172,7 @@ from dvc_dat import Dat, DatManager
 
 # a world on a list of folders; nothing is read from disk
 m = DatManager(dat_folders=["/work/dats"])
-m.do.mount(folder="catalog", at="catalog", relative_to=root)
+m.ns.mount(folder="catalog", at="catalog", relative_to=root)
 m.run("catalog.experiment", lr=0.5)  # created and run inside m
 m.load("runs/experiment1")           # searched in m's folders
 m.expand_spec(spec)                  # dat.base merged, {} filled, through m's namespace
@@ -192,7 +192,7 @@ folder first on `sys.path`, and returns a new manager.
 `Dat.manager.run(...)`, a `Dat.load`, any use at all) fills it with
 `DatManager.load_dat_config()`. `Dat.create` / `Dat.load` trampoline to it,
 every subclass shares it (`Run.manager is Dat.manager`), and the
-module-level `do` forwards to `Dat.manager.do`, whichever manager that is.
+module-level `ns` forwards to `Dat.manager.ns`, whichever manager that is.
 Nothing in an ordinary program configures anything:
 
 ```python
@@ -204,15 +204,15 @@ Dat.manager.run("mypkg.train.baseline", lr=0.5)
 
 To replace the default world, assign it. Mounts belong to the namespace
 they were made on, so a replacement that should keep them adopts the
-default `do`, which also makes it the default:
+default `ns`, which also makes it the default:
 
 ```python
 from dvc_dat import Dat, DatManager
 
-do = Dat.do
+ns = Dat.ns
 
-Dat.manager = DatManager.load_dat_config(project_root, do=do)
-Dat.manager = Store(dat_folders=["/work"], do=do)   # a subclass
+Dat.manager = DatManager.load_dat_config(project_root, ns=ns)
+Dat.manager = Store(dat_folders=["/work"], ns=ns)   # a subclass
 ```
 
 A manager takes no class: `m.create(spec)` and `m.load(name)` build the class
@@ -227,8 +227,8 @@ manager, not `Dat`. Every run in a world goes through the manager's private
 and a ledger's dat runs land there, so a subclass of `DatManager` that
 overrides `_execute` and calls `super()._execute(dat)` wraps every run.
 
-A bare `Do()` is a namespace with no world: it mounts and loads, and a
-manager built with `do=` adopts it. It is not callable.
+A bare `Namespace()` is a namespace with no world: it mounts and loads, and a
+manager built with `ns=` adopts it. It is not callable.
 
 The command line (`just run`) needs no special handling (see
 [Command Line](cli.md)); a long-lived service that starts in one directory
@@ -259,8 +259,8 @@ URN; `Dat.load` stays a dat's, and `dat.save()` a
 dat's seal. `save_artifact` returns the artifact's
 URN, `sha256:<hex>`. **The type** is what `load_artifact` hands the payload's path
 to: a class or callable, recorded by its dotted name, or that name as a
-string — anything `do.load` resolves. A factory that cannot be imported (a
-lambda, a closure) is mounted once, `m.do.mount(value=fn, at="video.clip")`,
+string — anything `ns.load` resolves. A factory that cannot be imported (a
+lambda, a closure) is mounted once, `m.ns.mount(value=fn, at="video.clip")`,
 and named `type="video.clip"`. With no type, `load_artifact` returns the `Path`.
 Nothing is registered. **The name** is any relative path, and carries no
 type; changing what a thing is never means renaming it. A name is held once
@@ -338,13 +338,13 @@ expand = Dat.manager.expand
 # 'runs/2026-09/exp'
 expand("runs/{YYYY}-{MM}/exp")
 
-# the object do.load('svp.CONFIG') returns
+# the object ns.load('svp.CONFIG') returns
 expand("{svp.CONFIG}")
 ```
 
 - an **undotted** name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`)
   or a key of the `vars` dict you pass; anything else is a `KeyError`
-- a **dotted** name resolves through `do.load`, at create; a function is
+- a **dotted** name resolves through `ns.load`, at create; a function is
   called (`{meta.commit}`), and `{meta.tag("v", 2)}` calls it with literals
 - `{{` and `}}` are the literal braces
 - a string that is *exactly* one reference returns the referenced **object**;

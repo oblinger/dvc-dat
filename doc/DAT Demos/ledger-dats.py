@@ -200,9 +200,9 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 
 # %%
 with L.transaction(by="human:dan", why="mount the etl") as t:
-    t.update("db/mount/demo_game.etl", {"db/root": "demo_game/etl", "db/repo": "demo-game"})
+    t.ns.mount("demo_game.etl", root="demo_game/etl", repo="demo-game")   # two db/mount rows
 rev = L.at()
-dat_fn = rev.resolve("demo_game.etl.dat.dat")
+dat_fn = rev.ns.load("demo_game.etl.dat.dat")
 print("sandboxed:", dat_fn.code.sandboxed, " mount:", dat_fn.mount)     # → sandboxed: True  mount: demo_game.etl
 print("code:", dat_fn.code)     # → code: demo_game.etl@0.1.0
 
@@ -383,7 +383,7 @@ track_path.write_text(track_path.read_text()
 # so no run on it can move the `db/repo/demo-game/demo_game.etl` clock.
 
 # %%
-print("track code:", L.at().resolve("demo_game.etl.track.tracks").code)
+print("track code:", L.at().ns.load("demo_game.etl.track.tracks").code)
 # → track code: demo_game.etl@<8 hex>+dirty
 
 # %% [markdown]
@@ -394,7 +394,7 @@ git("commit", "-q", "-am", "tidy track")
 import demo_game.etl.track
 importlib.reload(demo_game.etl.track)    # sandbox workers import anew
 rev = L.at()
-print("track code:", rev.resolve("demo_game.etl.track.tracks").code)   # → track code: demo_game.etl@0.1.0
+print("track code:", rev.ns.load("demo_game.etl.track.tracks").code)   # → track code: demo_game.etl@0.1.0
 print("detections match:", detections_dat.matches(rev),
       " tracks match:", tracks_dat.matches(rev))   # → detections match: True  tracks match: False
 print("model matches:", model_dat.matches(rev))     # → model matches: False, for now

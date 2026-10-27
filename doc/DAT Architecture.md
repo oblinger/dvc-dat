@@ -11,7 +11,7 @@ every value stored by its content. The dat half is the package
 `dvc_dat`; the ledger is `dvc_dat.ledger`. Each half has a module doc:
 
 - [DAT Dat](DAT%20Modules/DAT%20Dat.md): `Dat`, `DatManager`,
-  `DatContainer`, `Do`; specs, sealing, standing, the manager.
+  `DatContainer`, `Namespace`; specs, sealing, standing, the manager.
 - [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md): `Ledger`, `Rev`,
   `Ref`, `Transaction`, `Value`, `Fn`; the fold, sealing and saving,
   the sandbox, evaluation and the dependencies.
