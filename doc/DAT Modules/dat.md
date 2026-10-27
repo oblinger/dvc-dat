@@ -24,7 +24,7 @@ DatContainer, DatManager, Do`. Part of the
   from the nearest `.datconfig.yaml` walking up from `start`, then
   `.datconfig.override.yaml`, then `DAT_FOLDERS` (one folder, not split) / `DAT_ART_FOLDER`; an
   unknown key `ValueError`; `manager:` names a subclass to build.
-- `create(spec=None, *, path=None) -> Dat`: resolve `dat.base`,
+- `create(spec=None, *, path=None) -> Dat`: merge `dat.base`,
   validate, place, expand every `{}` once, write `_spec_.yaml`; an
   existing folder follows `dat.target_exists` (`FileExistsError` by
   default); a bad spec `TypeError`.
@@ -78,7 +78,7 @@ its folder, lazily, a child's `run/` skipped.
 
 `Do`: `do(target, *args, **kwargs)` runs a callable, forks a template
 spec into a new dat and runs it, or re-runs or forks a `Dat`;
-`resolve(spec)`, `load(dotted, *, default, kind)`, `name_of(obj)`,
+`merge_bases(spec)`, `load(dotted, *, default, kind)`, `name_of(obj)`,
 `keys()`, `mount(*, folder, file, module, value, at, relative_to)`
 (`ValueError` when a mounted name would shadow an importable one).
 

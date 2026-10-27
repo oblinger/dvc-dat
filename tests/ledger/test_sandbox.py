@@ -69,7 +69,7 @@ PKG = {
             r["base"] = do.load("sbx.stage.specs.base")                # a mounted yaml
             r["literal"] = do.load("sbx.stage.runs.TABLE")["dat"]["kwargs"]
             r["fn"] = do.load("sbx.stage.runs.table").kind             # a mounted run function: its Fn
-            r["spec"] = do.resolve("sbx.stage.specs.table")["dat"]               # its base merged
+            r["spec"] = do.merge_bases("sbx.stage.specs.table")["dat"]               # its base merged
             r["expanded"] = Dat.manager.expand_spec({"n": "{sbx.stage.runs.TABLE}"})["n"]["dat"]["kwargs"]
             try:
                 do.mount(value={}, at="x")

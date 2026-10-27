@@ -136,7 +136,7 @@ class Do:
         `dat.target_exists: use` found the dat already there.
         """
         manager = self.manager
-        spec = self.resolve(copy.deepcopy(spec))
+        spec = self.merge_bases(copy.deepcopy(spec))
         path = path or Dat.get(spec, DAT_NAME, None)
         target_exists = Dat.get(spec, DAT_TARGET_EXISTS, "error")
         if target_exists == "use":
@@ -147,7 +147,7 @@ class Do:
 
     # -- specs ---------------------------------------------------------------
 
-    def resolve(self, spec: Union[Spec, str]) -> Spec:
+    def merge_bases(self, spec: Union[Spec, str]) -> Spec:
         """A spec (or the name of one) merged over its `dat.base` (a name, a spec, or a list of them, later
         entries winning), recursively; `dat.base` is dropped from the result so the
         stored spec is complete on its own."""
@@ -159,7 +159,7 @@ class Do:
         bases = base if isinstance(base, list) else [base]
         merged: Spec = {}
         for entry in bases:
-            merged = merge_dicts(merged, self.resolve(entry))
+            merged = merge_dicts(merged, self.merge_bases(entry))
         result = merge_dicts(merged, spec)
         result["dat"].pop("base", None)
         return result
@@ -654,7 +654,7 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
         return 0
     try:
         if isinstance(cmd, dict):
-            spec = merge_dicts(do.resolve(cmd), overrides)
+            spec = merge_dicts(do.merge_bases(cmd), overrides)
             result = do(spec, *fixed, **kwargs)
         elif overrides:
             return _fail(f"--set/--json need a template spec; "
