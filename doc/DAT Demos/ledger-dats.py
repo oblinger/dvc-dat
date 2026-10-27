@@ -200,8 +200,7 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 
 # %%
 with L.transaction(by="human:dan", why="mount the etl") as t:
-    t.add("db/mount/demo_game.etl", "db/root", "demo_game/etl")
-    t.add("db/mount/demo_game.etl", "db/repo", "demo-game")
+    t.update("db/mount/demo_game.etl", {"db/root": "demo_game/etl", "db/repo": "demo-game"})
 rev = L.at()
 dat_fn = rev.resolve("demo_game.etl.dat.dat")
 print("sandboxed:", dat_fn.code.sandboxed, " mount:", dat_fn.mount)     # → sandboxed: True  mount: demo_game.etl

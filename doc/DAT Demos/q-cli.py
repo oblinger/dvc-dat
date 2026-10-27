@@ -108,8 +108,7 @@ for args in (["init", "-q"], ["config", "user.name", "demo"], ["config", "user.e
 
 import mymodule.mult                              # discovery finds the checkout, the repo q-cli
 with L.transaction(by="human:dan", why="mount mymodule") as t:   # mymodule's code is the mount's: its files, hashed
-    t.add("db/mount/mymodule", "db/root", "mymodule")
-    t.add("db/mount/mymodule", "db/repo", "q-cli")
+    t.update("db/mount/mymodule", {"db/root": "mymodule", "db/repo": "q-cli"})
     t.add("db", "version", "3.1.4")
 just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True)   # writes .dat/targets.just, the declared commands
 
@@ -144,8 +143,8 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # The project is q-dats's `mymodule`, mounted on the ledger in Setup:
 #
 # ```python
-# t.add("db/mount/mymodule", "db/root", "mymodule")
-# t.add("db/mount/mymodule", "db/repo", "q-cli")
+# t.update("db/mount/mymodule",
+#          {"db/root": "mymodule", "db/repo": "q-cli"})
 # ```
 #
 # Those rows are the project's names: `mymodule/specs/table12.yaml`

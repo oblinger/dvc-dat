@@ -254,8 +254,7 @@ print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("db/mount/plane", "db/root", "plane")
-    t.add("db/mount/plane", "db/repo", "geometry")
+    t.update("db/mount/plane", {"db/root": "plane", "db/repo": "geometry"})
 
 length_fn = L.at().resolve("plane.measure.length")
 segment_value = length_fn(a=(0, 0), b=(3, 4))
