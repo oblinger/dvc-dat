@@ -333,24 +333,11 @@ print("old result's code:", segment_value.dependencies["code"], " fn:", segment_
 # %%
 far_value = L.at().run("geometry.distance", a=(0, 0), b=(6, 8))
 print("result:", far_value.obj)                       # → 10.0
-for dep_key, dep_value in sorted(far_value.dependencies.items()):
-    print(f"{dep_key:15}= {dep_value}")
-print("the code snapshot:", repr(distance_fn.code), " same snapshot:",
-      distance_fn.code.subject == far_value.dependencies["code"])
-# → the code snapshot: <Code geometry@5.3.9>  same snapshot: True
 top_id = L.at().id
 
 again_value = L.at().run("geometry.distance", a=(0, 0), b=(6, 8))
 print("same value:", again_value.subject == far_value.subject, " nothing written:",
       L.at().id == top_id)                 # → True True: a hit, nothing written
-
-# %% [markdown]
-# - `code`: the snapshot of the code the function ran from, by its
-#   subject; here the package `geometry` at version 5.3.9.
-# - `code/geometry`: the commit of the repo `geometry` it ran at.
-# - `fn`: the function's dotted name inside that snapshot.
-# - `platform`: the operating system, CPU and Python version it ran
-#   on (`darwin-arm64-py3.12`), a tag, not a file.
 
 # %% [markdown]
 # ### Splitting the run method into discrete actions
@@ -361,14 +348,14 @@ print("same value:", again_value.subject == far_value.subject, " nothing written
 # `.seal(t)` is the third. Nothing runs twice.
 
 # %%
-distance_fn = L.at().ns.load("geometry.distance")          # (1) load the function
-draft_value = distance_fn(a=(0, 0), b=(9, 12), seal=False)           # (2) run it, provenance captured, nothing kept
-print("draft:", draft_value.obj, " sealed:", draft_value.sealed)   # → 15.0 None
-print("draft ran:", draft_value.dependencies["fn"], " from:", draft_value.dependencies["code"])   # the trace rides on the draft
-with L.transaction(by="human:dan", why="keep it") as t:    # (3) put it on the ledger
+distance_fn = L.at().ns.load("geometry.distance")                   # (1) load the function
+print("fn:", repr(distance_fn))                                     # → fn: <Fn geometry.distance@5.3.9>
+draft_value = distance_fn(a=(0, 0), b=(9, 12), seal=False)          # (2) run it, provenance captured, nothing kept
+print("draft:", draft_value.obj, " sealed:", draft_value.sealed)    # → 15.0 None
+with L.transaction(by="human:dan", why="keep it") as t:             # (3) put it on the ledger
     draft_value.seal(t)
-kept_value = L.at().run("geometry.distance", a=(0, 0), b=(9, 12))    # the same call: a hit
-print("hit:", kept_value.subject == draft_value.subject)   # → True: nothing ran
+kept_value = L.at().run("geometry.distance", a=(0, 0), b=(9, 12))   # the same call: a hit
+print("hit:", kept_value.subject == draft_value.subject)            # → True: nothing ran
 
 # %% [markdown]
 # `seal=` says how far a call goes: `"get"` only looks, `False` runs
@@ -384,11 +371,12 @@ print("hit:", kept_value.subject == draft_value.subject)   # → True: nothing r
 # name and value it read. That record is its provenance.
 
 # %% [markdown]
-# ### When a name moves, a result goes stale
+# ### When a name is pointed to a new value, a result goes stale
 #
 # A result records every name it read and the value it pointed at.
-# Seal a new video under the same name and the name moves; the old
-# result no longer matches the ledger, so `run` recomputes.
+# Seal a new video under the same name and the name is pointed to
+# it; the old result no longer matches the ledger, so `run`
+# recomputes.
 
 # %%
 (repo_path / "clips.py").write_text('''\
@@ -410,16 +398,16 @@ print("opening clip:", opening_clip.frames)                 # → b'G1 wide '
 retake_video = Video(b"G1 retake, 9100 frames")
 retake_video.preds.update(game="G1", camera="wide")
 with L.transaction(by="human:dan", why="the retake") as t:
-    retake_video.seal(t, name="video/G1")   # the name moves
+    retake_video.seal(t, name="video/G1")   # video/G1 is pointed to the retake
 rev4 = L.at()
-print("opening clip still holds:", opening_clip.matches(rev4))          # → False: video/G1 moved
+print("opening clip still holds:", opening_clip.matches(rev4))          # → False: video/G1 points to the retake
 retake_clip = rev4.run("clips.clip", video="video/G1", start=0, end=8)
 print("retake clip:", retake_clip.frames)                  # → b'G1 retak'
 print("first video, by hash:", rev4.load(video_subject).frames)     # → b'G1 wide camera, 9000 frames'
 
 # %% [markdown]
-# A value never changes; a name moves. The old video and the old
-# clip stay, found by their hashes.
+# A value never changes; a name is pointed to a progression of new
+# values. The old video and the old clip stay, found by their hashes.
 
 # %% [markdown]
 # ### What a result depends on
@@ -429,9 +417,11 @@ for dep_key, dep_value in sorted(retake_clip.dependencies.items()):
     print(f"{dep_key[:28]:30}= {dep_value[:56]}")
 
 # %% [markdown]
-# - `code/geometry`: the commit of the repo the function ran from.
-# - `code`: the snapshot the function ran from, by its subject, as for
-#   the sandbox above.
+# - `code/geometry`: the commit of the repo `geometry` the function
+#   ran at.
+# - `code`: the snapshot of the code the function ran from, by its
+#   subject; here the package `clips` at its version, as for the
+#   sandbox above.
 # - `fn`: the function's dotted name inside that snapshot.
 # - `platform`: the operating system, CPU and Python version it ran
 #   on, a tag, not a file.
@@ -439,7 +429,7 @@ for dep_key, dep_value in sorted(retake_clip.dependencies.items()):
 # - `video/G1 db/alias`: the value the name `video/G1` pointed at.
 #
 # That last row is how `matches` knew the opening clip was stale: it
-# names the first video, and the name has since moved to the retake.
+# names the first video, and the name now points to the retake.
 
 # %%
 first_hash = rev4.load(video_subject).hash
@@ -455,17 +445,17 @@ print("retake clip read the retake:", retake_clip.dependencies["video/G1 db/alia
 # apart.
 
 # %%
-highlight_video = Video(b"G1 highlights, 600 frames")      # 1. make a value
+highlight_video = Video(b"G1 highlights, 600 frames")                 # 1. make a value
 highlight_video.preds.update(game="G1", camera="wide")
 
-print("sealed, hash:", highlight_video.seal()[:12])     # 2. seal it, on this machine only
-print("sealed at:", highlight_video.sealed)             # → <the seal's moment>
+print("sealed, hash:", highlight_video.seal()[:12])                   # 2. seal it, on this machine only
+print("sealed at:", highlight_video.sealed)                           # → <the seal's moment>
 try:
     highlight_video.preds["camera"] = "baseline"
 except Exception as error:
-    print("change refused:", type(error).__name__, error)    # → TypeError cannot modify a sealed value's preds
-print("G1 videos on the ledger:", L.at().values(game="G1"))   # not on the timeline yet
+    print("change refused:", type(error).__name__, error)             # → TypeError cannot modify a sealed value's preds
+print("G1 videos on the ledger:", L.at().values(game="G1"))           # not on the timeline yet
 
 with L.transaction(by="human:dan", why="keep the highlights") as t:   # 3. keep it
     highlight_video.seal(t, name="video/G1/highlights")
-print("G1 videos on the ledger:", L.at().values(game="G1"))   # now it is
+print("G1 videos on the ledger:", L.at().values(game="G1"))           # now it is
