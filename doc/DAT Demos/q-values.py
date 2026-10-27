@@ -68,10 +68,14 @@ display(SVG(filename="q-values.svg"))   # black: the parts every value has; gray
 # %%
 from demo_game.game import Video
 
+# create a new value
 video_value = Video(b"G1 wide camera, 9000 frames")
+# add preds to the value
 video_value.preds.update(game="G1", camera="wide")
+# save the value under its name
 with L.transaction(by="human:dan") as t:
     video_subject = video_value.seal(t, name="video/G1")
+
 print("video:", repr(video_value))           # → video: <Video video/G1>
 print("subject:", video_subject)             # → the sha256 of the content, 64 hex chars
 
@@ -96,10 +100,12 @@ print("same value by hash:", by_name_video.subject == by_hash_video.subject)   #
 # value's subject.
 
 # %%
+# create a second value, add its preds, save it under its name
 g2_video = Video(b"G2 wide camera, 8400 frames")
 g2_video.preds.update(game="G2", camera="wide")
 with L.transaction(by="human:dan") as t:
     g2_subject = g2_video.seal(t, name="video/G2")
+
 rev2 = L.at()
 print("camera=wide:", rev2.values(camera="wide"))           # → [<Video video/G1>, <Video video/G2>]
 print("game=G1, camera=wide:", repr(rev2.value(game="G1", camera="wide")))   # → <Video video/G1>
