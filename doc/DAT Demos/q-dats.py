@@ -304,7 +304,7 @@ print("hit:", again_value.subject == table12_value.subject,
       " nothing written:", L.at().id == top_id)   # hit: True  nothing written: True
 
 # %% [markdown]
-# ### Saving a plain dat as a value
+# ### Storing a handmade dat on the ledger
 #
 # On a ledger a dat is a value: sealed under a name, loaded back,
 # found by its preds. The hand-made `table12_dat` is sealed here; nothing
@@ -331,15 +331,21 @@ print("preds:", dict(sorted(loaded_dat.preds.items())))
 
 # %% [markdown]
 # ### Finding dats
+#
+# A dat on the ledger is found by its preds: its spec's kwargs and
+# its results. `values(kind=Dat, **preds)` is every dat whose preds
+# equal the given ones; `value(...)` the one dat, an error on none
+# or several; `select(keys, ...)` the matches as tuples of the
+# named preds. First, two more runs, n=5 and n=9, to find among.
 
 # %%
 for n in (5, 9):
     L.at().run("mymodule.specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.manager.run
-print("found:", L.at().values(kind=Dat))
-# → found: [<Dat tables/2026/table12>, <Dat table/12>, <Dat tables/2026/table12_2>, <Dat tables/2026/table12_3>]
-print("cells:", L.at().select(("n", "cells"), kind=Dat))
-# → cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: L.at().run's n=12, table/12 sealed from table12_dat, then n=5 and n=9
 
-# %% [markdown]
-# Spec kwargs and results are preds, so a query over them is an
-# ordinary ledger query.
+# %%
+# print results
+print("ALL:     ", L.at().values(kind=Dat))
+print("N=12:    ", L.at().values(kind=Dat, n=12))       # the run and the handmade table/12
+print("CELLS=81:", repr(L.at().value(kind=Dat, cells=81)))   # exactly one: the n=9 run
+print("N, CELLS:", L.at().select(("n", "cells"), kind=Dat))   # every dat, two preds each
+print("N=5:     ", L.at().select(("cells",), kind=Dat, n=5))   # one pred of the n=5 dat
