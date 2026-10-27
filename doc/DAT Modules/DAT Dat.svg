@@ -37,7 +37,7 @@
     <text x="610" y="100" font-size="23" font-weight="bold">Do</text>
     <text x="610" y="124" font-size="15" fill="#607d8b">class · manager.do, one per world</text>
     <text x="610" y="152" font-size="15">dotted name → object</text>
-    <text x="610" y="174" font-size="15">mount · load · resolve · do()</text>
+    <text x="610" y="174" font-size="15">mount · load · merge_bases · do()</text>
 
     <text x="1010" y="100" font-size="23" font-weight="bold">DatManager</text>
     <text x="1010" y="124" font-size="15" fill="#607d8b">class · a world of dats</text>

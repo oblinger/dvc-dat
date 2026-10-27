@@ -6,6 +6,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.33.0 — 2026-10-26
+
+- **`Do.resolve(spec)` becomes `Do.merge_bases(spec)` (DAT 1048).** It merges a spec (or the name of one) over its `dat.base`, recursively, and drops `base`; the new name says so and frees `resolve` for `rev.resolve(name)`, the ledger's dotted-name lookup, which is unrelated. Same on `LedgerDo`. `Dat.create`, the `Do` template fork, `x` and `rev.run` call it under the new name. **Removed, no alias:** `Do.resolve`. q-dats step 2 reads load, merge bases, expand.
+
 ## 2.32.0 — 2026-10-26
 
 - **One `k=v` grammar on every dat command line: v is JSON, else the text exactly as typed (DAT 1041).** `x`, `just run` (through `cli_main`, with or without a ledger), `--set DOTTED.KEY=VALUE`, every fixed argument, and the ledger-just recipes (`values`, `value`, `set`) read a value with `dvc_dat.do.arg_value`: `n=12` an int, `x=1.5` a float, `flag=true` a bool, `x=null` None, `ids=[1,2]` a list, `cfg={"a":1}` a dict, `k='"12"'` the string 12; anything not JSON is the string as typed, so `start=2026-01-01` is the string `"2026-01-01"` (before, a YAML date, refused by a ledger run as not JSON-encodable), `name=foo` is `"foo"`, `e=` is `""` (was None), `yes`/`no`/`~` are strings (were YAML bools / None), and `NaN`/`Infinity` are strings. `--json DOTTED.KEY=JSON` stays strict JSON. **Removed, no alias:** the YAML-scalar reading of command-line values, and the recipes' `k:=v` notation (a `k=v` whose v is JSON is that value). The recipes' `alias=TARGET` is a name, kept as typed. demo-etl passes its dates bare; ledger-just matches `span='[0, 9000]'`.

@@ -141,25 +141,27 @@ print("template:", template_spec)
 # → template: {'dat': {'base': 'mymodule.specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
 
 # %% [markdown]
-# ### 2. Expand it
+# ### 2. Merge its bases, then expand it
 #
-# `Dat.do.resolve(spec)` merges the spec over its `base:`, which it
-# drops: `kwargs` gains `start`, the spec gains `notes`.
-# `Dat.manager.expand_spec(spec)` fills every `{}`: `{YYYY}` is the
-# year, `{unique}` empty for a first folder.
+# The spec was loaded in step 1; two more steps make it complete.
+# `Dat.do.merge_bases(spec)` merges the spec over its `dat.base`,
+# which it drops: `kwargs` gains `start`, the spec gains `notes`.
+# `Dat.manager.expand_spec(spec)` then fills every `{}`: `{YYYY}` is
+# the year, `{unique}` empty for a first folder.
 
 # %%
-resolved_spec = Dat.do.resolve(template_spec)
-print("resolved:", resolved_spec)
-# → resolved: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
-expanded_spec = Dat.manager.expand_spec(resolved_spec)
+merged_spec = Dat.do.merge_bases(template_spec)
+print("merged:", merged_spec)
+# → merged: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
+expanded_spec = Dat.manager.expand_spec(merged_spec)
 print("expanded name:", expanded_spec["dat"]["name"])   # expanded name: tables/2026/table12
 
 # %% [markdown]
 # ### 3. Instantiate
 #
-# `Dat.create` does steps 1 and 2 itself, then makes the folder and
-# writes `_spec_.yaml`. It fills `{}` once, with the values the folder
+# `Dat.create` does all of that itself (loads the spec, merges its
+# bases, expands its `{}`), then makes the folder and writes
+# `_spec_.yaml`. It fills `{}` once, with the values the folder
 # got, so `{unique}` counts up when the folder is taken. Nothing runs.
 
 # %%
@@ -254,8 +256,8 @@ print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: the spec'
 # %%
 print("spec:", L.at().resolve("mymodule.specs.table12"))
 # → spec: {'dat': {'base': 'mymodule.specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
-print("resolved:", Dat.do.resolve("mymodule.specs.table12"))   # the base merged, through the ledger's mounts
-# → resolved: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
+print("merged:", Dat.do.merge_bases("mymodule.specs.table12"))   # the base merged, through the ledger's mounts
+# → merged: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
 print("db/keys:", L.at()[table12_value.subject, "db/keys"])   # the memo key
 # → db/keys: {'dat': {'do': 'mymodule.mult.build_table', 'kind': 'dvc_dat.core.Dat', 'kwargs': {'n': 12, 'start': 1}}, 'notes': 'shared defaults'}
 

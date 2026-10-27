@@ -214,7 +214,7 @@ A namespace of dotted names and a runner of dats, bound to the `DatManager` whos
 | --- | --- |
 | [manager](#^do-manager) | The world this namespace belongs to |
 | [__call__](#^--call--) | Run a callable, a template spec, or a dat |
-| [resolve](#^resolve) | A spec merged over its `dat.base` |
+| [merge_bases](#^merge-bases) | A spec merged over its `dat.base` |
 | [load](#^do-load) | The object a dotted name names |
 | [name_of](#^name-of) | The dotted name that loads back to an object |
 | [keys](#^keys) | Every mounted base name |
@@ -226,8 +226,8 @@ A namespace of dotted names and a runner of dats, bound to the `DatManager` whos
 **__call__**`(target: str | dict | Dat | Callable, *args, **kwargs) -> Any`
     Run `target`, a name first loaded through `load`. A callable is called with `args` and `kwargs`. A template spec is forked: `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key, the new spec creates a dat (`dat.target_exists: use` returns the existing one unrun), and that dat runs through `manager.execute` with no call-site arguments. A `Dat` re-runs in place with no arguments, which a sealed dat refuses, and with arguments forks a new dat from its spec that lands beside it (`target_exists` `error` becomes `increment`). Returns the run's value, or the dat when the spec has no `dat.do`. Every error is re-raised as `Exception("In <target>")` chained from the original. See [The spec is the record](#The%20spec%20is%20the%20record). ^--call--
 
-**resolve**`(spec: dict | str) -> dict`
-    A spec, or the name of one, merged over its `dat.base` (a name, a spec, or a list of them, later entries winning), recursively, with `dat.base` dropped from the result so the spec stands on its own. ^resolve
+**merge_bases**`(spec: dict | str) -> dict`
+    A spec, or the name of one, merged over its `dat.base` (a name, a spec, or a list of them, later entries winning), recursively, with `dat.base` dropped from the result so the spec stands on its own. ^merge-bases
 
 **load**`(dotted_name: str, *, default: Any = <required>, kind: Type | None = None) -> Any`
     The object `dotted_name` names: the longest mounted prefix first (values, modules, files, folders; a `.py`, `.yaml` or `.json` mount's contents as loaded, a string starting `yaml` parsed as YAML), else the longest importable prefix, imported, with `getattr` for the rest. Dict results are deep copies. With nothing found the `ImportError`, `AttributeError` or `KeyError` propagates unless `default` is given, which is also returned for a `None` result. `kind` makes a result of another type `TypeError`. ^do-load

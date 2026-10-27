@@ -12,7 +12,7 @@ literal (``NAME = {...}``) its value. A name under no mount is imported, and a
 itself.
 
 ``LedgerDo`` is ``Dat.manager.do`` in a project whose ``.datconfig.yaml`` names
-a ledger: the ``Do`` interface (``load``, ``resolve``, ``{}`` expansion, the
+a ledger: the ``Do`` interface (``load``, ``merge_bases``, ``{}`` expansion, the
 ``dat.do`` lookup in ``execute``) answered from these mounts, at the head, or at
 the rev it was made for. Its ``mount`` is refused: in a ledger project the mounts
 are rows.

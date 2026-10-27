@@ -731,7 +731,7 @@ class DatManager:
         *,
         path: Union[str, Path, None] = None,
     ) -> "Dat":
-        """Create a dat, as the class its `dat.kind` names: resolve `dat.base`,
+        """Create a dat, as the class its `dat.kind` names: merge `dat.base`,
         validate, place it, write `_spec_.yaml`.
 
         `spec` may be a dict or a dotted name loaded through the do-system.  The
@@ -793,7 +793,7 @@ class DatManager:
             spec = self.do.load(spec)
         if not isinstance(spec, dict):
             raise TypeError(f"Dat.create: spec must be a dict or a dotted name, not {spec!r}")
-        spec = self.do.resolve(deepcopy(spec))
+        spec = self.do.merge_bases(deepcopy(spec))
         if not isinstance(spec.setdefault("dat", {}), dict):
             raise TypeError(f"Dat.create: spec['dat'] is a mapping, got {spec['dat']!r}")
         return spec
