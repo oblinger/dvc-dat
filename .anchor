@@ -4,7 +4,7 @@ traits:
 page: doc/DAT Track/DAT.md
 backlog: doc/DAT Track/DAT Backlog/DAT Backlog.md
 inbox: doc/DAT Track/DAT Inbox.md
-agent: DAT
+agent: SVP
 stones:
   pebbles:
     member: titled
