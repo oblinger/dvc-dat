@@ -434,6 +434,23 @@ except TypeError as e:
     print("TypeError:", e)               # db/doc differs
 
 # %% [markdown]
+# `t.update(s, {...})` is an `add` per key of the record: it reads
+# nothing and retracts nothing, so it takes no `lock=`, and `db/`
+# keys go in as `add` takes them. Where `t[s] = {...}` is closed
+# world, `t.update` is open world: what the dict omits stays.
+
+# %%
+with L.transaction(by="human:dan") as t:    # no lock=: nothing is read
+    t.update("game/G3", {"court": "west"})
+print("game/G3:", t.rev["game/G3"])
+# → game/G3: {'home': 'G2', 'away': 'G5', 'date': '2026-10-14',
+#    'court': 'west'}
+
+# %% [markdown]
+# Notice `home`, `away` and `date` stayed; `t["game/G3"] =
+# {"court": "west"}` would have retracted all three.
+
+# %% [markdown]
 # `t[s, p] = o` writes `one` predicates only; a record write
 # `t[s] = {...}` takes a list for a `many` key. Notice the refusal
 # names the predicate's cardinality.

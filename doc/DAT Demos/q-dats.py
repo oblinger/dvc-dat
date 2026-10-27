@@ -244,7 +244,7 @@ print(".datconfig.yaml:", Path(".datconfig.yaml").read_text().splitlines())
 # → .datconfig.yaml: ['dat_folders: data', 'ledger: .dat/ledger']
 import mymodule                      # discovery finds the checkout, the repo q-dats
 with L.transaction(by="human:dan", why="mount mymodule") as t:
-    t.update("db/mount/mymodule", {"db/root": "mymodule", "db/repo": "q-dats"})   # the folder the prefix names, in this repo's checkout
+    t.update("db/mount/mymodule", {"db/root": "mymodule", "db/repo": "q-dats"})   # an add per key: the folder the prefix names, in this repo's checkout
 try:
     Dat.do.mount(folder="mymodule", at="mymodule")
 except TypeError as e:
