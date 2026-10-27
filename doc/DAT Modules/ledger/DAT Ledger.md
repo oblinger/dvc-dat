@@ -16,7 +16,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Rev         | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [resolve](#^resolve), [run](#^run)                                                      |
 | Ref         | [rev](#^rev), [subject](#^subject), [name](#^name), [aliases](#^aliases), [hash](#^hash), [type](#^type), [preds](#^preds), [sealed_at](#^sealed-at), [load](#^ref-load)                                                                                                                                   |
 | Row         | [rev](#^row-rev), [subject](#^row-subject), [predicate](#^predicate), [object](#^object), [added](#^added)                                                                                                                                                                                                 |
-| Transaction | [tx](#^transaction-tx), [previous_rev](#^previous-rev), [rev](#^transaction-rev), [add](#^add), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--)                                                                                                                                       |
+| Transaction | [tx](#^transaction-tx), [previous_rev](#^previous-rev), [rev](#^transaction-rev), [add](#^add), [update](#^update), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--)                                                                                                                   |
 | Value       | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [sealed](#^sealed), [hash](#^value-hash), [dependencies](#^dependencies), [Dependencies](#^value-dependencies), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
 | Value.Blob  | [obj](#^obj)                                                                                                                                                                                                                                                                                               |
 | Value.Table | [table](#^table-table)                                                                                                                                                                                                                                                                                     |
@@ -201,7 +201,7 @@ A named tuple encoding a single row in the ledger: revision, subject, predicate,
 
 
 ## Transaction Interface
-The write set of one `with L.transaction(...) as t:` block; it becomes exactly one revision on exit, or nothing. `add` and `remove` append rows and read nothing; `v.seal(t)` seals a value into it; the bracket forms are helpers over `add` and `remove`. A transaction has a revision's read operators through `previous_rev`, bound to the previous revision; it exists only under `lock=`, because an unlocked transaction has no well-defined previous revision (another writer may commit between open and exit). The helpers that read and then write (`t[s] = {...}`, `del`, `bump`) read through it, so they need `lock=`; unlocked they raise `Unlocked` and write nothing. Whatever must see the transaction's own rows is checked at commit, inside the write lock. Entered once; a verb used outside the block is `RuntimeError`.
+The write set of one `with L.transaction(...) as t:` block; it becomes exactly one revision on exit, or nothing. `add`, `update` and `remove` append rows and read nothing; `v.seal(t)` seals a value into it; the bracket forms are helpers over `add` and `remove`. A transaction has a revision's read operators through `previous_rev`, bound to the previous revision; it exists only under `lock=`, because an unlocked transaction has no well-defined previous revision (another writer may commit between open and exit). The helpers that read and then write (`t[s] = {...}`, `del`, `bump`) read through it, so they need `lock=`; unlocked they raise `Unlocked` and write nothing. Whatever must see the transaction's own rows is checked at commit, inside the write lock. Entered once; a verb used outside the block is `RuntimeError`.
 
 | Transaction | |
 | --- | --- |
@@ -209,6 +209,7 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 | [previous_rev](#^previous-rev) | The previous revision, the top while `lock=` holds |
 | [rev](#^transaction-rev) | The revision the exit wrote |
 | [add](#^add) | Append an add row |
+| [update](#^update) | An add per key of a record |
 | [__setitem__](#^--setitem--) | Assign a predicate, or a whole record |
 | [remove](#^remove) | Append a remove row |
 | [__delitem__](#^--delitem--) | Retract a predicate, or every user predicate |
@@ -224,6 +225,9 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 
 **add**`(subject: str, predicate: str, object) -> None`
     One add row. `object` is a `str`, a JSON `dict` or `list`, or a `Ref` to a sealed value; a `Value` is `TypeError` naming `seal`; a bare number, bool or `None` is `TypeError` (a number is its string). `predicate == "db/value"` is `TypeError`: only a seal writes it. ^add
+
+**update**`(subject: str, record: dict) -> None`
+    An `add` per key of `record`, nothing else: a `list` under a `many` predicate adds each element, any other value is one row. It reads nothing and retracts nothing, so it needs no lock; `db/` keys are taken as `add` takes them (`db/value` is `TypeError`), so `t.update("db/mount/pkg", {"db/root": "pkg", "db/repo": "r"})` writes a mount. A non-`dict` record or a key that is not a non-empty `str` is `TypeError`, and a refused record writes no row. Contrast `t[s] = {...}`, which makes the rows equal. ^update
 
 **__setitem__**`(key, value) -> None`
     `t[s, p] = o` is `add` on a `one` predicate and needs no lock; a `many` or `db/` predicate is `TypeError`. `t[s] = {...}` makes the subject's user rows equal to the dict at the next revision, reading what the subject holds through `previous_rev`, so it needs `lock=` (`Unlocked` without); `t[s] = t.previous_rev[s]` writes nothing. Brackets take exact subjects; a glob is `TypeError`. ^--setitem--

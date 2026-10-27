@@ -451,6 +451,29 @@ class Transaction:
             raise TypeError("a db/alias row's object is the subject it names, a str")
         self._ops.append(_Op(subject, predicate, o, True))
 
+    def update(self, subject: str, record: Dict[str, Any]) -> None:
+        """``t.update(s, {p: o, ...})``: an ``add`` per key of ``record``, nothing else (DAT 1050). A list
+        under a many predicate adds each element; any other value is one row. No read of the previous
+        revision, no retraction, so no ``lock=``; ``db/`` keys are taken as ``add`` takes them. Contrast
+        ``t[s] = {...}``, which makes the rows equal (retracts what the dict omits, needs ``lock=``) and
+        refuses ``db/`` keys. ``t.update("db/mount/pkg", {"db/root": "pkg", "db/repo": "r"})`` is a mount."""
+        self._open("update")
+        _name(subject, "subject")
+        if not isinstance(record, dict):
+            raise TypeError(f"update takes a dict record, not {type(record).__name__}")
+        for p in record:
+            if not isinstance(p, str) or not p:
+                raise TypeError(f"a record key is a non-empty str, not {p!r}")
+        mark = len(self._ops)
+        try:
+            for p, o in record.items():
+                many = isinstance(o, list) and self._card_now(p) == "many"
+                for m in (o if many else [o]):
+                    self.add(subject, p, m)
+        except BaseException:
+            del self._ops[mark:]                    # a refused key writes none of the record
+            raise
+
     def remove(self, subject: str, predicate: str, object: Any) -> None:
         """Append one remove row: out of the set on a many predicate, the tombstone on a one predicate."""
         self._open("remove")

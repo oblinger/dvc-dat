@@ -264,6 +264,38 @@ def test_bracket_many_and_glob_refusals(L):
             t["g*", "x"] = "y"
 
 
+# -- update: an add per key (DAT 1050) ---------------------------------------------------------------
+
+def test_update_adds_a_row_per_key_and_retracts_nothing(L):
+    write(L, ("db/pred/o", "db/cardinality", "many"))
+    with L.transaction(by="t") as t:
+        t.update("g", {"home": "a", "date": "d", "o": ["x", "y"]})
+    assert t.rev["g", "home"] == "a" and t.rev["g", "date"] == "d"
+    assert t.rev.all("g", "o") == ["x", "y"]
+    with L.transaction(by="t") as t:                        # no lock=: nothing is read
+        t.update("g", {"home": "b"})
+    assert t.rev["g", "home"] == "b" and t.rev["g", "date"] == "d"
+    assert t.rev.all("g", "o") == ["x", "y"]
+    with L.transaction(by="t") as t:
+        t.update("g", {"o": "z"})                           # one element of a many pred
+    assert t.rev.all("g", "o") == ["x", "y", "z"]
+
+
+def test_update_takes_db_keys_as_add_does_and_refuses_bad_records(L):
+    with L.transaction(by="t") as t:
+        t.update("db/mount/pkg", {"db/root": "pkg", "db/repo": "r"})
+    assert t.rev["db/mount/pkg"] == {"db/root": "pkg", "db/repo": "r"}
+    for record in ({"db/value": "x"}, {"db/alias": ["a"]}, ["p", "o"], {"": "o"}, {1: "o"}):
+        with pytest.raises(TypeError):
+            with L.transaction(by="t") as t:
+                t.update("g2", record)
+    with L.transaction(by="t") as t:
+        with pytest.raises(TypeError, match="db/value"):
+            t.update("g2", {"p": "o", "db/value": "x"})
+        t.update("g2", {"q": "o"})
+    assert t.rev["g2"] == {"q": "o"}                        # the refused record wrote no row
+
+
 # -- db/type (Q35, A36) ---------------------------------------------------------------------------
 
 def test_db_type_checked_at_commit_and_on_strict_reads(L):

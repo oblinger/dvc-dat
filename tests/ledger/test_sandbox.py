@@ -661,6 +661,14 @@ def test_resolve_hands_back_a_dict_an_fn_or_the_object(sbx):
     assert "sbx.stage.runs" not in sys.modules
 
 
+def test_update_writes_a_mount_that_resolve_sees(sbx):
+    L, _repo = sbx
+    with L.transaction(by="t") as t:
+        t.update("db/mount/flat2", {"db/root": "flat", "db/repo": "sbx-repo"})
+    f = L.at().resolve("flat2.calc.area")
+    assert f.code.sandboxed and f.mount == "flat2"
+
+
 def test_a_mounted_dat_run_draft_and_transaction(sbx, world):
     L, _repo = sbx
     d = L.at().run(RUN, n=4, seal=False)
