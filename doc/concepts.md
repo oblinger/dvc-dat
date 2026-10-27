@@ -175,7 +175,7 @@ m = DatManager(dat_folders=["/work/dats"])
 m.do.mount(folder="catalog", at="catalog", relative_to=root)
 m.do("catalog.experiment", lr=0.5)   # created and run inside m
 m.load("runs/experiment1")           # searched in m's folders
-m.expand_spec(spec)                  # {} through m's namespace
+m.expand_spec(spec)                  # dat.base merged, {} filled, through m's namespace
 ```
 
 The constructor is keyword-only and `dat_folders` is a required list: all are

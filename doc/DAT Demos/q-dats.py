@@ -17,10 +17,10 @@
 # > carry it on their own)
 # >
 # > A dat is a folder made from a spec, a recursive dict of
-# > parameters. Dat creation is four steps: look up the spec, merge
-# > its base, expand its `{}`, instantiate the Dat and its folder;
-# > each run by hand, the last producing the dat. Then `Dat.create`,
-# > the shorthand doing all four in one call. Then `Dat.do`, which
+# > parameters. Dat creation is three steps: look up the spec,
+# > expand it (merge its base, fill its `{}`), instantiate the Dat
+# > and its folder; each run by hand, the last producing the dat.
+# > Then `Dat.create`, the shorthand doing all three in one call. Then `Dat.do`, which
 # > runs a dat. Then a ledger: `L.at().run` is a run remembered, its
 # > spec the memo key, the same spec asked again found, not run; a
 # > dat sealed as a value; dats found by their preds.
@@ -125,30 +125,26 @@ show("q-dats")
 # %% [markdown]
 # ## Dat creation
 #
-# A dat is created in four steps:
+# A dat is created in three steps:
 #
 # 1. **Look up** its spec by name: `Dat.do.load(name)` is the object
 #    a dotted name names, here the spec file's dict as written.
-# 2. **Merge** it with its base spec: `Dat.do.merge_bases(spec)`
-#    merges the spec over its `dat.base`, which it drops.
-# 3. **Expand** the template variables: `Dat.manager.expand_spec(spec)`
-#    fills every `{}`; `{YYYY}` is the year, `{unique}` empty.
-# 4. **Instantiate** it: `Dat.create(spec=...)` is the Dat object,
-#    its folder made and `_spec_.yaml` written. Nothing runs.
+# 2. **Expand** it: `Dat.manager.expand_spec(spec)` merges the spec
+#    over its `dat.base`, which it drops, then fills every template
+#    variable `{}`; `{YYYY}` is the year, `{unique}` empty.
+# 3. **Instantiate** it: `Dat.create(spec=expanded_spec)` is the Dat
+#    object, its folder made and `_spec_.yaml` written. Nothing runs.
 
 # %%
-spec = Dat.do.load("mymodule.specs.table12")          # 1. the spec as written
-merged_spec = Dat.do.merge_bases(spec)                # 2. dat.base merged in
-expanded_spec = Dat.manager.expand_spec(merged_spec)  # 3. every {…} filled
-table12_dat = Dat.create(spec=expanded_spec)          # 4. the Dat and its folder
+spec = Dat.do.load("mymodule.specs.table12")    # 1. the spec as written
+expanded_spec = Dat.manager.expand_spec(spec)   # 2. dat.base merged in, every {…} filled
+table12_dat = Dat.create(spec=expanded_spec)    # 3. the Dat and its folder
 
 # %%
 table12_path = Path(table12_dat.get_path())
 print("spec:", spec)
 # → spec: {'dat': {'base': 'mymodule.specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
-print("merged:", merged_spec)   # base: gone, kwargs gains start, the spec gains notes
-# → merged: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
-print("expanded:", expanded_spec)   # name: filled
+print("expanded:", expanded_spec)   # base: gone, kwargs gains start, notes appears, name: filled
 # → expanded: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/2026/table12', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
 print("dat:", repr(table12_dat))   # dat: <Dat: tables/2026/table12>
 print("files:", sorted(os.listdir(table12_path)))   # files: ['_spec_.yaml']
@@ -156,14 +152,14 @@ print("_spec_.yaml:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_tex
 # _spec_.yaml: the expanded spec, plus kind: dvc_dat.core.Dat
 
 # %% [markdown]
-# ## `Dat.create`, the four steps in one call
+# ## `Dat.create`, the three steps in one call
 #
 # `Dat.create(spec=name)` is the shorthand: it looks the spec up,
-# merges its base, expands its `{}` and instantiates the dat. Nothing
-# runs.
+# expands it (base merged, `{}` filled) and instantiates the dat.
+# Nothing runs.
 
 # %%
-shorthand_dat = Dat.create(spec="mymodule.specs.table12")   # steps 1-4
+shorthand_dat = Dat.create(spec="mymodule.specs.table12")   # steps 1-3
 shorthand_path = Path(shorthand_dat.get_path())
 print("dat:", repr(shorthand_dat))   # dat: <Dat: tables/2026/table12_2>
 print("manual _spec_.yaml:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_text(), "    "))
@@ -176,7 +172,7 @@ print("shorthand _spec_.yaml:\n" + textwrap.indent((shorthand_path / "_spec_.yam
 # `table12` is taken, so `{unique}` counts up to `_2`, and
 # `_spec_.yaml` keeps `name:` as the template. By hand,
 # `expand_spec` sees no folder, so `{unique}` is always empty and
-# `name:` is filled once; were `tables/2026/table12` taken, step 4
+# `name:` is filled once; were `tables/2026/table12` taken, step 3
 # would raise `FileExistsError` instead of counting up.
 
 # %% [markdown]
@@ -243,7 +239,7 @@ except TypeError as e:
 # %% [markdown]
 # `L.at().run(name)` is a run remembered on the ledger: the result
 # found if this code computed it before, else run and sealed as the
-# memo entry. One call creates the dat in the four steps, runs it,
+# memo entry. One call creates the dat in the three steps, runs it,
 # and remembers it.
 
 # %%
@@ -262,8 +258,8 @@ print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: the spec'
 # %%
 print("spec:", L.at().resolve("mymodule.specs.table12"))
 # → spec: {'dat': {'base': 'mymodule.specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
-print("merged:", Dat.do.merge_bases("mymodule.specs.table12"))   # the base merged, through the ledger's mounts
-# → merged: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
+print("expanded:", Dat.manager.expand_spec(Dat.do.load("mymodule.specs.table12")))   # base merged and {} filled, through the ledger's mounts
+# → expanded: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/2026/table12', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
 print("db/keys:", L.at()[table12_value.subject, "db/keys"])   # the memo key
 # → db/keys: {'dat': {'do': 'mymodule.mult.build_table', 'kind': 'dvc_dat.core.Dat', 'kwargs': {'n': 12, 'start': 1}}, 'notes': 'shared defaults'}
 

@@ -55,7 +55,7 @@ A world of dats and artifacts: a list of dat folders (all searched by name, the 
 | [code_of](#^code-of)                     | A function's branch, commit and dirty flag           |
 | [exists](#^exists)                       | Is a dat or an artifact under this name or URN?      |
 | [expand](#^expand)                       | The `{}` expander, through this `do`                 |
-| [expand_spec](#^expand-spec)             | `expand` over every string in a spec                 |
+| [expand_spec](#^expand-spec)             | Merge `dat.base`, then `expand` every string         |
 
 **do**`: Do`
     This world's namespace and runner; the only public attribute. `m.do.mount(...)` names things in it, `m.do(target, ...)` runs them here. ^do
@@ -109,7 +109,7 @@ A world of dats and artifacts: a list of dat folders (all searched by name, the 
     The `{}` expander: built-ins, then `vars`, then a dotted name through this `do` — called when it is a function or method, and `{a.b(1, k=2)}` calls it with literal arguments; a class or callable object is not called without parentheses. A string that is one reference returns the object itself. ^expand
 
 **expand_spec**`(spec: Any, vars: dict | None = None) -> Any`
-    `expand` over every string in a nested dict or list; returns a copy. ^expand-spec
+    A copy of `spec` merged over its `dat.base` chain (a name, a spec, or a list of them, later entries winning, bases named through this `do`), recursively, with `dat.base` dropped, then with every string value expanded as `expand` does; keys are left alone. A spec that is not a dict has no bases and is only expanded. `create` stores what this returns, except `dat.name`. ^expand-spec
 
 
 

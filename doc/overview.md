@@ -122,7 +122,7 @@ Dat.get(x, "a.b.c")      # 1
 | Function | Description |
 |----------|-------------|
 | `Dat.manager.expand(TEXT, vars=None)` | Resolve the `{}` references in one string |
-| `Dat.manager.expand_spec(SPEC, vars=None)` | Resolve them throughout a spec tree |
+| `Dat.manager.expand_spec(SPEC, vars=None)` | Merge the spec's `dat.base`, then resolve them throughout it |
 
 See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
 

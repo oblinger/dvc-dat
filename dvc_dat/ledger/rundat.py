@@ -60,7 +60,7 @@ def memo_key(rev: "Rev", ns: "LedgerDo", target: Any, obj: Any,
         obj = {"dat": {"do": target}}
     if not isinstance(obj, dict):
         raise TypeError(f"run: {target!r} is {type(obj).__name__}, not a spec or a function")
-    spec = ns.merge_bases(copy.deepcopy(obj))
+    spec = ns._merge_bases(copy.deepcopy(obj))
     spec = ns._fork_spec(spec, (), kwargs)
     if not isinstance(spec.setdefault("dat", {}), dict):
         raise TypeError(f"run: spec['dat'] is a mapping, got {spec['dat']!r}")

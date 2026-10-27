@@ -133,7 +133,7 @@ A world of dats: the dat folders searched by name (the first is where new dats a
 | [load_artifact](#^datmanager-load-artifact) | An artifact only, by name or URN |
 | [reindex](#^reindex) | Rebuild the index from the folders |
 | [expand](#^expand) | Expand `{}` references through this world |
-| [expand_spec](#^expand-spec) | Expand every string in a spec through this world |
+| [expand_spec](#^expand-spec) | Merge a spec's `dat.base`, then expand every string, through this world |
 
 **__init__**`(*, dat_folders: list[str], art_folder: str | None = None, index: str | None = None, do: Do | None = None, verify: bool = False)`
     A world on `dat_folders`, searched in order, the first written to; `art_folder` holds the artifacts, and with none this world holds no artifacts. `index` is the index file, default `_index_.json` in the artifact folder, else in the first dat folder. `do` adopts an existing namespace with its mounts, and adopting the default world's `do` makes this manager the default world; with none the manager builds a fresh `Do`. Every manager mounts `dvc_dat.dat_tools` at `dt`. `verify` sets the default of every load's `verify`. Reads nothing from disk. A string for `dat_folders` is `TypeError`, an empty list `ValueError`, an artifact folder nested with a dat folder `ValueError`, a non-bool `verify` `TypeError`. ^--init--
@@ -187,7 +187,7 @@ A world of dats: the dat folders searched by name (the first is where new dats a
     Expand the `{}` references in `text`, dotted names resolved through this manager's `do`; the module function `dvc_dat.core.expand` with this world's resolver. A text that is exactly one reference returns the object itself. ^expand
 
 **expand_spec**`(spec: Any, vars: Dict[str, Any] | None = None) -> Any`
-    A copy of `spec` with every string value expanded as `expand` does; keys are left alone. ^expand-spec
+    A copy of `spec` merged over its `dat.base` chain (a name, a spec, or a list of them, later entries winning, bases named through this `do`), recursively, with `dat.base` dropped, then with every string value expanded as `expand` does; keys are left alone. A spec that is not a dict has no bases and is only expanded. `create` stores what this returns, except `dat.name`. ^expand-spec
 
 
 
@@ -214,7 +214,6 @@ A namespace of dotted names and a runner of dats, bound to the `DatManager` whos
 | --- | --- |
 | [manager](#^do-manager) | The world this namespace belongs to |
 | [__call__](#^--call--) | Run a callable, a template spec, or a dat |
-| [merge_bases](#^merge-bases) | A spec merged over its `dat.base` |
 | [load](#^do-load) | The object a dotted name names |
 | [name_of](#^name-of) | The dotted name that loads back to an object |
 | [keys](#^keys) | Every mounted base name |
@@ -225,9 +224,6 @@ A namespace of dotted names and a runner of dats, bound to the `DatManager` whos
 
 **__call__**`(target: str | dict | Dat | Callable, *args, **kwargs) -> Any`
     Run `target`, a name first loaded through `load`. A callable is called with `args` and `kwargs`. A template spec is forked: `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key, the new spec creates a dat (`dat.target_exists: use` returns the existing one unrun), and that dat runs through `manager.execute` with no call-site arguments. A `Dat` re-runs in place with no arguments, which a sealed dat refuses, and with arguments forks a new dat from its spec that lands beside it (`target_exists` `error` becomes `increment`). Returns the run's value, or the dat when the spec has no `dat.do`. Every error is re-raised as `Exception("In <target>")` chained from the original. See [The spec is the record](#The%20spec%20is%20the%20record). ^--call--
-
-**merge_bases**`(spec: dict | str) -> dict`
-    A spec, or the name of one, merged over its `dat.base` (a name, a spec, or a list of them, later entries winning), recursively, with `dat.base` dropped from the result so the spec stands on its own. ^merge-bases
 
 **load**`(dotted_name: str, *, default: Any = <required>, kind: Type | None = None) -> Any`
     The object `dotted_name` names: the longest mounted prefix first (values, modules, files, folders; a `.py`, `.yaml` or `.json` mount's contents as loaded, a string starting `yaml` parsed as YAML), else the longest importable prefix, imported, with `getattr` for the rest. Dict results are deep copies. With nothing found the `ImportError`, `AttributeError` or `KeyError` propagates unless `default` is given, which is also returned for a `None` result. `kind` makes a result of another type `TypeError`. ^do-load

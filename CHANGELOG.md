@@ -6,6 +6,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.34.0 — 2026-10-26
+
+- **`Dat.manager.expand_spec` merges `dat.base`, then fills every `{…}` (DAT 1048).** One expansion, never one kind without the other: `expand_spec(spec, vars=None)` merges the spec over its `dat.base` chain (names, specs or a list, later entries winning, recursively, bases named through the manager's `do`, so through the ledger's mounts in a ledger project), drops `dat.base`, then expands every string. A spec that is not a dict is only expanded. `Dat.create`, the `Do` template fork, `x` and `rev.run` merge exactly as before. This returns `expand_spec` to covering bases: in 1.x `do.expand_spec(spec)` *was* the base merge, which 2.0 renamed `resolve_base`, 2.33 `merge_bases`. **Removed, no alias:** `Dat.do.merge_bases` (and `LedgerDo.merge_bases`); use `Dat.manager.expand_spec`. The module function `dvc_dat.core.expand_spec` stays the pure `{…}` filler. q-dats § Dat creation reads load, expand, create.
+
 ## 2.33.0 — 2026-10-26
 
 - **`Do.resolve(spec)` becomes `Do.merge_bases(spec)` (DAT 1048).** It merges a spec (or the name of one) over its `dat.base`, recursively, and drops `base`; the new name says so and frees `resolve` for `rev.resolve(name)`, the ledger's dotted-name lookup, which is unrelated. Same on `LedgerDo`. `Dat.create`, the `Do` template fork, `x` and `rev.run` call it under the new name. **Removed, no alias:** `Do.resolve`. q-dats step 2 reads load, merge bases, expand.

@@ -69,7 +69,7 @@ PKG = {
             r["base"] = do.load("sbx.stage.specs.base")                # a mounted yaml
             r["literal"] = do.load("sbx.stage.runs.TABLE")["dat"]["kwargs"]
             r["fn"] = do.load("sbx.stage.runs.table").kind             # a mounted run function: its Fn
-            r["spec"] = do.merge_bases("sbx.stage.specs.table")["dat"]               # its base merged
+            r["spec"] = Dat.manager.expand_spec(do.load("sbx.stage.specs.table"))["dat"]  # base merged, {…} filled
             r["expanded"] = Dat.manager.expand_spec({"n": "{sbx.stage.runs.TABLE}"})["n"]["dat"]["kwargs"]
             try:
                 do.mount(value={}, at="x")
@@ -696,7 +696,7 @@ def test_a_sandboxed_dat_body_names_through_the_ledger_mounts(sbx, world):
     r = L.at().run({"dat": {"do": "sbx.stage.runs.names"}}).get_results()
     assert r["kind"] == "LedgerDo" and r["mount"] is True
     assert r["base"] == {"dat": {"kwargs": {"n": 3}}} and r["literal"] == {"n": 3} and r["fn"] == "dat"
-    assert r["spec"] == {"kwargs": {"n": 3}, "name": "tables/y{unique}", "do": "sbx.stage.runs.table"}
+    assert r["spec"] == {"kwargs": {"n": 3}, "name": "tables/y", "do": "sbx.stage.runs.table"}
     assert r["expanded"] == {"n": 3}
     assert "sbx.stage.runs" not in sys.modules
 
