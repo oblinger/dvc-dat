@@ -2,14 +2,14 @@
 # A stand-in for a project's own recipes (F447 Q4 (A)), imported by the demo
 # project's justfile beside dvc_dat.just, which holds `run`, the one way to run.
 # Every recipe runs in the directory it is invoked from, so `Ledger()` walks up
-# from there (or reads DAT_LEDGER). Keys and preds: `k=v` a string, `k:=v` JSON.
+# from there (or reads DAT_LEDGER). Keys and preds: `k=v`, v JSON, else the text as typed.
 
 set positional-arguments
 
 python := env_var_or_default("PYTHON", "python3")
 recipes := source_directory() / "ledger_recipes.py"
 
-# the values matching k=v / k:=v preds (kind=<short class name> narrows)
+# the values matching k=v preds (kind=<short class name> narrows)
 [no-cd]
 values *args:
     @{{python}} "{{recipes}}" values "$@"
@@ -29,7 +29,7 @@ history subject:
 why name *args:
     @{{python}} "{{recipes}}" why "$@"
 
-# rows on a subject: k=v a fact, k:=v JSON, alias=TARGET the name's value (a hash prefix is expanded)
+# rows on a subject: k=v a fact, alias=TARGET the name's value (a hash prefix is expanded)
 [no-cd]
 set subject *args:
     @{{python}} "{{recipes}}" set "$@"

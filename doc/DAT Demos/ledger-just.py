@@ -36,9 +36,9 @@
 # >    to list by; `bump` edits a module's `__version__` in its source,
 # >    or moves the ledger's own version (a release).
 # >
-# > A predicate on the command line is `k=v` (v a string) or `k:=v`
-# > (v JSON: a number, a list), the same two spellings `just` itself
-# > uses. The example data is one game, its video and two cuts of it;
+# > A predicate on the command line is `k=v`: v is JSON when it parses
+# > (a number, a list), else the text as typed (`G1`, `1.5.3`), the one
+# > grammar `just run` uses too. The example data is one game, its video and two cuts of it;
 # > the verbs are the same for any values. Each section: the shell line and
 # > its output, one sentence saying what the verb does, then the API
 # > call it wraps.
@@ -241,16 +241,17 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # 1.5.3 cut `just run` re-derived; and the dats the model run made.
 
 # %%
-# !just values span:='[0, 9000]'
+# !just values span='[0, 9000]'
 # → video/G1   game=G1 camera=wide span=[0, 9000]
 
 # %% [markdown]
 # The same listing, matched on a JSON-valued pred: it is
 # `L.at().values(span=[0, 9000])`.
 #
-# `k:=v` is JSON, so `span:='[0, 9000]'` is the list a Python caller
-# writes and `epochs:=8` the number 8; `k=v` is always a string, so
-# `version=1.5` stays `"1.5"` (A17).
+# v is JSON when it parses, so `span='[0, 9000]'` is the list a Python
+# caller writes and `epochs=8` the number 8; `version=1.5.3` is not
+# JSON and stays the string `"1.5.3"`, while `version=1.5` is the number
+# 1.5 and `version='"1.5"'` the string.
 #
 # ### Values of one kind
 # `kind=` narrows a listing to one value class.
@@ -318,8 +319,8 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # %%
 # !just why game/G1
 # → game/G1: #<8 hex>, matches the head
-# → dependencies: code/demo-game <8 hex>, fn <8 hex>,
-# →   game/G1 away G5, game/G1 home G6, platform darwin-arm64-py3.11,
+# → dependencies: code <8 hex>, code/demo-game <8 hex>, fn demo_game.game.cut,
+# →   game/G1 away G5, game/G1 home G6, platform <platform>,
 # →   query {"game":"G1","kind":"demo_game.game.Video"} -> 1 value(s)
 # → since #<8 hex>, its last target: game/G1 home G4 -> G6
 
@@ -413,7 +414,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # → ran  #<8 hex>  game=G1 version=1.5.5 video=video/G1 team=["G6", "G5"]
 # → rev  by         predicate  object
 # →   4  eval:demo_game.game.cut version    0.1.0
-# →  21  eval:demo_game.game.cut version    0.1.1
+# →  22  eval:demo_game.game.cut version    0.1.1
 
 # %% [markdown]
 # ### A release of the ledger
@@ -458,7 +459,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # - **`why=`** — on `just bump db`, the release.
 # - **The environment** — discovered from the checkout the recipe
 #   runs in, never passed.
-# - **Keys and preds** — `k=v` a string, `k:=v` JSON.
+# - **Keys and preds** — `k=v`, v JSON, else the text as typed.
 # - **Kinds** — a short class name, matched against `db/kind`.
 # - **Hashes** — a prefix, expanded by `refs(s="<prefix>*",
 #   one=True)`.

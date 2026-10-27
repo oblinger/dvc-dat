@@ -110,7 +110,7 @@ class TestCommandLine:
         result = run_capture_tail("./do hello_again.salutation Maxim emphasis=true")
         assert result == "(999, 'Maxim, My lucky number is 999')"
 
-    def test_keyword_values_are_yaml_scalars(self):
+    def test_keyword_values_are_json(self):
         result = run_capture_tail("./do hello_again.salutation Maxim lucky_number=7")
         assert result == "(7, 'Maxim, My lucky number is 7')"
 

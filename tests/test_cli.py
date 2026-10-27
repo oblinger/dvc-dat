@@ -189,16 +189,36 @@ class TestVerbs:
 
 
 class TestArguments:
-    def test_keyword_values_are_yaml_scalars(self):
-        code, out, _ = dat("echo_args", "n=7", "b=true", "l=[1, 2]",
-                           'q="x"', "w=bare", "f=1.5", "e=")
+    def test_keyword_values_are_json_else_the_text(self):
+        """DAT 1041: one k=v grammar; v is JSON, else the string exactly as typed."""
+        code, out, _ = dat("echo_args", "n=12", "x=1.5", "flag=true", "z=null", "ids=[1,2]",
+                           'cfg={"a":1}', "start=2026-01-01", "name=foo", 'q="12"', "e=",
+                           "nan=NaN", "y=yes")
         assert code == 0
-        assert out == ("args=[] kwargs={b=True, e=None, f=1.5, l=[1, 2], "
-                       "n=7, q='x', w='bare'}")
+        assert out == ("args=[] kwargs={cfg={'a': 1}, e='', flag=True, ids=[1, 2], "
+                       "n=12, name='foo', nan='NaN', q='12', start='2026-01-01', "
+                       "x=1.5, y='yes', z=None}")
 
-    def test_fixed_args_are_yaml_scalars(self):
-        code, out, _ = dat("echo_args", "7", "true", "[1, 2]", '"x"', "bare")
-        assert (code, out) == (0, "args=[7, True, [1, 2], 'x', 'bare'] kwargs={}")
+    def test_fixed_args_are_json_else_the_text(self):
+        code, out, _ = dat("echo_args", "7", "true", "[1, 2]", '"x"', "bare", "2026-01-01")
+        assert (code, out) == (0, "args=[7, True, [1, 2], 'x', 'bare', '2026-01-01'] kwargs={}")
+
+    def test_colon_equals_is_no_notation(self):
+        """`k:=v` is gone (DAT 1041): it is not NAME=, so it is a fixed word, as typed."""
+        assert dat("echo_args", "k:=3") == (0, "args=['k:=3'] kwargs={}", "")
+
+    def test_arg_value_is_the_one_grammar(self):
+        from dvc_dat.do import arg_value
+        cases = {"12": 12, "1.5": 1.5, "true": True, "null": None, "[1,2]": [1, 2],
+                 '{"a":1}': {"a": 1}, "2026-01-01": "2026-01-01", "foo": "foo", '"12"': "12",
+                 "": "", "NaN": "NaN", "Infinity": "Infinity", "yes": "yes", "1e3": 1000.0}
+        assert {text: arg_value(text) for text in cases} == cases
+        assert type(arg_value("12")) is int and type(arg_value('"12"')) is str
+
+    def test_set_value_is_json_else_the_text(self):
+        from dvc_dat.do import _parse_argv
+        overrides, _, _, _ = _parse_argv(["t", "--set", "a.d=2026-01-01", "--set", "a.n=3"])
+        assert overrides == {"a": {"d": "2026-01-01", "n": 3}}
 
     def test_fixed_and_keyword_args_together(self):
         code, out, _ = dat("echo_args", "one", "2", "k=3")
@@ -397,6 +417,10 @@ def make_ledger_project(root: Path, hand: str = "", targets: bool = True) -> Non
         "def hand(rev) -> int:\n"
         "    return 0\n"
         "\n"
+        "@ledger_fn\n"
+        "def span(rev, *, start: str, end: str, n: int) -> str:\n"
+        "    return f'{type(start).__name__} {start} {end} {type(n).__name__}'\n"
+        "\n"
         "def plain(dat, n=1):\n"
         "    dat.get_results()['out'] = n\n"
         "    dat.save()\n"
@@ -451,6 +475,15 @@ class TestLedgerRun:
         make_ledger_project(tmp_path)
         code, _, err = run_x("proj.fns.nothing", cwd=tmp_path)
         assert code == 2 and "nothing" in err
+
+    def test_a_date_reaches_the_function_as_a_string(self, tmp_path):
+        """DAT 1041: `start=2026-01-01` was a YAML date, refused as not JSON-encodable."""
+        make_ledger_project(tmp_path)
+        code, out, err = run_x("proj.fns.span", "start=2026-01-01", "end=2027-01-01", "n=2",
+                               "alias=year", cwd=tmp_path)
+        assert code == 0 and out.startswith("ran  "), err
+        from dvc_dat.ledger import Ledger
+        assert Ledger(tmp_path / ".dat" / "ledger").at().load("year").obj == "str 2026-01-01 2027-01-01 int"
 
     def test_dry_run_shows_the_eval(self, tmp_path):
         make_ledger_project(tmp_path)

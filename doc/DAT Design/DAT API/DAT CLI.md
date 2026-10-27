@@ -32,10 +32,10 @@ Every line you can type: a word runs a target, a flag asks `dat` about itself.
 | [dat --help](#^help) | The usage; `dat` alone prints it too |
 
 **dat TARGET**` [ARG …] [KEY=VALUE …]`
-    Run — a plain call for a function, a fork for a template; anything else it loads to prints. Fixed words become `dat.args` and `KEY=VALUE` pairs update `dat.kwargs`, every value a YAML scalar; the return value prints. A word is a keyword iff it starts with `NAME=`; `--` ends keywords. ^target
+    Run — a plain call for a function, a fork for a template; anything else it loads to prints. Fixed words become `dat.args` and `KEY=VALUE` pairs update `dat.kwargs`, every value JSON, else the text exactly as typed (`n=12` an int, `start=2026-01-01` the string, `k='"12"'` the string 12); the return value prints. A word is a keyword iff it starts with `NAME=`; `--` ends keywords. ^target
 
 **dat TARGET --set**` DOTTED.KEY=VALUE`
-    Update one spec key of a template before it forks; the value is a YAML scalar. One pair per flag — repeat the flag for more: `--set a=1 --set b.c=2`. ^set
+    Update one spec key of a template before it forks; the value is JSON, else the text as typed. One pair per flag — repeat the flag for more: `--set a=1 --set b.c=2`. ^set
 
 **dat TARGET --json**` DOTTED.KEY=JSON`
     `--set` with the value parsed as JSON: `--json rules='[[2, "x.f"]]'` — the quotes are the shell's, and `dat` sees one word, key `rules`, JSON `[[2, "x.f"]]`. Repeats, and mixes freely with `--set`. ^json
