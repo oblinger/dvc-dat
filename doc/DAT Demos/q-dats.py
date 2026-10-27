@@ -17,13 +17,13 @@
 # > carry it on their own)
 # >
 # > A dat is a folder made from a spec, a recursive dict of
-# > parameters. Part 1 makes one with no ledger, step by step: look
-# > up the spec, expand it, instantiate the folder, run it; then
-# > `Dat.do`, which runs a dat: all four steps in one call, nothing
-# > remembered. Part 2 puts the same project on a ledger:
-# > `L.at().run` is a run remembered on the ledger, its spec the memo
-# > key, the same spec asked again found, not run. Then a plain dat
-# > saved as a value, and dats found by their preds.
+# > parameters. Dat creation is four steps: look up the spec, merge
+# > its base, expand its `{}`, instantiate the Dat and its folder;
+# > each run by hand, the last producing the dat. Then `Dat.create`,
+# > the shorthand doing all four in one call. Then `Dat.do`, which
+# > runs a dat. Then a ledger: `L.at().run` is a run remembered, its
+# > spec the memo key, the same spec asked again found, not run; a
+# > dat sealed as a value; dats found by their preds.
 
 # %% [markdown]
 # #### Setup
@@ -73,13 +73,16 @@ def show(name):
 show("q-dats")
 
 # %% [markdown]
-# ## Part 1. A dat without a ledger, in its parts
-#
 # A spec's `dat:` part is what the dat system reads: `do:` names the
 # run function, `kwargs:` its arguments, `base:` a spec to inherit,
-# `name:` a folder template.
+# `name:` a folder template. The project below has one run function
+# and two specs; `table12` inherits `table_base`.
 #
-# #### Setup
+# `Dat.do.mount` puts a folder's `.py`, `.yaml` and `.json` files in
+# the dat world's namespace: `mymodule/specs/table12.yaml` answers to
+# `mymodule.specs.table12`, `build_table` in `mymodule/mult.py` to
+# `mymodule.mult.build_table`. A mount may not shadow a module Python
+# imports from elsewhere; this folder is `mymodule`'s own source.
 
 # %%
 # the files: a run function in mult.py, two template specs in specs/
@@ -124,59 +127,64 @@ subprocess.run(git_cmd + ["commit", "-q", "-m", "mymodule"], check=True)
 Dat.do.mount(folder="mymodule", at="mymodule")   # mymodule/specs/table12.yaml answers to mymodule.specs.table12
 
 # %% [markdown]
-# `Dat.do.mount` puts a folder's `.py`, `.yaml` and `.json` files in
-# the dat world's namespace: `mymodule/specs/table12.yaml` answers to
-# `mymodule.specs.table12`, `build_table` in `mymodule/mult.py` to
-# `mymodule.mult.build_table`. A mount may not shadow a module Python
-# imports from elsewhere; this folder is `mymodule`'s own source.
+# ## Dat creation
 #
-# ### 1. Look up the spec
+# A dat is created in four steps:
 #
-# `Dat.do.load(name)` is the object a dotted name names: here the
-# spec file's dict, as written, its base not merged.
+# 1. **Look up** its spec by name: `Dat.do.load(name)` is the object
+#    a dotted name names, here the spec file's dict as written.
+# 2. **Merge** it with its base spec: `Dat.do.merge_bases(spec)`
+#    merges the spec over its `dat.base`, which it drops.
+# 3. **Expand** the template variables: `Dat.manager.expand_spec(spec)`
+#    fills every `{}`; `{YYYY}` is the year, `{unique}` empty.
+# 4. **Instantiate** it: `Dat.create(spec=...)` is the Dat object,
+#    its folder made and `_spec_.yaml` written. Nothing runs.
 
 # %%
-template_spec = Dat.do.load("mymodule.specs.table12")
-print("template:", template_spec)
-# → template: {'dat': {'base': 'mymodule.specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
-
-# %% [markdown]
-# ### 2. Merge its bases, then expand it
-#
-# The spec was loaded in step 1; two more steps make it complete.
-# `Dat.do.merge_bases(spec)` merges the spec over its `dat.base`,
-# which it drops: `kwargs` gains `start`, the spec gains `notes`.
-# `Dat.manager.expand_spec(spec)` then fills every `{}`: `{YYYY}` is
-# the year, `{unique}` empty for a first folder.
+spec = Dat.do.load("mymodule.specs.table12")          # 1. the spec as written
+merged_spec = Dat.do.merge_bases(spec)                # 2. dat.base merged in
+expanded_spec = Dat.manager.expand_spec(merged_spec)  # 3. every {…} filled
+table12_dat = Dat.create(spec=expanded_spec)          # 4. the Dat and its folder
 
 # %%
-merged_spec = Dat.do.merge_bases(template_spec)
-print("merged:", merged_spec)
-# → merged: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
-expanded_spec = Dat.manager.expand_spec(merged_spec)
-print("expanded name:", expanded_spec["dat"]["name"])   # expanded name: tables/2026/table12
-
-# %% [markdown]
-# ### 3. Instantiate
-#
-# `Dat.create` does all of that itself (loads the spec, merges its
-# bases, expands its `{}`), then makes the folder and writes
-# `_spec_.yaml`. It fills `{}` once, with the values the folder
-# got, so `{unique}` counts up when the folder is taken. Nothing runs.
-
-# %%
-table12_dat = Dat.create(spec="mymodule.specs.table12")   # the Dat object, and its folder on disk
 table12_path = Path(table12_dat.get_path())
+print("spec:", spec)
+# → spec: {'dat': {'base': 'mymodule.specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
+print("merged:", merged_spec)   # base: gone, kwargs gains start, the spec gains notes
+# → merged: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
+print("expanded:", expanded_spec)   # name: filled
+# → expanded: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/2026/table12', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
 print("dat:", repr(table12_dat))   # dat: <Dat: tables/2026/table12>
 print("files:", sorted(os.listdir(table12_path)))   # files: ['_spec_.yaml']
 print("_spec_.yaml:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_text(), "    "))
-# _spec_.yaml: kwargs {start: 1, n: 12}; no base:; name: the template; kind: dvc_dat.core.Dat
+# _spec_.yaml: the expanded spec, plus kind: dvc_dat.core.Dat
 
 # %% [markdown]
-# The spec keeps `name:` as its template; the folder it filled to is
-# the dat's name.
+# ## `Dat.create`, the four steps in one call
 #
-# ### 4. Run
+# `Dat.create(spec=name)` is the shorthand: it looks the spec up,
+# merges its base, expands its `{}` and instantiates the dat. Nothing
+# runs.
+
+# %%
+shorthand_dat = Dat.create(spec="mymodule.specs.table12")   # steps 1-4
+shorthand_path = Path(shorthand_dat.get_path())
+print("dat:", repr(shorthand_dat))   # dat: <Dat: tables/2026/table12_2>
+print("manual _spec_.yaml:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_text(), "    "))
+print("shorthand _spec_.yaml:\n" + textwrap.indent((shorthand_path / "_spec_.yaml").read_text(), "    "))
+# the same kwargs, do, kind and notes; name: tables/2026/table12 by hand, tables/{YYYY}/table12{unique} in the shorthand
+
+# %% [markdown]
+# One difference, in `name:`. The shorthand expands `{}` after it
+# places the folder, with the placement's own `{YYYY}` and `{unique}`:
+# `table12` is taken, so `{unique}` counts up to `_2`, and
+# `_spec_.yaml` keeps `name:` as the template. By hand,
+# `expand_spec` sees no folder, so `{unique}` is always empty and
+# `name:` is filled once; were `tables/2026/table12` taken, step 4
+# would raise `FileExistsError` instead of counting up.
+
+# %% [markdown]
+# ## Running a dat
 #
 # `do` is DAT's verb for running a dat: `Dat.do(dat)` calls the run
 # function with the dat and the spec's kwargs, in place (1.x's
@@ -196,27 +204,28 @@ print("_result_.yaml:\n" + textwrap.indent((table12_path / "_result_.yaml").read
 # _result_.yaml: cells, and under dat: what the seal recorded
 
 # %% [markdown]
-# ### 5. All at once
-#
-# `Dat.do("mymodule.specs.table12")` is steps 1 to 4 in one call: it
-# returns what the run function returned. Nothing is remembered: a
-# new folder every call.
+# `Dat.do(name)` is `Dat.create` then `Dat.do(dat)`: it returns what
+# the run function returned, a new folder every call.
 
 # %%
-again_dat = Dat.do("mymodule.specs.table12")
-print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_2>
+again_dat = Dat.do("mymodule.specs.table12")   # same as: Dat.do(Dat.create(spec="mymodule.specs.table12"))
+print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_3>
 print("files:", sorted(os.listdir(again_dat.get_path())))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
 
 # %% [markdown]
-# ## Part 2. The same dat on a ledger
+# ## On a ledger: memo, seal, find
+#
+# A ledger remembers: a run is a memo entry, found again rather than
+# rerun; a dat is a value, sealed under a name and loaded back; dats
+# are found by their preds.
 #
 # `Ledger(create=True)` makes the ledger in this folder and adds
 # `ledger:` to `.datconfig.yaml`; the reloaded dat world names
 # through it. In a ledger project names come from the ledger's
 # mounts alone and `Dat.do.mount` is refused, so `mymodule` is
-# mounted as two `db/mount` rows; Part 1's mount went with the old
-# world.
+# mounted as two `db/mount` rows; the earlier mount went with the
+# old world.
 #
 # #### Setup
 
@@ -238,7 +247,8 @@ except TypeError as e:
 # %% [markdown]
 # `L.at().run(name)` is a run remembered on the ledger: the result
 # found if this code computed it before, else run and sealed as the
-# memo entry. One call does Part 1's four steps and remembers them.
+# memo entry. One call creates the dat in the four steps, runs it,
+# and remembers it.
 
 # %%
 table12_value = L.at().run("mymodule.specs.table12")
@@ -289,7 +299,7 @@ print("hit:", again_value.subject == table12_value.subject,
 # ### Saving a plain dat as a value
 #
 # On a ledger a dat is a value: sealed under a name, loaded back,
-# found by its preds. Part 1's `table12_dat` is sealed here; nothing
+# found by its preds. The hand-made `table12_dat` is sealed here; nothing
 # runs. Its preds are its spec's `kwargs` and its result's entries,
 # read from the folder.
 
@@ -320,7 +330,7 @@ for n in (5, 9):
 print("found:", L.at().values(kind=Dat))
 # → found: [<Dat tables/2026/table12>, <Dat table/12>, <Dat tables/2026/table12_2>, <Dat tables/2026/table12_3>]
 print("cells:", L.at().select(("n", "cells"), kind=Dat))
-# → cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: L.at().run's n=12, table/12 sealed from Part 1, then n=5 and n=9
+# → cells: [('12', '144'), ('12', '144'), ('5', '25'), ('9', '81')]: L.at().run's n=12, table/12 sealed from table12_dat, then n=5 and n=9
 
 # %% [markdown]
 # Spec kwargs and results are preds, so a query over them is an
