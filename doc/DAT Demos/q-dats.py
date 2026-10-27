@@ -222,7 +222,7 @@ print("files:", sorted(os.listdir(again_dat.get_path())))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
 
 # %% [markdown]
-# ## On a ledger: memo, seal, find
+# ## Running and storing a dat on the ledger
 #
 # A ledger remembers: a run is a memo entry, found again rather than
 # rerun; a dat is a value, sealed under a name and loaded back; dats
@@ -253,6 +253,8 @@ except TypeError as e:
 # → refused: a ledger project names things through its db/mount rows
 
 # %% [markdown]
+# ### Ledger run
+#
 # `L.at().run(name)` is a run remembered on the ledger: the result
 # found if this code computed it before, else run and sealed as the
 # memo entry. One call creates the dat in the three steps, runs it,
@@ -263,35 +265,33 @@ table12_value = L.at().run("mymodule.specs.table12")
 print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: the spec's template, filled in the ledger's data folder
 
 # %% [markdown]
-# ### What run did, piece by piece
+# #### What the run did, piece by piece
 #
-# `L.at().resolve(name)` is what a dotted name denotes on the ledger,
-# read off the mounted file, never imported: the spec's dict, as
-# `Dat.do.load` gave it. Its bases merged and `{}` expanded, with
-# `dat.name` removed and `dat.kind` set, it is the memo key, stored
-# as the value's `db/keys`.
+# The run took the three creation steps, through the ledger's
+# mounts: `Dat.do.load` read the spec off the mounted file, never
+# imported; `expand_spec` merged its base and filled its `{}`. The
+# expanded spec, `dat.name` removed and `dat.kind` set, is the memo
+# key, stored as the value's `db/keys`.
 
 # %%
-print("spec:", L.at().resolve("mymodule.specs.table12"))
-# → spec: {'dat': {'base': 'mymodule.specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
-print("expanded:", Dat.manager.expand_spec(Dat.do.load("mymodule.specs.table12")))   # base merged and {} filled, through the ledger's mounts
-# → expanded: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/2026/table12', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
-print("db/keys:", L.at()[table12_value.subject, "db/keys"])   # the memo key
-# → db/keys: {'dat': {'do': 'mymodule.mult.build_table', 'kind': 'dvc_dat.core.Dat', 'kwargs': {'n': 12, 'start': 1}}, 'notes': 'shared defaults'}
+# print results
+print("SPEC:    ", Dat.do.load("mymodule.specs.table12"))
+print("EXPANDED:", Dat.manager.expand_spec(Dat.do.load("mymodule.specs.table12")))
+print("DB/KEYS: ", L.at()[table12_value.subject, "db/keys"])   # the memo key
 
 # %% [markdown]
-# The run function resolves to an `Fn`, a ledger function: kind
-# `dat` (undecorated, run through a spec), sandboxed because it is
+# The run function loads as an `Fn`, a ledger function: kind `dat`
+# (undecorated, run through a spec), sandboxed because it is
 # mounted. It ran in a sandboxed worker, its code the mounted files
 # it loaded; `db/fn` names it, and the first clean run wrote the
 # package's version clock at `db/repo/q-dats/mymodule`.
 
 # %%
-run_fn = L.at().resolve("mymodule.mult.build_table")
-print("fn:", repr(run_fn), " kind:", run_fn.kind, " sandboxed:", run_fn.code.sandboxed)
-# → fn: <Fn mymodule.mult.build_table@0.1.0>  kind: dat  sandboxed: True
-print("db/fn:", L.at()[table12_value.subject, "db/fn"])   # db/fn: mymodule.mult.build_table
-print("db/repo/q-dats/mymodule:", L.at()["db/repo/q-dats/mymodule", "version"])   # db/repo/q-dats/mymodule: 0.1.0
+# print results
+run_fn = Dat.do.load("mymodule.mult.build_table")
+print("FN:      ", repr(run_fn), " kind:", run_fn.kind, " sandboxed:", run_fn.code.sandboxed)
+print("DB/FN:   ", L.at()[table12_value.subject, "db/fn"])
+print("VERSION: ", L.at()["db/repo/q-dats/mymodule", "version"])   # db/repo/q-dats/mymodule
 
 # %% [markdown]
 # The same spec asked again is a memo hit: nothing runs, nothing is
