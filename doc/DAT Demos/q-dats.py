@@ -62,28 +62,6 @@ def show(name):
     display(SVG(filename=str(demos_path / f"{name}.svg")))
 
 
-# %% [markdown]
-# # Quick: dats
-#
-# A dat is a handle for a folder of arbitrary data, derived from and
-# specified by a recursive dictionary of parameters: its spec. On a
-# ledger it is also a value: sealed, loaded, memoized, found.
-
-# %%
-show("q-dats")
-
-# %% [markdown]
-# A spec's `dat:` part is what the dat system reads: `do:` names the
-# run function, `kwargs:` its arguments, `base:` a spec to inherit,
-# `name:` a folder template. The project below has one run function
-# and two specs; `table12` inherits `table_base`.
-#
-# `Dat.do.mount` puts a folder's `.py`, `.yaml` and `.json` files in
-# the dat world's namespace: `mymodule/specs/table12.yaml` answers to
-# `mymodule.specs.table12`, `build_table` in `mymodule/mult.py` to
-# `mymodule.mult.build_table`. A mount may not shadow a module Python
-# imports from elsewhere; this folder is `mymodule`'s own source.
-
 # %%
 # the files: a run function in mult.py, two template specs in specs/
 module_path = Path("mymodule")
@@ -124,7 +102,25 @@ dat:
 ''')
 subprocess.run(git_cmd + ["add", "mymodule"], check=True)
 subprocess.run(git_cmd + ["commit", "-q", "-m", "mymodule"], check=True)
-Dat.do.mount(folder="mymodule", at="mymodule")   # mymodule/specs/table12.yaml answers to mymodule.specs.table12
+Dat.do.mount(folder="mymodule", at="mymodule")   # mymodule's files join the dat world's namespace:
+# mymodule/specs/table12.yaml answers to mymodule.specs.table12, build_table in mult.py to mymodule.mult.build_table
+
+
+
+# %% [markdown]
+# # Quick: dats
+#
+# A dat is a handle for a folder of arbitrary data, derived from and
+# specified by a recursive dictionary of parameters: its spec. On a
+# ledger it is also a value: sealed, loaded, memoized, found.
+
+# %%
+show("q-dats")
+
+# %% [markdown]
+# A spec's `dat:` part is what the dat system reads: `do:` names the
+# run function, `kwargs:` its arguments, `base:` a spec to inherit,
+# `name:` a folder template; Setup's `table12` inherits `table_base`.
 
 # %% [markdown]
 # ## Dat creation
