@@ -235,6 +235,10 @@ print("fn:", repr(distance_fn), " code:", repr(distance_fn.code))
 hypotenuse_value = distance_fn(a=(3, 4))
 print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 # → result: 5.0  sealed at: <the seal's moment>
+print("db/repo/geometry/geometry:", L.at()["db/repo/geometry/geometry"])
+# → db/repo/geometry/geometry: {'version': '5.3.9'}
+print("db/repo/geometry:", L.at()["db/repo/geometry"])
+# → db/repo/geometry: {'commit': '<the commit>'}
 
 # %% [markdown]
 # `L.at().ns.load(name)` is what a dotted name denotes on the ledger;
@@ -242,6 +246,11 @@ print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 # plain `float` it returns as a value (`.obj` unboxes it). A
 # function's repr is `<Fn name@version>`; `code` is the code it
 # is loaded from, the package `geometry` at the version it declares.
+#
+# A `db/repo/<repo>/<package>` subject is a version clock tied to a
+# git checkout: the version of that package's code that runs were
+# exposed to. The version lives in the source as `__version__`; this
+# first clean run wrote it, and its commit to `db/repo/<repo>`.
 
 # %% [markdown]
 # ### Sandboxed functions

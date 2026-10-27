@@ -16,15 +16,13 @@
 # #### Setup
 
 # %%
-import shutil, subprocess, sys
+import shutil
 from pathlib import Path
 
 from dvc_dat.ledger import Ledger, Unlocked, bump
 
 scratch_path = Path("scratch/q-triples").resolve()
 shutil.rmtree(scratch_path, ignore_errors=True)   # a re-run starts clean
-for module_name in [m for m in sys.modules if m.split(".")[0] == "demo_game"]:
-    del sys.modules[module_name]
 
 # %% [markdown]
 # # Quick: triples
@@ -66,8 +64,8 @@ print("rev2 court:", rev2.get("game/G1", "court"))   # south: the latest add
 print("rev1 court:", rev1.get("game/G1", "court"))   # north: rev1 never changes
 for r in rev2.history("game/G1", "court"):
     print("row:", r)                   # both rows are still stored
-#    1 + game/G1   court   north
-#    2 + game/G1   court   south
+# row:    1 + game/G1              court                    north
+# row:    2 + game/G1              court                    south
 
 # %% [markdown]
 # ## One and many
@@ -145,10 +143,10 @@ print("courts:", rev.all("game/*", "court"))                 # a glob subject: (
 #   [('game/G1', 'west')]
 for r in rev.history("game/G1", "court"):                       # the unfolded history, removes included
     print("row:", r)
-#   row:    1 + game/G1  court  north
-#   row:    2 + game/G1  court  south
-#   row:    3 + game/G1  court  east
-#   row:    4 + game/G1  court  west
+# row:    1 + game/G1              court                    north
+# row:    2 + game/G1              court                    south
+# row:    3 + game/G1              court                    east
+# row:    4 + game/G1              court                    west
 
 # %% [markdown]
 # `get` answers a default instead of raising, `in` tests one triple,
@@ -180,15 +178,18 @@ with L.transaction(by="human:dan") as t:
 
 # %% [markdown]
 # ## Naming a revision
+#
+# A revision is named by the ledger version set in it, and
+# `L.at("M.m.p")` is that revision.
 
 # %%
-with L.transaction(by="human:dan") as t:
-    t["env/prod", "rev"] = str(rev2.id)
-prod_rev = L.at(L.at()["env/prod", "rev"])
-print("prod id, court:", prod_rev.id, prod_rev.get("game/G1", "court"))   # 2 south
-
-# %% [markdown]
-# A name is any subject's `rev` row; `L.at` takes the id it holds.
+with L.transaction(by="human:dan", lock=10) as t:      # bump reads: lock=
+    db_version = bump(t, "db", "minor", confirm=lambda old, new: True)
+print("db version:", db_version)
+# db version: 0.1.0
+named_rev = L.at("0.1.0")
+print("named rev id, court:", named_rev.id, named_rev.get("game/G1", "court"))
+# named rev id, court: 7 west
 
 # %% [markdown]
 # ## Typing a predicate
@@ -203,47 +204,26 @@ except TypeError as e:
     print("TypeError:", e)   # json under a str predicate: not written
 
 # %% [markdown]
-# ## Connecting to code
-#
-# A `db/repo/<repo>/<package>` subject is a version clock tied to a git
-# checkout: the version of that package's code that runs were exposed
-# to. The version lives in the source, as `__version__`; the first run
-# from a clean checkout writes it, and its commit to `db/repo/<repo>`.
-
-# %%
-demo_repo_path = scratch_path / "demo-game"
-(demo_repo_path / "demo_game").mkdir(parents=True, exist_ok=True)
-(demo_repo_path / "demo_game/__init__.py").write_text('__version__ = "0.1.0"\n')
-(demo_repo_path / "demo_game/hello.py").write_text(
-    "from dvc_dat.ledger import ledger_fn\n\n\n"
-    "@ledger_fn\ndef hello(rev, *, game: str) -> str:\n    return f\"hello {rev['game/' + game, 'court']}\"\n")
-git_cmd = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.com"]
-for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "0.1.0"]):
-    subprocess.run(git_cmd + args, cwd=demo_repo_path, check=True)
-sys.path.insert(0, str(demo_repo_path))
-import demo_game.hello
-
-greeting = L.at().run("demo_game.hello.hello", game="G1")
-print("greeting:", greeting.obj)   # greeting: hello west: G1's court now
-print("db/repo/demo-game/demo_game:", L.at()["db/repo/demo-game/demo_game"])
-# db/repo/demo-game/demo_game: {'version': '0.1.0'}
-print("db/repo/demo-game:", L.at()["db/repo/demo-game"])
-# db/repo/demo-game: {'commit': '<the demo commit>'}
-
-# %% [markdown]
 # ## Locking the ledger
 #
-# `bump` raises any other clock, here a schema's.
+# Locking the ledger lets a transaction depend on the immediately
+# preceding revision, so a read-then-write is built on current data
+# and no other writer can land between the read and the write.
+#
+# `bump` advances any version number associated with any subject;
+# here it advances a schema's, and the minor part.
 
 # %%
 with L.transaction(by="human:dan", lock=10) as t:
-    print("schema/tape:", bump(t, "schema/tape"))   # schema/tape: 0.0.1
+    print("schema/tape:",
+          bump(t, "schema/tape", "minor", confirm=lambda old, new: True))
+# schema/tape: 0.1.0
 
 # %% [markdown]
 # `bump` reads the version through `t.previous_rev`, then writes
-# the next one. `lock=10` holds the write lock for the whole body,
-# so no other writer slips between the read and the write; past 10
-# seconds the body is interrupted and nothing is written.
+# the next one; a minor or major bump needs `confirm=`. `lock=10`
+# holds the write lock for the whole body; past 10 seconds the body
+# is interrupted and nothing is written.
 #
 # A transaction reads the previous revision and writes the next;
 # its own pending writes are not seen until it closes. So a body
@@ -257,11 +237,9 @@ with L.transaction(by="human:dan", lock=10) as t:
 print("officials:", t.rev.all("game/G2", "officials"))
 
 # %% [markdown]
-# `t[s]` reads `t.previous_rev`, the previous revision: the top as
-# it stands while the body holds the write lock: the write is built on current
-# data, and no other writer can commit between the read and the
-# write. Without `lock=` there is no well-defined previous revision.
-# Notice the ledger refuses the read.
+# `t[s]` reads `t.previous_rev`, the top as it stands while the
+# body holds the write lock. Without `lock=` there is no
+# well-defined previous revision; notice the ledger refuses the read.
 
 # %%
 try:
