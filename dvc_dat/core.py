@@ -582,6 +582,7 @@ class DatManager:
     _dat_folders: List[str]
     _art_folder: Optional[str]
     _config_dir: Optional[str]
+    _config_file: Optional[str]
     _dat_cache: "weakref.WeakValueDictionary[str, Dat]"
     _index_file: str
 
@@ -614,6 +615,7 @@ class DatManager:
                         f"{folder!r} nest; artifact and dat names would collide -- keep "
                         "them apart (e.g. data/ and art/ side by side)")
         self._config_dir = None
+        self._config_file = None       # the .datconfig.yaml load_dat_config read, if any
         self._dat_cache = weakref.WeakValueDictionary()
         self._index_file = os.path.realpath(str(index)) if index is not None else \
             os.path.join(self._art_folder or self._dat_folders[0], INDEX_FILE)
@@ -714,6 +716,7 @@ class DatManager:
                         art_folder=os.path.join(root, art_folder), ns=ns, verify=verify,
                         **extra_values)
         manager._config_dir = root
+        manager._config_file = str(config_path) if config_path is not None else None
         if make_default:
             Dat.manager = manager
         return manager
