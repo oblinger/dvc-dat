@@ -83,7 +83,7 @@ def mounted(tmp_path, monkeypatch):
 
 
 def test_installed_code_takes_its_packages_version(L, installed):
-    f = L.at().resolve("geom1037.dist.distance")
+    f = L.at().ns.load("geom1037.dist.distance")
     assert isinstance(f.code, Code)
     assert f.code.sandboxed is False and f.code.version == "5.3.9" and f.code.mounts == {}
     assert "geom1037/dist.py" in f.code.modules
@@ -96,13 +96,13 @@ def test_installed_code_takes_its_packages_version(L, installed):
 def test_installed_code_without_a_version_falls_back_to_its_hash(L, installed):
     (installed / "geom1037/__init__.py").write_text("")
     forget("geom1037")
-    f = L.at().resolve("geom1037.dist.distance")
+    f = L.at().ns.load("geom1037.dist.distance")
     assert f.code.version == "#" + f.code.hash[:8]
 
 
 def test_mounted_code_takes_the_roots_version(mounted):
     L, repo = mounted
-    f = L.at().resolve("plane.measure.length")
+    f = L.at().ns.load("plane.measure.length")
     assert f.code.sandboxed is True and f.code.version == "2.7.1"
     assert f.code.modules == ["plane/__init__.py", "plane/measure.py"]
     assert f.code.mounts == {"plane": {"repo": "code-repo", "root": "plane"},
@@ -118,13 +118,13 @@ def test_mounted_code_records_the_lock(mounted):
     (repo / "uv.lock").write_text("version = 1\n")
     git(repo, "add", "uv.lock")
     git(repo, "commit", "-q", "-m", "lock")
-    f = L.at().resolve("plane.measure.length")
+    f = L.at().ns.load("plane.measure.length")
     assert f.code.lock == git(repo, "rev-parse", "HEAD:uv.lock")
 
 
 def test_a_mounted_root_without_a_version_is_named_by_its_commit(mounted):
     L, repo = mounted
-    f = L.at().resolve("bare.calc.length")
+    f = L.at().ns.load("bare.calc.length")
     assert re.fullmatch(r"[0-9a-f]{8}", f.code.version)
     assert git(repo, "rev-parse", "HEAD").startswith(f.code.version)
     assert str(f.code) == f"bare@{f.code.version}"
@@ -134,7 +134,7 @@ def test_a_dirty_loaded_file_says_dirty(mounted):
     L, repo = mounted
     calc = repo / "bare/calc.py"
     calc.write_text(calc.read_text() + "\n# edited\n")
-    f = L.at().resolve("bare.calc.length")
+    f = L.at().ns.load("bare.calc.length")
     assert re.fullmatch(r"[0-9a-f]{8}\+dirty", f.code.version)
 
 
@@ -142,16 +142,16 @@ def test_a_version_bump_is_a_new_version(mounted):
     L, repo = mounted
     (repo / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
     git(repo, "commit", "-q", "-am", "bump")
-    assert str(L.at().resolve("plane.measure.length")) == "plane.measure.length@2.7.2"
+    assert str(L.at().ns.load("plane.measure.length")) == "plane.measure.length@2.7.2"
 
 
 def test_fn_has_no_mode(L, installed):
-    f = L.at().resolve("geom1037.dist.distance")
+    f = L.at().ns.load("geom1037.dist.distance")
     assert not hasattr(f, "mode")
 
 
 def test_codes_properties_are_read_only(L, installed):
-    code = L.at().resolve("geom1037.dist.distance").code
+    code = L.at().ns.load("geom1037.dist.distance").code
     for prop in ("modules", "mounts", "commit", "lock", "sandboxed", "version", "name"):
         with pytest.raises(AttributeError):
             setattr(code, prop, None)
@@ -163,34 +163,34 @@ SUBJECT = re.compile(r"db/code/[0-9a-f]{16}")
 
 
 def test_fn_has_no_subject_or_sha(L, installed):
-    f = L.at().resolve("geom1037.dist.distance")
+    f = L.at().ns.load("geom1037.dist.distance")
     assert not hasattr(f, "subject") and not hasattr(f, "sha")
 
 
 def test_codes_subject_is_its_hash_16(L, installed):
-    code = L.at().resolve("geom1037.dist.distance").code
+    code = L.at().ns.load("geom1037.dist.distance").code
     assert SUBJECT.fullmatch(code.subject) and code.subject == "db/code/" + code.hash[:16]
     assert code.hash == hash_text(code.encode().decode())
 
 
 def test_codes_hash_is_the_memo_keys_hash(L, installed):
     """The 16 hex the memo key carried as ``db/fn/<name>/<hash 16>``: the module checksums and mounts."""
-    code = L.at().resolve("geom1037.dist.distance").code
+    code = L.at().ns.load("geom1037.dist.distance").code
     sums = {rel: hash_text((installed / rel).read_text()) for rel in code.modules}
     assert code.hash[:16] == hash_text(canonical({"modules": sums, "mounts": None}), 16)
 
 
 def test_two_loads_of_identical_code_share_a_subject(mounted):
     L, _repo = mounted
-    a, b = L.at().resolve("plane.measure.length"), L.at().resolve("plane.measure.length")
+    a, b = L.at().ns.load("plane.measure.length"), L.at().ns.load("plane.measure.length")
     assert a.code.subject == b.code.subject and SUBJECT.fullmatch(a.code.subject)
 
 
 def test_a_changed_module_changes_the_subject(mounted):
     L, repo = mounted
-    before = L.at().resolve("plane.measure.length").code
+    before = L.at().ns.load("plane.measure.length").code
     (repo / "plane/measure.py").write_text(FN.replace("0.5", "0.25"))
-    after = L.at().resolve("plane.measure.length").code
+    after = L.at().ns.load("plane.measure.length").code
     assert after.subject != before.subject and before.version == "2.7.1"
     assert re.fullmatch(r"[0-9a-f]{8}\+dirty", after.version)          # uncommitted: no declared version (DAT 1043)
 
@@ -200,20 +200,20 @@ def test_two_functions_in_one_snapshot_share_its_subject(mounted):
     (repo / "plane/measure.py").write_text(FN + FN.split("@ledger_fn")[1].replace("length", "width")
                                            .replace("def ", "@ledger_fn\ndef ", 1))
     git(repo, "commit", "-q", "-am", "width")
-    length, width = L.at().resolve("plane.measure.length"), L.at().resolve("plane.measure.width")
+    length, width = L.at().ns.load("plane.measure.length"), L.at().ns.load("plane.measure.width")
     assert length.code.subject == width.code.subject and length.name != width.name
     assert str(width) == "plane.measure.width@2.7.1"
 
 
 def test_a_result_names_the_snapshot_and_the_function_apart(mounted):
     L, _repo = mounted
-    f = L.at().resolve("plane.measure.length")
+    f = L.at().ns.load("plane.measure.length")
     v = f(a=(0, 0), b=(3, 4))
     assert SUBJECT.fullmatch(v.dependencies["code"]) and v.dependencies["fn"] == "plane.measure.length"
     assert L.at()[v.subject, "db/fn"] == "plane.measure.length"
     assert sorted(L.at()[v.dependencies["code"], "db/modules"]) == ["plane/__init__.py", "plane/measure.py"]
     top = L.at().id
-    w = L.at().resolve("plane.measure.length")(a=(0, 0), b=(3, 4))    # the identical call: a hit
+    w = L.at().ns.load("plane.measure.length")(a=(0, 0), b=(3, 4))    # the identical call: a hit
     assert w.subject == v.subject and L.at().id == top and v.matches(L.at())
 
 
@@ -221,16 +221,16 @@ def test_another_function_in_the_snapshot_does_not_hit(mounted):
     L, repo = mounted
     (repo / "plane/measure.py").write_text(FN + FN.split("@ledger_fn")[1].replace("length", "width")
                                            .replace("def ", "@ledger_fn\ndef ", 1))
-    v = L.at().resolve("plane.measure.length")(a=(0, 0), b=(3, 4))
-    w = L.at().resolve("plane.measure.width")(a=(0, 0), b=(3, 4))
+    v = L.at().ns.load("plane.measure.length")(a=(0, 0), b=(3, 4))
+    w = L.at().ns.load("plane.measure.width")(a=(0, 0), b=(3, 4))
     assert w.subject != v.subject and w.dependencies["code"] == v.dependencies["code"]
     assert w.dependencies["fn"] == "plane.measure.width"
 
 
 def test_a_changed_snapshot_misses(mounted):
     L, repo = mounted
-    v = L.at().resolve("plane.measure.length")(a=(0, 0), b=(3, 4))
+    v = L.at().ns.load("plane.measure.length")(a=(0, 0), b=(3, 4))
     (repo / "plane/measure.py").write_text(FN.replace("0.5", "0.25"))
     assert not v.matches(L.at())
-    w = L.at().resolve("plane.measure.length")(a=(0, 0), b=(3, 4))
+    w = L.at().ns.load("plane.measure.length")(a=(0, 0), b=(3, 4))
     assert w.obj == 1.25 and w.dependencies["code"] != v.dependencies["code"]

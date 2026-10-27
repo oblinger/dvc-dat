@@ -1,11 +1,11 @@
 """``rev.run(target, **kwargs)``: one call for a ledger function and a dat (DAT 1038, 1045, 1046).
 
-The target is resolved through the ledger's namespace (``rev.resolve``): a
+The target is resolved through the ledger's namespace (``rev.ns.load``): a
 ``@ledger_fn`` comes back its ``Fn`` and is called with the kwargs as its keys.
 Anything else is a dat: a spec (a dict, or a name resolving to one, from a
 mounted ``.yaml``/``.json`` or a literal in a mounted module) or a dat's run
 function by its dotted name, which is the spec ``{dat: {do: <name>}}``. Its memo
-key is the spec ``Dat.do`` would create from: ``dat.base`` merged, the kwargs
+key is the spec ``Dat.ns`` would create from: ``dat.base`` merged, the kwargs
 merged into ``dat.kwargs``, ``dat.kind`` the class it makes, every ``{}``
 expanded once here with names through the ledger's namespace, and ``dat.name``
 removed (the folder template is not part of the key, it names the result). The
@@ -26,15 +26,15 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 from .fn import Fn, installed_fn
 
 if TYPE_CHECKING:
-    from .namespace import LedgerDo
+    from .namespace import LedgerNamespace
     from .rev import Rev
 
 
 def run(rev: "Rev", target: Any, *, seal: Any, clean: bool, path: Any, kwargs: Dict[str, Any]) -> Any:
     """``Rev.run``: see the module doc."""
-    from .namespace import LedgerDo
+    from .namespace import LedgerNamespace
 
-    ns = LedgerDo(rev=rev)
+    ns = LedgerNamespace(rev=rev)
     if isinstance(target, str):
         obj = ns.load(target)
         if isinstance(obj, Fn) and obj.kind == "ledger":
@@ -48,7 +48,7 @@ def run(rev: "Rev", target: Any, *, seal: Any, clean: bool, path: Any, kwargs: D
     return fn(seal=seal, clean=clean, path=path, kwargs=keys)
 
 
-def memo_key(rev: "Rev", ns: "LedgerDo", target: Any, obj: Any,
+def memo_key(rev: "Rev", ns: "LedgerNamespace", target: Any, obj: Any,
              kwargs: Dict[str, Any]) -> Tuple[Fn, Dict[str, Any]]:
     """``(fn, keys)`` of a dat run: the run function's ``Fn`` (its template and class set) and the memo key,
     the spec expanded with ``dat.name`` removed."""
@@ -71,7 +71,7 @@ def memo_key(rev: "Rev", ns: "LedgerDo", target: Any, obj: Any,
     return dataclasses.replace(fn, _template=template, _returns=keys["dat"]["kind"]), keys
 
 
-def run_fn(rev: "Rev", ns: "LedgerDo", keys: Dict[str, Any]) -> Fn:
+def run_fn(rev: "Rev", ns: "LedgerNamespace", keys: Dict[str, Any]) -> Fn:
     """The ``Fn`` of kind ``"dat"`` the spec's ``dat.do`` names: mounted, read off its file (it runs in the
     worker); installed, imported here."""
     name = keys["dat"].get("do")

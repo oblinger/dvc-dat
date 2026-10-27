@@ -42,8 +42,8 @@ target named `list` runs like any other.
 
 ## Arguments
 
-`TARGET` is a dotted name resolved by `do.load` — the running program's
-`do.mount(...)` names first, then the longest importable prefix. What happens next is the library's rule, not the
+`TARGET` is a dotted name resolved by `ns.load` — the running program's
+`ns.mount(...)` names first, then the longest importable prefix. What happens next is the library's rule, not the
 CLI's: a **callable** is called, a **template spec** is forked — the fixed
 arguments become the new spec's `dat.args`, the `KEY=VALUE` pairs update its
 `dat.kwargs` key by key — and the forked spec creates a dat, which runs.
@@ -216,7 +216,7 @@ run: uv run python -m dvc_dat
 mounts, the library's own command line will do: `uv run python -m
 dvc_dat`, `.venv/bin/python -m dvc_dat`. A project that mounts names points
 it at its **own main** — `run: .venv/bin/python -m mypkg.main` — a module
-that imports what it needs, makes its `do.mount(...)` calls and, when
+that imports what it needs, makes its `ns.mount(...)` calls and, when
 `DAT_CLI_CONFIG` is set, ends with `sys.exit(Dat.cli_main())`, so the shell
 runs inside the program's own namespace and the same main is free to do
 anything else when run by hand:
@@ -231,7 +231,7 @@ if __name__ == "__main__":
 `Dat.cli_main(argv=None, *, config=None)` takes the config as a parameter
 instead — a folder or a config file — for a program that runs the command
 line on a config it chose: it does
-`Dat.manager = DatManager.load_dat_config(config, do=Dat.do)`, keeping
+`Dat.manager = DatManager.load_dat_config(config, ns=Dat.ns)`, keeping
 the program's mounts. The environment variable is never the way to hand it
 one. The library itself never reads the `run` key — it is there so that one
 file describes the whole project.

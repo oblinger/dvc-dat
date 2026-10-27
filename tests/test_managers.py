@@ -1,8 +1,8 @@
-"""2.3: a `DatManager` owns its `do`; two worlds in one process stay apart.
+"""2.3: a `DatManager` owns its `ns`; two worlds in one process stay apart.
 
 The 1.x ownership restored (Dan, 2026-09-22): the manager holds the folders and
 the namespace, `Dat.create` / `Dat.load` trampoline to `Dat.manager`, and the
-module-level `do` forwards to that manager's namespace.
+module-level `ns` forwards to that manager's namespace.
 """
 import os
 import subprocess
@@ -14,9 +14,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from dvc_dat import Dat, DatManager, Do  # noqa: E402
+from dvc_dat import Dat, DatManager, Namespace  # noqa: E402
 
-do = Dat.do
+ns = Dat.ns
 from dvc_dat.core import DAT_CONFIG_FILE  # noqa: E402
 
 
@@ -28,10 +28,10 @@ def world(root: Path, tag: str) -> DatManager:
     """A manager on `root`, whose namespace holds a base-chained template that
     only it can see -- the same names in every world, different content."""
     manager = DatManager(dat_folders=[str(root / "dats")])
-    manager.do.mount(value=echo, at="fn")
-    manager.do.mount(value={"tag": tag, "who": f"world {tag}"}, at="consts")
-    manager.do.mount(value={"dat": {"do": "fn", "kwargs": {"tag": tag}}}, at="base")
-    manager.do.mount(value={"dat": {"base": "base", "name": f"run_{tag}"},
+    manager.ns.mount(value=echo, at="fn")
+    manager.ns.mount(value={"tag": tag, "who": f"world {tag}"}, at="consts")
+    manager.ns.mount(value={"dat": {"do": "fn", "kwargs": {"tag": tag}}}, at="base")
+    manager.ns.mount(value={"dat": {"base": "base", "name": f"run_{tag}"},
                             "who": "{consts.who}"}, at="tmpl")
     return manager
 
@@ -46,7 +46,7 @@ def worlds(tmp_path):
 class TestTwoWorlds:
     def test_each_runs_its_own_template_into_its_own_folder(self, worlds):
         ma, mb = worlds
-        global_folder, global_names = Dat.manager._dat_folders, set(do.keys())
+        global_folder, global_names = Dat.manager._dat_folders, set(ns.mounts())
 
         assert ma.run("tmpl") == {"name": "run_a", "args": [], "kwargs": {"tag": "a"}}
         assert mb.run("tmpl", 7) == {"name": "run_b", "args": [7], "kwargs": {"tag": "b"}}
@@ -62,17 +62,17 @@ class TestTwoWorlds:
             ma.load("run_b")
 
         assert Dat.manager._dat_folders == global_folder    # the default world: untouched
-        assert set(do.keys()) == global_names
-        assert do.load("tmpl", default=None) is None
+        assert set(ns.mounts()) == global_names
+        assert ns.load("tmpl", default=None) is None
         assert not Dat.manager.exists("run_a") and not Dat.manager.exists("run_b")
 
     def test_neither_sees_the_others_mounts(self, worlds):
         ma, mb = worlds
-        assert ma.do.load("consts.tag") == "a"
-        assert mb.do.load("consts.tag") == "b"
-        ma.do.mount(value=1, at="only_a")
-        assert mb.do.load("only_a", default=None) is None
-        assert do.load("only_a", default=None) is None
+        assert ma.ns.load("consts.tag") == "a"
+        assert mb.ns.load("consts.tag") == "b"
+        ma.ns.mount(value=1, at="only_a")
+        assert mb.ns.load("only_a", default=None) is None
+        assert ns.load("only_a", default=None) is None
 
     def test_a_dotted_spec_and_its_base_resolve_in_the_managers_namespace(self, worlds):
         ma, mb = worlds
@@ -87,37 +87,37 @@ class TestTwoWorlds:
 
     def test_a_managers_do_is_bound_to_it(self, worlds):
         ma, _ = worlds
-        assert ma.do.manager is ma
-        assert ma.do is not do
+        assert ma.ns.manager is ma
+        assert ma.ns is not ns
 
 
 class TestAdoption:
     def test_a_second_manager_adopting_a_namespace_keeps_its_mounts(self, tmp_path):
         before = Dat.manager
         m = DatManager(dat_folders=[str(tmp_path / "one")])
-        m.do.mount(value=1, at="kept")
-        m2 = DatManager(dat_folders=[str(tmp_path / "two")], do=m.do)
+        m.ns.mount(value=1, at="kept")
+        m2 = DatManager(dat_folders=[str(tmp_path / "two")], ns=m.ns)
         assert m2._dat_folders[0].endswith("/two")
-        assert m2.do is m.do and m2.do.manager is m2       # the namespace moved
-        assert m2.do.load("kept") == 1                     # mounts survive
+        assert m2.ns is m.ns and m2.ns.manager is m2       # the namespace moved
+        assert m2.ns.load("kept") == 1                     # mounts survive
         assert Dat.manager is before                       # not the default's do
 
     def test_a_bare_do_mounts_and_loads_but_cannot_run(self, tmp_path):
-        probe = Do()
+        probe = Namespace()
         probe.mount(value={"x": 1}, at="bare")
         assert probe.load("bare.x") == 1
         with pytest.raises(TypeError, match="not callable"):   # running is a manager's (DAT 1049)
             probe({"dat": {"do": "bare"}})
         with pytest.raises(RuntimeError, match="no manager"):
             probe.manager
-        m = DatManager(dat_folders=[str(tmp_path)], do=probe)
+        m = DatManager(dat_folders=[str(tmp_path)], ns=probe)
         assert probe.manager is m and probe.load("bare.x") == 1
 
 
 class TestTheDefaultWorld:
     def test_dat_create_and_load_trampoline_to_the_manager(self):
-        assert Dat.manager is do.manager
-        assert do._current() is Dat.manager.do
+        assert Dat.manager is ns.manager
+        assert ns._current() is Dat.manager.ns
         name = "managers/trampoline"
         if Dat.manager.exists(name):
             Dat.load(name).delete()
@@ -130,14 +130,14 @@ class TestTheDefaultWorld:
     def test_first_use_builds_the_default_world(self, tmp_path):
         (tmp_path / DAT_CONFIG_FILE).write_text("dat_folders: warehouse/\n")
         probe = (
-            "from dvc_dat import Dat\ndo = Dat.do\n"
+            "from dvc_dat import Dat\nns = Dat.ns\n"
             "from dvc_dat import core\n"
             "assert core._default_manager is None\n"       # import read nothing
-            "do.mount(value={'x': 1}, at='early')\n"        # first use builds it
+            "ns.mount(value={'x': 1}, at='early')\n"        # first use builds it
             "assert core._default_manager is not None\n"
-            "assert Dat.manager is do.manager\n"
-            "assert do.load('early.x') == 1\n"
-            "assert do.load('dt.list') is not None\n"
+            "assert Dat.manager is ns.manager\n"
+            "assert ns.load('early.x') == 1\n"
+            "assert ns.load('dt.list') is not None\n"
             "print(Dat.manager._dat_folders[0])\n"
         )
         result = subprocess.run(

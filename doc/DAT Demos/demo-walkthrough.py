@@ -67,7 +67,7 @@ FILES = {
         from dvc_dat import Dat
 
         ROOT = Path(__file__).parent.parent
-        Dat.do.mount(folder=str(ROOT / "catalog"), at="catalog")
+        Dat.ns.mount(folder=str(ROOT / "catalog"), at="catalog")
 
         if __name__ == "__main__":
             if os.environ.get("DAT_CLI_CONFIG"):   # launched by `just run`
@@ -83,7 +83,7 @@ print(*sorted(FILES), sep="\n")
 # %% [markdown]
 # ## Mount the catalog
 #
-# `DatManager.load_dat_config(PROJECT, do=do)` reads that config and becomes
+# `DatManager.load_dat_config(PROJECT, ns=ns)` reads that config and becomes
 # the default world, `Dat.manager` (a program run from inside the project needs
 # no call: the first use of `Dat.manager` finds the nearest `.datconfig.yaml`). It also puts the
 # project first on `sys.path`, so importing `mypkg.main` makes its mounts,
@@ -92,12 +92,12 @@ print(*sorted(FILES), sep="\n")
 # %%
 from dvc_dat import Dat, DatManager
 
-do, merge_dicts = Dat.do, Dat.merge_dicts
+ns, merge_dicts = Dat.ns, Dat.merge_dicts
 
-Dat.manager = DatManager.load_dat_config(PROJECT, do=do)
+Dat.manager = DatManager.load_dat_config(PROJECT, ns=ns)
 import mypkg.main  # noqa: E402,F401 -- the mounts
 
-do.load("catalog.experiment")      # the template as written
+ns.load("catalog.experiment")      # the template as written
 
 # %% [markdown]
 # ## Run a template, then fork it

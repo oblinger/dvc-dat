@@ -13,9 +13,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import dvc_dat  # noqa: E402
 from dvc_dat import Dat, DatManager  # noqa: E402
 
-do, cli_main = Dat.do, Dat.cli_main
+ns, cli_main = Dat.ns, Dat.cli_main
 from dvc_dat.core import DAT_CONFIG_FILE, DAT_CONFIG_OVERRIDE_FILE  # noqa: E402
-from dvc_dat.do import Do  # noqa: E402
+from dvc_dat.do import Namespace  # noqa: E402
 
 
 @pytest.fixture
@@ -117,14 +117,14 @@ class TestConstructor:
         assert manager._dat_folders == [os.path.realpath(tmp_path / "dats")]
         assert manager._config_dir is None
 
-    def test_the_only_public_attribute_is_do(self, tmp_path):
+    def test_the_only_public_attribute_is_ns(self, tmp_path):
         manager = DatManager(dat_folders=[str(tmp_path)])
         public = [n for n in vars(manager) if not n.startswith("_")]
-        assert public == ["do"]
+        assert public == ["ns"]
         for gone in ("config", "dat_folder", "dat_folders", "cwd"):
             assert not hasattr(manager, gone)
         assert not hasattr(dvc_dat, "DataConfig")
-        assert not hasattr(Do, "configure") and not hasattr(Do, "config")
+        assert not hasattr(Namespace, "configure") and not hasattr(Namespace, "config")
 
     def test_dat_create_and_load(self, tmp_path):
         manager = DatManager(dat_folders=[str(tmp_path)])
@@ -140,17 +140,17 @@ class TestDefaultWorld:
         mine.create({"dat": {"kind": "Dat"}}, path="here")
         Dat.manager = mine
         assert Dat.load("here").get_path() == os.path.join(os.path.realpath(tmp_path), "here")
-        assert do.manager is mine
-        assert do.load("dt.list") is mine.do.load("dt.list")
+        assert ns.manager is mine
+        assert ns.load("dt.list") is mine.ns.load("dt.list")
 
     def test_a_bound_shortcut_follows_a_reassignment(self, tmp_path, default_world):
-        shortcut = Dat.do
+        shortcut = Dat.ns
         replaced = DatManager(dat_folders=[str(tmp_path)])
         Dat.manager = replaced
         assert shortcut.manager is replaced
 
     def test_the_package_exports_the_four_classes(self):
-        assert sorted(dvc_dat.__all__) == ["Dat", "DatContainer", "DatManager", "Do"]
+        assert sorted(dvc_dat.__all__) == ["Dat", "DatContainer", "DatManager", "Namespace"]
         for gone in ("cli_main", "expand", "expand_spec", "merge_dicts"):
             assert not hasattr(dvc_dat, gone)
 
@@ -160,11 +160,11 @@ class TestDefaultWorld:
         assert Run.manager is Dat.manager
 
     def test_adopting_the_default_do_keeps_mounts(self, tmp_path, default_world):
-        do.mount(value={"x": 1}, at="adopt_probe")
-        replaced = DatManager(dat_folders=[str(tmp_path)], do=do)
+        ns.mount(value={"x": 1}, at="adopt_probe")
+        replaced = DatManager(dat_folders=[str(tmp_path)], ns=ns)
         assert Dat.manager is replaced
-        assert do.load("adopt_probe.x") == 1
-        assert replaced.do is default_world.do
+        assert ns.load("adopt_probe.x") == 1
+        assert replaced.ns is default_world.ns
 
     def test_a_plain_manager_does_not_replace_it(self, tmp_path, default_world):
         DatManager(dat_folders=[str(tmp_path)])
@@ -180,7 +180,7 @@ class TestDefaultWorld:
         monkeypatch.chdir(tmp_path)
         Dat.manager = None
         assert Dat.manager._dat_folders == [os.path.join(os.path.realpath(tmp_path), "warehouse")]
-        assert do.manager is Dat.manager
+        assert ns.manager is Dat.manager
 
 
 class TestDatCliConfigVariable:
@@ -221,25 +221,25 @@ class TestFolderMountPaths:
         return tmp_path
 
     def test_at_prefixes_the_folder(self, catalog):
-        probe = Do()
+        probe = Namespace()
         probe.mount(folder=str(catalog), at="catalog")
         assert probe.load("catalog.experiment")["dat"]["kwargs"] == {"game": "G1"}
         assert probe.load("catalog.experiment.dat.kwargs.game") == "G1"
 
     def test_nested_files_answer_to_their_path(self, catalog):
-        probe = Do()
+        probe = Namespace()
         probe.mount(folder=str(catalog), at="catalog")
         assert probe.load("catalog.models.baseline") == {"lr": 0.1}
         assert probe.load("catalog.models.baseline.lr") == 0.1
         assert probe.load("catalog.models.helpers.double")(4) == 8
 
     def test_without_at_the_folder_is_the_root(self, catalog):
-        probe = Do()
+        probe = Namespace()
         probe.mount(folder=str(catalog))
         assert probe.load("models.baseline.lr") == 0.1
 
     def test_a_missing_key_under_a_nested_file_is_named(self, catalog):
-        probe = Do()
+        probe = Namespace()
         probe.mount(folder=str(catalog), at="catalog")
         with pytest.raises(KeyError, match="'nope' is missing from"):
             probe.load("catalog.models.baseline.nope")
@@ -283,7 +283,7 @@ class TestMergeByName:
 
     def test_dat_base_uses_it(self, tmp_path):
         m = DatManager(dat_folders=[str(tmp_path)])
-        m.do.mount(value=self.stages, at="parent")
+        m.ns.mount(value=self.stages, at="parent")
         dat = m.create({"dat": {"base": "parent"}, "stages": [{"name": "viz"}]}, path="child")
         assert [e["name"] for e in dat.get_spec()["stages"]] == ["detect", "track", "score", "viz"]
 
@@ -312,16 +312,16 @@ class TestMountRefusesImportClash:
     def test_a_root_folder_mount_may_not_shadow_a_module(self, importable):
         _, mounted = importable
         with pytest.raises(ValueError, match="'helpers' is an importable module"):
-            Do().mount(folder=str(mounted))
+            Namespace().mount(folder=str(mounted))
 
     def test_at_may_not_be_an_importable_package(self, importable):
         _, mounted = importable
         with pytest.raises(ValueError, match="'configs' is an importable module"):
-            Do().mount(folder=str(mounted), at="configs")
+            Namespace().mount(folder=str(mounted), at="configs")
 
     def test_a_clear_name_mounts(self, importable):
         _, mounted = importable
-        probe = Do()
+        probe = Namespace()
         probe.mount(folder=str(mounted), at="templates")
         assert probe.load("templates.helpers.WHO") == "mounted"
         assert probe.load("helpers.WHO") == "installed"
@@ -329,19 +329,19 @@ class TestMountRefusesImportClash:
     def test_values_and_files_are_checked_too(self, importable):
         _, mounted = importable
         with pytest.raises(ValueError, match="'json' is an importable module"):
-            Do().mount(value={"a": 1}, at="json.settings")
+            Namespace().mount(value={"a": 1}, at="json.settings")
         with pytest.raises(ValueError, match="'helpers'"):
-            Do().mount(file=str(mounted / "base.yaml"), at="helpers")
+            Namespace().mount(file=str(mounted / "base.yaml"), at="helpers")
 
     def test_a_module_at_its_own_name_is_not_a_clash(self, importable):
-        probe = Do()
+        probe = Namespace()
         probe.mount(module="helpers", at="helpers")
         probe.mount(module="configs", at="configs")
         assert probe.load("configs.X") == "installed"
 
     def test_a_package_folder_at_its_own_name_is_not_a_clash(self, importable):
         site, _ = importable
-        probe = Do()
+        probe = Namespace()
         probe.mount(folder=str(site / "configs"), at="configs")
 
     def test_a_symlinked_package_folder_at_its_own_name_is_not_a_clash(
@@ -350,7 +350,7 @@ class TestMountRefusesImportClash:
         (site / "configs" / "base.yaml").write_text("a: 1\n")
         link = tmp_path / "link"
         link.symlink_to(site / "configs")
-        probe = Do()
+        probe = Namespace()
         probe.mount(folder=str(link), at="configs")
         assert probe.load("configs.base") == {"a": 1}
 
@@ -361,19 +361,19 @@ class TestMountRefusesImportClash:
         (site / "configs" / "base.yaml").write_text("a: 1\n")
         importlib.invalidate_caches()
         with pytest.raises(ValueError, match="'configs2' is an importable module"):
-            Do().mount(folder=str(site / "configs"), at="configs2")
+            Namespace().mount(folder=str(site / "configs"), at="configs2")
 
 
 class TestValueMountPaths:
     def test_a_value_mount_answers_below_itself(self):
-        probe = Do()
+        probe = Namespace()
         probe.mount(value={"pi": 3.14159, "deep": {"e": 2.71828}}, at="consts")
         assert probe.load("consts.pi") == 3.14159
         assert probe.load("consts.deep.e") == 2.71828
         assert probe.load("consts")["pi"] == 3.14159
 
     def test_a_missing_key_is_named(self):
-        probe = Do()
+        probe = Namespace()
         probe.mount(value={"pi": 3.14159}, at="consts")
         with pytest.raises(KeyError, match="'tau' is missing"):
             probe.load("consts.tau")

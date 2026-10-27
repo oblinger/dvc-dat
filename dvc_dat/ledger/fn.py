@@ -2,7 +2,7 @@
 
 ``@ledger_fn`` declares and returns the function unchanged (A52): a plain call
 runs the body and returns an unsealed ``Value``, recording nothing.
-``rev.resolve(name)`` resolves a dotted name at a revision; a function comes
+``rev.ns.load(name)`` resolves a dotted name at a revision; a function comes
 back an ``Fn``: under a mounted prefix (``db/mount/<prefix>`` rows) a sandboxed
 function, read off the mounted file and run in a worker (``sandbox``);
 otherwise an installed one, resolved in this process. Its ``kind`` is
@@ -512,7 +512,7 @@ class Fn:
         return kw
 
     def _function(self) -> Callable:
-        """The function itself, for a plain ``Dat.do`` run (nothing memoised): installed, the object;
+        """The function itself, for a plain ``Dat.ns`` run (nothing memoised): installed, the object;
         mounted, imported in this process through the mounts as of ``_rev`` (``sandbox.import_mounted``)."""
         if self._obj is not None:
             return self._obj

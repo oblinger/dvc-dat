@@ -27,7 +27,7 @@ def world(tmp_path):
 
 
 def made(spec=SPEC, **kwargs):
-    """A dat ``Dat.do`` made and ran: saved by its run function."""
+    """A dat ``Dat.ns`` made and ran: saved by its run function."""
     return Dat.manager.run(spec, **kwargs)
 
 
@@ -139,11 +139,11 @@ def test_rev_resolve_hands_back_what_a_name_denotes(coded):
     import ledger_kinds
 
     rev = coded.at()
-    assert rev.resolve("ledger_kinds.TABLE_SPEC") == ledger_kinds.TABLE_SPEC
-    cut_fn = rev.resolve("ledger_kinds.cut")
+    assert rev.ns.load("ledger_kinds.TABLE_SPEC") == ledger_kinds.TABLE_SPEC
+    cut_fn = rev.ns.load("ledger_kinds.cut")
     assert isinstance(cut_fn, Fn) and cut_fn.kind == "ledger" and cut_fn.code.sandboxed is False
-    assert rev.resolve("ledger_kinds.build_table") is ledger_kinds.build_table   # installed, undecorated: itself
-    assert rev.resolve("ledger_kinds.NotedDat") is NotedDat              # anything else: the object
+    assert rev.ns.load("ledger_kinds.build_table") is ledger_kinds.build_table   # installed, undecorated: itself
+    assert rev.ns.load("ledger_kinds.NotedDat") is NotedDat              # anything else: the object
 
 
 def test_a_spec_naming_a_ledger_function_is_refused(coded, world):
@@ -170,8 +170,8 @@ def test_a_dat_container_still_lists_its_dats(world):
 
 
 def test_a_ledger_project_gets_the_ledgers_do_and_a_plain_one_the_plain_do(tmp_path):
-    from dvc_dat import Do
-    from dvc_dat.ledger import Ledger, LedgerDo
+    from dvc_dat import Namespace
+    from dvc_dat.ledger import Ledger, LedgerNamespace
 
     led, plain = tmp_path / "led", tmp_path / "plain"
     led.mkdir()
@@ -180,11 +180,11 @@ def test_a_ledger_project_gets_the_ledgers_do_and_a_plain_one_the_plain_do(tmp_p
     Ledger(led / ".dat" / "ledger", create=True)
     (plain / ".datconfig.yaml").write_text("dat_folders: data\n")
     m = DatManager.load_dat_config(led)
-    assert isinstance(m.do, LedgerDo) and m.do.load("os.path.join") is os.path.join
-    assert m.do.load("dt.list") is not None                             # the world's own names stay
+    assert isinstance(m.ns, LedgerNamespace) and m.ns.load("os.path.join") is os.path.join
+    assert m.ns.load("dt.list") is not None                             # the world's own names stay
     with pytest.raises(TypeError, match="db/mount"):
-        m.do.mount(value={"dat": {}}, at="specs.x")
+        m.ns.mount(value={"dat": {}}, at="specs.x")
     p = DatManager.load_dat_config(plain)
-    assert type(p.do) is Do
-    p.do.mount(value={"dat": {}}, at="specs.x")
-    assert p.do.load("specs.x") == {"dat": {}}
+    assert type(p.ns) is Namespace
+    p.ns.mount(value={"dat": {}}, at="specs.x")
+    assert p.ns.load("specs.x") == {"dat": {}}

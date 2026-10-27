@@ -36,8 +36,8 @@ def inner(dat, n):
 @pytest.fixture
 def m(tmp_path):
     manager = DatManager(dat_folders=[str(tmp_path / "dats")])
-    manager.do.mount(value=outer, at="outer")
-    manager.do.mount(value=inner, at="inner")
+    manager.ns.mount(value=outer, at="outer")
+    manager.ns.mount(value=inner, at="inner")
     return manager
 
 
@@ -115,8 +115,8 @@ class TestExecute:
                 return super()._execute(dat)
 
         m = Recording(dat_folders=[str(tmp_path / "dats")])
-        m.do.mount(value=outer, at="outer")
-        m.do.mount(value=inner, at="inner")
+        m.ns.mount(value=outer, at="outer")
+        m.ns.mount(value=inner, at="inner")
         assert m.run({"dat": {"do": "outer", "name": "outer"}}, 4) == 50
         assert seen == ["outer", "inner"]
 
@@ -132,7 +132,7 @@ class TestExecute:
         assert "run_at" not in dat.get_results()["dat"]
 
     def test_code_outside_a_checkout_records_nothing(self, m):
-        m.do.mount(value=id, at="builtin")
+        m.ns.mount(value=id, at="builtin")
         dat = m.create({"dat": {"do": "builtin", "name": "b"}})
         m.run(dat)
         assert "code" not in dat.run.get_results()["dat"]

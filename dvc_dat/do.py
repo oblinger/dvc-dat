@@ -1,21 +1,22 @@
-"""The do-system: `do` maps dotted names to Python objects.
+"""The namespace: `ns` maps dotted names to Python objects.
 
-    do.load("pkg.mod.fn")         # the object a dotted name imports to
-    do.name_of(obj)               # the dotted name that loads back to obj
-    do.mount(folder=..., at=...)  # add names to the namespace, in code
+    ns.load("pkg.mod.fn")         # the object a dotted name imports to
+    ns.name_of(obj)               # the dotted name that loads back to obj
+    ns.mount(folder=..., at=...)  # add names to the namespace, in code
+    ns.mounts()                   # the mount table: {prefix: location}
 
 Running is the manager's: `Dat.manager.run(target, *args, **kwargs)` runs a
 dat, a template spec or a plain callable, loading names through this namespace.
-`do` is the process's default namespace: it forwards to `Dat.manager.do`,
+`ns` (`Dat.ns`) is the process's default namespace: it forwards to `Dat.manager.ns`,
 whichever manager that is.  `DatManager(dat_folders=[...])` is another world
-with a `do` of its own.  A dotted name is a mounted name, else exactly what
+with an `ns` of its own.  A dotted name is a mounted name, else exactly what
 `import` means in this environment, `getattr` below that.  Mounts are
-`do.mount(...)` calls in the program; `.datconfig.yaml` holds none.  Importing
+`ns.mount(...)` calls in the program; `.datconfig.yaml` holds none.  Importing
 never reads the filesystem; the first use builds `Dat.manager` from the
 nearest `.datconfig.yaml`.
 
-In a project whose `.datconfig.yaml` names a ledger, `Dat.manager.do` is a
-`LedgerDo` (`dvc_dat.ledger.namespace`, DAT 1046): the same interface, its
+In a project whose `.datconfig.yaml` names a ledger, `Dat.manager.ns` is a
+`LedgerNamespace` (`dvc_dat.ledger.namespace`, DAT 1046, 1051): the same interface, its
 names the ledger's `db/mount` rows, and `mount` refused.
 """
 
@@ -47,11 +48,11 @@ _MAIN = "__main__"
 Spec = Dict[str, Any]
 
 
-class Do:
-    """A do namespace, bound to the `DatManager` whose world it names.
+class Namespace:
+    """A namespace, bound to the `DatManager` whose world it names.
 
-    Every manager builds its own, reached as `manager.do`; the module-level `do`
-    forwards to `Dat.manager.do`.  A bare `Do()` is a plain namespace of Python
+    Every manager builds its own, reached as `manager.ns`; the module-level `ns`
+    forwards to `Dat.manager.ns`.  A bare `Namespace()` is a plain namespace of Python
     objects: it mounts, loads and names with no manager at all.  It is not
     callable: running is `manager.run(target, ...)`, which loads names here.
     """
@@ -71,9 +72,9 @@ class Do:
     def manager(self) -> DatManager:
         """The world this namespace belongs to."""
         if self._manager is None:
-            raise RuntimeError("this Do is a namespace with no manager, and running a "
-                               "dat needs one: Do(manager=m), or "
-                               "DatManager(dat_folders=[...], do=this_do)")
+            raise RuntimeError("this Namespace is a namespace with no manager, and running a "
+                               "dat needs one: Namespace(manager=m), or "
+                               "DatManager(dat_folders=[...], ns=this_ns)")
         return self._manager
 
     # -- forking (Dat.manager.run) ------------------------------------------
@@ -150,7 +151,7 @@ class Do:
         if result is None and default is not _DO_NULL:
             return default
         if kind and not isinstance(result, kind):
-            raise TypeError(f"do.load: expected {dotted_name!r} of type {kind}, found {result!r}")
+            raise TypeError(f"ns.load: expected {dotted_name!r} of type {kind}, found {result!r}")
         return result
 
     def _load_mounted(self, dotted_name: str) -> Any:
@@ -164,11 +165,11 @@ class Do:
                 value = _parse_yaml_prefix(value)
                 if cut < len(parts):
                     if not isinstance(value, dict):
-                        raise KeyError(f"do.load: {key!r} is a mounted value, "
+                        raise KeyError(f"ns.load: {key!r} is a mounted value, "
                                        f"not a mapping; {dotted_name!r} is not in it")
                     value = Dat.get(value, parts[cut:], _DO_NULL)
                     if value is _DO_NULL:
-                        raise KeyError(f"do.load: {'.'.join(parts[cut:])!r} "
+                        raise KeyError(f"ns.load: {'.'.join(parts[cut:])!r} "
                                        f"is missing from the value mounted at {key!r}")
                 return copy.deepcopy(value) if isinstance(value, dict) else value
         obj = self._get_base(file_base, default=None)
@@ -184,7 +185,7 @@ class Do:
         if obj is None:
             return _DO_NULL
         if obj == _DO_ERROR_FLAG:
-            raise KeyError(f"do.load: {file_base!r} is mounted more than once")
+            raise KeyError(f"ns.load: {file_base!r} is mounted more than once")
         elif isinstance(obj, ModuleType):
             if len(parts) < 2:
                 result = getattr(obj, _MAIN) if hasattr(obj, _MAIN) else None
@@ -196,16 +197,16 @@ class Do:
         elif isinstance(obj, dict):
             result = Dat.get(obj, parts[1:], None)
         else:
-            raise KeyError(f"do.load: illegal mounted value {obj!r} for {dotted_name}")
+            raise KeyError(f"ns.load: illegal mounted value {obj!r} for {dotted_name}")
         if result is None:
             name = dotted_name[len(file_base) + 1:] or _MAIN
             source = obj.__file__ if isinstance(obj, ModuleType) else obj
-            raise KeyError(f"do.load: {name!r} is missing from {source!r}")
+            raise KeyError(f"ns.load: {name!r} is missing from {source!r}")
         result = _parse_yaml_prefix(result)
         return copy.deepcopy(result) if isinstance(result, dict) else result
 
     def _load_unmounted(self, dotted_name: str) -> Any:
-        """A name no mount holds: imported (a `LedgerDo` walks the ledger's mounts first)."""
+        """A name no mount holds: imported (a `LedgerNamespace` walks the ledger's mounts first)."""
         return self._load_static(dotted_name)
 
     @staticmethod
@@ -213,7 +214,7 @@ class Do:
         """Import the longest importable prefix of `dotted_name`, then `getattr` the rest."""
         parts = dotted_name.split(".")
         if not all(parts):
-            raise ImportError(f"do.load: {dotted_name!r} is not a dotted name")
+            raise ImportError(f"ns.load: {dotted_name!r} is not a dotted name")
         for cut in range(len(parts), 0, -1):
             module_name = ".".join(parts[:cut])
             try:
@@ -225,7 +226,7 @@ class Do:
             for attr in parts[cut:]:
                 obj = getattr(obj, attr)
             return obj
-        raise ImportError(f"do.load: no importable prefix of {dotted_name!r}")
+        raise ImportError(f"ns.load: no importable prefix of {dotted_name!r}")
 
     @staticmethod
     def name_of(obj: Any) -> str:
@@ -235,11 +236,18 @@ class Do:
         module = getattr(obj, "__module__", None)
         qualname = getattr(obj, "__qualname__", None)
         if not module or not qualname or "<" in qualname:
-            raise ValueError(f"do.name_of: {obj!r} has no importable dotted name")
+            raise ValueError(f"ns.name_of: {obj!r} has no importable dotted name")
         return f"{module}.{qualname}"
 
-    def keys(self) -> Iterable[str]:
-        """Every mounted base name."""
+    def mounts(self) -> Dict[str, str]:
+        """The mount table: `{prefix: location}`, a mounted file, folder entry or
+        module (its import name when mounted as an object); values mounted with
+        `mount(value=...)` have no location and are not listed."""
+        return {at: (self._base_objects[at].__name__ if loc == "--directly-assigned--" else loc)
+                for at, loc in self._base_locations.items()}
+
+    def _mounted_names(self) -> Iterable[str]:
+        """Every mounted base name (the command line's `--list`, the just targets)."""
         return self._base_locations.keys()
 
     def _resolve_dat_folder(self, name: str) -> Optional[str]:
@@ -306,7 +314,7 @@ class Do:
             self._base_objects[base] = _load_base_entity(base, self._base_locations[base])
             result = self._base_objects[base]
         elif default is _DO_NULL:
-            raise KeyError(f"do: base {base + '...'!r} is not mounted")
+            raise KeyError(f"ns: base {base + '...'!r} is not mounted")
         else:
             result = default
         if isinstance(result, dict):
@@ -391,14 +399,14 @@ def _load_base_entity(base, source_spec: str) -> Union[ModuleType, Spec]:
         with open(source_spec, 'r') as f:
             return yaml.safe_load(f)
     else:
-        raise Exception(f"do: unsupported file type {source_spec}")
+        raise Exception(f"ns: unsupported file type {source_spec}")
 
 
 def _load_module(base, module_spec: str) -> ModuleType:
     if "/" not in module_spec:
         return import_module(module_spec)
     if not os.path.exists(module_spec):
-        raise FileNotFoundError(f"do: missing module file {module_spec}")
+        raise FileNotFoundError(f"ns: missing module file {module_spec}")
     spec = importlib.util.spec_from_file_location(base, module_spec)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -409,7 +417,7 @@ def _build_loadables_index(folder: str, at: str) -> Dict[str, Any]:
     folder = os.path.abspath(folder)
     results = {}
     if not folder or not os.path.exists(folder):
-        raise FileNotFoundError(f"do: could not mount folder {folder!r}")
+        raise FileNotFoundError(f"ns: could not mount folder {folder!r}")
     for path in Path(folder).rglob('*'):
         base, ext = os.path.splitext(path)
         loc = os.path.relpath(base, folder)
@@ -424,30 +432,30 @@ def _build_loadables_index(folder: str, at: str) -> Dict[str, Any]:
     return results
 
 
-class _DefaultDo:
-    """`dvc_dat.do`: forwards every call and attribute to `Dat.manager.do`, so it
+class _DefaultNamespace:
+    """`dvc_dat.do.ns` (`Dat.ns`): forwards every call and attribute to `Dat.manager.ns`, so it
     always acts on the default world, whichever manager that is."""
 
     __slots__ = ()
 
     @staticmethod
-    def _current() -> Optional[Do]:
-        """The default world's `Do` if one is built yet, else None (reads no config)."""
+    def _current() -> Optional[Namespace]:
+        """The default world's `Namespace` if one is built yet, else None (reads no config)."""
         from . import core
-        return core._default_manager.do if core._default_manager is not None else None
+        return core._default_manager.ns if core._default_manager is not None else None
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(Dat.manager.do, name)
+        return getattr(Dat.manager.ns, name)
 
     def __setattr__(self, name: str, value: Any) -> None:
-        raise AttributeError(f"dvc_dat.do forwards to Dat.manager.do; set {name!r} there")
+        raise AttributeError(f"Dat.ns forwards to Dat.manager.ns; set {name!r} there")
 
     def __repr__(self) -> str:
-        return f"<dvc_dat.do -> {self._current()!r}>"
+        return f"<Dat.ns -> {self._current()!r}>"
 
 
-# The process's default namespace: `Dat.manager.do`, whichever manager that is.
-do = _DefaultDo()
+# The process's default namespace: `Dat.manager.ns`, whichever manager that is.
+ns = _DefaultNamespace()
 
 
 # =============================================================================
@@ -536,7 +544,7 @@ def cli_main(argv: Optional[List[str]] = None, *,
     found -- for the program it launches, so the main knows it was launched by
     `just run` and the config is read once; nothing else reads the variable.  `argv` defaults to
     `sys.argv`; `config` (a folder or a config file) replaces the default world,
-    `Dat.manager = DatManager.load_dat_config(config, do=dvc_dat.do)`, keeping
+    `Dat.manager = DatManager.load_dat_config(config, ns=Dat.ns)`, keeping
     its mounts; with neither, first use discovers one.  The return value is the
     exit status.
     """
@@ -545,14 +553,14 @@ def cli_main(argv: Optional[List[str]] = None, *,
         if config and not Path(config).is_file():
             raise ValueError(f"{ENV_CLI_CONFIG}={config}: no such config file")
     if config is not None:
-        Dat.manager = DatManager.load_dat_config(config, do=do)
+        Dat.manager = DatManager.load_dat_config(config, ns=ns)
     argv = list(sys.argv if argv is None else argv)
     justfile = os.environ.get(ENV_JUSTFILE)
     if config is not None and justfile and argv[1:2] not in (["--version"], ["--help"], ["-h"]):
         from .just import refresh
         cfg = Path(config)
         try:
-            refresh(do, cfg.parent if cfg.is_file() else cfg, Path(justfile))
+            refresh(ns, cfg.parent if cfg.is_file() else cfg, Path(justfile))
         except Exception as e:
             print(f"run: targets: {_message(e)}", file=sys.stderr)
     return _do_argv(argv, config)
@@ -596,11 +604,11 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
             return _cmd_eval(ledger, args, kwargs, overrides, flags)
     target, fixed = args[0], [arg_value(a) for a in args[1:]]
     try:
-        cmd = do.load(target)
+        cmd = ns.load(target)
     except (ImportError, AttributeError, KeyError) as e:
         return _fail(f"cannot load {target!r}: {_message(e)}", code=2)
     if "usage" in flags:
-        usage = do.load(target.split(".")[0] + ".usage", default=None)
+        usage = ns.load(target.split(".")[0] + ".usage", default=None)
         if usage is None and isinstance(cmd, dict):
             usage = cmd.get("usage")
         print(usage or USAGE)
@@ -614,7 +622,7 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
         return 0
     try:
         if isinstance(cmd, dict):
-            spec = merge_dicts(do._merge_bases(cmd), overrides)
+            spec = merge_dicts(ns._merge_bases(cmd), overrides)
             result = Dat.manager.run(spec, *fixed, **kwargs)
         elif overrides:
             return _fail(f"--set/--json need a template spec; "
@@ -688,7 +696,7 @@ def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: S
             if not isinstance(spec, dict):
                 return _fail(f"{target}: a spec is a mapping, not {type(spec).__name__}")
         else:
-            obj = rev.resolve(target)
+            obj = rev.ns.load(target)
             if isinstance(obj, dict):
                 spec = obj
             elif overrides:
@@ -708,7 +716,7 @@ def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: S
             run_target = spec if (is_file or overrides) else target
         else:
             return _fail(f"{target}: a spec run through the ledger is a dat spec (`dat:` naming its run "
-                         "function in `do`) or names a ledger function in `main`")
+                         "function in `dat.do`) or names a ledger function in `main`")
     keys.update(kwargs)
     alias = keys.pop("alias", None)
     if "dry-run" in flags:

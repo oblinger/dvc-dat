@@ -4,10 +4,10 @@ description: "2.16: the contract of dvc-dat — one example, then the class, the
 
 | -[DAT API](DAT%20API.md)-             | : 2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace<br>→ [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](ha://p/DAT%20API) |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Class API](DAT%20Class%20API.md)     | `from dvc_dat import Dat`: the `Dat` class, `Dat.do`, the spec file, the config                                                                                                                             |
+| [Class API](DAT%20Class%20API.md)     | `from dvc_dat import Dat`: the `Dat` class, `Dat.ns`, the spec file, the config                                                                                                                             |
 | [CLI](DAT%20CLI.md)                   | `dat TARGET …` from a shell, and the bootstrap copy                                                                                                                                                         |
-| [Do API](DAT%20Do%20API.md)           | the namespace under `Dat.do`: your program's main, mounts, spec surgery — the advanced half                                                                                                                 |
-| [Manager API](DAT%20Manager%20API.md) | `DatManager`: the one object — folders, artifacts, `run`, recording, its `do`                                                                                                                                    |
+| [Namespace API](DAT%20Namespace%20API.md)           | the namespace under `Dat.ns`: your program's main, mounts, spec surgery — the advanced half                                                                                                                 |
+| [Manager API](DAT%20Manager%20API.md) | `DatManager`: the one object — folders, artifacts, `run`, recording, its `ns`                                                                                                                                    |
 | ...                                   |                                                                                                                                                                                                             |
 
 # DAT API
@@ -19,7 +19,7 @@ The 2.16 contract of `dvc_dat`, shown once as a whole project.
 dat_folders: data           # where dats live (default: data/)
 art_folder: art             # artifacts, beside data/ (default)
 # run: uv run dat           # what a copy of bin/dat execs -- your
-#                           # own main, if it mounts names (Do API)
+#                           # own main, if it mounts names (Namespace API)
 ```
 
 ### `mymodule/train.py`
@@ -114,7 +114,7 @@ dat:
 
 ## Conceptual model
 
-A **dat** is a folder holding `_spec_.yaml`, a complete argumentless recipe for itself, and `_result_.yaml`, what running it produced. **`Dat.manager.run`** is the one run and **`Dat.do`** the one namespace: a dotted name means what `import` means in this environment, `getattr` below that, with `do.mount(...)` calls in your program layered on top ([DAT Do API](DAT%20Do%20API.md)). **Arguments never ride beside a spec** — they fork a new one. Every spec string may carry `{…}` references, expanded once when the dat is created. And **a path is an address, not a record**: `dat.name` may organise a folder tree however you like, but nothing reads meaning back out of it — a dat loads by name and by nothing else, and everything *about* a dat is in its spec. Finding the right dat by what its spec says is the ledger's: a dat sealed there is a value found by its preds, its spec's kwargs and its results ([DAT 1007](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1007), DAT 1038).
+A **dat** is a folder holding `_spec_.yaml`, a complete argumentless recipe for itself, and `_result_.yaml`, what running it produced. **`Dat.manager.run`** is the one run and **`Dat.ns`** the one namespace: a dotted name means what `import` means in this environment, `getattr` below that, with `ns.mount(...)` calls in your program layered on top ([DAT Namespace API](DAT%20Namespace%20API.md)). **Arguments never ride beside a spec** — they fork a new one. Every spec string may carry `{…}` references, expanded once when the dat is created. And **a path is an address, not a record**: `dat.name` may organise a folder tree however you like, but nothing reads meaning back out of it — a dat loads by name and by nothing else, and everything *about* a dat is in its spec. Finding the right dat by what its spec says is the ledger's: a dat sealed there is a value found by its preds, its spec's kwargs and its results ([DAT 1007](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1007), DAT 1038).
 
 
 # Changes
@@ -122,6 +122,8 @@ A **dat** is a folder holding `_spec_.yaml`, a complete argumentless recipe for 
 ## Migration from 1.x
 
 `Dat.run()` → `Dat.manager.run(a_dat)`; `Dat.manager.do` → `Dat.do`; `DoManager`/`SimpleMethodManager` → the one `do`, configured for you on first use ([DAT Do API](DAT%20Do%20API.md)); spec key `dat.path` → `dat.name`; `dat.spec.dat.kind` → `d.get_spec()["dat"]["kind"]`; pydantic specs → a `validate_spec` override; `dat.base` may now be a list; call-site arguments no longer append to `dat.args` — they replace them, and they fork; config `mount_commands:` → `do.mount(...)` calls in your own program, and `run: python -m mypkg.main` for the shell ([DAT Do API](DAT%20Do%20API.md)); config `local_prefix` + `extra_local_prefixes` → `dat_folders`; config `python:` → `run:`; `bin/X` → `bin/dat`; `dat do TARGET` → `dat TARGET`; `--set KEY VALUE` / `--sets` → `--set KEY=VALUE`, repeated; `get_spec(raw=True)` → gone, the file holds the expanded values ([DAT 1009](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1009)). From 2.x: the table in https://github.com/oblinger/dvc-dat/blob/main/CHANGELOG.md § 2.2.0.
+
+**From 2.37:** `Dat.do` → `Dat.ns`, `manager.do` → `manager.ns`, `Do` → `Namespace`, `do.keys()` → `ns.mounts()`, `DatManager(do=)` → `ns=`; on a ledger `rev.resolve(name)` → `rev.ns.load(name)`, `LedgerDo` → `LedgerNamespace`, and `t.ns.mount(at, root=, repo=)` writes a mount ([DAT Namespace API](DAT%20Namespace%20API.md), DAT 1051).
 
 **From 2.35:** `Dat.do(x, …)` → `Dat.manager.run(x, …)`; `manager.execute(dat)` → `manager.run(dat)`; `Dat.do` is the namespace only, and `dat.run` is still the run record (DAT 1049).
 

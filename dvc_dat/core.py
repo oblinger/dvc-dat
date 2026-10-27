@@ -1,8 +1,8 @@
 """dvc_dat core: configuration, the Dat manager, Dat, and spec expansion.
 
 A Dat is a folder carrying a `_spec_.yaml` that is a complete, argumentless recipe
-for itself, plus a `_result_.yaml` holding what running it produced.  The do-system
-(`dvc_dat.do`) runs specs; this module stores and loads them.  A Dat is also a
+for itself, plus a `_result_.yaml` holding what running it produced.  The namespace
+(`dvc_dat.do`) names specs; this module stores and loads them.  A Dat is also a
 ledger `Value` (DAT 1038): its folder is its bytes, by the folder codec below, so
 `dat.seal(t)` saves it and `rev.load(name)` brings it back with no subclass.
 """
@@ -500,14 +500,14 @@ def _lookup_name(name: str, vars: Dict[str, Any],
                  resolver: Optional[Callable[[str], Any]]) -> Any:
     if "." in name:
         if resolver is None:
-            from .do import do          # the default world; a manager passes its own
-            resolver = do.load
+            from .do import ns          # the default world; a manager passes its own
+            resolver = ns.load
         return resolver(name)
     if name in vars:
         return vars[name]
     raise KeyError(
         f"expand: unknown name {{{name}}}; undotted names are the built-ins "
-        f"{sorted(_builtins())} and the vars given, a dotted name resolves through do.load"
+        f"{sorted(_builtins())} and the vars given, a dotted name resolves through ns.load"
     )
 
 
@@ -516,7 +516,7 @@ def expand(text: str, vars: Optional[Dict[str, Any]] = None, *,
     """Expand the `{}` references in `text`.
 
     `{name}` with an undotted name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`)
-    or a key of `vars`; `{dotted.name}` is resolved through `do.load` (or `resolver`),
+    or a key of `vars`; `{dotted.name}` is resolved through `ns.load` (or `resolver`),
     and called when it is a function or method; `{dotted.fn(1, "x", k=2)}` calls it
     with those literal arguments;
     `{{` and `}}` are the literal braces.  A `text` that is exactly one reference returns
@@ -569,16 +569,16 @@ def expand_spec(spec: Any, vars: Optional[Dict[str, Any]] = None, *,
 class DatManager:
     """A world of dats: the dat folders, and the namespace that names things in them.
 
-    A manager owns its `do` -- a `Do` bound to it, carrying its mounts and its
+    A manager owns its `ns` -- a `Namespace` bound to it, carrying its mounts and its
     `load` -- and everything the manager does (a dotted spec, `dat.base`, `{}`
-    expansion, path resolution, every run) goes through that `do`.  `run` is the
+    expansion, path resolution, every run) goes through that `ns`.  `run` is the
     one way to run a dat outside a ledger.  The process's default world is
     `Dat.manager`, built on first use by `DatManager.load_dat_config()` and
-    replaced by assigning to it.  Any number of others coexist.  `do` is the
+    replaced by assigning to it.  Any number of others coexist.  `ns` is the
     only public attribute.
     """
 
-    do: "Do"
+    ns: "Namespace"
     _dat_folders: List[str]
     _art_folder: Optional[str]
     _config_dir: Optional[str]
@@ -586,18 +586,18 @@ class DatManager:
     _index_file: str
 
     def __init__(self, *, dat_folders: List[str], art_folder: Optional[str] = None,
-                 index: Optional[str] = None, do: Optional["Do"] = None,
+                 index: Optional[str] = None, ns: Optional["Namespace"] = None,
                  verify: bool = False):
         """A world on `dat_folders` -- searched in order by name, the first written
         to -- and `art_folder`, where artifacts live; with none, this world holds
         no artifacts.  The two never nest: an artifact folder inside a dat
         folder, or a dat folder inside it, is `ValueError`.  Nothing is read
-        from disk.  `do` adopts an existing namespace with its mounts; adopting
+        from disk.  `ns` adopts an existing namespace with its mounts; adopting
         the default world's makes this the default world.  `verify` re-hashes
         every load against its stored `sha256` (see `load`).  `index` is the
         file keying every name and `sha256:` URN of the store, default
         `_index_.json` in the artifact folder, else in the first dat folder."""
-        from .do import Do, _DefaultDo
+        from .do import Namespace, _DefaultNamespace
         from . import dat_tools
 
         if isinstance(dat_folders, (str, Path)) or not isinstance(dat_folders, (list, tuple)):
@@ -623,20 +623,20 @@ class DatManager:
         self._verify = verify
 
         default = False
-        if isinstance(do, _DefaultDo):
-            do, default = do._current(), True
-        elif do is not None and _default_manager is not None and do is _default_manager.do:
+        if isinstance(ns, _DefaultNamespace):
+            ns, default = ns._current(), True
+        elif ns is not None and _default_manager is not None and ns is _default_manager.ns:
             default = True
-        self.do = Do(manager=self) if do is None else do
-        self.do._manager = self
-        self.do._reg_module("dt", dat_tools, allow_redefine=True)     # the world's own names, any `do`
-        self.do._reg_value("dt.list", dat_tools.cmd_list)
+        self.ns = Namespace(manager=self) if ns is None else ns
+        self.ns._manager = self
+        self.ns._reg_module("dt", dat_tools, allow_redefine=True)     # the world's own names, any `ns`
+        self.ns._reg_value("dt.list", dat_tools.cmd_list)
         if default:
             Dat.manager = self
 
     @classmethod
     def load_dat_config(cls, start: Union[str, Path, None] = None, *,
-                        do: Optional["Do"] = None) -> "DatManager":
+                        ns: Optional["Namespace"] = None) -> "DatManager":
         """A new manager from the `.datconfig.yaml` found walking up from `start`
         (default the working directory; a config file names itself).
 
@@ -646,11 +646,11 @@ class DatManager:
         no file they resolve against `start`.  `art_folder` defaults to `art/`
         beside the file, a sibling of `data/`; `index:` moves the store's index
         file.  An unknown key is `ValueError`.
-        `do` as in the constructor.
+        `ns` as in the constructor.
 
-        A `ledger:` key makes the namespace the ledger's (DAT 1046): `do` is a
-        `LedgerDo`, its names the ledger's `db/mount` rows at the head, and
-        `mount` refused; an adopted `do` that is not one is not kept.
+        A `ledger:` key makes the namespace the ledger's (DAT 1046): `ns` is a
+        `LedgerNamespace`, its names the ledger's `db/mount` rows at the head, and
+        `mount` refused; an adopted `ns` that is not one is not kept.
 
         A `manager:` key names the class to build, dotted (`mylab.store.Store`):
         a subclass of the class this is called on, imported once the config
@@ -703,15 +703,15 @@ class DatManager:
             extra_values["index"] = os.path.join(root, index)
         make_default = False
         if values.get("ledger") and config_path is not None:
-            from .do import _DefaultDo
-            from .ledger.namespace import LedgerDo
+            from .do import _DefaultNamespace
+            from .ledger.namespace import LedgerNamespace
 
-            adopted = do._current() if isinstance(do, _DefaultDo) else do
-            make_default = do is not None and (isinstance(do, _DefaultDo) or (
-                _default_manager is not None and do is _default_manager.do))
-            do = adopted if isinstance(adopted, LedgerDo) else LedgerDo(config=config_path)
+            adopted = ns._current() if isinstance(ns, _DefaultNamespace) else ns
+            make_default = ns is not None and (isinstance(ns, _DefaultNamespace) or (
+                _default_manager is not None and ns is _default_manager.ns))
+            ns = adopted if isinstance(adopted, LedgerNamespace) else LedgerNamespace(config=config_path)
         manager = klass(dat_folders=[os.path.join(root, f) for f in folders],
-                        art_folder=os.path.join(root, art_folder), do=do, verify=verify,
+                        art_folder=os.path.join(root, art_folder), ns=ns, verify=verify,
                         **extra_values)
         manager._config_dir = root
         if make_default:
@@ -719,21 +719,21 @@ class DatManager:
         return manager
 
     def expand(self, text: str, vars: Optional[Dict[str, Any]] = None) -> Any:
-        """`expand`, with dotted names resolved through this manager's `do`."""
-        return expand(text, vars, resolver=self.do.load)
+        """`expand`, with dotted names resolved through this manager's `ns`."""
+        return expand(text, vars, resolver=self.ns.load)
 
     def expand_spec(self, spec: Any, vars: Optional[Dict[str, Any]] = None) -> Any:
         """A copy of `spec` merged over its `dat.base` chain, then with every `{…}`
         filled; dotted names (bases and references alike) resolve through this
-        manager's `do`.
+        manager's `ns`.
 
         `dat.base` is a name, a spec, or a list of them, later entries winning,
         merged recursively and dropped from the result.  A spec that is not a dict
         has no bases and is only filled.
         """
         if isinstance(spec, dict):
-            spec = self.do._merge_bases(deepcopy(spec))
-        return expand_spec(spec, vars, resolver=self.do.load)
+            spec = self.ns._merge_bases(deepcopy(spec))
+        return expand_spec(spec, vars, resolver=self.ns.load)
 
     def create(
         self,
@@ -744,7 +744,7 @@ class DatManager:
         """Create a dat, as the class its `dat.kind` names: merge `dat.base`,
         validate, place it, write `_spec_.yaml`.
 
-        `spec` may be a dict or a dotted name loaded through the do-system.  The
+        `spec` may be a dict or a dotted name loaded through the namespace.  The
         folder is `path` if given, else the spec's `dat.name` template, else
         `anonymous/Dat{unique}`; `dat.target_exists` says what happens when the
         folder is already there.  Every `{}` in the spec is expanded here, once,
@@ -773,7 +773,7 @@ class DatManager:
 
         path = self._resolve_path(expanded_path)
         own = Dat.get(spec, DAT_NAME, None)
-        spec = expand_spec(spec, names, resolver=self.do.load)  # bases merged in _spec_of
+        spec = expand_spec(spec, names, resolver=self.ns.load)  # bases merged in _spec_of
         if own is not None:
             Dat.set(spec, DAT_NAME, own)            # the template, never its expansion (Q36)
         if _within(os.path.realpath(path), self._dat_folders[0]):
@@ -795,15 +795,15 @@ class DatManager:
         return self._load(path, dat_class=dat_class)
 
     def _spec_of(self, spec: Union[Dict, str, None]) -> Dict:
-        """A private copy of `spec` (a dict, or a dotted name loaded through `do`),
+        """A private copy of `spec` (a dict, or a dotted name loaded through `ns`),
         merged over its `dat.base`, with a `dat` mapping."""
         if spec is None:
             spec = {}
         if isinstance(spec, str):
-            spec = self.do.load(spec)
+            spec = self.ns.load(spec)
         if not isinstance(spec, dict):
             raise TypeError(f"Dat.create: spec must be a dict or a dotted name, not {spec!r}")
-        spec = self.do._merge_bases(deepcopy(spec))
+        spec = self.ns._merge_bases(deepcopy(spec))
         if not isinstance(spec.setdefault("dat", {}), dict):
             raise TypeError(f"Dat.create: spec['dat'] is a mapping, got {spec['dat']!r}")
         return spec
@@ -821,7 +821,7 @@ class DatManager:
         `sha256:<hex>` URN of either; a name held by both a dat and an
         artifact is `ValueError`.
 
-        A dat is searched as an absolute path, in the do-system's mounts, then in
+        A dat is searched as an absolute path, in the namespace's mounts, then in
         each dat folder.  Inside a `recording`, the load lands in that dat's
         `dat.dependencies`.  `cache_after_load` applies to dats only.  `verify`
         (default: the manager's) re-hashes what is handed back and raises
@@ -1069,7 +1069,7 @@ class DatManager:
 
         `type` is what `load` hands the payload's path to: a class or callable,
         recorded as its dotted name, or that name as a string -- anything
-        `do.load` resolves, a mounted value included.  With no type, `load`
+        `ns.load` resolves, a mounted value included.  With no type, `load`
         returns the path.  `name` is a path-like name of your choosing, held
         once and never overwritten; with none, the artifact answers to its URN
         only.  Bytes already stored are not stored again: the new name becomes
@@ -1169,23 +1169,23 @@ class DatManager:
             return None
         if isinstance(type, str):
             try:
-                obj = self.do.load(type)
+                obj = self.ns.load(type)
             except (ImportError, AttributeError, KeyError) as e:
                 raise ValueError(f"save_artifact: type {type!r} does not resolve through "
-                                 f"do.load: {e}") from None
+                                 f"ns.load: {e}") from None
             if not callable(obj):
                 raise TypeError(f"save_artifact: type {type!r} is {obj!r}, not callable")
             return type
         if not callable(type):
             raise TypeError(f"save_artifact: type is a class, a callable or its dotted name, "
                             f"got {type!r}")
-        hint = ("; mount it -- do.mount(value=..., at='some.name') -- and pass "
+        hint = ("; mount it -- Dat.ns.mount(value=..., at='some.name') -- and pass "
                 "type='some.name'")
         try:
-            dotted = self.do.name_of(type)
+            dotted = self.ns.name_of(type)
         except ValueError:
             raise TypeError(f"save_artifact: {type!r} has no importable dotted name{hint}") from None
-        if self.do.load(dotted, default=None) is not type:
+        if self.ns.load(dotted, default=None) is not type:
             raise TypeError(f"save_artifact: {type!r} does not load back as {dotted!r}{hint}")
         return dotted
 
@@ -1194,10 +1194,10 @@ class DatManager:
         if not sidecar.get("type"):
             return path
         try:
-            factory = self.do.load(sidecar["type"])
+            factory = self.ns.load(sidecar["type"])
         except (ImportError, AttributeError, KeyError) as e:
             raise ImportError(f"load: artifact {name!r} has type {sidecar['type']!r}, "
-                              f"which does not resolve through do.load: {e}") from None
+                              f"which does not resolve through ns.load: {e}") from None
         return factory(path)
 
     def _artifact_payload(self, name: str, folder: str,
@@ -1366,12 +1366,12 @@ class DatManager:
         object `dat.do` names, and records the run in `dat.run` (see
         `_execute`); the return value is `fn`'s.  A template with no `dat.do`
         just creates the dat and returns it, as does `dat.target_exists: use`
-        finding the dat already there.  Names load through this world's `do`,
+        finding the dat already there.  Names load through this world's `ns`,
         so in a ledger project they are the ledger's.  Fixed: a project needing
         other run machinery subclasses the manager, not `Dat`.
         """
-        do = self.do
-        obj = do.load(target) if isinstance(target, str) else target
+        ns = self.ns
+        obj = ns.load(target) if isinstance(target, str) else target
         try:
             if isinstance(obj, Dat):
                 if not args and not kwargs:
@@ -1383,8 +1383,8 @@ class DatManager:
                 return obj(*args, **kwargs)
             if not isinstance(obj, dict):
                 raise TypeError(f"run: cannot run {obj!r}; expected a callable, a spec or a Dat")
-            spec = do._fork_spec(obj, args, kwargs)
-            dat, skip_execution = do._dat_from_template(spec)
+            spec = ns._fork_spec(obj, args, kwargs)
+            dat, skip_execution = ns._dat_from_template(spec)
             if skip_execution:
                 return dat
             return self._execute(dat)
@@ -1395,7 +1395,7 @@ class DatManager:
         """Run `dat` as its spec says, and record the run in `dat.run`.
 
         Calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do`
-        names, loaded through this world's `do`, inside `recording(dat)`.  The
+        names, loaded through this world's `ns`, inside `recording(dat)`.  The
         run is a sub-dat, `run/` inside the dat, made fresh here: its results
         take `dat.run_at`, `dat.host`, `dat.pid` and `dat.code` (the branch,
         commit and dirty flag of the git checkout holding `fn`'s source; nothing
@@ -1420,7 +1420,7 @@ class DatManager:
         if fn is None:
             return dat
         if isinstance(fn, str):
-            fn = self.do.load(fn)
+            fn = self.ns.load(fn)
         from .ledger.fn import Fn
         if isinstance(fn, Fn):                  # a ledger project's name for a function (DAT 1046)
             if fn.kind != "dat":
@@ -1574,7 +1574,7 @@ class DatManager:
         name = str(name)
         if os.path.isabs(name):
             return name
-        if (mount_path := self.do._resolve_dat_folder(name)) is not None:
+        if (mount_path := self.ns._resolve_dat_folder(name)) is not None:
             return mount_path
         for folder in self._dat_folders:
             path = os.path.join(folder, name)
@@ -1595,16 +1595,16 @@ _default_manager: Optional[DatManager] = None
 class _DatMeta(type):
     """Gives `Dat` (and every subclass) `manager`, the process's default world:
     a plain assignable class attribute, filled on first read by
-    `DatManager.load_dat_config()`.  `Run.manager is Dat.manager`.  And `do`,
+    `DatManager.load_dat_config()`.  `Run.manager is Dat.manager`.  And `ns`,
     the default world's namespace."""
 
     @property
-    def do(cls) -> Any:
+    def ns(cls) -> Any:
         """The default world's namespace (not callable: `Dat.manager.run` runs): a
-        forwarder to `Dat.manager.do`, whichever manager that is when it is used, so
-        `do = Dat.do` binds a shortcut that follows a later reassignment."""
-        from .do import do
-        return do
+        forwarder to `Dat.manager.ns`, whichever manager that is when it is used, so
+        `ns = Dat.ns` binds a shortcut that follows a later reassignment."""
+        from .do import ns
+        return ns
 
     @property
     def manager(cls) -> DatManager:
@@ -1619,7 +1619,7 @@ class _DatMeta(type):
         if value is not None and not isinstance(value, DatManager):
             raise TypeError(f"Dat.manager is a DatManager, got {value!r}")
         if value is not None:
-            value.do._manager = value       # its namespace answers to it again
+            value.ns._manager = value       # its namespace answers to it again
         _default_manager = value
 
 

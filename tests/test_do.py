@@ -6,15 +6,15 @@ import subprocess
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from dvc_dat import Dat, DatManager, Do
+from dvc_dat import Dat, DatManager, Namespace
 
-do = Dat.do
+ns = Dat.ns
 
 
 @pytest.fixture
 def empty_do(tmp_path):
-    """A do namespace with nothing mounted, in a world of its own (2.3)."""
-    return DatManager(dat_folders=[str(tmp_path)]).do
+    """A namespace with nothing mounted, in a world of its own (2.3)."""
+    return DatManager(dat_folders=[str(tmp_path)]).ns
 
 
 def run_capture(line: str) -> str:
@@ -33,20 +33,20 @@ def run_capture_tail(line: str) -> str:
 
 class TestLoad:
     def test_load(self):
-        assert do.load("not_there", default=None) is None
-        assert isinstance(do.load("hello_world"), Callable)
+        assert ns.load("not_there", default=None) is None
+        assert isinstance(ns.load("hello_world"), Callable)
 
     def test_load_with_default(self):
-        assert do.load("not_there", default="hello") == "hello"
-        assert do.load("not_there", default=None) is None
-        assert isinstance(do.load("hello_world", default="hello"), Callable)
+        assert ns.load("not_there", default="hello") == "hello"
+        assert ns.load("not_there", default=None) is None
+        assert isinstance(ns.load("hello_world", default="hello"), Callable)
 
     def test_load_subfolder_value(self):
-        assert isinstance(do.load("script/hello_world", default="hello"), Callable)
+        assert isinstance(ns.load("script/hello_world", default="hello"), Callable)
 
     def test_multiple_values_in_one_loadable(self):
-        assert isinstance(do.load("hello_again"), Callable)
-        assert isinstance(do.load("hello_again.hella"), Callable)
+        assert isinstance(ns.load("hello_again"), Callable)
+        assert isinstance(ns.load("hello_again.hella"), Callable)
 
     def test_do(self):
         assert Dat.manager.run("hello_world") == "hello world!"
@@ -74,7 +74,7 @@ class TestLoad:
                  'metrics': ['team_highlight.money', 'team_highlight.precision',
                              'player_highlight.money', 'basket_stats.money',
                              'p_metric']}
-        assert do.load("supported") == value
+        assert ns.load("supported") == value
 
     def test_yaml_string_spec_parsing(self):
         """Test that YAML string specs (prefixed with 'yaml') are parsed correctly."""
@@ -85,8 +85,8 @@ foo: bar
 nested:
   key: value
 """
-        do.mount(at="yaml_test", value=yaml_spec)
-        loaded = do.load("yaml_test")
+        ns.mount(at="yaml_test", value=yaml_spec)
+        loaded = ns.load("yaml_test")
         assert isinstance(loaded, dict), "YAML string should be parsed to dict"
         assert loaded["foo"] == "bar"
         assert loaded["nested"]["key"] == "value"
@@ -174,13 +174,13 @@ class TestRegisteringStuff:
 
 class TestTemplatedDatCreationAndDeletion:
     def test_empty_creation_and_deletion(self):
-        dat, _ = do._dat_from_template({})
+        dat, _ = ns._dat_from_template({})
         assert dat, "Couldn't create Persistable"
         assert dat.delete(), "Couldn't delete Persistable"
 
     def test_creation_and_deletion_with_spec(self):
         spec1 = {"dat": {"name": "test_dats/{YY}-{MM} Dats{unique}"}}
-        dat, _ = do._dat_from_template(spec1)
+        dat, _ = ns._dat_from_template(spec1)
         assert dat, "Couldn't create Persistable"
         assert dat.get_path_name().startswith("test_dats/"), "Wrong path"
         assert dat.delete(), "Couldn't delete Persistable"
@@ -213,14 +213,14 @@ class TestDatCallArgs:
 
 
 class TestManagerRun:
-    """DAT 1049: `Dat.manager.run(target, ...)` is the one run; `Dat.do` is the namespace only."""
+    """DAT 1049: `Dat.manager.run(target, ...)` is the one run; `Dat.ns` is the namespace only."""
 
     @pytest.fixture
     def m(self, tmp_path):
         m = DatManager(dat_folders=[str(tmp_path)])
-        m.do.mount(at="echo", value=lambda dat, *a, **k: {"name": dat.get_path_name(),
+        m.ns.mount(at="echo", value=lambda dat, *a, **k: {"name": dat.get_path_name(),
                                                          "args": list(a), "kwargs": dict(k)})
-        m.do.mount(at="tmpl", value={"dat": {"do": "echo", "name": "runs/t", "kwargs": {"x": 1}}})
+        m.ns.mount(at="tmpl", value={"dat": {"do": "echo", "name": "runs/t", "kwargs": {"x": 1}}})
         return m
 
     def test_a_dat_runs_in_place_and_dat_run_is_the_record(self, m):
@@ -237,7 +237,7 @@ class TestManagerRun:
         assert dat.run is None                                   # the parent never ran
 
     def test_a_sealed_dat_is_refused(self, m):
-        m.do.mount(at="saves", value=lambda dat: dat.save())
+        m.ns.mount(at="saves", value=lambda dat: dat.save())
         dat = m.create({"dat": {"do": "saves"}}, path="sealed")
         m.run(dat)
         with pytest.raises(Exception, match="In <Dat") as e:
@@ -267,7 +267,7 @@ class TestManagerRun:
         assert m.run(lambda a, b=0: a + b, 1, b=2) == 3
 
     def test_a_callable_name_is_called(self, m):
-        m.do.mount(at="add", value=lambda a, b=0: a + b)
+        m.ns.mount(at="add", value=lambda a, b=0: a + b)
         assert m.run("add", 1, b=2) == 3
 
     def test_anything_else_is_refused(self, m):
@@ -280,10 +280,10 @@ class TestManagerRun:
 
     def test_dat_do_is_the_namespace_and_not_callable(self, m):
         with pytest.raises(TypeError, match="not callable"):
-            Dat.do("hello_world")
+            Dat.ns("hello_world")
         with pytest.raises(TypeError, match="not callable"):
-            m.do("tmpl")
-        assert Dat.do.load("hello_world") is not None           # the namespace stays
+            m.ns("tmpl")
+        assert Dat.ns.load("hello_world") is not None           # the namespace stays
         assert not hasattr(DatManager, "execute")
 
 

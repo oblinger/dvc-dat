@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, ExcelWriter, Series
 from dvc_dat import Dat, DatContainer
-from dvc_dat.do import do
+from dvc_dat.do import ns
 
 """
 Helper functions for creating data frames and manipulating data frames.
@@ -39,18 +39,18 @@ SHOW = "show"
 
 
 def cmd_list(prefix: str = ""):
-    """Lists all do names with a given prefix."""
+    """Lists all mounted names with a given prefix."""
     print(f"\nBase names matching: '{prefix}*'")
-    for k in do.keys():
+    for k in ns._mounted_names():
         if not k.startswith(prefix):
             continue
-        v = do.load(k, default="<module>")
+        v = ns.load(k, default="<module>")
         print(f"  {k:25} -->  {v}")  # noqa
 
 
 def from_dat(source: Union[Dat, str, Iterable],
         point_fns: Any) -> DataFrame:
-    """Creates a pandas DataFrame from one or more Dats and a list of do fns."""
+    """Creates a pandas DataFrame from one or more Dats and a list of functions."""
     cube = Cube(dats=source, point_fns=point_fns)
     df = cube.get_df()
     return df
@@ -263,7 +263,7 @@ class Cube(object):
 
     DO FNs:
     Point functions are invoked on each Dat as they are added to the cube, the results
-    are added to the Cube's points. These do fns may return:
+    are added to the Cube's points. These functions may return:
     - a scalar value (string, integer, or float) in which case a dict is created with
       the name of the point_fn as the key and the scalar value as the value.
     - a dict, which is added to the cube as a data point.
@@ -278,11 +278,10 @@ class Cube(object):
     def __init__(self, *, points: Points = None,
                  dats: Union[Dat, str, Iterable] = None,
                  point_fns: List[Union[str, PointFn]] = None):
-        # from . import do
         self.points: Points = list(points) if points else []
         self.point_fns: List[Callable[[Dat], Any]] = []
         for fn_spec in point_fns or []:
-            fn = do.load(fn_spec) if isinstance(fn_spec, str) else fn_spec
+            fn = ns.load(fn_spec) if isinstance(fn_spec, str) else fn_spec
             self.point_fns.append(fn)
         if dats:
             self._add_dats(dats, 1, {})

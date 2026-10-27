@@ -11,7 +11,7 @@ is a folder whose `_spec_.yaml` is a complete, argumentless recipe for itself;
 ```python
 from dvc_dat import Dat
 
-do = Dat.do   # the namespace shortcut; follows Dat.manager
+ns = Dat.ns   # the namespace shortcut; follows Dat.manager
 
 # Importing reads nothing; the first use below finds the nearest
 # .datconfig.yaml, walking up from the working directory.

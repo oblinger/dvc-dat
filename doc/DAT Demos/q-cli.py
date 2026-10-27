@@ -108,7 +108,7 @@ for args in (["init", "-q"], ["config", "user.name", "demo"], ["config", "user.e
 
 import mymodule.mult                              # discovery finds the checkout, the repo q-cli
 with L.transaction(by="human:dan", why="mount mymodule") as t:   # mymodule's code is the mount's: its files, hashed
-    t.update("db/mount/mymodule", {"db/root": "mymodule", "db/repo": "q-cli"})   # an add per key
+    t.ns.mount("mymodule", root="mymodule", repo="q-cli")   # the two db/mount/mymodule rows
     t.add("db", "version", "3.1.4")
 just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True)   # writes .dat/targets.just, the declared commands
 
@@ -143,8 +143,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # The project is q-dats's `mymodule`, mounted on the ledger in Setup:
 #
 # ```python
-# t.update("db/mount/mymodule",
-#          {"db/root": "mymodule", "db/repo": "q-cli"})
+# t.ns.mount("mymodule", root="mymodule", repo="q-cli")
 # ```
 #
 # Those rows are the project's names: `mymodule/specs/table12.yaml`
@@ -286,7 +285,7 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 
 # %%
 # !just mounts
-# same as: dvc_dat.dat_tools.cmd_list(""), in Dat.manager.do
+# same as: dvc_dat.dat_tools.cmd_list(""), in Dat.manager.ns
 # → Base names matching: '*'
 # →   dt                        -->  <module>
 # →   mymodule                  -->  <module>
