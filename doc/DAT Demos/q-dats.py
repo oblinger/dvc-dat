@@ -142,14 +142,13 @@ expanded_spec = Dat.manager.expand_spec(spec)   # 2. dat.base merged in, every {
 table12_dat = Dat.create(spec=expanded_spec)    # 3. the Dat and its folder
 
 # %%
+# print results
 table12_path = Path(table12_dat.get_path())
-print("spec:", spec)
-# → spec: {'dat': {'base': 'mymodule.specs.table_base', 'name': 'tables/{YYYY}/table12{unique}', 'do': 'mymodule.mult.build_table', 'kwargs': {'n': 12}}}
-print("expanded:", expanded_spec)   # base: gone, kwargs gains start, notes appears, name: filled
-# → expanded: {'dat': {'kwargs': {'start': 1, 'n': 12}, 'name': 'tables/2026/table12', 'do': 'mymodule.mult.build_table'}, 'notes': 'shared defaults'}
-print("dat:", repr(table12_dat))   # dat: <Dat: tables/2026/table12>
-print("files:", sorted(os.listdir(table12_path)))   # files: ['_spec_.yaml']
-print("_spec_.yaml:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_text(), "    "))
+print("SPEC:    ", spec)
+print("EXPANDED:", expanded_spec)   # base: gone, kwargs gains start, notes appears, name: filled
+print("DAT:     ", repr(table12_dat))
+print("FILES:   ", sorted(os.listdir(table12_path)))
+print("_SPEC_.YAML:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_text(), "    "))
 # _spec_.yaml: the expanded spec, plus kind: dvc_dat.core.Dat
 
 # %% [markdown]
@@ -161,10 +160,13 @@ print("_spec_.yaml:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_tex
 
 # %%
 shorthand_dat = Dat.create(spec="mymodule.specs.table12")   # steps 1-3
+
+# %%
+# print results
 shorthand_path = Path(shorthand_dat.get_path())
-print("dat:", repr(shorthand_dat))   # dat: <Dat: tables/2026/table12_2>
-print("manual _spec_.yaml:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_text(), "    "))
-print("shorthand _spec_.yaml:\n" + textwrap.indent((shorthand_path / "_spec_.yaml").read_text(), "    "))
+print("DAT:", repr(shorthand_dat))
+print("MANUAL _SPEC_.YAML:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_text(), "    "))
+print("SHORTHAND _SPEC_.YAML:\n" + textwrap.indent((shorthand_path / "_spec_.yaml").read_text(), "    "))
 # the same kwargs, do, kind and notes; name: tables/2026/table12 by hand, tables/{YYYY}/table12{unique} in the shorthand
 
 # %% [markdown]
@@ -183,17 +185,18 @@ print("shorthand _spec_.yaml:\n" + textwrap.indent((shorthand_path / "_spec_.yam
 # spec's run function with the dat and the spec's kwargs, in place,
 # and records the run in `dat.run`. `save()` in the run function
 # seals the folder, its results in `_result_.yaml`.
+# The cell runs once: a sealed dat refuses a second run, which
+# `RuntimeError: ... is sealed` reports.
 
 # %%
 Dat.manager.run(table12_dat)   # calls build_table in mult.py with this dat and n=12, start=1
 
-print("files:", sorted(os.listdir(table12_path)))
-# files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
-print("cells:", table12_dat.get_results()["cells"])   # cells: 144
-print("table.csv:\n" + textwrap.indent("\n".join((table12_path / "table.csv").read_text().splitlines()[:3]), "    "))
-# table.csv: rows 1..12, 2..24, 3..36
-print("_result_.yaml:\n" + textwrap.indent((table12_path / "_result_.yaml").read_text(), "    "))
-# _result_.yaml: cells, and under dat: what the seal recorded
+# %%
+# print results
+print("FILES:", sorted(os.listdir(table12_path)))
+print("CELLS:", table12_dat.get_results()["cells"])
+print("TABLE.CSV:\n" + textwrap.indent("\n".join((table12_path / "table.csv").read_text().splitlines()[:3]), "    "))
+print("_RESULT_.YAML:\n" + textwrap.indent((table12_path / "_result_.yaml").read_text(), "    "))
 
 # %% [markdown]
 # `dat.run` is the run's record, a sub-dat in the dat's `run/`
