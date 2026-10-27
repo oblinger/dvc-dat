@@ -229,7 +229,7 @@ The file a dat holds is that template expanded once, at create — `name` is the
 
 ## Grammar — `{…}` in any template string
 
-Expanded once, when the dat is created, with the same `now` and `unique` its folder got; the expanded values are what the file holds ([DAT 1009](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1009) Q7).
+Expanded once, when the dat is created, with the same `now` and `unique` its folder got; the expanded values are what the file holds ([DAT 1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md) Q7).
 
 | Form | Resolves to |
 | --- | --- |
@@ -285,4 +285,4 @@ Expanded once, when the dat is created, with the same `now` and `unique` its fol
 
 
 # BRIEF
-- 2026-09-23 — rewritten to the 2.3 + 2.4 surface ([DAT 103](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^103)) in Dan's module-doc member format: `Dat` and `DatContainer` as module docs, module functions as their own table; `DataConfig` removed; `Dat.load` lost `cwd`; `Dat.manager` a plain assignable class attribute; config renamed `.datconfig.yaml` with `art_folder`. The old § Dats on disk / One dat / Strings and configuration were folded into the member blocks; § Running, § Spec file, § Grammar, § Configuration kept as reference. Decided on [DAT 1008](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1008), [DAT 1009](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1009), [DAT 1014](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1014), [DAT 102](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^102).
+- 2026-09-23 — rewritten to the 2.3 + 2.4 surface ([DAT 103](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/103%20-%20API%20refactor.md)) in Dan's module-doc member format: `Dat` and `DatContainer` as module docs, module functions as their own table; `DataConfig` removed; `Dat.load` lost `cwd`; `Dat.manager` a plain assignable class attribute; config renamed `.datconfig.yaml` with `art_folder`. The old § Dats on disk / One dat / Strings and configuration were folded into the member blocks; § Running, § Spec file, § Grammar, § Configuration kept as reference. Decided on [DAT 1008](../../DAT%20Track/DAT%20Backlog/1008%20-%20Should%20configure%28%29%20disappear,%20and%20should%20the%20static%20namespace%20be%20the.md), [DAT 1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md), [DAT 1014](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/1014%20-%20Fold%20DataConfig%20into%20DatManager;%20settle%20the%20manager's%20public%20attributes.md), [DAT 102](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/102%20-%20Dependencies%20by%20capture,%20and%20artifacts,%20in%20DAT%20itself.md).
