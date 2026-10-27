@@ -253,10 +253,12 @@ print("db/repo/geometry:", L.at()["db/repo/geometry"])
 # function's repr is `<Fn name@version>`; `code` is the code it
 # is loaded from, the package `geometry` at the version it declares.
 #
-# A `db/repo/<repo>/<package>` subject is a version clock tied to a
-# git checkout: the version of that package's code that runs were
-# exposed to. The version lives in the source as `__version__`; this
-# first clean run wrote it, and its commit to `db/repo/<repo>`.
+# A repo is one git checkout and has one commit; it can hold several
+# packages, each with its own `__version__`. So the commit is a row
+# on `db/repo/<repo>` and each package's version a row on
+# `db/repo/<repo>/<package>`. Here the repo `geometry` holds the
+# packages `geometry` and `plane`, which is why `geometry` appears
+# twice. This first clean run wrote both rows.
 
 # %% [markdown]
 # ### Sandboxed functions
