@@ -241,7 +241,7 @@ with L.transaction(by="human:dan") as t:
 
 # %%
 stored_rev = wide_video.rev
-for row in stored_rev.rows(since=L.at(stored_rev.id - 1)):
+for row in stored_rev.history(since=L.at(stored_rev.id - 1)):
     print(row)
 # →    7 + <hash>   db/value              ref:demo_game.game.Video:<hash>
 # →    7 + <hash>   db/kind               demo_game.game.Video
@@ -833,7 +833,7 @@ print("same rev:", again_value.rev.id == far_value.rev.id)
 
 # %%
 entry_rev = far_value.rev
-for row in entry_rev.rows(since=L.at(entry_rev.id - 1)):
+for row in entry_rev.history(since=L.at(entry_rev.id - 1)):
     if row.predicate in ("db/fn", "db/keys"):
         print(row)
 # →   17 + <hash> db/fn   geometry.distance

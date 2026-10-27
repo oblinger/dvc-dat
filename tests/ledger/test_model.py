@@ -48,7 +48,7 @@ def check_rev(L, model, R):
     """Every row read at revision R equals the model's answer."""
     rev = L.at(R)
     assert rev.all() == model.pattern(R, ())
-    assert [(r.rev.id, r.subject, r.predicate, r.object, r.added) for r in rev.rows()] == \
+    assert [(r.rev.id, r.subject, r.predicate, r.object, r.added) for r in rev.history()] == \
         [(a, s, p, o, d) for a, _o, s, p, o, d in model.rows if a <= R]
     subjects = SUBJECTS + [f"db/pred/{p}" for p in PREDS]
     for s in subjects:
@@ -65,7 +65,7 @@ def check_rev(L, model, R):
             for o in OBJS:
                 assert ((s, p, o) in rev) == (o in want)
                 assert [r.id for r in rev.all(s, p, o)] == model.pattern(R, (s, p, o))
-                assert list(dict.fromkeys(r.rev.id for r in rev.rows(s, p, o) if r.added)) == model.added_at(R, s, p, o)
+                assert list(dict.fromkeys(r.rev.id for r in rev.history(s, p, o) if r.added)) == model.added_at(R, s, p, o)
                 held = model.pattern(R, (s, p, o))
                 assert outcome(lambda: rev[s, p, o].id) == (("ok", held[0]) if held else ("none",))
     for p in PREDS:

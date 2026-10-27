@@ -66,7 +66,7 @@ def test_a_transaction_reads_the_previous_revision_not_its_pending_writes(L):
         assert t.get("g/1", "home") == "a" and t.get("g/2", "home") is None
         assert ("g/1", "home", "a") in t and ("g/1", "home", "b") not in t
         assert t.all("g/1", "home") == ["a"] and t.all("g/2", "home") == []
-        assert t.rows("g/2") == []
+        assert t.history("g/2") == []
         before = t.previous_rev
     assert t.rev["g/1", "home"] == "b" and t.rev["g/2", "home"] == "c"
     assert before.id + 1 == t.rev.id

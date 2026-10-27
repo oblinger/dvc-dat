@@ -200,7 +200,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 
 # %%
 # !just history table/12
-# same as: [r for r in L.at().rows() if r.subject == "table/12"]
+# same as: [r for r in L.at().history() if r.subject == "table/12"]
 # → rev  by         predicate  object
 # →   3  name       db/alias   #<8 hex>
 
@@ -257,7 +257,7 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # !git commit -qam "mymodule 0.1.1"
 # !just run mymodule.specs.table12
 # !just history db/repo/q-cli/mymodule
-# same as: [r for r in L.at().rows() if r.subject == "db/repo/q-cli/mymodule"]
+# same as: [r for r in L.at().history() if r.subject == "db/repo/q-cli/mymodule"]
 # !just history db/repo/q-cli
 # → ran  tables/2026/table12  start=1 n=12 cells=144
 # → rev  by         predicate  object
