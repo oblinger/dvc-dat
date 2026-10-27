@@ -413,7 +413,7 @@ print(rev12.get("game/G3", "court"))           # None: retracted
 
 # %%
 with L.transaction(by="human:dan", lock=10) as t:
-    t["game/G3"] = t.previous_rev["game/G3"]
+    t["game/G3"] = t["game/G3"]
 noop_rev = t.rev
 print([row for row in noop_rev.all(since=rev12)
        if not row[0].startswith("db/tx/")])   # []: nothing moved
@@ -429,7 +429,7 @@ print([row for row in noop_rev.all(since=rev12)
 # %%
 try:
     with L.transaction(by="human:dan", lock=10) as t:
-        t["game/G3"] = {**t.previous_rev["game/G3"], "db/doc": "a game"}
+        t["game/G3"] = {**t["game/G3"], "db/doc": "a game"}
 except TypeError as e:
     print("TypeError:", e)               # db/doc differs
 
@@ -715,12 +715,14 @@ print("schema/tape:", new)   # schema/tape: 0.0.1
 # next one. `lock=10` holds the write lock for the body, so nothing
 # slips between the read and the write.
 #
-# A body can do the same by hand: read through `t.previous_rev`,
-# alter, write back. Here one more official joins `game/G1`.
+# A body can do the same by hand. A transaction reads the previous
+# revision and writes the next; its own pending writes are not seen
+# until it closes. So the body reads with `t[s]`, alters, and writes
+# back. Here one more official joins `game/G1`.
 
 # %%
 with L.transaction(by="human:dan", lock=10) as t:
-    g1 = t.previous_rev["game/G1"]                 # the record as it stands now
+    g1 = t["game/G1"]                              # the record as it stands now
     t["game/G1"] = {**g1, "officials": g1["officials"] + ["vance"]}   # one more, written back
 print("officials:", t.rev.all("game/G1", "officials"))
 print("previous_rev:", repr(t.previous_rev))     # the revision the body read
@@ -736,7 +738,7 @@ print("previous_rev:", repr(t.previous_rev))     # the revision the body read
 # %%
 try:
     with L.transaction(by="human:dan") as t:       # no lock=
-        t.previous_rev["game/G1"]
+        t["game/G1"]
 except Unlocked as e:
     print("Unlocked:", e)
 
@@ -799,14 +801,13 @@ print(L.at()["schema/tape", "version"])  # 0.0.9: add went back
 
 # %%
 with L.transaction(by="agent:release", lock=5) as t:
-    v = t.previous_rev["db/repo/demo-game/demo_game", "version"]
-    c = t.previous_rev["db/repo/demo-game", "commit"]
+    v = t["db/repo/demo-game/demo_game", "version"]
+    c = t["db/repo/demo-game", "commit"]
     t.add("rel/demo-game", "pair", f"{v}+{c}")
 print(L.at()["rel/demo-game", "pair"])    # 0.1.0+<commit>
 
 # %% [markdown]
-# Any read through `t.previous_rev` holds still for the whole
-# body. Notice that past the limit the body is interrupted and
+# Any read in the body holds still for the whole body. Notice that past the limit the body is interrupted and
 # `pair` is unchanged.
 
 # %%
