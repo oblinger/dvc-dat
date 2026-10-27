@@ -107,7 +107,7 @@ with L.transaction(by="human:dan") as t:
 with L.transaction(by="human:dan") as t:
     t.add("demo/c", "version", "1.0.1")
 print(f"{L.at().get('demo/c', 'version')=}")
-print("history:", [(r.rev.id, r.object, r.added) for r in L.at().rows("demo/c", "version")])
+print("history:", [(r.rev.id, r.object, r.added) for r in L.at().history("demo/c", "version")])
 
 # %% [markdown]
 # Nothing in the folder changed: the version is a fact about the dat, recorded beside it, with

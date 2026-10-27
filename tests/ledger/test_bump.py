@@ -99,16 +99,16 @@ def test_a_clean_seal_moves_the_clock_once(mounted):
     L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
     assert L.at()["db/repo/code-repo/plane"] == {"version": "2.7.1"}
     assert L.at()["db/repo/code-repo"] == {"commit": head}
-    n = len(L.at().rows("db/repo/code-repo/plane", "version"))
+    n = len(L.at().history("db/repo/code-repo/plane", "version"))
     L.at().run("plane.measure.length", a=(0, 0), b=(6, 8))      # the same version: nothing written
-    assert len(L.at().rows("db/repo/code-repo/plane", "version")) == n
-    assert len(L.at().rows("db/repo/code-repo", "commit")) == 1
+    assert len(L.at().history("db/repo/code-repo/plane", "version")) == n
+    assert len(L.at().history("db/repo/code-repo", "commit")) == 1
     (repo / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
     git(repo, "commit", "-q", "-am", "bump")
     L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
     assert L.at()["db/repo/code-repo/plane", "version"] == "2.7.2"
     assert L.at()["db/repo/code-repo", "commit"] == git(repo, "rev-parse", "HEAD")
-    assert not [r for r in L.at().rows() if r.subject.startswith("code/")]
+    assert not [r for r in L.at().history() if r.subject.startswith("code/")]
 
 
 def test_two_packages_in_one_checkout_each_keep_a_clock(mounted):
@@ -138,7 +138,7 @@ def test_the_commit_row_follows_the_latest_clean_run(mounted):
     assert L.at()["db/repo/code-repo/plane", "version"] == "2.7.1"   # plane's clock stays
     L.at().run("plane.measure.length", a=(0, 0), b=(6, 8))           # plane at 2.7.1, the new commit
     assert L.at()["db/repo/code-repo", "commit"] == second
-    assert len(L.at().rows("db/repo/code-repo", "commit")) == 2
+    assert len(L.at().history("db/repo/code-repo", "commit")) == 2
 
 
 def test_a_dirty_run_leaves_the_clock(mounted):
@@ -209,7 +209,7 @@ def test_a_hand_seal_with_no_code_writes_no_clock(mounted):
         warnings.simplefilter("error")
         with L.transaction(by="t") as t:
             Value.Blob({"x": 1}).seal(t)
-    assert not [r for r in L.at().rows() if r.subject.startswith("db/repo/")]
+    assert not [r for r in L.at().history() if r.subject.startswith("db/repo/")]
 
 
 def test_a_hand_seal_with_an_fn_dep_moves_the_clock(mounted):

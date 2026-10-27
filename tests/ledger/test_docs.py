@@ -44,9 +44,9 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev["model/demo", "version"] == "0.2.2"          # "0.2.2"; one or raise
     assert rev["model/demo"] == {"version": "0.2.2", "commit": "abc1234"}   # its record, a dict
     assert rev.get("model/shot", "db/value") is None           # a Ref, or None
-    assert rev.rows("model/demo", "version", "0.2.1") == []      # [Row]: when, unfolded
-    assert [(r.rev.id, r.object, r.added) for r in rev.rows("model/demo", "version")] == [(1, "0.2.2", True)]
-    assert rev.rows(since=L.at(0))                              # [Row], unfolded (A48)
+    assert rev.history("model/demo", "version", "0.2.1") == []      # [Row]: when, unfolded
+    assert [(r.rev.id, r.object, r.added) for r in rev.history("model/demo", "version")] == [(1, "0.2.2", True)]
+    assert rev.history(since=L.at(0))                              # [Row], unfolded (A48)
     assert [r.subject for r in rev.refs(s="db/pred/*", where={"db/index": "true"})] == ["db/pred/game"]
     assert ("db/pred/game", "db/index", "true") in rev
 
@@ -175,7 +175,7 @@ def test_putting_an_artifact_in_block(L):
     raw.preds.update(game="G1", camera="wide")
     with L.transaction(by="human:dan") as t:
         raw.seal(t, provenance="import:alg2")
-    rows = {r.predicate for r in L.at().rows(since=L.at(L.at().id - 1)) if r.subject == raw.subject}
+    rows = {r.predicate for r in L.at().history(since=L.at(L.at().id - 1)) if r.subject == raw.subject}
     assert {"db/value", "db/kind", "db/provenance", "db/preds", "game", "camera"} <= rows
     assert any(p.startswith("db/deps/") for p in rows)
     cut = L.at().run("ledger_kinds.cut", game="G1", version="1.5.3")

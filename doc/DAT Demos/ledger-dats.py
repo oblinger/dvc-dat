@@ -504,7 +504,7 @@ print("release rev:", release_rev.id == t.rev.id,
 print("code version:", release_rev["db/repo/demo-game/demo_game.etl", "version"])     # → code version: 0.1.0
 print("epochs:", release_rev["cfg/train", "epochs"])           # → epochs: 8
 print("subjects since:", sorted({row.subject
-                                 for row in release_rev.rows(since=pre_edit_rev)}))
+                                 for row in release_rev.history(since=pre_edit_rev)}))
 # → subjects since: the re-derived tracks, the hand run, the release,
 #   db/repo/demo-game (the clean re-run's commit) and their db/tx/<n> subjects
 

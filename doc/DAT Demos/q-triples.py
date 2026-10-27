@@ -64,7 +64,7 @@ with L.transaction(by="human:dan") as t:
 rev2 = t.rev
 print("rev2 court:", rev2.get("game/G1", "court"))   # south: the latest add
 print("rev1 court:", rev1.get("game/G1", "court"))   # north: rev1 never changes
-for r in rev2.rows("game/G1", "court"):
+for r in rev2.history("game/G1", "court"):
     print("row:", r)                   # both rows are still stored
 #    1 + game/G1   court   north
 #    2 + game/G1   court   south
@@ -143,7 +143,7 @@ print("G2:", rev.all("game/G2"))                             # one position fixe
 #   [('home', 'G1'), ('away', 'G3'), ('officials', 'lee'), ('officials', 'park')]
 print("courts:", rev.all("game/*", "court"))                 # a glob subject: (subject, object) pairs
 #   [('game/G1', 'west')]
-for r in rev.rows("game/G1", "court"):                       # the unfolded history, removes included
+for r in rev.history("game/G1", "court"):                       # the unfolded history, removes included
     print("row:", r)
 #   row:    1 + game/G1  court  north
 #   row:    2 + game/G1  court  south
@@ -154,7 +154,7 @@ for r in rev.rows("game/G1", "court"):                       # the unfolded hist
 # `get` answers a default instead of raising, `in` tests one triple,
 # `all` lists what a pattern leaves open: with two positions fixed
 # the objects, with one the (predicate, object) pairs, and a glob in
-# the subject binds the subject too. `rows` is the unfolded history
+# the subject binds the subject too. `history` is the unfolded history
 # of a pattern.
 
 # %% [markdown]

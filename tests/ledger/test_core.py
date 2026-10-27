@@ -80,7 +80,7 @@ def test_one_transaction_one_revision_and_tx_rows_last(L):
         t.add(t.tx, "checked", "yes")
     rev = t.rev
     assert rev.id == 1 and rev.tx == "db/tx/1"
-    rows = [(r.subject, r.predicate) for r in rev.rows()]
+    rows = [(r.subject, r.predicate) for r in rev.history()]
     assert rows[:2] == [("s", "p"), ("db/tx/1", "checked")]
     assert rows[2:5] == [("db", "db/format"), ("db/tx/1", "db/by"), ("db/tx/1", "db/time")]
     assert rev[rev.tx, "why"] == "w"
@@ -99,7 +99,7 @@ def test_by_is_a_str_or_a_json_dict_read_back_as_written(L):
     with L.transaction(by=who) as t:
         t.add("s", "p", "1")
     assert t.rev[t.rev.tx, "db/by"] == who                      # a dict, not an encoded string
-    raw = [r.object for r in t.rev.rows(t.rev.tx, "db/by")]
+    raw = [r.object for r in t.rev.history(t.rev.tx, "db/by")]
     assert raw == [who]
     stored = L._store.rows(t.rev.id, subject=t.rev.tx, predicate="db/by")
     assert [r[4] for r in stored] == ['json:{"admins":["root"],"host":"github.com","user":"dan"}']
@@ -157,7 +157,7 @@ def test_many_earliest_surviving_add_order(L):
     r5 = write(L, ("g", "o", "kim"))
     assert r5.all("g", "o") == ["ortiz", "lee", "kim"]
     assert r5["g", "o", "kim"] == r5 and r5["g", "o", "ortiz"].id == 2
-    assert [(r.rev.id, r.added) for r in r5.rows("g", "o", "kim")] == [(2, True), (3, True), (4, False), (5, True)]
+    assert [(r.rev.id, r.added) for r in r5.history("g", "o", "kim")] == [(2, True), (3, True), (4, False), (5, True)]
 
 
 def test_bracket_reads(L):
@@ -182,17 +182,17 @@ def test_rows_by_pattern_is_every_change(L):
     write(L, ("s", "v", "2"))
     write(L, ("t", "v", "9"))
     rev = write(L, ("-", "s", "v", "2"))
-    assert [(r.rev.id, r.object, r.added) for r in rev.rows("s", "v")] == [(1, "1", True), (2, "2", True),
+    assert [(r.rev.id, r.object, r.added) for r in rev.history("s", "v")] == [(1, "1", True), (2, "2", True),
                                                                           (4, "2", False)]
-    assert [r.subject for r in rev.rows("*", "v")] == ["s", "s", "t", "s"]
-    assert [r.rev.id for r in rev.rows("s", "v", since=rev.ledger.at(2))] == [4]
+    assert [r.subject for r in rev.history("*", "v")] == ["s", "s", "t", "s"]
+    assert [r.rev.id for r in rev.history("s", "v", since=rev.ledger.at(2))] == [4]
     with pytest.raises(TypeError, match="at most 3"):
-        rev.rows("s", "v", "1", "x")
+        rev.history("s", "v", "1", "x")
 
 
 def test_rows_are_rev_and_decoded(L):
     rev = write(L, ("s", "doc", {"a": 1}))
-    row = rev.rows()[0]
+    row = rev.history()[0]
     assert isinstance(row, Row) and isinstance(row.rev, Rev) and row.object == {"a": 1} and row.added
     assert "doc" in str(row)
 
@@ -240,7 +240,7 @@ def test_record_write_is_closed_world_over_user_rows(L):
     assert t.rev["g"] == {"home": "a"}
     with L.transaction(by="t", lock=10) as t:
         t["g"] = t.previous_rev["g"]
-    assert [r for r in t.rev.rows(since=L.at(t.rev.id - 1)) if not r.subject.startswith("db/tx")] == []
+    assert [r for r in t.rev.history(since=L.at(t.rev.id - 1)) if not r.subject.startswith("db/tx")] == []
     with pytest.raises(TypeError):
         with L.transaction(by="t", lock=10) as t:
             t["g"] = {"home": "a", "db/doc": "x"}

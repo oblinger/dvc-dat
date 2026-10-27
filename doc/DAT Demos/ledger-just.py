@@ -306,12 +306,12 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 
 # %% [markdown]
 # Each line carries the revision it was written at and who wrote it.
-# It is `rev.rows()` filtered to the subject, with each
+# It is `rev.history()` filtered to the subject, with each
 # revision's `db/by`.
 #
 # The game's own rows and its alias moves, in order: the home team
 # corrected at 7, the current cut moved at 9. No fold gives this;
-# `rows()` is the ledger unfolded, removes included.
+# `history()` is the ledger unfolded, removes included.
 #
 # ### A value's inputs
 # `just why <name>` lists what a value was computed from, and what has moved.
@@ -328,7 +328,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # The dependencies are what it read when made; `matches` says whether each
 # input still holds; `diff` names what moved since the name's previous
 # value. It is `v.dependencies`, `v.matches(rev)` and `v.diff(prev)`, `prev` the
-# alias's previous target from `rev.rows(s, "db/alias")`.
+# alias's previous target from `rev.history(s, "db/alias")`.
 #
 # Everything the cut read is in its dependencies; `matches` re-reads each
 # item at the head, and `diff` against the cut the game named before

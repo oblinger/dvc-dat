@@ -2,8 +2,8 @@
 
 Every read lives on ``Rev``. The row reads (``[]``, ``get``, ``all``, ``in``)
 fold the rows at or before the revision by each predicate's cardinality as of
-that revision, at every arity (Q19); ``rows`` takes the same pattern and walks
-history unfolded, removes included. The subject reads (``refs``, ``values``,
+that revision, at every arity (Q19); ``history`` takes the same pattern and
+walks history unfolded, removes included. The subject reads (``refs``, ``values``,
 ``value``, ``select``, ``load``, ``run``) treat the store as a table whose
 rows are subjects. No pattern read decodes a ``ref:`` object: it comes back a
 ``Ref``, unloaded (Q35). Inside a value function the ``Rev`` handed to the body
@@ -380,9 +380,10 @@ class Rev:
         self._record_call("in", triple, None, out)
         return out
 
-    def rows(self, *pattern: Any, since: Optional["Rev"] = None) -> List[Row]:
-        """Every row matching the pattern at or before this revision (or in ``(since, id]``), unfolded,
-        removes included, in ``(rev, ord)`` order (A48): ``all``'s pattern without the fold."""
+    def history(self, *pattern: Any, since: Optional["Rev"] = None) -> List[Row]:
+        """The history of a pattern, unfolded: every row at or before this revision (or in
+        ``(since, id]``), removes included, in ``(rev, ord)`` order (A48); ``all`` is the same
+        pattern folded. The trace records it under its call name ``rows``."""
         n = len(pattern)
         if n > 3:
             raise TypeError(f"a pattern fixes at most 3 positions, not {n}")

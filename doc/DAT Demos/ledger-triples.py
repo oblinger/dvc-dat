@@ -41,7 +41,7 @@ scratch_ledger_path = Path("scratch/triples-demo/ledger").resolve()
 L = Ledger(scratch_ledger_path, create=True)   # made, then opened
 
 # %% [markdown]
-# `Ledger(path)` opens what is there and raises
+# `Ledger(location)` opens what is there and raises
 # `LedgerError` when nothing is; `create=True` is the one explicit
 # act that makes a ledger, so an empty one never appears by accident.
 
@@ -96,7 +96,7 @@ print(rev1.get(rev1.tx, "why"))      # season opener
 
 # %% [markdown]
 # Every revision carries the wall-clock stamp `db/time` (UTC) beside
-# `by`. The stamp is a row like any other, so `rows` and `since=`
+# `by`. The stamp is a row like any other, so `history` and `since=`
 # work on it too.
 
 # %% [markdown]
@@ -135,13 +135,13 @@ with L.transaction(by="human:dan") as t:
 rev2 = t.rev
 
 # %% [markdown]
-# Every row so far, unfolded, in revision order: `rows()` is the
+# Every row so far, unfolded, in revision order: `history()` is the
 # ledger as it is stored, the one read that does not fold. Notice
 # the two game transactions stacked, a second `court` row after the
 # first, and two `officials` rows side by side.
 
 # %%
-rows = L.at().rows()                      # every row, unfolded
+rows = L.at().history()                   # every row, unfolded
 print(f"{'rev':>3}  {'subject':<18} {'predicate':<15} object")
 for r in rows:
     print(f"{r.rev.id:>3}  {r.subject:<18} {r.predicate:<15} "
@@ -163,7 +163,7 @@ for r in rows:
 # %% [markdown]
 # ## Folding semantics
 #
-# Every read except `rows` folds: it turns the rows
+# Every read except `history` folds: it turns the rows
 # at or before its revision into the state they mean. How a
 # predicate folds is its cardinality.
 
@@ -480,7 +480,7 @@ print(t.rev.get("game/G3", "home"))      # None: every row retracted
 # pattern, and subjects as a table.
 
 # %% [markdown]
-# ### `get`, `in`, `rows`
+# ### `get`, `in`, `history`
 
 # %%
 rev = L.at()
@@ -488,11 +488,11 @@ print(rev.get("game/G1", "score"))                # None
 print(rev.get("game/G1", "score", default="tbd")) # tbd
 print(("game/G1", "home", "G4") in rev)           # True
 print(("game/G1", "court", "north") in rev)       # False
-for row in rev.rows("game/G1", "court", "north"):  # its add; `south` replaced it, no remove row
+for row in rev.history("game/G1", "court", "north"):  # its add; `south` replaced it, no remove row
     print(row)
 #    1 + game/G1   court      north
-print(rev.rows("game/G1", "court", "west"))       # []
-for row in rev.rows("game/G1", "officials", "kim"):
+print(rev.history("game/G1", "court", "west"))    # []
+for row in rev.history("game/G1", "officials", "kim"):
     print(row)
 #    2 + game/G1   officials  kim
 #    4 + game/G1   officials  kim
@@ -502,7 +502,7 @@ for row in rev.rows("game/G1", "officials", "kim"):
 # %% [markdown]
 # `get` is `[]` answering `default` instead of raising on none.
 # `in` is the no-raise membership test, by the same fold.
-# `rows` takes `all`'s pattern and walks history unfolded: `north` is
+# `history` takes `all`'s pattern, unfolded: `north` is
 # gone from the fold and still in the history, and every add and
 # remove of `kim` is listed, in order.
 
@@ -821,10 +821,10 @@ print(L.at()["rel/demo-game", "pair"])    # 0.1.0+<commit>
 
 # %%
 rev = L.at()
-when = [r.rev for r in rev.rows("db/repo/demo-game/demo_game", "version", "0.1.0") if r.added]
+when = [r.rev for r in rev.history("db/repo/demo-game/demo_game", "version", "0.1.0") if r.added]
 print(when)                               # [Rev(...)]: when it was set
 print(when[0][when[0].tx, "db/by"])       # human:dan: by whom
 
 # %% [markdown]
-# The reverse lookup for a version: `rows` names the revision,
+# The reverse lookup for a version: `history` names the revision,
 # and its `db/tx/<rev>` rows say who, and when if stamped.

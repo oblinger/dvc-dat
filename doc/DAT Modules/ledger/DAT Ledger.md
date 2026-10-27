@@ -13,7 +13,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Methods     |                                                                                                                                                                                                                                                                                                            |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ledger      | [path](#^path), [at](#^at), [transaction](#^transaction), [close](#^close)                                                                                                                                                                                                                                 |
-| Rev         | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [rows](#^rows), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [ns](#^ns), [run](#^run)                                                                |
+| Rev         | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [history](#^history), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [ns](#^ns), [run](#^run)                                                                |
 | Ref         | [rev](#^rev), [subject](#^subject), [name](#^name), [aliases](#^aliases), [hash](#^hash), [type](#^type), [preds](#^preds), [sealed_at](#^sealed-at), [load](#^ref-load)                                                                                                                                   |
 | Row         | [rev](#^row-rev), [subject](#^row-subject), [predicate](#^predicate), [object](#^object), [added](#^added)                                                                                                                                                                                                 |
 | Transaction | [tx](#^transaction-tx), [previous_rev](#^previous-rev), [ns](#^transaction-ns), [rev](#^transaction-rev), [add](#^add), [update](#^update), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--)                                                                                                                   |
@@ -39,8 +39,8 @@ The handle on one ledger: a folder holding `ledger.db` and the art store `art/`,
 | [transaction](#^transaction) | A write set that becomes one revision |
 | [close](#^close) | Close every database connection the handle opened |
 
-**Ledger**`(path: str | Path | None = None, *, create: bool = False)`
-    `Ledger(path)` opens the folder or DSN at `path`; a folder without `ledger.db` is `LedgerError`, and so is a file. `Ledger()` takes `DAT_LEDGER` when set, else the nearest `.datconfig.yaml` at or above the working directory carrying a `ledger:` key (relative to that file), and asserts the config's `mounts:` as `db/mount/<prefix>` rows in one transaction `by="config:<path>"` when they differ from the ledger's; none found is `LedgerError` naming every folder searched. `Ledger(path, create=True)` makes an empty ledger there if absent. `Ledger(create=True)` makes a project in the working directory, writing `ledger: .dat/ledger` into its `.datconfig.yaml`; with `DAT_LEDGER` set it is `ValueError`. ^ledger
+**Ledger**`(location: str | Path | None = None, *, create: bool = False)`
+    `Ledger(location)` opens the ledger at `location`: a folder or a DSN (a `Path`, or a `str` that is not a DSN, is a folder); a folder without `ledger.db` is `LedgerError`, and so is a file. `Ledger()` takes `DAT_LEDGER` when set, else the nearest `.datconfig.yaml` at or above the working directory carrying a `ledger:` key (relative to that file), and asserts the config's `mounts:` as `db/mount/<prefix>` rows in one transaction `by="config:<path>"` when they differ from the ledger's; none found is `LedgerError` naming every folder searched. `Ledger(location, create=True)` makes an empty ledger there if absent. `Ledger(create=True)` makes a project in the working directory, writing `ledger: .dat/ledger` into its `.datconfig.yaml`; with `DAT_LEDGER` set it is `ValueError`. ^ledger
 
 **path**`: Path | str`
     The resolved ledger folder; for a Postgres ledger, the DSN with its `art` parameter made absolute. `repr` hides a DSN's password. ^path
@@ -57,7 +57,7 @@ The handle on one ledger: a folder holding `ledger.db` and the art store `art/`,
 
 
 ## Rev Interface
-A frozen view of the ledger as of one revision, made by `Ledger.at`, never by hand. Every read is bounded by `id`, so a `Rev` gives the same answer forever. Row reads fold the rows by each predicate's cardinality ([The fold](#The%20fold)); `rows` takes the same pattern and walks history unfolded; subject reads (`refs`, `values`, `value`, `select`) treat the store as a table whose rows are subjects. A stored reference comes back as an unloaded `Ref`. A `Rev` handed to a value function's body also traces every read into its result's dependencies. Ordered and equal by `id` within one ledger.
+A frozen view of the ledger as of one revision, made by `Ledger.at`, never by hand. Every read is bounded by `id`, so a `Rev` gives the same answer forever. Row reads fold the rows by each predicate's cardinality ([The fold](#The%20fold)); `history` takes the same pattern unfolded; subject reads (`refs`, `values`, `value`, `select`) treat the store as a table whose rows are subjects. A stored reference comes back as an unloaded `Ref`. A `Rev` handed to a value function's body also traces every read into its result's dependencies. Ordered and equal by `id` within one ledger.
 
 | Rev                            |                                                            |
 | ------------------------------ | ---------------------------------------------------------- |
@@ -68,7 +68,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 | [get](#^get)                   | __getitem__ with a default                                 |
 | [__contains__](#^--contains--) | Tests whether a triple is currently held                   |
 | [all](#^all)                   | Returns ordered pattern-matched values with folding        |
-| [rows](#^rows)                 | Returns ordered pattern-matched rows without folding       |
+| [history](#^history)           | Returns ordered pattern-matched rows without folding       |
 | [refs](#^refs)                 | Returns a Ref to every subject matching a query            |
 | [values](#^values)             | Returns the values whose subjects match a query            |
 | [value](#^value)               | Same as values, but requires exactly one match             |
@@ -98,8 +98,8 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 **all**`(*pattern, since: Rev | None = None) -> list`
     Every currently held match of the pattern (the fold), binding the open positions, in revision order; a prefix glob `"game/*"` binds the subject. Not checked against `db/type`. More than three positions is `TypeError`; a `*` anywhere but the end is `ValueError`. ^all
 
-**rows**`(*pattern, since: Rev | None = None) -> list[Row]`
-    Every row matching the pattern at or before this revision, or in `(since, id]`, removes included, unfolded, in `(rev, ord)` order: `all`'s pattern without the fold. No pattern is the ledger as stored; `rows(s, p, o)` with `added` true says when a triple was set. ^rows
+**history**`(*pattern, since: Rev | None = None) -> list[Row]`
+    The history of a pattern, unfolded: every row at or before this revision, or in `(since, id]`, removes included, in `(rev, ord)` order; `all` is the same pattern folded. No pattern is the ledger as stored; `history(s, p, o)` with `added` true says when a triple was set. ^history
 
 **refs**`(*, s=None, kind=None, fn=None, where=None, one=False, since=None, **preds) -> list[Ref] | Ref`
     Returns a `Ref` to every subject matching the query, sealed value or not. `refs`, `values` and `value` take the same query and pick the same subjects: a bare keyword names a pred (any member of a `many` pred); `kind=` a `Value` class or dotted name, following `db/moved` renames; `fn=` the producing function's dotted name; `where={p: o}` any predicate, `None` meaning any object; `s` an exact subject or a prefix glob; `since` keeps rows in `(since, id]`. `one=True` returns the single match: none is `KeyError`, several `Multiple`. A dotted predicate neither declared nor on any row is `Unindexed`. ^refs
@@ -173,7 +173,7 @@ A reference to one value at one moment, named without fetching a byte: the subje
 
 
 ## Row Interface
-A named tuple encoding a single row in the ledger: revision, subject, predicate, object, and an added/removed bit. `rows()` returns them; `str(row)` is one aligned line: revision, `+` or `-`, subject, predicate, object.
+A named tuple encoding a single row in the ledger: revision, subject, predicate, object, and an added/removed bit. `history()` returns them; `str(row)` is one aligned line: revision, `+` or `-`, subject, predicate, object.
 
 | Row                      |                                    |
 | ------------------------ | ---------------------------------- |
@@ -201,14 +201,14 @@ A named tuple encoding a single row in the ledger: revision, subject, predicate,
 
 
 ## Transaction Interface
-The write set of one `with L.transaction(...) as t:` block; it becomes exactly one revision on exit, or nothing. `add`, `update` and `remove` append rows and read nothing; `v.seal(t)` seals a value into it; the bracket forms are helpers over `add` and `remove`. **A transaction reads the previous revision and writes the next; its own pending writes are not seen until it closes.** Its read verbs are `previous_rev`'s: `get`, `all`, `rows`, `refs`, `values`, `value`, `select`, `load`, `in`, and `t[s, p]` / `t[s]` as a read (`t[s, p] = o` / `t[s] = {...}` write). `previous_rev` is bound to the previous revision and exists only under `lock=`, because an unlocked transaction has no well-defined previous revision (another writer may commit between open and exit). The helpers that read and then write (`t[s] = {...}`, `del`, `bump`) read through it, so they need `lock=`; unlocked they raise `Unlocked` and write nothing. Whatever must see the transaction's own rows is checked at commit, inside the write lock. Entered once; a verb used outside the block is `RuntimeError`.
+The write set of one `with L.transaction(...) as t:` block; it becomes exactly one revision on exit, or nothing. `add`, `update` and `remove` append rows and read nothing; `v.seal(t)` seals a value into it; the bracket forms are helpers over `add` and `remove`. **A transaction reads the previous revision and writes the next; its own pending writes are not seen until it closes.** Its read verbs are `previous_rev`'s: `get`, `all`, `history`, `refs`, `values`, `value`, `select`, `load`, `in`, and `t[s, p]` / `t[s]` as a read (`t[s, p] = o` / `t[s] = {...}` write). `previous_rev` is bound to the previous revision and exists only under `lock=`, because an unlocked transaction has no well-defined previous revision (another writer may commit between open and exit). The helpers that read and then write (`t[s] = {...}`, `del`, `bump`) read through it, so they need `lock=`; unlocked they raise `Unlocked` and write nothing. Whatever must see the transaction's own rows is checked at commit, inside the write lock. Entered once; a verb used outside the block is `RuntimeError`.
 
 | Transaction | |
 | --- | --- |
 | [tx](#^transaction-tx) | A placeholder for this revision's tx subject |
 | [previous_rev](#^previous-rev) | The previous revision, the top while `lock=` holds |
 | [ns](#^transaction-ns) | The namespace at `previous_rev`; `ns.mount` writes a mount |
-| [reads](#^transaction-reads) | `get`, `all`, `rows`, `refs`, `values`, `value`, `select`, `load`, `in`, `t[s, p]`: at `previous_rev` |
+| [reads](#^transaction-reads) | `get`, `all`, `history`, `refs`, `values`, `value`, `select`, `load`, `in`, `t[s, p]`: at `previous_rev` |
 | [rev](#^transaction-rev) | The revision the exit wrote |
 | [add](#^add) | Append an add row |
 | [update](#^update) | An add per key of a record |
@@ -548,7 +548,7 @@ One `with` block is one revision: its rows land together on exit, in body order,
 
 
 ## The fold
-A read turns the rows at or before its revision into what they hold, by each predicate's cardinality. Under `one`, the default, the latest add wins, so `add` is assignment; a remove of the held object leaves nothing held. Under `many`, the held objects are the set added and not since removed, each at its earliest add. Cardinality is itself a row, `(db/pred/officials, db/cardinality, many)`, read as of the same revision; every `db/` predicate and the clocks `version` and `commit` are fixed at `one`. Every read folds except `rows`, which walks history.
+A read turns the rows at or before its revision into what they hold, by each predicate's cardinality. Under `one`, the default, the latest add wins, so `add` is assignment; a remove of the held object leaves nothing held. Under `many`, the held objects are the set added and not since removed, each at its earliest add. Cardinality is itself a row, `(db/pred/officials, db/cardinality, many)`, read as of the same revision; every `db/` predicate and the clocks `version` and `commit` are fixed at `one`. Every read folds except `history`.
 
 
 ## The db/ vocabulary

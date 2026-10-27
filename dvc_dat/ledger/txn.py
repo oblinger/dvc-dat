@@ -135,7 +135,7 @@ class Transaction:
     """The write set open under one ``with L.transaction(...)``.
 
     A transaction reads the previous revision and writes the next; its own pending writes are not seen
-    until it closes. The read verbs (``get``, ``all``, ``rows``, ``refs``, ``values``, ``value``,
+    until it closes. The read verbs (``get``, ``all``, ``history``, ``refs``, ``values``, ``value``,
     ``select``, ``load``, ``in``, ``t[s, p]`` / ``t[s]``) are ``previous_rev``'s, so they need ``lock=``."""
 
     def __init__(self, ledger: "Ledger", by: "str | Dict[str, Any]", lock: Optional[float],
@@ -210,9 +210,9 @@ class Transaction:
         """``Rev.all`` at ``previous_rev``."""
         return self.previous_rev.all(*pattern, **kwargs)
 
-    def rows(self, *pattern: Any, **kwargs: Any) -> list:
-        """``Rev.rows`` at ``previous_rev``."""
-        return self.previous_rev.rows(*pattern, **kwargs)
+    def history(self, *pattern: Any, **kwargs: Any) -> list:
+        """``Rev.history`` at ``previous_rev``."""
+        return self.previous_rev.history(*pattern, **kwargs)
 
     def refs(self, **kwargs: Any) -> Any:
         """``Rev.refs`` at ``previous_rev``."""

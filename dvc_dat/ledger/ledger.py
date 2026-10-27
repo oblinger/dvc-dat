@@ -1,11 +1,11 @@
 """``Ledger``: the store handle. One constructor (A49), ``at`` for views, ``transaction`` for writes.
 
 A ledger is a folder holding the database and the art store (A54.2), or a
-Postgres DSN ``postgresql://…?art=<folder>`` (``pgstore``) wherever a path
-is accepted. ``Ledger(path)`` opens it; ``Ledger()`` finds it (``DAT_LEDGER``, else the
+Postgres DSN ``postgresql://…?art=<folder>`` (``pgstore``); its location is
+either. ``Ledger(location)`` opens it; ``Ledger()`` finds it (``DAT_LEDGER``, else the
 nearest ``.datconfig.yaml`` with a ``ledger:`` key at or above the working
 directory, A37, A44); ``create=True`` is the one act that makes a ledger
-(``Ledger(path, create=True)``), or a project in the working directory
+(``Ledger(location, create=True)``), or a project in the working directory
 (``Ledger(create=True)``: ``.datconfig.yaml`` with ``ledger: .dat/ledger``).
 Without it nothing is ever created.
 """
@@ -56,16 +56,18 @@ def _relative(cfg: Path, led: str) -> Path:
 class Ledger:
     """One logical store of quads ``(rev, subject, predicate, object)``."""
 
-    def __init__(self, path: Union[str, Path, None] = None, *, create: bool = False) -> None:
+    def __init__(self, location: Union[str, Path, None] = None, *, create: bool = False) -> None:
+        """Open the ledger at ``location``: a folder or a DSN (a ``Path``, or a ``str`` that is not a DSN, is a
+        folder); ``None`` finds it (``DAT_LEDGER``, else ``.datconfig.yaml`` ``ledger:``)."""
         self._values: Dict[Any, Any] = {}
         cfg: Optional[Path] = None
-        given: Any = path
+        given: Any = location
         target: Union[str, Path]
         base = Path.cwd()                   # where a DSN's relative art= resolves
-        if path is None and create:
+        if location is None and create:
             if os.environ.get(ENV):
                 raise ValueError(f"Ledger(create=True) makes a project in the working directory, but {ENV} is "
-                                 "set: ambiguous; unset it, or pass the path")
+                                 "set: ambiguous; unset it, or pass the location")
             cfg = Path.cwd() / CONFIG
             data = _read_config(cfg) if cfg.is_file() else {}
             led = data.get("ledger")
@@ -78,7 +80,7 @@ class Ledger:
             base = cfg.parent
             target = led if is_dsn(led) else _relative(cfg, led)
             given = target
-        elif path is None:
+        elif location is None:
             env = os.environ.get(ENV)
             if env:
                 given = env
@@ -93,7 +95,7 @@ class Ledger:
                 target = led if is_dsn(led) else _relative(cfg, led)
                 given = target
         else:
-            target = path if is_dsn(path) else Path(path).expanduser()
+            target = location if is_dsn(location) else Path(location).expanduser()
         self._store: Store
         if isinstance(target, str):
             store = PostgresStore(target, base=base, create=create)
@@ -109,7 +111,7 @@ class Ledger:
             self.path = folder
             self._shown = str(folder)
             self._store = SqliteStore(folder)
-        if cfg is not None and path is None and not create:
+        if cfg is not None and location is None and not create:
             self._assert_mounts(cfg)
 
     def __repr__(self) -> str:
@@ -160,7 +162,7 @@ class Ledger:
                 raise KeyError(f"no revision {which}: the ledger runs 0..{top}")
             return Rev(self, which)
         if isinstance(which, str) and _VERSION.match(which):
-            found = [r.rev for r in Rev(self, top).rows("db", "version", which) if r.added]
+            found = [r.rev for r in Rev(self, top).history("db", "version", which) if r.added]
             if not found:
                 raise KeyError(f"no revision set the ledger version {which}")
             return found[-1]

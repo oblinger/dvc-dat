@@ -95,7 +95,7 @@ def value(args):
 def history(args):
     rev = Ledger().at()
     print(f"{'rev':>3}  {'by':<10} {'predicate':<10} object")
-    for row in rev.rows():
+    for row in rev.history():
         if row.subject == args[0]:
             obj = short(row.object) if isinstance(row.object, str) else row.object
             sign = "" if row.added else "-"
@@ -132,7 +132,7 @@ def why(args):
                                 if not k.startswith("ref:")))
     prev = rest.get("against")
     if prev is None:
-        moves = [r.object for r in rev.rows(name, "db/alias") if r.added]
+        moves = [r.object for r in rev.history(name, "db/alias") if r.added]
         prev = moves[-2] if len(moves) > 1 else None
     if prev is not None:
         other = rev.load(prev)
