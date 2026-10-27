@@ -207,7 +207,7 @@ from dvc_dat.ledger import ledger_fn
 __version__ = "5.3.9"
 
 @ledger_fn
-def distance(rev, a, b=(0, 0)) -> float:
+def distance(rev, a, b) -> float:
     return math.dist(a, b)
 ''')
 
@@ -238,7 +238,7 @@ sys.path.insert(0, str(repo_path))
 distance_fn = L.at().ns.load("geometry.distance")
 print("fn:", repr(distance_fn), " code:", repr(distance_fn.code))
 # → fn: <Fn geometry.distance@5.3.9>  code: <Code geometry@5.3.9>
-hypotenuse_value = distance_fn(a=(3, 4))
+hypotenuse_value = distance_fn(a=(0, 0), b=(3, 4))
 print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 # → result: 5.0  sealed at: <the seal's moment>
 print("db/repo/geometry/geometry:", L.at()["db/repo/geometry/geometry"])
@@ -278,8 +278,8 @@ segment_value = length_fn(a=(0, 0), b=(3, 4))
 print("fn:", repr(length_fn), " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
 # → fn: <Fn plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
 print("result:", segment_value.obj)                 # → result: 2.5
-print("clocks:", {s: L.at()[s, "version"] for s in ("db/repo/geometry/geometry", "db/repo/geometry/plane")})
-# → clocks: {'db/repo/geometry/geometry': '5.3.9', 'db/repo/geometry/plane': '2.7.1'}
+print("geometry clock:", L.at()["db/repo/geometry/geometry", "version"])   # → geometry clock: 5.3.9
+print("plane clock:", L.at()["db/repo/geometry/plane", "version"])         # → plane clock: 2.7.1
 
 # %% [markdown]
 # `geometry` and `plane` share one checkout, the repo `geometry`, and each package keeps its own version clock, written by its first clean run.
@@ -331,21 +331,29 @@ print("old result's code:", segment_value.dependencies["code"], " fn:", segment_
 # answered from the ledger.
 
 # %%
-far_value = L.at().run("geometry.distance", a=(6, 8))
+far_value = L.at().run("geometry.distance", a=(0, 0), b=(6, 8))
 print("result:", far_value.obj)                       # → 10.0
-print("depends on:", sorted(far_value.dependencies))      # → ['code', 'code/geometry', 'fn', 'platform']
+for dep_key, dep_value in sorted(far_value.dependencies.items()):
+    print(f"{dep_key:15}= {dep_value}")
+print("the code snapshot:", repr(distance_fn.code), " same snapshot:",
+      distance_fn.code.subject == far_value.dependencies["code"])
+# → the code snapshot: <Code geometry@5.3.9>  same snapshot: True
 top_id = L.at().id
 
-again_value = L.at().run("geometry.distance", a=(6, 8))
+again_value = L.at().run("geometry.distance", a=(0, 0), b=(6, 8))
 print("same value:", again_value.subject == far_value.subject, " nothing written:",
       L.at().id == top_id)                 # → True True: a hit, nothing written
 
 # %% [markdown]
-# The dependencies are the snapshot (`code`), the function's name in
-# it (`fn`), the checkout's commit (`code/geometry`), and the platform.
+# - `code`: the snapshot of the code the function ran from, by its
+#   subject; here the package `geometry` at version 5.3.9.
+# - `code/geometry`: the commit of the repo `geometry` it ran at.
+# - `fn`: the function's dotted name inside that snapshot.
+# - `platform`: the operating system, CPU and Python version it ran
+#   on (`darwin-arm64-py3.12`), a tag, not a file.
 
 # %% [markdown]
-# ### Step by step
+# ### Splitting the run method into discrete actions
 #
 # `run` is three separable steps: load the function, run it with its
 # provenance captured, put the result on the ledger. `seal=False`
@@ -354,12 +362,12 @@ print("same value:", again_value.subject == far_value.subject, " nothing written
 
 # %%
 distance_fn = L.at().ns.load("geometry.distance")          # (1) load the function
-draft_value = distance_fn(a=(9, 12), seal=False)           # (2) run it, provenance captured, nothing kept
+draft_value = distance_fn(a=(0, 0), b=(9, 12), seal=False)           # (2) run it, provenance captured, nothing kept
 print("draft:", draft_value.obj, " sealed:", draft_value.sealed)   # → 15.0 None
-print("draft depends on:", sorted(draft_value.dependencies))       # the trace rides on the draft
+print("draft ran:", draft_value.dependencies["fn"], " from:", draft_value.dependencies["code"])   # the trace rides on the draft
 with L.transaction(by="human:dan", why="keep it") as t:    # (3) put it on the ledger
     draft_value.seal(t)
-kept_value = L.at().run("geometry.distance", a=(9, 12))    # the same call: a hit
+kept_value = L.at().run("geometry.distance", a=(0, 0), b=(9, 12))    # the same call: a hit
 print("hit:", kept_value.subject == draft_value.subject)   # → True: nothing ran
 
 # %% [markdown]
@@ -425,7 +433,8 @@ for dep_key, dep_value in sorted(retake_clip.dependencies.items()):
 # - `code`: the snapshot the function ran from, by its subject, as for
 #   the sandbox above.
 # - `fn`: the function's dotted name inside that snapshot.
-# - `platform`: the machine it ran on.
+# - `platform`: the operating system, CPU and Python version it ran
+#   on, a tag, not a file.
 # - `ref:…`: the video bytes it loaded.
 # - `video/G1 db/alias`: the value the name `video/G1` pointed at.
 #
