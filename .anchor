@@ -1,7 +1,6 @@
 slug: DAT
 traits:
 - code
-doc: doc/DAT Track/DAT.md
 page: doc/DAT Track/DAT.md
 backlog: doc/DAT Track/DAT Backlog/DAT Backlog.md
 inbox: doc/DAT Track/DAT Inbox.md
