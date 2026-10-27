@@ -528,13 +528,13 @@ DESCRIPTION
     also runs as `just NAME` once the justfile has
     `import? '.dat/targets.just'`; `run` rewrites that file when stale.
 
-    Every ARG and every KEY=VALUE value is read as a YAML scalar: 7 is an int,
-    true is a bool, [1,2] is a list, "x" is a string, and a bare word stays a
-    string.  A KEY=VALUE pair is recognised by a leading NAME= ; use -- to end
+    Every ARG and every KEY=VALUE value is JSON, else the text as typed: 7 is
+    an int, true is a bool, null is None, [1,2] is a list, '"7"' is the string
+    7, and 2026-01-01 or a bare word is that string.  A KEY=VALUE pair is recognised by a leading NAME= ; use -- to end
     the options and pass anything after it as a fixed argument.
 
 OPTIONS
-    --set DOTTED.KEY=VALUE      VALUE a YAML scalar
+    --set DOTTED.KEY=VALUE      VALUE JSON, else the text as typed
     --json DOTTED.KEY=JSON      JSON a JSON value
                 Update one spec key of a template before it forks; each
                 repeats, one KEY=VALUE per flag
@@ -634,7 +634,7 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
             return _fail(_message(e))
         if ledger is not None:
             return _cmd_eval(ledger, args, kwargs, overrides, flags)
-    target, fixed = args[0], [_scalar(a) for a in args[1:]]
+    target, fixed = args[0], [arg_value(a) for a in args[1:]]
     try:
         cmd = do.load(target)
     except (ImportError, AttributeError, KeyError) as e:
@@ -804,7 +804,7 @@ def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
     """Split `x TARGET` arguments into spec overrides, positionals, kwargs and flags.
 
     Positionals come back as written (the first is the target name); every
-    KEY=VALUE value is a YAML scalar.  A malformed line raises `ValueError`.
+    KEY=VALUE value is `arg_value` (JSON, else the text).  A malformed line raises `ValueError`.
     """
     overrides: Spec = {}
     args: List[str] = []
@@ -827,13 +827,13 @@ def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
                 except json.JSONDecodeError as e:
                     raise ValueError(f"--json {key}: illegal JSON: {e}")
             else:
-                value = _scalar(value)
+                value = arg_value(value)
             Dat.set(overrides, key, value)
             i += 1
         elif arg in ("--dry-run", "--usage"):
             flags.add(arg[2:])
         elif (match := _KWARG.match(arg)):
-            kwargs[match.group(1)] = _scalar(arg[match.end():])
+            kwargs[match.group(1)] = arg_value(arg[match.end():])
         elif arg.startswith("-") and arg != "-":
             raise ValueError(f"unknown option {arg!r}; "
                              f"keyword arguments are written KEY=VALUE")
@@ -851,12 +851,23 @@ def _operands(argv: List[str], i: int, count: int) -> List[str]:
     return operands
 
 
-def _scalar(text: str) -> Any:
-    """One command-line word as a YAML scalar; a bare word stays a string."""
+def arg_value(text: str) -> Any:
+    """One command-line value: JSON, else the text exactly as typed (DAT 1041).
+
+    The one `k=v` grammar of every dat command line (`x`, `just run`, `--set`, the
+    ledger recipes): `12` an int, `1.5` a float, `true` a bool, `null` None, `[1,2]`
+    a list, `{"a":1}` a dict, `"12"` the string 12; `2026-01-01`, `foo` and `NaN`
+    are not JSON, so each is that string.
+    """
     try:
-        return yaml.safe_load(text)
-    except yaml.YAMLError:
+        return json.loads(text, parse_constant=_not_json)
+    except ValueError:
         return text
+
+
+def _not_json(name: str) -> Any:
+    """`NaN` / `Infinity` / `-Infinity` are Python's extensions, not JSON."""
+    raise ValueError(name)
 
 
 def _message(error: BaseException) -> str:

@@ -130,9 +130,9 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # →     index pred             # declare a pred indexed
 # →     mounts *args           # mounts [PREFIX]: the mounted names, with what each loads to
 # →     run *args              # run TARGET [ARG ...] [KEY=VALUE ...]: a mounted name, a dotted function, a spec
-# →     set subject *args      # rows on a subject: k=v a fact, k:=v JSON, alias=TARGET the name's value (a hash prefix is expanded)
+# →     set subject *args      # rows on a subject: k=v a fact, alias=TARGET the name's value (a hash prefix is expanded)
 # →     value *args            # exactly one value matching the preds
-# →     values *args           # the values matching k=v / k:=v preds (kind=<short class name> narrows)
+# →     values *args           # the values matching k=v preds (kind=<short class name> narrows)
 # →     why name *args         # a value's dependencies, whether they hold at the head, and what moved since the alias's last target
 # →
 # →     [run]

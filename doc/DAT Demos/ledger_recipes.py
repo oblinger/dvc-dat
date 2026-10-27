@@ -4,7 +4,7 @@ Each recipe is one ledger call; running a function or a spec is not here but
 `just run` (dvc_dat.just), the one way to run. What a Python caller spells out the recipe
 supplies: the ledger (`Ledger()`), `by=human:$USER`, `confirm=` (a typed
 `yes`), the checkout's packages on `sys.path` (`bump <module>`), short kind
-names, hash prefixes, and `k=v` (a string) / `k:=v` (JSON) arguments.
+names, hash prefixes, and `k=v` arguments (v JSON, else the text as typed: `dvc_dat.do.arg_value`).
 """
 
 import importlib
@@ -14,6 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from dvc_dat.do import arg_value
 from dvc_dat.ledger import Ledger, LedgerError, bump, bump_source
 
 BY = f"human:{os.environ.get('USER', 'dan')}"
@@ -39,14 +40,10 @@ def import_checkout() -> None:
 def parse(args):
     out = {}
     for a in args:
-        if ":=" in a:
-            k, v = a.split(":=", 1)
-            out[k] = json.loads(v)
-        elif "=" in a:
-            k, v = a.split("=", 1)
-            out[k] = v
-        else:
-            sys.exit(f"{a!r}: an argument is k=v (a string) or k:=v (JSON)")
+        k, eq, v = a.partition("=")
+        if not eq or not k:
+            sys.exit(f"{a!r}: an argument is k=v (v JSON, else the text as typed)")
+        out[k] = arg_value(v)
     return out
 
 
@@ -144,10 +141,11 @@ def why(args):
 
 
 def set_recipe(args):
-    """Rows on a subject: `k=v` a fact, `k:=v` JSON; `alias=TARGET` is the name's `db/alias` row."""
+    """Rows on a subject: `k=v` a fact (v JSON, else the text); `alias=TARGET` is the name's `db/alias` row."""
     L = Ledger()
     subject, kw = args[0], parse(args[1:])
-    target = kw.pop("alias", None)
+    kw.pop("alias", None)
+    target = next((a.partition("=")[2] for a in args[1:] if a.startswith("alias=")), None)  # a name: as typed
     rev = L.at()
     if target is not None:
         aim = target if len(target) == 64 else rev.refs(s=f"{target}*", one=True).subject

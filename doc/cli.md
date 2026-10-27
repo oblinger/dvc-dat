@@ -48,7 +48,7 @@ CLI's: a **callable** is called, a **template spec** is forked — the fixed
 arguments become the new spec's `dat.args`, the `KEY=VALUE` pairs update its
 `dat.kwargs` key by key — and the forked spec creates a dat, which runs.
 
-Every fixed argument and every `KEY=VALUE` value is read as a **YAML scalar**:
+Every fixed argument and every `KEY=VALUE` value is read as **JSON, else the text exactly as typed** — the one `k=v` grammar of every dat command line (`dvc_dat.do.arg_value`):
 
 ```bash
 # do("train", 7, True)
@@ -57,12 +57,11 @@ x train 7 true
 # do("train", epochs=7, lr=0.01)
 x train epochs=7 lr=0.01
 
-# do("train", tags=["a", "b"], name="7")
-x train tags=[a,b] name='"7"'
+# do("train", tags=["a", "b"], cfg={"a": 1}, name="7", seed=None)
+x train 'tags=["a","b"]' 'cfg={"a":1}' name='"7"' seed=null
 
-# a bare word stays a string; an empty value is None
-x train note=hello
-x train note=
+# not JSON, so the string as typed: a bare word, a date, an empty value
+x train note=hello start=2026-01-01 note=
 ```
 
 A word is a keyword argument when it starts with `NAME=` (a Python identifier
@@ -73,13 +72,13 @@ every word after it is a fixed argument even when it looks like one of them:
 x echo -- --not-an-option
 ```
 
-The `TARGET` itself is never parsed as YAML.
+The `TARGET` itself is never parsed.
 
 ## Options
 
 | Option | Does |
 |--------|------|
-| `--set DOTTED.KEY=VALUE` | Set one spec key of a template before it forks; repeat the flag for more. The value is a YAML scalar. |
+| `--set DOTTED.KEY=VALUE` | Set one spec key of a template before it forks; repeat the flag for more. The value is JSON, else the text as typed. |
 | `--json DOTTED.KEY=JSON` | The same, with the value parsed as JSON; repeatable, and mixes freely with `--set`. |
 | `--dry-run` | Print the `do(...)` call this line would make, and any `--set` / `--json` updates, without making it. |
 | `--usage` | Print `TARGET`'s own usage — a `<base>.usage` value, else the spec's `usage` key — else the general usage. |

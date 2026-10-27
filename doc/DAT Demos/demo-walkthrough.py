@@ -148,7 +148,7 @@ print(d3.get_path_name(), d3.get_spec()["model"], d3.get_results()["loss"])
 # `.datconfig.yaml`, sets `DAT_CLI_CONFIG` and execs `run:`, here
 # `python -m mypkg.main`, which makes its mounts and hands the command line
 # to `Dat.cli_main()`. The cell does the same by hand, so it needs no `just`
-# on `PATH`. Every `KEY=VALUE` is a YAML scalar.
+# on `PATH`. Every `KEY=VALUE` value is JSON, else the text as typed.
 
 # %%
 def x(*args):

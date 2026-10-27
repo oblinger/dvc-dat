@@ -69,7 +69,7 @@ Dat.load_artifact("games/G1/video")  # a Path, or its type's
 $ dat mymodule.train.baseline           # run, print the value
 0.99
 
-$ dat mymodule.train.baseline lr=0.25   # a fork; YAML scalars
+$ dat mymodule.train.baseline lr=0.25   # a fork; JSON, else the text
 0.975
 
 # a copy of bin/dat on PATH: any subdirectory, no environment active

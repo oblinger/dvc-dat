@@ -159,7 +159,7 @@ x TARGET --usage
 itself from the nearest `.datconfig.yaml`. A target that
 is a template spec is forked: the fixed arguments become its `dat.args`,
 the `KEY=VALUE` pairs update its `dat.kwargs`, and `--set` / `--json` update
-any spec key. Every argument value is a YAML scalar. A first word is
+any spec key. Every argument value is JSON, else the text as typed (`2026-01-01` a string). A first word is
 always a target; `--list`, `--info`, `--version` and `--help` are the
 commands that are not. The exit code is `0` ran, `1` failed, `2` the
 target does not load.
