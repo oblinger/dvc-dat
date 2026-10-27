@@ -132,7 +132,11 @@ def code_token(env_commit: Optional[str]) -> str:
 
 
 class Transaction:
-    """The write set open under one ``with L.transaction(...)``."""
+    """The write set open under one ``with L.transaction(...)``.
+
+    A transaction reads the previous revision and writes the next; its own pending writes are not seen
+    until it closes. The read verbs (``get``, ``all``, ``rows``, ``refs``, ``values``, ``value``,
+    ``select``, ``load``, ``in``, ``t[s, p]`` / ``t[s]``) are ``previous_rev``'s, so they need ``lock=``."""
 
     def __init__(self, ledger: "Ledger", by: "str | Dict[str, Any]", lock: Optional[float],
                  preds: Dict[str, Any]) -> None:
@@ -195,6 +199,48 @@ class Transaction:
         from .namespace import LedgerNamespace
 
         return LedgerNamespace(txn=self, unguarded=True)
+
+    # -- reads: the previous revision's (DAT 1051) ---------------------------
+
+    def get(self, *pattern: Any, **kwargs: Any) -> Any:
+        """``Rev.get`` at ``previous_rev``; this transaction's pending writes are not seen."""
+        return self.previous_rev.get(*pattern, **kwargs)
+
+    def all(self, *pattern: Any, **kwargs: Any) -> list:
+        """``Rev.all`` at ``previous_rev``."""
+        return self.previous_rev.all(*pattern, **kwargs)
+
+    def rows(self, *pattern: Any, **kwargs: Any) -> list:
+        """``Rev.rows`` at ``previous_rev``."""
+        return self.previous_rev.rows(*pattern, **kwargs)
+
+    def refs(self, **kwargs: Any) -> Any:
+        """``Rev.refs`` at ``previous_rev``."""
+        return self.previous_rev.refs(**kwargs)
+
+    def values(self, **kwargs: Any) -> Any:
+        """``Rev.values`` at ``previous_rev``."""
+        return self.previous_rev.values(**kwargs)
+
+    def value(self, **kwargs: Any) -> Any:
+        """``Rev.value`` at ``previous_rev``."""
+        return self.previous_rev.value(**kwargs)
+
+    def select(self, keys: Tuple[str, ...], **kwargs: Any) -> Any:
+        """``Rev.select`` at ``previous_rev``."""
+        return self.previous_rev.select(keys, **kwargs)
+
+    def load(self, subject: str) -> Value:
+        """``Rev.load`` at ``previous_rev``."""
+        return self.previous_rev.load(subject)
+
+    def __contains__(self, triple: Any) -> bool:
+        """``(s, p, o) in t``: ``in`` at ``previous_rev``."""
+        return triple in self.previous_rev
+
+    def __getitem__(self, key: Any) -> Any:
+        """``t[s, p]`` / ``t[s]`` read at ``previous_rev``; ``t[s, p] = o`` and ``t[s] = {...}`` write."""
+        return self.previous_rev[key]
 
     def _snapshot(self) -> "Rev":
         """The top at open, for the package's own declaration and seal checks; no lock required."""

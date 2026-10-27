@@ -235,18 +235,20 @@ with L.transaction(by="human:dan", lock=10) as t:
 # so no other writer slips between the read and the write; past 10
 # seconds the body is interrupted and nothing is written.
 #
-# A body can read through `t.previous_rev` itself, alter, and write
-# back. Here one more official joins `game/G2`.
+# A transaction reads the previous revision and writes the next;
+# its own pending writes are not seen until it closes. So a body
+# reads with `t[s]`, alters, and writes back. Here one more
+# official joins `game/G2`.
 
 # %%
 with L.transaction(by="human:dan", lock=10) as t:
-    g2 = t.previous_rev["game/G2"]                 # the record as it stands now
+    g2 = t["game/G2"]                              # the record as it stands now
     t["game/G2"] = {**g2, "officials": g2["officials"] + ["vance"]}   # one more, written back
 print("officials:", t.rev.all("game/G2", "officials"))
 
 # %% [markdown]
-# `t.previous_rev` is the previous revision, the top as it stands
-# while the body holds the write lock: the write is built on current
+# `t[s]` reads `t.previous_rev`, the previous revision: the top as
+# it stands while the body holds the write lock: the write is built on current
 # data, and no other writer can commit between the read and the
 # write. Without `lock=` there is no well-defined previous revision.
 # Notice the ledger refuses the read.
@@ -254,7 +256,7 @@ print("officials:", t.rev.all("game/G2", "officials"))
 # %%
 try:
     with L.transaction(by="human:dan") as t:       # no lock=
-        t.previous_rev["game/G2"]
+        t["game/G2"]
 except Unlocked as e:
     print("Unlocked:", e)
 

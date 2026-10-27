@@ -201,13 +201,14 @@ A named tuple encoding a single row in the ledger: revision, subject, predicate,
 
 
 ## Transaction Interface
-The write set of one `with L.transaction(...) as t:` block; it becomes exactly one revision on exit, or nothing. `add`, `update` and `remove` append rows and read nothing; `v.seal(t)` seals a value into it; the bracket forms are helpers over `add` and `remove`. A transaction has a revision's read operators through `previous_rev`, bound to the previous revision; it exists only under `lock=`, because an unlocked transaction has no well-defined previous revision (another writer may commit between open and exit). The helpers that read and then write (`t[s] = {...}`, `del`, `bump`) read through it, so they need `lock=`; unlocked they raise `Unlocked` and write nothing. Whatever must see the transaction's own rows is checked at commit, inside the write lock. Entered once; a verb used outside the block is `RuntimeError`.
+The write set of one `with L.transaction(...) as t:` block; it becomes exactly one revision on exit, or nothing. `add`, `update` and `remove` append rows and read nothing; `v.seal(t)` seals a value into it; the bracket forms are helpers over `add` and `remove`. **A transaction reads the previous revision and writes the next; its own pending writes are not seen until it closes.** Its read verbs are `previous_rev`'s: `get`, `all`, `rows`, `refs`, `values`, `value`, `select`, `load`, `in`, and `t[s, p]` / `t[s]` as a read (`t[s, p] = o` / `t[s] = {...}` write). `previous_rev` is bound to the previous revision and exists only under `lock=`, because an unlocked transaction has no well-defined previous revision (another writer may commit between open and exit). The helpers that read and then write (`t[s] = {...}`, `del`, `bump`) read through it, so they need `lock=`; unlocked they raise `Unlocked` and write nothing. Whatever must see the transaction's own rows is checked at commit, inside the write lock. Entered once; a verb used outside the block is `RuntimeError`.
 
 | Transaction | |
 | --- | --- |
 | [tx](#^transaction-tx) | A placeholder for this revision's tx subject |
 | [previous_rev](#^previous-rev) | The previous revision, the top while `lock=` holds |
 | [ns](#^transaction-ns) | The namespace at `previous_rev`; `ns.mount` writes a mount |
+| [reads](#^transaction-reads) | `get`, `all`, `rows`, `refs`, `values`, `value`, `select`, `load`, `in`, `t[s, p]`: at `previous_rev` |
 | [rev](#^transaction-rev) | The revision the exit wrote |
 | [add](#^add) | Append an add row |
 | [update](#^update) | An add per key of a record |
@@ -223,6 +224,9 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 
 **ns**`: LedgerNamespace`
     The ledger's namespace at `previous_rev` (DAT 1051): `t.ns.load(name)` as [`rev.ns`](#^ns), so it needs `lock=`; `t.ns.mount(at, *, root, repo)` writes the two `db/mount/<at>` rows `db/root` and `db/repo` through `update`, reads nothing and needs no lock. A missing or non-`str` `root` or `repo`, or a `folder=`-style keyword, is `TypeError`. ^transaction-ns
+
+**get** · **all** · **rows** · **refs** · **values** · **value** · **select** · **load** · **in** · **`t[s, p]`** · **`t[s]`**
+    The [Rev](#Rev%20Interface) reads of the same names, at `previous_rev` (DAT 1051), so they need `lock=` and are `Unlocked` without it. The body's own `add`, `update`, bracket writes and seals are pending and not seen: `t[s, p] = o; t[s, p]` reads the old value. ^transaction-reads
 
 **rev**`: Rev`
     The revision written: the state after this transaction, so it exists only once committed; `RuntimeError` before. Under `lock=` the number it will be is `previous_rev.id + 1`. ^transaction-rev

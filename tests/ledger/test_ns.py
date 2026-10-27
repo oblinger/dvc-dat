@@ -51,3 +51,42 @@ def test_plain_ns_mounts_is_the_mount_table(tmp_path):
     assert table["dt"] == "dvc_dat.dat_tools"                     # the world's own names
     assert "consts" not in table                                  # a value has no location
     assert ns.load("cfg.a") == 1 and ns.load("consts.b") == 2
+
+
+def test_a_transaction_reads_the_previous_revision_not_its_pending_writes(L):
+    with L.transaction(by="t", lock=10) as t:
+        t["g/1"] = {"home": "a"}
+        t.add("g/1", "tag", "x")
+    with L.transaction(by="t", lock=10) as t:
+        t["g/1", "home"] = "b"                       # pending: not seen until the body closes
+        t.add("g/2", "home", "c")
+        assert t["g/1", "home"] == "a" and t["g/1"]["home"] == "a"
+        assert t.get("g/1", "home") == "a" and t.get("g/2", "home") is None
+        assert ("g/1", "home", "a") in t and ("g/1", "home", "b") not in t
+        assert t.all("g/1", "home") == ["a"] and t.all("g/2", "home") == []
+        assert t.rows("g/2") == []
+        before = t.previous_rev
+    assert t.rev["g/1", "home"] == "b" and t.rev["g/2", "home"] == "c"
+    assert before.id + 1 == t.rev.id
+
+
+def test_a_transaction_read_needs_lock(L):
+    from dvc_dat.ledger import Unlocked
+
+    with L.transaction(by="t") as t:
+        t.add("g/1", "home", "a")
+    with pytest.raises(Unlocked):
+        with L.transaction(by="t") as t:
+            t["g/1", "home"]
+
+
+def test_a_transaction_reads_values_at_the_previous_revision(world):
+    from ledger_kinds import Video
+
+    with world.transaction(by="t", lock=10) as t:
+        videos = t.values(kind=Video)
+        assert {v.preds["game"] for v in videos} == {"G1", "G2"}
+        assert t.value(kind=Video, game="G1").subject == t.load("video/G1").subject
+        assert len(t.refs(kind=Video)) == 2
+        assert sorted(t.select(("game",), kind=Video)) == [("G1",), ("G2",)]
+        t.add("note/1", "text", "x")
