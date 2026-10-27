@@ -13,7 +13,7 @@ itself.
 
 ``LedgerDo`` is ``Dat.manager.do`` in a project whose ``.datconfig.yaml`` names
 a ledger: the ``Do`` interface (``load``, the ``dat.base`` merge and ``{}`` expansion, the
-``dat.do`` lookup in ``execute``) answered from these mounts, at the head, or at
+``dat.do`` lookup in a run) answered from these mounts, at the head, or at
 the rev it was made for. Its ``mount`` is refused: in a ledger project the mounts
 are rows.
 """

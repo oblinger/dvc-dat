@@ -569,12 +569,13 @@ def expand_spec(spec: Any, vars: Optional[Dict[str, Any]] = None, *,
 class DatManager:
     """A world of dats: the dat folders, and the namespace that names things in them.
 
-    A manager owns its `do` -- a `Do` bound to it, carrying its mounts, its `load`
-    and its runner -- and everything the manager does (a dotted spec, `dat.base`,
-    `{}` expansion, path resolution, every run) goes through that `do`.  The
-    process's default world is `Dat.manager`, built on first use by
-    `DatManager.load_dat_config()` and replaced by assigning to it.  Any number
-    of others coexist.  `do` is the only public attribute.
+    A manager owns its `do` -- a `Do` bound to it, carrying its mounts and its
+    `load` -- and everything the manager does (a dotted spec, `dat.base`, `{}`
+    expansion, path resolution, every run) goes through that `do`.  `run` is the
+    one way to run a dat outside a ledger.  The process's default world is
+    `Dat.manager`, built on first use by `DatManager.load_dat_config()` and
+    replaced by assigning to it.  Any number of others coexist.  `do` is the
+    only public attribute.
     """
 
     do: "Do"
@@ -1255,7 +1256,7 @@ class DatManager:
     @contextlib.contextmanager
     def recording(self, dat: "Dat") -> Iterator[None]:
         """Every `load` (and `save_artifact`) inside the block lands in `dat.dependencies`.
-        `execute` runs its function inside one.  Blocks nest: when an inner block
+        `_execute` runs its function inside one.  Blocks nest: when an inner block
         ends, its dat becomes one entry of the outer one."""
         with self._capture(dat) as outer:
             yield
@@ -1349,7 +1350,48 @@ class DatManager:
                 return os.path.relpath(real, folder)
         return path
 
-    def execute(self, dat: "Dat") -> Any:
+    def run(self, target: Any, *args: Any, **kwargs: Any) -> Any:
+        """Run `target` in this world: the one way to run a dat outside a ledger.
+
+        - a **Dat** runs in place when no arguments are given -- refused once it
+          is sealed -- and forks a new dat from its spec when they are;
+        - a **template spec** (dict, or a dotted name that loads to one) is
+          forked -- `args` replace `dat.args`, `kwargs` update `dat.kwargs` --
+          the new spec creates a dat, and that dat runs with no call-site
+          arguments;
+        - a **callable** (or a dotted name that loads to one) is called with
+          `args`/`kwargs`.
+
+        A dat's run calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the
+        object `dat.do` names, and records the run in `dat.run` (see
+        `_execute`); the return value is `fn`'s.  A template with no `dat.do`
+        just creates the dat and returns it, as does `dat.target_exists: use`
+        finding the dat already there.  Names load through this world's `do`,
+        so in a ledger project they are the ledger's.  Fixed: a project needing
+        other run machinery subclasses the manager, not `Dat`.
+        """
+        do = self.do
+        obj = do.load(target) if isinstance(target, str) else target
+        try:
+            if isinstance(obj, Dat):
+                if not args and not kwargs:
+                    return self._execute(obj)
+                obj = deepcopy(obj.get_spec())
+                if Dat.get(obj, DAT_TARGET_EXISTS, "error") == "error":
+                    Dat.set(obj, DAT_TARGET_EXISTS, "increment")   # a fork lands beside its parent
+            elif callable(obj):
+                return obj(*args, **kwargs)
+            if not isinstance(obj, dict):
+                raise TypeError(f"run: cannot run {obj!r}; expected a callable, a spec or a Dat")
+            spec = do._fork_spec(obj, args, kwargs)
+            dat, skip_execution = do._dat_from_template(spec)
+            if skip_execution:
+                return dat
+            return self._execute(dat)
+        except Exception as e:
+            raise Exception(f"In {target!r}") from e
+
+    def _execute(self, dat: "Dat") -> Any:
         """Run `dat` as its spec says, and record the run in `dat.run`.
 
         Calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do`
@@ -1368,7 +1410,7 @@ class DatManager:
         runs again, and its `run/` is replaced).  A spec saying `dat.standing:
         referenceable` demands it: a load of an input that is not referenceable
         raises there, and so does code that is dirty or outside a checkout.
-        Every run in this world comes here -- `do(...)` and the `do(...)` calls
+        Every run in this world comes here -- `run(...)` and the `run(...)` calls
         nested inside a running function alike -- so a subclass that wraps this
         wraps every run.  Returns `fn`'s value, or `dat` when there is no
         `dat.do`.
@@ -1388,11 +1430,11 @@ class DatManager:
         if not callable(fn):
             raise TypeError(f"{DAT_DO} in {dat!r} is {fn!r}, not callable")
         if dat._standing() in _FROZEN:
-            raise RuntimeError(f"execute: {dat!r} is sealed; fork it with do(dat, ...) "
+            raise RuntimeError(f"run: {dat!r} is sealed; fork it with Dat.manager.run(dat, ...) "
                                "or copy it")
         code = _code_of(fn)
         if dat._demands_referenceable() and (code is None or code.get("dirty")):
-            raise RuntimeError(f"execute: {dat!r} demands dat.standing: referenceable, and "
+            raise RuntimeError(f"run: {dat!r} demands dat.standing: referenceable, and "
                                f"the code of {fn!r} is "
                                f"{'dirty' if code else 'outside a git checkout'}")
         args = list(Dat.get(spec, DAT_ARGS, None) or [])
@@ -1554,12 +1596,12 @@ class _DatMeta(type):
     """Gives `Dat` (and every subclass) `manager`, the process's default world:
     a plain assignable class attribute, filled on first read by
     `DatManager.load_dat_config()`.  `Run.manager is Dat.manager`.  And `do`,
-    the default world's runner and namespace."""
+    the default world's namespace."""
 
     @property
     def do(cls) -> Any:
-        """The default world's runner and namespace: a forwarder to
-        `Dat.manager.do`, whichever manager that is when it is called, so
+        """The default world's namespace (not callable: `Dat.manager.run` runs): a
+        forwarder to `Dat.manager.do`, whichever manager that is when it is used, so
         `do = Dat.do` binds a shortcut that follows a later reassignment."""
         from .do import do
         return do
@@ -1633,7 +1675,7 @@ class Dat(Value, metaclass=_DatMeta):
         self._spec = spec
         self._result = result or {}
         self._manager = None
-        self._running = False           # inside its own execute
+        self._running = False           # inside its own _execute
         self._save_asked = False        # save() was called while running
         self._run_dat: Optional["Dat"] = None   # the run sub-dat, once known
         self._written = _standing_of(self._spec, self._result)   # as last written

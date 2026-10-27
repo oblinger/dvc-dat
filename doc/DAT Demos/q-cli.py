@@ -64,7 +64,7 @@ def write_table(folder, n=10, start=1):
 
 
 def build_table(dat, n=10, start=1):
-    """The run function: `do` calls it with the new dat and the spec's kwargs."""
+    """The run function: a run calls it with the new dat and the spec's kwargs."""
     cells = write_table(dat.get_path(), n, start)
     Path(dat.get_path(), "log.txt").write_text(f"{n} x {n} from {start}\\n")
     dat.get_results()["cells"] = cells
@@ -298,7 +298,7 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # | Command | What it does |
 # | --- | --- |
 # | `x TARGET k=v` | `bin/x`, the same as `just run TARGET k=v` |
-# | `dat TARGET k=v` | the `dat` console script: `Dat.do(TARGET, …)` from a shell, no ledger; `dat --list`, `dat --info` ([DAT CLI](../DAT%20Design/DAT%20API/DAT%20CLI.md)) |
+# | `dat TARGET k=v` | the `dat` console script: `Dat.manager.run(TARGET, …)` from a shell, no ledger; `dat --list`, `dat --info` ([DAT CLI](../DAT%20Design/DAT%20API/DAT%20CLI.md)) |
 # | `just sealed` | in the dvc-dat repo: values sealed with `v.seal()` and never saved; `just sealed purge older=14d` drops the old ones |
 # | `just test` | in the dvc-dat repo: the test suite |
 # | `just demo` | in the dvc-dat repo: sync and execute the `demo-*` notebooks |

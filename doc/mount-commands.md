@@ -214,7 +214,7 @@ spec = do.load("catalog.experiment")
 fixture = do.load("fixtures.simple")
 
 # Fork a script's spec and run it
-do("scripts.process", input="data.csv")
+Dat.manager.run("scripts.process", input="data.csv")
 
 # Access a constant
 version = do.load("config.version")

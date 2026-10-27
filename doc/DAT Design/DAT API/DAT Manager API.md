@@ -22,23 +22,23 @@ def run(dat):
     prev = dat.manager.load("runs/a")         # a Dat, as its kind
     ...
 
-m.do("configs.bb.pure_ai")       # made, executed, recorded
+m.run("configs.bb.pure_ai")      # made, run, recorded
 
 class Store(DatManager):          # a store wraps every run
-    def execute(self, dat):
+    def _execute(self, dat):
         with self.index_run(dat):
-            return super().execute(dat)
+            return super()._execute(dat)
 
 # replace the default world, keeping its mounts
 Dat.manager = Store(dat_folders=["/work"], do=Dat.do)
 ```
 
 ## DatManager Interface
-A world of dats and artifacts: a list of dat folders (all searched by name, the first written to), one artifact folder, a cache, and a `Do` bound to it. Every load and every run go through it, so a run's dependencies are whatever it loaded. `Dat.manager` is the default world, built from `.datconfig.yaml` on first use and replaced by assignment; others coexist. A subclass overrides `execute` to wrap every run.
+A world of dats and artifacts: a list of dat folders (all searched by name, the first written to), one artifact folder, a cache, and a `Do` bound to it. Every load and every run go through it, so a run's dependencies are whatever it loaded. `Dat.manager` is the default world, built from `.datconfig.yaml` on first use and replaced by assignment; others coexist. `run` is fixed; a subclass overrides the private `_execute`, which every run reaches, to wrap every run.
 
 | DatManager                                 |                                                      |
 | ------------------------------------------ | ---------------------------------------------------- |
-| [do](#^do)                               | This world's namespace and runner; its one attribute |
+| [do](#^do)                               | This world's namespace; its one attribute            |
 | [DatManager](#^init)                     | A world on a list of dat folders; reads nothing      |
 | [load_dat_config](#^load-dat-config)     | A new manager from the nearest `.datconfig.yaml`     |
 | [create](#^create)                       | Make a dat, as the class its `dat.kind` names        |
@@ -50,7 +50,7 @@ A world of dats and artifacts: a list of dat folders (all searched by name, the 
 | [reindex](#^reindex)                     | Rebuild the index from the folders                   |
 | [recording](#^recording)                 | Every load inside lands in `dat.dependencies`        |
 | [record_dependency](#^record-dependency) | Add a dependency by hand while recording             |
-| [execute](#^execute)                     | Run a dat; record its time, code and loads, unsaved  |
+| [run](#^run)                             | Run a dat, a spec or a callable; record the run      |
 | [roots](#^roots)                         | A dependency map trimmed to its roots, as at a seal  |
 | [code_of](#^code-of)                     | A function's branch, commit and dirty flag           |
 | [exists](#^exists)                       | Is a dat or an artifact under this name or URN?      |
@@ -58,7 +58,7 @@ A world of dats and artifacts: a list of dat folders (all searched by name, the 
 | [expand_spec](#^expand-spec)             | Merge `dat.base`, then `expand` every string         |
 
 **do**`: Do`
-    This world's namespace and runner; the only public attribute. `m.do.mount(...)` names things in it, `m.do(target, ...)` runs them here. ^do
+    This world's namespace; the only public attribute. `m.do.mount(...)` names things in it; `m.run(target, ...)` runs them here. Not callable. ^do
 
 **DatManager**`(*, dat_folders: list[str], art_folder: str | None = None, index: str | None = None, do: Do | None = None, verify: bool = False)`
     A world on a list of folders, searched in order and written at its head; keyword-only, and the list is required — a string or an empty list is `TypeError` / `ValueError`. Nothing is read from disk. `art_folder` is where artifacts live; with none, this world holds no artifacts and `save` raises `RuntimeError`. `index` is the store's index file, default `_index_.json` in the artifact folder, else in the first dat folder. It never nests with a dat folder, either way round — that is `ValueError`, since an artifact name and a dat name would collide. `do` adopts an existing namespace with its mounts; adopting the default world's makes this the default world. ^init
@@ -85,13 +85,15 @@ A world of dats and artifacts: a list of dat folders (all searched by name, the 
     Rebuild the index from the folders — every artifact's names and URN from its sidecar, every saved dat's URN from its results — and return the number of keys. ^reindex
 
 **recording**`(dat: Dat) -> ContextManager[None]`
-    Every `load` inside the block lands in `dat.dependencies`. `execute` runs its function inside one; blocks nest, and an inner dat is one entry of the outer. ^recording
+    Every `load` inside the block lands in `dat.dependencies`. A run calls its function inside one; blocks nest, and an inner dat is one entry of the outer. ^recording
 
 **record_dependency**`(name: str, sha256: str | None = None) -> None`
     An entry by hand, for what a run used without a `load`. Raises when nothing is recording. ^record-dependency
 
-**execute**`(dat: Dat) -> Any`
-    Run `dat.do` with the spec's args and kwargs inside `recording(dat)`, with a fresh `run/work/` as the working directory; record `dat.dependencies` in its results and `dat.run_at`, `dat.host`, `dat.pid`, `dat.code`, then `dat.run_time` and (after the seal) `dat.content` in the `run/` sub-dat, saving nothing — a `dat.save()` inside the function writes a checkpoint and seals it when the function returns; a sealed dat is `RuntimeError` (a rolling one runs again); a spec saying `dat.standing: referenceable` raises at the first load of an input that is not, and up front on dirty code or code outside a checkout; return the function's value (`dat` itself when the spec has no `dat.do`). Whatever the function raises propagates, with nothing recorded. Override to wrap every run. ^execute
+**run**`(target: str | dict | Dat | Callable, *args, **kwargs) -> Any`
+    The one way to run a dat outside a ledger (2.35, DAT 1049; it replaces `execute` and the call form of `Dat.do`), fixed: a project wanting other run machinery subclasses the manager, not `Dat`. A name is loaded through `do` first. A **`Dat`** with no arguments runs in place; with arguments it forks a new dat from its spec, landing beside it (`target_exists` `error` becomes `increment`). A **template spec** (dict, or a name loading to one) is forked — `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key — the new spec creates a dat (`dat.target_exists: use` returns an existing one unrun), and that dat runs with no call-site arguments. A **callable** (or a name loading to one) is called with `args` and `kwargs`. Anything else is `TypeError`. Every error is re-raised as `Exception("In <target>")` chained from the original. A `Dat.manager.run(...)` inside the running function runs on the same machinery, so runs nest and record as a stack. Nothing is remembered: a template makes a fresh folder every call. Its ledger form is `rev.run(target, **kwargs)` (DAT 1038, 1046): the same targets (a template spec, its name, or a run function's dotted name, which is the spec `{dat: {do: <name>}}`), the kwargs updating `dat.kwargs` as here, and the dat made, run and sealed as a value once, then found by its memo key ([DAT Ledger § run](../../DAT%20Modules/ledger/DAT%20Ledger.md#Rev%20Interface)).
+
+    A dat's run calls `dat.do` with the spec's args and kwargs inside `recording(dat)`, with a fresh `run/work/` as the working directory; record `dat.dependencies` in its results and `dat.run_at`, `dat.host`, `dat.pid`, `dat.code`, then `dat.run_time` and (after the seal) `dat.content` in the `run/` sub-dat, saving nothing — a `dat.save()` inside the function writes a checkpoint and seals it when the function returns; a sealed dat is `RuntimeError` (a rolling one runs again); a spec saying `dat.standing: referenceable` raises at the first load of an input that is not, and up front on dirty code or code outside a checkout; return the function's value (`dat` itself when the spec has no `dat.do`). Whatever the function raises propagates, with nothing recorded. `dat.run` is that `run/` sub-dat, the record. ^run
 
 **standing**`(name: str | Path | Dat) -> str | None`
     `rolling`, `open`, `sealed` or `referenceable`, read from `_spec_.yaml` and `_result_.yaml` without building anything; `None` when nothing is stored under the name or URN. An artifact is `referenceable`. A file written before 2.14 reads by the 2.13 rule: sealed with `dat.run_time` or `$MANUAL` and no `unsealed` entry, referenceable when stamped so, rolling when its spec says `dat.rolling: true`. ^standing
@@ -117,7 +119,7 @@ A world of dats and artifacts: a list of dat folders (all searched by name, the 
 # DatManager Semantics
 
 ## The default world
-`Dat.manager` is a plain class attribute: `None` until first use, when `DatManager.load_dat_config()` fills it; assign to it to replace the default world. `Dat.do` forwards to `Dat.manager.do`, whichever manager that is, so `do.mount` and `do(...)` always act on the default world. Mounts made before an assignment stay with the manager they were made on; to keep them, adopt the namespace: `Dat.manager = Store(dat_folders=[...], do=Dat.do)`. `cli_main(config=path)` does exactly that with `load_dat_config(path, do=Dat.do)`. A subclass's `Run.manager` is the same object; a dat built by hand with no manager falls back to it.
+`Dat.manager` is a plain class attribute: `None` until first use, when `DatManager.load_dat_config()` fills it; assign to it to replace the default world. `Dat.do` forwards to `Dat.manager.do`, whichever manager that is, so `do.mount` and `do.load` always act on the default world; `Dat.manager.run(...)` runs in it. Mounts made before an assignment stay with the manager they were made on; to keep them, adopt the namespace: `Dat.manager = Store(dat_folders=[...], do=Dat.do)`. `cli_main(config=path)` does exactly that with `load_dat_config(path, do=Dat.do)`. A subclass's `Run.manager` is the same object; a dat built by hand with no manager falls back to it.
 
 ## The config file
 `.datconfig.yaml`, overridden by `.datconfig.override.yaml`, then by `DAT_FOLDERS` / `DAT_ART_FOLDER`. A `manager:` key names the `DatManager` subclass `load_dat_config` builds (so the default world's class); the keys in that class's `CONFIG_KEYS` may appear too and reach its constructor, any other unknown key is an error. `load_dat_config` is its only reader in the library; `run` is read by `bin/dat` only (`DAT_RUN` overrides it there). An empty file is a complete config: it marks the project root.
@@ -131,7 +133,7 @@ run: .venv/bin/python -m mylab.main
 ```
 
 ## What a run records
-`execute` records the dependency map in the dat's results, and the seal writes it to `_result_.yaml`, keeping the roots only. A dat entry carries its `dat.sha256`, the content hash its seal stamped (3.0: the folder but its `run/` sub-dat, and the spec but its `dat.name`) — `unsealed` for a dat still open, which keeps the run open; a save outside the run adds `$MANUAL: manual`; an artifact entry carries the sha256 from its `_art_.yaml`. The key is the dat's own name (`dat.get_path_name()`, relative to the dat folder holding it); a dat outside every dat folder records as its absolute path. A run with no loads records `{}`. The execution itself — clock, host, pid, code, and the hash it sealed — is the `run/` sub-dat's results, written as it goes; `run/work/` is the working directory while the code runs.
+A run records the dependency map in the dat's results, and the seal writes it to `_result_.yaml`, keeping the roots only. A dat entry carries its `dat.sha256`, the content hash its seal stamped (3.0: the folder but its `run/` sub-dat, and the spec but its `dat.name`) — `unsealed` for a dat still open, which keeps the run open; a save outside the run adds `$MANUAL: manual`; an artifact entry carries the sha256 from its `_art_.yaml`. The key is the dat's own name (`dat.get_path_name()`, relative to the dat folder holding it); a dat outside every dat folder records as its absolute path. A run with no loads records `{}`. The execution itself — clock, host, pid, code, and the hash it sealed — is the `run/` sub-dat's results, written as it goes; `run/work/` is the working directory while the code runs.
 
 ```yaml
 # _result_.yaml
@@ -156,7 +158,7 @@ dat:
   content: "sha256:7c0a…"
 ```
 
-A nested `do()` inside a run records its own loads, and the outer run records the inner dat as one entry, by its final hash. A load that reaches around the manager is not a dependency unless the run says so with `record_dependency`. `dat.code` is the checkout holding the source of the function `dat.do` names; outside a git checkout nothing is recorded. Anything that gathers a dat's inputs before its run captures into it the same way `execute` does:
+A nested `Dat.manager.run()` inside a run records its own loads, and the outer run records the inner dat as one entry, by its final hash. A load that reaches around the manager is not a dependency unless the run says so with `record_dependency`. `dat.code` is the checkout holding the source of the function `dat.do` names; outside a git checkout nothing is recorded. Anything that gathers a dat's inputs before its run captures into it the same way a run does:
 
 ```python
 with m.recording(dat):
@@ -196,6 +198,7 @@ The sidecar decides the class; the manager takes none.
 | `save(src, type, name)` | 2.15: `save_artifact(src, *, type=, name=)`, `load_artifact`, both on `Dat` too |
 | `save(src, name)`, `register_artifact`, `status`, `execute(referenceable=)` | 2.14: `save(src, type=, name=)`, `standing`, `reindex`, `index=`; names or URNs everywhere |
 | 2.4: `art/` under the first dat folder by default | 2.5: `art/` beside the config file; nesting is `ValueError`; a hand-built manager has none unless given |
+| `execute(dat)`, `do(target, ...)` | 2.35: `run(target, ...)`, the one run; `do` the namespace only (DAT 1049) |
 
 # BRIEF
 - 2026-09-23 — rewritten to the agreed 2.3 + 2.4 surface from the proposal module doc (now [DAT Manager API](DAT%20Manager%20API.md)) ([DAT 103](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^103); [DAT 1014](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1014) part 1, [DAT 102](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^102) part 2), in Dan's module-doc member format (bold name + signature, 4-space-indented description). The 2.3 branch history (§ Changed from the branch, Q1–Q3 calls, § On main) was dropped: Q1 survives as the `dat.code` sentence, Q2–Q3 as § The class of a dat.

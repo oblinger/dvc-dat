@@ -28,7 +28,7 @@ def world(tmp_path):
 
 def made(spec=SPEC, **kwargs):
     """A dat ``Dat.do`` made and ran: saved by its run function."""
-    return Dat.do(spec, **kwargs)
+    return Dat.manager.run(spec, **kwargs)
 
 
 def test_the_ledger_dat_is_the_core_dat():

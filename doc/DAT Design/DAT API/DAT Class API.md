@@ -1,5 +1,5 @@
 ---
-description: "`from dvc_dat import Dat`: the `Dat` class, `Dat.do`, the spec file, the config"
+description: "`from dvc_dat import Dat`: the `Dat` class, `Dat.manager.run`, `Dat.do`, the spec file, the config"
 ---
 :>> [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Class API](ha://p/DAT%20Class%20API) 
 # DAT Class API
@@ -8,9 +8,8 @@ The `Dat` class — what a run makes, and everything you can do with one.
 ```python
 from dvc_dat import Dat
 
-do = Dat.do   # the shortcut; follows Dat.manager
-do("mymodule.train.baseline")       # 0.99 -- runs/2026-09/baseline
-do("mymodule.train.baseline", lr=0.5)       # 0.95 -- a fork, run
+Dat.manager.run("mymodule.train.baseline")          # 0.99 -- runs/2026-09/baseline
+Dat.manager.run("mymodule.train.baseline", lr=0.5)  # 0.95 -- a fork, run
 d = Dat.load("runs/2026-09/baseline_2")     # the dat it made
 
 d.get_path()           # '/.../data/runs/2026-09/baseline_2'
@@ -61,12 +60,12 @@ Dats, specs, and the one call that runs them. The world they live in is [DAT Man
 ## Dat Interface
 A folder holding `_spec_.yaml` — a complete, argumentless recipe, expanded once at create and never rewritten — and `_result_.yaml`, what running it produced. The class is chosen by the spec's `dat.kind`; subclass `Dat` to give a kind its own rules. `Dat(path)` is the dat already in a folder, its spec and results read from there, writing nothing; `create` makes one, `load` finds one by name.
 
-Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Value`, so `seal`, `preds`, `subject`, `sealed` and `hash` are on every dat, and `dvc_dat.ledger.Dat` is this class. A saved dat seals with `dat.seal(t, name=...)`, its folder's files going to the ledger's art store and its `db/value` row naming `dat.kind`; `preds` default to the spec's scalar `dat.kwargs` and the results' scalar top-level entries; `L.at().do(spec)` is `Dat.do(spec)` remembered. The ledger side is [DAT Ledger § Dat Interface](../../DAT%20Modules/ledger/DAT%20Ledger.md#Dat%20Interface). Two words: a dat's *standing* (`sealed` by `save()`) is the dat world's; `dat.sealed` (a moment, or `None`) is the ledger's.
+Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Value`, so `seal`, `preds`, `subject`, `sealed` and `hash` are on every dat, and `dvc_dat.ledger.Dat` is this class. A saved dat seals with `dat.seal(t, name=...)`, its folder's files going to the ledger's art store and its `db/value` row naming `dat.kind`; `preds` default to the spec's scalar `dat.kwargs` and the results' scalar top-level entries; `L.at().run(spec)` is `Dat.manager.run(spec)` remembered. The ledger side is [DAT Ledger § Dat Interface](../../DAT%20Modules/ledger/DAT%20Ledger.md#Dat%20Interface). Two words: a dat's *standing* (`sealed` by `save()`) is the dat world's; `dat.sealed` (a moment, or `None`) is the ledger's.
 
 | Dat | |
 | --- | --- |
 | [manager](#^manager) | The default world on the class; its own on a dat |
-| [do](#^do) | The default world's runner and namespace |
+| [do](#^do) | The default world's namespace; not callable |
 | [create](#^create) | Make a dat in the default world, typed to `cls` |
 | [load](#^load) | Read a dat, typed to the class it is called on |
 | [validate_spec](#^validate-spec) | The validation hook, on create and on load |
@@ -92,7 +91,7 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
     A plain class attribute: `None` until first use, when the getter builds the default world with `DatManager.load_dat_config()`. Assign a manager to replace the default world (`Dat.manager = Store(dat_folders=[...], do=Dat.do)` keeps the mounts). Every subclass sees the same object. `dat.manager` on an instance is the manager that loaded it, else this one — a run's function loads through `dat.manager`. ^manager
 
 **do**`: Do`
-    The default world's runner and namespace: a forwarder to `Dat.manager.do`, whichever manager that is when it is called. `Dat.do("x", lr=0.5)` runs; `Dat.do.mount(...)` and `Dat.do.load(...)` name things. `do = Dat.do` binds a shortcut that follows a later reassignment of `Dat.manager`. With no arguments a spec runs as written; with arguments it **forks** — `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key — and the forked spec creates the dat that runs ([Running](#Running)). ^do
+    The default world's namespace: a forwarder to `Dat.manager.do`, whichever manager that is when it is used. `Dat.do.mount(...)` and `Dat.do.load(...)` name things; `do = Dat.do` binds a shortcut that follows a later reassignment of `Dat.manager`. It is not callable: `Dat.manager.run("x", lr=0.5)` runs ([Running](#Running); 2.35, DAT 1049). ^do
 
 **create**`(path: str | None = None, spec: dict | str | None = None) -> Dat`
     Classmethod. `Dat.manager.create(spec, path=path)`, typed: a `dat.kind` naming a class outside `cls` is `TypeError`, checked before any folder is made; with no `dat.kind`, the class it is called on is written. `spec` is a dict or a dotted name; `path` is a template under the first dat folder, default `dat.name`, else `anonymous/Dat{unique}`, with `dat.target_exists` settling a collision. ^create
@@ -173,7 +172,7 @@ A dat whose folder holds dats.
 
 
 ## dvc_dat Interface
-`from dvc_dat import Dat, DatContainer, DatManager, Do` is the whole export; everything else hangs off those classes. `dvc_dat.__version__` is `"2.16.0"`.
+`from dvc_dat import Dat, DatContainer, DatManager, Do` is the whole export; everything else hangs off those classes. `dvc_dat.__version__` is `"2.35.0"`.
 
 
 
@@ -182,15 +181,17 @@ A dat whose folder holds dats.
 
 ## Running
 
+`Dat.manager.run(target, *args, **kwargs)` is the one way to run a dat outside a ledger, a fixed `DatManager` method ([DAT Manager API](DAT%20Manager%20API.md) § run). With no arguments a spec runs as written; with arguments it **forks** — `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key — and the forked spec creates the dat that runs.
+
 | `target` is … | With no `args`/`kwargs` | With `args`/`kwargs` |
 | --- | --- | --- |
 | a **callable** (or a name loading to one) | `target()` | `target(*args, **kwargs)` — a plain call, no dat |
 | a **template spec** (dict, or a name loading to one) | create the dat, run it | fork, then the forked spec creates the dat, which runs |
 | a **`Dat`** | re-run in place while open or rolling; refused once sealed | fork a new dat from its spec; the dat on disk is never rewritten |
 
-`Dat.do` records nothing: a template makes a fresh folder every time. On a ledger, `rev.run(target, **kwargs)` takes the same targets (a template spec, its name, or a run function's dotted name) and remembers the answer: the dat made, run and sealed as a value once, then found ([DAT Ledger § run](../../DAT%20Modules/ledger/DAT%20Ledger.md#Rev%20Interface)).
+`Dat.manager.run` remembers nothing: a template makes a fresh folder every time. On a ledger, `rev.run(target, **kwargs)` takes the same targets (a template spec, its name, or a run function's dotted name) and remembers the answer: the dat made, run and sealed as a value once, then found ([DAT Ledger § run](../../DAT%20Modules/ledger/DAT%20Ledger.md#Rev%20Interface)).
 
-A run is `Dat.manager.execute(dat)`: `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do` names, inside a recording, with `run/work/` as the working directory; `dat.dependencies` lands in the results beside whatever the function put in `dat.get_results()`, and reaches `_result_.yaml` when the dat is saved; `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and `dat.content` are the run's, in the sub-dat `run/` (`dat.run`), outside the hash. **Nothing about arguments is recorded in the results — the spec is the record.** A template with no `dat.do` just creates the dat and returns it; `dat.target_exists: use` on an existing folder returns that dat without running. In-place iteration (profiling, a report you re-run): a fixed `dat.name` plus `dat.target_exists: overwrite`.
+A dat's run is `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do` names, inside a recording, with `run/work/` as the working directory; `dat.dependencies` lands in the results beside whatever the function put in `dat.get_results()`, and reaches `_result_.yaml` when the dat is saved; `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and `dat.content` are the run's, in the sub-dat `run/` (`dat.run`), outside the hash. **Nothing about arguments is recorded in the results — the spec is the record.** A template with no `dat.do` just creates the dat and returns it; `dat.target_exists: use` on an existing folder returns that dat without running. In-place iteration (profiling, a report you re-run): a fixed `dat.name` plus `dat.target_exists: overwrite`.
 
 
 
@@ -254,7 +255,7 @@ Expanded once, when the dat is created, with the same `now` and `unique` its fol
 
 `DatManager.load_dat_config(start)` walks up from `start` (default the working directory); `.datconfig.override.yaml` wins over it; `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment win over both (`DAT_RUN` overrides `run`, in `bin/dat` only). The bootstrap hands its child the file it found as `DAT_CLI_CONFIG`, which `cli_main()` alone reads. An unknown key is an error.
 
-**You never configure anything.** `import dvc_dat` reads no filesystem; the first use of `Dat.manager` — `Dat.do(…)`, `Dat.load(…)`, `Dat.create(…)` — builds the default world from the working directory, and the config folder goes first on `sys.path`, so the project's own modules resolve from any directory, installed or not. An empty `.datconfig.yaml` is a complete config: it marks the project root, `data/` is the dat folder, and dotted names mean what `import` means. A different world is one assignment: `Dat.manager = DatManager.load_dat_config(path, do=dat.do)` ([DAT Manager API](DAT%20Manager%20API.md) § The default world).
+**You never configure anything.** `import dvc_dat` reads no filesystem; the first use of `Dat.manager` — `Dat.manager.run(…)`, `Dat.load(…)`, `Dat.create(…)` — builds the default world from the working directory, and the config folder goes first on `sys.path`, so the project's own modules resolve from any directory, installed or not. An empty `.datconfig.yaml` is a complete config: it marks the project root, `data/` is the dat folder, and dotted names mean what `import` means. A different world is one assignment: `Dat.manager = DatManager.load_dat_config(path, do=dat.do)` ([DAT Manager API](DAT%20Manager%20API.md) § The default world).
 
 
 

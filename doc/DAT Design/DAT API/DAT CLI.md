@@ -3,12 +3,12 @@ description: "`dat TARGET …` from a shell, and the bootstrap copy"
 ---
 :>> [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT CLI](ha://p/DAT%20CLI) 
 # DAT CLI
-`dat TARGET …` is `Dat.do(TARGET, …)` from a shell.
+`dat TARGET …` is `Dat.manager.run(TARGET, …)` from a shell.
 
 ```bash
 $ dat mymodule.train.baseline            # run it
 $ dat mymodule.train.baseline lr=0.25    # fork it: lr into dat.kwargs
-$ dat mymodule.train.baseline 7 true --dry-run   # do('…', 7, True)
+$ dat mymodule.train.baseline 7 true --dry-run   # Dat.manager.run('…', 7, True)
 $ dat mymodule.train.baseline --set "notes=second try"
 $ dat --list train                       # mounted names with `train`
 $ dat --info                             # version, folders, config
@@ -24,7 +24,7 @@ Every line you can type: a word runs a target, a flag asks `dat` about itself.
 | [dat TARGET …](#^target) | Run it: call a function, fork a template, else print |
 | [dat TARGET --set K=V](#^set) | Update a spec key before the fork; repeat it |
 | [dat TARGET --json K=J](#^json) | The same, with the value as JSON; repeat it |
-| [dat TARGET --dry-run](#^dry-run) | Print the `Dat.do(…)` call instead of making it |
+| [dat TARGET --dry-run](#^dry-run) | Print the `Dat.manager.run(…)` call instead of making it |
 | [dat TARGET --usage](#^usage) | The target's own usage, else the general one |
 | [dat --list PREFIX](#^list) | Mounted names starting with PREFIX; all without it |
 | [dat --info](#^info) | Version, dat folders, artifact folder, config |
@@ -41,7 +41,7 @@ Every line you can type: a word runs a target, a flag asks `dat` about itself.
     `--set` with the value parsed as JSON: `--json rules='[[2, "x.f"]]'` — the quotes are the shell's, and `dat` sees one word, key `rules`, JSON `[[2, "x.f"]]`. Repeats, and mixes freely with `--set`. ^json
 
 **dat TARGET --dry-run**
-    Print the `Dat.do(…)` call this line would make, without making it — to check a fork before paying for the run. ^dry-run
+    Print the `Dat.manager.run(…)` call this line would make, without making it — to check a fork before paying for the run. ^dry-run
 
 **dat TARGET --usage**
     `<first part of TARGET>.usage`, else the spec's `usage` key, else the general usage. ^usage

@@ -48,8 +48,8 @@ class TestTwoWorlds:
         ma, mb = worlds
         global_folder, global_names = Dat.manager._dat_folders, set(do.keys())
 
-        assert ma.do("tmpl") == {"name": "run_a", "args": [], "kwargs": {"tag": "a"}}
-        assert mb.do("tmpl", 7) == {"name": "run_b", "args": [7], "kwargs": {"tag": "b"}}
+        assert ma.run("tmpl") == {"name": "run_a", "args": [], "kwargs": {"tag": "a"}}
+        assert mb.run("tmpl", 7) == {"name": "run_b", "args": [7], "kwargs": {"tag": "b"}}
 
         dat_a, dat_b = ma.load("run_a"), mb.load("run_b")
         assert dat_a.get_path().startswith(ma._dat_folders[0])
@@ -106,10 +106,10 @@ class TestAdoption:
         probe = Do()
         probe.mount(value={"x": 1}, at="bare")
         assert probe.load("bare.x") == 1
-        with pytest.raises(Exception) as caught:
+        with pytest.raises(TypeError, match="not callable"):   # running is a manager's (DAT 1049)
             probe({"dat": {"do": "bare"}})
-        assert isinstance(caught.value.__cause__, RuntimeError)
-        assert "no manager" in str(caught.value.__cause__)
+        with pytest.raises(RuntimeError, match="no manager"):
+            probe.manager
         m = DatManager(dat_folders=[str(tmp_path)], do=probe)
         assert probe.manager is m and probe.load("bare.x") == 1
 

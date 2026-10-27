@@ -14,7 +14,7 @@ You are the Pilot for the dvc-dat project. Role: `~/.claude/skills/role/role-pil
 A data-artifact layer for ML experimentation: metadata and provenance for folders of data, and a namespace for loading Python objects by dotted name. Two integrated systems:
 
 - **Do-system** — `do.load("catalog.experiment")` resolves a dotted name to a Python object: a Python import first and last; `.datconfig.yaml` (2.3; was `.dataconfig.yaml`) holds `dat_folders`, `art_folder`, `run`; `DatManager.load_dat_config` reads it and `Dat.manager` is the assignable default world; `do.mount(...)` calls live in the program, and `run:` names the program's own main, which ends with `dat.cli_main()` (2.0, T010/T011).
-- **DAT storage** — a DAT is a folder carrying a `_spec_.yaml`; `Dat.create(spec=…, path=…)` / `Dat.load(path)` are the API; in 2.0 `dat.do(target, …)` is the one runner (fork rule: arguments make a new spec) — [[DAT API]], with the namespace layer on [[DAT Do API]].
+- **DAT storage** — a DAT is a folder carrying a `_spec_.yaml`; `Dat.create(spec=…, path=…)` / `Dat.load(path)` are the API; since 2.35 `Dat.manager.run(target, …)` is the one run (fork rule: arguments make a new spec), `Dat.do` the namespace — [[DAT API]], with the namespace layer on [[DAT Do API]].
 
 Read `docs/concepts.md`, `docs/spec-format.md`, `docs/mount-commands.md` in the repo before changing semantics; they are the public contract.
 

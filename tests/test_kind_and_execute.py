@@ -2,7 +2,7 @@
 
 SVP's handoff, 2026-09-22: `dat.kind` is a dotted `module.qualname`, imported
 on load; `manager.load` / `manager.create` take no class; `Cls.load` is typed;
-`manager.execute(dat)` is the run, nested runs included, and records the code.
+`manager.run(dat)` is the run (DAT 1049; `execute` until 2.35), nested runs included, and records the code.
 """
 import subprocess
 import sys
@@ -26,7 +26,7 @@ class Other(Dat):
 
 
 def outer(dat, n):
-    return dat._manager.do({"dat": {"do": "inner", "name": "inner{unique}"}}, n + 1)
+    return dat._manager.run({"dat": {"do": "inner", "name": "inner{unique}"}}, n + 1)
 
 
 def inner(dat, n):
@@ -106,23 +106,23 @@ class TestTypedTrampolines:
 
 
 class TestExecute:
-    def test_nested_runs_all_go_through_the_managers_execute(self, tmp_path):
+    def test_nested_runs_all_go_through_the_managers_execute_step(self, tmp_path):
         seen = []
 
         class Recording(DatManager):
-            def execute(self, dat):
+            def _execute(self, dat):
                 seen.append(dat.get_path_name())
-                return super().execute(dat)
+                return super()._execute(dat)
 
         m = Recording(dat_folders=[str(tmp_path / "dats")])
         m.do.mount(value=outer, at="outer")
         m.do.mount(value=inner, at="inner")
-        assert m.do({"dat": {"do": "outer", "name": "outer"}}, 4) == 50
+        assert m.run({"dat": {"do": "outer", "name": "outer"}}, 4) == 50
         assert seen == ["outer", "inner"]
 
     def test_a_run_records_the_checkout_of_the_code_it_ran(self, m):
         dat = m.create({"dat": {"do": "inner", "name": "a", "args": [1]}})
-        assert m.execute(dat) == 10
+        assert m.run(dat) == 10
         code = dat.run.get_results()["dat"]["code"]
         head = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
                               capture_output=True, text=True).stdout.strip()
@@ -134,9 +134,9 @@ class TestExecute:
     def test_code_outside_a_checkout_records_nothing(self, m):
         m.do.mount(value=id, at="builtin")
         dat = m.create({"dat": {"do": "builtin", "name": "b"}})
-        m.execute(dat)
+        m.run(dat)
         assert "code" not in dat.run.get_results()["dat"]
 
     def test_no_do_returns_the_dat(self, m):
         dat = m.create({"dat": {"name": "c"}})
-        assert m.execute(dat) is dat
+        assert m.run(dat) is dat

@@ -17,6 +17,14 @@ from dvc_dat import Dat, DatManager  # noqa: E402
 from dvc_dat.core import ART_FILE, DAT_CONFIG_FILE, INDEX_FILE, RESULT_YAML  # noqa: E402
 
 
+def run_cause(m, dat):
+    """`m.run(dat)`, re-raising what the run raised, unwrapped from its `In <dat>`."""
+    try:
+        return m.run(dat)
+    except Exception as e:
+        raise (e.__cause__ or e) from None
+
+
 def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -352,7 +360,7 @@ def uses_both(dat, prev):
 
 
 def outer(dat):
-    dat.manager.do({"dat": {"do": "inner_fn", "name": "inner"}})
+    dat.manager.run({"dat": {"do": "inner_fn", "name": "inner"}})
     dat.manager.load("video/G1")
     dat.save()
 
@@ -375,7 +383,7 @@ class TestCapture:
     def test_a_runs_loads_land_in_its_dependencies(self, world):
         dat = world.create({"dat": {"do": "uses_both", "kwargs": {"prev": "prev"}}},
                            path="run")
-        assert world.execute(dat) == "ran"
+        assert world.run(dat) == "ran"
         deps = stored_results(dat)["dat"]["dependencies"]
         assert deps == {"prev": world.load("prev").get_results()["dat"]["sha256"],
                         "video/G1": self.digest}
@@ -389,12 +397,12 @@ class TestCapture:
     def test_a_run_with_no_loads_says_so(self, world):
         world.do.mount(value=lambda dat: dat.save(), at="quiet")
         dat = world.create({"dat": {"do": "quiet"}}, path="quiet_run")
-        world.execute(dat)
+        world.run(dat)
         assert stored_results(dat)["dat"]["dependencies"] == {}
 
     def test_a_nested_run_records_its_own_and_appears_once_outside(self, world):
         dat = world.create({"dat": {"do": "outer"}}, path="outer_run")
-        world.execute(dat)
+        world.run(dat)
         inner = world.load("inner")
         assert stored_results(dat)["dat"]["dependencies"] == \
             {"inner": inner.get_results()["dat"]["sha256"], "video/G1": self.digest}
@@ -427,13 +435,13 @@ class TestCapture:
 
     def test_a_wrapping_subclass_does_not_record_a_dat_into_itself(self, clip, tmp_path):
         class Store(DatManager):
-            def execute(self, dat):
+            def _execute(self, dat):
                 with self.recording(dat):
-                    return super().execute(dat)
+                    return super()._execute(dat)
         m = Store(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "art"))
         m.do.mount(value=lambda dat: dat.save(), at="quiet")
         dat = m.create({"dat": {"do": "quiet"}}, path="wrapped")
-        m.execute(dat)
+        m.run(dat)
         assert stored_results(dat)["dat"]["dependencies"] == {}
 
     def test_two_threads_recording_at_once_do_not_mix(self, world):
@@ -478,10 +486,10 @@ class TestSeal:
         dat.save()
         assert stored_results(dat)["dat"]["dependencies"] == {"$MANUAL": "manual"}
 
-    def test_execute_does_not_save(self, m, clean_code):
+    def test_run_does_not_save(self, m, clean_code):
         m.do.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="unsaved")
-        assert m.execute(dat) == "ran"
+        assert m.run(dat) == "ran"
         assert not Path(dat.get_path(), RESULT_YAML).exists()
         assert "run_at" not in dat.get_results()["dat"]     # the run is the sub-dat's
         assert dat.run.get_results()["dat"]["run_at"]
@@ -499,7 +507,7 @@ class TestSeal:
             seen["checkpoint"] = stored_results(dat)["dat"]["sha256"]
         m.do.mount(value=fn, at="saves")
         dat = m.create({"dat": {"do": "saves"}}, path="inside")
-        m.execute(dat)
+        m.run(dat)
         assert seen["inside"] == "open" and seen["checkpoint"]
         results = stored_results(dat)["dat"]
         assert "run_time" not in results
@@ -511,14 +519,14 @@ class TestSeal:
     def test_an_open_dat_runs_again_in_place(self, m):
         m.do.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="twice")
-        assert m.execute(dat) == "ran" and m.execute(dat) == "ran"
+        assert m.run(dat) == "ran" and m.run(dat) == "ran"
 
-    def test_execute_refuses_a_sealed_dat(self, m):
+    def test_run_refuses_a_sealed_dat(self, m):
         m.do.mount(value=lambda dat: dat.save(), at="saves")
         dat = m.create({"dat": {"do": "saves"}}, path="ran_once")
-        m.execute(dat)
+        m.run(dat)
         with pytest.raises(RuntimeError, match="sealed"):
-            m.execute(dat)
+            run_cause(m, dat)
 
     def test_the_seal_keeps_the_roots_only(self, m):
         base = m.create({"dat": {}}, path="base")
@@ -556,19 +564,19 @@ class TestStanding:
     def test_a_rolling_dat_runs_again(self, m):
         m.do.mount(value=lambda dat: dat.save(), at="saves")
         dat = m.create({"dat": {"do": "saves", "standing": "rolling"}}, path="roll")
-        m.execute(dat)
-        m.execute(dat)
+        m.run(dat)
+        m.run(dat)
         assert m.standing("roll") == "rolling"
 
     def test_referenceable_inputs_and_clean_code_earn_referenceable(self, w, clean_code):
         for src in ("base", "video/G1"):
             dat = w.create({"dat": {"do": "reads", "args": [src]}}, path=f"r_{src}")
-            w.execute(dat)
+            w.run(dat)
             assert w.standing(dat) == "referenceable"
 
     def test_a_rolling_input_caps_the_run_at_sealed(self, w, clean_code):
         dat = w.create({"dat": {"do": "reads", "args": ["roll"]}}, path="r1")
-        w.execute(dat)
+        w.run(dat)
         assert stored_results(dat)["dat"]["standing"] == "sealed"
 
     def test_dirty_code_caps_the_run_at_sealed(self, w, monkeypatch):
@@ -576,12 +584,12 @@ class TestStanding:
         monkeypatch.setattr(core, "_code_of", lambda fn: {
             "branch": "main", "commit": "c", "dirty": True})
         dat = w.create({"dat": {"do": "reads", "args": ["base"]}}, path="dirty")
-        w.execute(dat)
+        w.run(dat)
         assert w.standing("dirty") == "sealed"
 
     def test_an_open_input_keeps_the_run_open_for_good(self, w):
         dat = w.create({"dat": {"do": "reads", "args": ["draft"]}}, path="r2")
-        w.execute(dat)
+        w.run(dat)
         results = stored_results(dat)
         assert results["dat"]["dependencies"]["draft"] == "unsealed"
         assert results["dat"]["standing"] == "open" == w.standing("r2")
@@ -593,7 +601,7 @@ class TestStanding:
         dat = w.create({"dat": {"do": "reads", "args": ["roll"],
                                 "standing": "referenceable"}}, path="loud")
         with pytest.raises(RuntimeError, match="'roll' is rolling"):
-            w.execute(dat)
+            run_cause(w, dat)
 
     def test_a_referenceable_demand_refuses_dirty_code_up_front(self, w, monkeypatch):
         import dvc_dat.core as core
@@ -602,7 +610,7 @@ class TestStanding:
         dat = w.create({"dat": {"do": "reads", "args": ["base"],
                                 "standing": "referenceable"}}, path="dirty")
         with pytest.raises(RuntimeError, match="dirty"):
-            w.execute(dat)
+            run_cause(w, dat)
 
     def test_a_referenceable_demand_fails_a_seal_that_earns_less(self, w):
         dat = w.create({"dat": {"standing": "referenceable"}}, path="by_hand")
@@ -748,7 +756,7 @@ class TestTheRun:
     def test_the_run_is_a_sub_dat_with_the_execution_facts(self, m, clean_code):
         m.do.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="runs/one")
-        m.execute(dat)
+        m.run(dat)
         run = dat.run
         assert run.get_path() == os.path.join(dat.get_path(), "run")
         assert (Path(run.get_path()) / "_spec_.yaml").exists()
@@ -765,8 +773,8 @@ class TestTheRun:
             dat.get_results()["loss"] = 0.5
             dat.save()
         m.do.mount(value=fn, at="det")
-        m.do({"dat": {"do": "det", "name": "runs/a"}})
-        m.do({"dat": {"do": "det", "name": "runs/b"}})
+        m.run({"dat": {"do": "det", "name": "runs/a"}})
+        m.run({"dat": {"do": "det", "name": "runs/b"}})
         a, b = m.load("runs/a"), m.load("runs/b")
         assert a.get_results()["dat"]["sha256"] == b.get_results()["dat"]["sha256"]
         ra, rb = stored_results(a.run)["dat"], stored_results(b.run)["dat"]
@@ -782,7 +790,7 @@ class TestTheRun:
             dat.save()
         m.do.mount(value=fn, at="scratch")
         here = os.getcwd()
-        m.do({"dat": {"do": "scratch", "name": "runs/s"}})
+        m.run({"dat": {"do": "scratch", "name": "runs/s"}})
         dat = m.load("runs/s")
         assert os.getcwd() == here
         assert os.path.realpath(seen["cwd"]) == os.path.realpath(
@@ -795,10 +803,10 @@ class TestTheRun:
     def test_a_rolling_dat_replaces_its_run(self, m, clean_code):
         m.do.mount(value=lambda dat: dat.save(), at="roll")
         dat = m.create({"dat": {"do": "roll", "standing": "rolling"}}, path="runs/roll")
-        m.execute(dat)
+        m.run(dat)
         first = stored_results(dat.run)["dat"]
         Path(dat.run.get_path(), "work", "left.txt").write_text("from the first run")
-        m.execute(dat)
+        m.run(dat)
         second = stored_results(dat.run)["dat"]
         assert second["content"] == dat.get_results()["dat"]["sha256"]
         assert not (Path(dat.run.get_path()) / "work" / "left.txt").exists()
@@ -838,7 +846,7 @@ class TestTheRun:
 
     def test_copy_without_the_run(self, m, clean_code):
         m.do.mount(value=lambda dat: dat.save(), at="plain")
-        m.do({"dat": {"do": "plain", "name": "runs/src"}})
+        m.run({"dat": {"do": "plain", "name": "runs/src"}})
         dat = m.load("runs/src")
         full = dat.copy("runs/full")
         bare = dat.copy("runs/bare", run=False)
@@ -850,14 +858,14 @@ class TestTheRun:
         from dvc_dat import DatContainer
         m.do.mount(value=lambda dat: dat.save(), at="plain")
         m.create({"dat": {"kind": "dvc_dat.core.DatContainer"}}, path="box")
-        m.do({"dat": {"do": "plain", "name": "box/child"}})
+        m.run({"dat": {"do": "plain", "name": "box/child"}})
         box = m.load("box")
         assert isinstance(box, DatContainer)
         assert [os.path.basename(p) for p in box.get_dat_paths()] == ["child"]
 
     def test_the_run_is_read_back_from_disk(self, m, clean_code):
         m.do.mount(value=lambda dat: dat.save(), at="plain")
-        m.do({"dat": {"do": "plain", "name": "runs/disk"}})
+        m.run({"dat": {"do": "plain", "name": "runs/disk"}})
         made = m.load("runs/disk")
         fresh = DatManager(dat_folders=m._dat_folders, art_folder=m._art_folder)
         dat = fresh.load("runs/disk")
@@ -866,7 +874,7 @@ class TestTheRun:
 
     def test_the_name_is_an_address_not_content(self, m, clean_code):
         m.do.mount(value=lambda dat: dat.save(), at="plain")
-        m.do({"dat": {"do": "plain", "name": "runs/named"}})
+        m.run({"dat": {"do": "plain", "name": "runs/named"}})
         dat = m.load("runs/named")
         assert stored_results(dat)["dat"]["hash"] == "functional"
         before = dat.get_results()["dat"]["sha256"]
@@ -883,7 +891,7 @@ class TestTheRun:
     def test_hash_dat_takes_a_path_and_still_leaves_the_run_out(self, m, clean_code):
         import dvc_dat.core as core
         m.do.mount(value=lambda dat: dat.save(), at="plain")
-        m.do({"dat": {"do": "plain", "name": "runs/pathed"}})
+        m.run({"dat": {"do": "plain", "name": "runs/pathed"}})
         dat = m.load("runs/pathed")
         stored = stored_results(dat)
         assert core._hash_dat(Path(dat.get_path()), stored) == stored["dat"]["sha256"]

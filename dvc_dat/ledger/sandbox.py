@@ -37,7 +37,7 @@ A dat's run function under a mount (an ``Fn`` of kind ``"dat"``, DAT 1045, 1046)
 runs through the same call: its keys are the spec, expanded in the parent, and the
 caller's dat world (its dat folders, art folder and index, readable in the child)
 crosses the pipe beside them; in the child ``run_here`` imports the function from
-the mounts, creates the dat in its work folder and ``execute``s it, the body
+the mounts, creates the dat in its work folder and runs it (``_execute``), the body
 confined as a ledger function's, the dat world's index writes its own machinery.
 
 The ``code`` item (Q37 (A); Dan 2026-10-21; DAT 1037): exactly the modules the run loaded
@@ -856,7 +856,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
     """In the worker: import the function from the mounts and run it, confined, then seal (``_close_run``).
     A ledger function gets the recording ``Rev``, its keys and, when it takes one, its ``path`` folder; a
     dat's run function (``fn.kind == "dat"``) gets the dat made from its keys, the spec, in the work
-    folder, run by the dat world's ``execute`` (DAT 1046)."""
+    folder, run by the dat world's ``_execute`` (DAT 1046)."""
     from .rev import Rev
 
     outer_guard = STATE.guard
@@ -921,7 +921,7 @@ class _WorkerWorld(DatManager):
 
 
 def _run_dat(fn: Fn, run: Any, spec: Dict[str, Any], work: Path) -> Dat:
-    """The dat branch of ``run_here``: ``Dat.manager.create`` from the spec in ``work``, then ``execute`` with
+    """The dat branch of ``run_here``: ``Dat.manager.create`` from the spec in ``work``, then ``_execute`` with
     ``run`` (imported from the mounts) as its ``dat.do``, its body confined (writes only in the work
     folder); the world's own machinery around it unguarded."""
     manager = Dat.manager
@@ -936,10 +936,10 @@ def _run_dat(fn: Fn, run: Any, spec: Dict[str, Any], work: Path) -> Dat:
             STATE.guard = old
     registered = manager.do._registered_values or {}
     before = registered.get(fn.name, _NONE)
-    manager.do._reg_value(fn.name, confined)       # execute loads dat.do through the world
+    manager.do._reg_value(fn.name, confined)       # _execute loads dat.do through the world
     try:
         dat = manager.create(dat_spec(spec, fn._template), path=str(work / "dat"))
-        manager.execute(dat)
+        manager._execute(dat)
     finally:
         values = manager.do._registered_values or {}
         if before is _NONE:

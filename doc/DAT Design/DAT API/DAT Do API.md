@@ -30,7 +30,7 @@ if __name__ == "__main__":
 from dvc_dat import Dat, DatManager
 
 do = Dat.do
-do("train.baseline")    # 'train' resolves through the mount table
+Dat.manager.run("train.baseline")   # 'train' resolves through the mount table
 do.load("train.run")        # the function itself, unrun
 do.name_of(run)             # 'mymodule.train.run'
 Dat.manager = DatManager.load_dat_config(path, do=do)
@@ -50,22 +50,18 @@ Base names matching: 'train*'
 ```
 
 ## Do Interface
-One world's namespace and runner. `manager.do` is built with its manager or adopted by one, and points back; `Dat.do` forwards to `Dat.manager.do`, so it always acts on the default world, whichever manager that is. Nothing reads a config here — that is `DatManager.load_dat_config` ([DAT Manager API](DAT%20Manager%20API.md)).
+One world's namespace; it is not callable — running is `manager.run(target, ...)` ([DAT Manager API](DAT%20Manager%20API.md) § run), which loads names here. `manager.do` is built with its manager or adopted by one, and points back; `Dat.do` forwards to `Dat.manager.do`, so it always acts on the default world, whichever manager that is. Nothing reads a config here — that is `DatManager.load_dat_config` ([DAT Manager API](DAT%20Manager%20API.md)). In a project whose `.datconfig.yaml` names a ledger, `Dat.manager.do` is a `LedgerDo`: this interface, its names the ledger's `db/mount` rows, and `mount` refused.
 
 | Do | |
 | --- | --- |
 | [manager](#^manager) | The world this namespace belongs to |
-| [__call__](#^call) | Run in this world; arguments fork |
 | [load](#^load) | The object a dotted name resolves to |
 | [name_of](#^name-of) | The dotted name `load` takes back to `obj` |
 | [mount](#^mount) | Add one mount: folder, file, module or value |
 | [keys](#^keys) | Every mounted base name |
 
 **manager**`: DatManager`
-    The world this namespace belongs to; one `do` per manager, one manager per `do`. On `Dat.do` it is `Dat.manager`. A bare `Do()` has none and is a plain namespace of Python objects: `mount`, `load`, `name_of`, `keys` and calling a plain function all work with no manager and no default world built. Running a dat (a spec or a `Dat`) is the one thing that needs a world — `Do(manager=m)`, or a manager built with `do=` adopts it — and raises `RuntimeError` without one. ^manager
-
-**__call__**`(target: str | dict | Dat | Callable, *args, **kwargs) -> Any`
-    Fork, create or load through `manager`, then `manager.execute(dat)`. A `do(...)` inside the running function reaches `execute` again on the same manager, so runs nest and record as a stack. Nothing is remembered: a template makes a fresh folder every call. Its ledger form is `rev.run(target, **kwargs)` (DAT 1038, 1046): the same targets (a template spec, its name, or a run function's dotted name, which is the spec `{dat: {do: <name>}}`), the kwargs updating `dat.kwargs` as here, and the dat made, run and sealed as a value once, then found by its memo key, the spec expanded with `dat.name` left out ([DAT Ledger § run](../../DAT%20Modules/ledger/DAT%20Ledger.md#Rev%20Interface)). In a project whose `.datconfig.yaml` names a ledger, `Dat.manager.do` is a `LedgerDo`: this interface, its names the ledger's `db/mount` rows, and `mount` refused. ^call
+    The world this namespace belongs to; one `do` per manager, one manager per `do`. On `Dat.do` it is `Dat.manager`. A bare `Do()` has none and is a plain namespace of Python objects: `mount`, `load`, `name_of` and `keys` all work with no manager and no default world built; reading `manager` before `Do(manager=m)`, or a manager built with `do=` adopting it, raises `RuntimeError`. ^manager
 
 **load**`(name: str, *, default: Any = …, kind: str | None = None) -> Any`
     The object `name` resolves to: mount table first, then the static floor. `ImportError` / `AttributeError` / `KeyError` propagate raw unless `default` is given. A mounted `.py` / `.yaml` / `.json` file comes back as loaded. ^load

@@ -9,14 +9,14 @@ The dvc_dat API reference: what the package exports and how each part is called.
 - **[Mount Commands](mount-commands.md)** — configuring the do-system
 
 A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
-itself. `Dat.manager` is the default world; `do` is its namespace and runner.
+itself. `Dat.manager` is the default world; `Dat.manager.run` runs, and `do` is its namespace.
 
 ## What the package exports
 
 ```python
 from dvc_dat import Dat, DatContainer, DatManager, Do
 
-do = Dat.do     # the usual shortcut; follows Dat.manager
+do = Dat.do     # the namespace shortcut; follows Dat.manager
 ```
 
 | Name | What it is |
@@ -24,21 +24,21 @@ do = Dat.do     # the usual shortcut; follows Dat.manager
 | `Dat` | A dat folder: its spec, its results, its path |
 | `DatContainer` | A dat whose folder holds other dats |
 | `DatManager` | Creates, finds, loads and runs dats; `Dat.manager` is the default, assign to replace |
-| `Do` | A namespace and runner; every manager has one |
+| `Do` | A namespace; every manager has one |
 
 Everything else hangs off those four:
 
 | Name | What it is |
 |------|------------|
-| `Dat.do` | The default world's namespace and runner, forwarding to `Dat.manager.do` |
+| `Dat.do` | The default world's namespace, forwarding to `Dat.manager.do`; not callable |
 | `Dat.cli_main` | The command line (`just run`) for a program's own main |
 | `Dat.merge_dicts` | The zipper merge `dat.base` uses |
 | `Dat.manager.expand` / `expand_spec` | The `{}` grammar |
 
-## Running and loading — `do`
+## Running — `Dat.manager.run`; loading — `do`
 
 ```python
-do(TARGET, *args, **kwargs)
+Dat.manager.run(TARGET, *args, **kwargs)
 ```
 
 | `TARGET` | What happens |
@@ -88,7 +88,7 @@ given.
 | `m.load_path(NAME) -> Path` | Where `load` finds it — a dat's folder, an artifact's payload; nothing built, still recorded |
 | `m.recording(DAT)` | Context manager: every `load` inside lands in `DAT`'s `dat.dependencies` |
 | `m.record_dependency(NAME, sha256=None)` | An entry by hand; `RuntimeError` when nothing is recording |
-| `Dat.manager.execute(DAT)` | Run a dat; every run in a world goes through it |
+| `Dat.manager.run(TARGET, *ARGS, **KWARGS)` | Run a dat, a spec or a callable; the one way to run outside a ledger |
 | `.get_spec() -> dict` | The spec — every `{}` was expanded once, at create |
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |
