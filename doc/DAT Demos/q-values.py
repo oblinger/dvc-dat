@@ -232,6 +232,36 @@ subprocess.run(git_cmd + ["commit", "-q", "-m", "geometry and plane"], cwd=repo_
 sys.path.insert(0, str(repo_path))
 
 # %% [markdown]
+# ### The ledger namespace
+
+# %%
+display(SVG(filename="q-values-ns.svg"))
+
+# %% [markdown]
+# The ledger namespace, `ns`, is the bridge between the ledger and
+# Python: Python's namespace, modules, functions and objects by dotted
+# name, on the ledger, so every name has a history of revisions tied
+# to the git commit history of its code. `rev.ns` is the namespace at
+# a revision; `t.ns` is the namespace at a transaction, reading the
+# revision before it.
+#
+# `ns.load(name)` is the object a dotted name denotes.
+# `ns.name_of(obj)` is the dotted name `load` takes back to an object.
+# `t.ns.mount(at, root=, repo=)` writes the two `db/mount/<at>` rows
+# that put a repo's folder under a name; a transaction's `ns` is the
+# one that mounts. `ns.mounts()` is the mount table at that revision.
+
+# %%
+ns = L.at().ns
+dist_fn = ns.load("math.dist")
+print("loaded:", dist_fn)                   # → loaded: <built-in function dist>
+print("its name:", ns.name_of(dist_fn))     # → its name: math.dist
+with L.transaction(by="human:dan") as t:
+    t.ns.mount("plane", root="plane", repo="geometry")
+print("mounts:", L.at().ns.mounts())
+# → mounts: {'plane': {'root': 'plane', 'repo': 'geometry'}}
+
+# %% [markdown]
 # ### Accessing and using Python functions
 
 # %%
@@ -264,15 +294,11 @@ print("db/repo/geometry:", L.at()["db/repo/geometry"])
 # ### Sandboxed functions
 #
 # A sandboxed function runs isolated, seeing only its mounted source
-# folder. A mount is two rows: the folder, and the repo that holds
-# it. Its version is the mounted package's `__version__`, read after
-# importing it; the checksum of the files it loaded (`sha`) is its
-# identity.
+# folder: here `plane`, mounted above. Its version is the mounted
+# package's `__version__`, read after importing it; the checksum of
+# the files it loaded (`sha`) is its identity.
 
 # %%
-with L.transaction(by="human:dan") as t:
-    t.ns.mount("plane", root="plane", repo="geometry")   # the two db/mount/plane rows
-
 length_fn = L.at().ns.load("plane.measure.length")
 segment_value = length_fn(a=(0, 0), b=(3, 4))
 print("fn:", repr(length_fn), " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)

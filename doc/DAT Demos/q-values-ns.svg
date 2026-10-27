@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 1160 640" width="1160" height="640" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+<defs><marker id="head" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#222"/></marker></defs>
+<rect width="1160" height="640" fill="#ffffff"/>
+<rect x="800" y="0" width="360" height="640" fill="#f3f3f3"/>
+<text x="185" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">GIT REPO</text>
+<text x="502" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">LEDGER</text>
+<text x="980" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">PYTHON</text>
+<!-- git repo: a database glyph and its commits -->
+<path d="M40,88 v38 a30,8 0 0 0 60,0 v-38" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<ellipse cx="70" cy="88" rx="30" ry="8" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<text x="70" y="150" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" text-anchor="middle">geometry</text>
+<g font-size="11" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">
+<text x="120" y="100">a1f3c2e  geometry and plane</text>
+<text x="120" y="122">7b9e04d  quarter metres</text>
+<text x="120" y="144">···</text>
+</g>
+<polyline points="306,96 336,112" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<polyline points="280,118 336,184" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<!-- the ledger: a strip of triples, a .rev row every so often -->
+<rect x="340" y="64" width="325" height="312" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<line x1="532" y1="64" x2="532" y2="376" stroke="#e4e4e4"/>
+<line x1="596" y1="64" x2="596" y2="376" stroke="#e4e4e4"/>
+<g font-size="10" fill="#bbb" font-style="italic"><text x="348" y="84">subject</text><text x="538" y="84">pred</text><text x="602" y="84">object</text></g>
+<line x1="340" y1="92" x2="665" y2="92" stroke="#ddd"/>
+<rect x="341" y="124" width="323" height="24" fill="#ececec"/>
+<rect x="341" y="196" width="323" height="24" fill="#ececec"/>
+<rect x="341" y="316" width="323" height="24" fill="#ececec"/>
+<g font-size="11" fill="#000" font-weight="bold" font-family="Menlo, monospace"><text x="348" y="140">.rev 3</text><text x="348" y="212">.rev 7</text><text x="348" y="332">.rev 9</text></g>
+<g font-size="11" fill="#9a9a9a" font-family="Menlo, monospace">
+<text x="348" y="116">db/repo/geometry</text><text x="538" y="116">commit</text><text x="602" y="116">a1f3c2e</text>
+<text x="348" y="164">···</text>
+<text x="348" y="188">db/repo/geometry</text><text x="538" y="188">commit</text><text x="602" y="188">7b9e04d</text>
+<text x="348" y="236">···</text>
+<text x="348" y="260">db/repo/geometry/geometry</text><text x="538" y="260">version</text><text x="602" y="260">5.3.9</text>
+<text x="348" y="284">db/repo/geometry/plane</text><text x="538" y="284">version</text><text x="602" y="284">2.7.1</text>
+<text x="348" y="308">db/repo/geometry/plane</text><text x="538" y="308">version</text><text x="602" y="308">2.7.2</text>
+<text x="348" y="356">···</text>
+</g>
+<!-- the source tree, below the ledger -->
+<text x="340" y="396" font-size="13" fill="#000" font-weight="bold">source tree</text>
+<path d="M340,404 H555 L565,414 V478 H340 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
+<path d="M555,404 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
+<text x="350" y="420" font-size="11" fill="#9a9a9a" font-family="Menlo, monospace" font-style="italic">geometry.py</text>
+<line x1="350" y1="426" x2="555" y2="426" stroke="#ddd"/>
+<g font-size="11" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">
+<text x="350" y="442">__version__ = "5.3.9"</text>
+<text x="350" y="457">@ledger_fn</text>
+<text x="350" y="472">def distance(rev, a, b): ...</text>
+</g>
+<path d="M340,488 H555 L565,498 V530 H340 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
+<path d="M555,488 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
+<text x="350" y="504" font-size="11" fill="#9a9a9a" font-family="Menlo, monospace" font-style="italic">plane/__init__.py</text>
+<line x1="350" y1="510" x2="555" y2="510" stroke="#ddd"/>
+<text x="350" y="526" font-size="11" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">__version__ = "2.7.1"</text>
+<path d="M340,540 H555 L565,550 V616 H340 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
+<path d="M555,540 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
+<text x="350" y="556" font-size="11" fill="#9a9a9a" font-family="Menlo, monospace" font-style="italic">plane/measure.py</text>
+<line x1="350" y1="562" x2="555" y2="562" stroke="#ddd"/>
+<g font-size="11" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">
+<text x="350" y="578">@ledger_fn</text>
+<text x="350" y="593">def length(rev, a, b):</text>
+<text x="350" y="608">    return math.dist(a, b) * 0.5</text>
+</g>
+<!-- __version__ lines, up into the version rows -->
+<path d="M567,438 C715,438 715,256 668,256" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<path d="M567,522 C755,522 755,284 668,284" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<path d="M567,522 C755,522 755,308 668,308" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<!-- the ledger namespace -->
+<polyline points="666,208 816,208" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<text x="741" y="200" font-size="13" fill="#000" font-weight="bold" font-family="Menlo, monospace" text-anchor="middle">rev.ns</text>
+<rect x="820" y="176" width="240" height="72" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<text x="836" y="206" font-size="17" fill="#000" font-weight="bold">Ledger namespace</text>
+<text x="994" y="206" font-size="13" fill="#9a9a9a" font-family="Menlo, monospace">(ns)</text>
+<text x="836" y="232" font-size="11" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">load  name_of  mount  mounts</text>
+<!-- the Fn objects it gives out -->
+<path d="M1060,226 H1120 V500" fill="none" stroke="#222" stroke-width="1.5"/>
+<polyline points="1120,420 1102,420" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<polyline points="1120,500 1102,500" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<text x="1090" y="220" font-size="13" fill="#000" font-weight="bold" font-family="Menlo, monospace" text-anchor="middle">load</text>
+<rect x="840" y="400" width="260" height="40" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<text x="852" y="424" font-size="12" fill="#555" font-family="Menlo, monospace">&lt;Fn plane.measure.length@2.7.1&gt;</text>
+<rect x="840" y="480" width="260" height="40" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<text x="852" y="504" font-size="12" fill="#555" font-family="Menlo, monospace">&lt;Fn plane.measure.length@2.7.2&gt;</text>
+<line x1="840" y1="420" x2="566" y2="585" stroke="#9a9a9a" stroke-width="1.2" stroke-dasharray="4,3"/>
+<line x1="840" y1="500" x2="566" y2="605" stroke="#9a9a9a" stroke-width="1.2" stroke-dasharray="4,3"/>
+</svg>
