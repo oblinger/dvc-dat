@@ -158,6 +158,16 @@ for r in rev.rows("game/G1", "court"):                       # the unfolded hist
 # of a pattern.
 
 # %% [markdown]
+# A read by value is a subject read: `refs(**preds)` is every
+# subject holding each given triple, `select(keys, **preds)` the
+# matches' chosen preds as tuples.
+
+# %%
+print("court=west:", rev.refs(court="west"))                     # [<Ref game/G1>]: which games are on the west court
+print("home=G1:", rev.refs(home="G1"))                           # [<Ref game/G2>]: which game has G1 at home
+print("west teams:", rev.select(("home", "away"), court="west"))   # [('G4', 'G5')]
+
+# %% [markdown]
 # ## Declaring an index
 
 # %%
