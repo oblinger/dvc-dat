@@ -114,6 +114,24 @@ print(rev["game/G2"])
 # missing fact is a `KeyError`.
 
 # %% [markdown]
+# `t.update(s, {...})` is an `add` per key of the record, on one
+# subject: a list under a `many` key adds each element. It reads
+# nothing and retracts nothing, so it takes no `lock=`; `db/` keys
+# go in as `add` takes them.
+
+# %%
+with L.transaction(by="human:dan") as t:        # no lock=: nothing is read
+    t.update("game/G2", {"court": "north"})      # one add; the rest stays
+print("game/G2:", t.rev["game/G2"])
+# → game/G2: {'home': 'G1', 'away': 'G3',
+#    'officials': ['lee', 'park'], 'court': 'north'}
+
+# %% [markdown]
+# `t["game/G2"] = {"court": "north"}` would instead make the rows
+# equal to the dict: it retracts `home`, `away` and `officials`,
+# which the dict omits, so it reads first and takes `lock=`.
+
+# %% [markdown]
 # ## Triple reads
 
 # %%
@@ -230,7 +248,8 @@ except Unlocked as e:
 
 # %% [markdown]
 # `bump`, `t[s] = {...}` and `del` read through `t.previous_rev` and
-# take `lock=`; `t[s, p] = o` and `t.add` read nothing and need none.
+# take `lock=`; `t[s, p] = o`, `t.update` and `t.add` read nothing
+# and need none.
 
 # %%
 with L.transaction(by="human:dan") as t:           # no lock=: nothing is read
