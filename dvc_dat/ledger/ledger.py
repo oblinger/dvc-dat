@@ -69,6 +69,8 @@ class Ledger:
                 raise ValueError(f"Ledger(create=True) makes a project in the working directory, but {ENV} is "
                                  "set: ambiguous; unset it, or pass the location")
             cfg = Path.cwd() / CONFIG
+            if cfg.is_file() and not isinstance(yaml.safe_load(cfg.read_text()) or {}, dict):
+                raise LedgerError(f"{cfg}: not a mapping; Ledger(create=True) adds a 'ledger:' key to it")
             data = _read_config(cfg) if cfg.is_file() else {}
             led = data.get("ledger")
             if not (isinstance(led, str) and led):
@@ -95,6 +97,8 @@ class Ledger:
                 target = led if is_dsn(led) else _relative(cfg, led)
                 given = target
         else:
+            if isinstance(location, str) and not location.strip():
+                raise TypeError("Ledger(location): an empty location; pass a folder or a DSN, or None to find it")
             target = location if is_dsn(location) else Path(location).expanduser()
         self._store: Store
         if isinstance(target, str):

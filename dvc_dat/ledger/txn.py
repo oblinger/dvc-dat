@@ -98,7 +98,7 @@ def by_text(by: Any) -> str:
         return "str:" + by
     if isinstance(by, dict) and by:
         try:
-            return "json:" + canonical(by)
+            return "json:" + canonical(by, strict=True)
         except (TypeError, ValueError) as e:
             raise TypeError(f"by is not a JSON document: {e}") from None
     raise TypeError(f"by is a non-empty str or JSON dict, not {by!r}")
@@ -166,7 +166,7 @@ class Transaction:
         self._pending: Dict[int, Tuple[Value, str]] = {}
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
         self._codes: set = set()
-        self._clocks: set = set()
+        self._clocks: Dict[Tuple[str, str], Tuple[int, int, int]] = {}   # the highest version seen
         self._commits: Dict[str, str] = {}
         #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
         self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
@@ -286,7 +286,7 @@ class Transaction:
             def handler(signum: int, frame: Any) -> None:
                 raise LockTimeout(msg)
             self._old_handler = signal.signal(signal.SIGALRM, handler)
-            signal.setitimer(signal.ITIMER_REAL, seconds)
+            self._old_timer = (signal.setitimer(signal.ITIMER_REAL, seconds), _time.monotonic())
         else:
             tid = threading.get_ident()
 
@@ -301,6 +301,9 @@ class Transaction:
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, self._old_handler)
             self._old_handler = None
+            (delay, interval), armed = self._old_timer
+            if delay > 0:                       # the caller's own timer: restored, less the body's time
+                signal.setitimer(signal.ITIMER_REAL, max(delay - (_time.monotonic() - armed), 1e-6), interval)
         if self._timer is not None:
             self._timer.cancel()
             self._timer = None
@@ -318,27 +321,39 @@ class Transaction:
                 self._cm.__exit__(et, ev, tb)
             return False
         self._state = "committing"
+        wrote = False
         try:
             if self._cm is not None:
                 try:
                     rev = self._write(self._w)
                 except BaseException as e:
+                    self._abandon()             # under the lock: no writer can claim the bytes it drops
                     self._cm.__exit__(type(e), e, e.__traceback__)
                     raise
+                wrote = True
                 self._cm.__exit__(None, None, None)
             else:
                 with self._ledger._store.writer(30.0, locked=False) as w:
-                    rev = self._write(w)
+                    try:
+                        rev = self._write(w)
+                    except BaseException:
+                        self._abandon()         # under the lock, as above
+                        raise
+                    wrote = True
         except BaseException:
-            self._abandon()
+            if self._state != "abandoned":
+                # the rows were written, and COMMIT may have run (an interrupt or a late async
+                # LockTimeout landing after it): bytes rows may name are never dropped
+                self._abandon(drop_bytes=not wrote)
             raise
         self._rev = self._ledger.at(rev)
         self._finish()
         self._state = "committed"
         return False
 
-    def _abandon(self) -> None:
-        """Nothing was written: unseal every value this body froze (A43) and drop bytes it stored."""
+    def _abandon(self, drop_bytes: bool = True) -> None:
+        """Nothing was written: unseal every value this body froze (A43) and drop bytes it stored
+        (``drop_bytes``; called with the write lock held, so no other writer has found them stored)."""
         from .value import _EMPTY
 
         self._state = "abandoned"
@@ -351,7 +366,7 @@ class Transaction:
             value.sealed = None
             value.__dict__["_preds"] = old
             value.__dict__.pop("_hash", None)
-        for path in self._created:
+        for path in (self._created if drop_bytes else ()):
             try:
                 path.unlink()
             except OSError:
@@ -818,14 +833,19 @@ class Transaction:
         the source).
 
         Only a plain ``MAJOR.MINOR.PATCH`` counts: a dirty checkout's ``<commit 8>+dirty``, a bare commit
-        or a ``#hash`` moves neither. Read through the snapshot at open. The version, per package: absent
-        or lower, this transaction adds it; equal, nothing; higher on the row, a warning and nothing (the
+        or a ``#hash`` moves neither. Read through the snapshot at open. The version, per package (the
+        highest this body ran): absent or lower, this transaction adds it; equal, nothing; higher on the row, a warning and nothing (the
         clock never moves back). The commit: added whenever it differs from the row."""
-        if _semver(version) is None or (repo, package) in self._clocks:
-            return
-        self._clocks.add((repo, package))
         seen = _semver(version)
+        if seen is None:
+            return
+        before = self._clocks.get((repo, package))
+        if before is not None and before >= seen:
+            return
+        self._clocks[(repo, package)] = seen
         subject = f"db/repo/{repo}/{package}"
+        if before is not None:                  # a higher version seen later in this body replaces the add
+            self._ops[:] = [op for op in self._ops if not (op.s == subject and op.p == "db/version" and op.added)]
         row = self._snapshot().get(subject, "db/version", default=None)
         held = _semver(row) if isinstance(row, str) else None
         if held is not None and held > seen:
@@ -875,25 +895,30 @@ class Transaction:
                 if p not in current or current[p] != o:
                     raise TypeError(f"{p!r}: a db/ key differing from the current row; machinery is not "
                                     "written through the bracket")
-        for p in [q for q in current if not q.startswith("db/") and q not in value]:
-            for h in base._held(s, p):
-                self._ops.append(_Op(s, p, h.obj, False))
-        for p, o in value.items():
-            if p.startswith("db/"):
-                continue
-            held = [h.obj for h in base._held(s, p)]
-            if self._card_now(p) == "many":
-                want = [self._encode(m) for m in (o if isinstance(o, list) else [o])]
-                for h in held:
-                    if strip_hint(h) not in [strip_hint(w) for w in want]:
-                        self._ops.append(_Op(s, p, h, False))
-                for w in want:
-                    if strip_hint(w) not in [strip_hint(h) for h in held]:
+        mark = len(self._ops)
+        try:
+            for p in [q for q in current if not q.startswith("db/") and q not in value]:
+                for h in base._held(s, p):
+                    self._ops.append(_Op(s, p, h.obj, False))
+            for p, o in value.items():
+                if p.startswith("db/"):
+                    continue
+                held = [h.obj for h in base._held(s, p)]
+                if self._card_now(p) == "many":
+                    want = [self._encode(m) for m in (o if isinstance(o, list) else [o])]
+                    for h in held:
+                        if strip_hint(h) not in [strip_hint(w) for w in want]:
+                            self._ops.append(_Op(s, p, h, False))
+                    for w in want:
+                        if strip_hint(w) not in [strip_hint(h) for h in held]:
+                            self._ops.append(_Op(s, p, w, True))
+                else:
+                    w = self._encode(o)
+                    if not held or strip_hint(held[0]) != strip_hint(w):
                         self._ops.append(_Op(s, p, w, True))
-            else:
-                w = self._encode(o)
-                if not held or strip_hint(held[0]) != strip_hint(w):
-                    self._ops.append(_Op(s, p, w, True))
+        except BaseException:
+            del self._ops[mark:]                    # a refused key writes none of the record, as update
+            raise
 
     def __delitem__(self, key: Any) -> None:
         """``del t[s, p]``: retract what ``p`` holds on ``s``. ``del t[s]``: every user row; ``db/`` rows survive.

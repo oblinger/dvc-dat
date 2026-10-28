@@ -350,7 +350,7 @@ class SqliteStore(Store):
     def subjects(self, upto: int, *, predicate: Optional[str] = None, obj: Optional[str] = None,
                  prefix: Optional[str] = None, subject: Optional[str] = None, after: int = 0) -> List[str]:
         """The distinct subjects with an add row matching the columns given, in ``after < rev <= upto``."""
-        sql = "SELECT subject, MIN(rev * 1000000 + ord) FROM quads WHERE rev <= ? AND rev > ? AND added = 1"
+        sql = "SELECT subject, MIN(rev * 4294967296 + ord) FROM quads WHERE rev <= ? AND rev > ? AND added = 1"
         params: List[Any] = [upto, after]
         for col, val in (("predicate", predicate), ("object", obj), ("subject", subject)):
             if val is not None:
