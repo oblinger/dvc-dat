@@ -6,6 +6,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## Unreleased
+
+- **Deep scan round 4 fixes (patch).** Namespace: a dotted name with a `/` segment no longer reads outside its mount (also from a sandboxed body); a folder mounted at a dotted `at` answers to its names; a remount serves the new file, not a cached one or a value mounted there; a `null` in a mounted file loads as `None`; `t.ns.mount` refuses an `at` no dotted name can reach. Ledger: a refused commit drops its bytes while it holds the write lock, and an interrupt after COMMIT never drops them; `t[s] = {...}` with a refused key writes nothing; a `lock=` body restores the caller's `ITIMER_REAL`; one body running a package at two versions moves the clock to the higher; `subjects` keeps row order past 10**6 rows in one revision; a NaN or infinity in a stored JSON row or `by=` is `TypeError`; `Ledger(create=True)` refuses a `.datconfig.yaml` that is not a mapping; `Ledger("")` is `TypeError`. Core: forking a dat (`run(dat, k=v)`) always lands beside it, whatever its `target_exists` (an `overwrite` parent was wiped, a `use` parent came back unrun), and keeps its stored braces literal; `create` with `overwrite` wipes the old folder only once the new spec is made, and drops the old cached object; a `dat.base` cycle is `ValueError`; `save()` of a `_spec_.json` dat works; `arg_value` keeps padded text, `1e999` and over-deep JSON as typed; a dotted `--set` under a scalar is `ValueError`.
+
 ## 2.38.0 — 2026-10-27
 
 - **The code clocks' predicates are under `db/`: `db/repo/<repo> db/commit` and `db/repo/<repo>/<package> db/version` (DAT 1052 Q2 B).** Every predicate the ledger writes or interprets carries `db/`; these two were the bare exceptions. Subjects are unchanged. As `db/` predicates they are fixed at `one`, hidden from `preds()`, kept by `t[s] = {...}`, and skip the `db/type` check. The seal's clock advance, `clean=True`'s `NotClean` check, the docs (`DAT Ledger` § Versioning) and the demo sheets read the new names. **No alias, no migration:** a ledger holding bare `commit` / `version` clock rows is not read; `clean=True` against it raises `NotClean` (no `db/commit`) until the next clean run writes the clocks. Migration: `rev["db/repo/r", "commit"]` → `rev["db/repo/r", "db/commit"]`; `rev["db/repo/r/p", "version"]` → `rev["db/repo/r/p", "db/version"]`. User `version` / `commit` predicates (`bump`, `db version`) are untouched.
@@ -836,7 +840,7 @@ Breaking: public names removed or made private. Nothing is kept as an alias.
   imported: `do.mount(...)` calls live in your own code, and for the shell
   `run:` names your program's main, which ends with `sys.exit(dat.cli_main())`
   when `DAT_CLI_CONFIG` is set (`cli_main(argv=None, *, config=None)` is new and
-  exported; the bootstrap sets `DAT_CLI_CONFIG` -- the config file it found -- for the program
+  exported; the bootstrap sets `DAT_CLI_CONFIG` — the config file it found — for the program
   it launches). `do.mount_all` is removed. With no mounts a
   dotted name is a Python name and nothing else; an empty `.dataconfig.yaml`
   is a complete config.

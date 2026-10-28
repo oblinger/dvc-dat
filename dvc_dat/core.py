@@ -339,11 +339,14 @@ def _hash_dat(folder: Union[str, Path], results: Dict[str, Any]) -> str:
             dirs[:] = [d for d in dirs if d != RUN_FOLDER]
         for file in files:
             rel = os.path.relpath(os.path.join(root, file), folder)
-            if rel == RESULT_YAML or (functional and rel == SPEC_YAML):
+            if rel == RESULT_YAML or (functional and rel in (SPEC_YAML, SPEC_JSON)):
                 continue
             lines.append(f"{rel}\0{_sha256_file(os.path.join(root, file))}\n")
     if functional:
-        spec = yaml.safe_load(Path(folder, SPEC_YAML).read_text()) or {}
+        if os.path.exists(os.path.join(folder, SPEC_YAML)):
+            spec = yaml.safe_load(Path(folder, SPEC_YAML).read_text()) or {}
+        else:                           # a `_spec_.json` is read too (spec-format), and hashed as its spec
+            spec = json.loads(Path(folder, SPEC_JSON).read_text()) or {}
         if isinstance(spec.get("dat"), dict):
             spec["dat"].pop("name", None)
         text = yaml.dump(spec, Dumper=_SpecDumper, sort_keys=True)
@@ -548,6 +551,17 @@ def expand(text: str, vars: Optional[Dict[str, Any]] = None, *,
         return str(value)
 
     return _REFERENCE.sub(replace, text)
+
+
+def _escape_braces(spec: Any) -> Any:
+    """A copy of `spec` that `expand_spec` turns back into `spec`: every brace in a string doubled."""
+    if isinstance(spec, dict):
+        return {k: _escape_braces(v) for k, v in spec.items()}
+    if isinstance(spec, list):
+        return [_escape_braces(v) for v in spec]
+    if isinstance(spec, str):
+        return spec.replace("{", "{{").replace("}", "}}")
+    return spec
 
 
 def expand_spec(spec: Any, vars: Optional[Dict[str, Any]] = None, *,
@@ -770,7 +784,7 @@ class DatManager:
         if target_exists == "overwrite" and path.lower() == "{cwd}":
             target_exists = "error"  # never wipe the working directory
 
-        expanded_path, skip_execution, names = self._place(path, target_exists=target_exists)
+        expanded_path, skip_execution, names = self._place(path, target_exists=target_exists, wipe=False)
         if skip_execution:
             return self.load(expanded_path)
 
@@ -779,21 +793,27 @@ class DatManager:
         spec = expand_spec(spec, names, resolver=self.ns.load)  # bases merged in _spec_of
         if own is not None:
             Dat.set(spec, DAT_NAME, own)            # the template, never its expansion (Q36)
-        if _within(os.path.realpath(path), self._dat_folders[0]):
+        within = _within(os.path.realpath(path), self._dat_folders[0])
+        if within:
             Dat.set(spec, DAT_NAME, template if "{" in template else self._get_path_name(path))
             if self._artifact_folder(self._get_path_name(path)) is not None:
                 raise FileExistsError(f"Dat.create: {self._get_path_name(path)!r} is an "
                                       "artifact's name; dats and artifacts share one namespace")
-        os.makedirs(path, exist_ok=True)
-        logger.info("Creating Dat %s under path: <%s>", dat_class, path)
         try:
             text = yaml.dump(spec, Dumper=_SpecDumper, sort_keys=False)
         except yaml.representer.RepresenterError as e:
-            shutil.rmtree(path, ignore_errors=True)
             raise TypeError(
                 f"Dat.create: the spec is not data once expanded ({e.args[0]}); a "
                 "`{...}` reference in a spec must resolve to something YAML can hold"
             ) from None
+        if target_exists == "overwrite" and os.path.exists(path):
+            # wiped only now the new spec is in hand: a create that fails keeps the old dat
+            self._dat_cache.pop(os.path.abspath(path), None)    # a held object is not the new dat
+            if within:
+                self._index_forget(self._get_path_name(path))
+            shutil.rmtree(path)
+        os.makedirs(path, exist_ok=True)
+        logger.info("Creating Dat %s under path: <%s>", dat_class, path)
         Path(path, SPEC_YAML).write_text(text)
         return self._load(path, dat_class=dat_class)
 
@@ -1379,9 +1399,15 @@ class DatManager:
             if isinstance(obj, Dat):
                 if not args and not kwargs:
                     return self._execute(obj)
-                obj = deepcopy(obj.get_spec())
-                if Dat.get(obj, DAT_TARGET_EXISTS, "error") == "error":
-                    Dat.set(obj, DAT_TARGET_EXISTS, "increment")   # a fork lands beside its parent
+                # the stored spec is expanded already: its braces are literal, so the fork's
+                # create (which expands) is handed them escaped; dat.name stays the path template
+                name = Dat.get(obj.get_spec(), DAT_NAME, None)
+                obj = _escape_braces(obj.get_spec())
+                if name is not None:
+                    Dat.set(obj, DAT_NAME, name)
+                # a fork lands beside its parent, whatever the parent's own target_exists says:
+                # `overwrite` would wipe the parent, `use` would hand it back unrun
+                Dat.set(obj, DAT_TARGET_EXISTS, "increment")
             elif callable(obj):
                 return obj(*args, **kwargs)
             if not isinstance(obj, dict):
@@ -1542,9 +1568,11 @@ class DatManager:
         *,
         variables: Optional[Dict[str, Any]] = None,
         target_exists: str = "error",
+        wipe: bool = True,
     ) -> Tuple[str, bool, Dict[str, Any]]:
         """`_prepare_dat_path`, also returning the names the path expanded with, so the
-        spec can be expanded with the very same `now` and `unique`."""
+        spec can be expanded with the very same `now` and `unique`.  `wipe=False`: an
+        `overwrite` leaves the folder for the caller to remove (`create`, once its spec is made)."""
         if path_spec is None:
             path_spec = _DEFAULT_PATH_TEMPLATE
         path_spec = str(path_spec)
@@ -1566,7 +1594,8 @@ class DatManager:
             elif target_exists == "use":
                 return expanded_path, True, names
             elif target_exists == "overwrite":
-                shutil.rmtree(expanded_path)
+                if wipe:
+                    shutil.rmtree(expanded_path)
                 return expanded_path, False, names
             elif target_exists == "increment" or "{unique}" in path_spec:
                 count += 1
@@ -2337,10 +2366,12 @@ def _dotted_set(source: SpecDict, keys, value):
         keys = keys.split(".")
     for k in keys[:-1]:
         if not isinstance(source, dict):
-            raise Exception(f"Expected dict value for {k!r} not {source!r}")
+            raise ValueError(f"Expected dict value for {k!r} not {source!r}")
         sub = source.get(k)
         if sub is None:
             sub = source[k] = {}
         source = sub
+    if not isinstance(source, dict):
+        raise ValueError(f"Expected dict value for {keys[-1]!r} not {source!r}")
     source[keys[-1]] = value
 

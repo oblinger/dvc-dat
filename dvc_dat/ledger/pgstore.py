@@ -200,7 +200,7 @@ class PostgresStore(Store):
         if _has_nul(subject, predicate, obj, prefix):
             return []
         params: List[Any] = [upto, after]
-        sql = ("SELECT subject, MIN(rev * 1000000 + ord) FROM quads WHERE rev <= %s AND rev > %s AND added"
+        sql = ("SELECT subject, MIN(rev * 4294967296 + ord) FROM quads WHERE rev <= %s AND rev > %s AND added"
                + self._where(params, (("predicate", predicate), ("object", obj), ("subject", subject)), prefix)
                + " GROUP BY subject ORDER BY 2")
         return [r[0] for r in self.read(sql, params)]

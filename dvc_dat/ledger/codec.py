@@ -25,9 +25,10 @@ from typing import Any, Optional, Tuple
 _HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
-def canonical(doc: Any) -> str:
-    """One text per JSON document: sorted keys, compact, unicode kept."""
-    return json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+def canonical(doc: Any, *, strict: bool = False) -> str:
+    """One text per JSON document: sorted keys, compact, unicode kept. ``strict``: a stored document, where
+    a NaN or an infinity is not JSON (``ValueError``) -- it would not read back."""
+    return json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=not strict)
 
 
 def sha256(data: bytes) -> str:
@@ -75,7 +76,7 @@ def encode_plain(obj: Any) -> Optional[str]:
         return "str:" + obj
     if isinstance(obj, (dict, list)):
         try:
-            return "json:" + canonical(obj)
+            return "json:" + canonical(obj, strict=True)
         except (TypeError, ValueError) as e:
             raise TypeError(f"not a JSON document: {e}") from None
     return None
