@@ -115,7 +115,8 @@ def test_rerun_overwrite_template_while_previous_is_held(world):
     tmpl = {"dat": {"do": "seal_fn", "name": "again", "target_exists": "overwrite"}}
     held = world.run(tmpl)  # noqa: F841 -- a notebook keeps `held`
     again = world.run(tmpl)                # today: RuntimeError "<Dat: again> is sealed", folder already wiped
-    assert again.get_results()["dat"]["standing"] == "sealed"
+    # frozen either way: `referenceable` from a clean checkout, `sealed` when the run's code is dirty
+    assert again.get_results()["dat"]["standing"] in ("sealed", "referenceable")
 
 
 
