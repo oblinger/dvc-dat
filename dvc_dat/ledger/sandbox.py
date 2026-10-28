@@ -50,7 +50,7 @@ sys.path entry> -> sha256`` of the file (the standard library, an editable
 source). dvc-dat and what the server holds before the fork (the standard
 library pieces the ledger uses, pyyaml) are infrastructure, like dvc-dat (A56).
 A lookup re-hashes exactly those as they are now: a mounted file on disk
-(whatever commit the rev's ``db/repo/<repo>`` row names), a third-party one as
+(whatever commit the rev's ``db/repo/<repo> db/commit`` row names), a third-party one as
 installed. Any byte changed in a loaded module is a different entry.
 ``fn.code.subject`` before any run is the static closure.
 """

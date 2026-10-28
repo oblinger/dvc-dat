@@ -680,9 +680,10 @@ import demo_game                       # discovery sees it imported
 # %% [markdown]
 # ### The code clock
 #
-# `db/repo/demo-game/demo_game` is a clock: the version of that
-# package's code that runs were exposed to; `db/repo/demo-game` holds
-# the commit of the latest clean run. The first run from a clean
+# `db/repo/demo-game/demo_game` is a clock: its `db/version` is the
+# version of that package's code that runs were exposed to;
+# `db/repo/demo-game`'s `db/commit` is the commit of the latest clean
+# run. The ledger writes and reads both, so both carry `db/`. The first run from a clean
 # checkout writes both ([Ledger: dats](ledger-dats.ipynb) shows it);
 # this sheet runs nothing, so it adds the two rows such a run writes.
 
@@ -690,12 +691,12 @@ import demo_game                       # discovery sees it imported
 demo_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=demo_repo_path, check=True,
                              capture_output=True, text=True).stdout.strip()
 with L.transaction(by="human:dan") as t:
-    t.add("db/repo/demo-game/demo_game", "version", demo_game.__version__)
-    t.add("db/repo/demo-game", "commit", demo_commit)
+    t.add("db/repo/demo-game/demo_game", "db/version", demo_game.__version__)
+    t.add("db/repo/demo-game", "db/commit", demo_commit)
 print("db/repo/demo-game/demo_game:", L.at()["db/repo/demo-game/demo_game"])
-# db/repo/demo-game/demo_game: {'version': '0.1.0'}
+# db/repo/demo-game/demo_game: {'db/version': '0.1.0'}
 print("db/repo/demo-game:", L.at()["db/repo/demo-game"])
-# db/repo/demo-game: {'commit': '<the demo commit>'}
+# db/repo/demo-game: {'db/commit': '<the demo commit>'}
 
 # %% [markdown]
 # ### Transaction locking: `bump` under `lock=`
@@ -801,8 +802,8 @@ print(L.at()["schema/tape", "version"])  # 0.0.9: add went back
 
 # %%
 with L.transaction(by="agent:release", lock=5) as t:
-    v = t["db/repo/demo-game/demo_game", "version"]
-    c = t["db/repo/demo-game", "commit"]
+    v = t["db/repo/demo-game/demo_game", "db/version"]
+    c = t["db/repo/demo-game", "db/commit"]
     t.add("rel/demo-game", "pair", f"{v}+{c}")
 print(L.at()["rel/demo-game", "pair"])    # 0.1.0+<commit>
 
@@ -821,7 +822,7 @@ print(L.at()["rel/demo-game", "pair"])    # 0.1.0+<commit>
 
 # %%
 rev = L.at()
-when = [r.rev for r in rev.history("db/repo/demo-game/demo_game", "version", "0.1.0") if r.added]
+when = [r.rev for r in rev.history("db/repo/demo-game/demo_game", "db/version", "0.1.0") if r.added]
 print(when)                               # [Rev(...)]: when it was set
 print(when[0][when[0].tx, "db/by"])       # human:dan: by whom
 

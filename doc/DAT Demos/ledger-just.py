@@ -402,10 +402,10 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # nothing committed, nothing written to the ledger. A minor or major
 # move waits for `yes`, which is `confirm=`.
 #
-# The ledger's `db/repo/demo-game/demo_game` clock is the version of
-# `demo_game` runs were exposed to. The first cut (rev 4) put `0.1.0`
-# there; after the commit, the next run from the clean checkout moves
-# it, and `db/repo/demo-game` to that run's commit.
+# The ledger's `db/repo/demo-game/demo_game` `db/version` clock is the
+# version of `demo_game` runs were exposed to. The first cut (rev 4) put
+# `0.1.0` there; after the commit, the next run from the clean checkout
+# moves it, and `db/repo/demo-game` `db/commit` to that run's commit.
 
 # %%
 # !git commit -qam "demo_game 0.1.1"
@@ -413,8 +413,8 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # !just history db/repo/demo-game/demo_game
 # → ran  #<8 hex>  game=G1 version=1.5.5 video=video/G1 team=["G6", "G5"]
 # → rev  by         predicate  object
-# →   4  eval:demo_game.game.cut version    0.1.0
-# →  22  eval:demo_game.game.cut version    0.1.1
+# →   4  eval:demo_game.game.cut db/version 0.1.0
+# →  22  eval:demo_game.game.cut db/version 0.1.1
 
 # %% [markdown]
 # ### A release of the ledger

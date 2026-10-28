@@ -1,15 +1,16 @@
 """DAT 1043, 1044: a code version lives in its source. ``bump_source`` edits ``__version__``; ``bump`` refuses
 ``db/repo/`` subjects; a declared version counts only from a clean checkout; a clean seal moves the
-``db/repo/<repo>/<package>`` clock to the version the run was exposed to, one per package, and
-``db/repo/<repo>`` to the commit of the latest clean run."""
+``db/repo/<repo>/<package> db/version`` clock to the version the run was exposed to, one per package, and
+``db/repo/<repo> db/commit`` to the commit of the latest clean run (DAT 1052 Q2 B)."""
 
 import re
 import warnings
 
 import pytest
 
-from dvc_dat.ledger import Checkout, Env, NotClean, Value, bump, bump_source
+from dvc_dat.ledger import Checkout, Env, NotClean, Ref, Value, bump, bump_source
 from dvc_dat.ledger.code import installed_version
+from dvc_dat.ledger.rev import fixed_one
 from test_code import forget, git, installed, mounted  # noqa: F401  (fixtures)
 
 
@@ -70,7 +71,7 @@ def test_bump_refuses_clock_subjects_and_writes_nothing(L):
                                         r".*records it in db/repo/<repo>/<package> \(the commit in db/repo/<repo>\)"):
         with L.transaction(by="t", lock=10) as t:
             bump(t, "db/repo/x/y")
-    assert L.at().id == top and L.at().get("db/repo/x/y", "version") is None
+    assert L.at().id == top and L.at().get("db/repo/x/y", "db/version") is None
 
 
 def test_installed_version_is_the_attr_only_from_a_clean_checkout(installed):
@@ -97,18 +98,34 @@ def test_a_clean_seal_moves_the_clock_once(mounted):
     L, repo = mounted
     head = git(repo, "rev-parse", "HEAD")
     L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
-    assert L.at()["db/repo/code-repo/plane"] == {"version": "2.7.1"}
-    assert L.at()["db/repo/code-repo"] == {"commit": head}
-    n = len(L.at().history("db/repo/code-repo/plane", "version"))
+    assert L.at()["db/repo/code-repo/plane"] == {"db/version": "2.7.1"}
+    assert L.at()["db/repo/code-repo"] == {"db/commit": head}
+    n = len(L.at().history("db/repo/code-repo/plane", "db/version"))
     L.at().run("plane.measure.length", a=(0, 0), b=(6, 8))      # the same version: nothing written
-    assert len(L.at().history("db/repo/code-repo/plane", "version")) == n
-    assert len(L.at().history("db/repo/code-repo", "commit")) == 1
+    assert len(L.at().history("db/repo/code-repo/plane", "db/version")) == n
+    assert len(L.at().history("db/repo/code-repo", "db/commit")) == 1
     (repo / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
     git(repo, "commit", "-q", "-am", "bump")
     L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
-    assert L.at()["db/repo/code-repo/plane", "version"] == "2.7.2"
-    assert L.at()["db/repo/code-repo", "commit"] == git(repo, "rev-parse", "HEAD")
+    assert L.at()["db/repo/code-repo/plane", "db/version"] == "2.7.2"
+    assert L.at()["db/repo/code-repo", "db/commit"] == git(repo, "rev-parse", "HEAD")
     assert not [r for r in L.at().history() if r.subject.startswith("code/")]
+
+
+def test_the_clocks_are_db_predicates(mounted):
+    """DAT 1052 Q2 (B): ``db/version`` and ``db/commit`` are hidden from ``preds``, kept by ``t[s] = {...}``,
+    fixed at ``one``; no bare ``version`` or ``commit`` row is written."""
+    L, repo = mounted
+    head = git(repo, "rev-parse", "HEAD")
+    L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
+    assert Ref(L.at(), "db/repo/code-repo/plane").preds == {} and Ref(L.at(), "db/repo/code-repo").preds == {}
+    assert not [r for r in L.at().history() if r.predicate in ("version", "commit")]
+    with L.transaction(by="t", lock=10) as t:
+        t["db/repo/code-repo"] = {"note": "kept"}
+        t["db/repo/code-repo/plane"] = {}
+    assert L.at()["db/repo/code-repo"] == {"db/commit": head, "note": "kept"}
+    assert L.at()["db/repo/code-repo/plane"] == {"db/version": "2.7.1"}
+    assert fixed_one("db/version") and fixed_one("db/commit")
 
 
 def test_two_packages_in_one_checkout_each_keep_a_clock(mounted):
@@ -119,8 +136,8 @@ def test_two_packages_in_one_checkout_each_keep_a_clock(mounted):
         warnings.simplefilter("error")
         L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
         L.at().run("bare.calc.length", a=(0, 0), b=(3, 4))
-    assert L.at()["db/repo/code-repo/plane", "version"] == "2.7.1"
-    assert L.at()["db/repo/code-repo/bare", "version"] == "0.4.0"
+    assert L.at()["db/repo/code-repo/plane", "db/version"] == "2.7.1"
+    assert L.at()["db/repo/code-repo/bare", "db/version"] == "0.4.0"
 
 
 def test_the_commit_row_follows_the_latest_clean_run(mounted):
@@ -129,24 +146,24 @@ def test_the_commit_row_follows_the_latest_clean_run(mounted):
     git(repo, "commit", "-q", "-am", "bare versioned")
     L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
     first = git(repo, "rev-parse", "HEAD")
-    assert L.at()["db/repo/code-repo", "commit"] == first
+    assert L.at()["db/repo/code-repo", "db/commit"] == first
     (repo / "bare/__init__.py").write_text('__version__ = "0.4.1"\n')
     git(repo, "commit", "-q", "-am", "bare bump")
     L.at().run("bare.calc.length", a=(0, 0), b=(3, 4))
     second = git(repo, "rev-parse", "HEAD")
-    assert second != first and L.at()["db/repo/code-repo", "commit"] == second
-    assert L.at()["db/repo/code-repo/plane", "version"] == "2.7.1"   # plane's clock stays
+    assert second != first and L.at()["db/repo/code-repo", "db/commit"] == second
+    assert L.at()["db/repo/code-repo/plane", "db/version"] == "2.7.1"   # plane's clock stays
     L.at().run("plane.measure.length", a=(0, 0), b=(6, 8))           # plane at 2.7.1, the new commit
-    assert L.at()["db/repo/code-repo", "commit"] == second
-    assert len(L.at().history("db/repo/code-repo", "commit")) == 2
+    assert L.at()["db/repo/code-repo", "db/commit"] == second
+    assert len(L.at().history("db/repo/code-repo", "db/commit")) == 2
 
 
 def test_a_dirty_run_leaves_the_clock(mounted):
     L, repo = mounted
     (repo / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')     # uncommitted
     v = L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
-    assert v.sealed and L.at().get("db/repo/code-repo/plane", "version") is None
-    assert L.at().get("db/repo/code-repo", "commit") is None
+    assert v.sealed and L.at().get("db/repo/code-repo/plane", "db/version") is None
+    assert L.at().get("db/repo/code-repo", "db/commit") is None
 
 
 def test_a_lower_version_on_one_package_warns_and_keeps_its_row(mounted):
@@ -154,16 +171,16 @@ def test_a_lower_version_on_one_package_warns_and_keeps_its_row(mounted):
     (repo / "bare/__init__.py").write_text('__version__ = "0.4.0"\n')
     git(repo, "commit", "-q", "-am", "bare versioned")
     with L.transaction(by="t") as t:
-        t.add("db/repo/code-repo/plane", "version", "9.0.0")
+        t.add("db/repo/code-repo/plane", "db/version", "9.0.0")
     msg = "db/repo/code-repo/plane: the run's code is 2.7.1, below the ledger's 9.0.0; the clock keeps 9.0.0"
     with pytest.warns(UserWarning, match=re.escape(msg)):       # sealed in the worker, warned here
         L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
-    assert L.at()["db/repo/code-repo/plane", "version"] == "9.0.0"
-    assert L.at()["db/repo/code-repo", "commit"] == git(repo, "rev-parse", "HEAD")
+    assert L.at()["db/repo/code-repo/plane", "db/version"] == "9.0.0"
+    assert L.at()["db/repo/code-repo", "db/commit"] == git(repo, "rev-parse", "HEAD")
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         L.at().run("bare.calc.length", a=(0, 0), b=(3, 4))
-    assert L.at()["db/repo/code-repo/bare", "version"] == "0.4.0"
+    assert L.at()["db/repo/code-repo/bare", "db/version"] == "0.4.0"
     f = L.at().ns.load("plane.measure.length")
     with pytest.warns(UserWarning, match=re.escape(msg)):
         with L.transaction(by="t") as t:                       # a hand seal, in this process
@@ -173,7 +190,7 @@ def test_a_lower_version_on_one_package_warns_and_keeps_its_row(mounted):
 def test_the_workers_warning_reaches_the_caller(mounted, capfd):
     L, _repo = mounted
     with L.transaction(by="t") as t:
-        t.add("db/repo/code-repo/plane", "version", "9.0.0")
+        t.add("db/repo/code-repo/plane", "db/version", "9.0.0")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
@@ -184,12 +201,12 @@ def test_the_workers_warning_reaches_the_caller(mounted, capfd):
 
 def test_clean_reads_the_repos_commit_row(mounted):
     L, repo = mounted
-    with pytest.raises(NotClean, match="names no db/repo/code-repo commit"):
+    with pytest.raises(NotClean, match="names no db/repo/code-repo db/commit"):
         L.at().run("plane.measure.length", a=(0, 0), b=(3, 4), clean=True)
     L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
     assert L.at().run("plane.measure.length", a=(0, 0), b=(3, 4), clean=True).obj == 2.5
     with L.transaction(by="t") as t:
-        t.add("db/repo/code-repo", "commit", "0" * 40)
+        t.add("db/repo/code-repo", "db/commit", "0" * 40)
     with pytest.raises(NotClean, match="binds db/repo/code-repo to 00000000"):
         L.at().run("plane.measure.length", a=(0, 0), b=(3, 4), clean=True)
 
@@ -217,8 +234,8 @@ def test_a_hand_seal_with_an_fn_dep_moves_the_clock(mounted):
     f = L.at().ns.load("plane.measure.length")
     with L.transaction(by="t") as t:
         Value.Blob({"x": 2}).seal(t, deps=[f])
-    assert L.at()["db/repo/code-repo/plane", "version"] == "2.7.1"
-    assert L.at()["db/repo/code-repo", "commit"] == git(repo, "rev-parse", "HEAD")
+    assert L.at()["db/repo/code-repo/plane", "db/version"] == "2.7.1"
+    assert L.at()["db/repo/code-repo", "db/commit"] == git(repo, "rev-parse", "HEAD")
 
 
 def test_bump_source_takes_the_innermost_version(pkg):

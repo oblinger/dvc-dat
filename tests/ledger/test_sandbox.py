@@ -325,7 +325,7 @@ def sbx(tmp_path, monkeypatch, backend):
         t.add("db/mount/flatpkg", "db/root", "flat")          # a plain folder, no __init__.py
         t.add("db/mount/flatpkg", "db/repo", "sbx-repo")
         t["game/G1"] = {"n": "3"}
-        t.add("db/repo/sbx-repo", "commit", git(repo, "rev-parse", "HEAD"))     # what clean=True binds to
+        t.add("db/repo/sbx-repo", "db/commit", git(repo, "rev-parse", "HEAD"))     # what clean=True binds to
     yield L, repo
     shutdown()
     set_env_provider(old)

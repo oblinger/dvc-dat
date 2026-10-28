@@ -12,7 +12,7 @@ Items (Module § Value ``Dependencies``):
     holds beside a ``code`` item, which does the checking.
 ``code/<repo>``
     ``<commit 8>``; holds when the commit agrees with the environment's,
-    whatever the ``db/repo/<repo>`` commit row says (T543 Q7 (C); Q1: the
+    whatever the ``db/repo/<repo> db/commit`` row says (T543 Q7 (C); Q1: the
     commit is the pin). A label, not a subject. The version is not in the
     item (T034); it stays readable from the ``db/repo/<repo>/<package>``
     clocks at the revision (DAT 1044).

@@ -272,9 +272,9 @@ hypotenuse_value = distance_fn(a=(0, 0), b=(3, 4))
 print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 # → result: 5.0  sealed at: <the seal's moment>
 print("db/repo/geometry/geometry:", L.at()["db/repo/geometry/geometry"])
-# → db/repo/geometry/geometry: {'version': '5.3.9'}
+# → db/repo/geometry/geometry: {'db/version': '5.3.9'}
 print("db/repo/geometry:", L.at()["db/repo/geometry"])
-# → db/repo/geometry: {'commit': '<the commit>'}
+# → db/repo/geometry: {'db/commit': '<the commit>'}
 
 # %% [markdown]
 # `L.at().ns.load(name)` is what a dotted name denotes on the ledger;
@@ -284,9 +284,10 @@ print("db/repo/geometry:", L.at()["db/repo/geometry"])
 # is loaded from, the package `geometry` at the version it declares.
 #
 # A repo is one git checkout and has one commit; it can hold several
-# packages, each with its own `__version__`. So the commit is a row
-# on `db/repo/<repo>` and each package's version a row on
-# `db/repo/<repo>/<package>`. Here the repo `geometry` holds the
+# packages, each with its own `__version__`. So the commit is a
+# `db/commit` row on `db/repo/<repo>` and each package's version a
+# `db/version` row on `db/repo/<repo>/<package>`; the ledger writes
+# both, so both predicates carry `db/`. Here the repo `geometry` holds the
 # packages `geometry` and `plane`, which is why `geometry` appears
 # twice. This first clean run wrote both rows.
 
@@ -304,8 +305,8 @@ segment_value = length_fn(a=(0, 0), b=(3, 4))
 print("fn:", repr(length_fn), " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
 # → fn: <Fn plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
 print("result:", segment_value.obj)                 # → result: 2.5
-print("geometry clock:", L.at()["db/repo/geometry/geometry", "version"])   # → geometry clock: 5.3.9
-print("plane clock:", L.at()["db/repo/geometry/plane", "version"])         # → plane clock: 2.7.1
+print("geometry db/version:", L.at()["db/repo/geometry/geometry", "db/version"])   # → geometry db/version: 5.3.9
+print("plane db/version:", L.at()["db/repo/geometry/plane", "db/version"])         # → plane db/version: 2.7.1
 
 # %% [markdown]
 # `geometry` and `plane` share one checkout, the repo `geometry`, and each package keeps its own version clock, written by its first clean run.

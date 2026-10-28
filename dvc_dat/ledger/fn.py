@@ -77,7 +77,7 @@ class RunTrace:
     the ``db/code/<hash 16>`` item's rows; ``repo`` and ``dirty`` the checkout that vouches for an
     unsandboxed run (``repo`` ``None`` outside any), for the code check at a late save. ``clock`` is
     ``(repo, package, version, commit)`` of the code that ran, sandboxed or not, for the
-    ``db/repo/<repo>/<package>`` version and ``db/repo/<repo>`` commit a seal advances (DAT 1043, 1044);
+    ``db/repo/<repo>/<package> db/version`` and ``db/repo/<repo> db/commit`` a seal advances (DAT 1043, 1044);
     ``None`` outside any checkout or when the code declares no version."""
 
     name: str
@@ -448,7 +448,7 @@ class Fn:
         its own. An open ``Transaction`` on that ledger: the same, saved into it. A later ``v.seal(L)``
         or ``v.seal(t)`` of a ``False``/``True`` result writes the same memo entry.
         ``clean=True``: the code must be a clean representation of a version,
-        the checkout clean and at the commit the rev's ``db/repo/<repo>`` row names, else ``NotClean``
+        the checkout clean and at the commit the rev's ``db/repo/<repo> db/commit`` row names, else ``NotClean``
         (Q39), before any lookup; ``False`` (default): a sandboxed call runs at HEAD, clean or dirty.
         ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder
         there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
@@ -529,7 +529,7 @@ class Fn:
         if code.dirty:
             raise NotEvaluated(f"{self.name}: the checkout of {repo} has uncommitted changes; a result would "
                                "carry false provenance")
-        return repo         # a db/repo/<repo> commit row names a clean run, not where evals may run
+        return repo         # a db/repo/<repo> db/commit row names a clean run, not where evals may run
 
     def _run_base(self, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
                   name: Optional[str] = None) -> Value:
@@ -652,16 +652,16 @@ def seal_level(name: str, plain: "Rev", seal: Any, clean: Any, path: Any) -> Any
 
 
 def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
-    """``clean=True`` (Q39): the checkout clean and at the commit ``plain``'s ``db/repo/<repo>`` row names."""
+    """``clean=True`` (Q39): the checkout clean and at the commit ``plain``'s ``db/repo/<repo> db/commit`` row names."""
     repo = fn._info.get("repo") if fn.code.sandboxed else repo_of(env, fn.module)
     code = env.code.get(repo) if repo else None
     if code is None:
         raise NotClean(f"{fn.name}: clean=True, and its code ({fn.module}) is in no git checkout here")
     if code.dirty:
         raise NotClean(f"{fn.name}: clean=True, and the checkout of {repo} has uncommitted changes")
-    c = plain.get(f"db/repo/{repo}", "commit")
+    c = plain.get(f"db/repo/{repo}", "db/commit")
     if c is None:
-        raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} names no db/repo/{repo} commit "
+        raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} names no db/repo/{repo} db/commit "
                        "(the first clean run of code with a __version__ writes it)")
     if not (code.commit and (code.commit.startswith(c) or c.startswith(code.commit))):
         raise NotClean(f"{fn.name}: clean=True, and rev {plain.id} binds db/repo/{repo} to {c[:8]}; "

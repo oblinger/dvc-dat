@@ -250,8 +250,8 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # → commit it: git commit -am "mymodule 0.1.1"
 
 # %% [markdown]
-# The ledger's `db/repo/q-cli/mymodule` clock is the version of `mymodule` runs were exposed to.
-# The first run (rev 2) put `0.1.0` there; after the commit, the next run from the clean checkout moves it to `0.1.1`, and `db/repo/q-cli` to that run's commit.
+# The ledger's `db/repo/q-cli/mymodule` `db/version` clock is the version of `mymodule` runs were exposed to.
+# The first run (rev 2) put `0.1.0` there; after the commit, the next run from the clean checkout moves it to `0.1.1`, and `db/repo/q-cli` `db/commit` to that run's commit.
 
 # %%
 # !git commit -qam "mymodule 0.1.1"
@@ -261,11 +261,11 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # !just history db/repo/q-cli
 # → ran  tables/2026/table12  start=1 n=12 cells=144
 # → rev  by         predicate  object
-# →   2  eval:mymodule.mult.build_table version    0.1.0
-# →   7  eval:mymodule.mult.build_table version    0.1.1
+# →   2  eval:mymodule.mult.build_table db/version 0.1.0
+# →   7  eval:mymodule.mult.build_table db/version 0.1.1
 # → rev  by         predicate  object
-# →   2  eval:mymodule.mult.build_table commit     <40 hex>
-# →   7  eval:mymodule.mult.build_table commit     <40 hex>
+# →   2  eval:mymodule.mult.build_table db/commit  <40 hex>
+# →   7  eval:mymodule.mult.build_table db/commit  <40 hex>
 
 # %% [markdown]
 # A bump of `db`, the ledger's own clock, is a release: a row on the
