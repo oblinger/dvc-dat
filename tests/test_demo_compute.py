@@ -7,8 +7,15 @@ import pytest
 
 from dvc_dat import Dat, DatManager
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "doc" / "DAT Demos"))
-from demo_kinds.compute import Compute, Numbers, evaluate  # noqa: E402
+# on sys.path for the import only: left there, every top-level folder in the demos
+# directory (an ignored notebook scratch/, say) is importable for the rest of the
+# worker's tests, and ns.mount refuses those names as import clashes
+_DEMOS = str(Path(__file__).parent.parent / "doc" / "DAT Demos")
+sys.path.insert(0, _DEMOS)
+try:
+    from demo_kinds.compute import Compute, Numbers, evaluate  # noqa: E402
+finally:
+    sys.path.remove(_DEMOS)
 
 
 @pytest.fixture
