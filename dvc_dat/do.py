@@ -23,6 +23,7 @@ names the ledger's `db/mount` rows, and `mount` refused.
 import copy
 import importlib.util
 import json
+import math
 import os
 import re
 import sys
@@ -111,11 +112,14 @@ class Namespace:
 
     # -- specs ---------------------------------------------------------------
 
-    def _merge_bases(self, spec: Union[Spec, str]) -> Spec:
+    def _merge_bases(self, spec: Union[Spec, str], _chain: Tuple[str, ...] = ()) -> Spec:
         """A spec (or the name of one) merged over its `dat.base` (a name, a spec, or a list of them, later
         entries winning), recursively; `dat.base` is dropped from the result so the
         stored spec is complete on its own."""
         if isinstance(spec, str):
+            if spec in _chain:
+                raise ValueError(f"dat.base: a cycle, {' -> '.join(_chain + (spec,))}")
+            _chain = _chain + (spec,)
             spec = copy.deepcopy(self.load(spec))
         base = Dat.get(spec, DAT_BASE, None)
         if not base:
@@ -123,7 +127,7 @@ class Namespace:
         bases = base if isinstance(base, list) else [base]
         merged: Spec = {}
         for entry in bases:
-            merged = merge_dicts(merged, self._merge_bases(entry))
+            merged = merge_dicts(merged, self._merge_bases(entry, _chain))
         result = merge_dicts(merged, spec)
         result["dat"].pop("base", None)
         return result
@@ -843,10 +847,20 @@ def arg_value(text: str) -> Any:
     a list, `{"a":1}` a dict, `"12"` the string 12; `2026-01-01`, `foo` and `NaN`
     are not JSON, so each is that string.
     """
+    if text != text.strip():
+        return text                     # JSON would drop the padding: not the text as typed
     try:
-        return json.loads(text, parse_constant=_not_json)
-    except ValueError:
+        return json.loads(text, parse_constant=_not_json, parse_float=_finite)
+    except (ValueError, RecursionError):
         return text
+
+
+def _finite(text: str) -> float:
+    """A JSON number too big for a float (`1e999`) is not `inf`: the text stays as typed."""
+    x = float(text)
+    if math.isinf(x):
+        raise ValueError(text)
+    return x
 
 
 def _not_json(name: str) -> Any:
