@@ -64,7 +64,7 @@ def sbx(tmp_path, monkeypatch, backend):
     with L.transaction(by="t", lock=10) as t:
         t.add("db/mount/sbx.stage", "db/root", "sbx/stage")
         t.add("db/mount/sbx.stage", "db/repo", "sbx-repo")
-        t.add("db/repo/sbx-repo", "commit", git(repo, "rev-parse", "HEAD"))
+        t.add("db/repo/sbx-repo", "db/commit", git(repo, "rev-parse", "HEAD"))
     yield L, repo
     shutdown()
     set_env_provider(old)
