@@ -283,14 +283,14 @@ print("DB/KEYS: ", L.at()[table12_value.subject, "db/keys"])   # the memo key
 # (undecorated, run through a spec), sandboxed because it is
 # mounted. It ran in a sandboxed worker, its code the mounted files
 # it loaded; `db/fn` names it, and the first clean run wrote the
-# package's version clock at `db/repo/q-dats/mymodule`.
+# package's version clock, `db/repo/q-dats/mymodule` `db/version`.
 
 # %%
 # print results
 run_fn = Dat.ns.load("mymodule.mult.build_table")
-print("FN:      ", repr(run_fn), " kind:", run_fn.kind, " sandboxed:", run_fn.code.sandboxed)
-print("DB/FN:   ", L.at()[table12_value.subject, "db/fn"])
-print("VERSION: ", L.at()["db/repo/q-dats/mymodule", "version"])   # db/repo/q-dats/mymodule
+print("FN:         ", repr(run_fn), " kind:", run_fn.kind, " sandboxed:", run_fn.code.sandboxed)
+print("DB/FN:      ", L.at()[table12_value.subject, "db/fn"])
+print("DB/VERSION: ", L.at()["db/repo/q-dats/mymodule", "db/version"])   # db/repo/q-dats/mymodule
 
 # %% [markdown]
 # The same spec asked again is a memo hit: nothing runs, nothing is

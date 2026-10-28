@@ -6,6 +6,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## 2.38.0 — 2026-10-27
+
+- **The code clocks' predicates are under `db/`: `db/repo/<repo> db/commit` and `db/repo/<repo>/<package> db/version` (DAT 1052 Q2 B).** Every predicate the ledger writes or interprets carries `db/`; these two were the bare exceptions. Subjects are unchanged. As `db/` predicates they are fixed at `one`, hidden from `preds()`, kept by `t[s] = {...}`, and skip the `db/type` check. The seal's clock advance, `clean=True`'s `NotClean` check, the docs (`DAT Ledger` § Versioning) and the demo sheets read the new names. **No alias, no migration:** a ledger holding bare `commit` / `version` clock rows is not read; `clean=True` against it raises `NotClean` (no `db/commit`) until the next clean run writes the clocks. Migration: `rev["db/repo/r", "commit"]` → `rev["db/repo/r", "db/commit"]`; `rev["db/repo/r/p", "version"]` → `rev["db/repo/r/p", "db/version"]`. User `version` / `commit` predicates (`bump`, `db version`) are untouched.
+
 ## 2.37.1 — 2026-10-27
 
 - **`rev.history(*pattern, since=)` replaces `rev.rows` (DAT 1052, 1049 Q6).** The history of a pattern, unfolded: every row at or before the revision, removes included, in `(rev, ord)` order; `all` is the same pattern folded. `Transaction.history` reads it at `previous_rev`. The class `Row` keeps its name; a traced read is still recorded under the call name `rows`, so stored dependencies replay unchanged. **Removed, no alias:** `Rev.rows`, `Transaction.rows`. The demo sheets and `DAT Ledger` (`^history`) follow.

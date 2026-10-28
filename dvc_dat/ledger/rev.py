@@ -26,7 +26,8 @@ if TYPE_CHECKING:
     from .namespace import LedgerNamespace
     from .ledger import Ledger
 
-#: Predicates whose cardinality is fixed at ``one``: every ``db/`` predicate, and the user clocks.
+#: Predicates whose cardinality is fixed at ``one``: every ``db/`` predicate (the ledger's clocks
+#: ``db/version`` and ``db/commit`` among them), and the user clocks ``bump`` writes.
 FIXED_ONE = frozenset({"version", "commit"})
 ALIAS_HOPS = 8
 _OMIT = object()

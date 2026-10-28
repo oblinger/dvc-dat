@@ -71,6 +71,6 @@ def pytest_sessionfinish(session, exitstatus):
 @pytest.fixture
 def coded(L):
     with L.transaction(by="test") as t:
-        t.add("db/repo/testrepo/ledger_kinds", "version", "1.0.0")
-        t.add("db/repo/testrepo", "commit", "abc1234")
+        t.add("db/repo/testrepo/ledger_kinds", "db/version", "1.0.0")
+        t.add("db/repo/testrepo", "db/commit", "abc1234")
     return L

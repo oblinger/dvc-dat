@@ -331,7 +331,7 @@ def test_bump_refuses_a_code_subject(L):
     with pytest.raises(TypeError, match="a code version lives in its source"):
         with L.transaction(by="t", lock=10) as t:
             bump(t, "db/repo/testrepo/ledger_kinds")
-    assert L.at().get("db/repo/testrepo/ledger_kinds", "version") is None
+    assert L.at().get("db/repo/testrepo/ledger_kinds", "db/version") is None
 
 
 # -- previous_rev and the lock (DAT 1039) --------------------------------------------------------

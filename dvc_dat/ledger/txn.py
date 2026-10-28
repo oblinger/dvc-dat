@@ -126,7 +126,7 @@ def _semver(text: Any) -> Optional[Tuple[int, int, int]]:
 
 def code_token(env_commit: Optional[str]) -> str:
     """The ``code/<repo>`` dependency item (a label, not a subject): the environment's commit, 8 hex
-    (T034), the commit the code ran at, whatever the ``db/repo/<repo>`` commit row says. The version is
+    (T034), the commit the code ran at, whatever the ``db/repo/<repo> db/commit`` row says. The version is
     not in the item; it stays readable from the ``db/repo/<repo>/<package>`` clocks (DAT 1044)."""
     return (env_commit or "")[:8]
 
@@ -811,9 +811,10 @@ class Transaction:
             self._ops.append(_Op(subject, p, o, True))
 
     def _advance_clock(self, repo: str, package: str, version: str, commit: str) -> None:
-        """Move the clocks of a clean run (DAT 1043, 1044): ``db/repo/<repo>/<package> version``, the version
-        the run was exposed to, one per versioned package; ``db/repo/<repo> commit``, the latest clean run
-        of any package in the repo. Written by the ledger alone, never by a person (``bump_source`` edits
+        """Move the clocks of a clean run (DAT 1043, 1044): ``db/repo/<repo>/<package> db/version``, the version
+        the run was exposed to, one per versioned package; ``db/repo/<repo> db/commit``, the latest clean run
+        of any package in the repo. Both are ``db/`` predicates (DAT 1052 Q2 B): fixed one, hidden from
+        ``preds()``, kept by ``t[s] = {...}``. Written by the ledger alone, never by a person (``bump_source`` edits
         the source).
 
         Only a plain ``MAJOR.MINOR.PATCH`` counts: a dirty checkout's ``<commit 8>+dirty``, a bare commit
@@ -825,18 +826,18 @@ class Transaction:
         self._clocks.add((repo, package))
         seen = _semver(version)
         subject = f"db/repo/{repo}/{package}"
-        row = self._snapshot().get(subject, "version", default=None)
+        row = self._snapshot().get(subject, "db/version", default=None)
         held = _semver(row) if isinstance(row, str) else None
         if held is not None and held > seen:
             warnings.warn(f"{subject}: the run's code is {version}, below the ledger's {row}; the clock keeps "
                           f"{row}", stacklevel=2)
         elif held is None or held < seen:
-            self.add(subject, "version", version)
+            self.add(subject, "db/version", version)
         if self._commits.get(repo) != commit:
             self._commits[repo] = commit
-            if self._snapshot().get(f"db/repo/{repo}", "commit", default=None) != commit or \
-                    any(op.s == f"db/repo/{repo}" and op.p == "commit" for op in self._ops):
-                self.add(f"db/repo/{repo}", "commit", commit)
+            if self._snapshot().get(f"db/repo/{repo}", "db/commit", default=None) != commit or \
+                    any(op.s == f"db/repo/{repo}" and op.p == "db/commit" for op in self._ops):
+                self.add(f"db/repo/{repo}", "db/commit", commit)
 
     # -- the bracket ----------------------------------------------------------
 

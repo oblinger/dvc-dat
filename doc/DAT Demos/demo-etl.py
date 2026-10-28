@@ -198,7 +198,7 @@ show("comfort/report.py")
 # ### Mounting the code
 #
 # Mounting `comfort` makes its stages sandboxed: each call runs in a fresh process of its own, and its code is the hash of every module file the run loaded.
-# Its version is `comfort.__version__`, in the source; the first run from the clean checkout writes it to the ledger's `db/repo/comfort-repo/comfort` clock, one per versioned package.
+# Its version is `comfort.__version__`, in the source; the first run from the clean checkout writes it to the ledger's `db/repo/comfort-repo/comfort` `db/version` clock, one per versioned package.
 # A `# same as` line is the shell form, typed in the code's repo, whose justfile imports `run` from dvc-dat (`dvc_dat.just`) and the ledger verbs from the `justfile` beside this notebook.
 
 # %%
@@ -222,8 +222,8 @@ print(comfort_report_value.obj)
 # → {'comfortable': '213/1095 days', 'top': ['Austin', 'Boston']}
 print(ran_since(counts_before))
 # → {'daily_comfort': 3, 'city_comfort': 3, 'comfort_report': 1}
-print("db/repo/comfort-repo/comfort:", L.at()["db/repo/comfort-repo/comfort", "version"])
-# → db/repo/comfort-repo/comfort: 0.1.0: the clock, written by this first clean run
+print("db/version:", L.at()["db/repo/comfort-repo/comfort", "db/version"])
+# → db/version: 0.1.0: the clock, written by this first clean run
 # same as:
 #   just run comfort.report.comfort_report cityset=cityset/representative start=2026-01-01 end=2027-01-01
 
