@@ -39,7 +39,7 @@ DATA_SUFFIXES = (".yaml", ".yml", ".json")
 
 def resolve_name(rev: "Rev", name: str) -> Any:
     """What the dotted ``name`` denotes at ``rev``: a dict, an ``Fn``, a literal, or the imported object."""
-    if not isinstance(name, str) or not name or not all(name.split(".")):
+    if not _dotted(name):
         raise ImportError(f"{name!r} is not a dotted name")
     plain = rev._plain()
     for prefix, info in sorted(mounts_at(plain).items(), key=lambda kv: -len(kv[0])):
@@ -49,6 +49,13 @@ def resolve_name(rev: "Rev", name: str) -> Any:
     if callable(obj) and getattr(obj, "__ledger_fn__", False):
         return installed_fn(rev, name, obj)
     return obj
+
+
+def _dotted(name: Any) -> bool:
+    """A dotted name: non-empty segments, none holding a path separator (``a./etc/x`` would leave the
+    mount: ``Path.joinpath`` drops the root at an absolute segment)."""
+    return (isinstance(name, str) and bool(name) and all(name.split("."))
+            and "/" not in name and "\\" not in name)
 
 
 def project_repo() -> str:
@@ -90,6 +97,8 @@ def _mounted(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Any:
         root = mount_root(name, prefix, info)
         for cut in range(len(rest), -1, -1):
             base = root.joinpath(*rest[:cut])
+            if not base.is_relative_to(root):     # lexical: a symlink inside the tree is the tree's
+                raise ImportError(f"{name!r} leaves its mount {prefix!r} ({root})")
             tail = rest[cut:]
             data = [base.with_suffix(s) for s in DATA_SUFFIXES if cut and base.with_suffix(s).is_file()]
             py = base / "__init__.py" if (base / "__init__.py").is_file() else (
@@ -261,6 +270,8 @@ class LedgerNamespace(Namespace):
         for key, v in (("at", at), ("root", root), ("repo", repo)):
             if not isinstance(v, str) or not v:
                 raise TypeError(f"t.ns.mount: {key} is a non-empty str, got {v!r}")
+        if not _dotted(at):
+            raise ValueError(f"t.ns.mount: at is a dotted name (non-empty segments, no '/'), got {at!r}")
         self._txn.update(f"db/mount/{at}", {"db/root": root, "db/repo": repo})
 
     def mounts(self) -> Dict[str, Dict[str, str]]:  # type: ignore[override]

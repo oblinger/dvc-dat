@@ -188,17 +188,17 @@ class Namespace:
             raise KeyError(f"ns.load: {file_base!r} is mounted more than once")
         elif isinstance(obj, ModuleType):
             if len(parts) < 2:
-                result = getattr(obj, _MAIN) if hasattr(obj, _MAIN) else None
+                result = getattr(obj, _MAIN, _DO_NULL)
             else:
-                result = getattr(obj, parts[1]) if hasattr(obj, parts[1]) else None
-                result = Dat.get(result, parts[2:], None) if result is not None else None
+                result = getattr(obj, parts[1], _DO_NULL)
+                result = _get_present(result, parts[2:])
         elif len(parts) == 1:
             result = obj
         elif isinstance(obj, dict):
-            result = Dat.get(obj, parts[1:], None)
+            result = _get_present(obj, parts[1:])
         else:
             raise KeyError(f"ns.load: illegal mounted value {obj!r} for {dotted_name}")
-        if result is None:
+        if result is _DO_NULL:
             name = dotted_name[len(file_base) + 1:] or _MAIN
             source = obj.__file__ if isinstance(obj, ModuleType) else obj
             raise KeyError(f"ns.load: {name!r} is missing from {source!r}")
@@ -288,7 +288,7 @@ class Namespace:
         elif file is not None:
             path = os.path.join(relative_to, file)
             _refuse_import_clash(_top_name(at), "file", path, own=path)
-            self._base_locations[at] = path
+            self._reg_module(at, path, allow_redefine=True)     # drops what an earlier mount cached
         elif module is not None:
             if isinstance(module, ModuleType):
                 own = getattr(module, "__file__", None)
@@ -304,7 +304,11 @@ class Namespace:
             self._reg_module(at, module, allow_redefine=True)
         else:
             _refuse_import_clash(_top_name(at), "value", repr(value)[:60])
+            self._base_locations.pop(at, None)
+            self._base_objects.pop(at, None)
             self._reg_value(at, value)
+        if value is None and self._registered_values:
+            self._registered_values.pop(at, None)               # a remount replaces a value mounted there
 
     def _get_base(self, base: str, default: Any = _DO_NULL) -> Any:
         """The module or object mounted at base name `base`."""
@@ -336,6 +340,18 @@ class Namespace:
         if self._registered_values is None:
             self._registered_values = {}
         self._registered_values[dotted_name] = value
+
+
+def _get_present(obj: Any, keys: List[str]) -> Any:
+    """`obj` walked by `keys`; `_DO_NULL` when a key is missing -- a null in the file is `None`, not
+    missing (`Dat.get` reads both as missing)."""
+    for k in keys:
+        if obj is _DO_NULL or obj is None:     # under a null, as under a missing key: missing
+            return _DO_NULL
+        if not isinstance(obj, dict):
+            raise ValueError(f"GET: Expected dict value for {k!r} not {obj!r}")
+        obj = obj.get(k, _DO_NULL)
+    return obj
 
 
 def _top_name(name: str) -> str:
@@ -421,7 +437,7 @@ def _build_loadables_index(folder: str, at: str) -> Dict[str, Any]:
     for path in Path(folder).rglob('*'):
         base, ext = os.path.splitext(path)
         loc = os.path.relpath(base, folder)
-        loc = os.path.join(at, loc) if at else loc
+        loc = os.path.join(at.replace(".", "/"), loc) if at else loc   # lookup joins a name's parts by /
         if not path.is_file() or ext not in _DO_EXTENSIONS or os.path.basename(base) == '__init__':
             continue
         elif loc in results:
