@@ -1,0 +1,71 @@
+{
+ "date": "20261029T141042Z",
+ "machine": {
+  "host": "dexter.local",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "machine": "x86_64",
+  "cpus": 12,
+  "python": "3.12.14",
+  "sqlite": "3.53.1",
+  "store": "sqlite"
+ },
+ "config": {
+  "ledger": "/private/tmp/svp1468/sq-4-16-0.02",
+  "handles": 4,
+  "threads": 16,
+  "transactions": 200,
+  "write_share": 0.5,
+  "lock": 0.02,
+  "flips": 60,
+  "flip_pause": 0.01,
+  "seed": 0,
+  "k": 4
+ },
+ "wall_s": 237.813,
+ "hung": [],
+ "transactions_committed": 1649,
+ "top": 1650,
+ "tx_per_s": 6.93,
+ "reads": 1577,
+ "reads_per_s": 6.63,
+ "flips": 51,
+ "flip_lock_timeouts": 9,
+ "counts": {
+  "write": {
+   "ok": 1598,
+   "LockTimeout": 25
+  },
+  "read": {
+   "ok": 1577
+  }
+ },
+ "latency": {
+  "write": {
+   "n": 1623,
+   "p50_ms": 11.246,
+   "p90_ms": 18.968,
+   "p99_ms": 52.342,
+   "max_ms": 1270.041
+  },
+  "read": {
+   "n": 1577,
+   "p50_ms": 2277.582,
+   "p90_ms": 4093.498,
+   "p99_ms": 4540.935,
+   "max_ms": 4839.488
+  }
+ },
+ "errors": [],
+ "invariants": {
+  "failures": [],
+  "counts": {},
+  "top": 1650,
+  "setup_top": 1,
+  "checked": {
+   "committed": 1598,
+   "reads": 1577,
+   "flips": 51,
+   "revisions_read": 858
+  }
+ }
+}
