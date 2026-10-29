@@ -57,9 +57,11 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
   keeps `ledger.db` (or a Postgres schema) and its own `art/`. Both key
   bytes by sha256; they are separate folders.
 - **One configuration file.** `.datconfig.yaml` configures the dat
-  manager and, under `ledger:`, names the ledger; `Ledger()` finds it by
-  walking up from the working directory and asserts its `mounts:` as
-  ledger rows.
+  manager and, under `ledger:`, names the ledger, or under `ledgers:`
+  several by name (`ledgers.record`); `Ledger()` and `L` find the active
+  one by walking up from the working directory (`DAT_LEDGER`, else the
+  section's `default:` from `.datconfig.override.yaml`) and assert its
+  `mounts:` as ledger rows.
 
 ## Designed, not yet built
 

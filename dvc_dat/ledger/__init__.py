@@ -7,7 +7,7 @@ entry findable by ``Rev.run``. SQLite backend; ``run`` unsandboxed (in this
 process) or sandboxed (under a ``db/mount/<prefix>``, in a worker).
 
     from dvc_dat.ledger import Ledger, Ref, ledger_fn, ledger_class, bump, bump_source, attr
-    L = Ledger()                         # the nearest .datconfig.yaml
+    from dvc_dat import L, ledgers       # L: the active ledger; ledgers.record: one by name
     rev = L.at()
     with L.transaction(by="human:dan", lock=10, why="release") as t:
         bump(t, "db", "minor", confirm=lambda old, new: True)
@@ -27,12 +27,13 @@ from .namespace import LedgerNamespace
 from .policy import register_policy
 from .helpers import SourceBump, bump, bump_source
 from .ledger import Ledger
+from .named import L, ledgers
 from .rev import Ref, Rev, Row
 from .txn import Transaction, attr
 from .value import Value, ledger_class
 from ..core import Dat                  # one class: a dat is a Value (DAT 1038)
 
-__all__ = ["Ledger", "Rev", "Ref", "Row", "Transaction", "Value", "Dat", "Fn", "Code", "LedgerNamespace",
+__all__ = ["Ledger", "ledgers", "L", "Rev", "Ref", "Row", "Transaction", "Value", "Dat", "Fn", "Code", "LedgerNamespace",
            "ledger_fn", "ledger_class", "register_policy", "bump", "bump_source", "SourceBump", "attr", "LedgerError", "Multiple", "NotEvaluated", "NotClean",
            "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
            "AliasLoop", "SealBroken"]

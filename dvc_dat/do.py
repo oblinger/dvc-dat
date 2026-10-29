@@ -514,7 +514,7 @@ DESCRIPTION
     a dat, and that dat runs.  A TARGET that is a callable is simply called.
     The return value prints on stdout when it is not None.
 
-    With a `ledger:` line in the config, `x TARGET KEY=VALUE ...` is
+    With a `ledger:` line or a `ledgers:` section, `x TARGET KEY=VALUE ...` is
     rev.run(TARGET, KEY=VALUE, ...): found if computed before from the same
     inputs by the same code, else run and sealed; it prints `hit` or `ran`
     and the value, and alias=NAME names it.  TARGET is a dotted name
@@ -687,20 +687,15 @@ def _config_file(config: Union[None, str, Path]) -> Optional[Path]:
 
 
 def _ledger_of(config: Union[None, str, Path]) -> Any:
-    """The ledger the config's `ledger:` line names (`DAT_LEDGER` overriding it), else None."""
+    """The config's active ledger (`DAT_LEDGER`, else its `ledgers:` default or `ledger:` line), else None."""
     path = _config_file(config)
     if path is None:
         return None
-    led = (yaml.safe_load(path.read_text()) or {}).get("ledger")
-    if not led:
+    from .ledger.ledger import ENV, Ledger, _names_ledger, _resolve, _values
+    values = _values(path)
+    if not _names_ledger(values):
         return None
-    from .ledger import Ledger
-    from .ledger.ledger import ENV, _relative, is_dsn
-    if os.environ.get(ENV):
-        return Ledger()
-    ledger = Ledger(led if is_dsn(led) else _relative(path, led))
-    ledger._assert_mounts(path)              # the config's `mounts:` sugar, as `Ledger()` does
-    return ledger
+    return Ledger._opened(*_resolve(path, values, os.environ.get(ENV)))
 
 
 RESERVED_RUN_KEYS = ("alias",)                # control options on a ledger run, never a key

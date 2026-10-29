@@ -7,8 +7,9 @@
     Dat.manager = DatManager(dat_folders=["/work"])   # replaces the default world
     ns = Dat.ns                              # the namespace: ns.load, ns.mount, ns.mounts()
 
-The package exports four classes; everything else hangs off them. The ledger,
-the dat's record in time, is its own subpackage: `from dvc_dat.ledger import Ledger`.
+The package exports four classes and the two ledger handles, `L` (the active
+ledger) and `ledgers` (the project's ledgers by name, `ledgers.record`); the
+ledger, the dat's record in time, is its own subpackage: `from dvc_dat.ledger import Ledger`.
 """
 
 __version__ = "2.39.0"
@@ -16,5 +17,6 @@ __version__ = "2.39.0"
 from . import ledger  # noqa: F401  (first: core's Dat is a ledger Value, and the ledger names Dat)
 from .core import Dat, DatContainer, DatManager
 from .do import Namespace
+from .ledger.named import L, ledgers
 
-__all__ = ["Dat", "DatContainer", "DatManager", "Namespace"]
+__all__ = ["Dat", "DatContainer", "DatManager", "Namespace", "L", "ledgers"]

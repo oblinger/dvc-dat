@@ -96,7 +96,7 @@ DAT_CONFIG_OVERRIDE_FILE = ".datconfig.override.yaml"
 ENV_PREFIX = "DAT_"
 _CONFIG_KEYS = ("dat_folders", "art_folder", "index", "manager", "verify",
                 "run",                 # `just run` only
-                "ledger", "mounts")    # the ledger's (`Ledger()`), read there
+                "ledger", "ledgers", "mounts")    # the ledger's (`Ledger()`, `ledgers`), read there
 _DEFAULT_DAT_FOLDER = "data"
 _DEFAULT_ART_FOLDER = "art"           # beside the dat folder, never inside it
 
@@ -664,7 +664,7 @@ class DatManager:
         file.  An unknown key is `ValueError`.
         `ns` as in the constructor.
 
-        A `ledger:` key makes the namespace the ledger's (DAT 1046): `ns` is a
+        A `ledger:` key or a `ledgers:` section makes the namespace the active ledger's (DAT 1046): `ns` is a
         `LedgerNamespace`, its names the ledger's `db/mount` rows at the head, and
         `mount` refused; an adopted `ns` that is not one is not kept.
 
@@ -718,7 +718,7 @@ class DatManager:
                 raise ValueError(f"{config_path}: index is a file, got {index!r}")
             extra_values["index"] = os.path.join(root, index)
         make_default = False
-        if values.get("ledger") and config_path is not None:
+        if (values.get("ledger") or "ledgers" in values) and config_path is not None:
             from .do import _DefaultNamespace
             from .ledger.namespace import LedgerNamespace
 

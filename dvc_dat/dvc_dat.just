@@ -15,7 +15,7 @@
 # config folder is the import root (PYTHONPATH). Exit 3 when no
 # .datconfig.yaml is above the working directory.
 #
-# With a `ledger:` line in the config, `run` runs TARGET through the ledger:
+# With a `ledger:` line or a `ledgers:` section, `run` runs TARGET through the active ledger:
 # found if computed before from the same inputs by the same code, else run
 # and sealed; `alias=NAME` names the result. Without one it records nothing.
 
@@ -73,8 +73,8 @@ mounts *args:
     @"{{just_executable()}}" -f "{{justfile()}}" run --list "$@"
 
 # The ledger verbs (SVP 1465): each is `python -m dvc_dat.ledger.recipes VERB`,
-# one ledger call (`Ledger()`: $DAT_LEDGER, else the nearest .datconfig.yaml
-# with `ledger:`), run from the working directory. The interpreter is
+# one ledger call (`Ledger()`, the active ledger: $DAT_LEDGER, else the nearest
+# .datconfig.yaml's `ledgers:` default or `ledger:`), run from the working directory. The interpreter is
 # $DAT_PYTHON, else .venv/bin/python beside the justfile, else python3. A
 # project that keeps its own recipe of one of these names calls the module
 # instead. Keys and preds: `k=v`, v JSON, else the text as typed.
