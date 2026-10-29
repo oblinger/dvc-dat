@@ -1021,6 +1021,25 @@ def _check_read(p: Optional[str], caller: Any) -> None:
     raise UntracedRead(f"{p}: outside the mounts, the dats and the path folder")
 
 
+_REAL_OS_OPEN: Any = None
+
+
+def _os_open(path: Any, flags: int, mode: int = 0o777, *, dir_fd: Optional[int] = None) -> int:
+    """``os.open`` in the worker: under the guard, a path relative to ``dir_fd`` is opened by the full path
+    the descriptor names, so the ``open`` audit event (which carries no ``dir_fd``) checks the file the
+    kernel would open, not the same name under the working directory."""
+    if dir_fd is None or not STATE.guard or not isinstance(path, (str, bytes, os.PathLike)):
+        return _REAL_OS_OPEN(path, flags, mode, dir_fd=dir_fd)
+    text = os.fsdecode(os.fspath(path))
+    if os.path.isabs(text):
+        return _REAL_OS_OPEN(text, flags, mode)
+    base = _fd_path(dir_fd)
+    if base is None:
+        raise ConfinedWrite(f"{text} under descriptor {dir_fd}: a sandboxed function opens a path only by "
+                            "a descriptor naming a folder")
+    return _REAL_OS_OPEN(os.path.join(base, text), flags, mode)
+
+
 def install_worker(ledger: Any, mounts: List[Mount]) -> None:
     global IN_WORKER
     IN_WORKER = True
@@ -1035,6 +1054,8 @@ def install_worker(ledger: Any, mounts: List[Mount]) -> None:
         _REAL_IMPORT, _REAL_IMPORT_MODULE = builtins.__import__, importlib.import_module
         builtins.__import__ = _tracking_import      # a body's imports, loaded already or not (Q37 (ii))
         importlib.import_module = _tracking_import_module
+        global _REAL_OS_OPEN
+        _REAL_OS_OPEN, os.open = os.open, _os_open  # the ``open`` audit event carries no ``dir_fd``
         tempfile.gettempdir()                       # probed unconfined, so a default temp file in a body is
                                                     # refused by name (ConfinedWrite), not "no usable dir"
     STATE.mounts = mounts
@@ -1269,11 +1290,21 @@ class Server:
         return sys.executable
 
     def _ask(self, req: Dict[str, Any]) -> Dict[str, Any]:
+        broken = False
         with self.lock:
             retired = self.retired
             if not retired:
-                send(self.proc.stdin, req)
-                resp = recv(self.proc.stdout)
+                try:
+                    send(self.proc.stdin, req)
+                    resp = recv(self.proc.stdout)
+                except BaseException:
+                    # interrupted between send and recv (a `lock=` alarm, ^C): the reply may still come,
+                    # and the next call would read it as its own; the server goes, the next starts afresh
+                    self.retired = broken = True
+                    raise
+                finally:
+                    if broken:
+                        self._drop()
                 self.last = time.monotonic()
                 self._arm()
         if retired:                                 # retired between being handed out and this call
@@ -1281,6 +1312,15 @@ class Server:
         if not resp["ok"]:
             _raise(resp)
         return resp
+
+    def _drop(self) -> None:
+        """Kill the server and forget it (its pipe is out of step)."""
+        if self.timer is not None:
+            self.timer.cancel()
+        self.proc.kill()
+        with _SERVERS_LOCK:
+            if _SERVERS.get(self.key) is self:
+                del _SERVERS[self.key]
 
     def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env) -> Any:
         """One call in a forked child. A dat's run function (DAT 1045, 1046) also ships its template, its

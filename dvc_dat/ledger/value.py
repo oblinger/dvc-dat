@@ -208,6 +208,7 @@ class Value:
                             "hand seal's")
         provenance = check_provenance(provenance)
         self._sealable()
+        check_loadable(self)
         declared = self._pred_names()
         extra = [k for k in self.preds if k not in declared]
         if extra:
@@ -396,6 +397,13 @@ def check_name(name: Any) -> str:
 
 def dotted(cls: type) -> str:
     return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def check_loadable(value: "Value") -> None:
+    """Refuse at the seal a value whose class no load can find: one defined inside a function."""
+    if "<" in type(value).__qualname__:
+        raise TypeError(f"{dotted(type(value))}: a value class defined inside a function seals but never loads "
+                        "back; define it at module level")
 
 
 def takes_name(cls: type) -> bool:

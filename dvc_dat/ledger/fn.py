@@ -36,7 +36,7 @@ from .codec import canonical, hash_text, ref_text, sha256
 from .env import Env, current_env, repo_of
 from .errors import NotClean, NotEvaluated
 from .code import Code
-from .value import Blob, Value, dotted
+from .value import Blob, Value, check_loadable, dotted
 from ..core import Dat
 
 if TYPE_CHECKING:
@@ -170,6 +170,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
                         "own result, so return it unsealed")
     t._open("seal")
     value._sealable()
+    check_loadable(value)
     if ledger_key(t._ledger) != run.ledger:
         raise ValueError(f"{run.name}: the result ran against {run.ledger}; its memo entry goes there, "
                          f"not to {ledger_key(t._ledger)}")

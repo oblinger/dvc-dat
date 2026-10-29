@@ -94,13 +94,15 @@ class Namespace:
             Dat.set(spec, DAT_KWARGS, merged)
         return spec
 
-    def _dat_from_template(self, spec: Spec, *, path: Optional[str] = None) -> Tuple[Dat, bool]:
-        """Create the dat a template spec describes (see `DatManager.create`).
+    def _dat_from_template(self, spec: Spec, *, path: Optional[str] = None,
+                           manager: Optional[DatManager] = None) -> Tuple[Dat, bool]:
+        """Create the dat a template spec describes (see `DatManager.create`) in `manager`, the
+        world running it (default this namespace's; one namespace may serve several worlds).
 
         Returns `(dat, skip_execution)`; `skip_execution` is True when
         `dat.target_exists: use` found the dat already there.
         """
-        manager = self.manager
+        manager = manager or self.manager
         spec = self._merge_bases(copy.deepcopy(spec))
         path = path or Dat.get(spec, DAT_NAME, None)
         target_exists = Dat.get(spec, DAT_TARGET_EXISTS, "error")
@@ -164,28 +166,30 @@ class Namespace:
         if self._registered_values:
             for cut in range(len(parts), 0, -1):   # the longest mounted prefix
                 key = ".".join(parts[:cut])
-                if _DO_NULL == (value := self._registered_values.get(key, _DO_NULL)):
+                if (value := self._registered_values.get(key, _DO_NULL)) is _DO_NULL:
                     continue
                 value = _parse_yaml_prefix(value)
                 if cut < len(parts):
                     if not isinstance(value, dict):
                         raise KeyError(f"ns.load: {key!r} is a mounted value, "
                                        f"not a mapping; {dotted_name!r} is not in it")
-                    value = Dat.get(value, parts[cut:], _DO_NULL)
+                    value = _get_present(value, parts[cut:])
                     if value is _DO_NULL:
                         raise KeyError(f"ns.load: {'.'.join(parts[cut:])!r} "
                                        f"is missing from the value mounted at {key!r}")
                 return copy.deepcopy(value) if isinstance(value, dict) else value
-        obj = self._get_base(file_base, default=None)
+        # A folder mount indexes its files by path under `at`: `catalog/models/baseline` answers to
+        # `catalog.models.baseline`; the longest such prefix wins, over a file named by the first part
+        # alone (`train.yaml` does not hide `train/fast.yaml`).
+        obj = None
+        for cut in range(len(parts), 1, -1):
+            key = "/".join(parts[:cut])
+            if key in self._base_locations:
+                obj = self._get_base(key)
+                file_base, parts = key, [key] + parts[cut:]
+                break
         if obj is None:
-            # A folder mount indexes its files by path under `at`: `catalog/models/baseline`
-            # answers to `catalog.models.baseline`, so try the longest such prefix.
-            for cut in range(len(parts), 1, -1):
-                key = "/".join(parts[:cut])
-                if key in self._base_locations:
-                    obj = self._get_base(key)
-                    file_base, parts = key, [key] + parts[cut:]
-                    break
+            obj = self._get_base(file_base, default=None)
         if obj is None:
             return _DO_NULL
         if obj == _DO_ERROR_FLAG:
@@ -251,8 +255,10 @@ class Namespace:
                 for at, loc in self._base_locations.items()}
 
     def _mounted_names(self) -> Iterable[str]:
-        """Every mounted base name (the command line's `--list`, the just targets)."""
-        return self._base_locations.keys()
+        """Every mounted name, `mount(value=...)` ones included (the command line's `--list`, the just
+        targets)."""
+        values = [k for k in self._registered_values or () if k not in self._base_locations]
+        return list(self._base_locations) + values
 
     def _resolve_dat_folder(self, name: str) -> Optional[str]:
         """The folder of a dat mounted as `<name>/_spec_`, else None."""
@@ -319,7 +325,8 @@ class Namespace:
         if base in self._base_objects:
             result = self._base_objects[base]
         elif base in self._base_locations:
-            self._base_objects[base] = _load_base_entity(base, self._base_locations[base])
+            loc = self._base_locations[base]        # two files with one stem: the flag, refused by name
+            self._base_objects[base] = loc if loc is _DO_ERROR_FLAG else _load_base_entity(base, loc)
             result = self._base_objects[base]
         elif default is _DO_NULL:
             raise KeyError(f"ns: base {base + '...'!r} is not mounted")
@@ -352,8 +359,8 @@ def _get_present(obj: Any, keys: List[str]) -> Any:
     for k in keys:
         if obj is _DO_NULL or obj is None:     # under a null, as under a missing key: missing
             return _DO_NULL
-        if not isinstance(obj, dict):
-            raise ValueError(f"GET: Expected dict value for {k!r} not {obj!r}")
+        if not isinstance(obj, dict):           # missing, as `default=` reads it (KeyError)
+            raise KeyError(f"ns.load: {k!r} is not in {obj!r}, which is not a mapping")
         obj = obj.get(k, _DO_NULL)
     return obj
 
@@ -625,7 +632,9 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
     target, fixed = args[0], [arg_value(a) for a in args[1:]]
     try:
         cmd = ns.load(target)
-    except (ImportError, AttributeError, KeyError) as e:
+    except Exception as e:                  # a mounted file that does not parse included: one line, 2
+        if os.environ.get("DAT_DEBUG"):
+            raise
         return _fail(f"cannot load {target!r}: {_message(e)}", code=2)
     if "usage" in flags:
         usage = ns.load(target.split(".")[0] + ".usage", default=None)
@@ -824,9 +833,11 @@ def _parse_argv(argv: List[str]) -> Tuple[List[Tuple[str, Any]], List[str], Dict
             i += 1
         elif arg in ("--dry-run", "--usage"):
             flags.add(arg[2:])
+        elif not args and not arg.startswith("-"):
+            args.append(arg)                # the first word is the TARGET, never parsed (cli.md)
         elif (match := _KWARG.match(arg)):
             kwargs[match.group(1)] = arg_value(arg[match.end():])
-        elif arg.startswith("-") and arg != "-":
+        elif arg.startswith("-") and arg != "-" and isinstance(arg_value(arg), str):
             raise ValueError(f"unknown option {arg!r}; "
                              f"keyword arguments are written KEY=VALUE")
         else:
@@ -896,5 +907,6 @@ def _message(error: BaseException) -> str:
 
 def _fail(text: str, code: int = 1) -> int:
     """Print a one-line error on stderr and return the exit code."""
+    text = " ".join(line.strip() for line in text.splitlines() if line.strip())   # a YAML error spans lines
     print(f"run: {text}", file=sys.stderr)
     return code

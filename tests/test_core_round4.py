@@ -159,3 +159,118 @@ def test_set_and_json_set_the_key_they_name(world):
     spec = _SEEN["spec"]
     assert spec["cfg"] == {} and spec["stages"] == [{"name": "z"}]
     assert spec["dat"]["do"] == "see_fn" and spec["dat"]["title"] == "T"     # a dotted key sets one leaf
+
+
+# --- round 4, the core items still open on 2026-10-29 (Tink's 31-item list, #1-#20) ---------------------------
+
+def test_overwrite_never_deletes_a_folder_holding_the_dat_folder(world, tmp_path):
+    (tmp_path / "keep").write_text("k")
+    for name in ("..", "."):
+        with pytest.raises(Exception, match="refusing to delete"):
+            world.create({"dat": {"name": name, "target_exists": "overwrite"}})
+    assert (tmp_path / "keep").read_text() == "k" and (tmp_path / "data").is_dir()
+
+
+def _where(dat):
+    dat.save()
+
+
+def test_a_namespace_shared_by_two_worlds_runs_in_the_callers(world, tmp_path):
+    from dvc_dat import DatManager
+    other = tmp_path / "other"
+    other.mkdir()
+    DatManager(dat_folders=[str(other)], ns=world.ns)
+    world.ns.mount(at="where_fn", value=_where)
+    world.run({"dat": {"do": "where_fn", "name": "here"}})
+    assert (tmp_path / "data" / "here").is_dir() and not list(other.iterdir())
+
+
+def _echo(*args, **kwargs):
+    return [list(args), kwargs]
+
+
+def test_a_kwarg_named_target_passes_through(world):
+    assert world.run(_echo, target="G1") == [[], {"target": "G1"}]
+
+
+def test_a_negative_number_is_a_positional(world, capsys):
+    from dvc_dat.do import _cmd_do
+    world.ns.mount(at="echo_fn", value=_echo)
+    assert _cmd_do(["echo_fn", "-1", "-2.5"]) == 0
+    assert capsys.readouterr().out.strip() == "[[-1, -2.5], {}]"
+
+
+def test_the_first_word_is_the_target_never_parsed(world, capsys):
+    from dvc_dat.do import _cmd_do
+    assert _cmd_do(["k=1"]) == 2
+    assert "cannot load 'k=1'" in capsys.readouterr().err
+
+
+def test_two_files_with_one_stem_are_refused_by_name(world, tmp_path, capsys):
+    from dvc_dat.do import _cmd_do
+    d = tmp_path / "cfg" / "dup"
+    d.mkdir(parents=True)
+    (d / "exp.yaml").write_text("x: 1\n")
+    (d / "exp.py").write_text("y = 2\n")
+    world.ns.mount(folder=str(tmp_path / "cfg"), at="c")
+    with pytest.raises(KeyError, match="more than once"):
+        world.ns.load("c.dup.exp")
+    assert world.ns.load("c.dup.exp.x", default="none") == "none"
+    assert _cmd_do(["c.dup.exp"]) == 2
+
+
+def test_a_name_through_a_non_mapping_is_missing(world, tmp_path):
+    class K:
+        attr = 1
+    world.ns.mount(at="modG", value={"m": {"K": K}})
+    assert world.ns.load("modG.m.K.attr", default=None) is None
+    (tmp_path / "m.py").write_text("class K:\n    attr = 1\n")
+    world.ns.mount(file=str(tmp_path / "m.py"), at="modH")
+    assert world.ns.load("modH.K.attr", default="d") == "d"
+    with pytest.raises(KeyError):
+        world.ns.load("modH.K.attr")
+
+
+def test_a_mounted_yaml_that_does_not_parse_is_one_line(world, tmp_path, capsys):
+    from dvc_dat.dat_tools import cmd_list
+    from dvc_dat.do import _cmd_do
+    (tmp_path / "cfg").mkdir()
+    (tmp_path / "cfg" / "broken.yaml").write_text("a: [1\n")
+    (tmp_path / "cfg" / "fine.yaml").write_text("a: 1\n")
+    world.ns.mount(folder=str(tmp_path / "cfg"), at="b")
+    assert _cmd_do(["b.broken"]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("run: cannot load 'b.broken'") and len(err.strip().splitlines()) == 1
+    cmd_list("b")                           # every other name still listed
+    out = capsys.readouterr().out
+    assert "b/fine" in out and "cannot load" in out
+
+
+def test_a_value_mount_is_listed(world, capsys):
+    from dvc_dat.dat_tools import cmd_list
+    world.ns.mount(at="vv", value={"q": 1})
+    cmd_list("vv")
+    assert any(line.split()[:1] == ["vv"] for line in capsys.readouterr().out.splitlines())
+
+
+def test_named_lists_merge_in_order_and_drop_remove_markers(world):
+    world.ns.mount(at="b1", value={"stages": [{"name": "a", "x": 1}, {"name": "gone", "remove": True}]})
+    world.ns.mount(at="c1", value={"dat": {"base": "b1"},
+                                   "stages": [{"name": "a", "remove": True}, {"name": "a", "x": 2}]})
+    spec = world.ns._merge_bases("c1")
+    assert spec["stages"] == [{"name": "a", "x": 2}]
+
+
+def test_a_folder_entry_is_not_hidden_by_a_file_of_its_first_part(world, tmp_path):
+    cfg = tmp_path / "cfg"
+    (cfg / "train").mkdir(parents=True)
+    (cfg / "train.yaml").write_text("lr: 1\n")
+    (cfg / "train" / "fast.yaml").write_text("lr: 2\n")
+    world.ns.mount(folder=str(cfg))
+    assert world.ns.load("train.lr") == 1 and world.ns.load("train.fast.lr") == 2
+
+
+def test_an_array_mounted_as_a_value_loads(world):
+    np = pytest.importorskip("numpy")
+    world.ns.mount(at="arr", value=np.arange(3))
+    assert list(world.ns.load("arr")) == [0, 1, 2]
