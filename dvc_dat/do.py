@@ -638,11 +638,11 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
                  + [f"{k}={v!r}" for k, v in kwargs.items()])
         print(f"Dat.manager.run({', '.join(shown)})")
         if overrides:
-            print(f"  with the spec updated by --set/--json: {overrides!r}")
+            print(f"  with the spec updated by --set/--json: {dict(overrides)!r}")
         return 0
     try:
         if isinstance(cmd, dict):
-            spec = merge_dicts(ns._merge_bases(cmd), overrides)
+            spec = _apply_sets(ns._merge_bases(cmd), overrides)
             result = Dat.manager.run(spec, *fixed, **kwargs)
         elif overrides:
             return _fail(f"--set/--json need a template spec; "
@@ -693,7 +693,8 @@ def _ledger_of(config: Union[None, str, Path]) -> Any:
 RESERVED_RUN_KEYS = ("alias",)                # control options on a ledger run, never a key
 
 
-def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: Spec, flags: set) -> int:
+def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: List[Tuple[str, Any]],
+              flags: set) -> int:
     """`x TARGET k=v ...` with a ledger: `rev.run(TARGET, **kwargs)`, found if computed before, else run
     and sealed (DAT 1046).
 
@@ -728,7 +729,7 @@ def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: S
     run_target: Any = target
     keys: Dict[str, Any] = {}
     if spec is not None:
-        spec = merge_dicts(copy.deepcopy(spec), overrides)
+        spec = _apply_sets(spec, overrides)
         if isinstance(spec.get("main"), str):
             run_target = spec["main"]
             keys = {k: v for k, v in spec.items() if k not in ("main", "command")}
@@ -788,13 +789,15 @@ def _cmd_info(argv: List[str]) -> int:
     return 0
 
 
-def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
+def _parse_argv(argv: List[str]) -> Tuple[List[Tuple[str, Any]], List[str], Dict[str, Any], set]:
     """Split `x TARGET` arguments into spec overrides, positionals, kwargs and flags.
 
-    Positionals come back as written (the first is the target name); every
+    The overrides are the `--set` / `--json` `(DOTTED.KEY, value)` pairs in order, each setting
+    one key (`_apply_sets`).  Positionals come back as written (the first is the target name); every
     KEY=VALUE value is `arg_value` (JSON, else the text).  A malformed line raises `ValueError`.
     """
-    overrides: Spec = {}
+    overrides: List[Tuple[str, Any]] = []
+    shape: Spec = {}                    # the keys the line sets, so a key under a scalar it set is refused
     args: List[str] = []
     kwargs: Dict[str, Any] = {}
     flags: set = set()
@@ -816,7 +819,8 @@ def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
                     raise ValueError(f"--json {key}: illegal JSON: {e}")
             else:
                 value = arg_value(value)
-            Dat.set(overrides, key, value)
+            Dat.set(shape, key, copy.deepcopy(value))
+            overrides.append((key, value))
             i += 1
         elif arg in ("--dry-run", "--usage"):
             flags.add(arg[2:])
@@ -829,6 +833,15 @@ def _parse_argv(argv: List[str]) -> Tuple[Spec, List[str], Dict[str, Any], set]:
             args.append(arg)
         i += 1
     return overrides, args, kwargs, flags
+
+
+def _apply_sets(spec: Spec, overrides: List[Tuple[str, Any]]) -> Spec:
+    """A copy of `spec` with each `--set` / `--json` pair applied in order: the value replaces what the
+    dotted key held (a dict or a named list too, never merged into it); missing levels are made."""
+    out = copy.deepcopy(spec)
+    for key, value in overrides:
+        Dat.set(out, key, copy.deepcopy(value))
+    return out
 
 
 def _operands(argv: List[str], i: int, count: int) -> List[str]:

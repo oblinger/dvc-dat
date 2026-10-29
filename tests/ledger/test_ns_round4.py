@@ -110,6 +110,28 @@ def test_f1b_a_sandboxed_body_reads_outside_the_mounts_through_ns_load(sbx, worl
         print("LEAKED:", v.get_results()["got"])
 
 
+# -- F2: a mounted yaml a sandboxed body loads through the ns is part of its code item ------------------
+
+def test_f2_editing_a_mounted_yaml_a_body_loaded_recomputes(sbx, world):
+    """A body reading a mounted spec through Dat.manager.ns.load depends on its bytes: a committed edit
+    to the yaml is a miss, not a stale hit (the code item hashed only the .py modules it loaded)."""
+    L, repo = sbx
+    v = L.at().run({"dat": {"do": "sbx.stage.runs.cfg"}})
+    assert v.get_results()["n"] == 3
+    (repo / "sbx/stage/specs/base.yaml").write_text("dat:\n  kwargs: {n: 4}\n")
+    git(repo, "commit", "-q", "-am", "n=4")
+    again = L.at().run({"dat": {"do": "sbx.stage.runs.cfg"}})
+    assert again.get_results()["n"] == 4, "stale memo hit: the body's input moved, the entry did not"
+
+
+# -- F6: a mounted @ledger_fn imported under another name is still a ledger function --------------------
+
+def test_f6_an_aliased_ledger_fn_decorator_is_still_a_ledger_fn(sbx):
+    L, _repo = sbx
+    assert L.at().ns.load("sbx.stage.aliased.area").kind == "ledger"
+    assert L.at().run("sbx.stage.aliased.area", side=3).obj == {"area": 9}
+
+
 
 
 # -- F3: plain Namespace: a folder mounted at a dotted `at` answers to nothing ------------------------

@@ -115,6 +115,17 @@ def test_a_nan_is_not_json(L):
             t.add("g", "p", {"x": float("inf")})
 
 
+def test_a_by_dict_that_would_not_read_back_is_refused(L):
+    """`by` is a JSON dict, read back as the dict: a non-str key (JSON writes it as a str) is TypeError."""
+    for by in ({1: "a"}, {"host": {2: "b"}}, {True: "a"}):
+        with pytest.raises(TypeError):
+            with L.transaction(by=by):
+                pass
+    with L.transaction(by={"host": "h", "admins": ["a"]}) as t:
+        pass
+    assert t.rev[t.rev.tx, "db/by"] == {"host": "h", "admins": ["a"]}
+
+
 def test_a_locked_transaction_keeps_the_callers_itimer(L):
     fired = []
     old = signal.signal(signal.SIGALRM, lambda *a: fired.append(1))

@@ -78,7 +78,7 @@ The `TARGET` itself is never parsed.
 
 | Option | Does |
 |--------|------|
-| `--set DOTTED.KEY=VALUE` | Set one spec key of a template before it forks; repeat the flag for more. The value is JSON, else the text as typed. |
+| `--set DOTTED.KEY=VALUE` | Set one spec key of a template before it forks; repeat the flag for more, applied in order. The value is JSON, else the text as typed, and replaces what the key held: a dict or a list is not merged into it, so `--json cfg={}` empties `cfg`. |
 | `--json DOTTED.KEY=JSON` | The same, with the value parsed as JSON; repeatable, and mixes freely with `--set`. |
 | `--dry-run` | Print the `Dat.manager.run(...)` call this line would make, and any `--set` / `--json` updates, without making it. |
 | `--usage` | Print `TARGET`'s own usage — a `<base>.usage` value, else the spec's `usage` key — else the general usage. |

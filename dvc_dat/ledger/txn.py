@@ -98,9 +98,12 @@ def by_text(by: Any) -> str:
         return "str:" + by
     if isinstance(by, dict) and by:
         try:
-            return "json:" + canonical(by, strict=True)
+            text = canonical(by, strict=True)
         except (TypeError, ValueError) as e:
             raise TypeError(f"by is not a JSON document: {e}") from None
+        if json.loads(text) != by:          # a non-str key or a tuple: JSON would read it back otherwise
+            raise TypeError(f"by is not a JSON document: {by!r} reads back as {json.loads(text)!r}")
+        return "json:" + text
     raise TypeError(f"by is a non-empty str or JSON dict, not {by!r}")
 
 
