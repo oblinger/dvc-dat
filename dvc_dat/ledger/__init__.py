@@ -24,6 +24,7 @@ from .errors import (AliasLoop, ConfinedNetwork, ConfinedWrite, Exists, LedgerEr
                      UnmountedImport, UntracedRead)
 from .fn import Fn, ledger_fn
 from .namespace import LedgerNamespace
+from .policy import register_policy
 from .helpers import SourceBump, bump, bump_source
 from .ledger import Ledger
 from .rev import Ref, Rev, Row
@@ -32,6 +33,6 @@ from .value import Value, ledger_class
 from ..core import Dat                  # one class: a dat is a Value (DAT 1038)
 
 __all__ = ["Ledger", "Rev", "Ref", "Row", "Transaction", "Value", "Dat", "Fn", "Code", "LedgerNamespace",
-           "ledger_fn", "ledger_class", "bump", "bump_source", "SourceBump", "attr", "LedgerError", "Multiple", "NotEvaluated", "NotClean",
+           "ledger_fn", "ledger_class", "register_policy", "bump", "bump_source", "SourceBump", "attr", "LedgerError", "Multiple", "NotEvaluated", "NotClean",
            "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
            "AliasLoop", "SealBroken"]

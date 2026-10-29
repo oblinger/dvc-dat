@@ -35,6 +35,9 @@ class Model:
         if self.top == 1:
             self.rows.append((1, n, "db", "db/format", FORMAT, True))
             n += 1
+            if not any(op[1] == "db" and op[2] == "db/memo-policy" for op in ops):
+                self.rows.append((1, n, "db", "db/memo-policy", "platform", True))   # SVP 1474
+                n += 1
         self.rows.append((self.top, n, f"db/tx/{self.top}", "db/by", by, True))
         self.rows.append((self.top, n + 1, f"db/tx/{self.top}", "db/time", time, True))
         return self.top

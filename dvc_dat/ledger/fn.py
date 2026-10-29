@@ -31,11 +31,12 @@ import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .codec import canonical, hash_text, ref_text, sha256
-from .env import Env, current_env, repo_of
+from .env import Env, current_env, platform_items, repo_of
 from .errors import NotClean, NotEvaluated
+from .policy import DETERMINISTIC
 from .code import Code
 from .value import Blob, Value, check_loadable, dotted
 from ..core import Dat
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
 
 #: The control options of a call (Q41): never keys, never hashed. A function may declare one as a
 #: key and is then called through ``kwargs=``; a declared ``path`` is the folder it builds (Q36).
-RESERVED_KEYS = ("seal", "clean", "path", "kwargs")
+RESERVED_KEYS = ("seal", "clean", "path", "kwargs", "deterministic")
 #: The name a folder-producing miss gets with neither ``path=`` nor a template (as ``Dat.create``).
 ANONYMOUS = "anonymous/Dat{unique}"
 
@@ -447,7 +448,8 @@ class Fn:
         return out
 
     def __call__(self, *, seal: Any = OWN, clean: bool = False, path: Any = None,
-                 kwargs: Optional[Dict[str, Any]] = None, **keys: Any) -> Optional[Value]:
+                 kwargs: Optional[Dict[str, Any]] = None, deterministic: bool = False,
+                 **keys: Any) -> Optional[Value]:
         """``f(k=v, ...)`` or ``f(kwargs={...})``: eval. The control options (Q41), never keys:
 
         ``seal``: where the result goes (DAT 1028). ``"get"``: the saved result if one holds, else
@@ -462,7 +464,9 @@ class Fn:
         ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder
         there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
         (Q36). A hit asked for under a new name takes that name. ``kwargs``: the function's whole key
-        set, for a key that is also a control option's name; inline keys beside it are ``TypeError``."""
+        set, for a key that is also a control option's name; inline keys beside it are ``TypeError``.
+        ``deterministic=True``: the lookup also asks that the entry ran on the same ``card`` and ``driver``,
+        on top of the ledger's memo policy (SVP 1474); the entry written is the same either way."""
         from .txn import Transaction
 
         if not self.code.sandboxed:
@@ -488,7 +492,7 @@ class Fn:
         item = f"eval:{self.name}{enc}"
         target = None if path is None else os.fspath(path)
         if level not in (True, False):
-            hit = lookup(plain, self.name, enc)
+            hit = lookup(plain, self.name, enc, widen=DETERMINISTIC if deterministic else ())
             if hit is not None or level == "get":
                 rev._record(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
                 at = target if target is not None or hit is None or self.kind != "dat" else hit.name
@@ -569,7 +573,7 @@ class Fn:
                 out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
             value = wrap_result(self.name, self._obj, out)
             trace = dict(rec)
-            trace.update({"code": self.code.subject, "fn": self.name, "platform": env.platform})
+            trace.update({"code": self.code.subject, "fn": self.name, **platform_items(env)})
             if repo is not None:
                 trace[f"code/{repo}"] = code_token(env.code[repo].commit)
             if save is False:
@@ -600,7 +604,7 @@ class Fn:
             value = dat
             alias_reads(plain, dat, rec)
             trace = dict(rec)
-            trace.update({"code": self.code.subject, "fn": self.name, "platform": env.platform})
+            trace.update({"code": self.code.subject, "fn": self.name, **platform_items(env)})
             if repo is not None:
                 trace[f"code/{repo}"] = code_token(env.code[repo].commit if repo in env.code else None)
             if save is False:
@@ -811,12 +815,18 @@ def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: s
     return value
 
 
-def lookup(plain: "Rev", name: str, enc: str) -> Optional[Value]:
-    """The latest-sealed entry for ``(name, keys)`` whose dependencies hold at ``plain``; never runs."""
+def lookup(plain: "Rev", name: str, enc: str, widen: Sequence[str] = ()) -> Optional[Value]:
+    """The latest-sealed entry for ``(name, keys)`` whose dependencies hold at ``plain``; never runs.
+    The memo index (``policy.reduced``) skips a candidate whose platform the policy already rules out;
+    every other candidate is judged in full (``trace_matches``, ``widen`` added to the policy)."""
+    from .policy import judge, policy_at, reduced
     from .rev import Ref
     from .trace import trace_matches
 
     top = plain.ledger.at()
+    pname, pfn = policy_at(top)
+    keys = reduced(top, pname, pfn)
+    want = judge(pfn, current_env().platform_record())
     cands = []
     for s in top._store.subjects(top.id, predicate="db/keys", obj="json:" + enc):
         fnh = top._held(s, "db/fn")
@@ -824,9 +834,11 @@ def lookup(plain: "Rev", name: str, enc: str) -> Optional[Value]:
         if fnh and fnh[0].obj == "str:" + name and val:
             cands.append((val[0].rev, val[0].ord, s))
     for _r, _o, s in sorted(cands, reverse=True):
+        if s in keys and (keys[s] is None or keys[s] != want):
+            continue                                # the policy rules its platform out: no row read
         trace = {p[len("db/deps/"):]: h.obj.partition(":")[2]
                  for _s, p, h in top._held_rows(subject=s) if p.startswith("db/deps/")}
-        if trace_matches(plain, trace):
+        if trace_matches(plain, trace, widen):
             return Ref(top, s).load()
     return None
 

@@ -10,10 +10,18 @@ the commit at HEAD, whether tracked files are modified (``dirty``: none whose
 path the repo's ``.gitattributes`` marks ``dat-noncode``, as ``core._code_of``), and the
 checkout ``path`` a mount's ``db/root`` resolves under. The commit is read on
 every call, never cached: a notebook commits mid-session.
+
+The platform record (SVP 1474) is what a memo entry stores of the machine its function ran on:
+``platform`` (today's short tag, ``<os>-<machine>-py<X.Y>``), ``os``, ``machine``, ``python``
+(``X.Y.Z``), ``cpu`` (the CPU model), and ``card``, ``driver``, ``cuda``, ``torch``, each ``None``
+when absent (no NVIDIA card, no torch). It is probed once per process; ``Env.record`` carries it,
+and the ledger's memo policy (``policy``) judges it at lookup.
 """
 
 from __future__ import annotations
 
+import functools
+import json
 import os
 import platform as _platform
 import re
@@ -22,7 +30,7 @@ import sys
 import sysconfig
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
 from ..core import CODE_PATHSPEC
 
@@ -44,11 +52,19 @@ class Checkout:
 
 @dataclass(frozen=True)
 class Env:
-    """What a provider reports: ``code`` (repo -> ``Checkout``) and the platform."""
+    """What a provider reports: ``code`` (repo -> ``Checkout``), the platform's short tag, and its full
+    ``record`` (the fields of ``platform_record``; ``None``: only the tag is known)."""
 
     code: Dict[str, Checkout]
     platform: str
     mounts: Optional[str] = field(default=None)
+    record: Optional[Mapping[str, Optional[str]]] = field(default=None)
+
+    def platform_record(self) -> Dict[str, Optional[str]]:
+        """The platform record, its ``platform`` field this environment's tag."""
+        out = dict(self.record or {})
+        out["platform"] = self.platform
+        return out
 
 
 Provider = Callable[[], Env]
@@ -70,6 +86,115 @@ def current_env() -> Env:
 
 def platform_tag() -> str:
     return f"{sys.platform}-{_platform.machine()}-py{sys.version_info[0]}.{sys.version_info[1]}"
+
+
+#: The dependency item holding the full platform record, beside the short ``platform`` item.
+RECORD_ITEM = "platform/record"
+
+
+def platform_items(env: Env) -> Dict[str, str]:
+    """A run's platform items: ``platform`` (the short tag, as before 1474) and ``platform/record`` (the
+    full record as canonical JSON), both of the environment the function ran in."""
+    from .codec import canonical
+
+    return {"platform": env.platform, RECORD_ITEM: canonical(env.platform_record())}
+
+
+def stored_record(trace: Mapping[str, str]) -> Optional[Dict[str, Any]]:
+    """The platform record a trace holds: its ``platform/record`` item; an entry written before it
+    (the short item alone) is ``{"platform": <tag>}``; ``None`` when it holds neither, or the record
+    no longer parses."""
+    text = trace.get(RECORD_ITEM)
+    if text is None:
+        return {"platform": trace["platform"]} if "platform" in trace else None
+    try:
+        rec = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(rec, dict):
+        return None
+    if "platform" in trace:
+        rec["platform"] = trace["platform"]
+    return rec
+
+
+def _run(*cmd: str) -> Optional[str]:
+    try:
+        out = subprocess.run(list(cmd), capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout if out.returncode == 0 else None
+
+
+def cpu_model() -> Optional[str]:
+    """The CPU's model name: ``sysctl`` on macOS, ``/proc/cpuinfo`` on Linux, else ``platform.processor()``."""
+    if sys.platform == "darwin":
+        text = _run("sysctl", "-n", "machdep.cpu.brand_string")
+        if text and text.strip():
+            return text.strip()
+    if sys.platform.startswith("linux"):
+        try:
+            for line in Path("/proc/cpuinfo").read_text().splitlines():
+                key, _, value = line.partition(":")
+                if key.strip() in ("model name", "Model") and value.strip():
+                    return value.strip()
+        except OSError:
+            pass
+    return _platform.processor() or None
+
+
+def parse_smi(text: str, visible: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    """``(card, driver)`` from ``nvidia-smi --query-gpu=index,name,driver_version --format=csv,noheader``:
+    the distinct names of the GPUs the process sees (``visible``, ``CUDA_VISIBLE_DEVICES``, when it is a
+    list of indexes), sorted and joined by `` + ``; ``(None, None)`` for none."""
+    rows = [[c.strip() for c in line.split(",")] for line in text.splitlines() if line.strip()]
+    rows = [r for r in rows if len(r) >= 3]
+    if visible is not None and all(v.strip().isdigit() for v in visible.split(",") if v.strip()):
+        keep = {v.strip() for v in visible.split(",") if v.strip()}
+        rows = [r for r in rows if r[0] in keep]
+    if not rows:
+        return None, None
+    return " + ".join(sorted({r[1] for r in rows})), rows[0][2]
+
+
+def gpu_fields() -> Dict[str, Optional[str]]:
+    """``card`` and ``driver`` (``nvidia-smi``), ``torch`` (its installed distribution's version) and
+    ``cuda`` (the CUDA torch was built against, read off ``torch/version.py``); torch is never imported."""
+    import shutil
+    from importlib import metadata
+
+    card = driver = cuda = torch = None
+    if shutil.which("nvidia-smi"):
+        text = _run("nvidia-smi", "--query-gpu=index,name,driver_version", "--format=csv,noheader")
+        if text:
+            card, driver = parse_smi(text, os.environ.get("CUDA_VISIBLE_DEVICES"))
+    try:
+        dist = metadata.distribution("torch")
+        torch = dist.version
+        mod = sys.modules.get("torch")
+        if mod is not None and getattr(getattr(mod, "version", None), "cuda", None):
+            cuda = str(mod.version.cuda)
+        else:
+            m = re.search(r"^cuda\s*(?::[^=]*)?=\s*['\"]([^'\"]+)['\"]",
+                          Path(str(dist.locate_file("torch/version.py"))).read_text(), re.M)
+            cuda = m.group(1) if m else None
+    except (metadata.PackageNotFoundError, OSError):
+        pass
+    return {"card": card, "driver": driver, "cuda": cuda, "torch": torch}
+
+
+@functools.lru_cache(maxsize=1)
+def _probed() -> Tuple[Tuple[str, Optional[str]], ...]:
+    rec: Dict[str, Optional[str]] = {"platform": platform_tag(), "os": sys.platform,
+                                     "machine": _platform.machine(), "python": _platform.python_version(),
+                                     "cpu": cpu_model()}
+    rec.update(gpu_fields())
+    return tuple(rec.items())
+
+
+def platform_record() -> Dict[str, Optional[str]]:
+    """This process's platform record (module doc), probed once per process."""
+    return dict(_probed())
 
 
 def _git(folder: str, *args: str) -> Optional[str]:
@@ -146,7 +271,8 @@ def discover() -> Env:
         name = repo_name(Path(top))
         if name != SELF:                        # dvc-dat itself, its demos included (A56)
             chosen[name] = top                  # a later import overrides an earlier same-named checkout
-    return Env({name: code_at(top) for name, top in sorted(chosen.items())}, platform_tag())
+    return Env({name: code_at(top) for name, top in sorted(chosen.items())}, platform_tag(),
+               record=platform_record())
 
 
 def repo_of(env: Env, path: Optional[Path]) -> Optional[str]:
