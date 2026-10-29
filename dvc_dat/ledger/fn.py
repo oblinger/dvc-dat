@@ -456,6 +456,12 @@ class Fn:
         set, for a key that is also a control option's name; inline keys beside it are ``TypeError``."""
         from .txn import Transaction
 
+        if not self.code.sandboxed:
+            from . import sandbox
+
+            if sandbox.IN_WORKER and sandbox.STATE.frames:
+                raise NotEvaluated(f"{self.name} is unsandboxed (under no mount): it does not run nested inside "
+                                   f"the sandboxed body of mount {sandbox.STATE.frames[-1].mount!r}; mount it")
         rev = self._rev
         plain = rev._plain()
         level = seal_level(self.name, plain, seal, clean, path)

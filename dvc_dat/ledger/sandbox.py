@@ -32,8 +32,11 @@ body's ``path`` folder, the dat being produced
 writes inside a body (a nested eval's seal, a dat materialised into the art
 store) run ``unguarded``. The same hook refuses a host-name lookup or an internet
 send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
-A nested eval runs in-process and its loads count toward its own entry (Q37 (ii)), a module its
-caller loaded first included: the worker's ``__import__`` credits every import a body makes, loaded
+A nested eval under the running body's own mount runs in-process and its loads count toward its own
+entry (Q37 (ii)); one under another mount runs in a fresh child of the server, asked for up the child's
+channel. A nested unsandboxed (base-mode) call is refused, ``NotEvaluated`` naming the mount and the
+function. An in-process nested eval's code includes a module its
+caller loaded first: the worker's ``__import__`` credits every import a body makes, loaded
 already or not, with what that module's first import pulled in.
 
 A dat's run function under a mount (an ``Fn`` of kind ``"dat"``, DAT 1045, 1046)
@@ -555,11 +558,17 @@ def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
     env = current_env()
     if fn._info["repo"] not in env.code:
         raise NotEvaluated(f"{fn.name}: repo {fn._info['repo']!r} has no checkout in this environment")
+    server: Any
     if IN_WORKER:
-        return run_here(fn, plain, kw, enc, save, name)
+        running = STATE.frames[-1].mount if STATE.frames else None
+        if running is None or running == fn._info["prefix"] or _UPSTREAM is None:
+            return run_here(fn, plain, kw, enc, save, name)     # nested under its own mount: in-process
+        server = _UPSTREAM                          # under another mount: a fresh child of the server
+    else:
+        server = _server()
     if save is True or save is False:
-        return _server().call(fn, plain, kw, save, env)
-    draft = _server().call(fn, plain, kw, False, env)
+        return server.call(fn, plain, kw, save, env)
+    draft = server.call(fn, plain, kw, False, env)
     run = draft.__dict__.get("_run")
     if run is None:
         raise TypeError(f"{fn.name} returned a {type(draft).__name__} sealed by v.seal(); run seals its own "
@@ -574,7 +583,8 @@ class _Frame:
     """One running body: the modules present when it started, those a nested body claimed, the modules it
     imported (``requested``, loaded already or not), and the mounted files it read (``relpath -> sha256``)."""
 
-    def __init__(self) -> None:
+    def __init__(self, mount: Optional[str] = None) -> None:
+        self.mount = mount
         self.before: Set[str] = set(sys.modules)
         self.claimed: Set[str] = set()
         self.requested: Set[str] = set()
@@ -1054,7 +1064,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
         work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None)) \
             if fn._takes_path else None
         rec: Dict[str, str] = {}
-        with _body(work) as frame:
+        with _body(work, fn._info["prefix"]) as frame:
             cwd = os.getcwd()
             try:
                 if work is not None and fn.kind != "dat":
@@ -1138,10 +1148,10 @@ _NONE = object()
 
 
 @contextmanager
-def _body(work: Optional[Path]) -> Iterator[_Frame]:
+def _body(work: Optional[Path], mount: Optional[str] = None) -> Iterator[_Frame]:
     """One running body: its frame (the modules it loads, ``frame.loaded`` once done) and its path folder,
     the one place it writes."""
-    frame = _Frame()
+    frame = _Frame(mount)
     STATE.frames.append(frame)
     STATE.works.append(os.path.realpath(work) if work is not None else None)
     try:
@@ -1380,33 +1390,73 @@ def worker_main() -> None:
             req = recv(proto_in)
         except EOFError:
             return
-        r, w = os.pipe()
-        pid = os.fork()
-        if pid == 0:                                # the child: one call, then gone
-            os.close(r)
-            status = 0
+        send(proto_out, _fork_call(req))
+
+
+def _fork_call(req: Dict[str, Any]) -> Dict[str, Any]:
+    """One request in a child forked from this warm server, its reply. A child's nested call under another
+    mount comes back up its channel (``{"nested": request}``) and runs in a child of its own, forked
+    from here as fresh as the first; its reply goes back down."""
+    r, w = os.pipe()                                # child -> server: nested requests, then the reply
+    r2, w2 = os.pipe()                              # server -> child: nested replies
+    pid = os.fork()
+    if pid == 0:                                    # the child: one call, then gone
+        global _UPSTREAM
+        os.close(r)
+        os.close(w2)
+        status = 0
+        try:
+            with os.fdopen(w, "wb") as out, os.fdopen(r2, "rb") as back:
+                _UPSTREAM = _Upstream(out, back)
+                serve(req, out)
+        except BaseException:  # noqa: BLE001 - the parent reports a child that never replied
+            status = 1
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(status)
+    os.close(w)
+    os.close(r2)
+    resp = None
+    with os.fdopen(r, "rb") as inp, os.fdopen(w2, "wb") as down:
+        while True:
             try:
-                with os.fdopen(w, "wb") as out:
-                    serve(req, out)
-            except BaseException:  # noqa: BLE001 - the parent reports a child that never replied
-                status = 1
-            finally:
-                sys.stdout.flush()
-                sys.stderr.flush()
-                os._exit(status)
-        os.close(w)
-        with os.fdopen(r, "rb") as inp:
-            try:
-                resp = recv(inp)
+                msg = recv(inp)
             except (EOFError, pickle.UnpicklingError, struct.error):
-                resp = None
-        _pid, status = os.waitpid(pid, 0)
-        if resp is None:
-            resp = {"ok": False, "exc": None, "type": "WorkerDied",
-                    "message": f"the sandboxed call's process ended (exit code "
-                               f"{os.waitstatus_to_exitcode(status)}) before it replied",
-                    "traceback": ""}
-        send(proto_out, resp)
+                break
+            if isinstance(msg, dict) and "nested" in msg:
+                send(down, _fork_call(msg["nested"]))
+                continue
+            resp = msg
+            break
+    _pid, status = os.waitpid(pid, 0)
+    if resp is None:
+        resp = {"ok": False, "exc": None, "type": "WorkerDied",
+                "message": f"the sandboxed call's process ended (exit code "
+                           f"{os.waitstatus_to_exitcode(status)}) before it replied",
+                "traceback": ""}
+    return resp
+
+
+class _Upstream:
+    """In a child: the channel to the server it was forked from, which runs a nested call under another
+    mount in a fresh child of its own (``Server``'s ``call`` and ``version``, over the child's pipes)."""
+
+    def __init__(self, out: Any, back: Any) -> None:
+        self.out, self.back = out, back
+
+    def _ask(self, req: Dict[str, Any]) -> Dict[str, Any]:
+        send(self.out, {"nested": req})
+        resp = recv(self.back)
+        if not resp["ok"]:
+            _raise(resp)
+        return resp
+
+    call = Server.call
+    version = Server.version
+
+
+_UPSTREAM: Optional[_Upstream] = None
 
 
 def serve(req: Dict[str, Any], out: Any) -> None:
