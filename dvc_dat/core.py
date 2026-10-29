@@ -59,6 +59,8 @@ def merge_dicts(*dicts: Dict, inplace: bool = False) -> Dict:
             dict_1[k] = merge_dicts(dict_1[k], v)
         elif _named_list(v) and _named_list(dict_1.get(k)):
             dict_1[k] = _merge_by_name(dict_1[k], v)
+        elif _named_list(v):                # nothing to merge into: a `remove` entry deletes nothing
+            dict_1[k] = _merge_by_name([], v)
         else:
             dict_1[k] = deepcopy(v)
     return merge_dicts(dict_1, *dicts[2:])
@@ -72,19 +74,17 @@ def _named_list(value: Any) -> bool:
 
 def _merge_by_name(base: List[Dict], over: List[Dict]) -> List[Dict]:
     """`over` merged into `base` by each entry's `name` (see `merge_dicts`)."""
-    merged = [deepcopy(e) for e in base]
-    index = {e["name"]: i for i, e in enumerate(merged)}
-    removed = set()
-    for entry in over:
-        name = entry["name"]
+    merged = [deepcopy(e) for e in base if e.get("remove") is not True]
+    for entry in over:                      # in order: a name removed, then given again, is back
+        at = next((i for i, e in enumerate(merged) if e["name"] == entry["name"]), None)
         if entry.get("remove") is True:
-            removed.add(name)
-        elif name in index:
-            merged[index[name]] = merge_dicts(merged[index[name]], entry)
+            if at is not None:
+                del merged[at]
+        elif at is not None:
+            merged[at] = merge_dicts(merged[at], entry)
         else:
-            index[name] = len(merged)
             merged.append(deepcopy(entry))
-    return [e for e in merged if e["name"] not in removed]
+    return merged
 
 
 # =============================================================================
@@ -1373,7 +1373,7 @@ class DatManager:
                 return os.path.relpath(real, folder)
         return path
 
-    def run(self, target: Any, *args: Any, **kwargs: Any) -> Any:
+    def run(self, target: Any, /, *args: Any, **kwargs: Any) -> Any:
         """Run `target` in this world: the one way to run a dat outside a ledger.
 
         - a **Dat** runs in place when no arguments are given -- refused once it
@@ -1413,7 +1413,7 @@ class DatManager:
             if not isinstance(obj, dict):
                 raise TypeError(f"run: cannot run {obj!r}; expected a callable, a spec or a Dat")
             spec = ns._fork_spec(obj, args, kwargs)
-            dat, skip_execution = ns._dat_from_template(spec)
+            dat, skip_execution = ns._dat_from_template(spec, manager=self)
             if skip_execution:
                 return dat
             return self._execute(dat)
@@ -1594,6 +1594,7 @@ class DatManager:
             elif target_exists == "use":
                 return expanded_path, True, names
             elif target_exists == "overwrite":
+                self._refuse_wipe(expanded_path, path_spec)
                 if wipe:
                     shutil.rmtree(expanded_path)
                 return expanded_path, False, names
@@ -1601,6 +1602,15 @@ class DatManager:
                 count += 1
             else:
                 raise FileExistsError(f"DAT: Create failed, dir {expanded_path!r} exists")
+
+    def _refuse_wipe(self, path: str, template: str) -> None:
+        """`overwrite` never deletes a folder holding the working directory, a dat folder, the
+        artifact folder or the config's folder: a name such as `.` or `..` expands to one."""
+        real = os.path.realpath(path)
+        for keep in (os.getcwd(), *self._dat_folders, self._art_folder, self._config_dir):
+            if keep and _within(os.path.realpath(keep), real):
+                raise ValueError(f"dat.target_exists overwrite: {template!r} names {real!r}, which "
+                                 f"holds {keep!r}; refusing to delete it")
 
     def _resolve_path(self, name: Union[str, Path]) -> str:
         name = str(name)

@@ -89,6 +89,19 @@ PKG = {
 
         TABLE = {"dat": {"do": "sbx.stage.runs.table", "kwargs": {"n": 3}}}
     '''),
+    "sbx/stage/slow.py": textwrap.dedent('''
+        import time
+        from dvc_dat.ledger import ledger_fn
+
+        @ledger_fn
+        def slow(rev, *, n: int) -> dict:
+            time.sleep(3)
+            return {"who": "slow", "n": n}
+
+        @ledger_fn
+        def fast(rev, *, n: int) -> dict:
+            return {"who": "fast", "n": n}
+    '''),
     "sbx/stage/conf.yaml": "k: 1\n",
     "sbx/plain.py": textwrap.dedent('''
         import json
@@ -220,6 +233,13 @@ PKG = {
             finally:
                 os.close(fd)
 
+        def _dirfd_open(d, w):
+            fd = os.open(d, os.O_RDONLY)
+            try:
+                os.close(os.open("by-fd-open", os.O_WRONLY | os.O_CREAT, dir_fd=fd))
+            finally:
+                os.close(fd)
+
         def _src(w):
             (w / "s").write_text("x")
             return w / "s"
@@ -250,6 +270,7 @@ PKG = {
             "named": lambda d, w: tempfile.NamedTemporaryFile(dir=d).close(),
             "sqlite": lambda d, w: sqlite3.connect(d / "x.db").execute("CREATE TABLE t (x)"),
             "dir_fd": _dirfd,
+            "os.open-dir_fd": _dirfd_open,
         }
 
         def seed(d):
@@ -651,7 +672,7 @@ WRITE_HOWS = ["open", "os.open", "o_trunc", "write_text", "mkdir", "makedirs", "
 
 def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
     L, repo = sbx
-    assert L.at().run("sbx.stage.writes.write", how="all", where="work").obj == {"n": len(WRITE_HOWS) + 1}
+    assert L.at().run("sbx.stage.writes.write", how="all", where="work").obj == {"n": len(WRITE_HOWS) + 2}
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "seed").write_text("s")
@@ -672,7 +693,9 @@ def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
         L.at().run("sbx.stage.writes.write", how="mkstemp-default", where="")
     with pytest.raises(ConfinedWrite):                  # a path relative to a descriptor on a mount
         L.at().run("sbx.stage.writes.write", how="dir_fd", where="mount")
-    assert not (repo / "sbx/stage/by-fd").exists()
+    with pytest.raises(ConfinedWrite):                  # os.open by a descriptor: its audit event names no dir_fd
+        L.at().run("sbx.stage.writes.write", how="os.open-dir_fd", where="mount")
+    assert not (repo / "sbx/stage/by-fd").exists() and not (repo / "sbx/stage/by-fd-open").exists()
 
 
 READ_HOWS = ["open", "os.open", "listdir", "scandir", "iterdir", "copy"]
@@ -868,3 +891,13 @@ def test_rev_has_one_run_and_ns():
     assert not hasattr(Rev, "do") and not hasattr(Rev, "dat_run") and not hasattr(Rev, "load_fn")
     assert not hasattr(Rev, "resolve")
     assert callable(Rev.run) and isinstance(Rev.ns, property)
+
+
+def test_a_call_interrupted_while_the_worker_runs_leaves_the_next_call_its_own_reply(sbx):
+    """Round 4 #23: an alarm between the request and its reply left the reply queued; the next call read it."""
+    L, _repo = sbx
+    with pytest.raises(Exception):
+        with L.transaction(by="t", lock=1) as t:
+            L.at().run("sbx.stage.slow.slow", n=7, seal=t)
+    assert L.at().run("sbx.stage.slow.fast", n=1).obj == {"who": "fast", "n": 1}
+    assert L.at().run("sbx.stage.slow.fast", n=2).obj == {"who": "fast", "n": 2}

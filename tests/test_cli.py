@@ -336,6 +336,15 @@ class TestRun:
                               text=True, env=_env())
         assert done.returncode == 0 and "greet" in done.stdout
 
+    def test_the_default_venv_under_a_path_with_a_space(self, tmp_path):
+        """Round 4 #8: the default command was word-split, so a project path with a space broke it."""
+        root = tmp_path / "my project"
+        root.mkdir()
+        make_wrapper(root / ".venv", "SPACED-VENV")
+        nested = make_project(root)
+        code, out, _ = run_x("os.sep", cwd=nested)
+        assert code == 0 and out.splitlines() == ["SPACED-VENV", os.sep]
+
     def test_venv_beside_the_config_is_the_default(self, tmp_path):
         """No `run:` -> `.venv/bin/python -m dvc_dat`: the library's own main, so
         the namespace is Python's and nothing of the project's is mounted."""

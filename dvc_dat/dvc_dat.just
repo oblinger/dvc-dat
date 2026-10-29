@@ -37,15 +37,14 @@ run *args:
     cfg_run=$(sed -n 's/^run:[[:space:]]*//p' "$dir/.datconfig.yaml" | head -n 1 |
         sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")
     if [ -n "$DAT_RUN" ]; then
-        run=$DAT_RUN
+        eval "set -- $DAT_RUN \"\$@\""
     elif [ -n "$cfg_run" ]; then
-        run=$cfg_run
+        eval "set -- $cfg_run \"\$@\""
     elif [ -x "$dir/.venv/bin/python" ]; then
-        run="$dir/.venv/bin/python -m dvc_dat"
+        set -- "$dir/.venv/bin/python" -m dvc_dat "$@"     # one word: a project path may hold a space
     else
-        run="python3 -m dvc_dat"
+        set -- python3 -m dvc_dat "$@"
     fi
-    eval "set -- $run \"\$@\""
     case $1 in
         /*) ;;
         */*) first=$dir/$1; shift; set -- "$first" "$@" ;;

@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, 
 
 from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, sha256, show, strip_hint, tag
 from .errors import Exists, LockTimeout, SealBroken, Undeclared, Unlocked
-from .value import Value, dotted
+from .value import Value, check_loadable, dotted
 
 if TYPE_CHECKING:
     from .ledger import Ledger
@@ -350,8 +350,8 @@ class Transaction:
                 self._abandon(drop_bytes=not wrote)
             raise
         self._rev = self._ledger.at(rev)
+        self._state = "committed"           # the revision is written, whatever a post-commit hook does
         self._finish()
-        self._state = "committed"
         return False
 
     def _abandon(self, drop_bytes: bool = True) -> None:
@@ -447,7 +447,8 @@ class Transaction:
         self._store_all()
         w.insert(rev, rows)
         with store.reading_through(w):
-            self._validate(Rev(self._ledger, rev), kept)
+            self._validate(Rev(self._ledger, rev),       # the keywords' rows are checked as add's are
+                           kept + [_Op(txs, k, o, True) for k, o in self._preds])
         for op in kept:
             if op.added and op.p == "db/index" and op.s.startswith("db/pred/") and op.o == "str:true":
                 w.create_index(op.s[len("db/pred/"):])
@@ -728,6 +729,7 @@ class Transaction:
         if value.subject is not None:
             raise ValueError(f"{value!r} is sealed already; a different value is a new object")
         value._sealable()
+        check_loadable(value)
         local = value.__dict__.get("_local")
         run = value.__dict__.get("_run")
         if run is not None:                             # a run's result: its memo entry (DAT 1028)

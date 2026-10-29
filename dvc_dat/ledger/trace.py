@@ -248,5 +248,5 @@ def trace_matches(rev: "Rev", trace: Dict[str, str]) -> bool:
     try:
         return all(present(plain, k, v, env, trace)
                    for k, v in sorted(trace.items(), key=lambda kv: kv[0] == "code"))
-    except (LedgerError, ImportError):
+    except (LedgerError, ImportError, ValueError):     # an item that no longer parses: a miss, never a crash
         return False

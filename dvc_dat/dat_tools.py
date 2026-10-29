@@ -44,7 +44,10 @@ def cmd_list(prefix: str = ""):
     for k in ns._mounted_names():
         if not k.startswith(prefix):
             continue
-        v = ns.load(k, default="<module>")
+        try:
+            v = ns.load(k, default="<module>")
+        except Exception as e:              # one name that does not load (a yaml that does not parse)
+            v = f"<cannot load: {type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}>"
         print(f"  {k:25} -->  {v}")  # noqa
 
 
