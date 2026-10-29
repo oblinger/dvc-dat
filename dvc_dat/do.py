@@ -514,7 +514,7 @@ DESCRIPTION
     a dat, and that dat runs.  A TARGET that is a callable is simply called.
     The return value prints on stdout when it is not None.
 
-    With a `ledger:` line in the config, `x TARGET KEY=VALUE ...` is
+    With a `ledger:` line or a `ledgers:` section, `x TARGET KEY=VALUE ...` is
     rev.run(TARGET, KEY=VALUE, ...): found if computed before from the same
     inputs by the same code, else run and sealed; it prints `hit` or `ran`
     and the value, and alias=NAME names it.  TARGET is a dotted name

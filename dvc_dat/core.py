@@ -664,7 +664,7 @@ class DatManager:
         file.  An unknown key is `ValueError`.
         `ns` as in the constructor.
 
-        A `ledger:` key makes the namespace the ledger's (DAT 1046): `ns` is a
+        A `ledger:` key or a `ledgers:` section makes the namespace the active ledger's (DAT 1046): `ns` is a
         `LedgerNamespace`, its names the ledger's `db/mount` rows at the head, and
         `mount` refused; an adopted `ns` that is not one is not kept.
 
