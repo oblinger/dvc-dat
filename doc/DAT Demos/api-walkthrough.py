@@ -144,14 +144,14 @@ print("rev1 court, officials:", rev1.get("game/G1", "court"),
 # %% [markdown]
 # ## The `[]` accessor
 #
-# One level is the subject's record; two levels is one predicate.
+# Two keys assign the triples of one predicate; one key assigns all the triples of one subject.
 # Writing mirrors reading, and a record write takes a list for a
 # `many` key.
 
 # %%
 with L.transaction(by="human:dan", lock=10) as t:      # the record write reads: lock=
-    t["game/G1", "court"] = "west"                       # two levels
-    t["game/G2"] = {"home": "G1", "away": "G3",          # one level
+    t["game/G1", "court"] = "west"                       # one predicate
+    t["game/G2"] = {"home": "G1", "away": "G3",          # all of one subject
                     "officials": ["lee", "park"]}
 rev = t.rev
 print("court:", rev["game/G1", "court"])   # west
