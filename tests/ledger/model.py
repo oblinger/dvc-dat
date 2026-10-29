@@ -18,7 +18,7 @@ FORMAT = "dvc-dat-ledger/1"   # (db, db/format), written by the first transactio
 
 
 def fixed_one(p):
-    return p.startswith("db/") or p in ("version", "commit")
+    return p.startswith("db/")
 
 
 class Model:

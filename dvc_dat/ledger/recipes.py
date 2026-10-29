@@ -189,7 +189,7 @@ def bump_recipe(args):
     ask = None if part == "patch" else confirm(name)
     if name == "db" or "/" in name:         # a ledger clock (db: the release); a module has no slash
         L = Ledger()
-        old = L.at().get(name, "version", default="0.0.0")
+        old = L.at().get(name, "db/version", default="0.0.0")
         extra = {"why": "release"} if name == "db" else {}
         with L.transaction(by=BY, lock=10, **extra) as t:
             new = bump(t, name, part, confirm=ask)

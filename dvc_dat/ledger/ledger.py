@@ -252,7 +252,8 @@ class Ledger:
                     t.add(s, p, o)
 
     def at(self, which: Union[int, str, None] = None) -> Rev:
-        """A frozen view: ``None`` the top, an ``int`` (or digit string) a revision, ``"M.m.p"`` a ledger version."""
+        """A frozen view: ``None`` the top, an ``int`` (or digit string) a revision, ``"M.m.p"`` the latest revision whose
+        ``db db/version`` row (the release, ``bump(t, "db")``) added that version."""
         top = self._store.top()
         if which is None:
             return Rev(self, top)
@@ -265,7 +266,7 @@ class Ledger:
                 raise KeyError(f"no revision {which}: the ledger runs 0..{top}")
             return Rev(self, which)
         if isinstance(which, str) and _VERSION.match(which):
-            found = [r.rev for r in Rev(self, top).history("db", "version", which) if r.added]
+            found = [r.rev for r in Rev(self, top).history("db", "db/version", which) if r.added]
             if not found:
                 raise KeyError(f"no revision set the ledger version {which}")
             return found[-1]

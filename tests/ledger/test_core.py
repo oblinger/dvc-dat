@@ -198,7 +198,7 @@ def test_rows_are_rev_and_decoded(L):
 
 
 def test_at_digit_string_and_version(L):
-    write(L, ("db", "version", "1.0.0"))
+    write(L, ("db", "db/version", "1.0.0"))
     write(L, ("x", "y", "z"))
     assert L.at("1").id == 1 and L.at("1.0.0").id == 1
     with pytest.raises(KeyError):
@@ -323,8 +323,53 @@ def test_bump_patch_minor_confirm_and_backwards_add(L):
             bump(t, "schema", "minor")
     with L.transaction(by="t", lock=10) as t:
         assert bump(t, "schema", "minor", confirm=lambda a, b: True) == "0.1.0"
-    write(L, ("schema", "version", "0.0.9"))
-    assert L.at()["schema", "version"] == "0.0.9"
+    write(L, ("schema", "db/version", "0.0.9"))
+    assert L.at()["schema", "db/version"] == "0.0.9"
+
+
+def test_the_release_row_is_db_db_version(L):
+    """DAT 1052 Q3 (A), widened 2026-10-29: ``db/version`` is the version predicate on every subject. The
+    release is ``db db/version``, read by ``L.at("M.m.p")``; ``bump`` on a user subject moves its
+    ``db/version`` too; a bare ``version`` row is never read, on ``db`` or anywhere."""
+    with L.transaction(by="t", lock=10, why="release") as t:
+        assert bump(t, "db", "minor", confirm=lambda a, b: True) == "0.1.0"
+        assert bump(t, "schema") == "0.0.1"
+    top = L.at()
+    assert top["db", "db/version"] == "0.1.0" and top.get("db", "version") is None
+    assert top["schema", "db/version"] == "0.0.1" and top.get("schema", "version") is None
+    assert Ref(top, "schema").preds == {} and L.at("0.1.0").id == top.id
+    with L.transaction(by="t", lock=10) as t:
+        assert bump(t, "db") == "0.1.1"
+    assert L.at("0.1.1").id == L.at().id and L.at("0.1.0").id == top.id
+    write(L, ("db", "version", "9.9.9"))
+    with pytest.raises(KeyError, match="9.9.9"):
+        L.at("9.9.9")
+
+
+def test_bare_version_is_opaque_user_data(L):
+    """A bare ``version`` / ``commit`` is the user's: free text, default cardinality, never read by ``bump``."""
+    from dvc_dat.ledger.rev import fixed_one
+    assert fixed_one("db/version") and fixed_one("db/commit")
+    assert not fixed_one("version") and not fixed_one("commit")
+    write(L, ("db/pred/version", "db/cardinality", "many"))
+    write(L, ("model/m", "version", "spring build"), ("model/m", "version", "v2"), ("model/m", "commit", "tip"))
+    assert sorted(L.at().all("model/m", "version")) == ["spring build", "v2"]
+    with L.transaction(by="t", lock=10) as t:
+        assert bump(t, "model/m") == "0.0.1"           # db/version absent: bare version is not a clock
+    assert L.at()["model/m", "db/version"] == "0.0.1"
+
+
+def test_db_version_is_semver_checked_at_add(L):
+    """``db/version`` objects are ``MAJOR.MINOR.PATCH`` strings; anything else is refused at ``add``."""
+    for bad in ("1.2", "v1.2.3", "1.2.3-rc1", 3, None):
+        with pytest.raises(ValueError, match="db/version"):
+            with L.transaction(by="t") as t:
+                t.add("model/m", "db/version", bad)
+    with pytest.raises(ValueError, match="db/version"):
+        with L.transaction(by="t") as t:
+            t.update("model/m", {"db/version": "next"})
+    write(L, ("model/m", "db/version", "1.4.0"))
+    assert L.at()["model/m", "db/version"] == "1.4.0"
 
 
 def test_bump_refuses_a_code_subject(L):
@@ -351,12 +396,12 @@ def test_previous_rev_before_enter_is_a_runtime_error(L):
 
 
 def test_unlocked_bump_raises_unlocked_and_writes_nothing(L):
-    write(L, ("schema", "version", "0.0.1"))
+    write(L, ("schema", "db/version", "0.0.1"))
     top = L.at().id
     with pytest.raises(Unlocked):
         with L.transaction(by="t") as t:
             bump(t, "schema")
-    assert L.at().id == top and L.at()["schema", "version"] == "0.0.1"
+    assert L.at().id == top and L.at()["schema", "db/version"] == "0.0.1"
 
 
 def test_unlocked_record_write_and_del_raise_unlocked(L):
@@ -382,14 +427,14 @@ def test_unlocked_pair_write_and_add_still_commit(L):
 
 
 def test_locked_previous_rev_is_the_top_and_the_helpers_work(L):
-    write(L, ("g", "home", "a"), ("schema", "version", "0.0.1"))
+    write(L, ("g", "home", "a"), ("schema", "db/version", "0.0.1"))
     before = L.at()
     with L.transaction(by="t", lock=10) as t:
         assert t.previous_rev.id == before.id
         assert t.previous_rev["g"] == before["g"]
         assert bump(t, "schema") == "0.0.2"
         t["g"] = {**t.previous_rev["g"], "away": "b"}
-    assert L.at()["g"] == {"home": "a", "away": "b"} and L.at()["schema", "version"] == "0.0.2"
+    assert L.at()["g"] == {"home": "a", "away": "b"} and L.at()["schema", "db/version"] == "0.0.2"
 
 
 def test_close_closes_every_thread_reader_and_a_later_read_reopens(L):
