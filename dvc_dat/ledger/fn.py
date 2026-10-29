@@ -536,6 +536,7 @@ class Fn:
         """Run in this process. ``save``: ``False``, a draft carrying its ``RunTrace``; ``True``, the
         memo entry in a transaction of its own; a ``Transaction``, the memo entry in it (named ``name``)."""
         from .rev import Rev
+        from .sandbox import base_confined
         from .txn import code_token
 
         env = current_env()
@@ -549,7 +550,8 @@ class Fn:
         args = dict(kw, path=work) if work is not None else kw
         value = None
         try:
-            out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+            with base_confined(_checkout(env, repo), _dats(plain, work)):
+                out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
             value = wrap_result(self.name, self._obj, out)
             trace = dict(rec)
             trace.update({"code": self.code.subject, "fn": self.name, "platform": env.platform})
@@ -569,6 +571,7 @@ class Fn:
                  env: Env, repo: Optional[str]) -> Value:
         """A dat's run function, run here (``_run_base``): the dat made from the spec in a work folder and
         run (``manager._execute``), its recorded dependencies that are ledger names entered as alias reads."""
+        from .sandbox import base_confined
         from .txn import code_token
 
         rec: Dict[str, str] = {}
@@ -576,8 +579,9 @@ class Fn:
         value: Any = None
         manager = Dat.manager
         try:
-            dat = manager.create(dat_spec(spec, self._template), path=str(work / "dat"))
-            manager._execute(dat)
+            with base_confined(_checkout(env, repo), _dats(plain, work)):
+                dat = manager.create(dat_spec(spec, self._template), path=str(work / "dat"))
+                manager._execute(dat)
             value = dat
             alias_reads(plain, dat, rec)
             trace = dict(rec)
@@ -596,6 +600,24 @@ class Fn:
             if not work.exists():                       # its folder is gone: so is the dat world's index of it
                 manager._index_forget(str(work / "dat"))
         return value
+
+
+def _checkout(env: Env, repo: Optional[str]) -> Optional[Path]:
+    """The checkout an unsandboxed body's repo is, for its open hook (``None``: none, nothing checked)."""
+    co = env.code.get(repo) if repo else None
+    return co.path if co is not None else None
+
+
+def _dats(plain: "Rev", work: Optional[Path]) -> List[Any]:
+    """Where an unsandboxed body may read inside its repo (Eval § 5.3): the dats (the dat world's folders
+    and art folder, the ledger's art store), the ledger's own folder, and the body's path folder."""
+    from .pgstore import is_dsn
+
+    manager = Dat.manager
+    out: List[Any] = [*manager._dat_folders, manager._art_folder, plain.ledger._store.art.root, work]
+    if not is_dsn(str(plain.ledger.path)):
+        out.append(plain.ledger.path)
+    return out
 
 
 def dat_spec(keys: Dict[str, Any], template: Optional[str]) -> Dict[str, Any]:

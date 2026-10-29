@@ -81,6 +81,34 @@ PKG = {
         TABLE = {"dat": {"do": "sbx.stage.runs.table", "kwargs": {"n": 3}}}
     '''),
     "sbx/stage/conf.yaml": "k: 1\n",
+    "sbx/plain.py": textwrap.dedent('''
+        import json
+        from pathlib import Path
+        import yaml
+        from dvc_dat.ledger import ledger_fn
+
+        CONF = Path(__file__).parent / "stage" / "conf.yaml"
+
+        @ledger_fn
+        def peek(rev, *, how: str) -> dict:
+            if how == "open":
+                return {"n": len(open(CONF).read())}
+            if how == "library":
+                return {"n": len(yaml.safe_load(CONF.open()))}
+            return {"n": len(CONF.read_text())}
+
+        @ledger_fn
+        def calm(rev, *, game: str, path: Path) -> dict:
+            from sbx import other                    # importing a repo module reads it: the import system
+            (path / "x.json").write_text(json.dumps({"g": game}))
+            CONF.with_name("out.txt").open("w").close()    # a write to the repo is not a read
+            return {"x": other.X, "w": json.loads((path / "x.json").read_text()),
+                    "inner": rev.run("sbx.plain.leaf", game=game).obj}
+
+        @ledger_fn
+        def leaf(rev, *, game: str) -> dict:
+            return {"g": game}
+    '''),
     "sbx/stage/specs/base.yaml": "dat:\n  kwargs: {n: 3}\n",
     "sbx/stage/specs/table.yaml": textwrap.dedent('''
         dat:
@@ -399,6 +427,19 @@ def test_a_module_the_caller_loaded_is_recorded_for_the_nested_entry(sbx):
     want = sha256(open(colorsys.__file__, "rb").read())
     assert L.at()[inner.dependencies["code"], "db/modules"]["py:colorsys.py"] == want
     assert L.at()[v.dependencies["code"], "db/modules"]["py:colorsys.py"] == want
+
+
+def test_an_unsandboxed_body_reading_its_repo_outside_the_dats_is_refused(sbx):
+    L, repo = sbx
+    git(repo, "commit", "-q", "--allow-empty", "-m", "clean")
+    assert not L.at().ns.load("sbx.plain.peek").code.sandboxed
+    for how in ("open", "read_text", "library"):
+        with pytest.raises(UntracedRead, match="conf.yaml: an unsandboxed function reads a file of its repo"):
+            L.at().run("sbx.plain.peek", how=how)
+    v = L.at().run("sbx.plain.calm", game="G1")
+    assert v.obj == {"x": 1, "w": {"g": "G1"}, "inner": {"g": "G1"}}
+    assert L.at()[v.subject, "db/provenance"] == "eval:unsandboxed"
+    assert (repo / "sbx/stage/conf.yaml").read_text() == "k: 1\n"     # outside a body: nothing checked
 
 
 def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):

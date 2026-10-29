@@ -918,6 +918,70 @@ def _note_open(p: str, caller: Any) -> None:
         note_read(checkout, Path(p))
 
 
+# -- base mode: an unsandboxed body's repo reads (Eval § 5.3) -----------------------------------------
+
+class _BaseGuards(threading.local):
+    def __init__(self) -> None:
+        self.stack: List[Tuple[str, List[str]]] = []      # (repo root, allowed roots), innermost last
+
+
+_BASE = _BaseGuards()
+_BASE_HOOKED = False
+_SOURCE_READERS = ("linecache", "tokenize", "traceback", "inspect")
+
+
+@contextmanager
+def base_confined(repo: Optional[Path], allowed: List[Any]) -> Iterator[None]:
+    """While an unsandboxed body runs (in this thread): a file of its repo checkout ``repo`` opened to
+    read, outside ``allowed`` (the dats, the art store, the ledger, the body's path folder) and the
+    interpreter's folders, is ``UntracedRead`` (Eval § 5.3); the ``code/<repo>`` commit vouches for the
+    code it imports, not for a config it opens. The import system and the ledger's own machinery read
+    freely. ``repo`` ``None`` (no checkout): nothing is checked."""
+    global _BASE_HOOKED
+    if repo is None:
+        yield
+        return
+    if not _BASE_HOOKED:
+        sys.addaudithook(_base_audit)
+        _BASE_HOOKED = True
+    roots = [os.path.realpath(os.fspath(a)) for a in allowed if a] + _interpreter_roots()
+    _BASE.stack.append((os.path.realpath(repo), roots))
+    try:
+        yield
+    finally:
+        _BASE.stack.pop()
+
+
+def _base_audit(event: str, args: Any) -> None:
+    if event != "open" or not _BASE.stack:
+        return
+    path, mode, flags = (list(args) + [None, None, None])[:3]
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        return
+    if isinstance(flags, int):
+        if flags & os.O_ACCMODE == os.O_WRONLY:
+            return                                  # a write: not a read of the repo
+    elif isinstance(mode, str) and "r" not in mode and "+" not in mode:
+        return
+    repo, allowed = _BASE.stack[-1]
+    p = os.path.realpath(os.fsdecode(os.fspath(path)))
+    if not _under(p, [repo]) or _under(p, allowed):
+        return
+    f = sys._getframe(1)
+    while f is not None:
+        name = str(f.f_globals.get("__name__", ""))
+        file = f.f_code.co_filename
+        if file.startswith("<frozen importlib") or name in _SOURCE_READERS:
+            return                                  # the import system, or source shown for a traceback
+        if name == "dvc_dat" or name.startswith("dvc_dat."):
+            return                                  # the ledger's own machinery
+        if file.startswith("<") or not _under(os.path.realpath(file), _BASE.stack[-1][1]):
+            break                                   # the body's own code (a library passes it on)
+        f = f.f_back
+    raise UntracedRead(f"{p}: an unsandboxed function reads a file of its repo outside the dats; mount the "
+                       "function (its reads are then traced by their bytes) or read it through the ledger")
+
+
 def _importing(frame: Any) -> Optional[str]:
     """The module whose import is running at ``frame`` (the innermost module body the import system
     called), or ``None`` outside any import."""
