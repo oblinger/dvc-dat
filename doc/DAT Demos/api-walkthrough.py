@@ -207,14 +207,15 @@ for r in rev.history("game/G1", "court"):                       # the unfolded h
 # of a pattern.
 
 # %% [markdown]
-# A read by value is a subject read: `refs(**preds)` is every
-# subject holding each given triple, `select(keys, **preds)` the
-# matches' chosen preds as tuples.
+# A read by value is a subject read. `refs(**preds)` is every
+# subject holding each given triple. `select(keys, **preds)` is SQL's
+# `SELECT keys WHERE preds`: the keywords are the filter, the tuple of
+# predicate names is what comes back, one tuple per matching subject.
 
 # %%
 print("court=west:", rev.refs(court="west"))                     # [<Ref game/G1>]: which games are on the west court
 print("home=G1:", rev.refs(home="G1"))                           # [<Ref game/G2>]: which game has G1 at home
-print("west teams:", rev.select(("home", "away"), court="west"))   # [('G4', 'G5')]
+print("west teams:", rev.select(("home", "away"), court="west"))   # [('G4', 'G5')]: game/G1 is the one west-court game; its home and away
 
 # %% [markdown]
 # ## Declaring an index
