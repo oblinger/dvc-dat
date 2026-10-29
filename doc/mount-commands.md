@@ -138,8 +138,9 @@ You get:
 - `constants.pi` → `3.14159`
 - `constants.e` → `2.71828`
 
-A string value that begins with `yaml` is parsed as YAML, which is how a spec
-can be written inline in a `.py` file:
+A string value whose first line is `yaml` alone is parsed as YAML (the lines
+after it), which is how a spec can be written inline in a `.py` file; any other
+string, one merely starting with the word, is the string:
 
 ```python
 __main__ = """yaml
@@ -169,7 +170,9 @@ refused, and so is a root-level folder mount holding a `helpers.py` while an
 installed `helpers` exists. Mounting a module at its own name, or a package's
 own folder at its name, is not a clash — paths are compared as real paths,
 component by component, so the package's folder reached through a symlink
-is still its own, and `configs2/` is not inside `configs/`. Choose another `at`, and the mounted
+is still its own, and `configs2/` is not inside `configs/`. A bare folder that
+merely sits on `sys.path` (no `__init__.py`: a namespace package, no code) is
+not importable code and does not block a mount of its name. Choose another `at`, and the mounted
 object and the installed one each keep a name of their own.
 
 ## Complete example

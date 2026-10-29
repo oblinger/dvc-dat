@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import math
 import os
 import shutil
 import tempfile
@@ -239,12 +240,19 @@ def encode_keys(kw: Dict[str, Any]) -> Dict[str, Any]:
     from .rev import Ref
 
     def nested(x: Any, k: str) -> Any:
+        # what JSON would turn into another value is refused, never collapsed into another call's memo
+        # key: a non-str dict key (1 as "1"), a NaN or an infinity; a tuple is its list, as documented
         if isinstance(x, (Value, Ref)):
             raise TypeError(f"key {k!r}: a Value or Ref is a key only at the top level, never nested (A44)")
         if isinstance(x, dict):
-            return {str(a): nested(b, k) for a, b in x.items()}
+            bad = [a for a in x if not isinstance(a, str)]
+            if bad:
+                raise TypeError(f"key {k!r}: a dict key is a str, not {bad[0]!r}: JSON would make it {str(bad[0])!r}")
+            return {a: nested(b, k) for a, b in x.items()}
         if isinstance(x, (list, tuple)):
             return [nested(b, k) for b in x]
+        if isinstance(x, float) and not math.isfinite(x):
+            raise TypeError(f"key {k!r}: {x!r} is not JSON")
         if x is None or isinstance(x, (str, int, float, bool)):
             return x
         raise TypeError(f"key {k!r}: {type(x).__name__} is not JSON-encodable")

@@ -24,3 +24,8 @@ def local_value(rev, *, n: int) -> Value:
         def decode(cls, data, store):
             return cls(data)
     return Inner(b"x" * n)
+
+
+@ledger_fn
+def echo(rev, *, x: object) -> dict:
+    return {"x": x}
