@@ -2,12 +2,18 @@
 
 A ledger is a folder holding the database and the art store (A54.2), or a
 Postgres DSN ``postgresql://…?art=<folder>`` (``pgstore``); its location is
-either. ``Ledger(location)`` opens it; ``Ledger()`` finds it (``DAT_LEDGER``, else the
-nearest ``.datconfig.yaml`` with a ``ledger:`` key at or above the working
-directory, A37, A44); ``create=True`` is the one act that makes a ledger
-(``Ledger(location, create=True)``), or a project in the working directory
-(``Ledger(create=True)``: ``.datconfig.yaml`` with ``ledger: .dat/ledger``).
-Without it nothing is ever created.
+either. ``Ledger(location)`` opens it; ``Ledger()`` opens the project's *active*
+ledger (A37, A44): ``DAT_LEDGER`` (a name from the config's ``ledgers:`` section,
+or a location), else the nearest ``.datconfig.yaml`` at or above the working
+directory with a ``ledgers:`` section (its ``default:``, the override file
+``.datconfig.override.yaml`` beside it winning) or a single ``ledger:`` key.
+``create=True`` is the one act that makes a ledger (``Ledger(location,
+create=True)``), or a project in the working directory (``Ledger(create=True)``:
+``.datconfig.yaml`` with ``ledger: .dat/ledger``, or the active entry of its
+``ledgers:``). Without it nothing is ever created.
+
+The named handles (``ledgers.record``) and ``L``, the active ledger as one
+object, are ``named``.
 """
 
 from __future__ import annotations
@@ -27,8 +33,12 @@ from .txn import Transaction
 
 ENV = "DAT_LEDGER"
 CONFIG = ".datconfig.yaml"
+OVERRIDE = ".datconfig.override.yaml"
 DEFAULT = ".dat/ledger"
+NAME = re.compile(r"^[a-z][a-z0-9-]*$")    # a ledger's name in ``ledgers:``: lowercase, digits, hyphens
 _VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+
+Target = Union[str, Path]                  # a DSN, or a folder
 
 
 def _read_config(cfg: Path) -> Dict[str, Any]:
@@ -36,15 +46,31 @@ def _read_config(cfg: Path) -> Dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _values(cfg: Path) -> Dict[str, Any]:
+    """The config's keys with the override file beside it over them; ``ledgers:`` merges by name."""
+    data = _read_config(cfg)
+    over = cfg.parent / OVERRIDE
+    if not over.is_file():
+        return data
+    extra = _read_config(over)
+    merged = {**data, **extra}
+    if isinstance(data.get("ledgers"), dict) and isinstance(extra.get("ledgers"), dict):
+        merged["ledgers"] = {**data["ledgers"], **extra["ledgers"]}
+    return merged
+
+
+def _names_ledger(values: Dict[str, Any]) -> bool:
+    led = values.get("ledger")
+    return (isinstance(led, str) and bool(led)) or "ledgers" in values
+
+
 def _walk_up(start: Path) -> Tuple[Optional[Path], List[Path]]:
     searched = []
     for folder in (start, *start.parents):
         searched.append(folder)
         cfg = folder / CONFIG
-        if cfg.is_file():
-            led = _read_config(cfg).get("ledger")
-            if isinstance(led, str) and led:
-                return cfg, searched
+        if cfg.is_file() and _names_ledger(_values(cfg)):
+            return cfg, searched
     return None, searched
 
 
@@ -53,53 +79,128 @@ def _relative(cfg: Path, led: str) -> Path:
     return p if p.is_absolute() else (cfg.parent / p)
 
 
+def _target(cfg: Path, led: str) -> Target:
+    return led if is_dsn(led) else _relative(cfg, led)
+
+
+def _section(cfg: Path, values: Dict[str, Any]) -> Tuple[Dict[str, str], Optional[str]]:
+    """The ``ledgers:`` section, checked: ``({name: location}, default name or None)``."""
+    if values.get("ledger"):
+        raise LedgerError(f"{cfg}: both 'ledger:' and 'ledgers:'; 'ledger: X' is the one-ledger project, "
+                          "keep one of the two")
+    section = values.get("ledgers")
+    if not isinstance(section, dict):
+        raise LedgerError(f"{cfg}: 'ledgers:' is a mapping of name to location, got {section!r}")
+    entries: Dict[str, str] = {}
+    for name, loc in section.items():
+        if name == "default":
+            continue
+        if not (isinstance(name, str) and NAME.match(name)):
+            raise LedgerError(f"{cfg}: ledgers: {name!r} is not a ledger name (lowercase letters, digits and "
+                              "hyphens, a letter first)")
+        if not (isinstance(loc, str) and loc.strip()):
+            raise LedgerError(f"{cfg}: ledgers: {name} is a folder or a DSN, got {loc!r}")
+        entries[name] = loc
+    default = section.get("default")
+    if default is not None and not (isinstance(default, str) and default in entries):
+        raise LedgerError(f"{cfg}: ledgers: default: {default!r} names no entry of the section "
+                          f"({', '.join(entries) or 'none'})")
+    return entries, default
+
+
+def _entries(cfg: Path) -> Dict[str, str]:
+    """``{name: location}`` of the config's ``ledgers:`` section, the override file's merged in."""
+    return _section(cfg, _values(cfg))[0]
+
+
+def _resolve(cfg: Optional[Path], values: Dict[str, Any],
+             env: Optional[str]) -> Tuple[Target, Any, Path, Optional[Path]]:
+    """The active ledger: ``(target, as named in errors, base for a DSN's relative art=, config whose mounts
+    to assert or None)``. ``DAT_LEDGER`` first (an entry's name, else a location), then the section's
+    ``default:``, then the one-ledger ``ledger:`` key."""
+    if env:
+        given: Any = env
+        if cfg is not None and "ledgers" in values and NAME.match(env):
+            entries, _ = _section(cfg, values)
+            if env in entries:
+                return _target(cfg, entries[env]), f"{env} ({ENV}, {cfg})", cfg.parent, cfg
+            given = f"{env} ({ENV}: a location; not a name in {cfg} ledgers: {', '.join(entries) or 'none'})"
+        return (env if is_dsn(env) else Path(env).expanduser()), given, Path.cwd(), None
+    assert cfg is not None
+    if "ledgers" in values:
+        entries, default = _section(cfg, values)
+        if default is None:
+            raise LedgerError(f"no active ledger: {cfg} lists ledgers ({', '.join(entries) or 'none'}) and names "
+                              f"no default; set {ENV}=<name>, or 'ledgers: {{default: <name>}}' in "
+                              f"{cfg.parent / OVERRIDE}")
+        target = _target(cfg, entries[default])
+        return target, f"{default} ({cfg})", cfg.parent, cfg
+    target = _target(cfg, values["ledger"])
+    return target, target, cfg.parent, cfg
+
+
+def _find(create: bool) -> Tuple[Target, Any, Path, Optional[Path]]:
+    """``Ledger(None)``'s resolution, from the working directory (``_resolve``)."""
+    env = os.environ.get(ENV)
+    if create:
+        if env:
+            raise ValueError(f"Ledger(create=True) makes a project in the working directory, but {ENV} is "
+                             "set: ambiguous; unset it, or pass the location")
+        here = Path.cwd() / CONFIG
+        if here.is_file() and not isinstance(yaml.safe_load(here.read_text()) or {}, dict):
+            raise LedgerError(f"{here}: not a mapping; Ledger(create=True) adds a 'ledger:' key to it")
+        values = _values(here) if here.is_file() else {}
+        if "ledgers" in values:
+            return _resolve(here, values, None)
+        led = values.get("ledger")
+        if not (isinstance(led, str) and led):
+            text = here.read_text() if here.is_file() else ""
+            if text and not text.endswith("\n"):
+                text += "\n"
+            here.write_text(text + f"ledger: {DEFAULT}\n")
+            led = DEFAULT
+        target = _target(here, led)
+        return target, target, here.parent, here
+    if env and not NAME.match(env):              # a location: no config read
+        return _resolve(None, {}, env)
+    cfg, searched = _walk_up(Path.cwd().resolve())
+    if cfg is None and not env:
+        raise LedgerError(f"no ledger: {ENV} unset and no {CONFIG} with a 'ledger:' key or a 'ledgers:' section "
+                          "in " + ", ".join(str(s) for s in searched) + " (Ledger(create=True) makes one)")
+    return _resolve(cfg, _values(cfg) if cfg is not None else {}, env)
+
+
 class Ledger:
     """One logical store of quads ``(rev, subject, predicate, object)``."""
 
     def __init__(self, location: Union[str, Path, None] = None, *, create: bool = False) -> None:
         """Open the ledger at ``location``: a folder or a DSN (a ``Path``, or a ``str`` that is not a DSN, is a
-        folder); ``None`` finds it (``DAT_LEDGER``, else ``.datconfig.yaml`` ``ledger:``)."""
-        self._values: Dict[Any, Any] = {}
+        folder); ``None`` opens the active ledger (``DAT_LEDGER``, else ``.datconfig.yaml``'s ``ledgers:``
+        default or ``ledger:``)."""
         cfg: Optional[Path] = None
-        given: Any = location
-        target: Union[str, Path]
-        base = Path.cwd()                   # where a DSN's relative art= resolves
-        if location is None and create:
-            if os.environ.get(ENV):
-                raise ValueError(f"Ledger(create=True) makes a project in the working directory, but {ENV} is "
-                                 "set: ambiguous; unset it, or pass the location")
-            cfg = Path.cwd() / CONFIG
-            if cfg.is_file() and not isinstance(yaml.safe_load(cfg.read_text()) or {}, dict):
-                raise LedgerError(f"{cfg}: not a mapping; Ledger(create=True) adds a 'ledger:' key to it")
-            data = _read_config(cfg) if cfg.is_file() else {}
-            led = data.get("ledger")
-            if not (isinstance(led, str) and led):
-                text = cfg.read_text() if cfg.is_file() else ""
-                if text and not text.endswith("\n"):
-                    text += "\n"
-                cfg.write_text(text + f"ledger: {DEFAULT}\n")
-                led = DEFAULT
-            base = cfg.parent
-            target = led if is_dsn(led) else _relative(cfg, led)
-            given = target
-        elif location is None:
-            env = os.environ.get(ENV)
-            if env:
-                given = env
-                target = env if is_dsn(env) else Path(env).expanduser()
-            else:
-                cfg, searched = _walk_up(Path.cwd().resolve())
-                if cfg is None:
-                    raise LedgerError(f"no ledger: {ENV} unset and no {CONFIG} with a 'ledger:' key in "
-                                      + ", ".join(str(s) for s in searched) + " (Ledger(create=True) makes one)")
-                led = _read_config(cfg)["ledger"]
-                base = cfg.parent
-                target = led if is_dsn(led) else _relative(cfg, led)
-                given = target
+        target: Target
+        if location is None:
+            target, given, base, cfg = _find(create)
         else:
             if isinstance(location, str) and not location.strip():
                 raise TypeError("Ledger(location): an empty location; pass a folder or a DSN, or None to find it")
             target = location if is_dsn(location) else Path(location).expanduser()
+            given, base = location, Path.cwd()      # where a DSN's relative art= resolves
+        self._open(target, given, base, create)
+        if cfg is not None and not create:
+            self._assert_mounts(cfg)
+
+    @classmethod
+    def _opened(cls, target: Target, given: Any, base: Path, cfg: Optional[Path]) -> "Ledger":
+        """A handle on a resolved target (``named``, ``do``); ``cfg`` names the config whose mounts to assert."""
+        led = cls.__new__(cls)
+        led._open(target, given, base, False)
+        if cfg is not None:
+            led._assert_mounts(cfg)
+        return led
+
+    def _open(self, target: Target, given: Any, base: Path, create: bool) -> None:
+        self._values: Dict[Any, Any] = {}
         self._store: Store
         if isinstance(target, str):
             store = PostgresStore(target, base=base, create=create)
@@ -115,8 +216,6 @@ class Ledger:
             self.path = folder
             self._shown = str(folder)
             self._store = SqliteStore(folder)
-        if cfg is not None and location is None and not create:
-            self._assert_mounts(cfg)
 
     def __repr__(self) -> str:
         return f"Ledger({self._shown!r})"
@@ -180,4 +279,4 @@ class Ledger:
         return Transaction(self, by, lock, preds)
 
 
-__all__ = ["Ledger", "ENV", "CONFIG"]
+__all__ = ["Ledger", "ENV", "CONFIG", "OVERRIDE"]

@@ -8,7 +8,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 ![DAT Ledger](DAT%20Ledger.svg) 
 
 **Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [module functions](#dvc_dat.ledger%20Interface) 
-**Topics:** [Ledger Semantics](#Ledger%20Semantics) · [Execution Semantics](#Execution%20Semantics) · [Value Provenance](#Value%20Provenance) 
+**Topics:** [Ledger Semantics](#Ledger%20Semantics) · [Many ledgers](#Many%20ledgers) · [Execution Semantics](#Execution%20Semantics) · [Value Provenance](#Value%20Provenance) 
 
 | Methods     |                                                                                                                                                                                                                                                                                                            |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -40,7 +40,7 @@ The handle on one ledger: a folder holding `ledger.db` and the art store `art/`,
 | [close](#^close) | Close every database connection the handle opened |
 
 **Ledger**`(location: str | Path | None = None, *, create: bool = False)`
-    `Ledger(location)` opens the ledger at `location`: a folder or a DSN (a `Path`, or a `str` that is not a DSN, is a folder); a folder without `ledger.db` is `LedgerError`, and so is a file. `Ledger()` takes `DAT_LEDGER` when set, else the nearest `.datconfig.yaml` at or above the working directory carrying a `ledger:` key (relative to that file), and asserts the config's `mounts:` as `db/mount/<prefix>` rows in one transaction `by="config:<path>"` when they differ from the ledger's; none found is `LedgerError` naming every folder searched. `Ledger(location, create=True)` makes an empty ledger there if absent. `Ledger(create=True)` makes a project in the working directory, writing `ledger: .dat/ledger` into its `.datconfig.yaml`; with `DAT_LEDGER` set it is `ValueError`. ^ledger
+    `Ledger(location)` opens the ledger at `location`: a folder or a DSN (a `Path`, or a `str` that is not a DSN, is a folder); a folder without `ledger.db` is `LedgerError`, and so is a file. `Ledger()` opens the active ledger ([Many ledgers](#Many%20ledgers)): `DAT_LEDGER` when set (a name from the config's `ledgers:` section, else a location), else the nearest `.datconfig.yaml` at or above the working directory carrying a `ledgers:` section (its `default:`) or a `ledger:` key (relative to that file), and asserts the config's `mounts:` as `db/mount/<prefix>` rows in one transaction `by="config:<path>"` when they differ from the ledger's; none found is `LedgerError` naming every folder searched, and a `ledgers:` section naming no default is `LedgerError` saying how to name one. `Ledger(location, create=True)` makes an empty ledger there if absent. `Ledger(create=True)` makes a project in the working directory, writing `ledger: .dat/ledger` into its `.datconfig.yaml`, or, when that file has a `ledgers:` section, making its active entry; with `DAT_LEDGER` set it is `ValueError`. ^ledger
 
 **path**`: Path | str`
     The resolved ledger folder; for a Postgres ledger, the DSN with its `art` parameter made absolute. `repr` hides a DSN's password. ^path
@@ -431,10 +431,12 @@ A value function resolved at one revision: a frozen dataclass made by `rev.ns.lo
 
 
 ## dvc_dat.ledger Interface
-The package's other exports: two decorators, four helpers, and the exceptions. Every exception is a `LedgerError` and also the builtin it most resembles, so a caller catches either. `Env`, `Checkout` and `set_env_provider` are importable as the test suite's seam for the environment and are not part of the interface.
+The package's other exports: the two ledger handles (also exported from `dvc_dat`), two decorators, four helpers, and the exceptions. Every exception is a `LedgerError` and also the builtin it most resembles, so a caller catches either. `Env`, `Checkout` and `set_env_provider` are importable as the test suite's seam for the environment and are not part of the interface.
 
 | dvc_dat.ledger | |
 | --- | --- |
+| [L](#^active-l) | The active ledger, resolved at each use |
+| [ledgers](#^ledgers) | The project's ledgers by name |
 | [ledger_fn](#^ledger-fn) | Mark a function as a value function |
 | [ledger_class](#^ledger-class) | Declare a Value class's pred names |
 | [bump](#^bump) | Move a clock subject's version |
@@ -456,6 +458,12 @@ The package's other exports: two decorators, four helpers, and the exceptions. E
 | [Undeclared](#^undeclared) | A pred name the class did not declare |
 | [AliasLoop](#^aliasloop) | An alias chain that loops or runs long |
 | [SealBroken](#^sealbroken) | A sealed value's bytes changed before saving |
+
+**L**`: Ledger`
+    The active ledger as one object: `from dvc_dat import L`. A `Ledger` (`isinstance` holds, so `v.seal(L)` and `seal=L` take it) whose every attribute is the ledger `Ledger()` would open, resolved from the working directory and `DAT_LEDGER` at each use and never at import; a checkout with a `ledgers:` section and no default imports it fine and raises the one-line `LedgerError` at the first use. `L.at()` is a `Rev` of the real handle, the same handle `ledgers.<name>` gives for that ledger; `repr(L)` names it, or says why it is unresolved. See [Many ledgers](#Many%20ledgers). ^active-l
+
+**ledgers**`: Ledgers`
+    The `ledgers:` section of the nearest `.datconfig.yaml` (the override file's entries merged in), by name: `ledgers.record` or `ledgers["record"]` is that entry's `Ledger`, opened on first use and kept for the process; a name with a hyphen takes the item form only, `ledgers["exp-jb-26"]`, and `ledgers.exp_jb_26` is `AttributeError` naming it. `list(ledgers)` is the names in file order, `"games" in ledgers` a test; an unknown name is `KeyError` (`AttributeError` as an attribute) listing the section. A named handle asserts no `mounts:`; only the active ledger does. A project with the one-ledger `ledger:` key has no section: `ledgers.<name>` is `LedgerError` and its ledger is `L`. ^ledgers
 
 **ledger_fn**`(func: Callable) -> Callable`
     Marks `func` as a value function and returns it unchanged, still a plain callable: a plain call runs the body with whatever `Rev` it is given, records nothing and seals nothing, which is how it is unit-tested. A missing return annotation or a non-callable is `TypeError` at decoration. ^ledger-fn
@@ -578,6 +586,32 @@ The quads live in one table, `quads(rev, ord, subject, predicate, object, added)
 
 The art store holds bytes by sha256 at `sha256/<2>/<hex>`, write-once, so the same bytes are stored once however many subjects point at them. A value's parts enter by `put_path` (a hardlink on the same filesystem, else a streamed copy checked against the hash) and leave by `get_to`. A stored `Dat`'s files and its materialised folder under `art/dats/` share inodes. The ledger's art store and the dat manager's `art/` are separate folders keyed the same way.
 
+
+## Many ledgers
+A project may keep several ledgers, split by how long their data lives, so cleanup is dropping a whole ledger rather than thinning one row by row (SVP 239). The `ledgers:` section of `.datconfig.yaml` names them; each entry is a location, exactly what `Ledger(location)` takes: a folder (relative to the file) or a Postgres DSN, whose database or schema is the ledger. The section is committed, listing every ledger the team shares, personal ones included, so any checkout reads any ledger by name.
+
+```yaml
+ledgers:
+  games: postgresql://dat@db/games?art=/data/art/games
+  record: postgresql://dat@db/record?art=/data/art/record
+  record-run: postgresql://dat@db/record_run?art=/data/art/record-run
+  exp-do-26: postgresql://dat@db/exp_do_26?art=/data/art/exp-do-26
+  exp-jb-26: postgresql://dat@db/exp_jb_26?art=/data/art/exp-jb-26
+  ci-26: postgresql://dat@db/ci_26?art=/data/art/ci-26
+  scratch: .dat/scratch
+```
+
+**Names** are lowercase letters, digits and hyphens, a letter first; `default` is reserved. A rolling ledger is a *generation* named `<kind>-<owner>-<yy>` or `<kind>-<yy>`, the two-digit year: `exp-jb-26`, `ci-26`; a second generation in the same year appends a letter, `exp-jb-26b`.
+
+**The active ledger** is where work lands when a script names none: `L`, and `Ledger()`. It is, first to last:
+
+1. `DAT_LEDGER`: an entry's name (`DAT_LEDGER=exp-jb-26`), else a location as before.
+2. `ledgers: {default: <name>}` in `.datconfig.override.yaml` beside the config, which is never committed: whose ledger is active is a per-checkout choice.
+3. `default:` in the committed section, only if one is there.
+
+A section with no default and no `DAT_LEDGER` is `LedgerError`, one line: `no active ledger: <config> lists ledgers (games, record, ...) and names no default; set DAT_LEDGER=<name>, or 'ledgers: {default: <name>}' in <folder>/.datconfig.override.yaml`. Nothing falls back to a shared ledger. CI and long-running agents set `DAT_LEDGER` in their environment. The override file's `ledgers:` merges over the committed one by name, so it may also add a personal entry. A script written for a specialty ledger names it: `ledgers.record`, `ledgers["record-run"]`.
+
+**One ledger** is the single key `ledger: <location>`, unchanged: a project with no named ledgers, its ledger the active one (`L`, `Ledger()`). A config with both `ledger:` and `ledgers:` is `LedgerError`; keep one.
 
 ## Concurrency
 One writer at a time: a transaction takes the write lock only at commit, and its revision is `MAX(rev) + 1` under that lock. `lock=<seconds>` holds the lock for the whole body when a read must not go stale before the write; `t.previous_rev` and the helpers that read through it require it. Readers take no lock; a `Rev` is a snapshot. Two processes missing on one memo key both run and both seal: identical bytes and dependencies are one subject, the second dropped at commit; different bytes are two entries, both kept, which is the evidence a nondeterminism check needs. The load harness under `tests/load/` checks these invariants across processes on SQLite and Postgres; its measurements are in [`tests/load/README.md`](../../../tests/load/README.md).

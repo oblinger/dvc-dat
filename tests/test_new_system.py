@@ -149,8 +149,8 @@ class TestDefaultWorld:
         Dat.manager = replaced
         assert shortcut.manager is replaced
 
-    def test_the_package_exports_the_four_classes(self):
-        assert sorted(dvc_dat.__all__) == ["Dat", "DatContainer", "DatManager", "Namespace"]
+    def test_the_package_exports_the_four_classes_and_the_ledger_handles(self):
+        assert sorted(dvc_dat.__all__) == ["Dat", "DatContainer", "DatManager", "L", "Namespace", "ledgers"]
         for gone in ("cli_main", "expand", "expand_spec", "merge_dicts"):
             assert not hasattr(dvc_dat, gone)
 
