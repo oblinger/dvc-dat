@@ -244,6 +244,30 @@ print("named rev id, court:", named_rev.id, named_rev.get("game/G1", "court"))
 # named rev id, court: 7 west
 
 # %% [markdown]
+# `bump` is a convenience: it reads `db db/version`, adds the next
+# version, and writes that row for you. A revision is named the same
+# way without it, by writing the row yourself: `(db, db/tag, name)`
+# names the revision its transaction commits.
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t.add("db", "db/tag", "2026-Q4-official")
+print("tagged rev id:", t.rev.id)
+# tagged rev id: 8
+
+# %% [markdown]
+# `L.at(name)` reads through the name, as `L.at("0.1.0")` reads
+# through the version: each route is a row on `db` pointing at a
+# revision.
+
+# %%
+official_rev = L.at("2026-Q4-official")
+print("by name, rev id, court:", official_rev.id, official_rev["game/G1", "court"])
+# by name, rev id, court: 8 west
+print("by version, rev id, court:", named_rev.id, named_rev["game/G1", "court"])
+# by version, rev id, court: 7 west
+
+# %% [markdown]
 # ## Typing a predicate
 
 # %%

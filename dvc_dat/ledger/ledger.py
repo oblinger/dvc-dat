@@ -253,7 +253,8 @@ class Ledger:
 
     def at(self, which: Union[int, str, None] = None) -> Rev:
         """A frozen view: ``None`` the top, an ``int`` (or digit string) a revision, ``"M.m.p"`` the latest revision whose
-        ``db db/version`` row (the release, ``bump(t, "db")``) added that version."""
+        ``db db/version`` row (the release, ``bump(t, "db")``) added that version, any other str the revision whose
+        ``db db/tag`` row added that name."""
         top = self._store.top()
         if which is None:
             return Rev(self, top)
@@ -270,7 +271,11 @@ class Ledger:
             if not found:
                 raise KeyError(f"no revision set the ledger version {which}")
             return found[-1]
-        raise TypeError(f"at takes None, an int revision or a version string M.m.p, not {which!r}")
+        if isinstance(which, str) and which:
+            found = [r.rev for r in Rev(self, top).history("db", "db/tag", which) if r.added]
+            if found:
+                return found[-1]
+        raise TypeError(f"at takes None, an int revision, a version string M.m.p or a db/tag name, not {which!r}")
 
     def transaction(self, *, by: Union[str, Dict[str, Any]], lock: Optional[float] = None,
                     **preds: Any) -> Transaction:

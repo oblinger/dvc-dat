@@ -46,7 +46,7 @@ The handle on one ledger: a folder holding `ledger.db` and the art store `art/`,
     The resolved ledger folder; for a Postgres ledger, the DSN with its `art` parameter made absolute. `repr` hides a DSN's password. ^path
 
 **at**`(which: int | str | None = None) -> Rev`
-    `None` is the top; an `int` or a digit string is that revision (`KeyError` outside `0..top`); `"M.m.p"` is the latest revision that set `(db, db/version, M.m.p)`, the release row (`KeyError` when none did); a `bool` or anything else is `TypeError`. ^at
+    `None` is the top; an `int` or a digit string is that revision (`KeyError` outside `0..top`); `"M.m.p"` is the latest revision that set `(db, db/version, M.m.p)`, the release row (`KeyError` when none did); any other str is the revision whose `(db, db/tag, name)` row added that name, `L.at("2026-Q4-official")`; a `bool`, or a str that is neither, is `TypeError`. ^at
 
 **transaction**`(*, by: str | dict, lock: float | None = None, **preds) -> Transaction`
     A write set, used only as `with L.transaction(by=...) as t:`. `by` names the writer and is required: a non-empty `str` (`"human:dan"`), or a non-empty JSON `dict` for a structured identity (`{"host": ..., "user": ..., "admins": [...]}`), stored under the `json:` tag and read back as the dict, so no identity is parsed out of a string (DAT 1024); anything else is `TypeError`. The `eval:` prefix convention is a string's alone; `lock=` holds the write lock for the whole body, at most that many seconds. Each extra keyword is a `str` or a JSON document and lands as a row on the transaction's `db/tx/<rev>` subject beside `db/by` and `db/time`. See [Revisions and transactions](#Revisions%20and%20transactions). ^transaction
@@ -517,7 +517,7 @@ The package's other exports: the two ledger handles (also exported from `dvc_dat
     A where clause or select key named a dotted predicate neither declared nor carried by any row. ^unindexed
 
 **Exists**`(LedgerError, ValueError)`
-    An `add`, `remove`, bracket write or `del` on one of a sealed subject's own predicates, raised at commit. ^exists
+    An `add`, `remove`, bracket write or `del` on one of a sealed subject's own predicates, or a `db/tag` name added before, raised at commit. ^exists
 
 **Undeclared**`(LedgerError, TypeError)`
     At the seal, a pred name the class's `@ledger_class(preds=...)` did not declare. ^undeclared
@@ -560,7 +560,7 @@ One `with` block is one revision: its rows land together on exit, in body order,
 
 
 ## The fold
-A read turns the rows at or before its revision into what they hold, by each predicate's cardinality. Under `one`, the default, the latest add wins, so `add` is assignment; a remove of the held object leaves nothing held. Under `many`, the held objects are the set added and not since removed, each at its earliest add. Cardinality is itself a row, `(db/pred/officials, db/cardinality, many)`, read as of the same revision; every `db/` predicate (the clocks `db/version` and `db/commit` among them) is fixed at `one`; a bare `version` or `commit` is the user's, `one` by default and declarable `many` like any other. Every read folds except `history`.
+A read turns the rows at or before its revision into what they hold, by each predicate's cardinality. Under `one`, the default, the latest add wins, so `add` is assignment; a remove of the held object leaves nothing held. Under `many`, the held objects are the set added and not since removed, each at its earliest add. Cardinality is itself a row, `(db/pred/officials, db/cardinality, many)`, read as of the same revision; every `db/` predicate (the clocks `db/version` and `db/commit` among them) is fixed at `one`, but `db/tag`, fixed at `many`; a bare `version` or `commit` is the user's, `one` by default and declarable `many` like any other. Every read folds except `history`.
 
 
 ## The db/ vocabulary
@@ -568,7 +568,7 @@ A read turns the rows at or before its revision into what they hold, by each pre
 
 | subject | what it holds |
 | --- | --- |
-| `db` | `db/version`, the release, the name of a whole state (`bump(t, "db")`, `L.at("M.m.p")`); `db/format`; `db/memo-policy`, the memo policy's name ([Memoization and the platform](#Memoization%20and%20the%20platform)) |
+| `db` | `db/version`, the release, the name of a whole state (`bump(t, "db")`, `L.at("M.m.p")`); `db/tag`, a name for the revision its transaction commits (`t.add("db", "db/tag", "2026-Q4-official")`, `L.at("2026-Q4-official")`): cardinality `many`, never reused (a name added before is `Exists`, nothing written), neither digits nor `M.m.p`; `db/format`; `db/memo-policy`, the memo policy's name ([Memoization and the platform](#Memoization%20and%20the%20platform)) |
 | `db/tx/<rev>` | `db/by`, `db/time`, the transaction's keywords |
 | `db/pred/<name>` | `db/cardinality`, `db/index`, `db/type`, `db/doc` |
 | `db/code/<16 hex>` | `db/modules` (`relpath -> sha256` of every module the run loaded, a module its caller loaded first included, and every mounted file it read, through the namespace or by opening it), `db/mounts` (the mounts hash when sandboxed, `none` when installed): a snapshot of code, shared by every function in it and every result it made |

@@ -51,7 +51,8 @@ class Unindexed(LedgerError, LookupError):
 
 
 class Exists(LedgerError, ValueError):
-    """An ``add``, ``remove``, bracket write or ``del`` on one of a sealed subject's own predicates."""
+    """An ``add``, ``remove``, bracket write or ``del`` on one of a sealed subject's own predicates, or a
+    ``db/tag`` name added before (a name is never reused)."""
 
 
 class Undeclared(LedgerError, TypeError):
