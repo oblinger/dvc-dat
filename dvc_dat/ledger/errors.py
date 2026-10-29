@@ -24,7 +24,8 @@ class UnmountedImport(LedgerError, ImportError):
 
 
 class UntracedRead(LedgerError, PermissionError):
-    """A sandboxed function read a path outside the mounts, the dats and its path folder."""
+    """A sandboxed function read a path outside the mounts, the dats and its path folder; or an unsandboxed
+    one read a file of its repo outside the dats (Eval § 5.3)."""
 
 
 class ConfinedWrite(LedgerError, PermissionError):

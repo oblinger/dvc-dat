@@ -445,7 +445,7 @@ The package's other exports: two decorators, three helpers, and the exceptions. 
 | [NotEvaluated](#^notevaluated) | A miss this environment cannot run |
 | [NotClean](#^notclean) | `clean=True`, and the code is not a clean version |
 | [UnmountedImport](#^unmountedimport) | A sandboxed import outside every mount |
-| [UntracedRead](#^untracedread) | A sandboxed read outside the allowed places |
+| [UntracedRead](#^untracedread) | A sandboxed read outside the allowed places, or an unsandboxed read of its repo outside the dats |
 | [ConfinedWrite](#^confinedwrite) | A sandboxed write outside the path folder |
 | [ConfinedNetwork](#^confinednetwork) | A sandboxed network use |
 | [LockTimeout](#^locktimeout) | A lock= body past its limit |
@@ -487,7 +487,7 @@ The package's other exports: two decorators, three helpers, and the exceptions. 
     A sandboxed body imported a module of a mounted repo that lies under no mount. ^unmountedimport
 
 **UntracedRead**`(LedgerError, PermissionError)`
-    A sandboxed body read outside the mounts, the art store and its `path` folder. ^untracedread
+    A sandboxed body read outside the mounts, the art store and its `path` folder; or an unsandboxed body read a file of its own repo checkout outside the dats. ^untracedread
 
 **ConfinedWrite**`(LedgerError, PermissionError)`
     A sandboxed body wrote outside its `path` folder, the dat being produced. ^confinedwrite
@@ -606,7 +606,7 @@ A function that declares `path: Path` is given a fresh folder under `$DAT_WORK` 
 ## The execution environment
 `rev.ns.load(name)` decides between two environments. A name under a mounted prefix is *sandboxed*; any other name is *unsandboxed*. The difference is what the `fn` dependency item stands for, and so what a changed input the memo can detect.
 
-**Unsandboxed** executes in the Python environment of the ledger's own process: whatever that process has imported, with every package it can see. The function's `code` subject hashes the function module's static import closure within its checkout, and its `code/<repo>` dependency item names the checkout's commit; the commit stands for the bytes, which is why an unsandboxed call needs a clean checkout. The checkout is found by git discovery over the folders of the imported modules, skipping the standard library, `site-packages` and the dvc-dat checkout; a checkout is named by its `pyproject.toml` `[project].name`.
+**Unsandboxed** executes in the Python environment of the ledger's own process: whatever that process has imported, with every package it can see. The function's `code` subject hashes the function module's static import closure within its checkout, and its `code/<repo>` dependency item names the checkout's commit; the commit stands for the bytes, which is why an unsandboxed call needs a clean checkout. The commit vouches for the code the body imports, not for a file it opens: while an unsandboxed body runs, a file of its repo checkout opened to read outside the dats (the dat folders, the art stores, the ledger's folder, its `path` folder) is `UntracedRead`; the import system and the ledger's own machinery read freely, and a write is not checked. Mount the function to have such a read traced by its bytes. The checkout is found by git discovery over the folders of the imported modules, skipping the standard library, `site-packages` and the dvc-dat checkout; a checkout is named by its `pyproject.toml` `[project].name`.
 
 **Sandboxed** functions live under a mount: rows naming a dotted prefix, its repo and its root, `(db/mount/demo_game.etl, db/root, demo_game/etl)` with `db/repo` beside it. Each call runs in a fresh process forked from a warm `python -I` server, one per environment, which holds only the ledger's machinery (no mounted module, no CUDA); a finder first on `sys.meta_path` serves the mounted prefixes from their roots, so every run loads, and records, exactly what it uses, third-party modules included. The `code` item is then the bytes of every module the run loaded, and of every mounted file it read, through `ns.load` (a spec, a literal) or by opening it (a config, a yaml); a nested run's are its own, a module its caller loaded first included: one changed byte anywhere is a different snapshot, so a sandboxed call runs at HEAD, clean or dirty. The child refuses what it cannot trace: `UnmountedImport`, `UntracedRead`, `ConfinedWrite`, `ConfinedNetwork`. An incomplete mount table is therefore a crash rather than a silently wider set of dependencies.
 
