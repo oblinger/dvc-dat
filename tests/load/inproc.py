@@ -59,6 +59,9 @@ def setup(path: Any) -> int:
     if is_dsn(path):
         make_schema(path)
     L = Ledger(path, create=True)
+    if L.at().id:
+        raise SystemExit(f"{path}: holds revisions already; the in-process leg wants a fresh ledger (its tags "
+                         "repeat run to run)")
     with L.transaction(by="inproc:setup") as t:
         t.add("db/pred/part", "db/cardinality", "many")
         t.add("db/pred/flipc", "db/cardinality", CARDS[0])

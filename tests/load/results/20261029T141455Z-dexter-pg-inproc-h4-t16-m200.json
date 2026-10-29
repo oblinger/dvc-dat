@@ -1,0 +1,72 @@
+{
+ "date": "20261029T141455Z",
+ "machine": {
+  "host": "dexter.local",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "machine": "x86_64",
+  "cpus": 12,
+  "python": "3.12.14",
+  "sqlite": "3.53.1",
+  "store": "pg",
+  "postgres": "17.11 (Homebrew)"
+ },
+ "config": {
+  "ledger": "postgresql://postgres@localhost:5544/postgres?options=-csearch_path%3Dip_0_02&art=/tmp/svp1468/pgart-4-16-0.02",
+  "handles": 4,
+  "threads": 16,
+  "transactions": 200,
+  "write_share": 0.5,
+  "lock": 0.02,
+  "flips": 60,
+  "flip_pause": 0.01,
+  "seed": 0,
+  "k": 4
+ },
+ "wall_s": 16.019,
+ "hung": [],
+ "transactions_committed": 821,
+ "top": 822,
+ "tx_per_s": 51.25,
+ "reads": 1577,
+ "reads_per_s": 98.45,
+ "flips": 0,
+ "flip_lock_timeouts": 60,
+ "counts": {
+  "write": {
+   "ok": 821,
+   "LockTimeout": 802
+  },
+  "read": {
+   "ok": 1577
+  }
+ },
+ "latency": {
+  "write": {
+   "n": 1623,
+   "p50_ms": 66.682,
+   "p90_ms": 276.745,
+   "p99_ms": 428.02,
+   "max_ms": 505.741
+  },
+  "read": {
+   "n": 1577,
+   "p50_ms": 21.602,
+   "p90_ms": 56.626,
+   "p99_ms": 88.149,
+   "max_ms": 111.208
+  }
+ },
+ "errors": [],
+ "invariants": {
+  "failures": [],
+  "counts": {},
+  "top": 822,
+  "setup_top": 1,
+  "checked": {
+   "committed": 821,
+   "reads": 1577,
+   "flips": 0,
+   "revisions_read": 705
+  }
+ }
+}

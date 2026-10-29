@@ -103,3 +103,61 @@ below half the 4-process value recorded on the machine running it:
 
 On a host with no recorded floor only the invariants are checked. A
 floor, not a target: it catches a regression of 2x, not drift.
+
+**In one process** (SVP 1468, R0001): `tests/load/inproc.py`, `uv run python -m
+tests.load.inproc --handles N --threads M --transactions T --ledger <fresh folder or
+DSN>`; `tests/load/test_inproc.py` runs a small one (SQLite, and Postgres when
+`DVC_DAT_TEST_PG` answers) in the normal suite, and `tests/ledger/test_handles.py`
+pins the two-handle cases on both stores. N `Ledger` handles on one ledger, M
+threads over them (thread j on handle j % N), each doing T operations: half writes
+(one transaction of 4 `(ip/<tag>, part, k)` rows; every other one under `lock=`),
+half reads (`h.at()`, the `ip/*` parts folded there, the flipped declarations).
+A flipper thread on handle 0 cycles `db/pred/flipc db/cardinality` (one / many),
+`db/pred/flipt db/type` (str / json) and a fresh `db/index`, and after each
+commit asks every other handle. Invariants: revisions 1..top, one `db/by` each,
+none reported twice, each thread's commits increasing and its `at()` never
+below its last read or commit; no read sees a subject with other than 4 parts,
+every committed tag's 4 rows at its revision, no failed tag in the ledger; every
+read's subject digest equal to a fresh handle's at its revision and to the commit
+log's; every observed cardinality and type equal to the last flip at or below
+the read's revision; after a flip at R every other handle's next `at()` is
+`>= R` and answers the new value; a declared index is listed by every handle.
+
+Dexter (same machine as above; Python 3.12.14, SQLite 3.53.1, PostgreSQL 17.11
+Homebrew, fresh `initdb`, default config, localhost:5544), 2026-10-29, dvc-dat
+branch `row-1468`, T = 200 operations per thread, 60 flips (20 of each kind).
+
+| Store | Handles | Threads | `lock=` | Wall s | Transactions | tx/s | reads/s | write p50 ms | write p99 ms | read p50 ms | read p99 ms | LockTimeout (writes / flips) | Invariant failures |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SQLite | 1 | 8 | 10 s | 59.3 | 851 | 14.4 | 13.6 | 6.8 | 59.7 | 529.0 | 1176.2 | 0 / 0 | none |
+| SQLite | 4 | 8 | 10 s | 58.1 | 851 | 14.6 | 13.9 | 6.5 | 60.7 | 538.3 | 1081.7 | 0 / 0 | none |
+| SQLite | 8 | 8 | 10 s | 54.9 | 851 | 15.5 | 14.7 | 6.2 | 42.2 | 508.7 | 1034.4 | 0 / 0 | none |
+| SQLite | 16 | 16 | 10 s | 253.2 | 1683 | 6.6 | 6.2 | 11.8 | 105.3 | 2485.6 | 4510.5 | 0 / 0 | none |
+| SQLite | 4 | 16 | 0.02 s | 237.8 | 1649 | 6.9 | 6.6 | 11.2 | 52.3 | 2277.6 | 4540.9 | 25 / 9 | none |
+| Postgres | 1 | 8 | 10 s | 9.8 | 851 | 86.6 | 82.3 | 74.6 | 181.2 | 11.6 | 43.5 | 0 / 0 | none |
+| Postgres | 4 | 8 | 10 s | 10.3 | 851 | 83.0 | 78.9 | 78.5 | 163.7 | 11.9 | 40.3 | 0 / 0 | none |
+| Postgres | 8 | 8 | 10 s | 10.0 | 851 | 85.5 | 81.2 | 74.3 | 180.5 | 12.0 | 46.3 | 0 / 0 | none |
+| Postgres | 16 | 16 | 10 s | 31.3 | 1683 | 53.8 | 50.4 | 237.6 | 626.4 | 23.1 | 107.8 | 0 / 0 | none |
+| Postgres | 4 | 16 | 0.02 s | 16.0 | 821 | 51.3 | 98.5 | 66.7 | 428.0 | 21.6 | 88.1 | 802 / 60 | none |
+
+- No invariant failure on either store at any row: no stale cardinality, type
+  or index on any handle after a flip, no half-committed transaction seen, no
+  as-of read differing from a fresh handle's. There is no head-state cache to go
+  stale: a `Rev` folds declarations from the rows at or below its own revision
+  (`Rev._cards` lives on the `Rev`), and `h.at()` reads the top from the store
+  every call.
+- `lock=0.02` in threads takes the `threading.Timer` path (an async
+  `LockTimeout` into the body's thread, not `SIGALRM`): 25 (SQLite) and 802
+  (Postgres) writes timed out, none left a row or its tag. On Postgres every
+  flip timed out, so that row checks no flip; the 10 s rows do.
+- Transactions and reads are each about half of the operations, so tx/s and
+  reads/s move together; wall time is set by the reads, which fold every `ip/*`
+  row (growing with the run).
+- SQLite reads are slow under threads: read p50 529 ms at 8 threads, where the
+  same read alone on the same ledger takes 28 ms (Postgres p50: 12 ms). Not
+  explained here; a correctness run, not a tuning one.
+- The leg refuses a ledger that already holds revisions: its tags repeat run to
+  run. (Three Postgres rows first run into reused schemas failed `no-half` and
+  `as-of` on the earlier run's rows; rerun into fresh schemas they pass; the
+  failed JSONs are not kept.)
+- Results: `tests/load/results/*-inproc-*.json`, one line each in `summary.txt`.
