@@ -31,7 +31,9 @@ body's ``path`` folder, the dat being produced
 writes inside a body (a nested eval's seal, a dat materialised into the art
 store) run ``unguarded``. The same hook refuses a host-name lookup or an internet
 send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
-A nested eval runs in-process and its loads count toward its own entry (Q37 (ii)).
+A nested eval runs in-process and its loads count toward its own entry (Q37 (ii)), a module its
+caller loaded first included: the worker's ``__import__`` credits every import a body makes, loaded
+already or not, with what that module's first import pulled in.
 
 A dat's run function under a mount (an ``Fn`` of kind ``"dat"``, DAT 1045, 1046)
 runs through the same call: its keys are the spec, expanded in the parent, and the
@@ -44,7 +46,7 @@ The ``code`` item (Q37 (A); Dan 2026-10-21; DAT 1037): exactly the modules the r
 (beside the function's ``Code``), hashed with the mount rows into ``db/code/<hash 16>``; the
 ``fn`` item beside it is the function's dotted name. A mounted module (and
 the static import closure of the function's module), and a mounted file the body
-read through the namespace (a spec, a literal: ``note_read``), is ``relpath -> sha256`` of
+read, through the namespace (a spec, a literal: ``note_read``) or by opening it (a config), is ``relpath -> sha256`` of
 the file as read; a third-party one is ``dist:<name> -> <version>:<sha256 of its
 RECORD>`` when its distribution has a ``RECORD``, else ``py:<path under its
 sys.path entry> -> sha256`` of the file (the standard library, an editable
@@ -519,7 +521,7 @@ def import_version(prefix: str) -> Optional[str]:
     old = STATE.guard
     STATE.guard = True
     try:
-        v = getattr(importlib.import_module(prefix), "__version__", None)
+        v = getattr((_REAL_IMPORT_MODULE or importlib.import_module)(prefix), "__version__", None)
     finally:
         STATE.guard = old
         for n in set(sys.modules) - before:
@@ -567,14 +569,85 @@ def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
 # -- the worker's own machinery -----------------------------------------------------------------------
 
 class _Frame:
-    """One running body: the modules present when it started, those a nested body claimed, and the mounted
-    files it read through the namespace (``relpath -> sha256``)."""
+    """One running body: the modules present when it started, those a nested body claimed, the modules it
+    imported (``requested``, loaded already or not), and the mounted files it read (``relpath -> sha256``)."""
 
     def __init__(self) -> None:
         self.before: Set[str] = set(sys.modules)
         self.claimed: Set[str] = set()
+        self.requested: Set[str] = set()
         self.loaded: Set[str] = set()
         self.read: Dict[str, str] = {}
+
+
+#: In the worker: each module's first import, the modules it added to ``sys.modules`` (what it pulled in),
+#: so a later body importing it again is credited with those too.
+_PULLED: Dict[str, Set[str]] = {}
+_REAL_IMPORT: Any = None
+_REAL_IMPORT_MODULE: Any = None
+
+
+def _credit(names: List[str], before: Optional[Set[str]]) -> None:
+    """``names`` were imported by the running body; ``before`` the modules present before a first load."""
+    if before is not None:
+        added = set(sys.modules) - before
+        for n in added:
+            _PULLED.setdefault(n, added - {n})
+    if STATE.frames:
+        STATE.frames[-1].requested.update(n for n in names if n in sys.modules)
+
+
+def _absolute(name: str, globals: Any, level: int) -> str:
+    if level <= 0:
+        return name
+    g = globals or {}
+    package = g.get("__package__")
+    if package is None:
+        package = g.get("__name__", "") if "__path__" in g else g.get("__name__", "").rpartition(".")[0]
+    try:
+        return importlib.util.resolve_name("." * level + name, package)
+    except (ImportError, ValueError):
+        return name
+
+
+def _tracking_import(name: str, globals: Any = None, locals: Any = None, fromlist: Any = (), level: int = 0) -> Any:
+    """``builtins.__import__`` in the worker: an import statement in a body is credited to it even when
+    the module is loaded already (a nested body importing what its caller loaded, Q37 (ii))."""
+    if not STATE.frames:
+        return _REAL_IMPORT(name, globals, locals, fromlist, level)
+    full = _absolute(name, globals, level)
+    before = None if full in sys.modules else set(sys.modules)
+    mod = _REAL_IMPORT(name, globals, locals, fromlist, level)
+    parts = full.split(".") if full else []
+    names = [".".join(parts[:i]) for i in range(1, len(parts) + 1)]
+    names += [f"{full}.{a}" for a in (fromlist or ()) if isinstance(a, str) and a != "*"]
+    _credit(names, before)
+    return mod
+
+
+def _tracking_import_module(name: str, package: Optional[str] = None) -> Any:
+    """``importlib.import_module`` in the worker, credited as ``_tracking_import``."""
+    if not STATE.frames:
+        return _REAL_IMPORT_MODULE(name, package)
+    full = importlib.util.resolve_name(name, package) if name.startswith(".") else name
+    before = None if full in sys.modules else set(sys.modules)
+    mod = _REAL_IMPORT_MODULE(name, package)
+    parts = full.split(".")
+    _credit([".".join(parts[:i]) for i in range(1, len(parts) + 1)], before)
+    return mod
+
+
+def _pulled(names: Set[str], base: Set[str]) -> Set[str]:
+    """``names`` and every module their first imports pulled in, transitively, outside ``base``."""
+    out: Set[str] = set()
+    todo = [n for n in names if n not in base]
+    while todo:
+        n = todo.pop()
+        if n in out:
+            continue
+        out.add(n)
+        todo.extend(m for m in _PULLED.get(n, ()) if m not in base and m not in out)
+    return out
 
 
 def note_read(checkout: Path, f: Path) -> None:
@@ -826,7 +899,23 @@ def _audit(event: str, args: Any) -> None:
     if write:
         _check_write(p)
         return
-    _check_read(p, sys._getframe(1))
+    caller = sys._getframe(1)
+    _check_read(p, caller)
+    _note_open(p, caller)
+
+
+def _note_open(p: str, caller: Any) -> None:
+    """A mounted file the running body opened to read (a config, a yaml): part of its ``code`` item by its
+    bytes, as a module it imports is, so an edit to it is a miss, never a stale hit. The import system's
+    own reads of module files are its modules', counted already."""
+    if not STATE.frames or caller.f_code.co_filename.startswith("<frozen importlib"):
+        return
+    m = next((m for m in STATE.mounts if _under(p, [os.path.realpath(m.path)])), None)
+    if m is None or not os.path.isfile(p):
+        return
+    checkout = Path(os.path.realpath(m.checkout))
+    with unguarded():                               # hashing it is the ledger's own read
+        note_read(checkout, Path(p))
 
 
 def _importing(frame: Any) -> Optional[str]:
@@ -864,6 +953,12 @@ def install_worker(ledger: Any, mounts: List[Mount]) -> None:
         #                    editable install's source folder is unreadable to the import system)
         sys.meta_path.insert(0, MountFinder())
         sys.addaudithook(_audit)
+        global _REAL_IMPORT, _REAL_IMPORT_MODULE
+        import builtins
+
+        _REAL_IMPORT, _REAL_IMPORT_MODULE = builtins.__import__, importlib.import_module
+        builtins.__import__ = _tracking_import      # a body's imports, loaded already or not (Q37 (ii))
+        importlib.import_module = _tracking_import_module
         tempfile.gettempdir()                       # probed unconfined, so a default temp file in a body is
                                                     # refused by name (ConfinedWrite), not "no usable dir"
     STATE.mounts = mounts
@@ -989,7 +1084,8 @@ def _body(work: Optional[Path]) -> Iterator[_Frame]:
         STATE.frames.pop()
         STATE.works.pop()
         new = set(sys.modules) - frame.before
-        frame.loaded = new - frame.claimed
+        base = STATE.frames[0].before if STATE.frames else frame.before     # what the server held: infrastructure
+        frame.loaded = (new - frame.claimed) | _pulled(frame.requested, base)
         if STATE.frames:
             STATE.frames[-1].claimed |= new         # a nested body's loads are its own entry's (Q37 (ii))
 
