@@ -65,8 +65,7 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 
 - **Sandbox stubs.** No idle retirement of workers; a nested run
   under another mount runs in the same worker; an unsandboxed run nested
-  inside a worker is unsupported; repo files read under a mount are
-  allowed, not recorded; no old commit is ever checked out.
+  inside a worker is unsupported; no old commit is ever checked out.
 - **The mirror**: one durable shelf per cloud region beside the local
   art store, and a `whereabouts(hash, region)` table saying where the
   bytes are now, outside the quads.

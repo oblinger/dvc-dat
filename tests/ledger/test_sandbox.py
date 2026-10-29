@@ -80,6 +80,7 @@ PKG = {
 
         TABLE = {"dat": {"do": "sbx.stage.runs.table", "kwargs": {"n": 3}}}
     '''),
+    "sbx/stage/conf.yaml": "k: 1\n",
     "sbx/stage/specs/base.yaml": "dat:\n  kwargs: {n: 3}\n",
     "sbx/stage/specs/table.yaml": textwrap.dedent('''
         dat:
@@ -133,6 +134,20 @@ PKG = {
         def borrow(rev, *, game: str) -> dict:
             from sbx import other
             return {"x": other.X}
+
+        @ledger_fn
+        def conf(rev, *, game: str) -> dict:
+            return {"text": (Path(__file__).parent / "conf.yaml").read_text()}
+
+        @ledger_fn
+        def hue(rev, *, game: str) -> dict:
+            import colorsys
+            return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0]}
+
+        @ledger_fn
+        def outer_hue(rev, *, game: str) -> dict:
+            import colorsys                         # loaded here first: the nested hue imports it again
+            return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0], "inner": rev.run("sbx.stage.fns.hue", game=game).obj}
 
         @ledger_fn
         def snoop(rev, *, game: str) -> dict:
@@ -359,6 +374,31 @@ def test_nested_eval_in_process_and_work_folder(sbx):
     assert (d.path / "f.txt").read_text() == "G1" and d.name == "anonymous/Dat"
     e = L.at().run("sbx.stage.fns.folder", game="G1", path="games/G1")      # a hit, renamed
     assert e.subject == d.subject and e.name == "games/G1" and (e.path / "f.txt").read_text() == "G1"
+
+
+def test_a_mounted_file_the_body_opens_is_in_its_code_item(sbx):
+    L, repo = sbx
+    v = L.at().run("sbx.stage.fns.conf", game="G1")
+    mods = L.at()[v.dependencies["code"], "db/modules"]
+    assert mods["sbx/stage/conf.yaml"] == sha256((repo / "sbx/stage/conf.yaml").read_bytes())
+    assert L.at().run("sbx.stage.fns.conf", game="G1").subject == v.subject
+    (repo / "sbx/stage/conf.yaml").write_text("k: 2\n")
+    assert not v.matches(L.at())
+    w = L.at().run("sbx.stage.fns.conf", game="G1")
+    assert w.obj == {"text": "k: 2\n"} and w.subject != v.subject
+
+
+def test_a_module_the_caller_loaded_is_recorded_for_the_nested_entry(sbx):
+    import colorsys
+
+    L, _repo = sbx
+    v = L.at().run("sbx.stage.fns.outer_hue", game="G1")
+    assert v.obj == {"h": 0.0, "inner": {"h": 0.0}}
+    inner = L.at().run("sbx.stage.fns.hue", game="G1", seal="get")
+    assert inner is not None
+    want = sha256(open(colorsys.__file__, "rb").read())
+    assert L.at()[inner.dependencies["code"], "db/modules"]["py:colorsys.py"] == want
+    assert L.at()[v.dependencies["code"], "db/modules"]["py:colorsys.py"] == want
 
 
 def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):
