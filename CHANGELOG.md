@@ -6,7 +6,7 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
-## Unreleased
+## 2.40.1 — 2026-10-29
 
 - **A `ledgers:` section no longer makes the project a ledger-namespace project; `namespace: ledger` does (SVP 239 A2; patch).** In 2.40.0 the presence of `ledgers:` made `ns` a `LedgerNamespace`, which refuses `Dat.ns.mount`, so a project whose `manager:` mounts its own names (sv-pipe's `SVPManager`) failed at import once it listed its ledgers. Now: `ledger: <location>` alone still gives the ledger namespace (no existing project changes); `ledgers:` alone keeps the plain `Namespace`, and `x TARGET` is the bare run there; `ledgers:` with the new key `namespace: ledger` gives the ledger namespace and the ledger-run `x`. `L`, `Ledger()` and `ledgers.<name>` resolve exactly as before in every case. `namespace:` takes only `ledger`; another value, or `namespace: ledger` naming no ledger, is `ValueError`. Docs: `DAT Ledger` § Many ledgers, `DAT Dat` § Configuration, `cli.md`. Migration: a 2.40.0 project that relied on `ledgers:` for its ledger namespace adds `namespace: ledger`.
 
