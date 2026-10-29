@@ -30,7 +30,8 @@ if TYPE_CHECKING:
     from .rev import Rev
 
 
-def run(rev: "Rev", target: Any, *, seal: Any, clean: bool, path: Any, kwargs: Dict[str, Any]) -> Any:
+def run(rev: "Rev", target: Any, *, seal: Any, clean: bool, path: Any, kwargs: Dict[str, Any],
+        deterministic: bool = False) -> Any:
     """``Rev.run``: see the module doc."""
     from .namespace import LedgerNamespace
 
@@ -38,14 +39,14 @@ def run(rev: "Rev", target: Any, *, seal: Any, clean: bool, path: Any, kwargs: D
     if isinstance(target, str):
         obj = ns.load(target)
         if isinstance(obj, Fn) and obj.kind == "ledger":
-            return obj(seal=seal, clean=clean, path=path, **kwargs)
+            return obj(seal=seal, clean=clean, path=path, deterministic=deterministic, **kwargs)
     elif isinstance(target, dict):
         obj = target
     else:
         raise TypeError(f"run takes a dotted name or a spec dict, not {type(target).__name__}; a function "
                         "object would resolve in this process")
     fn, keys = memo_key(rev, ns, target, obj, kwargs)
-    return fn(seal=seal, clean=clean, path=path, kwargs=keys)
+    return fn(seal=seal, clean=clean, path=path, kwargs=keys, deterministic=deterministic)
 
 
 def memo_key(rev: "Rev", ns: "LedgerNamespace", target: Any, obj: Any,

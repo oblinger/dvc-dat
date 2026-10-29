@@ -15,7 +15,8 @@ new revision would have (the rows are inserted, read back through the open
 write transaction, and rolled back on a refusal): ``Exists`` (a write on a
 sealed subject's own predicates), the ``db/alias`` target check (A18, A45)
 and the ``db/type`` check (A36, A44). Rows land in body order, then
-``(db, db/format, …)`` on a ledger's first transaction, then the
+``(db, db/format, …)`` and, unless the body wrote one, ``(db, db/memo-policy, platform)`` on a
+ledger's first transaction, then the
 transaction's own ``db/tx/<rev>`` rows (A50).
 """
 
@@ -440,6 +441,10 @@ class Transaction:
             kept.append(op)
         if rev == 1:
             rows.append(("db", "db/format", "str:" + FORMAT, True))
+            from .policy import DEFAULT, PREDICATE, SUBJECT
+
+            if not any(r[0] == SUBJECT and r[1] == PREDICATE for r in rows):
+                rows.append((SUBJECT, PREDICATE, "str:" + DEFAULT, True))      # the memo policy (SVP 1474)
         rows.append((txs, "db/by", self._by, True))
         stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         rows.append((txs, "db/time", "str:" + stamp, True))

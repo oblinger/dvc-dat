@@ -119,8 +119,8 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 **ns**`: LedgerNamespace`
     The ledger's namespace at this revision (DAT 1046, 1051), the `Namespace` interface of [DAT Namespace API](../../DAT%20Design/DAT%20API/DAT%20Namespace%20API.md): `rev.ns.load(name)` is what the dotted `name` denotes here, `rev.ns.mounts()` the `db/mount` rows as `{prefix: {"root": ..., "repo": ...}}`, and `mount` is `TypeError` (a transaction's [`t.ns`](#^transaction-ns) mounts). The `db/mount/<prefix>` rows as of the revision are walked longest prefix first; under a mount the name is a path in the mount's tree, in the checkout discovery reports for its `db/repo` (none is `NotEvaluated`): a `.yaml`/`.yml`/`.json` file is read and comes back a dict (a dotted tail below the file walks into it), a function in a `.py` file comes back its [`Fn`](#Fn%20Interface), read off the file and never imported in this process, and a module-level literal (`TABLE = {...}`) its value. A mounted prefix owns its names: one nothing answers to is `ImportError`, a file and a module answering to one name `KeyError`. A name under no mount is imported (unsandboxed), a `@ledger_fn` coming back its `Fn` and anything else as itself. An `Fn`'s `kind` is read off the function: `"ledger"` for a `@ledger_fn`, `"dat"` for an undecorated one, a dat's run function, which runs only through a spec ([`run`](#^run)). In a project whose `.datconfig.yaml` names a ledger, `Dat.manager.ns` is this namespace at the head, `mount` refused; inside a sandboxed dat body it is this namespace at the run's revision (DAT 1047). See [Execution Semantics](#Execution%20Semantics). ^ns
 
-**run**`(target, /, *, seal=<this rev's ledger>, clean=False, path=None, **kwargs) -> Value | None`
-    The result of `target`, handing back an already-sealed result instead of running when one from the same code and memo key still holds at this revision; the API form of `just run TARGET KEY=VALUE` (DAT 1046). `target` is a dotted name, resolved as by [`ns.load`](#^ns), or a spec dict. A ledger function's name runs it with `kwargs` as its keys, which are its memo key. Anything else is a dat: a spec, a spec's name, or a dat's run function's name (the spec `{dat: {do: <name>}}`), `kwargs` updating the spec's `dat.kwargs`. A dat's memo key, `db/keys`, is the spec with its `dat.base` merged, the kwargs merged, `dat.kind` set and every `{}` expanded once (dotted names through the ledger's namespace), `dat.name` removed; `db/fn` is the run function's dotted name and `db/returns` the dat's class. A miss creates the dat in a work folder and runs it there (the machinery of `Dat.manager.run`), then seals the folder the run function saved; a run that leaves its dat open is `ValueError`. Where a miss runs is the function's: under a `db/mount`, in the sandbox worker, imported there from the mounted tree and never in the calling process, confined, its code the modules it loaded, provenance `eval:sandbox`, no `code/<repo>` item (a dat's run function gets the caller's dat folders and art folder, its `Dat.manager.ns` a `LedgerNamespace` at this revision); installed, in this process, its code the static closure and the `code/<repo>` commit, which needs a clean checkout (`NotEvaluated`), provenance `eval:unsandboxed`. `seal` says where the result goes, as on [`Fn.__call__`](#^--call--): by default, the hit, else run and save it as the memo entry; `seal=False` runs and keeps nothing; `seal=True` runs and seals locally; `seal=t` saves into an open transaction; `seal="get"` returns the saved result or `None` and never runs ([Running](#Running)). `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit of the latest clean run this revision records, its `db/repo/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. `path` names the result; a dat's name is `path=`, else its spec's `dat.name` template (`{unique}` counting up in the data folder), else `anonymous/Dat`, and a hit is handed back at its name, its folder a view there. A spec naming a `@ledger_fn` in `dat.do` is `TypeError`; a target that is neither a `str` nor a dict is `TypeError`. The dat's recorded dependencies that are names on the ledger enter its trace as alias reads. See [Execution Semantics](#Execution%20Semantics) and [Value Provenance](#Value%20Provenance). ^run
+**run**`(target, /, *, seal=<this rev's ledger>, clean=False, path=None, deterministic=False, **kwargs) -> Value | None`
+    The result of `target`, handing back an already-sealed result instead of running when one from the same code and memo key still holds at this revision; the API form of `just run TARGET KEY=VALUE` (DAT 1046). `target` is a dotted name, resolved as by [`ns.load`](#^ns), or a spec dict. A ledger function's name runs it with `kwargs` as its keys, which are its memo key. Anything else is a dat: a spec, a spec's name, or a dat's run function's name (the spec `{dat: {do: <name>}}`), `kwargs` updating the spec's `dat.kwargs`. A dat's memo key, `db/keys`, is the spec with its `dat.base` merged, the kwargs merged, `dat.kind` set and every `{}` expanded once (dotted names through the ledger's namespace), `dat.name` removed; `db/fn` is the run function's dotted name and `db/returns` the dat's class. A miss creates the dat in a work folder and runs it there (the machinery of `Dat.manager.run`), then seals the folder the run function saved; a run that leaves its dat open is `ValueError`. Where a miss runs is the function's: under a `db/mount`, in the sandbox worker, imported there from the mounted tree and never in the calling process, confined, its code the modules it loaded, provenance `eval:sandbox`, no `code/<repo>` item (a dat's run function gets the caller's dat folders and art folder, its `Dat.manager.ns` a `LedgerNamespace` at this revision); installed, in this process, its code the static closure and the `code/<repo>` commit, which needs a clean checkout (`NotEvaluated`), provenance `eval:unsandboxed`. `seal` says where the result goes, as on [`Fn.__call__`](#^--call--): by default, the hit, else run and save it as the memo entry; `seal=False` runs and keeps nothing; `seal=True` runs and seals locally; `seal=t` saves into an open transaction; `seal="get"` returns the saved result or `None` and never runs ([Running](#Running)). `clean=True` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the commit of the latest clean run this revision records, its `db/repo/<repo>` row), else it raises `NotClean`; by default a sandboxed function runs at HEAD, clean or dirty. `deterministic=True` asks the lookup to match the card and driver too, on top of the ledger's memo policy ([Memoization and the platform](#Memoization%20and%20the%20platform)). `path` names the result; a dat's name is `path=`, else its spec's `dat.name` template (`{unique}` counting up in the data folder), else `anonymous/Dat`, and a hit is handed back at its name, its folder a view there. A spec naming a `@ledger_fn` in `dat.do` is `TypeError`; a target that is neither a `str` nor a dict is `TypeError`. The dat's recorded dependencies that are names on the ledger enter its trace as alias reads. See [Execution Semantics](#Execution%20Semantics) and [Value Provenance](#Value%20Provenance). ^run
 
 
 
@@ -425,13 +425,13 @@ A value function resolved at one revision: a frozen dataclass made by `rev.ns.lo
 **kind**`: str`
     `"ledger"` for a `@ledger_fn`: its keys are its memo key and it receives them. `"dat"` for an undecorated function, a dat's run function (DAT 1046): its memo key is the expanded spec, and it receives the dat made from that spec in its work folder; it runs only through a spec (`rev.run(spec)`, `rev.run(name, **kwargs)`), and a direct call is `TypeError`. A plain `Dat.manager.run` in a ledger project runs a mounted one in the calling process, nothing memoised. ^fn-kind
 
-**__call__**`(*, seal=<the fn's ledger>, clean=False, path=None, kwargs=None, **keys) -> Value | None`
-    `seal` is where the result goes ([Running](#Running)). A `Ledger` (by default the one the function was loaded from) hands back a memo hit, else runs the body and saves the result as the memo entry in a transaction of its own; an open `Transaction` on that ledger does the same into it, the value's subject fixed at once and its revision at commit; `False` runs and keeps nothing, the trace on the result; `True` runs and seals locally (`v.seal()`); `"get"` returns a hit or `None` and never runs. Another ledger, or anything else, is `ValueError`. With `seal=t`, `path=` must be relative: it is the name the entry is saved under. The control options are exactly `seal`, `clean`, `path` and `kwargs`, never keys and never hashed. Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. An unsandboxed run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `db/repo/<repo>` `db/commit`, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
+**__call__**`(*, seal=<the fn's ledger>, clean=False, path=None, kwargs=None, deterministic=False, **keys) -> Value | None`
+    `seal` is where the result goes ([Running](#Running)). A `Ledger` (by default the one the function was loaded from) hands back a memo hit, else runs the body and saves the result as the memo entry in a transaction of its own; an open `Transaction` on that ledger does the same into it, the value's subject fixed at once and its revision at commit; `False` runs and keeps nothing, the trace on the result; `True` runs and seals locally (`v.seal()`); `"get"` returns a hit or `None` and never runs. Another ledger, or anything else, is `ValueError`. With `seal=t`, `path=` must be relative: it is the name the entry is saved under. The control options are exactly `seal`, `clean`, `path`, `kwargs` and `deterministic`, never keys and never hashed; `deterministic=True` adds the card and driver to the lookup's platform match ([Memoization and the platform](#Memoization%20and%20the%20platform)). Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. An unsandboxed run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `db/repo/<repo>` `db/commit`, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
 
 
 
 ## dvc_dat.ledger Interface
-The package's other exports: two decorators, three helpers, and the exceptions. Every exception is a `LedgerError` and also the builtin it most resembles, so a caller catches either. `Env`, `Checkout` and `set_env_provider` are importable as the test suite's seam for the environment and are not part of the interface.
+The package's other exports: two decorators, four helpers, and the exceptions. Every exception is a `LedgerError` and also the builtin it most resembles, so a caller catches either. `Env`, `Checkout` and `set_env_provider` are importable as the test suite's seam for the environment and are not part of the interface.
 
 | dvc_dat.ledger | |
 | --- | --- |
@@ -440,6 +440,7 @@ The package's other exports: two decorators, three helpers, and the exceptions. 
 | [bump](#^bump) | Move a clock subject's version |
 | [bump_source](#^bump-source) | Raise a module's `__version__` in its source |
 | [attr](#^attr) | Walk a dotted path into an object |
+| [register_policy](#^register-policy) | Name a memo policy a ledger's `db/memo-policy` row can select |
 | [LedgerError](#^ledgererror) | Base of every ledger exception |
 | [Multiple](#^multiple) | Several matched where one was required |
 | [NotEvaluated](#^notevaluated) | A miss this environment cannot run |
@@ -464,6 +465,9 @@ The package's other exports: two decorators, three helpers, and the exceptions. 
 
 **bump**`(t: Transaction, subject: str, part: str = "patch", *, confirm=None) -> str`
     Reads `version` through `t.previous_rev` (`0.0.0` when absent), adds the next by `part`, and returns it. `minor` and `major` need `confirm(old, new)` to return `True`. A subject holding a `db/alias` is `TypeError`: a value's version is a pred, not a clock. A `db/repo/` subject is `TypeError` too: a code version lives in its source (`bump_source`), and the first clean run after it moves the `db/repo/<repo>/<package>` clock, which the ledger alone writes (DAT 1043, 1044). It needs `lock=`: unlocked it is `Unlocked` and writes nothing. ^bump
+
+**register_policy**`(name: str, fn: Callable[[Mapping], str]) -> None`
+    Registers `fn`, a function from a platform record to a `str`, as the memo policy `name`, for a `(db, db/memo-policy, name)` row to select ([Memoization and the platform](#Memoization%20and%20the%20platform)). A built-in name (`platform`, `card`) is `ValueError`; registering a name again replaces it. Process-local: every process that looks up under the name registers it first, else the lookup is `LedgerError`. ^register-policy
 
 **bump_source**`(module: str, part: str = "patch", *, confirm=None) -> SourceBump`
     Raises a module's `__version__` by `part` in its source and returns `SourceBump(module, old, new, path, repo, package)`. `module` is a dotted name importable in this process; the version is the innermost on its dotted path, the module's own file then each enclosing package's `__init__.py`, the first holding one line `__version__ = "X.Y.Z"` (so `demo_game.etl`, a mount root declaring its own, finds `demo_game/etl/__init__.py`). One line is rewritten; nothing is committed and no ledger is touched. `minor` and `major` need `confirm(old, new)` to return `True`. A module that does not resolve is `ModuleNotFoundError`; no `__version__` line, or one not `MAJOR.MINOR.PATCH`, is `ValueError`, nothing written. `repo` is the checkout's name, `None` outside one; `package` is the dotted root whose file holds the version, the `<package>` of the `db/repo/<repo>/<package>` clock the next clean run moves. A mount name is reached by its dotted module name, not by `db/mount/<prefix>`. `just bump <module> [part]` is this call. ^bump-source
@@ -556,7 +560,7 @@ Every predicate the system writes or interprets is `db/...`; everything bare is 
 
 | subject | what it holds |
 | --- | --- |
-| `db` | `version`, the name of a whole state; `db/format` |
+| `db` | `version`, the name of a whole state; `db/format`; `db/memo-policy`, the memo policy's name ([Memoization and the platform](#Memoization%20and%20the%20platform)) |
 | `db/tx/<rev>` | `db/by`, `db/time`, the transaction's keywords |
 | `db/pred/<name>` | `db/cardinality`, `db/index`, `db/type`, `db/doc` |
 | `db/code/<16 hex>` | `db/modules` (`relpath -> sha256` of every module the run loaded, a module its caller loaded first included, and every mounted file it read, through the namespace or by opening it), `db/mounts` (the mounts hash when sandboxed, `none` when installed): a snapshot of code, shared by every function in it and every result it made |
@@ -650,6 +654,58 @@ A save writes the value's own rows once, under a subject hashing the dependencie
 
 
 
+## Memoization and the platform
+A memo entry records the whole platform it ran on; the ledger decides, at each lookup, how much of it must agree (SVP 1474). **Record at write, policy at lookup.**
+
+**The record.** Every run's entry stores two platform items. `platform` is the short tag `<os>-<machine>-py<X.Y>` (`linux-x86_64-py3.11`), as every entry before 1474 did. `platform/record` is the full record as canonical JSON, captured where the function ran: in the sandbox worker for a mounted function, in the calling process for an installed one, and for a draft saved later the machine it ran on, not the one that saved it.
+
+| field | holds |
+| --- | --- |
+| `platform` | the short tag, `<os>-<machine>-py<X.Y>` |
+| `os` | `sys.platform` (`linux`, `darwin`) |
+| `machine` | `platform.machine()` (`x86_64`, `arm64`) |
+| `python` | the full Python version, `3.11.9` |
+| `cpu` | the CPU model (`sysctl` on macOS, `/proc/cpuinfo` on Linux) |
+| `card` | the NVIDIA card model the process sees (`nvidia-smi`, honouring `CUDA_VISIBLE_DEVICES`; distinct models joined by ` + `), else `null` |
+| `driver` | the NVIDIA driver version, else `null` |
+| `cuda` | the CUDA version torch was built against, else `null` |
+| `torch` | the installed torch version, else `null` |
+
+The record is probed once per process; torch is never imported to read it. A hand seal (`v.seal(t)` of a value no run made) records `platform` alone, as before.
+
+**The policy.** A policy is a function from a record to a string; a lookup hits an entry only when `policy(stored record) == policy(current record)`, every other dependency item holding as before. A field the policy reads that a record lacks is a miss, never a hit: an entry written before 1474 holds only `platform`, read as the record `{"platform": <tag>}`, so a policy reading `card` never matches it, while the default still does. Built-ins:
+
+| name | compares |
+| --- | --- |
+| `platform` | the default: the `platform` field, byte for byte the tag every entry has always been matched on, so every existing entry keeps hitting |
+| `card` | `platform`, `card` and `driver`: a result computed on an H100 no longer answers on an RTX PRO 6000; a CPU-only entry (`card` `null`) still answers a CPU-only host |
+
+**Which policy is in force.** One row: `(db, db/memo-policy, <name>)`. A new ledger's first transaction writes it as `platform` (unless that transaction writes its own); a ledger made before 1474 has no row and reads `platform`. Changing the policy is a new row at a later revision, a plain `add`; every `db/` predicate is cardinality one, so the latest wins:
+
+```python
+with L.transaction(by="human:dan") as t:
+    t.add("db", "db/memo-policy", "card")
+```
+
+Every handle reads the policy at the ledger's top, whatever revision it looks up at, so all handles judge by one policy, and every entry, old or new, is judged by the policy in force at the lookup: after the change above, an entry sealed on an H100 under `platform` misses on an RTX PRO 6000 and still hits on an H100. Changing back restores the old answers; nothing is rewritten.
+
+**A policy of your own.** `register_policy(name, fn)` adds one in code, `fn` taking the record (a mapping of the fields above) to a `str`; the row then names it. The row stores only the name, so every process that looks up under it registers it first; an unregistered name is `LedgerError` naming it, at the lookup.
+
+```python
+from dvc_dat.ledger import register_policy
+
+def by_cuda(r):
+    return f"{r['platform']}|{r['card']}|{r['cuda']}"
+
+register_policy("cuda", by_cuda)
+```
+
+**Deterministic runs.** `deterministic=True` on a call (`f(..., deterministic=True)`, `rev.run(target, deterministic=True)`) adds `card` and `driver` to whatever the policy compares, for that lookup only; the entry a miss writes is the one any run writes. dvc-dat has no other notion of a deterministic run: a caller whose run is deterministic says so here. A nested lookup inside the body, and the `eval:` item that re-checks it, use the policy alone.
+
+**The index.** Each store handle keeps, in memory, the policy's reduction of every memo entry's record (subject to string), stamped with the policy it was built under. A lookup reads the policy row, rebuilds the index once when the stamp differs (a new row, or a name registered again), otherwise adds only the entries sealed since, and skips a candidate whose reduction cannot match without reading its rows. It is a pre-filter: every candidate it passes is judged in full by the hit test, so correctness never depends on it. It is not persisted; a new process builds it on its first lookup.
+
+
+
 
 # Value Provenance
 A value's provenance is stored in the ledger as triples whose subject is the value: beside its `db/value` row and its preds, one `db/deps/<item>` row for every input the computation depended on. These rows are the value's *dependencies*. They are written once, at the save, and never change; whether the dependencies still *hold* is computed, by re-asking each item at a revision. Every object is one string, the identity the input had when the value was computed, so two values' dependencies compare row by row and nothing is loaded.
@@ -662,7 +718,8 @@ In the table `<value>` is the value's own subject and the other angle-bracketed 
 | `<value>` | `db/deps/code` | `db/code/<16 hex>` | the code that ran, the snapshot: the hash of the modules it loaded (sandboxed) or of its static import closure (unsandboxed), with the mounts; holds while the function re-hashes to it at the rev |
 | `<value>` | `db/deps/fn` | `<dotted name>` | the function inside that snapshot (`plane.measure.length`) |
 | `<value>` | `db/deps/code/<repo>` | `<commit8>` | a checkout the run imported from, at that commit |
-| `<value>` | `db/deps/platform` | `<os>-<machine>-py<M.m>` | the platform it ran on |
+| `<value>` | `db/deps/platform` | `<os>-<machine>-py<M.m>` | the platform it ran on, its short tag; judged by the ledger's memo policy |
+| `<value>` | `db/deps/platform/record` | the platform record, canonical JSON | the full platform it ran on, captured where the function ran (a run's entry only; [Memoization and the platform](#Memoization%20and%20the%20platform)) |
 | `<value>` | `db/deps/<subject> <predicate>` | the held object | a row the body read with `rev[s, p]` or `get`, and what it held |
 | `<value>` | `db/deps/<name> db/alias` | `ref:<class>:<hash>` | a name the body loaded through, and the bytes it named |
 | `<value>` | `db/deps/ref:<class>:<hash>` | `ref:<class>:<hash>` | a value the body loaded, named by its bytes |
@@ -670,12 +727,12 @@ In the table `<value>` is the value's own subject and the other angle-bracketed 
 | `<value>` | `db/deps/q:{...}` | the sorted `ref:` list, or a token of the result | a query the body made (`refs`, `values`, `value`, `select`; any other read as `__call__`), and what it answered |
 | `<value>` | `db/deps/salt` | the mount's `db/salt` | the salt of the mount a sandboxed run was under, when set |
 
-A run records the first eight as it goes: `code`, `fn`, `code/<repo>` and `platform` from the environment, the rest from each read the body makes through its `Rev`. A hand seal's dependencies are declared instead: a `ref:` row for each of its `deps` (an alias row too when the dep was loaded by name, a `code` and an `fn` row for an `Fn` dep), plus `code/<repo>` for every repo the environment reports, and `platform`. Nothing in the dependencies describes the value; it is the evidence the value was computed from.
+A run records the first nine as it goes: `code`, `fn`, `code/<repo>`, `platform` and `platform/record` from the environment, the rest from each read the body makes through its `Rev`. A hand seal's dependencies are declared instead: a `ref:` row for each of its `deps` (an alias row too when the dep was loaded by name, a `code` and an `fn` row for an `Fn` dep), plus `code/<repo>` for every repo the environment reports, and `platform`. Nothing in the dependencies describes the value; it is the evidence the value was computed from.
 
 ## same_as, matches and diff
 **`same_as(other)`** measures byte identity between the contents of two values: `hash == other.hash`, `False` for `None`. It reads no dependencies. Two values computed from different inputs can be the same bytes, and the store keeps them once; two values with identical dependencies can differ in bytes, which is what a nondeterminism check looks for.
 
-**`matches(rev)`** measures whether anything a value depends on has changed by `rev`: whether any input it was computed from has, at `rev`, an identity other than the one its dependencies recorded. A later `rev` asks whether anything the value was built from has moved since; an earlier one asks whether the value would have been current then. The measure is the dependencies re-asked item by item, each kind its own way: `code` holds when the function its `fn` item names resolves at `rev` to the same `db/code` subject (sandboxed: the recorded modules re-hashed as they are now; unsandboxed: the static closure), and `fn` holds beside it; `code/<repo>` when the environment is at that commit; `platform` when the environment is the same; a `<subject> <predicate>` item when the fold at `rev` holds the same object; an alias item when the name resolves at `rev` to the same bytes; an `eval:` item when the nested lookup at `rev`, never running, yields that hash; a `q:` item when the query asked at `rev` answers the same; a `ref:` item always, since bytes do not change. It consults the ledger and the environment only and never runs anything; it is the hit test `run` applies to each candidate.
+**`matches(rev)`** measures whether anything a value depends on has changed by `rev`: whether any input it was computed from has, at `rev`, an identity other than the one its dependencies recorded. A later `rev` asks whether anything the value was built from has moved since; an earlier one asks whether the value would have been current then. The measure is the dependencies re-asked item by item, each kind its own way: `code` holds when the function its `fn` item names resolves at `rev` to the same `db/code` subject (sandboxed: the recorded modules re-hashed as they are now; unsandboxed: the static closure), and `fn` holds beside it; `code/<repo>` when the environment is at that commit; `platform` when the ledger's memo policy reduces the stored platform record and the environment's to the same string (`platform/record` is judged through it); a `<subject> <predicate>` item when the fold at `rev` holds the same object; an alias item when the name resolves at `rev` to the same bytes; an `eval:` item when the nested lookup at `rev`, never running, yields that hash; a `q:` item when the query asked at `rev` answers the same; a `ref:` item always, since bytes do not change. It consults the ledger and the environment only and never runs anything; it is the hit test `run` applies to each candidate.
 
 **`diff(other)`** measures how two values differ in what they were computed from: the dependency items whose recorded identities differ between them, item to `(mine, theirs)`, `None` where one lacks the item. It compares the two stored dependencies and asks the ledger nothing. Two seals of the same function and keys with different bytes differ in some item here, and that item is the cause.
 

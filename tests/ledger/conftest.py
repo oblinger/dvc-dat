@@ -5,6 +5,7 @@ deterministic: one repo, ``testrepo``, at commit ``abc1234``, clean, its
 checkout this folder; ``coded`` writes the matching ``db/repo/testrepo`` clocks.
 """
 
+import dataclasses
 import sys
 from pathlib import Path
 
@@ -30,10 +31,10 @@ class EnvBox:
         return self.env
 
     def code(self, commit="abc1234", dirty=False):
-        self.env = Env({"testrepo": Checkout(None, commit, dirty, HERE)}, self.env.platform)
+        self.env = dataclasses.replace(self.env, code={"testrepo": Checkout(None, commit, dirty, HERE)})
 
     def set(self, **kw):
-        fields = {"code": self.env.code, "platform": self.env.platform}
+        fields = {"code": self.env.code, "platform": self.env.platform, "record": self.env.record}
         fields.update(kw)
         self.env = Env(**fields)
 

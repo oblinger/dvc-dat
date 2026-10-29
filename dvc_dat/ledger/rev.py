@@ -590,7 +590,7 @@ class Rev:
         return LedgerNamespace(rev=self, unguarded=True)
 
     def run(self, target: Any, /, *, seal: Any = OWN, clean: bool = False, path: Any = None,
-            **kwargs: Any) -> Optional[Value]:
+            deterministic: bool = False, **kwargs: Any) -> Optional[Value]:
         """The API form of ``just run TARGET KEY=VALUE``: the result found if computed before by this code,
         else run and sealed as the memo entry (DAT 1046).
 
@@ -600,14 +600,14 @@ class Rev:
         is the spec with ``dat.base`` merged, ``dat.kind`` set, every ``{}`` expanded and ``dat.name``
         removed; a miss creates the dat in a work folder and runs it there, in the sandbox worker when its
         run function is mounted (provenance ``eval:sandbox``), here when installed (``eval:unsandboxed``,
-        a clean checkout to save). ``seal``, ``clean`` and ``path`` as ``Fn.__call__``'s; a dat's name is
+        a clean checkout to save). ``seal``, ``clean``, ``path`` and ``deterministic`` as ``Fn.__call__``'s; a dat's name is
         ``path=``, else its ``dat.name`` template, else ``anonymous/Dat{unique}``."""
         from .sandbox import unguarded
 
         with unguarded():                          # in a sandboxed body: the lookup and seal are the ledger's
             from .rundat import run
 
-            return run(self, target, seal=seal, clean=clean, path=path, kwargs=kwargs)
+            return run(self, target, seal=seal, clean=clean, path=path, kwargs=kwargs, deterministic=deterministic)
 
 
 def describe(s: Any, kind: Any, fn: Any, where: Optional[Dict[str, Any]], preds: Dict[str, Any]) -> str:

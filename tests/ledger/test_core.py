@@ -82,7 +82,7 @@ def test_one_transaction_one_revision_and_tx_rows_last(L):
     assert rev.id == 1 and rev.tx == "db/tx/1"
     rows = [(r.subject, r.predicate) for r in rev.history()]
     assert rows[:2] == [("s", "p"), ("db/tx/1", "checked")]
-    assert rows[2:5] == [("db", "db/format"), ("db/tx/1", "db/by"), ("db/tx/1", "db/time")]
+    assert rows[2:6] == [("db", "db/format"), ("db", "db/memo-policy"), ("db/tx/1", "db/by"), ("db/tx/1", "db/time")]
     assert rev[rev.tx, "why"] == "w"
 
 

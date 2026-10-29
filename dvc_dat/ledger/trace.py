@@ -17,9 +17,16 @@ Items (Module § Value ``Dependencies``):
     item (T034); it stays readable from the ``db/repo/<repo>/<package>``
     clocks at the revision (DAT 1044).
 ``platform``
-    the environment, now. (A sandboxed entry's third-party modules are in
+    the short tag ``<os>-<machine>-py<X.Y>`` of the platform it ran on; holds when the
+    ledger's memo policy (``policy``, the ``(db, db/memo-policy)`` row at the top) reduces the
+    stored record and the environment's to the same string, card and driver added under
+    ``deterministic=True`` (SVP 1474). (A sandboxed entry's third-party modules are in
     ``code``, each by its bytes or its distribution's ``RECORD``; there is no
     whole-``uv.lock`` item.)
+``platform/record``
+    the full platform record it ran on (``env.platform_record``), canonical JSON; provenance,
+    judged through the ``platform`` item. An entry written before it holds ``platform`` alone,
+    read as the record ``{"platform": <tag>}``.
 ``<subject> <predicate>``
     a two-position bracket read or ``get``: the held object.
 ``<name> db/alias``
@@ -43,7 +50,7 @@ Items (Module § Value ``Dependencies``):
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence
 
 from .codec import canonical, ref_text, strip_hint
 from .errors import AliasLoop, LedgerError
@@ -186,8 +193,10 @@ def salt_at(rev: "Rev", nm: Optional[str]) -> str:
     return best[1].get("salt", NONE) if best else NONE
 
 
-def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict[str, str]] = None) -> bool:
-    """Does the recorded item still hold at ``rev``."""
+def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict[str, str]] = None,
+            platform: Optional[Any] = None) -> bool:
+    """Does the recorded item still hold at ``rev``. ``platform`` judges the ``platform`` item: the
+    stored record -> whether it matches the environment's (``trace_matches`` builds it)."""
     from .rev import Ref
 
     if item == "salt":
@@ -200,7 +209,13 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
 
         return code_holds(rev, recorded, (trace or {}).get("fn"))
     if item == "platform":
-        return env().platform == recorded
+        from .env import stored_record
+
+        if platform is None:
+            raise TypeError("the platform item is judged by the memo policy: trace_matches passes platform=")
+        return bool(platform(stored_record(dict(trace or {}, platform=recorded))))
+    if item == "platform/record":               # provenance: the platform item judges it
+        return True
     # A row read is recorded as "<subject> <predicate>", so a subject may look like another item's prefix;
     # the other items hold no space (a ref, an eval: name, a q: item outside its JSON, a repo by name).
     if " " not in item and item.startswith("ref:"):
@@ -246,9 +261,11 @@ def _query_of(item: str) -> Optional[Dict[str, Any]]:
     return query if isinstance(query, dict) else None
 
 
-def trace_matches(rev: "Rev", trace: Dict[str, str]) -> bool:
-    """Every item holds at ``rev``: the memo's hit test. Never runs a function."""
+def trace_matches(rev: "Rev", trace: Dict[str, str], widen: Sequence[str] = ()) -> bool:
+    """Every item holds at ``rev``: the memo's hit test. Never runs a function. The ``platform`` item is
+    judged by the ledger's memo policy at its top, ``widen`` (``policy.DETERMINISTIC``) added."""
     from .env import current_env
+    from .policy import judge, policy_at
 
     plain = rev._plain()
     cache: list = []
@@ -257,8 +274,13 @@ def trace_matches(rev: "Rev", trace: Dict[str, str]) -> bool:
         if not cache:
             cache.append(current_env())
         return cache[0]
+    _name, fn = policy_at(rev.ledger.at())
+
+    def platform(stored: Any) -> bool:
+        mine = judge(fn, stored, widen)
+        return mine is not None and mine == judge(fn, env().platform_record(), widen)
     try:
-        return all(present(plain, k, v, env, trace)
+        return all(present(plain, k, v, env, trace, platform)
                    for k, v in sorted(trace.items(), key=lambda kv: kv[0] == "code"))
     except (LedgerError, ImportError, ValueError):     # an item that no longer parses: a miss, never a crash
         return False

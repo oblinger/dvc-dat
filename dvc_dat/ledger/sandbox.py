@@ -90,7 +90,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from .codec import sha256
-from .env import Env, current_env
+from .env import Env, current_env, platform_items
 from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
 from ..core import Dat, DatManager
@@ -458,7 +458,7 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
         check_mounted_imports(mounts, modname, attr_name)
         mods = module_shas(closure(mounts, [modname]))
     return Fn(name=name, module=f[0],
-              mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain)),
+              mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain), env.record),
               code=mounted_code(plain, env, m, modname, mods),
               _rev=rev, _takes_path=takes_path, _template=template, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name},
@@ -1199,7 +1199,7 @@ def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], frame: _Frame, mounts:
     mods = dict(sorted({**mods, **frame.read, **third_party_items(loaded)}.items()))
     ran = fn.code._with_modules(mods)
     trace = dict(rec)
-    trace.update({"code": ran.subject, "fn": fn.name, "platform": env.platform})
+    trace.update({"code": ran.subject, "fn": fn.name, **platform_items(env)})
     salt = rows.get(fn._info["prefix"], {}).get("salt")
     if salt is not None:
         trace["salt"] = salt
@@ -1413,10 +1413,14 @@ atexit.register(shutdown)
 
 def _warm() -> None:
     """What every child shares, loaded once before any fork: the ledger's machinery (never a mounted
-    module, never CUDA) and the installed distributions' map."""
+    module, never CUDA), the installed distributions' map and the platform record (SVP 1474: probed
+    once here, so no child runs ``nvidia-smi``)."""
     from . import kept, ledger, namespace, rev, rundat, store, trace, txn, value  # noqa: F401
     from .. import just  # noqa: F401 - `@command` on a mounted function imports it in the body
+    from .env import platform_record
+
     _dist_map()
+    platform_record()
 
 
 def worker_main() -> None:
@@ -1501,13 +1505,13 @@ _UPSTREAM: Optional[_Upstream] = None
 
 def serve(req: Dict[str, Any], out: Any) -> None:
     """In the forked child: confine this process, run the call, reply on ``out``."""
-    from .env import Checkout, platform_tag, set_env_provider
+    from .env import Checkout, platform_record, platform_tag, set_env_provider
     from .ledger import Ledger
     from .rev import Ref
 
     try:
         code = {r: Checkout(v, c, d, Path(p) if p else None) for r, (v, c, d, p) in req["env"].items()}
-        env = Env(code, platform_tag())
+        env = Env(code, platform_tag(), record=platform_record())     # where the function runs (SVP 1474)
         set_env_provider(lambda env=env: env)
         ledger = Ledger(req["ledger"])
         plain = ledger.at(req["rev"])

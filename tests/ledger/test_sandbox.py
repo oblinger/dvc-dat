@@ -901,3 +901,17 @@ def test_a_call_interrupted_while_the_worker_runs_leaves_the_next_call_its_own_r
             L.at().run("sbx.stage.slow.slow", n=7, seal=t)
     assert L.at().run("sbx.stage.slow.fast", n=1).obj == {"who": "fast", "n": 1}
     assert L.at().run("sbx.stage.slow.fast", n=2).obj == {"who": "fast", "n": 2}
+
+
+def test_a_sandboxed_entry_records_the_platform_of_the_worker_it_ran_in(sbx, monkeypatch):
+    """SVP 1474: the record is captured where the function runs, not where the caller sits."""
+    import json
+
+    from dvc_dat.ledger import env as env_module
+
+    real = env_module.platform_record()
+    monkeypatch.setattr(env_module, "platform_record", lambda: dict(real, card="the caller's card"))
+    L, _repo = sbx
+    v = L.at().run("sbx.stage.fns.count", game="G1")
+    assert json.loads(v.dependencies["platform/record"]) == real
+    assert L.at().run("sbx.stage.fns.count", game="G1", seal="get").subject == v.subject   # the default policy

@@ -243,7 +243,8 @@ def preds_from(d: Dict[str, Any]) -> Dict[str, Any]:
 def env_record(env: Any) -> Dict[str, Any]:
     return {"code": {repo: {"version": c.version, "commit": c.commit, "dirty": c.dirty,
                             "path": None if c.path is None else str(c.path)} for repo, c in env.code.items()},
-            "platform": env.platform, "mounts": env.mounts}
+            "platform": env.platform, "mounts": env.mounts,
+            "record": None if env.record is None else dict(env.record)}
 
 
 def env_from(d: Dict[str, Any]) -> Any:
@@ -251,7 +252,7 @@ def env_from(d: Dict[str, Any]) -> Any:
 
     code = {repo: Checkout(c["version"], c["commit"], bool(c["dirty"]), None if c["path"] is None else Path(c["path"]))
             for repo, c in d["code"].items()}
-    return Env(code, d["platform"], d.get("mounts"))
+    return Env(code, d["platform"], d.get("mounts"), d.get("record"))
 
 
 
