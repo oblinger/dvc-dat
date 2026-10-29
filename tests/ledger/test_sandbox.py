@@ -27,6 +27,15 @@ PKG = {
             return {"area": util.square(side)}
     '''),
     "flat/util.py": "def square(x):\n    return x * x\n",
+    "flat/where.py": textwrap.dedent('''
+        import os
+        from dvc_dat.ledger import ledger_fn
+
+        @ledger_fn
+        def pid(rev, *, side: int) -> dict:
+            import sys
+            return {"pid": os.getpid(), "stage": [m for m in sys.modules if m.startswith("sbx.stage")]}
+    '''),
     "sbx/stage/kinds.py": textwrap.dedent('''
         from dvc_dat.ledger import Value, ledger_class, ledger_fn
 
@@ -176,6 +185,16 @@ PKG = {
         def outer_hue(rev, *, game: str) -> dict:
             import colorsys                         # loaded here first: the nested hue imports it again
             return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0], "inner": rev.run("sbx.stage.fns.hue", game=game).obj}
+
+        @ledger_fn
+        def cross(rev, *, game: str) -> dict:
+            import os
+            return {"me": os.getpid(), "same": rev.run("sbx.stage.fns.pid", game=game).obj["pid"],
+                    "other": rev.run("flatpkg.where.pid", side=2).obj}
+
+        @ledger_fn
+        def base_inside(rev, *, game: str) -> dict:
+            return {"x": rev.run("colorsys.rgb_to_hsv").obj}
 
         @ledger_fn
         def snoop(rev, *, game: str) -> dict:
@@ -440,6 +459,26 @@ def test_an_unsandboxed_body_reading_its_repo_outside_the_dats_is_refused(sbx):
     assert v.obj == {"x": 1, "w": {"g": "G1"}, "inner": {"g": "G1"}}
     assert L.at()[v.subject, "db/provenance"] == "eval:unsandboxed"
     assert (repo / "sbx/stage/conf.yaml").read_text() == "k: 1\n"     # outside a body: nothing checked
+
+
+def test_a_nested_eval_under_another_mount_runs_in_a_fresh_child(sbx):
+    L, _repo = sbx
+    v = L.at().run("sbx.stage.fns.cross", game="G1")
+    assert v.obj["same"] == v.obj["me"]                         # its own mount: in-process (Q37 (ii))
+    assert v.obj["other"]["pid"] != v.obj["me"] and v.obj["other"]["stage"] == []    # fresh, nothing of the caller's
+    other = L.at().run("flatpkg.where.pid", side=2, seal="get")
+    assert other is not None and other.obj == v.obj["other"]
+    assert v.dependencies["eval:flatpkg.where.pid{\"side\":2}"].endswith(other.hash)
+    assert sorted(L.at()[other.dependencies["code"], "db/modules"]) == ["flat/where.py"]
+    with L.transaction(by="t") as t:                            # a draft into a transaction, across mounts
+        w = L.at().run("sbx.stage.fns.cross", game="G2", seal=t)
+    assert w.sealed and w.obj["other"]["pid"] != w.obj["me"]
+
+
+def test_an_unsandboxed_eval_nested_in_a_sandboxed_body_is_refused_by_name(sbx):
+    L, _repo = sbx
+    with pytest.raises(NotEvaluated, match="colorsys.rgb_to_hsv is unsandboxed .* mount 'sbx.stage'; mount it"):
+        L.at().run("sbx.stage.fns.base_inside", game="G1")
 
 
 def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):

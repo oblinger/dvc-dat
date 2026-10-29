@@ -11,7 +11,8 @@ class Multiple(LedgerError, LookupError):
 
 class NotEvaluated(LedgerError, RuntimeError):
     """A call this environment will not run: its repo has no checkout here, or (unsandboxed, a
-    miss) its code is outside any git checkout or the checkout is dirty."""
+    miss) its code is outside any git checkout or the checkout is dirty; or it is unsandboxed and called
+    inside a sandboxed body."""
 
 
 class NotClean(NotEvaluated):
