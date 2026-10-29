@@ -201,13 +201,15 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
         return code_holds(rev, recorded, (trace or {}).get("fn"))
     if item == "platform":
         return env().platform == recorded
-    if item.startswith("ref:"):
+    # A row read is recorded as "<subject> <predicate>", so a subject may look like another item's prefix;
+    # the other items hold no space (a ref, an eval: name, a q: item outside its JSON, a repo by name).
+    if " " not in item and item.startswith("ref:"):
         return True
-    if item.startswith("code/"):                # the environment's commit, row or no row
+    if item.startswith("code/") and (" " not in item or item[len("code/"):] in env().code):
         code = env().code.get(item[len("code/"):])
         c = code.commit if code is not None else None
         return bool(c) and bool(recorded) and (c.startswith(recorded) or recorded.startswith(c))
-    if item.startswith("eval:"):
+    if item.startswith("eval:") and "{" in item and " " not in item[:item.index("{")]:
         from .fn import lookup_encoded
 
         i = item.index("{")
@@ -215,9 +217,10 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
         if hit is None:
             return recorded == NONE          # no entry then, and still none
         return ref_text(dotted(type(hit)), hit.hash) == recorded
-    if item.startswith("q:"):
-        return _requery(rev, json.loads(item[2:])) == recorded
-    if item.endswith(" db/alias"):
+    if item.startswith("q:{") and (query := _query_of(item)) is not None:
+        return _requery(rev, query) == recorded
+    if item.endswith(" db/alias") and (recorded == NONE or recorded.startswith("ref:")):   # a load through
+        # an alias records the ref it reached; a read of the db/alias row itself records the name it holds
         name = item[: -len(" db/alias")]
         try:
             r = Ref(rev, name)
@@ -232,6 +235,15 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
     from .codec import show
 
     return (strip_hint(text) if text.startswith("ref:") else show(text)) == recorded
+
+
+def _query_of(item: str) -> Optional[Dict[str, Any]]:
+    """The query a ``q:`` item recorded, or ``None`` when the item is a row read of a subject starting ``q:{``."""
+    try:
+        query = json.loads(item[2:])
+    except ValueError:
+        return None
+    return query if isinstance(query, dict) else None
 
 
 def trace_matches(rev: "Rev", trace: Dict[str, str]) -> bool:

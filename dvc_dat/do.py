@@ -144,7 +144,7 @@ class Namespace:
         the longest importable prefix is imported and the rest is `getattr`.  With
         nothing found the import's own `ImportError` / `AttributeError` propagates
         unless `default` is given.  A `.py`/`.yaml`/`.json` mount's contents are
-        returned as loaded; a string starting with `yaml` is parsed as YAML.
+        returned as loaded; a string whose first line is `yaml` alone is parsed as YAML.
         """
         try:
             result = self._load_mounted(dotted_name)
@@ -386,8 +386,8 @@ def _refuse_import_clash(top: str, kind: str, source: str, *, own: Optional[str]
         if top in sys.modules:
             raise ValueError(f"mount: {top!r} is already an imported module; "
                              f"mount the {kind} {source!r} at another name")
-    if spec is None:
-        return
+    if spec is None or (spec.origin is None and top not in sys.modules):
+        return      # nothing, or a bare folder on sys.path (a namespace package): no code to shadow
     places = [spec.origin] if spec.origin and spec.origin not in ("built-in", "frozen") else []
     places += list(spec.submodule_search_locations or [])
     if not places:  # a built-in module
@@ -405,10 +405,14 @@ def _within(path: str, folder: str) -> bool:
     return path == folder or path.startswith(folder.rstrip(os.sep) + os.sep)
 
 
+_YAML_MARKER = re.compile(r"\s*yaml[ \t]*\r?\n", re.IGNORECASE)
+
+
 def _parse_yaml_prefix(result: Any) -> Any:
-    """A string beginning `yaml` is a YAML spec; parse it."""
-    if isinstance(result, str) and result.lstrip().lower().startswith("yaml"):
-        return yaml.safe_load(result.lstrip()[4:].lstrip())
+    """A string whose first line is `yaml` alone is a YAML spec; parse the rest. Any other string, one
+    merely starting with the word (`yaml`, `yaml-based pipeline`), is returned as written."""
+    if isinstance(result, str) and (m := _YAML_MARKER.match(result)):
+        return yaml.safe_load(result[m.end():])
     return result
 
 
