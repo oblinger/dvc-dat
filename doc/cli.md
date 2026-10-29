@@ -95,12 +95,13 @@ x my_letters --json rules='[[2, "my_letters.triple_it"]]'
 
 ## With a ledger: `run` evaluates
 
-When the config has a `ledger:` line or a `ledgers:` section, `x TARGET KEY=VALUE ...` runs
+When the project's names are its ledger's (a `ledger:` line, or `namespace: ledger`; a `ledgers:`
+section alone is not enough), `x TARGET KEY=VALUE ...` runs
 through the ledger (F447 Q40): `rev.run` of the ledger function TARGET
 names, found if computed before from the same inputs by the same code,
 else run and sealed. It prints `hit` or `ran`, the value (its name, else
-a hash prefix) and its preds. Without a `ledger:` line it is the bare run
-above and records nothing.
+a hash prefix) and its preds. Otherwise it is the bare run above and
+records nothing.
 
 | TARGET | The function and its keys |
 |--------|---------------------------|

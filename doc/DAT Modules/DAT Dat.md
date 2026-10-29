@@ -358,6 +358,7 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 | `ledger` | The one ledger of a one-ledger project: a folder, or a Postgres DSN; read by `Ledger()` | none |
 | `ledgers` | Named ledgers, `name: location`, and `default: name`, the active one; read by `ledgers` and `L` ([DAT Ledger § Many ledgers](ledger/DAT%20Ledger.md#Many%20ledgers)). Not with `ledger` | none |
 | `mounts` | Prefix-to-folder mounts the ledger asserts as rows; read by `Ledger()` | none |
+| `namespace` | `ledger`: the project's names are its active ledger's `db/mount` rows (`LedgerNamespace`, `Dat.ns.mount` refused). Implied by `ledger:`; a `ledgers:` section alone keeps the plain namespace ([DAT Ledger § Many ledgers](ledger/DAT%20Ledger.md#Many%20ledgers)) | `ledger` with `ledger:`, else plain |
 
 `DAT_FOLDERS` replaces `dat_folders` with one folder (the value is not split) and `DAT_ART_FOLDER` replaces `art_folder`. `DAT_LEDGER` picks the active ledger: an entry of `ledgers:` by name, or a location. `ledgers: {default: <name>}` belongs in `.datconfig.override.yaml`, which a project keeps out of git, since whose ledger is active differs per checkout. `run` is read by the `run` recipe of `dvc_dat.just` only; see [Command Line](../cli.md). A `manager:` subclass may accept more keys by listing them in its `CONFIG_KEYS`.
 

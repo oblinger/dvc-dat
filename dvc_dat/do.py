@@ -628,7 +628,7 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
         return _fail("no TARGET given; `x --help` for usage")
     if "usage" not in flags:
         try:
-            ledger = _ledger_of(config)
+            ledger = _ledger_of(config, namespace=True)
         except Exception as e:
             return _fail(_message(e))
         if ledger is not None:
@@ -686,14 +686,16 @@ def _config_file(config: Union[None, str, Path]) -> Optional[Path]:
     return path if path.is_file() else None
 
 
-def _ledger_of(config: Union[None, str, Path]) -> Any:
-    """The config's active ledger (`DAT_LEDGER`, else its `ledgers:` default or `ledger:` line), else None."""
+def _ledger_of(config: Union[None, str, Path], *, namespace: bool = False) -> Any:
+    """The config's active ledger (`DAT_LEDGER`, else its `ledgers:` default or `ledger:` line), else None;
+    with `namespace`, None too unless the project's names are the ledger's (`_ledger_namespace`)."""
     path = _config_file(config)
     if path is None:
         return None
+    from .core import _ledger_namespace
     from .ledger.ledger import ENV, Ledger, _names_ledger, _resolve, _values
     values = _values(path)
-    if not _names_ledger(values):
+    if not _names_ledger(values) or (namespace and not _ledger_namespace(path, values)):
         return None
     return Ledger._opened(*_resolve(path, values, os.environ.get(ENV)))
 
