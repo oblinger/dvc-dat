@@ -31,10 +31,14 @@ _OMIT = object()
 NONE_TOKEN = "<none>"
 
 
+FIXED_MANY = frozenset({"db/tag"})
+
+
 def fixed_one(p: str) -> bool:
     """Every ``db/`` predicate's cardinality is fixed at ``one`` (the clocks ``db/version`` and ``db/commit``
-    among them); a bare predicate, ``version`` and ``commit`` included, is the user's (DAT 1052 Q3)."""
-    return p.startswith("db/")
+    among them) but ``db/tag``, fixed at ``many``; a bare predicate, ``version`` and ``commit`` included, is
+    the user's (DAT 1052 Q3)."""
+    return p.startswith("db/") and p not in FIXED_MANY
 
 
 class Row(NamedTuple):
@@ -172,8 +176,8 @@ class Rev:
     def _card(self, p: str) -> str:
         c = self._cards.get(p)
         if c is None:
-            c = "one"
-            if not fixed_one(p):
+            c = "many" if p in FIXED_MANY else "one"
+            if not fixed_one(p) and p not in FIXED_MANY:
                 held = fold(self._store.rows(self.id, subject=f"db/pred/{p}", predicate="db/cardinality"), "one")
                 c = "many" if held and held[0].obj == "str:many" else "one"
             self._cards[p] = c

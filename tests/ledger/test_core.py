@@ -3,7 +3,7 @@
 
 import pytest
 
-from dvc_dat.ledger import Ledger, LedgerError, LockTimeout, Ref, Rev, Row, Unlocked, bump
+from dvc_dat.ledger import Exists, Ledger, LedgerError, LockTimeout, Ref, Rev, Row, Unlocked, bump
 
 
 def write(L, *ops, by="t"):
@@ -344,6 +344,28 @@ def test_the_release_row_is_db_db_version(L):
     write(L, ("db", "version", "9.9.9"))
     with pytest.raises(KeyError, match="9.9.9"):
         L.at("9.9.9")
+
+
+def test_a_db_tag_names_a_revision(L):
+    """``(db, db/tag, name)`` names the revision its transaction commits; ``L.at(name)`` is that revision.
+    Cardinality many, so several names may land; a name is never reused; an unknown string is ``TypeError``."""
+    write(L, ("x", "a", "1"))
+    with L.transaction(by="t") as t:
+        t.add("db", "db/tag", "2026-Q4-official")
+        t.add("db", "db/tag", "audit")
+    named = L.at()
+    write(L, ("x", "a", "2"))
+    assert L.at("2026-Q4-official").id == named.id == L.at("audit").id != L.at().id
+    assert L.at("2026-Q4-official")["x", "a"] == "1"
+    assert set(L.at().all("db", "db/tag")) == {"2026-Q4-official", "audit"}
+    with pytest.raises(Exists, match="never reused"):
+        write(L, ("db", "db/tag", "audit"))
+    assert L.at("audit").id == named.id
+    for bad in (("db", "db/tag", "1.2.3"), ("db", "db/tag", "42"), ("schema", "db/tag", "x")):
+        with pytest.raises(ValueError):
+            write(L, bad)
+    with pytest.raises(TypeError, match="db/tag name"):
+        L.at("no-such-name")
 
 
 def test_bare_version_is_opaque_user_data(L):

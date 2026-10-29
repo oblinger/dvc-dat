@@ -128,6 +128,15 @@ def _semver(text: Any) -> Optional[Tuple[int, int, int]]:
     return (int(m[1]), int(m[2]), int(m[3])) if m else None
 
 
+def _tag_name(subject: str, name: Any) -> None:
+    """A ``db/tag`` row names the revision its transaction commits: on ``db``, a str that is neither a revision
+    number nor a version, which ``Ledger.at`` reads first."""
+    if subject != "db":
+        raise ValueError(f"db/tag names a revision: its subject is db, not {subject!r}")
+    if not isinstance(name, str) or not name.strip() or name.isdigit() or _semver(name) is not None:
+        raise ValueError(f"a db/tag is a name, a str neither digits nor MAJOR.MINOR.PATCH, not {name!r}")
+
+
 def code_token(env_commit: Optional[str]) -> str:
     """The ``code/<repo>`` dependency item (a label, not a subject): the environment's commit, 8 hex
     (T034), the commit the code ran at, whatever the ``db/repo/<repo> db/commit`` row says. The version is
@@ -479,6 +488,10 @@ class Transaction:
                     verb = "add" if op.added else "remove"
                     raise Exists(f"{op.s[:12]}… is sealed: {op.p!r} is one of its own predicates, written once "
                                  f"({verb} refused); add another predicate, or seal anew and re-point")
+            if op.p == "db/tag" and op.added:
+                if sum(1 for r in R.history("db", "db/tag", show(op.o)) if r.added) > 1:
+                    raise Exists(f"db/tag {show(op.o)!r} names a revision already: a name is never reused; "
+                                 "nothing written")
             if op.p == "db/alias" and op.added:
                 if R._held(op.s, "db/value"):
                     raise TypeError(f"{op.s[:16]!r} holds its own db/value: a name is never a sealed subject; "
@@ -528,6 +541,8 @@ class Transaction:
             raise TypeError("db/value rows are written by v.seal alone")
         if predicate == "db/version" and _semver(object) is None:
             raise ValueError(f"{subject} db/version: the object is a MAJOR.MINOR.PATCH str, not {object!r}")
+        if predicate == "db/tag":
+            _tag_name(subject, object)
         o = self._encode(object)
         if predicate == "db/alias" and tag(o) != "str":
             raise TypeError("a db/alias row's object is the subject it names, a str")
@@ -576,6 +591,10 @@ class Transaction:
     def _card_now(self, p: str) -> str:
         from .rev import fixed_one
 
+        from .rev import FIXED_MANY
+
+        if p in FIXED_MANY:
+            return "many"
         return "one" if fixed_one(p) else ("many" if self._decl_now(p, "db/cardinality") == "many" else "one")
 
     # -- sealing --------------------------------------------------------------
