@@ -535,6 +535,23 @@ def test_each_call_is_a_fresh_process(sbx):
     assert L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1   # the server lives on
 
 
+def test_an_idle_server_is_retired_and_the_next_call_starts_one(sbx, monkeypatch):
+    import time
+
+    L, _repo = sbx
+    monkeypatch.setattr(sandbox, "IDLE_SECONDS", 0.5)
+    shutdown()
+    assert L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1
+    s = sandbox._SERVERS[sys.executable]
+    for _ in range(100):
+        if s.proc.poll() is not None:
+            break
+        time.sleep(0.1)
+    assert s.proc.poll() is not None and s.retired and sys.executable not in sandbox._SERVERS
+    assert L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1
+    assert sandbox._SERVERS[sys.executable] is not s and sandbox._SERVERS[sys.executable].alive()
+
+
 def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
     import colorsys
     import importlib.metadata as md
