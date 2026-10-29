@@ -12,7 +12,8 @@ ledger's machinery and no mounted module, never initialises CUDA, and forks a
 child per request. The child opens the request's ledger (A44), runs the call,
 seals the entry itself and hands back its subject; an exception comes back
 with the child's traceback, nothing sealed; the child then exits, so nothing a
-body loaded or changed outlives its call.
+body loaded or changed outlives its call. A server idle for ``IDLE_SECONDS`` (600) is retired; the next
+call starts a fresh one.
 
 Child side (``worker.py`` drives the server): ``MountFinder``, first on
 ``sys.meta_path``, loads a mounted prefix from its root, gives the prefix's
@@ -78,6 +79,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import traceback
 import warnings
 from pathlib import Path
@@ -1206,8 +1208,13 @@ def encode_key(v: Any) -> Any:
     return v
 
 
+#: Seconds a warm server may sit idle before it is retired (stopped; the next call starts a fresh one).
+IDLE_SECONDS = 600.0
+
+
 class Server:
-    """One warm ``python -I`` process per environment (the interpreter): it forks a fresh child per call."""
+    """One warm ``python -I`` process per environment (the interpreter): it forks a fresh child per call,
+    and is retired once idle for ``IDLE_SECONDS``."""
 
     def __init__(self) -> None:
         self.scratch = Path(tempfile.mkdtemp(prefix="ledger-worker-"))
@@ -1216,14 +1223,51 @@ class Server:
         self.proc = subprocess.Popen([sys.executable, "-I", "-m", "dvc_dat.ledger.worker"], stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, cwd=str(self.scratch), env=env)
         self.lock = threading.Lock()
+        self.retired = False
+        self.last = time.monotonic()
+        self.timer: Optional[threading.Timer] = None
+        self._arm()
 
     def alive(self) -> bool:
         return self.proc.poll() is None
 
+    def _arm(self) -> None:
+        """(Re)start the idle clock: ``IDLE_SECONDS`` from now with no call, the server is retired."""
+        if self.timer is not None:
+            self.timer.cancel()
+        self.timer = threading.Timer(IDLE_SECONDS, self._idle)
+        self.timer.daemon = True
+        self.timer.start()
+
+    def _idle(self) -> None:
+        """The idle clock ran out: retire the server unless a call holds it (then the call re-arms it)."""
+        with _SERVERS_LOCK:
+            if not self.lock.acquire(blocking=False):
+                return
+            try:
+                if time.monotonic() - self.last < IDLE_SECONDS:
+                    return                          # used since this clock started: a newer one runs
+                self.retired = True
+                if _SERVERS.get(self.key) is self:
+                    del _SERVERS[self.key]
+            finally:
+                self.lock.release()
+        self.close()
+
+    @property
+    def key(self) -> str:
+        return sys.executable
+
     def _ask(self, req: Dict[str, Any]) -> Dict[str, Any]:
         with self.lock:
-            send(self.proc.stdin, req)
-            resp = recv(self.proc.stdout)
+            retired = self.retired
+            if not retired:
+                send(self.proc.stdin, req)
+                resp = recv(self.proc.stdout)
+                self.last = time.monotonic()
+                self._arm()
+        if retired:                                 # retired between being handed out and this call
+            return _server()._ask(req)
         if not resp["ok"]:
             _raise(resp)
         return resp
@@ -1247,6 +1291,8 @@ class Server:
         return resp["version"]
 
     def close(self) -> None:
+        if self.timer is not None:
+            self.timer.cancel()
         if self.alive():
             try:
                 self.proc.stdin.close()
