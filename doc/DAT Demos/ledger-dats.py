@@ -501,7 +501,7 @@ with L.transaction(by="human:dan", lock=10,
          confirm=lambda old, new: True)
 release_rev = L.at("0.1.0")
 print("release rev:", release_rev.id == t.rev.id,
-      " version:", release_rev["db", "version"])          # → release rev: True  version: 0.1.0
+      " version:", release_rev["db", "db/version"])          # → release rev: True  version: 0.1.0
 print("db/version:", release_rev["db/repo/demo-game/demo_game.etl", "db/version"])     # → db/version: 0.1.0
 print("epochs:", release_rev["cfg/train", "epochs"])           # → epochs: 8
 print("subjects since:", sorted({row.subject
@@ -510,7 +510,7 @@ print("subjects since:", sorted({row.subject
 #   db/repo/demo-game (the clean re-run's db/commit) and their db/tx/<n> subjects
 
 # %% [markdown]
-# A release is a bump of `db`'s own `version`: one revision, named
+# A release is a bump of `db`'s own `db/version`: one revision, named
 # `0.1.0`, at which every code clock, config row and alias reads
 # one way. `L.at("0.1.0")` is that moment by its name.
 

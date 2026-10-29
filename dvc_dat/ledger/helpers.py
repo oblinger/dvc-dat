@@ -17,7 +17,9 @@ _VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
 def bump(t: Transaction, subject: str, part: str = "patch", *,
          confirm: Optional[Callable[[str, str], bool]] = None) -> str:
-    """Read ``version`` through ``t.previous_rev`` (``0.0.0`` when absent), add the next by ``part``, return it.
+    """Read ``subject``'s ``db/version`` through ``t.previous_rev`` (``0.0.0`` when absent), add the next by
+    ``part``, return it. ``db/version`` is the version predicate on every subject (DAT 1052 Q3): on ``db`` it
+    is the release ``L.at("M.m.p")`` reads; a bare ``version`` row is user data and is not read.
 
     A read-then-write, so ``t`` must be opened with ``lock=``: unlocked, ``t.previous_rev`` raises
     ``Unlocked`` and nothing is written.
@@ -37,9 +39,9 @@ def bump(t: Transaction, subject: str, part: str = "patch", *,
     if held:
         raise TypeError(f"{subject} is an alias; seal a new value and re-point (a value's version is a pred; "
                         f"{subject} names #{show(held[0].obj)[:8]})")
-    old = prev.get(subject, "version", default="0.0.0")
+    old = prev.get(subject, "db/version", default="0.0.0")
     new = _next(subject, old, part, confirm)
-    t.add(subject, "version", new)
+    t.add(subject, "db/version", new)
     return new
 
 

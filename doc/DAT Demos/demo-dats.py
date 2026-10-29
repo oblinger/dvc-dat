@@ -97,17 +97,17 @@ print(f"new dat, new hash: {a2.get_results()['dat']['sha256'] != result['sha256'
 # ## Versions
 
 # %%
-# a version is a predicate on the dat, kept on the ledger; a new version is a new add
+# a version is the db/version predicate on the dat, kept on the ledger; a new version is a new add
 from dvc_dat.ledger import Ledger
 
 ledger_path = Path(tempfile.mkdtemp(prefix="demo-dats-ledger-"))
 L = Ledger(ledger_path / "ledger", create=True)
 with L.transaction(by="human:dan") as t:
-    t.add("demo/c", "version", "1.0.0")
+    t.add("demo/c", "db/version", "1.0.0")
 with L.transaction(by="human:dan") as t:
-    t.add("demo/c", "version", "1.0.1")
-print(f"{L.at().get('demo/c', 'version')=}")
-print("history:", [(r.rev.id, r.object, r.added) for r in L.at().history("demo/c", "version")])
+    t.add("demo/c", "db/version", "1.0.1")
+print(f"{L.at().get('demo/c', 'db/version')=}")
+print("history:", [(r.rev.id, r.object, r.added) for r in L.at().history("demo/c", "db/version")])
 
 # %% [markdown]
 # Nothing in the folder changed: the version is a fact about the dat, recorded beside it, with

@@ -791,12 +791,12 @@ with L.transaction(by="human:dan", lock=10) as t:
     print(bump(t, "schema/tape", "minor",
                confirm=lambda old, new: True))   # 0.1.0
 with L.transaction(by="human:dan") as t:
-    t.add("schema/tape", "version", "0.0.9")
-print(L.at()["schema/tape", "version"])  # 0.0.9: add went back
+    t.add("schema/tape", "db/version", "0.0.9")
+print(L.at()["schema/tape", "db/version"])  # 0.0.9: add went back
 
 # %% [markdown]
 # `confirm(old, new)` must answer `True` (`just bump` asks for the
-# word `yes`); a subject with no `version` starts from `0.0.0`.
+# word `yes`); a subject with no `db/version` starts from `0.0.0`.
 # `add` can set a clock backwards; `bump` is the helper that only
 # goes up.
 

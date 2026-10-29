@@ -76,17 +76,17 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev.all(since=L.at(1))            # every row in (1, rev.id]
 
     with L.transaction(by="human:dan", why="T531", lock=10) as t:
-        assert bump(t, "model/demo") == "0.2.3"   # ADAPTED: a code version lives in its source (DAT 1043, 1044)
+        assert bump(t, "model/demo") == "0.0.1"   # ADAPTED: a code version lives in its source (DAT 1043, 1044); bump moves db/version, not the bare row (DAT 1052 Q3)
         t["env/prod", "rev"] = "413"         # add, on a one pred
         t.add(t.tx, "checked", "G1,G4,G5")
     assert t.rev.id == L.at().id
     assert t.rev[t.rev.tx, "db/by"] == "human:dan"
 
     with L.transaction(by="agent:svp", lock=30) as t:
-        v = t.previous_rev["model/demo", "version"]       # nothing can move
+        v = t.previous_rev["model/demo", "db/version"]    # nothing can move  ADAPTED: db/version (DAT 1052 Q3)
         mv = Ref(t.previous_rev, m.subject).preds["version"]   # a value's version is a pred  ADAPTED: m's subject
         t.add("rel/pipe", "pair", f"{v}+{mv}")
-    assert L.at()["rel/pipe", "pair"] == "0.2.3+1.0.0"
+    assert L.at()["rel/pipe", "pair"] == "0.0.1+1.0.0"
 
     # the worked example (SVP447 Values): a game, its video, its cut
     with L.transaction(by="human:dan") as t:

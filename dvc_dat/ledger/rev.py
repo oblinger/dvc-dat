@@ -26,16 +26,15 @@ if TYPE_CHECKING:
     from .namespace import LedgerNamespace
     from .ledger import Ledger
 
-#: Predicates whose cardinality is fixed at ``one``: every ``db/`` predicate (the ledger's clocks
-#: ``db/version`` and ``db/commit`` among them), and the user clocks ``bump`` writes.
-FIXED_ONE = frozenset({"version", "commit"})
 ALIAS_HOPS = 8
 _OMIT = object()
 NONE_TOKEN = "<none>"
 
 
 def fixed_one(p: str) -> bool:
-    return p.startswith("db/") or p in FIXED_ONE
+    """Every ``db/`` predicate's cardinality is fixed at ``one`` (the clocks ``db/version`` and ``db/commit``
+    among them); a bare predicate, ``version`` and ``commit`` included, is the user's (DAT 1052 Q3)."""
+    return p.startswith("db/")
 
 
 class Row(NamedTuple):

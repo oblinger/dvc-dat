@@ -104,7 +104,7 @@ os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"  # re
 from demo_game.game import Video, Cut
 
 with L.transaction(by="human:dan") as t:
-    t.add("db", "version", "3.1.4")
+    t.add("db", "db/version", "3.1.4")
     t.add("db/pred/team", "db/cardinality", "many")
     t.add("db/pred/video", "db/type", "demo_game.game.Video")
     t.add("db/pred/span", "db/type", "json")

@@ -526,6 +526,8 @@ class Transaction:
         _name(predicate, "predicate")
         if predicate == "db/value":
             raise TypeError("db/value rows are written by v.seal alone")
+        if predicate == "db/version" and _semver(object) is None:
+            raise ValueError(f"{subject} db/version: the object is a MAJOR.MINOR.PATCH str, not {object!r}")
         o = self._encode(object)
         if predicate == "db/alias" and tag(o) != "str":
             raise TypeError("a db/alias row's object is the subject it names, a str")

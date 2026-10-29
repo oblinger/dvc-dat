@@ -10,7 +10,7 @@ process) or sandboxed (under a ``db/mount/<prefix>``, in a worker).
     from dvc_dat import L, ledgers       # L: the active ledger; ledgers.record: one by name
     rev = L.at()
     with L.transaction(by="human:dan", lock=10, why="release") as t:
-        bump(t, "db", "minor", confirm=lambda old, new: True)
+        bump(t, "db", "minor", confirm=lambda old, new: True)   # the release row: db db/version; L.at("0.1.0") reads it
     bump_source("demo_game")             # __version__ in the source; the next clean run moves db/repo/demo-game/demo_game
 
 The environment is found by discovery; ``set_env_provider``, ``Env`` and
