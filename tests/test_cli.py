@@ -218,7 +218,7 @@ class TestArguments:
     def test_set_value_is_json_else_the_text(self):
         from dvc_dat.do import _parse_argv
         overrides, _, _, _ = _parse_argv(["t", "--set", "a.d=2026-01-01", "--set", "a.n=3"])
-        assert overrides == {"a": {"d": "2026-01-01", "n": 3}}
+        assert overrides == [("a.d", "2026-01-01"), ("a.n", 3)]
 
     def test_fixed_and_keyword_args_together(self):
         code, out, _ = dat("echo_args", "one", "2", "k=3")
@@ -562,6 +562,22 @@ class TestTargets:
         listing = subprocess.run(["just", "--list"], cwd=str(tmp_path), capture_output=True,
                                  text=True, env=_env()).stdout
         assert "double *args" in listing and "# n=…  double n" in listing
+
+    def test_a_hand_recipe_added_after_generation_wins(self, tmp_path):
+        """cli.md: a name the justfile already has is skipped, the hand recipe wins, also when the
+        hand recipe arrives after `.dat/targets.just` generated that name."""
+        make_ledger_project(tmp_path)
+        code, _, err = run_x("proj.fns.double", "n=2", cwd=tmp_path)
+        assert code == 0, err
+        assert "double *args:" in (tmp_path / ".dat" / "targets.just").read_text()
+        jf = tmp_path / "justfile"
+        jf.write_text(jf.read_text() + "double:\n    @echo by-hand\n")
+        done = subprocess.run(["just", "double"], cwd=str(tmp_path), capture_output=True, text=True,
+                              env=_env())
+        assert done.returncode == 0 and done.stdout.strip() == "by-hand", done.stderr
+        code, _, err = run_x("proj.fns.double", "n=2", cwd=tmp_path)     # the next run skips it
+        assert code == 0 and "fns.double (double is a recipe in the justfile)" in err, err
+        assert "double *args:" not in (tmp_path / ".dat" / "targets.just").read_text()
 
     def test_a_fresh_file_is_not_rewritten(self, tmp_path):
         make_ledger_project(tmp_path)

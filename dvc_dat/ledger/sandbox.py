@@ -43,7 +43,8 @@ confined as a ledger function's, the dat world's index writes its own machinery.
 The ``code`` item (Q37 (A); Dan 2026-10-21; DAT 1037): exactly the modules the run loaded
 (beside the function's ``Code``), hashed with the mount rows into ``db/code/<hash 16>``; the
 ``fn`` item beside it is the function's dotted name. A mounted module (and
-the static import closure of the function's module) is ``relpath -> sha256`` of
+the static import closure of the function's module), and a mounted file the body
+read through the namespace (a spec, a literal: ``note_read``), is ``relpath -> sha256`` of
 the file as read; a third-party one is ``dist:<name> -> <version>:<sha256 of its
 RECORD>`` when its distribution has a ``RECORD``, else ``py:<path under its
 sys.path entry> -> sha256`` of the file (the standard library, an editable
@@ -386,7 +387,8 @@ def third_party_now(key: str) -> str:
     return "<missing>"
 
 
-def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, bool, Optional[str], str, bool]:
+def _signature(fdef: ast.FunctionDef, name: str,
+               marks: Set[str] = frozenset({"ledger_fn"})) -> Tuple[inspect.Signature, bool, Optional[str], str, bool]:
     a = fdef.args
     params = []
     pos = a.posonlyargs + a.args
@@ -417,7 +419,7 @@ def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, boo
     keep = [p for p in rest if p.name != "path"]
     template = path_template(folder.default) if folder is not None else None
     returns = ast.unparse(fdef.returns) if fdef.returns is not None else ""
-    return inspect.Signature(keep), folder is not None, template, returns, _decorated(fdef)
+    return inspect.Signature(keep), folder is not None, template, returns, _decorated(fdef, marks)
 
 
 def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Fn:
@@ -440,9 +442,10 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
         fdef = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == attr_name), None)
         if fdef is None:
             raise ImportError(f"{name!r}: no function {attr_name!r} in {f[0]}")
-        decorated = _decorated(fdef)
+        marks = _ledger_fn_names(tree)
+        decorated = _decorated(fdef, marks)
         if decorated:
-            sig, takes_path, template, returns, _ = _signature(fdef, name)
+            sig, takes_path, template, returns, _ = _signature(fdef, name, marks)
         else:                                       # a dat's run function: its keys are a spec (DAT 1046)
             sig, takes_path, template, returns = inspect.Signature(), True, None, ""
         check_mounted_imports(mounts, modname, attr_name)
@@ -455,9 +458,20 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
               kind="ledger" if decorated else "dat")
 
 
-def _decorated(fdef: ast.FunctionDef) -> bool:
-    """Is the function marked ``@ledger_fn`` (by name or attribute), read off its source."""
-    return any((isinstance(d, ast.Name) and d.id == "ledger_fn")
+def _ledger_fn_names(tree: ast.Module) -> Set[str]:
+    """The names ``ledger_fn`` is bound to in a module, read off its source: ``ledger_fn`` itself and
+    every ``from ... import ledger_fn as <alias>`` at its top level."""
+    names = {"ledger_fn"}
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            names.update(a.asname for a in node.names if a.name == "ledger_fn" and a.asname)
+    return names
+
+
+def _decorated(fdef: ast.FunctionDef, marks: Set[str] = frozenset({"ledger_fn"})) -> bool:
+    """Is the function marked ``@ledger_fn`` (by name, an import alias of it in ``marks``, or attribute),
+    read off its source."""
+    return any((isinstance(d, ast.Name) and d.id in marks)
                or (isinstance(d, ast.Attribute) and d.attr == "ledger_fn") for d in fdef.decorator_list)
 
 
@@ -553,12 +567,22 @@ def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
 # -- the worker's own machinery -----------------------------------------------------------------------
 
 class _Frame:
-    """One running body: the modules present when it started, and those a nested body claimed."""
+    """One running body: the modules present when it started, those a nested body claimed, and the mounted
+    files it read through the namespace (``relpath -> sha256``)."""
 
     def __init__(self) -> None:
         self.before: Set[str] = set(sys.modules)
         self.claimed: Set[str] = set()
         self.loaded: Set[str] = set()
+        self.read: Dict[str, str] = {}
+
+
+def note_read(checkout: Path, f: Path) -> None:
+    """A mounted file the running body read through the namespace (a spec, a literal): part of its ``code``
+    item by its bytes, as a module it imports is, so an edit to it is a miss, never a stale hit."""
+    if STATE.frames:
+        rel = f.relative_to(checkout).as_posix()
+        STATE.frames[-1].read[rel] = file_sha(checkout, rel)
 
 
 class _State:
@@ -895,12 +919,12 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
                 raise
         if fn.kind == "dat":
             alias_reads(plain, out, rec)
-            value = _close_run(fn, plain, rec, frame.loaded, mounts, rows, env, enc, save, name, out, work)
+            value = _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, out, work)
             if work is not None and not work.exists():  # its folder is gone: so is the dat world's index of it
                 Dat.manager._index_forget(str(work / "dat"))
             return value
         value = wrap_result(fn.name, obj, out)
-        return _close_run(fn, plain, rec, frame.loaded, mounts, rows, env, enc, save, name, value, work)
+        return _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, value, work)
     finally:
         STATE.guard = outer_guard
 
@@ -970,14 +994,16 @@ def _body(work: Optional[Path]) -> Iterator[_Frame]:
             STATE.frames[-1].claimed |= new         # a nested body's loads are its own entry's (Q37 (ii))
 
 
-def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], loaded: Set[str], mounts: List[Mount],
+def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], frame: _Frame, mounts: List[Mount],
                rows: Dict[str, Dict[str, str]], env: Env, enc: str, save: Any, name: Optional[str],
                value: Any, work: Optional[Path]) -> Any:
-    """A run's code (the modules it loaded, beside ``fn``'s), its trace, and the result: a draft carrying
-    its ``RunTrace`` (``save`` False) or the memo entry, provenance ``eval:sandbox``."""
+    """A run's code (the modules it loaded and the mounted files it read, beside ``fn``'s), its trace, and
+    the result: a draft carrying its ``RunTrace`` (``save`` False) or the memo entry, provenance
+    ``eval:sandbox``."""
+    loaded = frame.loaded
     mounted = sorted(n for n in loaded if _mount_of(mounts, n) is not None)
     mods = module_shas(closure(mounts, [fn._info["modname"], *mounted]))
-    mods = dict(sorted({**mods, **third_party_items(loaded)}.items()))
+    mods = dict(sorted({**mods, **frame.read, **third_party_items(loaded)}.items()))
     ran = fn.code._with_modules(mods)
     trace = dict(rec)
     trace.update({"code": ran.subject, "fn": fn.name, "platform": env.platform})

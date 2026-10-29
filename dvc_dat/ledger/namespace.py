@@ -90,11 +90,13 @@ def mount_root(name: str, prefix: str, info: Dict[str, str]) -> Path:
 
 
 def _mounted(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Any:
-    from .sandbox import load_sandboxed, unguarded
+    from .env import current_env
+    from .sandbox import load_sandboxed, note_read, unguarded
 
     rest = name[len(prefix) + 1:].split(".") if name != prefix else []
     with unguarded():                       # the ledger's own reads, also inside a sandboxed body
         root = mount_root(name, prefix, info)
+        checkout = Path(current_env().code[info["repo"]].path)
         for cut in range(len(rest), -1, -1):
             base = root.joinpath(*rest[:cut])
             if not base.is_relative_to(root):     # lexical: a symlink inside the tree is the tree's
@@ -107,6 +109,7 @@ def _mounted(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Any:
                 raise KeyError(f"{name!r}: {', '.join(str(f) for f in data + ([py] if py else []))} "
                                "all answer to it")
             if data:
+                note_read(checkout, data[0])        # a body's input: in its code item by its bytes
                 text = data[0].read_text()
                 value = json.loads(text) if data[0].suffix == ".json" else yaml.safe_load(text)
                 return _walk(value, tail, name, data[0])
@@ -124,6 +127,7 @@ def _mounted(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Any:
             if node is None:
                 raise ImportError(f"{name!r}: no {tail[0]!r} in {py}")
             if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+                note_read(checkout, py)
                 try:
                     value = ast.literal_eval(node.value)
                 except ValueError:

@@ -139,3 +139,23 @@ def test_set_dotted_under_scalar_is_a_cli_error(world):
     world.ns.mount(at="tmpl13", value={"dat": {}})
     # _cmd_do turns a malformed line into exit 1 + "run: ..." -- it catches ValueError only
     assert _cmd_do(["tmpl13", "--set", "a=1", "--set", "a.b=2"]) == 1
+
+
+# --- --set / --json set one spec key: a dict or a named list replaces, never merges (cli.md § Options) ---
+_SEEN = {}
+
+
+def _see(dat, *a, **k):
+    _SEEN["spec"] = dat.get_spec()
+
+
+def test_set_and_json_set_the_key_they_name(world):
+    from dvc_dat.do import _cmd_do
+    world.ns.mount(at="see_fn", value=_see)
+    world.ns.mount(at="tmpl5", value={"dat": {"do": "see_fn"}, "cfg": {"a": 1},
+                                      "stages": [{"name": "x", "k": 1}, {"name": "y"}]})
+    assert _cmd_do(["tmpl5", "--json", "cfg={}", "--json", 'stages=[{"name": "z"}]',
+                    "--set", "dat.title=T"]) == 0
+    spec = _SEEN["spec"]
+    assert spec["cfg"] == {} and spec["stages"] == [{"name": "z"}]
+    assert spec["dat"]["do"] == "see_fn" and spec["dat"]["title"] == "T"     # a dotted key sets one leaf
