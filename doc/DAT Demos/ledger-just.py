@@ -71,8 +71,7 @@ with open(".datconfig.yaml", "a") as config_file:
                       "run: python3 -m demo_main\n")     # the main: cli
 dvc_dat_just_path = files("dvc_dat") / "dvc_dat.just"
 Path("justfile").write_text(
-    f"import '{dvc_dat_just_path}'  # run, mounts\n"
-    "import '../../justfile'  # the demo's ledger verbs\n"
+    f"import '{dvc_dat_just_path}'  # run, mounts, the ledger verbs\n"
     "import? '.dat/targets.just'  # the declared commands\n")
 user_name = os.environ.get("USER", "dan")
 
@@ -145,9 +144,9 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # Each verb is one ledger API call with the things a program would
 # have to say every time (which ledger, who is acting, the yes to a
 # confirmation) supplied by the recipe. No verb that reads like an
-# edit hides a seal. The project's justfile imports `run` from
-# dvc-dat (`dvc_dat.just`) and the other verbs from the `justfile`
-# beside this notebook, the proposal for F447 Q4.
+# edit hides a seal. The project's justfile imports them all from
+# dvc-dat (`dvc_dat.just`): `run`, and the ledger verbs, each
+# `python -m dvc_dat.ledger.recipes <verb>`.
 #
 # Under each heading one sentence says what the verb does; after its
 # example, which API call it is. The Python notebooks show those calls.

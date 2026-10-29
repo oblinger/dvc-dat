@@ -1,5 +1,6 @@
 # dvc-dat's recipes, for a project's justfile to import. `just run TARGET`
-# is the one way to run; `x TARGET` (bin/x) is `just run TARGET`.
+# is the one way to run; `x TARGET` (bin/x) is `just run TARGET`. Below
+# `mounts`, the ledger verbs: values, value, history, why, set, index, bump.
 #
 #     import 'dvc_dat.just'    # a link to the installed dvc_dat/dvc_dat.just
 #
@@ -70,3 +71,53 @@ run *args:
 [positional-arguments]
 mounts *args:
     @"{{just_executable()}}" -f "{{justfile()}}" run --list "$@"
+
+# The ledger verbs (SVP 1465): each is `python -m dvc_dat.ledger.recipes VERB`,
+# one ledger call (`Ledger()`: $DAT_LEDGER, else the nearest .datconfig.yaml
+# with `ledger:`), run from the working directory. The interpreter is
+# $DAT_PYTHON, else .venv/bin/python beside the justfile, else python3. A
+# project that keeps its own recipe of one of these names calls the module
+# instead. Keys and preds: `k=v`, v JSON, else the text as typed.
+_dat_python := env("DAT_PYTHON", if path_exists(justfile_directory() / ".venv/bin/python") == "true" { justfile_directory() / ".venv/bin/python" } else { "python3" })
+
+# the values matching k=v preds (kind=<short class name> narrows)
+[no-cd]
+[positional-arguments]
+values *args:
+    @"{{_dat_python}}" -m dvc_dat.ledger.recipes values "$@"
+
+# exactly one value matching the preds
+[no-cd]
+[positional-arguments]
+value *args:
+    @"{{_dat_python}}" -m dvc_dat.ledger.recipes value "$@"
+
+# every row a subject has held, with each revision's db/by
+[no-cd]
+[positional-arguments]
+history subject:
+    @"{{_dat_python}}" -m dvc_dat.ledger.recipes history "$@"
+
+# a value's dependencies, whether they hold at the head, and what moved since the alias's last target
+[no-cd]
+[positional-arguments]
+why name *args:
+    @"{{_dat_python}}" -m dvc_dat.ledger.recipes why "$@"
+
+# rows on a subject: k=v a fact, alias=TARGET the name's value (a hash prefix is expanded)
+[no-cd]
+[positional-arguments]
+set subject *args:
+    @"{{_dat_python}}" -m dvc_dat.ledger.recipes set "$@"
+
+# declare a pred indexed
+[no-cd]
+[positional-arguments]
+index pred:
+    @"{{_dat_python}}" -m dvc_dat.ledger.recipes index "$@"
+
+# bump a version: <module> edits its __version__ in the source; db is the ledger's release (a/b: a ledger clock); minor and major ask for yes
+[no-cd]
+[positional-arguments]
+bump name part="patch":
+    @"{{_dat_python}}" -m dvc_dat.ledger.recipes bump "$@"

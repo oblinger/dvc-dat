@@ -5,6 +5,7 @@ The command line, `just run` and `x`: where it finds its config, and every subco
 ```
 x TARGET [ARG ...] [KEY=VALUE ...]      run TARGET (just run)
 just mounts [PREFIX]                    the mounted names (x --list)
+just values|value|history|why|set|index|bump ...   the ledger verbs
 x --info                                version, folders, config
 x --version                             the version
 x --help                                the usage message
@@ -202,6 +203,33 @@ folder.
 # from anywhere in the project
 cd any/deep/subfolder && x train epochs=200
 ```
+
+## The ledger verbs
+
+Below `run` and `mounts`, `dvc_dat.just` carries the ledger's verbs. Each
+is one call of [`dvc_dat.ledger`](DAT%20Modules/ledger/DAT%20Ledger.md),
+run from the working directory as `python -m dvc_dat.ledger.recipes VERB
+ARGS`, which supplies what a Python caller spells out: the ledger
+(`Ledger()`: `DAT_LEDGER`, else the nearest `.datconfig.yaml` with
+`ledger:`), `by=human:$USER`, a typed `yes` for a minor or major bump,
+short kind names and hash prefixes.
+
+| Recipe | Does | The call |
+|--------|------|----------|
+| `just values [k=v ...]` | every value whose preds match; `kind=` a short class name | `rev.values(**preds)` |
+| `just value [k=v ...]` | exactly one; none or several exits 1 | `rev.value(**preds)` |
+| `just history SUBJECT` | every row the subject has held, with each revision's `db/by` | `rev.history()` |
+| `just why NAME [against=X]` | its dependencies, whether they hold at the head, what moved since the name's last target | `v.matches(rev)`, `v.diff(other)` |
+| `just set SUBJECT k=v ... [alias=TARGET]` | rows on a subject; `alias=` points the name at a value (a hash prefix expands) | `t[s, p] = o`, `t.add(s, "db/alias", ...)` |
+| `just index PRED` | declares the pred indexed | `t.add("db/pred/PRED", "db/index", "true")` |
+| `just bump NAME [patch\|minor\|major]` | a module: its `__version__` in the source; `db` or a `a/b` subject: a ledger clock | `bump_source`, `bump` |
+
+A `k=v` value is JSON when it parses, else the text as typed. A refusal
+prints `<Error>: <message>` and exits `1`. The interpreter is
+`$DAT_PYTHON`, else `.venv/bin/python` beside the justfile, else `python3`.
+A project with its own recipe of one of these names (a `run` or `index`
+of its own) does not import `dvc_dat.just`; it writes hand recipes calling
+the module instead, e.g. `ledger-index pred: python -m dvc_dat.ledger.recipes index "$@"`.
 
 ## `run:` in `.datconfig.yaml`
 
