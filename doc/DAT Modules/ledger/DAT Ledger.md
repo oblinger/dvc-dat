@@ -613,6 +613,16 @@ A section with no default and no `DAT_LEDGER` is `LedgerError`, one line: `no ac
 
 **One ledger** is the single key `ledger: <location>`, unchanged: a project with no named ledgers, its ledger the active one (`L`, `Ledger()`). A config with both `ledger:` and `ledgers:` is `LedgerError`; keep one.
 
+**Whose names the project uses** is a separate choice from which ledgers it names (SVP 239 A2). A *ledger-namespace project* names things through its active ledger's `db/mount` rows: its `ns` is a `LedgerNamespace`, `Dat.ns.mount` is refused (`t.ns.mount` writes a mount), and `x TARGET` runs through the ledger. Three cases:
+
+| Config | Namespace |
+| --- | --- |
+| `ledger: <location>` | the ledger's, as always; no existing project changes |
+| `ledgers:` section | the plain `Namespace`: the project keeps its own mounts (`Dat.ns.mount`, a `manager:` subclass that mounts), `x TARGET` is the bare run, and `L`, `Ledger()` and `ledgers.<name>` still open the section's ledgers |
+| `ledgers:` section and `namespace: ledger` | the ledger's, the active ledger's `db/mount` rows |
+
+`namespace:` takes only `ledger`; any other value, or `namespace: ledger` with neither `ledger:` nor `ledgers:`, is `ValueError` at the config load.
+
 ## Concurrency
 One writer at a time: a transaction takes the write lock only at commit, and its revision is `MAX(rev) + 1` under that lock. `lock=<seconds>` holds the lock for the whole body when a read must not go stale before the write; `t.previous_rev` and the helpers that read through it require it. Readers take no lock; a `Rev` is a snapshot. Two processes missing on one memo key both run and both seal: identical bytes and dependencies are one subject, the second dropped at commit; different bytes are two entries, both kept, which is the evidence a nondeterminism check needs. The load harness under `tests/load/` checks these invariants across processes on SQLite and Postgres; its measurements are in [`tests/load/README.md`](../../../tests/load/README.md).
 

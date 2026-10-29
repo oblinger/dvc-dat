@@ -61,7 +61,9 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
   several by name (`ledgers.record`); `Ledger()` and `L` find the active
   one by walking up from the working directory (`DAT_LEDGER`, else the
   section's `default:` from `.datconfig.override.yaml`) and assert its
-  `mounts:` as ledger rows.
+  `mounts:` as ledger rows. A `ledger:` key makes the project's names
+  the ledger's `db/mount` rows; a `ledgers:` section does so only with
+  `namespace: ledger`.
 
 ## Designed, not yet built
 

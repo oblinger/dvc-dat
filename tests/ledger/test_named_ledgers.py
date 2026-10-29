@@ -145,13 +145,60 @@ def test_a_dsn_entry_is_passed_through(here):
     assert _entries(here / ".datconfig.yaml")["exp-jb-26"] == dsn
 
 
-def test_the_manager_accepts_the_section(here):
+def test_a_ledgers_section_keeps_the_plain_namespace(here):
+    """SVP 239 A2: the section names ledgers; it does not make the project's names the ledger's."""
     project(here, SECTION, override="ledgers:\n  default: games\n")
     m = DatManager.load_dat_config(here)
+    assert type(m.ns).__name__ == "Namespace"
+    m.ns.mount(value={"k": 1}, at="cfg")                     # a ledger namespace refuses this
+    assert m.ns.load("cfg.k") == 1
+    assert L.path == (here / "led" / "games").resolve()       # the section still names the active ledger
+
+
+def test_the_one_ledger_key_still_gives_the_ledger_namespace(here):
+    (here / ".datconfig.yaml").write_text("ledger: .dat/ledger\n")
+    Ledger(here / ".dat" / "ledger", create=True)
+    m = DatManager.load_dat_config(here)
     assert type(m.ns).__name__ == "LedgerNamespace"
+    with pytest.raises(TypeError, match="db/mount"):
+        m.ns.mount(value={"k": 1}, at="cfg")
+
+
+def test_namespace_ledger_with_a_section_gives_the_ledger_namespace(here):
+    project(here, SECTION + "namespace: ledger\n", override="ledgers:\n  default: games\n")
+    m = DatManager.load_dat_config(here)
+    assert type(m.ns).__name__ == "LedgerNamespace"
+    with pytest.raises(TypeError, match="db/mount"):
+        m.ns.mount(value={"k": 1}, at="cfg")
+
+
+def test_namespace_key_is_checked(here):
+    (here / ".datconfig.yaml").write_text("namespace: files\n")
+    with pytest.raises(ValueError, match="namespace"):
+        DatManager.load_dat_config(here)
+    (here / ".datconfig.yaml").write_text("namespace: ledger\n")
+    with pytest.raises(ValueError, match="names a ledger"):
+        DatManager.load_dat_config(here)
 
 
 def test_the_active_ledger_asserts_the_mounts(here):
     project(here, SECTION + "  default: games\nmounts:\n  pkg.etl: pkg/etl\n")
     assert L.at()["db/mount/pkg.etl"]["db/root"] == "pkg/etl"
     assert ledgers.record.at().get("db/mount/pkg.etl", "db/root") is None     # a named handle asserts nothing
+
+
+_RAN = []
+
+
+def test_x_in_a_ledgers_project_is_the_bare_run(here, monkeypatch):
+    """`x TARGET` goes through the ledger only when the project's names are the ledger's."""
+    from dvc_dat import core
+    from dvc_dat.do import _cmd_do
+
+    project(here, SECTION, override="ledgers:\n  default: games\n")
+    m = DatManager.load_dat_config(here)
+    monkeypatch.setattr(core, "_default_manager", m)
+    m.ns.mount(at="fn_x", value=lambda *a, **k: _RAN.append(k))
+    assert _cmd_do(["fn_x", "k=1"], config=here) == 0
+    assert _RAN[-1] == {"k": 1}
+    assert ledgers.games.at().get("db", "db/version") is None       # nothing sealed in the active ledger

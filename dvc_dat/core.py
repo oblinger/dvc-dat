@@ -96,9 +96,24 @@ DAT_CONFIG_OVERRIDE_FILE = ".datconfig.override.yaml"
 ENV_PREFIX = "DAT_"
 _CONFIG_KEYS = ("dat_folders", "art_folder", "index", "manager", "verify",
                 "run",                 # `just run` only
-                "ledger", "ledgers", "mounts")    # the ledger's (`Ledger()`, `ledgers`), read there
+                "ledger", "ledgers", "mounts",    # the ledger's (`Ledger()`, `ledgers`), read there
+                "namespace")           # `ledger`: the project's names are its ledger's
 _DEFAULT_DAT_FOLDER = "data"
 _DEFAULT_ART_FOLDER = "art"           # beside the dat folder, never inside it
+
+
+def _ledger_namespace(config_path: Optional[Path], values: Dict[str, Any]) -> bool:
+    """Whether the project's names are its active ledger's `db/mount` rows (DAT 1046): `namespace: ledger`,
+    or the one-ledger `ledger:` key alone.  A `ledgers:` section never switches it (SVP 239 A2)."""
+    mode = values.get("namespace")
+    if mode is None:
+        return bool(values.get("ledger"))
+    if mode != "ledger":
+        raise ValueError(f"{config_path}: namespace is 'ledger' or absent, got {mode!r}")
+    if not (values.get("ledger") or "ledgers" in values):
+        raise ValueError(f"{config_path}: namespace: ledger, but no 'ledger:' key or 'ledgers:' section "
+                         "names a ledger")
+    return True
 
 
 def _find_file_up(path: Union[str, Path], file_name: str) -> Optional[Path]:
@@ -664,9 +679,10 @@ class DatManager:
         file.  An unknown key is `ValueError`.
         `ns` as in the constructor.
 
-        A `ledger:` key or a `ledgers:` section makes the namespace the active ledger's (DAT 1046): `ns` is a
-        `LedgerNamespace`, its names the ledger's `db/mount` rows at the head, and
-        `mount` refused; an adopted `ns` that is not one is not kept.
+        A `ledger:` key, or `namespace: ledger` beside a `ledger:` key or a `ledgers:` section, makes the
+        namespace the active ledger's (DAT 1046): `ns` is a `LedgerNamespace`, its names the ledger's
+        `db/mount` rows at the head, and `mount` refused; an adopted `ns` that is not one is not kept.  A
+        `ledgers:` section alone keeps the plain namespace (SVP 239 A2).
 
         A `manager:` key names the class to build, dotted (`mylab.store.Store`):
         a subclass of the class this is called on, imported once the config
@@ -718,7 +734,7 @@ class DatManager:
                 raise ValueError(f"{config_path}: index is a file, got {index!r}")
             extra_values["index"] = os.path.join(root, index)
         make_default = False
-        if (values.get("ledger") or "ledgers" in values) and config_path is not None:
+        if config_path is not None and _ledger_namespace(config_path, values):
             from .do import _DefaultNamespace
             from .ledger.namespace import LedgerNamespace
 
