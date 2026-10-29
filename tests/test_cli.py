@@ -601,6 +601,70 @@ class TestTargets:
         assert not (tmp_path / ".dat" / "targets.just").exists()
 
 
+def just(*args: str, cwd, stdin: str = None):
+    """Run `just ARGS` in a project whose justfile imports dvc_dat.just; the ledger verbs run this
+    interpreter (`DAT_PYTHON`). Returns (exit code, stdout, stderr)."""
+    done = subprocess.run(["just", *args], cwd=str(cwd), capture_output=True, text=True, input=stdin,
+                          env=_env(DAT_PYTHON=sys.executable))
+    return done.returncode, done.stdout.strip(), done.stderr.strip()
+
+
+@needs_just
+class TestLedgerVerbs:
+    """The ledger verbs shipped in `dvc_dat.just` (SVP 1465 Q1 (A)): each recipe is
+    `python -m dvc_dat.ledger.recipes VERB`, so a project importing the file has them."""
+
+    def test_set_then_history(self, tmp_path):
+        make_ledger_project(tmp_path)
+        code, out, err = just("set", "game/G1", "home=G4", cwd=tmp_path)
+        assert (code, out) == (0, "game/G1 home=G4"), err
+        code, out, err = just("history", "game/G1", cwd=tmp_path)
+        assert code == 0 and out.splitlines()[-1].split()[-2:] == ["home", "G4"], err
+
+    def test_values_and_value(self, tmp_path):
+        make_ledger_project(tmp_path)
+        assert run_x("proj.fns.double", "n=3", "alias=six", cwd=tmp_path)[0] == 0
+        code, out, err = just("values", cwd=tmp_path)
+        assert code == 0 and out.startswith("six"), err
+        code, out, err = just("value", cwd=tmp_path)
+        assert code == 0 and out.startswith("six"), err
+
+    def test_value_with_two_matches_is_refused(self, tmp_path):
+        make_ledger_project(tmp_path)
+        for n in ("3", "4"):
+            assert run_x("proj.fns.double", f"n={n}", cwd=tmp_path)[0] == 0
+        code, out, _ = just("value", cwd=tmp_path)
+        assert code == 1 and out.startswith("Multiple"), out
+
+    def test_why_names_the_dependencies(self, tmp_path):
+        make_ledger_project(tmp_path)
+        assert run_x("proj.fns.double", "n=3", "alias=six", cwd=tmp_path)[0] == 0
+        code, out, err = just("why", "six", cwd=tmp_path)
+        assert code == 0 and out.startswith("six: #") and "matches the head" in out, err
+
+    def test_index(self, tmp_path):
+        make_ledger_project(tmp_path)
+        assert just("set", "game/G1", "home=G4", cwd=tmp_path)[0] == 0
+        code, out, err = just("index", "home", cwd=tmp_path)
+        assert (code, out) == (0, "home: indexed; 1 subjects hold it"), err
+
+    def test_bump_the_ledger_and_a_module(self, tmp_path):
+        make_ledger_project(tmp_path)
+        code, out, err = just("bump", "db", cwd=tmp_path)
+        assert (code, out) == (0, "db: 0.0.0 -> 0.0.1, a release"), err
+        code, out, _ = just("bump", "db", "minor", cwd=tmp_path, stdin="no\n")
+        assert code == 1 and "0.0.1 -> 0.1.0?" in out, out
+        (tmp_path / "proj" / "__init__.py").write_text('__version__ = "0.1.0"\n')
+        code, out, err = just("bump", "proj", cwd=tmp_path)
+        assert code == 0 and out.startswith("proj: 0.1.0 -> 0.1.1 in proj/__init__.py"), err
+        assert '"0.1.1"' in (tmp_path / "proj" / "__init__.py").read_text()
+
+    def test_the_module_alone_needs_a_verb(self):
+        done = subprocess.run([sys.executable, "-m", "dvc_dat.ledger.recipes"], capture_output=True,
+                              text=True, env=_env())
+        assert done.returncode == 2 and "values" in done.stderr
+
+
 class TestCommand:
     def test_budgets(self):
         from dvc_dat.just import ARGS_MAX, HELP_MAX, command

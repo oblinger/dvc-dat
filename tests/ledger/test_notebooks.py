@@ -1,7 +1,7 @@
 """The four ledger notebooks (doc/DAT Demos/ledger-*.py) execute top to bottom, as the acceptance test.
 
 Each runs in a fresh kernel from this venv, in a temp copy of what it needs (the
-script, the `demo_game` stand-in, the justfile and its recipes), so its scratch
+script and the `demo_game` stand-in), so its scratch
 folders never land in the checkout. The just notebook needs `just` on PATH.
 """
 
@@ -23,8 +23,6 @@ def test_the_ledger_notebook_runs(name, tmp_path, monkeypatch):
     if name == "ledger-just" and shutil.which("just") is None:
         pytest.skip("just is not installed")
     shutil.copytree(DEMOS / "demo_game", tmp_path / "demo_game", ignore=shutil.ignore_patterns("__pycache__"))
-    for f in ("justfile", "ledger_recipes.py"):
-        shutil.copy(DEMOS / f, tmp_path / f)
     monkeypatch.setenv("JUPYTER_PATH", str(Path(sys.prefix) / "share" / "jupyter"))
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", ""))
     monkeypatch.delenv("DAT_LEDGER", raising=False)

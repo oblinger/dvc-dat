@@ -1,10 +1,15 @@
-"""The ledger-just notebook's recipe bodies: `python ledger_recipes.py <recipe> [args]`.
+"""The ledger's just verbs: `python -m dvc_dat.ledger.recipes <verb> [args]`.
 
-Each recipe is one ledger call; running a function or a spec is not here but
-`just run` (dvc_dat.just), the one way to run. What a Python caller spells out the recipe
-supplies: the ledger (`Ledger()`), `by=human:$USER`, `confirm=` (a typed
-`yes`), the checkout's packages on `sys.path` (`bump <module>`), short kind
-names, hash prefixes, and `k=v` arguments (v JSON, else the text as typed: `dvc_dat.do.arg_value`).
+`values`, `value`, `history`, `why`, `set`, `index` and `bump`, the recipes
+`dvc_dat.just` ships beside `run` and `mounts` (SVP 1465 Q1 (A)); a project
+that does not import that file trampolines to this module. Each verb is one
+ledger call; running a function or a spec is not here but `just run`, the one
+way to run. What a Python caller spells out the verb supplies: the ledger
+(`Ledger()`: `DAT_LEDGER`, else the nearest `.datconfig.yaml` with `ledger:`),
+`by=human:$USER`, `confirm=` (a typed `yes`), the checkout's packages on
+`sys.path` (`why`, `bump <module>`), short kind names, hash prefixes, and
+`k=v` arguments (v JSON, else the text as typed: `dvc_dat.do.arg_value`).
+A refusal prints `<Error>: <message>` and exits 1; no verb exits 2.
 """
 
 import importlib
@@ -199,9 +204,20 @@ def bump_recipe(args):
 RECIPES = {"values": values, "value": value, "history": history, "why": why, "set": set_recipe,
            "index": index, "bump": bump_recipe}
 
-if __name__ == "__main__":
+USAGE = "usage: python -m dvc_dat.ledger.recipes {" + ",".join(RECIPES) + "} [ARG ...]"
+
+
+def main(argv: list) -> int:
+    if not argv or argv[0] not in RECIPES:
+        print(USAGE, file=sys.stderr)
+        return 2
     try:
-        RECIPES[sys.argv[1]](sys.argv[2:])
+        RECIPES[argv[0]](argv[1:])
     except (LedgerError, LookupError, TypeError, ValueError, RuntimeError, ImportError) as e:
         print(f"{type(e).__name__}: {e}")
-        sys.exit(1)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

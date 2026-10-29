@@ -97,8 +97,7 @@ L = Ledger(create=True)                           # .datconfig.yaml + .dat/ledge
 with open(".datconfig.yaml", "a") as config_file:
     config_file.write("run: python3 -m q_cli_main\n")
 Path("justfile").write_text(
-    f"import '{files('dvc_dat') / 'dvc_dat.just'}'  # run\n"
-    "import '../../justfile'  # the demo's ledger verbs\n"
+    f"import '{files('dvc_dat') / 'dvc_dat.just'}'  # run, the ledger verbs\n"
     "import? '.dat/targets.just'  # the declared commands\n")
 Path("pyproject.toml").write_text('[project]\nname = "q-cli"\nversion = "0.1.0"\n')
 Path(".gitignore").write_text(".dat/\ndata/\n__pycache__/\n")
@@ -115,7 +114,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # %% [markdown]
 # # Quick: the CLI
 #
-# A project's `justfile` imports dvc-dat's `run` and a set of ledger
+# A project's `justfile` imports dvc-dat's `run` and its ledger
 # verbs. Each verb is syntactic sugar for one API call, shown beside
 # every command below as `# same as:`, so a shell line and a Python
 # line are the same call. `just --list` is the menu; `[run]` holds

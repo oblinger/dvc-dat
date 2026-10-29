@@ -80,8 +80,7 @@ commit("comfort: the stages", "comfort")
     "ledger: ../ledger\n"
     'run: python3 -c "import sys, comfort; from dvc_dat import Dat; sys.exit(Dat.cli_main())"\n')
 (repo_path / "justfile").write_text(
-    f"import '{files('dvc_dat') / 'dvc_dat.just'}'  # run\n"
-    f"import '{Path('justfile').resolve()}'  # the demo's ledger verbs\n")
+    f"import '{files('dvc_dat') / 'dvc_dat.just'}'  # run, the ledger verbs\n")
 os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"   # `just run` execs this venv's python3
 sys.path.insert(0, str(repo_path))
 L = Ledger(scratch_path / "ledger", create=True)
@@ -199,7 +198,7 @@ show("comfort/report.py")
 #
 # Mounting `comfort` makes its stages sandboxed: each call runs in a fresh process of its own, and its code is the hash of every module file the run loaded.
 # Its version is `comfort.__version__`, in the source; the first run from the clean checkout writes it to the ledger's `db/repo/comfort-repo/comfort` `db/version` clock, one per versioned package.
-# A `# same as` line is the shell form, typed in the code's repo, whose justfile imports `run` from dvc-dat (`dvc_dat.just`) and the ledger verbs from the `justfile` beside this notebook.
+# A `# same as` line is the shell form, typed in the code's repo, whose justfile imports `run` and the ledger verbs from dvc-dat (`dvc_dat.just`).
 
 # %%
 with L.transaction(by="human:dan", why="mount the stages") as t:

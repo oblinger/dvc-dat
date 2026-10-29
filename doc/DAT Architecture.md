@@ -50,8 +50,8 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
   the stage below it and returns a dat; a change upstream re-derives
   only the stages whose dependencies moved.
 - **The just layer is the human's verbs.** Each recipe is one ledger
-  call under a name a person would type; a minimal justfile sits beside
-  the notebooks ([`DAT Demos/justfile`](DAT%20Demos/justfile)).
+  call under a name a person would type, shipped in `dvc_dat.just`
+  beside `run` ([Command Line](cli.md) § The ledger verbs).
 - **Two stores, one keying.** The dat manager keeps dat folders and
   artifacts under its own `art/`, with one `_index_.json`; the ledger
   keeps `ledger.db` (or a Postgres schema) and its own `art/`. Both key
