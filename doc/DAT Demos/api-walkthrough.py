@@ -504,20 +504,25 @@ print("G2 resolution:", Ref(L.at(), g2_subject).preds["resolution"])      # → 
 # %% [markdown]
 # ### Set up repo and code
 #
-# One git repository, `geometry`, holds both functions used below:
-# `geometry.distance` runs in this process; `plane.measure.length`
-# runs sandboxed. Each package declares its version, `__version__`.
+# One git repository, `geometry-app`, holds two packages and both
+# functions used below: `geometry.main.distance` runs in this process;
+# `plane.measure.length` runs sandboxed. Each package declares its
+# version in its `__init__.py`; `geometry` is the app, so its version
+# is the app's.
 
 # %%
 # setup: create the repo in a folder, with these source files, and commit them
-repo_path = scratch_path / "geometry"
-(repo_path / "plane").mkdir(parents=True, exist_ok=True)
+repo_path = scratch_path / "geometry-app"
+for package in ("geometry", "plane"):
+    (repo_path / package).mkdir(parents=True, exist_ok=True)
 (repo_path / ".gitignore").write_text("__pycache__/\n")
-(repo_path / "geometry.py").write_text('''\
+(repo_path / "geometry/__init__.py").write_text('''\
+__version__ = "5.3.9"
+''')
+
+(repo_path / "geometry/main.py").write_text('''\
 import math
 from dvc_dat.ledger import ledger_fn
-
-__version__ = "5.3.9"
 
 @ledger_fn
 def distance(rev, a, b) -> float:
@@ -568,24 +573,24 @@ dist_fn = ns.load("math.dist")
 print("loaded:", dist_fn)                   # → loaded: <built-in function dist>
 print("its name:", ns.name_of(dist_fn))     # → its name: math.dist
 with L.transaction(by="human:dan") as t:
-    t.ns.mount("plane", root="plane", repo="geometry")
+    t.ns.mount("plane", root="plane", repo="geometry-app")
 print("mounts:", L.at().ns.mounts())
-# → mounts: {'plane': {'root': 'plane', 'repo': 'geometry'}}
+# → mounts: {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
 
 # %% [markdown]
 # ### Accessing and using Python functions
 
 # %%
-distance_fn = L.at().ns.load("geometry.distance")
+distance_fn = L.at().ns.load("geometry.main.distance")
 print("fn:", repr(distance_fn), " code:", repr(distance_fn.code))
-# → fn: <Fn geometry.distance@5.3.9>  code: <Code geometry@5.3.9>
+# → fn: <Fn geometry.main.distance@5.3.9>  code: <Code geometry@5.3.9>
 hypotenuse_value = distance_fn(a=(0, 0), b=(3, 4))
 print("result:", hypotenuse_value.obj, " sealed at:", hypotenuse_value.sealed)
 # → result: 5.0  sealed at: <the seal's moment>
-print("db/repo/geometry/geometry:", L.at()["db/repo/geometry/geometry"])
-# → db/repo/geometry/geometry: {'db/version': '5.3.9'}
-print("db/repo/geometry:", L.at()["db/repo/geometry"])
-# → db/repo/geometry: {'db/commit': '<the commit>'}
+print("db/repo/geometry-app/geometry:", L.at()["db/repo/geometry-app/geometry"])
+# → db/repo/geometry-app/geometry: {'db/version': '5.3.9'}
+print("db/repo/geometry-app:", L.at()["db/repo/geometry-app"])
+# → db/repo/geometry-app: {'db/commit': '<the commit>'}
 
 # %% [markdown]
 # `L.at().ns.load(name)` is what a dotted name denotes on the ledger;
@@ -598,9 +603,8 @@ print("db/repo/geometry:", L.at()["db/repo/geometry"])
 # packages, each with its own `__version__`. So the commit is a
 # `db/commit` row on `db/repo/<repo>` and each package's version a
 # `db/version` row on `db/repo/<repo>/<package>`; the ledger writes
-# both, so both predicates carry `db/`. Here the repo `geometry` holds the
-# packages `geometry` and `plane`, which is why `geometry` appears
-# twice. This first clean run wrote both rows.
+# both, so both predicates carry `db/`. Here the repo `geometry-app` holds
+# the packages `geometry` and `plane`. This first clean run wrote both rows.
 
 # %% [markdown]
 # ### Sandboxed functions
@@ -616,11 +620,11 @@ segment_value = length_fn(a=(0, 0), b=(3, 4))
 print("fn:", repr(length_fn), " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
 # → fn: <Fn plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
 print("result:", segment_value.obj)                 # → result: 2.5
-print("geometry db/version:", L.at()["db/repo/geometry/geometry", "db/version"])   # → geometry db/version: 5.3.9
-print("plane db/version:", L.at()["db/repo/geometry/plane", "db/version"])         # → plane db/version: 2.7.1
+print("geometry db/version:", L.at()["db/repo/geometry-app/geometry", "db/version"])   # → geometry db/version: 5.3.9
+print("plane db/version:", L.at()["db/repo/geometry-app/plane", "db/version"])         # → plane db/version: 2.7.1
 
 # %% [markdown]
-# `geometry` and `plane` share one checkout, the repo `geometry`, and each package keeps its own version clock, written by its first clean run.
+# `geometry` and `plane` share one checkout, the repo `geometry-app`, and each package keeps its own version clock, written by its first clean run.
 
 # %% [markdown]
 # #### A sandbox is a snapshot of the code
@@ -669,11 +673,11 @@ print("old result's code:", segment_value.dependencies["code"], " fn:", segment_
 # answered from the ledger.
 
 # %%
-far_value = L.at().run("geometry.distance", a=(0, 0), b=(6, 8))
+far_value = L.at().run("geometry.main.distance", a=(0, 0), b=(6, 8))
 print("result:", far_value.obj)                       # → 10.0
 top_id = L.at().id
 
-again_value = L.at().run("geometry.distance", a=(0, 0), b=(6, 8))
+again_value = L.at().run("geometry.main.distance", a=(0, 0), b=(6, 8))
 print("same value:", again_value.subject == far_value.subject, " nothing written:",
       L.at().id == top_id)                 # → True True: a hit, nothing written
 
@@ -686,13 +690,13 @@ print("same value:", again_value.subject == far_value.subject, " nothing written
 # `.seal(t)` is the third. Nothing runs twice.
 
 # %%
-distance_fn = L.at().ns.load("geometry.distance")                   # (1) load the function
-print("fn:", repr(distance_fn))                                     # → fn: <Fn geometry.distance@5.3.9>
+distance_fn = L.at().ns.load("geometry.main.distance")                   # (1) load the function
+print("fn:", repr(distance_fn))                                     # → fn: <Fn geometry.main.distance@5.3.9>
 draft_value = distance_fn(a=(0, 0), b=(9, 12), seal=False)          # (2) run it, provenance captured, nothing kept
 print("draft:", draft_value.obj, " sealed:", draft_value.sealed)    # → 15.0 None
 with L.transaction(by="human:dan", why="keep it") as t:             # (3) put it on the ledger
     draft_value.seal(t)
-kept_value = L.at().run("geometry.distance", a=(0, 0), b=(9, 12))   # the same call: a hit
+kept_value = L.at().run("geometry.main.distance", a=(0, 0), b=(9, 12))   # the same call: a hit
 print("hit:", kept_value.subject == draft_value.subject)            # → True: nothing ran
 
 # %% [markdown]
@@ -754,7 +758,7 @@ for dep_key, dep_value in sorted(retake_clip.dependencies.items()):
     print(f"{dep_key[:28]:30}= {dep_value[:56]}")
 
 # %% [markdown]
-# - `code/geometry`: the commit of the repo `geometry` the function
+# - `code/geometry-app`: the commit of the repo `geometry-app` the function
 #   ran at.
 # - `code`: the snapshot of the code the function ran from, by its
 #   subject; here the package `clips` at its version, as for the

@@ -88,9 +88,9 @@ A `LedgerNamespace`: the same interface, its names the ledger's `db/mount` rows 
 ```python
 f = L.at().ns.load("plane.measure.length")   # an Fn
 L.at().ns.mounts()
-# {'plane': {'root': 'plane', 'repo': 'geometry'}}
+# {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
 with L.transaction(by="human:dan") as t:
-    t.ns.mount("plane", root="plane", repo="geometry")
+    t.ns.mount("plane", root="plane", repo="geometry-app")
     t.ns.mount("mymodule", root="mymodule")   # this project's repo
 ```
 
