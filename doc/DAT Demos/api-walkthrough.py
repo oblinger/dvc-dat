@@ -211,40 +211,27 @@ with L.transaction(by="human:dan") as t:
 
 # %% [markdown]
 # ## Naming a revision
-#
-# A revision is named by a version or a tag written in it, a row on
-# the ledger's own subject `db`. `L.at("0.1.0")` or `L.at(name)` is
-# that revision. `bump`, under "Locking the ledger", advances the
-# version row for you.
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("db", "db/version", "0.1.0")        # the ledger's own version: a row on db
-named_rev = L.at("0.1.0")
-print("named rev id, court:", named_rev.id, named_rev.get("game/G1", "court"))
-# named rev id, court: 8 west
-
-# %% [markdown]
-# A tag is the same kind of row: `(db, db/tag, name)` names the
-# revision its transaction commits.
-
-# %%
+    t.add("db", "db/version", "0.1.0")            # a version: a row on the ledger's own subject, db
+version_rev = t.rev
 with L.transaction(by="human:dan") as t:
-    t.add("db", "db/tag", "2026-Q4-official")
-print("tagged rev id:", t.rev.id)
-# tagged rev id: 9
+    t.add("db", "db/tag", "2026-Q4-official")     # a tag: another row on db
+tag_rev = t.rev
+print(f"version 0.1.0 was written at rev {version_rev.id}; L.at('0.1.0') is rev {L.at('0.1.0').id}")
+print(f"tag 2026-Q4-official was written at rev {tag_rev.id}; L.at('2026-Q4-official') is rev {L.at('2026-Q4-official').id}")
+print(f"court at L.at('0.1.0'): {L.at('0.1.0')['game/G1', 'court']}")
+# version 0.1.0 was written at rev 8; L.at('0.1.0') is rev 8
+# tag 2026-Q4-official was written at rev 9; L.at('2026-Q4-official') is rev 9
+# court at L.at('0.1.0'): west
 
 # %% [markdown]
-# `L.at(name)` reads through the name, as `L.at("0.1.0")` reads
-# through the version: each route is a row on `db` pointing at a
-# revision.
-
-# %%
-official_rev = L.at("2026-Q4-official")
-print("by name, rev id, court:", official_rev.id, official_rev["game/G1", "court"])
-# by name, rev id, court: 9 west
-print("by version, rev id, court:", named_rev.id, named_rev["game/G1", "court"])
-# by version, rev id, court: 8 west
+# A revision is named by a row on the ledger's own subject `db`:
+# `(db, db/version, M.m.p)` or `(db, db/tag, name)` names the
+# revision its transaction commits, and `L.at("0.1.0")` or
+# `L.at(name)` reads through the row to that revision. `bump`, under
+# "Locking the ledger", advances the version row for you.
 
 # %% [markdown]
 # ## Typing a predicate
