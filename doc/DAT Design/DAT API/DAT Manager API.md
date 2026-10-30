@@ -38,7 +38,7 @@ A world of dats and artifacts: a list of dat folders (all searched by name, the 
 
 | DatManager                                 |                                                      |
 | ------------------------------------------ | ---------------------------------------------------- |
-| [do](#^do)                               | This world's namespace; its one attribute            |
+| [ns](#^ns)                               | This world's namespace; its one attribute            |
 | [DatManager](#^init)                     | A world on a list of dat folders; reads nothing      |
 | [load_dat_config](#^load-dat-config)     | A new manager from the nearest `.datconfig.yaml`     |
 | [create](#^create)                       | Make a dat, as the class its `dat.kind` names        |
@@ -72,7 +72,7 @@ A world of dats and artifacts: a list of dat folders (all searched by name, the 
 **load**`(name: str | Path, *, cache_after_load: bool = True, verify: bool | None = None) -> Any`
     What a name or a `sha256:` URN names: a dat, as its `dat.kind` class, or an artifact, handed to the `type` recorded at its save (its payload's `Path` with none). A dat is tried absolute, then mounted in `ns`, then in each dat folder in order; a name both a dat and an artifact hold is `ValueError`; an `art:` name written before 2.14 loads with the prefix stripped. Inside a `recording`, the entry lands in that dat's map. `KeyError` when nothing is found. `verify` (default the manager's, set by `verify=` or `verify:` in `.datconfig.yaml`) re-hashes what is handed back — the folder against `dat.sha256`, an artifact's payload against its `_art_.yaml` — and raises `ValueError` naming the name and both hashes on a mismatch; `load_path` takes it too. ^load
 
-**load_path**`(name: str | Path) -> Path`
+**load_path**`(name: str | Path, *, verify: bool | None = None) -> Path`
     Where `load(name)` finds its object — a dat's folder, or an artifact's payload — with nothing built: no type is called. For heavy objects and for tools that read the file themselves. Recorded on the running dat exactly as `load` records it. ^load-path
 
 **save_artifact**`(source: str | Path, *, type: str | Callable | None = None, name: str | None = None, link: bool = False) -> str`
@@ -122,7 +122,7 @@ A world of dats and artifacts: a list of dat folders (all searched by name, the 
 `Dat.manager` is a plain class attribute: `None` until first use, when `DatManager.load_dat_config()` fills it; assign to it to replace the default world. `Dat.ns` forwards to `Dat.manager.ns`, whichever manager that is, so `ns.mount` and `ns.load` always act on the default world; `Dat.manager.run(...)` runs in it. Mounts made before an assignment stay with the manager they were made on; to keep them, adopt the namespace: `Dat.manager = Store(dat_folders=[...], ns=Dat.ns)`. `cli_main(config=path)` does exactly that with `load_dat_config(path, ns=Dat.ns)`. A subclass's `Run.manager` is the same object; a dat built by hand with no manager falls back to it.
 
 ## The config file
-`.datconfig.yaml`, overridden by `.datconfig.override.yaml`, then by `DAT_FOLDERS` / `DAT_ART_FOLDER`. A `manager:` key names the `DatManager` subclass `load_dat_config` builds (so the default world's class); the keys in that class's `CONFIG_KEYS` may appear too and reach its constructor, any other unknown key is an error. `load_dat_config` is its only reader in the library; `run` is read by `bin/dat` only (`DAT_RUN` overrides it there). An empty file is a complete config: it marks the project root.
+`.datconfig.yaml`, overridden by `.datconfig.override.yaml`, then by `DAT_FOLDERS` / `DAT_ART_FOLDER`. A `manager:` key names the `DatManager` subclass `load_dat_config` builds (so the default world's class); the keys in that class's `CONFIG_KEYS` may appear too and reach its constructor, any other unknown key is an error. `load_dat_config` is its only reader in the library; `run` is read by the `run` recipe of `dvc_dat.just` only (`DAT_RUN` overrides it there). An empty file is a complete config: it marks the project root.
 
 ```yaml
 dat_folders: data/        # or a list; the first is written to

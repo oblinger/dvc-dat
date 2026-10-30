@@ -7,7 +7,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 
 ![DAT Ledger](DAT%20Ledger.svg) 
 
-**Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [module functions](#dvc_dat.ledger%20Interface) 
+**Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [Code](#^fn-code) · [module functions](#dvc_dat.ledger%20Interface) 
 **Topics:** [Ledger Semantics](#Ledger%20Semantics) · [Many ledgers](#Many%20ledgers) · [Execution Semantics](#Execution%20Semantics) · [Value Provenance](#Value%20Provenance) 
 
 | Methods     |                                                                                                                                                                                                                                                                                                            |
@@ -21,10 +21,10 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Value.Blob  | [obj](#^obj)                                                                                                                                                                                                                                                                                               |
 | Value.Table | [table](#^table-table)                                                                                                                                                                                                                                                                                     |
 | Dat         | [path](#^dat-path), [preds](#^dat-preds), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind)                                                                                                                                                       |
-| Fn          | [name](#^fn-name), [module](#^module), [code](#^fn-code), [mount](#^mount), [env](#^env), [signature](#^signature), [()](#^--call--)                                                                                                                                                                       |
+| Fn          | [name](#^fn-name), [module](#^module), [code](#^fn-code), [mount](#^mount), [env](#^env), [signature](#^signature), [kind](#^fn-kind), [()](#^--call--) |
 
 
-This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md). The four notebooks run it end to end: [ledger-triples](../../DAT%20Demos/ledger-triples.ipynb), [ledger-values](../../DAT%20Demos/ledger-values.ipynb), [ledger-dats](../../DAT%20Demos/ledger-dats.ipynb), [ledger-just](../../DAT%20Demos/ledger-just.ipynb). From a shell, `just values`, `value`, `history`, `why`, `set`, `index` and `bump` are one call each of this interface, shipped in `dvc_dat.just` beside `run` ([Command Line](../../cli.md) § The ledger verbs).
+This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md). The four notebooks run it end to end: [ledger-triples](../../DAT%20Demos/ledger-triples.ipynb), [ledger-values](../../DAT%20Demos/ledger-values.ipynb), [ledger-dats](../../DAT%20Demos/ledger-dats.ipynb), [ledger-just](../../DAT%20Demos/ledger-just.ipynb); [api-walkthrough](../../DAT%20Demos/api-walkthrough.ipynb) is the one API sheet covering all four parts. From a shell, `just values`, `value`, `history`, `why`, `set`, `index` and `bump` are one call each of this interface, shipped in `dvc_dat.just` beside `run` ([Command Line](../../cli.md) § The ledger verbs).
 
 
 
@@ -225,7 +225,7 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 **ns**`: LedgerNamespace`
     The ledger's namespace at `previous_rev` (DAT 1051): `t.ns.load(name)` as [`rev.ns`](#^ns), so it needs `lock=`; `t.ns.mount(at, *, root, repo=None)` writes the two `db/mount/<at>` rows `db/root` and `db/repo` through `update`, reads nothing and needs no lock. `repo` defaults to the project's own repository: the git checkout holding the `.datconfig.yaml` `Dat.manager` was loaded from, named as discovery names it (its `pyproject.toml` name, normalised, else its folder), so the `db/repo/<name>` rows agree; with no such file, or one in no checkout, it is `ValueError` naming `repo=`. A mount from another repo names it. A missing or non-`str` `root`, an empty `repo`, or a `folder=`-style keyword is `TypeError`. ^transaction-ns
 
-**get** · **all** · **rows** · **refs** · **values** · **value** · **select** · **load** · **in** · **`t[s, p]`** · **`t[s]`**
+**get** · **all** · **history** · **refs** · **values** · **value** · **select** · **load** · **in** · **`t[s, p]`** · **`t[s]`**
     The [Rev](#Rev%20Interface) reads of the same names, at `previous_rev` (DAT 1051), so they need `lock=` and are `Unlocked` without it. The body's own `add`, `update`, bracket writes and seals are pending and not seen: `t[s, p] = o; t[s, p]` reads the old value. ^transaction-reads
 
 **rev**`: Rev`
@@ -570,7 +570,7 @@ A read turns the rows at or before its revision into what they hold, by each pre
 | --- | --- |
 | `db` | `db/version`, the release, the name of a whole state (`bump(t, "db")`, `L.at("M.m.p")`); `db/tag`, a name for the revision its transaction commits (`t.add("db", "db/tag", "2026-Q4-official")`, `L.at("2026-Q4-official")`): cardinality `many`, never reused (a name added before is `Exists`, nothing written), neither digits nor `M.m.p`; `db/format`; `db/memo-policy`, the memo policy's name ([Memoization and the platform](#Memoization%20and%20the%20platform)) |
 | `db/tx/<rev>` | `db/by`, `db/time`, the transaction's keywords |
-| `db/pred/<name>` | `db/cardinality`, `db/index`, `db/type`, `db/doc` |
+| `db/pred/<name>` | `db/cardinality`, `db/index`, `db/type` |
 | `db/code/<16 hex>` | `db/modules` (`relpath -> sha256` of every module the run loaded, a module its caller loaded first included, and every mounted file it read, through the namespace or by opening it), `db/mounts` (the mounts hash when sandboxed, `none` when installed): a snapshot of code, shared by every function in it and every result it made |
 | `db/mount/<prefix>` | `db/repo`, `db/root`, `db/salt` |
 | `db/repo/<repo>` | `db/commit`, the full commit of the latest clean run of any package in the repo: written by that run's seal, never by a person |

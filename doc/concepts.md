@@ -1,6 +1,8 @@
 :>> [DAT](DAT%20Track/DAT.md) → [DAT concepts](ha://p/DAT%20concepts) 
 # Core Concepts
-The core ideas of dvc_dat: dats, specs, results and the do system.
+The core ideas of dvc_dat: dats, specs, results and the namespace `ns`.
+The record in time — values found by their inputs, `L` and `rev.run` — is the
+ledger's: [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md).
 
 A **dat** is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
 itself. `_result_.yaml` holds only what running it produced.
@@ -27,8 +29,8 @@ dat = Dat.load("runs/2026-09/exp")
 
 **Dotted names** (`catalog.experiment`, `os.path.join`) name source code:
 templates, functions, constants. `ns.load` resolves them — first against the
-names the program mounted with `ns.mount(...)` (in code; `.datconfig.yaml`
-holds no mounts), then by import: the longest importable
+names the program mounted with `ns.mount(...)` (in code; the config's `mounts:`
+key is the ledger's, asserted by `Ledger()` as `db/mount/<prefix>` rows), then by import: the longest importable
 prefix of the name is imported and the rest is `getattr`-ed. So any importable
 object has a name whether or not it was mounted, and `ns.name_of(obj)` gives the
 name that loads back to it.
@@ -398,7 +400,8 @@ manager: mylab.store.Store
 run: .venv/bin/python -m mypkg.main
 ```
 
-Those six keys are the whole file, plus any key the named `manager` class lists
+Those six keys, with the ledger's four — `ledger`, `ledgers`, `mounts`,
+`namespace` — are the whole file, plus any key the named `manager` class lists
 in its `CONFIG_KEYS`; an empty file is a complete config.
 An unrecognized key is an error naming the file, the key and the known keys —
 a typo is never silently ignored. The config's folder is the project's import

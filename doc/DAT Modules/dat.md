@@ -8,7 +8,8 @@ folders it searches and writes, the artifact store beside them, and a
 run goes through it, so dependencies are captured rather than declared.
 The code is `dvc_dat/core.py` (`Dat`, `DatContainer`, `DatManager`) and
 `dvc_dat/do.py` (`Namespace`), exported as `from dvc_dat import Dat,
-DatContainer, DatManager, Namespace`. Part of the
+DatContainer, DatManager, Namespace` beside the ledger handles `L`
+and `ledgers`. Part of the
 [architecture](../DAT%20Architecture.md); a `Dat` is also a ledger value,
 `ledger.Dat` the same class ([DAT Ledger](ledger/DAT%20Ledger.md), DAT 1038).
 

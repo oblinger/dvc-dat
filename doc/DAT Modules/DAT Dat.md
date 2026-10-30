@@ -238,7 +238,7 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
 
 
 ## dvc_dat Interface
-`from dvc_dat import Dat, DatContainer, DatManager, Namespace` is the package's `__all__`; importing it reads no file. `dvc_dat.do` is the submodule, not the namespace: the default world's namespace is `Dat.ns`, or `from dvc_dat.do import do`. The module functions `expand`, `expand_spec` and `merge_dicts` are importable from `dvc_dat.core`. The ledger is its own subpackage, `dvc_dat.ledger`.
+`from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers` is the package's `__all__`; importing it reads no file. `dvc_dat.do` is the submodule, not the namespace: the default world's namespace is `Dat.ns`, or `dvc_dat.do.ns`. The module functions `expand`, `expand_spec` and `merge_dicts` are importable from `dvc_dat.core`. The ledger is its own subpackage, `dvc_dat.ledger`.
 
 | dvc_dat | |
 | --- | --- |
@@ -246,6 +246,8 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
 | [DatContainer](#^datcontainer) | A dat holding dats |
 | [DatManager](#^datmanager) | A world of dats |
 | [Namespace](#^namespace) | A namespace bound to a world |
+| [L](#^l) | The active ledger |
+| [ledgers](#^ledgers) | The project's ledgers by name |
 | [__version__](#^--version--) | The package version |
 
 **Dat**`(class)`
@@ -260,8 +262,14 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
 **Namespace**`(class)`
     From `dvc_dat.do`; see [Namespace Interface](#Namespace%20Interface). ^namespace
 
+**L**`: Ledger`
+    From `dvc_dat.ledger.named`: the active ledger, `DAT_LEDGER`, else the `ledgers:` section's `default:` or `ledger:`, resolved at each use ([DAT Ledger § Many ledgers](ledger/DAT%20Ledger.md#Many%20ledgers)). ^l
+
+**ledgers**
+    From `dvc_dat.ledger.named`: `ledgers.<name>` or `ledgers["jb-26"]`, that entry of the `ledgers:` section. ^ledgers
+
 **__version__**`: str`
-    The package version, `"2.22.0"` at this checkout. ^--version--
+    The package version, `"2.40.1"` at this checkout. ^--version--
 
 
 

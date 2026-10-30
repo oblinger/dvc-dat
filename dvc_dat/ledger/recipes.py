@@ -5,7 +5,8 @@
 that does not import that file trampolines to this module. Each verb is one
 ledger call; running a function or a spec is not here but `just run`, the one
 way to run. What a Python caller spells out the verb supplies: the ledger
-(`Ledger()`: `DAT_LEDGER`, else the nearest `.datconfig.yaml` with `ledger:`),
+(`Ledger()`: `DAT_LEDGER`, else the nearest `.datconfig.yaml`'s `ledger:`
+or `ledgers:` default),
 `by=human:$USER`, `confirm=` (a typed `yes`), the checkout's packages on
 `sys.path` (`why`, `bump <module>`), short kind names, hash prefixes, and
 `k=v` arguments (v JSON, else the text as typed: `dvc_dat.do.arg_value`).

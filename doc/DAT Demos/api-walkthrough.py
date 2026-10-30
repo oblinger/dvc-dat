@@ -1308,7 +1308,7 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # | Command | What it does |
 # | --- | --- |
 # | `x TARGET k=v` | `bin/x`, the same as `just run TARGET k=v` |
-# | `dat TARGET k=v` | the `dat` console script: `Dat.manager.run(TARGET, …)` from a shell, no ledger; `dat --list`, `dat --info` ([DAT CLI](../DAT%20Design/DAT%20API/DAT%20CLI.md)) |
+# | `just mounts` · `x --info` | the mounted names (`x --list`), the version and config; with no ledger in the config `just run` is the bare `Dat.manager.run(TARGET, …)` ([DAT CLI](../DAT%20Design/DAT%20API/DAT%20CLI.md)) |
 # | `just sealed` | in the dvc-dat repo: values sealed with `v.seal()` and never saved; `just sealed purge older=14d` drops the old ones |
 # | `just test` | in the dvc-dat repo: the test suite |
 # | `just demo` | in the dvc-dat repo: sync and execute the `demo-*` notebooks |

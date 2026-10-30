@@ -5,7 +5,7 @@ description: "2.16: the contract of dvc-dat — one example, then the class, the
 | -[DAT API](DAT%20API.md)-         | : 2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace<br>→ [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](ha://p/DAT%20API) |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Class API](DAT%20Class%20API.md) | `from dvc_dat import Dat`: the `Dat` class, `Dat.ns`, the spec file, the config                                                                                                                             |
-| [CLI](DAT%20CLI.md)               | `dat TARGET …` from a shell, and the bootstrap copy                                                                                                                                                         |
+| [CLI](DAT%20CLI.md)               | `just run TARGET …` / `x TARGET …` from a shell                                                                                                                                                             |
 | ...                               | [DAT Manager API](DAT%20Manager%20API.md),  [DAT Namespace API](DAT%20Namespace%20API.md),                                                                                                                  |
 
 | [Namespace API](DAT%20Namespace%20API.md)           | the namespace under `Dat.ns`: your program's main, mounts, spec surgery — the advanced half                                                                                                                 |
@@ -20,8 +20,8 @@ The 2.16 contract of `dvc_dat`, shown once as a whole project.
 # At the project root -- all keys are optional
 dat_folders: data           # where dats live (default: data/)
 art_folder: art             # artifacts, beside data/ (default)
-# run: uv run dat           # what a copy of bin/dat execs -- your
-#                           # own main, if it mounts names (Namespace API)
+# run: uv run python -m dvc_dat  # what `just run` execs -- your
+#                                # own main, if it mounts names (Namespace API)
 ```
 
 ### `mymodule/train.py`
@@ -50,9 +50,11 @@ baseline = {
 
 ### From Python
 ```python
-from dvc_dat import Dat
+from dvc_dat import Dat, L, ledgers
 
 m = Dat.manager              # the default world
+L                            # the active ledger: DAT_LEDGER, else the config's
+ledgers["jb-26"]             # a named one, ledgers.<name> too (DAT Ledger)
 Dat.save_artifact("clips/G1.mp4", name="games/G1/video")
 
 Dat.manager.run("mymodule.train.baseline")          # -> data/runs/2026-09/baseline/
@@ -67,14 +69,14 @@ Dat.load_artifact("games/G1/video")  # a Path, or its type's
 
 ### From a shell
 ```bash
-$ dat mymodule.train.baseline           # run, print the value
+$ x mymodule.train.baseline             # just run: run, print the value
 0.99
 
-$ dat mymodule.train.baseline lr=0.25   # a fork; JSON, else the text
+$ x mymodule.train.baseline lr=0.25     # a fork; JSON, else the text
 0.975
 
-# a copy of bin/dat on PATH: any subdirectory, no environment active
-$ cd analysis/scratch && dat mymodule.train.baseline lr=0.4
+# x (bin/x) or just run: any subdirectory, no environment active
+$ cd analysis/scratch && x mymodule.train.baseline lr=0.4
 0.96
 ```
 
@@ -123,7 +125,7 @@ A **dat** is a folder holding `_spec_.yaml`, a complete argumentless recipe for 
 
 ## Migration from 1.x
 
-`Dat.run()` → `Dat.manager.run(a_dat)`; `Dat.manager.do` → `Dat.do`; `DoManager`/`SimpleMethodManager` → the one `do`, configured for you on first use ([DAT Do API](DAT%20Do%20API.md)); spec key `dat.path` → `dat.name`; `dat.spec.dat.kind` → `d.get_spec()["dat"]["kind"]`; pydantic specs → a `validate_spec` override; `dat.base` may now be a list; call-site arguments no longer append to `dat.args` — they replace them, and they fork; config `mount_commands:` → `do.mount(...)` calls in your own program, and `run: python -m mypkg.main` for the shell ([DAT Do API](DAT%20Do%20API.md)); config `local_prefix` + `extra_local_prefixes` → `dat_folders`; config `python:` → `run:`; `bin/X` → `bin/dat`; `dat do TARGET` → `dat TARGET`; `--set KEY VALUE` / `--sets` → `--set KEY=VALUE`, repeated; `get_spec(raw=True)` → gone, the file holds the expanded values ([DAT 1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md)). From 2.x: the table in https://github.com/oblinger/dvc-dat/blob/main/CHANGELOG.md § 2.2.0.
+`Dat.run()` → `Dat.manager.run(a_dat)`; `Dat.manager.do` → `Dat.do`; `DoManager`/`SimpleMethodManager` → the one `do`, configured for you on first use ([DAT Namespace API](DAT%20Namespace%20API.md)); spec key `dat.path` → `dat.name`; `dat.spec.dat.kind` → `d.get_spec()["dat"]["kind"]`; pydantic specs → a `validate_spec` override; `dat.base` may now be a list; call-site arguments no longer append to `dat.args` — they replace them, and they fork; config `mount_commands:` → `do.mount(...)` calls in your own program, and `run: python -m mypkg.main` for the shell ([DAT Namespace API](DAT%20Namespace%20API.md)); config `local_prefix` + `extra_local_prefixes` → `dat_folders`; config `python:` → `run:`; `bin/X` → `bin/x`; the `do TARGET` subcommand → `x TARGET`; `--set KEY VALUE` / `--sets` → `--set KEY=VALUE`, repeated; `get_spec(raw=True)` → gone, the file holds the expanded values ([DAT 1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md)). From 2.x: the table in https://github.com/oblinger/dvc-dat/blob/main/CHANGELOG.md § 2.2.0.
 
 **From 2.37:** `Dat.do` → `Dat.ns`, `manager.do` → `manager.ns`, `Do` → `Namespace`, `do.keys()` → `ns.mounts()`, `DatManager(do=)` → `ns=`; on a ledger `rev.resolve(name)` → `rev.ns.load(name)`, `LedgerDo` → `LedgerNamespace`, and `t.ns.mount(at, root=, repo=)` writes a mount ([DAT Namespace API](DAT%20Namespace%20API.md), DAT 1051).
 

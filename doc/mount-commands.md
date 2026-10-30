@@ -9,7 +9,9 @@ imports — a folder of YAML templates, a file outside the import path, a
 literal value — and for giving an importable thing a shorter name.
 
 Mounts are made in code, by `ns.mount(...)`, by your own program — the
-namespace is whatever the running program imported. For the shell, your
+namespace is whatever the running program imported. A ledger-namespace project
+(`ledger:` or `namespace: ledger`) refuses `Dat.ns.mount`: its mounts are ledger
+rows, written by `t.ns.mount` in a transaction. For the shell, your
 program's main does the mounting and hands the command line to `Dat.cli_main()`,
 and `.datconfig.yaml` names that main as `run:`:
 
@@ -32,7 +34,7 @@ Dat.ns.mount(folder=str(ROOT / "catalog"), at="catalog")
 Dat.ns.mount(module="tests.fixtures", at="fixtures")
 
 if __name__ == "__main__":
-    # launched by the dat bootstrap
+    # launched by `just run`
     if os.environ.get("DAT_CLI_CONFIG"):
         sys.exit(Dat.cli_main())
 ```
@@ -198,7 +200,7 @@ Dat.ns.mount(folder=str(SRC / "scripts"), at="scripts")
 Dat.ns.mount(value={"debug": False, "version": "2.0.0"}, at="config")
 
 if __name__ == "__main__":
-    # launched by the dat bootstrap
+    # launched by `just run`
     if os.environ.get("DAT_CLI_CONFIG"):
         sys.exit(Dat.cli_main())
 ```
