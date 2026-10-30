@@ -127,15 +127,15 @@ print("rev1 court, officials:", rev1.get("game/G1", "court"),
 # %% [markdown]
 # ## The `[]` accessor
 #
-# Two keys assign the triples of one predicate; one key assigns all the triples of one subject.
-# Writing mirrors reading, and a record write takes a list for a
-# `many` key.
+# Two keys read or assign one predicate; one key reads a subject's
+# record as a dict. `t.update(s, {...})` writes a record, an add per
+# key.
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:      # the record write reads: lock=
-    t["game/G1", "court"] = "west"                       # one predicate
-    t["game/G2"] = {"home": "G1", "away": "G3",          # all of one subject
-                    "officials": ["lee", "park"]}
+with L.transaction(by="human:dan") as t:
+    t["game/G1", "court"] = "west"                       # one predicate: an add
+    t.update("game/G2", {"home": "G1", "away": "G3",     # a record: an add per key
+                         "officials": ["lee", "park"]})  # a list under a many key adds each
 rev = t.rev
 print("court:", rev["game/G1", "court"])   # west
 print("game/G2:", rev["game/G2"])
@@ -146,58 +146,57 @@ print("game/G2:", rev["game/G2"])
 # missing fact is a `KeyError`.
 
 # %% [markdown]
-# `t.update(s, {...})` is an `add` per key of the record, on one
-# subject: a list under a `many` key adds each element. It reads
-# nothing and retracts nothing, so it takes no `lock=`; `db/` keys
-# go in as `add` takes them.
+# `t.update` reads nothing and retracts nothing: a key it omits
+# stays. `db/` keys go in as `add` takes them.
 
 # %%
-with L.transaction(by="human:dan") as t:        # no lock=: nothing is read
+with L.transaction(by="human:dan") as t:
     t.update("game/G2", {"court": "north"})      # one add; the rest stays
 print("game/G2:", t.rev["game/G2"])
 #   game/G2: {'home': 'G1', 'away': 'G3',
 #    'officials': ['lee', 'park'], 'court': 'north'}
 
 # %% [markdown]
-# `t["game/G2"] = {"court": "north"}` would instead make the rows
-# equal to the dict: it retracts `home`, `away` and `officials`,
-# which the dict omits, so it reads first and takes `lock=`.
+# Assigning a whole record, `t[s] = {...}`, makes the rows equal to
+# the dict and reads first, so it waits for "Locking the ledger"
+# below.
 
 # %% [markdown]
 # ## Reading triple data
 
 # %%
+with L.transaction(by="human:dan") as t:
+    t.remove("game/G1", "officials", "kim")   # a remove is a row too
+rev = t.rev
 print("score:", rev.get("game/G1", "score", default="tbd"))   # tbd: no raise
 print("has home G4:", ("game/G1", "home", "G4") in rev)      # True
-print("G1 officials:", rev.all("game/G1", "officials"))      # ['kim', 'ortiz']
+print("G1 officials:", rev.all("game/G1", "officials"))      # ['ortiz']
 print("G2 officials:", rev.all("game/G2", "officials"))      # ['lee', 'park']
 print("G2:", rev.all("game/G2"))                             # one position fixed: its (predicate, object) pairs
-#   [('home', 'G1'), ('away', 'G3'), ('officials', 'lee'), ('officials', 'park')]
+#   [('home', 'G1'), ('away', 'G3'), ('officials', 'lee'), ('officials', 'park'), ('court', 'north')]
 print("courts:", rev.all("game/*", "court"))                 # a glob subject: (subject, object) pairs
-#   [('game/G1', 'west')]
-for r in rev.history("game/G1", "court"):                       # the unfolded history, removes included
+#   [('game/G1', 'west'), ('game/G2', 'north')]
+for r in rev.history("game/G1", "officials"):                   # the unfolded rows, removes included
     print("row:", r)
-# row:    1 + game/G1              court                    north
-# row:    2 + game/G1              court                    south
-# row:    3 + game/G1              court                    east
-# row:    4 + game/G1              court                    west
+# row:    3 + game/G1              officials                kim
+# row:    3 + game/G1              officials                ortiz
+# row:    6 - game/G1              officials                kim
 
 # %% [markdown]
-# `get` answers a default instead of raising, `in` tests one triple,
-# `all` lists what a pattern leaves open: with two positions fixed
-# the objects, with one the (predicate, object) pairs, and a glob in
-# the subject binds the subject too. `history` is the unfolded history
-# of a pattern.
+# `get` is one match of an exact pattern: `[]` with a default
+# instead of `KeyError`. `all` is every match as a list, binding the
+# open positions: with two fixed the objects, with one the
+# (predicate, object) pairs. A `*` at the end of the subject, allowed
+# on `all` and `refs` only, binds the subject too. `in` tests one
+# triple. `history` is the same pattern unfolded: every row with its
+# `+` or `-`, an add or a remove.
 
 # %% [markdown]
-# A read by value is a subject read. `refs(**preds)` is every
-# subject holding each given triple. `select(keys, **preds)` is SQL's
-# `SELECT keys WHERE preds`: the keywords are the filter, the tuple of
-# predicate names is what comes back, one tuple per matching subject.
+# `select(keys, **preds)` is SQL's `SELECT keys WHERE preds`: the
+# keywords are the filter, the tuple of predicate names is what comes
+# back, one tuple per matching subject.
 
 # %%
-print("court=west:", rev.refs(court="west"))                     # [<Ref game/G1>]: which games are on the west court
-print("home=G1:", rev.refs(home="G1"))                           # [<Ref game/G2>]: which game has G1 at home
 print("west teams:", rev.select(("home", "away"), court="west"))   # [('G4', 'G5')]: game/G1 is the one west-court game; its home and away
 
 # %% [markdown]
@@ -214,29 +213,27 @@ with L.transaction(by="human:dan") as t:
 # %% [markdown]
 # ## Naming a revision
 #
-# A revision is named by the ledger version set in it, and
-# `L.at("M.m.p")` is that revision.
+# A revision is named by a version or a tag written in it, a row on
+# the ledger's own subject `db`. `L.at("0.1.0")` or `L.at(name)` is
+# that revision. `bump`, under "Locking the ledger", advances the
+# version row for you.
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:      # bump reads: lock=
-    db_version = bump(t, "db", "minor", confirm=lambda old, new: True)
-print("db version:", db_version)
-# db version: 0.1.0
+with L.transaction(by="human:dan") as t:
+    t.add("db", "db/version", "0.1.0")        # the ledger's own version: a row on db
 named_rev = L.at("0.1.0")
 print("named rev id, court:", named_rev.id, named_rev.get("game/G1", "court"))
-# named rev id, court: 7 west
+# named rev id, court: 8 west
 
 # %% [markdown]
-# `bump` is a convenience: it reads `db db/version`, adds the next
-# version, and writes that row for you. A revision is named the same
-# way without it, by writing the row yourself: `(db, db/tag, name)`
-# names the revision its transaction commits.
+# A tag is the same kind of row: `(db, db/tag, name)` names the
+# revision its transaction commits.
 
 # %%
 with L.transaction(by="human:dan") as t:
     t.add("db", "db/tag", "2026-Q4-official")
 print("tagged rev id:", t.rev.id)
-# tagged rev id: 8
+# tagged rev id: 9
 
 # %% [markdown]
 # `L.at(name)` reads through the name, as `L.at("0.1.0")` reads
@@ -246,9 +243,9 @@ print("tagged rev id:", t.rev.id)
 # %%
 official_rev = L.at("2026-Q4-official")
 print("by name, rev id, court:", official_rev.id, official_rev["game/G1", "court"])
-# by name, rev id, court: 8 west
+# by name, rev id, court: 9 west
 print("by version, rev id, court:", named_rev.id, named_rev["game/G1", "court"])
-# by version, rev id, court: 7 west
+# by version, rev id, court: 8 west
 
 # %% [markdown]
 # ## Typing a predicate
@@ -265,35 +262,40 @@ except TypeError as e:
 # %% [markdown]
 # ## Locking the ledger
 #
-# Locking the ledger lets a transaction depend on the immediately
-# preceding revision, so a read-then-write is built on current data
-# and no other writer can land between the read and the write.
+# Locking lets a transaction read the immediately preceding
+# revision, so a read-then-write builds on current data and no other
+# writer lands between.
 #
-# `bump` advances any version number associated with any subject;
-# here it advances a schema's, and the minor part.
-
-# %%
-with L.transaction(by="human:dan", lock=10) as t:
-    print("schema/tape:",
-          bump(t, "schema/tape", "minor", confirm=lambda old, new: True))
-# schema/tape: 0.1.0
-
-# %% [markdown]
-# `bump` reads the version through `t.previous_rev`, then writes
-# the next one; a minor or major bump needs `confirm=`. `lock=10`
-# holds the write lock for the whole body; past 10 seconds the body
-# is interrupted and nothing is written.
+# The lock is the store's own write lock: SQLite `BEGIN IMMEDIATE`,
+# Postgres `SELECT … FOR UPDATE` on the one `ledger_lock` row. It
+# holds across threads, processes and machines. `lock=10` is the
+# budget to get the lock and run the body; past it the body is
+# interrupted and nothing is written. An unlocked transaction takes
+# the lock only at commit, for the write itself.
 #
 # A transaction reads the previous revision and writes the next;
-# its own pending writes are not seen until it closes. So a body
-# reads with `t[s]`, alters, and writes back. Here one more
-# official joins `game/G2`.
+# its own writes are not seen until it closes. So a body reads with
+# `t[s]`, alters, and writes back. `t[s] = {...}` makes the rows
+# equal to the dict, retracting what it omits, so it reads first.
+# Here one more official joins `game/G2`.
 
 # %%
 with L.transaction(by="human:dan", lock=10) as t:
     g2 = t["game/G2"]                              # the record as it stands now
     t["game/G2"] = {**g2, "officials": g2["officials"] + ["vance"]}   # one more, written back
 print("officials:", t.rev.all("game/G2", "officials"))
+
+# %% [markdown]
+# `bump(t, subject, part)` is the read-then-write a version row
+# needs: it reads `subject db/version` through `t.previous_rev` and
+# adds the next. Minor and major need `confirm=`. Here the ledger's
+# own clock, then a schema's.
+
+# %%
+with L.transaction(by="human:dan", lock=10) as t:
+    print("db:", bump(t, "db", "minor", confirm=lambda old, new: True))                   # 0.1.0 -> 0.2.0
+    print("schema/tape:", bump(t, "schema/tape", "minor", confirm=lambda old, new: True)) # none -> 0.1.0
+print("L.at('0.2.0') id:", L.at("0.2.0").id)   # 12
 
 # %% [markdown]
 # `t[s]` reads `t.previous_rev`, the top as it stands while the
@@ -378,6 +380,16 @@ by_name_video = rev1.load("video/G1")
 by_hash_video = rev1.load(video_subject)
 print("loaded by name:", by_name_video.frames)   # → b'G1 wide camera, 9000 frames'
 print("same value by hash:", by_name_video.subject == by_hash_video.subject)   # → True
+video_ref = Ref(rev1, "video/G1")
+print("ref:", repr(video_ref))                        # → <Ref video/G1>
+print("its preds:", video_ref.preds)                  # → {'game': 'G1', 'camera': 'wide'}
+print("loaded from the ref:", video_ref.load().frames)   # → b'G1 wide camera, 9000 frames'
+
+# %% [markdown]
+# `load` fetches the value. A `Ref` is the subject without its bytes:
+# its rows are readable (`preds`, `aliases`, `name`) and `load()`
+# fetches the value when wanted. The finders come in both forms,
+# `values` and `refs`.
 
 # %% [markdown]
 # ### Assigning preds, and finding values by them
@@ -439,9 +451,6 @@ with L.transaction(by="human:dan") as t:
 camera_ref = Ref(L.at(), "video/G1")
 print("aliases:", sorted(camera_ref.aliases))   # → ['raw/G1/wide-camera', 'video/G1']
 print("name:", camera_ref.name)              # → raw/G1/wide-camera
-
-# %% [markdown]
-# A `Ref` points at a value without fetching its bytes.
 
 # %% [markdown]
 # #### Renaming: a new alias, the old one removed
@@ -537,19 +546,19 @@ show("api-walkthrough-ns")
 #
 # `ns.load(name)` is the object a dotted name denotes.
 # `ns.name_of(obj)` is the dotted name `load` takes back to an object.
-# `t.ns.mount(at, root=, repo=)` writes the two `db/mount/<at>` rows
-# that put a repo's folder under a name; a transaction's `ns` is the
-# one that mounts. `ns.mounts()` is the mount table at that revision.
 
 # %%
 ns = L.at().ns
 dist_fn = ns.load("math.dist")
 print("loaded:", dist_fn)                   # → loaded: <built-in function dist>
 print("its name:", ns.name_of(dist_fn))     # → its name: math.dist
-with L.transaction(by="human:dan") as t:
-    t.ns.mount("plane", root="plane", repo="geometry-app")
-print("mounts:", L.at().ns.mounts())
-# → mounts: {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
+
+# %% [markdown]
+# `math.dist` is the standard library's. An unmounted name resolves
+# in this process, the interpreter running this notebook, as `import`
+# would. So does `geometry.main.distance` below, from the checkout
+# put on `sys.path` under "Set up repo and code"; such a function's
+# code is the whole checkout at its commit.
 
 # %% [markdown]
 # ### Accessing and using Python functions
@@ -583,10 +592,18 @@ print("db/repo/geometry-app:", L.at()["db/repo/geometry-app"])
 # %% [markdown]
 # ### Sandboxed functions
 #
-# A sandboxed function runs isolated, seeing only its mounted source
-# folder: here `plane`, mounted above. Its version is the mounted
-# package's `__version__`, read after importing it; the checksum of
-# the files it loaded (`sha`) is its identity.
+# `t.ns.mount(at, root=, repo=)` puts the repo's folder `plane`
+# under the name `plane`: two `db/mount/plane` rows; `ns.mounts()` is
+# the mount table at a revision. A name under a mount loads in a
+# sandbox, a fresh interpreter holding only that folder. Its version
+# is the mounted package's `__version__`; the checksum of the files
+# it loaded is its identity.
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t.ns.mount("plane", root="plane", repo="geometry-app")   # the two db/mount/plane rows
+print("mounts:", L.at().ns.mounts())
+# → mounts: {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
 
 # %%
 length_fn = L.at().ns.load("plane.measure.length")
@@ -618,7 +635,7 @@ print("sandbox:", repr(sandbox), " version:", sandbox.version, " modules:", sand
 # → sandbox: <Code plane@2.7.1>  version: 2.7.1  modules: ['plane/__init__.py', 'plane/measure.py']
 print("result's code:", segment_value.dependencies["code"], " is the sandbox:",
       segment_value.dependencies["code"] == sandbox.subject)
-# → result's code: db/code/04ebdaea96da6a7b  is the sandbox: True
+# → result's code: db/code/1fa8b8c101e51d7a  is the sandbox: True
 print("result's fn:", segment_value.dependencies["fn"])
 # → result's fn: plane.measure.length
 
@@ -637,7 +654,7 @@ print("new fn:", repr(new_length_fn), " sandbox:", repr(new_length_fn.code))
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → new result: 1.25
 print("old result's code:", segment_value.dependencies["code"], " fn:", segment_value.dependencies["fn"],
       " holds:", segment_value.obj)
-# → old result's code: db/code/04ebdaea96da6a7b  fn: plane.measure.length  holds: 2.5
+# → old result's code: db/code/1fa8b8c101e51d7a  fn: plane.measure.length  holds: 2.5
 
 # %% [markdown]
 # ## Ledger evaluation
