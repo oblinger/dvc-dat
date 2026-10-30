@@ -53,6 +53,7 @@ Notebooks in [`DAT Demos/`](https://github.com/oblinger/dvc-dat/tree/main/doc/DA
 outputs kept (`just demo` re-syncs and re-runs them; the tests run every one):
 
 - **[`api-walkthrough`](DAT%20Demos/api-walkthrough.ipynb)** — the one API sheet: dats, the namespace, values and the ledger, in one notebook
+- **[`q-cli`](DAT%20Demos/q-cli.ipynb)** — the shell side: `just run` and the ledger verbs, each beside the API call it makes
 - **[`demo-walkthrough`](DAT%20Demos/demo-walkthrough.ipynb)** — one project, end to end: mounts,
   `dat.base`, `Dat.manager.run()` and a fork, `Dat.load`, `merge_dicts`, the command-line main
 - **[`demo-dats`](DAT%20Demos/demo-dats.ipynb)** — dats, dependencies and versions
