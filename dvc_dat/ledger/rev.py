@@ -50,7 +50,8 @@ class Row(NamedTuple):
     object: Any
     added: bool
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
+        """``<Row subject predicate object rev=N +>``: the triple, the revision that wrote it, ``+`` added or ``-`` removed."""
         obj = self.object
         if isinstance(obj, Ref):
             text = obj._text()
@@ -58,7 +59,9 @@ class Row(NamedTuple):
             text = canonical(obj)
         else:
             text = str(obj)
-        return f"{self.rev.id:>4} {'+' if self.added else '-'} {self.subject:<20} {self.predicate:<24} {text}"
+        return f"<Row {self.subject} {self.predicate} {text} rev={self.rev.id} {'+' if self.added else '-'}>"
+
+    __str__ = __repr__
 
 
 def class_named(ledger: "Ledger", name: str) -> type:
