@@ -13,30 +13,6 @@
 # ---
 
 # %% [markdown]
-# > **Plan** — API walkthrough (what this sheet teaches; delete once the sections
-# > carry it on their own)
-# >
-# > The dvc-dat ledger keeps facts, the values computed from them and the
-# > folders of data they name, so every result can be found again and
-# > traced to what made it. Four parts, each building on the one before:
-# >
-# > 1. **Triples**: the ledger is a store of facts, each a row
-# >    `(rev, subject, predicate, object)`, written in transactions and
-# >    read at a revision.
-# > 2. **Values**: a value is a Python object stored by its content,
-# >    named and found by its preds; a ledger function computes values,
-# >    and the ledger remembers each result with what it depended on.
-# > 3. **Dats**: a dat is a folder of data made from a spec, a recursive
-# >    dict of parameters, by look-up, expansion and instantiation; on a
-# >    ledger it is a value, its runs remembered and found by their preds.
-# > 4. **The CLI**: a ledger project is worked from a shell with
-# >    `just <verb>`, each verb one API call: running, finding, updating,
-# >    releasing, and the namespace.
-# >
-# > Triples and Values share one ledger; Dats and the CLI each work in
-# > their own project folder, with its own ledger.
-
-# %% [markdown]
 # #### Setup
 
 # %%
@@ -353,7 +329,7 @@ print("game/G2:", t.rev["game/G2"])
 # with ledger functions, and let the ledger remember their results.
 
 # %%
-show("q-values")   # black: the parts every value has; gray: an example
+show("api-walkthrough-values")   # black: the parts every value has; gray: an example
 
 # %% [markdown]
 # ## Value objects
@@ -551,7 +527,7 @@ sys.path.insert(0, str(repo_path))
 # ### The ledger namespace
 
 # %%
-show("q-values-ns")
+show("api-walkthrough-ns")
 
 # %% [markdown]
 # The ledger namespace, `ns`, is the bridge between the ledger and
@@ -809,7 +785,7 @@ print("G1 videos on the ledger:", L.at().values(game="G1"))           # now it i
 # ledger it is also a value: sealed, loaded, memoized, found.
 
 # %%
-show("q-dats")
+show("api-walkthrough-dats")
 
 # %% [markdown]
 # #### Project setup
