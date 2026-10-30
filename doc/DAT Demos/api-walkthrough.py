@@ -181,6 +181,10 @@ print("history:", *rev.history("game/G1", "officials"), sep="\n")   # the unfold
 # <Row game/G1 officials kim rev=3 +>
 # <Row game/G1 officials ortiz rev=3 +>
 # <Row game/G1 officials kim rev=6 ->
+print("court, per game:", rev.select(("court",), s="game/*"))   # keys=("court",): one tuple per game, its court
+#   [('west',), ('north',)]
+print("home and away, west court:", rev.select(("home", "away"), court="west"))   # keys=("home", "away"), filter court=west
+#   [('G4', 'G5')]
 
 # %% [markdown]
 # `get` is one match of an exact pattern: `[]` with a default
@@ -189,15 +193,10 @@ print("history:", *rev.history("game/G1", "officials"), sep="\n")   # the unfold
 # (predicate, object) pairs. A `*` at the end of the subject, allowed
 # on `all` and `refs` only, binds the subject too. `in` tests one
 # triple. `history` is the same pattern unfolded: every row with its
-# `+` or `-`, an add or a remove.
-
-# %% [markdown]
-# `select(keys, **preds)` is SQL's `SELECT keys WHERE preds`: the
-# keywords are the filter, the tuple of predicate names is what comes
-# back, one tuple per matching subject.
-
-# %%
-print("west teams:", rev.select(("home", "away"), court="west"))   # [('G4', 'G5')]: game/G1 is the one west-court game; its home and away
+# `+` or `-`, an add or a remove. `select(keys, **preds)` is SQL's
+# `SELECT keys WHERE preds`: the tuple names the predicates that come
+# back, in that order, one tuple per matching subject; the keywords
+# are the filter, `s="game/*"` a filter on the subject.
 
 # %% [markdown]
 # ## Declaring an index
