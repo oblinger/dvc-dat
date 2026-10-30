@@ -164,7 +164,7 @@ the `KEY=VALUE` pairs update its `dat.kwargs`, and `--set` / `--json` update
 any spec key. Every argument value is JSON, else the text as typed (`2026-01-01` a string). A first word is
 always a target; `--list`, `--info`, `--version` and `--help` are the
 commands that are not. The exit code is `0` ran, `1` failed, `2` the
-target does not load.
+target does not load, `3` no `.datconfig.yaml` above the working directory.
 
 `just run` runs your project's `run:` main from any directory, else the
 library's own command line (`python -m dvc_dat`) with no project mounts.
