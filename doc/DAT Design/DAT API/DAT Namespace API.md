@@ -21,7 +21,7 @@ from dvc_dat import Dat
 Dat.ns.mount(module="mymodule.train", at="train")   # an alias
 
 if __name__ == "__main__":
-    if os.environ.get("DAT_CLI_CONFIG"):   # launched by `dat`
+    if os.environ.get("DAT_CLI_CONFIG"):   # launched by `just run`
         sys.exit(Dat.cli_main())           # the shell, here
     ...                                    # otherwise, your own main
 ```
@@ -44,7 +44,7 @@ ImportError: ns.load: no importable prefix of 'train.baseline'
 ```
 
 ```
-$ dat --list train
+$ just mounts train
 
 Base names matching: 'train*'
   train                     -->  <module>
@@ -74,7 +74,7 @@ One world's namespace; it is not callable — running is `manager.run(target, ..
     Add one mount, exactly one of the four sources; your program makes the calls. See § Mount forms. ^mount
 
 **mounts**`() -> Dict[str, str]`
-    The mount table: each mounted prefix and where it loads from — a file, a folder entry, or a module's import name. A `value` mount has no location and is not listed; `dat --list` prints every mounted name. ^mounts
+    The mount table: each mounted prefix and where it loads from — a file, a folder entry, or a module's import name. A `value` mount has no location and is not listed; `just mounts` (`x --list`) prints every mounted name. ^mounts
 
 ## On a ledger
 A `LedgerNamespace`: the same interface, its names the ledger's `db/mount` rows at one revision, longest prefix first; a name under no mount is imported. A mounted `.yaml`/`.json` comes back a dict, a mounted function its `Fn` (read off the file, never imported here), a mounted literal its value; a `@ledger_fn` it imports to comes back its `Fn`.
@@ -111,7 +111,7 @@ You are here because something in the namespace is *not* a Python import: a fold
 
 Two layers, checked in order.
 
-**The mount table**, if one is installed — names your program put there with `Dat.ns.mount(...)`, by folder, file, module or value. Nothing in YAML mounts anything, and nothing is imported on your behalf: the namespace is whatever the running program imported ([DAT 1008](../../DAT%20Track/DAT%20Backlog/1008%20-%20Should%20configure%28%29%20disappear,%20and%20should%20the%20static%20namespace%20be%20the.md) Q2, [DAT 1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md)). For the shell, `run:` names your own main — a module that makes the mounts and ends with `sys.exit(Dat.cli_main())` — so `dat …` runs inside it; with no `run:` the bootstrap runs the library's own main, where a dotted name is a Python name and nothing else.
+**The mount table**, if one is installed — names your program put there with `Dat.ns.mount(...)`, by folder, file, module or value. Nothing in YAML mounts anything, and nothing is imported on your behalf: the namespace is whatever the running program imported ([DAT 1008](../../DAT%20Track/DAT%20Backlog/1008%20-%20Should%20configure%28%29%20disappear,%20and%20should%20the%20static%20namespace%20be%20the.md) Q2, [DAT 1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md)). For the shell, `run:` names your own main — a module that makes the mounts and ends with `sys.exit(Dat.cli_main())` — so `just run …` runs inside it; with no `run:` the `run` recipe runs the library's own main, where a dotted name is a Python name and nothing else.
 
 **The static floor**, always — the longest importable prefix of the name, imported, then `getattr` for the rest. `pkg.mod.CONST` imports `pkg.mod` and takes `CONST` off it. Nothing found raises the import's own `ImportError` or `AttributeError`, unless `default=` was given.
 
@@ -123,7 +123,7 @@ The worry is that names resolved by the library are not the modules the rest of 
 
 **A file run as `__main__`.** `python scripts/train.py` makes that file `sys.modules["__main__"]`; a spec naming `scripts.train.run` imports it a *second* time under its real name, and you get two copies of every global in it. The rule that prevents it: anything a spec names lives in an importable module, never in a script you also run directly.
 
-**A different `sys.path`.** The `dat` command is a separate process. The `run:` key and the `bin/dat` bootstrap exist to pin it to the same interpreter as your program, so the same name resolves to the same file — see [DAT CLI](DAT%20CLI.md).
+**A different `sys.path`.** `just run` (`x`) is a separate process. The `run:` key and the `run` recipe of `dvc_dat.just` exist to pin it to the same interpreter as your program, so the same name resolves to the same file — see [DAT CLI](DAT%20CLI.md).
 
 **By-path mounts.** A mounted folder or file, or a module mounted by path, is loaded **by file path**, bypassing `sys.path` entirely, so a module reached that way can never be the one your program imported — even if the file is the same file. This is the one genuinely dynamic thing in the library, and the reason mounts are opt-in. A module mounted **by name** is the opposite: it resolves through `sys.modules`, so it is an alias for the object your program already holds, and costs nothing.
 

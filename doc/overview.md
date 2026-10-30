@@ -14,7 +14,7 @@ itself. `Dat.manager` is the default world; `Dat.manager.run` runs, and `ns` is 
 ## What the package exports
 
 ```python
-from dvc_dat import Dat, DatContainer, DatManager, Namespace
+from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers
 
 ns = Dat.ns     # the namespace shortcut; follows Dat.manager
 ```
@@ -25,8 +25,10 @@ ns = Dat.ns     # the namespace shortcut; follows Dat.manager
 | `DatContainer` | A dat whose folder holds other dats |
 | `DatManager` | Creates, finds, loads and runs dats; `Dat.manager` is the default, assign to replace |
 | `Namespace` | A namespace; every manager has one |
+| `L` | The active ledger: `DAT_LEDGER`, else the config's `ledgers:` default or `ledger:` |
+| `ledgers` | The project's ledgers by name: `ledgers.<name>`, `ledgers["jb-26"]` |
 
-Everything else hangs off those four:
+Everything else hangs off those four classes:
 
 | Name | What it is |
 |------|------------|
@@ -167,7 +169,8 @@ target does not load.
 `just run` runs your project's `run:` main from any directory, else the
 library's own command line (`python -m dvc_dat`) with no project mounts.
 See **[Command Line](cli.md)** for every command, flag and exit code,
-`dvc_dat.just` and the `run:` config key.
+`dvc_dat.just` and the `run:` config key. Below `run` and `mounts`, `dvc_dat.just`
+carries the ledger verbs `just values value history why set index bump` ([cli.md](cli.md)).
 
 ## `.datconfig.yaml`
 
@@ -189,7 +192,8 @@ art_folder: art
 run: .venv/bin/python -m mypkg.main
 ```
 
-Those are the only keys; anything else is an error that names the file and the
+Those, with the ledger's `ledger`, `ledgers`, `mounts` and `namespace`, are the
+ten keys; anything else is an error that names the file and the
 key. The config's folder is the import root. The namespace is whatever the
 running program imported; `run:` names your program's main, which mounts what
 it mounts and ends with `sys.exit(Dat.cli_main())`. See **[Mounts](mount-commands.md)**.

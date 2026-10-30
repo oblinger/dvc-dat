@@ -212,8 +212,8 @@ Below `run` and `mounts`, `dvc_dat.just` carries the ledger's verbs. Each
 is one call of [`dvc_dat.ledger`](DAT%20Modules/ledger/DAT%20Ledger.md),
 run from the working directory as `python -m dvc_dat.ledger.recipes VERB
 ARGS`, which supplies what a Python caller spells out: the ledger
-(`Ledger()`: `DAT_LEDGER`, else the nearest `.datconfig.yaml` with
-`ledger:`), `by=human:$USER`, a typed `yes` for a minor or major bump,
+(`Ledger()`: `DAT_LEDGER`, else the nearest `.datconfig.yaml`'s
+`ledger:` or its `ledgers:` section's `default:`), `by=human:$USER`, a typed `yes` for a minor or major bump,
 short kind names and hash prefixes.
 
 | Recipe | Does | The call |
