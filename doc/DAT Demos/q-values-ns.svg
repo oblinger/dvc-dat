@@ -2,128 +2,131 @@
 <defs><marker id="head" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#222"/></marker></defs>
 <rect width="1090" height="660" fill="#ffffff"/>
 <rect x="772" y="0" width="318" height="660" fill="#f3f3f3"/>
-<text x="118" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">GITHUB REPO</text>
+<text x="118" y="44" font-size="15" fill="#000" font-weight="bold" text-anchor="middle" letter-spacing="2">GITHUB REPO</text>
 <path d="M88,72 v40 a30,8 0 0 0 60,0 v-40" fill="#fff" stroke="#222" stroke-width="1.5"/>
 <ellipse cx="118" cy="72" rx="30" ry="8" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<text x="118" y="138" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve" text-anchor="middle">geometry</text>
+<text x="118" y="138" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve" text-anchor="middle">geometry-app</text>
 <text x="30" y="166" font-size="14" fill="#000" font-weight="bold">commits</text>
 <text x="30" y="188" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">a1f3c2e</text>
 <text x="30" y="210" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">7b9e04d</text>
 <text x="30" y="232" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
 <text x="30" y="300" font-size="14" fill="#000" font-weight="bold">source tree</text>
 <path d="M30,313 h5 l2,-2 h6 v12 h-13 Z" fill="#fff" stroke="#222" stroke-width="1"/>
-<text x="49" y="322" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">geometry/</text>
+<text x="49" y="322" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">geometry-app/</text>
 <path d="M51,335 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
 <path d="M59,335 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
 <text x="69" y="346" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">README.md</text>
-<path d="M51,359 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
-<path d="M59,359 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
-<text x="69" y="370" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">geometry.py</text>
-<path d="M51,409 h5 l2,-2 h6 v12 h-13 Z" fill="#fff" stroke="#222" stroke-width="1"/>
-<text x="69" y="418" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">plane/</text>
-<path d="M71,431 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
-<path d="M79,431 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
-<text x="89" y="442" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">__init__.py</text>
-<path d="M71,489 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
-<path d="M79,489 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
-<text x="89" y="500" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">measure.py</text>
-<text x="89" y="548" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">...</text>
-<path d="M51,563 h5 l2,-2 h6 v12 h-13 Z" fill="#fff" stroke="#222" stroke-width="1"/>
-<text x="69" y="572" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">tests/</text>
-<text x="89" y="596" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">...</text>
-<text x="69" y="620" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">...</text>
-<line x1="36" y1="326" x2="36" y2="616" stroke="#222" stroke-width="1"/>
+<path d="M51,361 h5 l2,-2 h6 v12 h-13 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<text x="70" y="370" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">geometry/</text>
+<path d="M71,383 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M79,383 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="89" y="394" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">__init__.py</text>
+<path d="M71,419 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M79,419 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="89" y="430" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">main.py</text>
+<path d="M51,469 h5 l2,-2 h6 v12 h-13 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<text x="70" y="478" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">plane/</text>
+<path d="M71,491 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M79,491 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="89" y="502" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">__init__.py</text>
+<path d="M71,539 h8 l4,4 v10 h-12 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<path d="M79,539 v4 h4" fill="none" stroke="#222" stroke-width="1"/>
+<text x="89" y="550" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">measure.py</text>
+<text x="89" y="598" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">...</text>
+<path d="M51,613 h5 l2,-2 h6 v12 h-13 Z" fill="#fff" stroke="#222" stroke-width="1"/>
+<text x="70" y="622" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">tests/</text>
+<text x="89" y="646" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">...</text>
+<line x1="36" y1="326" x2="36" y2="618" stroke="#222" stroke-width="1"/>
 <line x1="36" y1="342" x2="48" y2="342" stroke="#222" stroke-width="1"/>
 <line x1="36" y1="366" x2="48" y2="366" stroke="#222" stroke-width="1"/>
-<line x1="36" y1="414" x2="48" y2="414" stroke="#222" stroke-width="1"/>
-<line x1="36" y1="568" x2="48" y2="568" stroke="#222" stroke-width="1"/>
-<line x1="36" y1="616" x2="48" y2="616" stroke="#222" stroke-width="1"/>
-<line x1="56" y1="422" x2="56" y2="544" stroke="#222" stroke-width="1"/>
-<line x1="56" y1="438" x2="68" y2="438" stroke="#222" stroke-width="1"/>
-<line x1="56" y1="496" x2="68" y2="496" stroke="#222" stroke-width="1"/>
-<line x1="56" y1="544" x2="68" y2="544" stroke="#222" stroke-width="1"/>
-<line x1="56" y1="576" x2="56" y2="592" stroke="#222" stroke-width="1"/>
-<line x1="56" y1="592" x2="68" y2="592" stroke="#222" stroke-width="1"/>
-<line x1="153.2" y1="366" x2="174" y2="366" stroke="#bbb" stroke-width="1"/>
-<path d="M176,354 H358 L368,364 V418 H176 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
-<path d="M358,354 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
-<text x="182" y="370" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">import math</text>
-<text x="182" y="388" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">__version__ = "5.3.9"</text>
-<text x="182" y="406" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">def distance(rev, a, b):</text>
-<line x1="173.2" y1="438" x2="214" y2="438" stroke="#bbb" stroke-width="1"/>
-<path d="M216,426 H390 L400,436 V454 H216 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
-<path d="M390,426 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
-<text x="222" y="442" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">__version__ = "2.7.1"</text>
-<line x1="166.0" y1="496" x2="214" y2="496" stroke="#bbb" stroke-width="1"/>
-<path d="M216,484 H460 L470,494 V530 H216 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
-<path d="M460,484 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
-<text x="222" y="500" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">def length(rev, a, b):</text>
-<text x="222" y="518" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    return math.dist(a, b) * 0.5</text>
-<text x="588.0" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">LEDGER</text>
+<line x1="36" y1="474" x2="48" y2="474" stroke="#222" stroke-width="1"/>
+<line x1="36" y1="618" x2="48" y2="618" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="374" x2="56" y2="426" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="390" x2="68" y2="390" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="426" x2="68" y2="426" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="482" x2="56" y2="594" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="498" x2="68" y2="498" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="546" x2="68" y2="546" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="594" x2="68" y2="594" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="626" x2="56" y2="642" stroke="#222" stroke-width="1"/>
+<line x1="56" y1="642" x2="68" y2="642" stroke="#222" stroke-width="1"/>
+<line x1="172.2" y1="390" x2="184" y2="390" stroke="#bbb" stroke-width="1"/>
+<path d="M186,380 H345.5 L355.5,390 V408 H186 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
+<path d="M345.5,380 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
+<text x="192" y="396" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">__version__ = "5.3.9"</text>
+<line x1="143.4" y1="426" x2="184" y2="426" stroke="#bbb" stroke-width="1"/>
+<path d="M186,416 H368.0 L378.0,426 V462 H186 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
+<path d="M368.0,416 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
+<text x="192" y="432" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">import math</text>
+<text x="192" y="450" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">def distance(rev, a, b):</text>
+<line x1="172.2" y1="498" x2="184" y2="498" stroke="#bbb" stroke-width="1"/>
+<path d="M186,488 H345.5 L355.5,498 V516 H186 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
+<path d="M345.5,488 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
+<text x="192" y="504" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">__version__ = "2.7.1"</text>
+<line x1="165.0" y1="546" x2="184" y2="546" stroke="#bbb" stroke-width="1"/>
+<path d="M186,532 H428.0 L438.0,542 V578 H186 Z" fill="#fff" stroke="#222" stroke-width="1.2"/>
+<path d="M428.0,532 v10 h10" fill="none" stroke="#222" stroke-width="1"/>
+<text x="192" y="548" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">def length(rev, a, b):</text>
+<text x="192" y="566" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">    return math.dist(a, b) * 0.5</text>
+<text x="588" y="44" font-size="15" fill="#000" font-weight="bold" text-anchor="middle" letter-spacing="2">LEDGER</text>
 <rect x="412" y="64" width="352" height="374" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<line x1="612" y1="64" x2="612" y2="438" stroke="#e4e4e4"/>
-<line x1="698" y1="64" x2="698" y2="438" stroke="#e4e4e4"/>
-<g font-size="11" fill="#bbb" font-style="italic"><text x="420" y="86">subject</text><text x="618" y="86">pred</text><text x="704" y="86">object</text></g>
+<line x1="622" y1="64" x2="622" y2="438" stroke="#e4e4e4"/>
+<line x1="700" y1="64" x2="700" y2="438" stroke="#e4e4e4"/>
+<g font-size="11" fill="#bbb" font-style="italic"><text x="420" y="86">subject</text><text x="628" y="86">pred</text><text x="706" y="86">object</text></g>
 <line x1="412" y1="94" x2="764" y2="94" stroke="#ddd"/>
-<text x="420" y="112" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry</text>
-<text x="618" y="112" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/commit</text>
-<text x="704" y="112" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">a1f3c2e</text>
-<text x="420" y="138" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry/geometry</text>
-<text x="618" y="138" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/version</text>
-<text x="704" y="138" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">5.3.9</text>
+<text x="420" y="112" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry-app</text>
+<text x="628" y="112" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/commit</text>
+<text x="706" y="112" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">a1f3c2e</text>
+<text x="420" y="138" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry-app/geometry</text>
+<text x="628" y="138" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/version</text>
+<text x="706" y="138" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">5.3.9</text>
 <rect x="413" y="147" width="350" height="26" fill="#ececec"/>
-<text x="420" y="164" font-size="12.5" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold">.rev 3</text>
-<text x="420" y="190" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
-<text x="420" y="216" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
-<text x="420" y="242" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry/plane</text>
-<text x="618" y="242" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/version</text>
-<text x="704" y="242" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">2.7.1</text>
+<text x="420" y="164" font-size="11.5" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold">.rev 3</text>
+<text x="420" y="190" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
+<text x="420" y="216" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
+<text x="420" y="242" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry-app/plane</text>
+<text x="628" y="242" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/version</text>
+<text x="706" y="242" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">2.7.1</text>
 <rect x="413" y="251" width="350" height="26" fill="#ececec"/>
-<text x="420" y="268" font-size="12.5" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold">.rev 7</text>
-<text x="420" y="294" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
-<text x="420" y="320" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db</text>
-<text x="618" y="320" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/version</text>
-<text x="704" y="320" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">0.1.0</text>
-<text x="420" y="346" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry</text>
-<text x="618" y="346" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/commit</text>
-<text x="704" y="346" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">7b9e04d</text>
-<text x="420" y="372" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry/plane</text>
-<text x="618" y="372" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/version</text>
-<text x="704" y="372" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">2.7.2</text>
+<text x="420" y="268" font-size="11.5" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold">.rev 7</text>
+<text x="420" y="294" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
+<text x="420" y="320" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db</text>
+<text x="628" y="320" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/version</text>
+<text x="706" y="320" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">0.1.0</text>
+<text x="420" y="346" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry-app</text>
+<text x="628" y="346" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/commit</text>
+<text x="706" y="346" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">7b9e04d</text>
+<text x="420" y="372" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry-app/plane</text>
+<text x="628" y="372" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/version</text>
+<text x="706" y="372" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">2.7.2</text>
 <rect x="413" y="381" width="350" height="26" fill="#ececec"/>
-<text x="420" y="398" font-size="12.5" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold">.rev 9</text>
-<text x="420" y="424" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
+<text x="420" y="398" font-size="11.5" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold">.rev 9</text>
+<text x="420" y="424" font-size="11.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
 <path d="M88.5,184 L410,108" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<path d="M340.5,384 C394,384 372,250 410,134" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<path d="M380.5,438 L410,238" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<path d="M380.5,438 L410,368" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<path d="M88.5,206 L345.5,314.7" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<text x="925" y="44" font-size="15" fill="#000" font-weight="bold" letter-spacing="2" text-anchor="middle">PYTHON</text>
+<path d="M88.5,206 C 260,206 330,342 410,342" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<path d="M355.5,394 L410,134" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<path d="M355.5,500 H402 L410,242" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<path d="M355.5,504 H402 L410,372" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<line x1="767" y1="134" x2="786" y2="134" stroke="#999" stroke-width="1" stroke-dasharray="2,2"/>
+<text x="790" y="138" font-size="11" fill="#888" font-style="italic">app version</text>
+<line x1="767" y1="316" x2="786" y2="316" stroke="#999" stroke-width="1" stroke-dasharray="2,2"/>
+<text x="790" y="320" font-size="11" fill="#888" font-style="italic">ledger version</text>
+<line x1="767" y1="368" x2="786" y2="368" stroke="#999" stroke-width="1" stroke-dasharray="2,2"/>
+<text x="790" y="372" font-size="11" fill="#888" font-style="italic">package version</text>
+<text x="925" y="44" font-size="15" fill="#000" font-weight="bold" text-anchor="middle" letter-spacing="2">PYTHON</text>
 <path d="M766,264 H826" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<text x="797.0" y="256" font-size="13" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold" text-anchor="middle">rev.ns</text>
-<text x="910.0" y="224" font-size="16" fill="#000" font-weight="bold" text-anchor="middle">Ledger namespace</text>
+<text x="797" y="256" font-size="13" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold" text-anchor="middle">rev.ns</text>
+<text x="910" y="224" font-size="16" fill="#000" font-weight="bold" text-anchor="middle">Ledger namespace</text>
 <rect x="830" y="236" width="160" height="56" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<text x="910.0" y="276" font-size="30" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold" text-anchor="middle">.ns</text>
-<path d="M990,252 H1062 V590.0" fill="none" stroke="#222" stroke-width="1.5"/>
-<text x="1026.0" y="244" font-size="13" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold" text-anchor="middle">load</text>
+<text x="910" y="276" font-size="30" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold" text-anchor="middle">.ns</text>
+<path d="M990,252 H1062 V590" fill="none" stroke="#222" stroke-width="1.5"/>
+<text x="1026" y="244" font-size="13" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold" text-anchor="middle">load</text>
 <rect x="786" y="500" width="250" height="40" fill="#fff" stroke="#222" stroke-width="1.5"/>
 <text x="798" y="524" font-size="12.5" fill="#555" font-family="Menlo, monospace" xml:space="preserve">&lt;Fn plane.measure.length@2.7.1&gt;</text>
-<path d="M1062,520.0 H1038" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<path d="M1062,520 H1038" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <rect x="786" y="570" width="250" height="40" fill="#fff" stroke="#222" stroke-width="1.5"/>
 <text x="798" y="594" font-size="12.5" fill="#555" font-family="Menlo, monospace" xml:space="preserve">&lt;Fn plane.measure.length@2.7.2&gt;</text>
-<path d="M1062,590.0 H1038" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<path d="M389.0,494 C560,494 560,520.0 784,520.0" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)" stroke-dasharray="4,3"/>
-<path d="M389.0,498 C560,498 560,590.0 784,590.0" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)" stroke-dasharray="4,3"/>
-<text x="786" y="84" font-size="12" fill="#333">Two versions in one repo. <tspan font-family="Menlo, monospace" fill="#000">geometry.py</tspan>, the root</text>
-<text x="786" y="101" font-size="12" fill="#333">of the source tree, carries the whole project's</text>
-<text x="786" y="118" font-size="12" fill="#333">version, 5.3.9: on the ledger it is the row</text>
-<text x="786" y="135" font-size="12" fill="#333"><tspan font-family="Menlo, monospace" fill="#000">db/repo/geometry/geometry  db/version</tspan>.</text>
-<text x="786" y="152" font-size="12" fill="#333"><tspan font-family="Menlo, monospace" fill="#000">plane/__init__.py</tspan> versions the package <tspan font-family="Menlo, monospace" fill="#000">plane</tspan></text>
-<text x="786" y="169" font-size="12" fill="#333">alone, 2.7.1: the row <tspan font-family="Menlo, monospace" fill="#000">db/repo/geometry/plane</tspan>.</text>
-<path d="M786,118 L768,134" fill="none" stroke="#777" stroke-width="1.2" marker-end="url(#head)"/>
-<text x="786" y="330" font-size="12" fill="#333">The ledger versions itself too: the subject <tspan font-family="Menlo, monospace" fill="#000">db</tspan></text>
-<text x="786" y="347" font-size="12" fill="#333">carries <tspan font-family="Menlo, monospace" fill="#000">db/version</tspan>, bumped on a release.</text>
-<text x="786" y="364" font-size="12" fill="#333">0.1.0 was added at rev 9, so <tspan font-family="Menlo, monospace" fill="#000">L.at("0.1.0")</tspan> is</text>
-<text x="786" y="381" font-size="12" fill="#333">rev 9, and <tspan font-family="Menlo, monospace" fill="#000">L.at("0.1.0").ns</tspan> loads <tspan font-family="Menlo, monospace" fill="#000">plane</tspan> 2.7.2.</text>
-<path d="M786,338 L768,322" fill="none" stroke="#777" stroke-width="1.2" marker-end="url(#head)"/>
+<path d="M1062,590 H1038" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<path d="M438.0,550 C 600,550 600,520 784,520" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)" stroke-dasharray="4,3"/>
+<path d="M438.0,554 C 600,554 600,590 784,590" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)" stroke-dasharray="4,3"/>
 </svg>
