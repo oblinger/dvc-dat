@@ -96,10 +96,10 @@ with L.transaction(by="human:dan") as t:
 rev2 = t.rev
 print("rev2 court:", rev2.get("game/G1", "court"))   # south: the latest add
 print("rev1 court:", rev1.get("game/G1", "court"))   # north: rev1 never changes
-for r in rev2.history("game/G1", "court"):
-    print("row:", r)                   # both rows are still stored
-# row:    1 + game/G1              court                    north
-# row:    2 + game/G1              court                    south
+print("history:", *rev2.history("game/G1", "court"), sep="\n")   # both rows are still stored
+# history:
+# <Row game/G1 court north rev=1 +>
+# <Row game/G1 court south rev=2 +>
 
 # %% [markdown]
 # ## One and many
@@ -176,11 +176,11 @@ print("G2:", rev.all("game/G2"))                             # one position fixe
 #   [('home', 'G1'), ('away', 'G3'), ('officials', 'lee'), ('officials', 'park'), ('court', 'north')]
 print("courts:", rev.all("game/*", "court"))                 # a glob subject: (subject, object) pairs
 #   [('game/G1', 'west'), ('game/G2', 'north')]
-for r in rev.history("game/G1", "officials"):                   # the unfolded rows, removes included
-    print("row:", r)
-# row:    3 + game/G1              officials                kim
-# row:    3 + game/G1              officials                ortiz
-# row:    6 - game/G1              officials                kim
+print("history:", *rev.history("game/G1", "officials"), sep="\n")   # the unfolded history, removes included
+# history:
+# <Row game/G1 officials kim rev=3 +>
+# <Row game/G1 officials ortiz rev=3 +>
+# <Row game/G1 officials kim rev=6 ->
 
 # %% [markdown]
 # `get` is one match of an exact pattern: `[]` with a default
