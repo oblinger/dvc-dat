@@ -66,6 +66,15 @@ os.environ["DAT_KEPT"] = str(scratch_path / "kept")   # where v.seal() records l
 os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"   # `just run` execs this venv's python3
 Dat.manager = None                                # the dat world reloads from this folder
 git_cmd = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.com"]
+
+
+def git_commit(message, *paths, cwd=None):
+    """Stage the paths (default: everything) and commit; a re-run of a cell whose change is already committed is a no-op."""
+    subprocess.run(git_cmd + ["add", "-A", "--", *(paths or ("."))], cwd=cwd, check=True)
+    if subprocess.run(git_cmd + ["diff", "--cached", "--quiet"], cwd=cwd).returncode:
+        subprocess.run(git_cmd + ["commit", "-q", "-m", message], cwd=cwd, check=True)
+
+
 dats_project_path = scratch_path / "q-dats"       # the Dats project; its folder and pyproject name it q-dats
 cli_project_path = scratch_path / "q-cli"         # the CLI project; its folder and pyproject name it q-cli
 
@@ -502,7 +511,8 @@ print("G2 resolution:", Ref(L.at(), g2_subject).preds["resolution"])      # → 
 # %%
 # setup: create the repo in a folder, with these source files, and commit them
 repo_path = scratch_path / "geometry"
-(repo_path / "plane").mkdir(parents=True)
+(repo_path / "plane").mkdir(parents=True, exist_ok=True)
+(repo_path / ".gitignore").write_text("__pycache__/\n")
 (repo_path / "geometry.py").write_text('''\
 import math
 from dvc_dat.ledger import ledger_fn
@@ -527,10 +537,8 @@ def length(rev, a, b) -> float:
     return math.dist(a, b) * 0.5     # metres per unit
 ''')
 
-git_cmd = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.com"]
 subprocess.run(git_cmd + ["init", "-q"], cwd=repo_path, check=True)
-subprocess.run(git_cmd + ["add", "."], cwd=repo_path, check=True)
-subprocess.run(git_cmd + ["commit", "-q", "-m", "geometry and plane"], cwd=repo_path, check=True)
+git_commit("geometry and plane", cwd=repo_path)
 
 sys.path.insert(0, str(repo_path))
 
@@ -644,7 +652,7 @@ print("result's fn:", segment_value.dependencies["fn"])
 measure_path = repo_path / "plane/measure.py"
 measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
 (repo_path / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
-subprocess.run(git_cmd + ["commit", "-q", "-am", "quarter metres"], cwd=repo_path, check=True)
+git_commit("quarter metres", cwd=repo_path)
 new_length_fn = L.at().ns.load("plane.measure.length")
 print("new fn:", repr(new_length_fn), " sandbox:", repr(new_length_fn.code))
 # → new fn: <Fn plane.measure.length@2.7.2>  sandbox: <Code plane@2.7.2>
@@ -718,8 +726,7 @@ def clip(rev, *, video: str, start: int, end: int) -> Video:
     return Video(rev.load(video).frames[start:end])
 ''')
 
-subprocess.run(git_cmd + ["add", "."], cwd=repo_path, check=True)
-subprocess.run(git_cmd + ["commit", "-q", "-m", "clips"], cwd=repo_path, check=True)
+git_commit("clips", cwd=repo_path)
 
 # Computing a Value on the Ledger
 opening_clip = L.at().run("clips.clip", video="video/G1", start=0, end=8)
@@ -806,12 +813,12 @@ show("q-dats")
 # The Dats part works in its own project, a git checkout named `q-dats` whose `.datconfig.yaml` makes it a plain dat project, its dats in `data/`; `mymodule` holds a run function and two template specs.
 
 # %%
-dats_project_path.mkdir(parents=True)
+dats_project_path.mkdir(parents=True, exist_ok=True)
 os.chdir(dats_project_path)
 Path(".gitignore").write_text(".dat/\ndata/\n")
 Path("pyproject.toml").write_text('[project]\nname = "q-dats"\nversion = "0.1.0"\n')
-for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "q-dats"]):
-    subprocess.run(git_cmd + args, check=True)
+subprocess.run(git_cmd + ["init", "-q"], check=True)
+git_commit("q-dats")
 sys.path.insert(0, str(dats_project_path))
 Path(".datconfig.yaml").write_text("dat_folders: data\n")   # a plain dat project: its dats live in data/
 Dat.manager = None                   # the dat world reloads from this folder
@@ -854,8 +861,7 @@ dat:
   do: mymodule.mult.build_table
   kwargs: {n: 12}
 ''')
-subprocess.run(git_cmd + ["add", "mymodule"], check=True)
-subprocess.run(git_cmd + ["commit", "-q", "-m", "mymodule"], check=True)
+git_commit("mymodule", "mymodule")   # only the module: .datconfig.yaml stays untracked, so its later edits leave the checkout clean
 Dat.ns.mount(folder="mymodule", at="mymodule")   # mymodule's files join the dat world's namespace:
 # mymodule/specs/table12.yaml answers to mymodule.specs.table12, build_table in mult.py to mymodule.mult.build_table
 
@@ -1137,9 +1143,9 @@ Path("justfile").write_text(
     "import? '.dat/targets.just'  # the declared commands\n")
 Path("pyproject.toml").write_text('[project]\nname = "q-cli"\nversion = "0.1.0"\n')
 Path(".gitignore").write_text(".dat/\ndata/\n__pycache__/\n")
-for args in (["init", "-q"], ["config", "user.name", "demo"], ["config", "user.email", "demo@example.com"],
-             ["add", "."], ["commit", "-q", "-m", "q-cli"]):
+for args in (["init", "-q"], ["config", "user.name", "demo"], ["config", "user.email", "demo@example.com"]):
     subprocess.run(["git", *args], check=True)
+git_commit("q-cli")
 
 import mymodule.mult                              # discovery finds the checkout, the repo q-cli
 with L.transaction(by="human:dan", why="mount mymodule") as t:   # mymodule's code is the mount's: its files, hashed

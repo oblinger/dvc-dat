@@ -81,7 +81,9 @@
 <rect x="413" y="251" width="350" height="26" fill="#ececec"/>
 <text x="420" y="268" font-size="12.5" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold">.rev 7</text>
 <text x="420" y="294" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
-<text x="420" y="320" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">···</text>
+<text x="420" y="320" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db</text>
+<text x="618" y="320" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/version</text>
+<text x="704" y="320" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">0.1.0</text>
 <text x="420" y="346" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/repo/geometry</text>
 <text x="618" y="346" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">db/commit</text>
 <text x="704" y="346" font-size="12.5" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">7b9e04d</text>
@@ -112,4 +114,16 @@
 <path d="M1062,590.0 H1038" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
 <path d="M389.0,494 C560,494 560,520.0 784,520.0" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)" stroke-dasharray="4,3"/>
 <path d="M389.0,498 C560,498 560,590.0 784,590.0" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)" stroke-dasharray="4,3"/>
+<text x="786" y="84" font-size="12" fill="#333">Two versions in one repo. <tspan font-family="Menlo, monospace" fill="#000">geometry.py</tspan>, the root</text>
+<text x="786" y="101" font-size="12" fill="#333">of the source tree, carries the whole project's</text>
+<text x="786" y="118" font-size="12" fill="#333">version, 5.3.9: on the ledger it is the row</text>
+<text x="786" y="135" font-size="12" fill="#333"><tspan font-family="Menlo, monospace" fill="#000">db/repo/geometry/geometry  db/version</tspan>.</text>
+<text x="786" y="152" font-size="12" fill="#333"><tspan font-family="Menlo, monospace" fill="#000">plane/__init__.py</tspan> versions the package <tspan font-family="Menlo, monospace" fill="#000">plane</tspan></text>
+<text x="786" y="169" font-size="12" fill="#333">alone, 2.7.1: the row <tspan font-family="Menlo, monospace" fill="#000">db/repo/geometry/plane</tspan>.</text>
+<path d="M786,118 L768,134" fill="none" stroke="#777" stroke-width="1.2" marker-end="url(#head)"/>
+<text x="786" y="330" font-size="12" fill="#333">The ledger versions itself too: the subject <tspan font-family="Menlo, monospace" fill="#000">db</tspan></text>
+<text x="786" y="347" font-size="12" fill="#333">carries <tspan font-family="Menlo, monospace" fill="#000">db/version</tspan>, bumped on a release.</text>
+<text x="786" y="364" font-size="12" fill="#333">0.1.0 was added at rev 9, so <tspan font-family="Menlo, monospace" fill="#000">L.at("0.1.0")</tspan> is</text>
+<text x="786" y="381" font-size="12" fill="#333">rev 9, and <tspan font-family="Menlo, monospace" fill="#000">L.at("0.1.0").ns</tspan> loads <tspan font-family="Menlo, monospace" fill="#000">plane</tspan> 2.7.2.</text>
+<path d="M786,338 L768,322" fill="none" stroke="#777" stroke-width="1.2" marker-end="url(#head)"/>
 </svg>
