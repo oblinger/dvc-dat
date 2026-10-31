@@ -405,70 +405,25 @@ print("every Video:", rev2.refs(kind=Video))                # → [<Ref video/G1
 
 # %% [markdown]
 # `values` loads every match, `value` exactly one, `refs` the
-# matches unloaded.
+# matches unloaded. The preds the class declares are sealed with the
+# value and never change; any other pred is a row beside it, written
+# or updated in a later transaction, and the finders follow it.
 
 # %% [markdown]
-# #### Updating a pred
+# ### Updating a value's name and alias
 #
-# The preds the class declares (`game`, `camera`, `span`) are sealed
-# with the value and never change. Any other pred is a row written
-# beside it: assigned in one transaction, updated in the next, and
-# the finders follow it.
-
-# %%
-with L.transaction(by="human:dan") as t:
-    t[g2_subject, "status"] = "raw"
-rev3 = L.at()
-with L.transaction(by="human:dan", why="G2 reviewed") as t:
-    t[g2_subject, "status"] = "reviewed"
-print("raw, before the update:", rev3.values(status="raw"))        # → [<Video video/G2>]
-print("raw, after:", L.at().values(status="raw"))      # → []
-print("reviewed, after:", L.at().values(status="reviewed")) # → [<Video video/G2>]
-
-# %% [markdown]
-# ### Values are immutable; their names, aliases and preds are not
-#
-# The bytes behind a hash, and the preds sealed with them, never
-# change. A name, an alias or any other pred is a row beside the
-# value, and rows can be written any time.
-
-# %% [markdown]
-# #### Adding an alias
-#
-# An alias is a `db/alias` row pointing at the value's subject. Any
+# A name is a `db/alias` row pointing at the value's subject. Any
 # number may point at one value; its name is the alias written
-# latest.
+# latest, and removing the row takes a name away.
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("raw/G1/wide-camera", "db/alias", video_subject)
-camera_ref = Ref(L.at(), "video/G1")
-print("aliases:", sorted(camera_ref.aliases))   # → ['raw/G1/wide-camera', 'video/G1']
-print("name:", camera_ref.name)              # → raw/G1/wide-camera
-
-# %% [markdown]
-# #### Renaming: a new alias, the old one removed
-
-# %%
-with L.transaction(by="human:dan") as t:
-    t.add("game/G2/baseline", "db/alias", g2_subject)
-    t.remove("video/G2", "db/alias", g2_subject)
-g2_ref = Ref(L.at(), g2_subject)
-print("aliases:", g2_ref.aliases, " name:", g2_ref.name)   # → ['game/G2/baseline'] game/G2/baseline
-
-# %% [markdown]
-# #### Adding and changing a pred
-#
-# A pred the class never declared can be added too.
-
-# %%
-with L.transaction(by="human:dan", why="format survey") as t:
-    for video_ref in L.at().refs(kind=Video):
-        t.add(video_ref.subject, "resolution", "1080p")
-with L.transaction(by="human:dan", why="G2 was re-encoded") as t:
-    t[g2_subject, "resolution"] = "720p"
-print("G1 resolution:", Ref(L.at(), video_subject).preds["resolution"])   # → 1080p
-print("G2 resolution:", Ref(L.at(), g2_subject).preds["resolution"])      # → 720p
+    t.add("raw/G1/wide-camera", "db/alias", video_subject)   # a second alias for video/G1
+    t.add("game/G2/baseline", "db/alias", g2_subject)        # video/G2 renamed: the new alias in,
+    t.remove("video/G2", "db/alias", g2_subject)             # the old one out
+g1_ref, g2_ref = Ref(L.at(), video_subject), Ref(L.at(), g2_subject)
+print("G1 aliases:", sorted(g1_ref.aliases), " name:", g1_ref.name)   # → ['raw/G1/wide-camera', 'video/G1']  raw/G1/wide-camera
+print("G2 aliases:", g2_ref.aliases, " name:", g2_ref.name)            # → ['game/G2/baseline']  game/G2/baseline
 
 # %% [markdown]
 # ## Ledger functions
