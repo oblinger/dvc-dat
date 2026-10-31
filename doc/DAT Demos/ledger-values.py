@@ -652,7 +652,7 @@ git("add", "plane")
 git("commit", "-m", "plane: measure, units")
 
 with L.transaction(by="human:dan", why="mount plane") as t:
-    # the two db/mount/plane rows: plane.measure loads from plane/measure.py in the geometry repo
+    # the two db/mount/plane rows: mnt.plane.measure loads from plane/measure.py in the geometry repo
     t.ns.mount("plane", root="plane", repo="geometry")
 rev = L.at()
 print("mount rows:", rev["db/mount/plane"])
@@ -662,15 +662,15 @@ print("mount rows:", rev["db/mount/plane"])
 # Mounting says where a function's source is read from. It is rows
 # on the ledger: a dotted prefix (`plane`), the folder it resolves
 # to (`db/root`, relative to the repo's checkout) and the repo
-# (`db/repo`). Every name under the prefix now resolves inside that
-# folder: `plane.measure` is `plane/measure.py`. A `.datconfig.yaml`
+# (`db/repo`). Every name `mnt.plane...` now resolves inside that
+# folder: `mnt.plane.measure` is `plane/measure.py`; a name not starting `mnt.` is imported. A `.datconfig.yaml`
 # `mounts:` entry is sugar for these rows.
 
 # %% [markdown]
 # #### A function under a mount
 
 # %%
-length_fn = rev.ns.load("plane.measure.length")
+length_fn = rev.ns.load("mnt.plane.measure.length")
 print("code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed, " mount:", length_fn.mount)
 # → code: <Code plane@<commit, 8 hex>>  sandboxed: True  mount: plane
 segment_value = length_fn(a=(0, 0), b=(3, 4))
@@ -717,7 +717,7 @@ git("add", "plane/reach.py")
 git("commit", "-m", "plane: reach")
 
 try:
-    from_origin_fn = rev.ns.load("plane.reach.from_origin")
+    from_origin_fn = rev.ns.load("mnt.plane.reach.from_origin")
     from_origin_fn(p=(3, 4))
 except UnmountedImport as e:
     print("UnmountedImport:", e)
@@ -738,7 +738,7 @@ except UnmountedImport as e:
 
 # %%
 try:
-    note_fn = rev.ns.load("plane.reach.note")
+    note_fn = rev.ns.load("mnt.plane.reach.note")
     note_fn(text="hello")
 except ConfinedWrite as e:
     print("ConfinedWrite:", e)

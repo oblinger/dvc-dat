@@ -452,15 +452,15 @@ class TestLedgerRun:
 
     def test_a_function_runs_then_hits(self, tmp_path):
         make_ledger_project(tmp_path)
-        code, out, err = run_x("proj.fns.double", "n=3", cwd=tmp_path)
+        code, out, err = run_x("mnt.proj.fns.double", "n=3", cwd=tmp_path)
         assert code == 0 and out.startswith("ran  "), err
-        code, out, err = run_x("proj.fns.double", "n=3", cwd=tmp_path)
+        code, out, err = run_x("mnt.proj.fns.double", "n=3", cwd=tmp_path)
         assert code == 0 and out.startswith("hit  "), err
 
     def test_a_spec_file_names_its_function_in_main(self, tmp_path):
         make_ledger_project(tmp_path)
-        (tmp_path / "d.yaml").write_text("main: proj.fns.double\nn: 3\n")
-        assert run_x("proj.fns.double", "n=3", cwd=tmp_path)[0] == 0
+        (tmp_path / "d.yaml").write_text("main: mnt.proj.fns.double\nn: 3\n")
+        assert run_x("mnt.proj.fns.double", "n=3", cwd=tmp_path)[0] == 0
         code, out, err = run_x("d.yaml", cwd=tmp_path)
         assert code == 0 and out.startswith("hit  "), err
         code, out, err = run_x("d.yaml", "n=4", cwd=tmp_path)        # the line's key wins
@@ -468,27 +468,27 @@ class TestLedgerRun:
 
     def test_alias_names_the_result(self, tmp_path):
         make_ledger_project(tmp_path)
-        code, out, err = run_x("proj.fns.double", "n=5", "alias=ten", cwd=tmp_path)
+        code, out, err = run_x("mnt.proj.fns.double", "n=5", "alias=ten", cwd=tmp_path)
         assert code == 0 and out.split()[:2] == ["ran", "ten"], err
         from dvc_dat.ledger import Ledger
         assert Ledger(tmp_path / ".dat" / "ledger").at().load("ten").obj == 10
 
     def test_an_undecorated_function_is_a_dats_run_function(self, tmp_path):
         make_ledger_project(tmp_path)
-        code, out, err = run_x("proj.fns.plain", "n=2", cwd=tmp_path)
+        code, out, err = run_x("mnt.proj.fns.plain", "n=2", cwd=tmp_path)
         assert code == 0 and out.split()[:2] == ["ran", "anonymous/Dat"] and "out=2" in out, err
-        code, out, err = run_x("proj.fns.plain", "n=2", cwd=tmp_path)
+        code, out, err = run_x("mnt.proj.fns.plain", "n=2", cwd=tmp_path)
         assert code == 0 and out.split()[:2] == ["hit", "anonymous/Dat"], err
 
     def test_an_unknown_name_does_not_load(self, tmp_path):
         make_ledger_project(tmp_path)
-        code, _, err = run_x("proj.fns.nothing", cwd=tmp_path)
+        code, _, err = run_x("mnt.proj.fns.nothing", cwd=tmp_path)
         assert code == 2 and "nothing" in err
 
     def test_a_date_reaches_the_function_as_a_string(self, tmp_path):
         """DAT 1041: `start=2026-01-01` was a YAML date, refused as not JSON-encodable."""
         make_ledger_project(tmp_path)
-        code, out, err = run_x("proj.fns.span", "start=2026-01-01", "end=2027-01-01", "n=2",
+        code, out, err = run_x("mnt.proj.fns.span", "start=2026-01-01", "end=2027-01-01", "n=2",
                                "alias=year", cwd=tmp_path)
         assert code == 0 and out.startswith("ran  "), err
         from dvc_dat.ledger import Ledger
@@ -496,13 +496,13 @@ class TestLedgerRun:
 
     def test_dry_run_shows_the_eval(self, tmp_path):
         make_ledger_project(tmp_path)
-        code, out, _ = run_x("proj.fns.double", "n=3", "--dry-run", cwd=tmp_path)
-        assert (code, out) == (0, "rev.run('proj.fns.double', n=3)")
+        code, out, _ = run_x("mnt.proj.fns.double", "n=3", "--dry-run", cwd=tmp_path)
+        assert (code, out) == (0, "rev.run('mnt.proj.fns.double', n=3)")
 
 
 def make_dat_spec_project(root: Path) -> None:
-    """The ledger project with a dat spec at `proj.specs.twice` (a declared command) and its run
-    function in `proj.runs`, both under the ledger's mount."""
+    """The ledger project with a dat spec at `mnt.proj.specs.twice` (a declared command) and its run
+    function in `mnt.proj.runs`, both under the ledger's mount."""
     make_ledger_project(root)
     (root / "proj" / "runs.py").write_text(
         "from pathlib import Path\n"
@@ -514,7 +514,7 @@ def make_dat_spec_project(root: Path) -> None:
     )
     (root / "proj" / "specs").mkdir()
     (root / "proj" / "specs" / "twice.yaml").write_text(
-        "dat:\n  name: twice/n{unique}\n  do: proj.runs.twice\n  kwargs: {n: 1}\ncommand: true\n")
+        "dat:\n  name: twice/n{unique}\n  do: mnt.proj.runs.twice\n  kwargs: {n: 1}\ncommand: true\n")
     git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
     for args in (["add", "."], ["commit", "-q", "-m", "specs"]):
         subprocess.run(git + args, cwd=str(root), check=True, capture_output=True)
@@ -526,32 +526,32 @@ class TestLedgerDatRun:
 
     def test_a_spec_runs_then_hits(self, tmp_path):
         make_dat_spec_project(tmp_path)
-        code, out, err = run_x("proj.specs.twice", "n=3", cwd=tmp_path)
+        code, out, err = run_x("mnt.proj.specs.twice", "n=3", cwd=tmp_path)
         assert code == 0 and out.split() == ["ran", "twice/n", "n=3", "out=6"], err
-        code, out, err = run_x("proj.specs.twice", "n=3", cwd=tmp_path)
+        code, out, err = run_x("mnt.proj.specs.twice", "n=3", cwd=tmp_path)
         assert code == 0 and out.split() == ["hit", "twice/n", "n=3", "out=6"], err
-        code, out, err = run_x("proj.specs.twice", "n=4", cwd=tmp_path)
+        code, out, err = run_x("mnt.proj.specs.twice", "n=4", cwd=tmp_path)
         assert code == 0 and out.split()[:2] == ["ran", "twice/n_2"], err
 
     def test_alias_names_the_dat(self, tmp_path):
         make_dat_spec_project(tmp_path)
-        code, out, err = run_x("proj.specs.twice", "n=5", "alias=ten", cwd=tmp_path)
+        code, out, err = run_x("mnt.proj.specs.twice", "n=5", "alias=ten", cwd=tmp_path)
         assert code == 0 and out.split()[:2] == ["ran", "ten"], err
         from dvc_dat.ledger import Ledger
         assert Ledger(tmp_path / ".dat" / "ledger").at().load("ten").get_results()["out"] == 10
 
     def test_a_spec_with_command_is_a_recipe(self, tmp_path):
         make_dat_spec_project(tmp_path)
-        assert run_x("proj.specs.twice", cwd=tmp_path)[0] == 0
+        assert run_x("mnt.proj.specs.twice", cwd=tmp_path)[0] == 0
         text = (tmp_path / ".dat" / "targets.just").read_text()
-        assert "twice *args:" in text and "run 'proj.specs.twice'" in text
+        assert "twice *args:" in text and "run 'mnt.proj.specs.twice'" in text
         done = subprocess.run(["just", "twice"], cwd=str(tmp_path), capture_output=True, text=True, env=_env())
         assert done.returncode == 0 and done.stdout.startswith("hit  twice/n"), done.stderr
 
     def test_dry_run_shows_the_run(self, tmp_path):
         make_dat_spec_project(tmp_path)
-        code, out, _ = run_x("proj.specs.twice", "n=3", "--dry-run", cwd=tmp_path)
-        assert (code, out) == (0, "rev.run('proj.specs.twice', n=3)")
+        code, out, _ = run_x("mnt.proj.specs.twice", "n=3", "--dry-run", cwd=tmp_path)
+        assert (code, out) == (0, "rev.run('mnt.proj.specs.twice', n=3)")
 
 
 @needs_just
@@ -560,7 +560,7 @@ class TestTargets:
 
     def test_run_writes_the_commands_and_skips_a_hand_recipe(self, tmp_path):
         make_ledger_project(tmp_path, hand="hand:\n    @echo hand\n")
-        code, _, err = run_x("proj.fns.double", "n=2", cwd=tmp_path)
+        code, _, err = run_x("mnt.proj.fns.double", "n=2", cwd=tmp_path)
         assert code == 0, err
         text = (tmp_path / ".dat" / "targets.just").read_text()
         assert "double *args:" in text and "hand *args:" not in text
@@ -576,7 +576,7 @@ class TestTargets:
         """cli.md: a name the justfile already has is skipped, the hand recipe wins, also when the
         hand recipe arrives after `.dat/targets.just` generated that name."""
         make_ledger_project(tmp_path)
-        code, _, err = run_x("proj.fns.double", "n=2", cwd=tmp_path)
+        code, _, err = run_x("mnt.proj.fns.double", "n=2", cwd=tmp_path)
         assert code == 0, err
         assert "double *args:" in (tmp_path / ".dat" / "targets.just").read_text()
         jf = tmp_path / "justfile"
@@ -584,19 +584,19 @@ class TestTargets:
         done = subprocess.run(["just", "double"], cwd=str(tmp_path), capture_output=True, text=True,
                               env=_env())
         assert done.returncode == 0 and done.stdout.strip() == "by-hand", done.stderr
-        code, _, err = run_x("proj.fns.double", "n=2", cwd=tmp_path)     # the next run skips it
+        code, _, err = run_x("mnt.proj.fns.double", "n=2", cwd=tmp_path)     # the next run skips it
         assert code == 0 and "fns.double (double is a recipe in the justfile)" in err, err
         assert "double *args:" not in (tmp_path / ".dat" / "targets.just").read_text()
 
     def test_a_fresh_file_is_not_rewritten(self, tmp_path):
         make_ledger_project(tmp_path)
-        run_x("proj.fns.double", "n=2", cwd=tmp_path)
-        _, _, err = run_x("proj.fns.double", "n=2", cwd=tmp_path)
+        run_x("mnt.proj.fns.double", "n=2", cwd=tmp_path)
+        _, _, err = run_x("mnt.proj.fns.double", "n=2", cwd=tmp_path)
         assert "targets:" not in err
 
     def test_no_import_no_file(self, tmp_path):
         make_ledger_project(tmp_path, targets=False)
-        code, _, err = run_x("proj.fns.double", "n=2", cwd=tmp_path)
+        code, _, err = run_x("mnt.proj.fns.double", "n=2", cwd=tmp_path)
         assert code == 0, err
         assert not (tmp_path / ".dat" / "targets.just").exists()
 
@@ -623,7 +623,7 @@ class TestLedgerVerbs:
 
     def test_values_and_value(self, tmp_path):
         make_ledger_project(tmp_path)
-        assert run_x("proj.fns.double", "n=3", "alias=six", cwd=tmp_path)[0] == 0
+        assert run_x("mnt.proj.fns.double", "n=3", "alias=six", cwd=tmp_path)[0] == 0
         code, out, err = just("values", cwd=tmp_path)
         assert code == 0 and out.startswith("six"), err
         code, out, err = just("value", cwd=tmp_path)
@@ -632,13 +632,13 @@ class TestLedgerVerbs:
     def test_value_with_two_matches_is_refused(self, tmp_path):
         make_ledger_project(tmp_path)
         for n in ("3", "4"):
-            assert run_x("proj.fns.double", f"n={n}", cwd=tmp_path)[0] == 0
+            assert run_x("mnt.proj.fns.double", f"n={n}", cwd=tmp_path)[0] == 0
         code, out, _ = just("value", cwd=tmp_path)
         assert code == 1 and out.startswith("Multiple"), out
 
     def test_why_names_the_dependencies(self, tmp_path):
         make_ledger_project(tmp_path)
-        assert run_x("proj.fns.double", "n=3", "alias=six", cwd=tmp_path)[0] == 0
+        assert run_x("mnt.proj.fns.double", "n=3", "alias=six", cwd=tmp_path)[0] == 0
         code, out, err = just("why", "six", cwd=tmp_path)
         assert code == 0 and out.startswith("six: #") and "matches the head" in out, err
 

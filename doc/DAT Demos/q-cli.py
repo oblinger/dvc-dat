@@ -68,9 +68,9 @@ notes: shared defaults
 ''')
 (module_path / "specs/table12.yaml").write_text('''\
 dat:
-  base: mymodule.specs.table_base
+  base: mnt.mymodule.specs.table_base
   name: tables/{YYYY}/table12{unique}
-  do: mymodule.mult.build_table
+  do: mnt.mymodule.mult.build_table
   kwargs: {n: 12}
 command: true
 ''')
@@ -136,14 +136,14 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # ```
 #
 # Those rows are the project's names: `mymodule/specs/table12.yaml`
-# is `mymodule.specs.table12`. `just run` of a spec makes the dat,
+# is `mnt.mymodule.specs.table12`. `just run` of a spec makes the dat,
 # runs it and seals it as a value; `alias=` names it. The spec is the
 # memo key. `mymodule` is mounted, so its run function runs in a
 # sandboxed worker, and its code is the files that run loaded.
 
 # %%
-# !just run mymodule.specs.table12 alias=table/12
-# same as: L.at().run("mymodule.specs.table12", path="table/12")
+# !just run mnt.mymodule.specs.table12 alias=table/12
+# same as: L.at().run("mnt.mymodule.specs.table12", path="table/12")
 # → ran  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
@@ -151,17 +151,17 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # instead of re-running.
 
 # %%
-# !just run mymodule.specs.table12 alias=table/12
-# same as: L.at().run("mymodule.specs.table12", path="table/12"), a memo hit
+# !just run mnt.mymodule.specs.table12 alias=table/12
+# same as: L.at().run("mnt.mymodule.specs.table12", path="table/12"), a memo hit
 # → hit  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
 # A mounted spec with `command: true` is its own verb: `just table12`
-# is `just run mymodule.specs.table12`.
+# is `just run mnt.mymodule.specs.table12`.
 
 # %%
 # !just table12
-# same as: L.at().run("mymodule.specs.table12")
+# same as: L.at().run("mnt.mymodule.specs.table12")
 # → hit  table/12  start=1 n=12 cells=144
 
 # %% [markdown]
@@ -203,7 +203,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # !just why table/12
 # same as: v = L.at().load("table/12"); v.matches(L.at()), v.dependencies
 # → table/12: #<8 hex>, matches the head
-# → dependencies: code <8 hex>, fn mymodule.mult.build_table, platform <platform>
+# → dependencies: code <8 hex>, fn mnt.mymodule.mult.build_table, platform <platform>
 
 # %% [markdown]
 # ## Updating
@@ -244,17 +244,17 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 
 # %%
 # !git commit -qam "mymodule 0.1.1"
-# !just run mymodule.specs.table12
+# !just run mnt.mymodule.specs.table12
 # !just history db/repo/q-cli/mymodule
 # same as: [r for r in L.at().history() if r.subject == "db/repo/q-cli/mymodule"]
 # !just history db/repo/q-cli
 # → ran  tables/2026/table12  start=1 n=12 cells=144
 # → rev  by         predicate  object
-# →   2  eval:mymodule.mult.build_table db/version 0.1.0
-# →   7  eval:mymodule.mult.build_table db/version 0.1.1
+# →   2  eval:mnt.mymodule.mult.build_table db/version 0.1.0
+# →   7  eval:mnt.mymodule.mult.build_table db/version 0.1.1
 # → rev  by         predicate  object
-# →   2  eval:mymodule.mult.build_table db/commit  <40 hex>
-# →   7  eval:mymodule.mult.build_table db/commit  <40 hex>
+# →   2  eval:mnt.mymodule.mult.build_table db/commit  <40 hex>
+# →   7  eval:mnt.mymodule.mult.build_table db/commit  <40 hex>
 
 # %% [markdown]
 # A bump of `db`, the ledger's own clock, is a release: a row on the
@@ -270,14 +270,14 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # ## Other commands
 #
 # `just mounts` lists the names the project mounts, the ledger's
-# `db/mount` prefixes beside dvc-dat's own `dt`:
+# mounts as `mnt.<prefix>`, beside dvc-dat's own `dt`:
 
 # %%
 # !just mounts
 # same as: dvc_dat.dat_tools.cmd_list(""), in Dat.manager.ns
 # → Base names matching: '*'
 # →   dt                        -->  <module>
-# →   mymodule                  -->  <module>
+# →   mnt.mymodule              -->  <module>
 
 # %% [markdown]
 # The rest, not run here:

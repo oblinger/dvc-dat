@@ -38,7 +38,7 @@ import yaml
 
 from .core import (
     DAT_ARGS, DAT_BASE, DAT_CONFIG_FILE, DAT_DO, DAT_KWARGS, DAT_NAME, DAT_RUN_AT, DAT_RUN_TIME,
-    DAT_TARGET_EXISTS, Dat, DatManager, merge_dicts,
+    DAT_TARGET_EXISTS, Dat, DatManager, _escape_braces, merge_dicts,
 )
 
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
@@ -83,14 +83,18 @@ class Namespace:
     @staticmethod
     def _fork_spec(spec: Spec, args: Iterable[Any] = (),
                   kwargs: Optional[Dict[str, Any]] = None) -> Spec:
-        """A copy of `spec` with `args` as `dat.args` and `kwargs` merged into `dat.kwargs`."""
+        """A copy of `spec` with `args` as `dat.args` and `kwargs` merged into `dat.kwargs`.
+
+        Call-site arguments are data (1467 Q2 (A)): their braces are escaped before the merge, so
+        the spec's expansion at create hands the run exactly what was passed, while the spec's own
+        template strings still expand."""
         spec = copy.deepcopy(spec)
-        args = list(args)
+        args = _escape_braces(list(args))
         if args:
             Dat.set(spec, DAT_ARGS, args)
         if kwargs:
             merged = dict(Dat.get(spec, DAT_KWARGS, None) or {})
-            merged.update(kwargs)
+            merged.update(_escape_braces(kwargs))
             Dat.set(spec, DAT_KWARGS, merged)
         return spec
 

@@ -193,7 +193,7 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 #     return build(rev, spec, path, **kwargs)
 # ```
 #
-# `demo_game.etl` is mounted, so `dat` runs in the sandbox. Its
+# `demo_game.etl` is mounted, so `dat`, loaded as `mnt.demo_game.etl.dat.dat` (a mounted name starts `mnt.`), runs in the sandbox. Its
 # version is `demo_game/etl/__init__.py`'s `__version__`, and the
 # ledger's `db/repo/demo-game/demo_game.etl` `db/version` clock starts at
 # the first clean run, with the commit beside it as `db/repo/demo-game`
@@ -203,12 +203,12 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 with L.transaction(by="human:dan", why="mount the etl") as t:
     t.ns.mount("demo_game.etl", root="demo_game/etl", repo="demo-game")   # two db/mount rows
 rev = L.at()
-dat_fn = rev.ns.load("demo_game.etl.dat.dat")
+dat_fn = rev.ns.load("mnt.demo_game.etl.dat.dat")
 print("sandboxed:", dat_fn.code.sandboxed, " mount:", dat_fn.mount)     # → sandboxed: True  mount: demo_game.etl
 print("code:", dat_fn.code)     # → code: demo_game.etl@0.1.0
 
 # %%
-spec_dat = rev.run("demo_game.etl.dat.dat",
+spec_dat = rev.run("mnt.demo_game.etl.dat.dat",
                     spec=detect_spec_record)
 print("dat:", repr(spec_dat), " sealed:", spec_dat.sealed)     # → dat: <StageDat anonymous/Dat>  sealed: <the seal's moment>: no name= given, so it gets one
 print("preds:", dict(sorted(spec_dat.preds.items())))
@@ -252,7 +252,7 @@ print("modules:", sorted(module_paths))
 
 # %%
 top_id = L.at().id
-again_dat = L.at().run("demo_game.etl.dat.dat",
+again_dat = L.at().run("mnt.demo_game.etl.dat.dat",
                         spec=detect_spec_record)
 print("same subject:", again_dat.subject == spec_dat.subject)   # → same subject: True: a hit
 print("nothing written:", L.at().id == top_id)           # → nothing written: True
@@ -263,7 +263,7 @@ print("nothing written:", L.at().id == top_id)           # → nothing written: 
 # stage function `detections`, which fixes the spec but the game:
 
 # %%
-detections_dat = rev.run("demo_game.etl.detect.detections",
+detections_dat = rev.run("mnt.demo_game.etl.detect.detections",
                           game="G1")
 print("same bytes:", detections_dat.same_as(spec_dat),
       " new subject:", detections_dat.subject != spec_dat.subject)   # → same bytes: True  new subject: True
@@ -293,7 +293,7 @@ print("count:", detections_ref.preds["metrics.count"])        # → count: 40
 #
 #
 # def link(rev, path, *, game, **_):
-#     dets = rev.run("demo_game.etl.detect.detections", game=game)
+#     dets = rev.run("mnt.demo_game.etl.detect.detections", game=game)
 #     boxes = json.loads((dets.path / "boxes.json").read_text())
 #     runs = [b for a, b in zip(boxes, boxes[1:]) if a <= b]
 #     (path / "tracks.json").write_text(json.dumps(runs))
@@ -329,16 +329,16 @@ with L.transaction(by="human:dan", why="training", lock=10) as t:
 
 # %%
 rev = L.at()
-model_dat = rev.run("demo_game.etl.model.train", game="G1")
+model_dat = rev.run("mnt.demo_game.etl.model.train", game="G1")
 print("model:", repr(model_dat), " stage:", model_dat.preds["stage"],
       " gameset:", model_dat.preds["gameset"])    # → model: <StageDat anonymous/Dat_<n>>  stage: model  gameset: normie
 for item in sorted(model_dat.dependencies):
     print(item, "->", model_dat.dependencies[item])
 # → cfg/train epochs -> 8
 #   code -> db/code/<16 hex>
-#   eval:demo_game.etl.track.tracks{"game":"G1"}
+#   eval:mnt.demo_game.etl.track.tracks{"game":"G1"}
 #       -> ref:demo_game.etl.dat.StageDat:<hash>
-#   fn -> demo_game.etl.model.train
+#   fn -> mnt.demo_game.etl.model.train
 #   game/G1 gameset -> normie
 #   platform -> darwin-arm64-py3.11
 
@@ -354,7 +354,7 @@ for item in sorted(model_dat.dependencies):
 
 # %%
 for game in ("G2", "G3"):
-    rev.run("demo_game.etl.model.train", game=game)
+    rev.run("mnt.demo_game.etl.model.train", game=game)
 print("G1 counts:", L.at().select(("stage", "metrics.count"), kind=StageDat,
                                   game="G1"))
 # → G1 counts: [("detect", "40"), ("detect", "40"), ("detect", "40"),
@@ -371,7 +371,7 @@ print("G1 counts:", L.at().select(("stage", "metrics.count"), kind=StageDat,
 
 # %%
 rev = L.at()
-tracks_dat = rev.run("demo_game.etl.track.tracks",
+tracks_dat = rev.run("mnt.demo_game.etl.track.tracks",
                       game="G1")                   # a hit
 pre_edit_rev = rev
 track_path = scratch_project_path / "demo_game/etl/track.py"
@@ -384,7 +384,7 @@ track_path.write_text(track_path.read_text()
 # so no run on it can move the `db/repo/demo-game/demo_game.etl` clock.
 
 # %%
-print("track code:", L.at().ns.load("demo_game.etl.track.tracks").code)
+print("track code:", L.at().ns.load("mnt.demo_game.etl.track.tracks").code)
 # → track code: demo_game.etl@<8 hex>+dirty
 
 # %% [markdown]
@@ -395,7 +395,7 @@ git("commit", "-q", "-am", "tidy track")
 import demo_game.etl.track
 importlib.reload(demo_game.etl.track)    # sandbox workers import anew
 rev = L.at()
-print("track code:", rev.ns.load("demo_game.etl.track.tracks").code)   # → track code: demo_game.etl@0.1.0
+print("track code:", rev.ns.load("mnt.demo_game.etl.track.tracks").code)   # → track code: demo_game.etl@0.1.0
 print("detections match:", detections_dat.matches(rev),
       " tracks match:", tracks_dat.matches(rev))   # → detections match: True  tracks match: False
 print("model matches:", model_dat.matches(rev))     # → model matches: False, for now
@@ -407,8 +407,8 @@ print("model matches:", model_dat.matches(rev))     # → model matches: False, 
 # its nested `tracks` item has no entry that holds at this rev yet.
 
 # %%
-model_hit_dat = rev.run("demo_game.etl.model.train", game="G1")
-retracked_dat = rev.run("demo_game.etl.track.tracks",
+model_hit_dat = rev.run("mnt.demo_game.etl.model.train", game="G1")
+retracked_dat = rev.run("mnt.demo_game.etl.track.tracks",
                          game="G1")                # a hit
 print("new subject:", retracked_dat.subject != tracks_dat.subject)  # → new subject: True
 print("same bytes:", retracked_dat.same_as(tracks_dat))     # → same bytes: True
@@ -434,7 +434,7 @@ print("db/version:", L.at()["db/repo/demo-game/demo_game.etl", "db/version"])
 
 # %%
 rev = L.at()
-tracks_g3_dat = rev.run("demo_game.etl.track.tracks",
+tracks_g3_dat = rev.run("mnt.demo_game.etl.track.tracks",
                          game="G3")    # re-derived: track.py moved
 fit_spec_record = {"main": "demo_game.etl.model.fit",
                    "stage": "model", "game": "G3", "epochs": 20}
@@ -525,7 +525,7 @@ with L.transaction(by="human:dan", why="train longer") as t:
     t["cfg/train", "epochs"] = "12"
 rev = L.at()
 for game in ("G1", "G2"):
-    rev.run("demo_game.etl.model.train", game=game)
+    rev.run("mnt.demo_game.etl.model.train", game=game)
 print("new dats:", len(L.at().refs(kind=StageDat, since=rev)))   # → new dats: 3: two
 #   models, and G2's tracks, re-derived since track.py moved
 
@@ -535,10 +535,10 @@ print("new dats:", len(L.at().refs(kind=StageDat, since=rev)))   # → new dats:
 
 # %%
 release_rev = L.at("0.1.0")
-old_model_dat = release_rev.run("demo_game.etl.model.train",
+old_model_dat = release_rev.run("mnt.demo_game.etl.model.train",
                                  game="G1")
 print("same subject:", old_model_dat.subject == model_dat.subject)  # → same subject: True: 8
-now_model_dat = L.at().run("demo_game.etl.model.train",
+now_model_dat = L.at().run("mnt.demo_game.etl.model.train",
                             game="G1")
 print("same subject:", now_model_dat.subject == old_model_dat.subject)  # → same subject: False
 print("diff:", old_model_dat.diff(now_model_dat))
@@ -556,7 +556,7 @@ print("diff:", old_model_dat.diff(now_model_dat))
 
 # %%
 try:
-    pre_edit_rev.run("demo_game.etl.model.train", game="G4",
+    pre_edit_rev.run("mnt.demo_game.etl.model.train", game="G4",
                       clean=True)
 except NotClean as e:
     print("NotClean:", e)       # → NotClean: … binds db/repo/demo-game
@@ -603,7 +603,7 @@ print("latest scores:", {game: model_ref.preds["metrics.score"]
 
 # %%
 rev = L.at()
-scores_table = rev.run("demo_game.etl.report.scores",
+scores_table = rev.run("mnt.demo_game.etl.report.scores",
                         gameset="normie")
 print("table:", repr(scores_table))       # → table: <Table #<8 hex>>
 q_items = [k for k in scores_table.dependencies if k.startswith("q:")]
@@ -623,10 +623,10 @@ print("models read:", len(json.loads(scores_table.dependencies[q_items[0]])))   
 with L.transaction(by="human:dan", why="G3 plays normie") as t:
     t["game/G3", "gameset"] = "normie"
 rev = L.at()
-rev.run("demo_game.etl.model.train", game="G3")  # re-derived
+rev.run("mnt.demo_game.etl.model.train", game="G3")  # re-derived
 rev = L.at()                                  # after its seal
 print("matches:", scores_table.matches(rev))              # → matches: False
-rescored_table = rev.run("demo_game.etl.report.scores",
+rescored_table = rev.run("mnt.demo_game.etl.report.scores",
                           gameset="normie")
 print("diff:", list(scores_table.diff(rescored_table)))
 # → diff: [the q: item, the fifth model's ref: item]: values loads each
@@ -663,7 +663,7 @@ print("config:", Path(".datconfig.yaml").read_text())   # → config: ledger: .d
 
 # %%
 try:
-    rev.run("demo_game.etl.stray.borrow", game="G1")
+    rev.run("mnt.demo_game.etl.stray.borrow", game="G1")
 except UnmountedImport as e:
     print("UnmountedImport:", e)     # → … demo_game.shots
 
@@ -673,7 +673,7 @@ except UnmountedImport as e:
 
 # %%
 try:
-    rev.run("demo_game.etl.stray.snoop", game="G1")
+    rev.run("mnt.demo_game.etl.stray.snoop", game="G1")
 except UntracedRead as e:
     print("UntracedRead:", e)        # → UntracedRead: /etc/hosts
 

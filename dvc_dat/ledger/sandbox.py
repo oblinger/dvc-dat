@@ -94,8 +94,8 @@ from .env import Env, current_env, platform_items
 from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
 from ..core import Dat, DatManager
-from .fn import (Fn, alias_reads, attach_run, dat_spec, drop_work, mounts_at, mounts_hash, path_template,
-                 run_trace, save_run, seal_entry, wrap_result)
+from .fn import (Fn, alias_reads, attach_run, dat_spec, drop_work, mounted_name, mounts_at, mounts_hash,
+                 path_template, run_trace, save_run, seal_entry, wrap_result)
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -457,7 +457,7 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
             sig, takes_path, template, returns = inspect.Signature(), True, None, ""
         check_mounted_imports(mounts, modname, attr_name)
         mods = module_shas(closure(mounts, [modname]))
-    return Fn(name=name, module=f[0],
+    return Fn(name=mounted_name(name), module=f[0],
               mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain), env.record),
               code=mounted_code(plain, env, m, modname, mods),
               _rev=rev, _takes_path=takes_path, _template=template, _returns=returns,
