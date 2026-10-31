@@ -71,6 +71,36 @@ def test_fork_of_dat_with_literal_brace_in_spec(world):
     assert child.get_spec()["note"] == "{literal}"
 
 
+# --- 1467 Q2 (A): a call-site argument is data; the run receives exactly what was passed ---
+def _kw(dat, *args, **kwargs):
+    return [list(args), kwargs]
+
+
+def test_run_kwarg_with_braces_kept_as_typed(world):
+    world.ns.mount(at="kw_fn", value=_kw)
+    assert world.run({"dat": {"do": "kw_fn"}}, pattern=r"\d{3}") == [[], {"pattern": r"\d{3}"}]
+
+
+def test_run_kwarg_with_escaped_braces_kept_as_typed(world):
+    world.ns.mount(at="kw_fn", value=_kw)
+    out = world.run({"dat": {"do": "kw_fn"}}, "{a}", fmt="{{x}}", when="{now}")
+    assert out == [["{a}"], {"fmt": "{{x}}", "when": "{now}"}]
+
+
+def test_a_spec_template_still_expands_beside_a_literal_kwarg(world):
+    world.ns.mount(at="kw_fn", value=_kw)
+    out = world.run({"dat": {"do": "kw_fn", "kwargs": {"y": "{{lit}}"}}}, pattern="{x}")
+    assert out == [[], {"y": "{lit}", "pattern": "{x}"}]
+
+
+def test_cli_kwarg_with_braces_kept_as_typed(world, capsys):
+    from dvc_dat.do import _cmd_do
+    world.ns.mount(at="kw_fn", value=_kw)
+    world.ns.mount(at="kw_tmpl", value={"dat": {"do": "kw_fn"}})
+    assert _cmd_do(["kw_tmpl", r"pattern=\d{3}"]) == 0
+    assert capsys.readouterr().out.strip() == str([[], {"pattern": r"\d{3}"}])
+
+
 # --- F5: a dat.base cycle is unbounded recursion, not a clear error -----------------------
 def test_base_cycle_is_a_clear_error(world):
     world.ns.mount(at="cyc_a", value={"dat": {"base": "cyc_b"}})

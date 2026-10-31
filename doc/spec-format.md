@@ -77,6 +77,8 @@ creates the dat and returns it.
 updated spec is written as the new dat's `_spec_.yaml`, and the new dat then
 runs with no call-site arguments. So the arguments of every run are on disk, in
 the spec of the dat that run produced.
+A call-site argument is literal data: its braces are escaped before the merge,
+so the `{…}` expansion at create leaves it exactly as passed.
 
 ## Custom fields
 

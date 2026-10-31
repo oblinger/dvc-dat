@@ -65,6 +65,8 @@ x train 'tags=["a","b"]' 'cfg={"a":1}' name='"7"' seed=null
 x train note=hello start=2026-01-01 note=
 ```
 
+A call-site argument is literal data: its braces are never expanded, so `x train 'pattern=\d{3}'` hands the run `\d{3}` and `fmt={{x}}` arrives as `{{x}}`. The spec's own `{…}` templates and `--set` values expand as before.
+
 A word is a keyword argument when it starts with `NAME=` (a Python identifier
 followed by `=`); anything else is a fixed argument. `--` ends the options, so
 every word after it is a fixed argument even when it looks like one of them:
