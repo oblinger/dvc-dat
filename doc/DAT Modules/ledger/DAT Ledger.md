@@ -537,6 +537,8 @@ The rows themselves: how triples are written, as revisions by transactions; how 
 ## Revisions and transactions
 Every fact is a quad `(rev, subject, predicate, object)`; rows are only ever appended, never updated or deleted, and `remove` appends a remove row.
 
+So on a ledger project `Dat.delete()`, and `Dat.create` with `target_exists: overwrite` onto an existing dat, are `TypeError`: nothing is reclaimed. To stop a dat being in the current view, retract its rows in a transaction (`del t[s]`); every earlier revision keeps them, and its folder stays as a local copy.
+
 | rev | subject | predicate | object |
 | --- | --- | --- | --- |
 | 1 | `game/G1` | `home` | `G4` |

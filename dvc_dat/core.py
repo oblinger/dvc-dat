@@ -823,6 +823,8 @@ class DatManager:
                 "`{...}` reference in a spec must resolve to something YAML can hold"
             ) from None
         if target_exists == "overwrite" and os.path.exists(path):
+            self._refuse_delete_on_a_ledger("Dat.create with target_exists: overwrite would delete "
+                                            f"{self._get_path_name(path)!r}")
             # wiped only now the new spec is in hand: a create that fails keeps the old dat
             self._dat_cache.pop(os.path.abspath(path), None)    # a held object is not the new dat
             if within:
@@ -1619,6 +1621,17 @@ class DatManager:
             else:
                 raise FileExistsError(f"DAT: Create failed, dir {expanded_path!r} exists")
 
+    def _refuse_delete_on_a_ledger(self, what: str) -> None:
+        """`TypeError` on a ledger project (its `ns` a `LedgerNamespace`, the test that refuses
+        `Dat.ns.mount`): a ledger only appends rows, so no delete can reclaim saved bytes (1467 Q15 (A))."""
+        from .ledger.namespace import LedgerNamespace
+
+        if isinstance(self.ns, LedgerNamespace):
+            raise TypeError(f"{what}, and a ledger never deletes. To stop a dat being in the current view, "
+                            "retract its rows in a transaction (`del t[s]`), which appends remove rows and "
+                            "keeps every earlier revision. The folder is a local copy, and the ledger does "
+                            "not reclaim its bytes.")
+
     def _refuse_wipe(self, path: str, template: str) -> None:
         """`overwrite` never deletes a folder holding the working directory, a dat folder, the
         artifact folder or the config's folder: a name such as `.` or `..` expands to one."""
@@ -1974,7 +1987,9 @@ class Dat(Value, metaclass=_DatMeta):
         return Dat.get(self._result, DAT_SHA256, None)
 
     def delete(self, *, must_exist=True) -> bool:
-        """Delete the folder and its contents."""
+        """Delete the folder and its contents; `TypeError` on a ledger project, which never deletes."""
+        self._world()._refuse_delete_on_a_ledger(
+            f"Dat.delete: {self.get_path_name()!r} is in a ledger project")
         self._world()._dat_cache.pop(self._path, None)
         self._world()._index_forget(self.get_path_name())
         try:
