@@ -958,14 +958,17 @@ class DatManager:
 
     def _locate(self, name: Union[str, Path]) -> Tuple[str, str]:
         """`("art", folder)` for an artifact, `("dat", name_or_path)` for a dat.
-        A URN not in the index is `KeyError`; an `art:` name with no artifact is
-        `FileNotFoundError`; a name both hold is `ValueError`."""
+        A URN not in the index is looked for in the dat folders, as `reindex()` does
+        (each saved dat's stored hash, nothing re-hashed); the first dat holding it
+        is keyed to it and found, so deleting one of two same-hash dats never strands
+        the other (1467 Q4 (A)). `KeyError` when none does; an `art:` name with no
+        artifact is `FileNotFoundError`; a name both hold is `ValueError`."""
         text = str(name)
         if text.startswith(URN_PREFIX):
-            entry = self._read_index().get(text)
+            entry = self._read_index().get(text) or self._rekey_dat(text)
             if entry is None:
-                raise KeyError(f"load: {text} is not in the index {self._index_file}; "
-                               "reindex() rebuilds it from the folders")
+                raise KeyError(f"load: {text} is not in the index {self._index_file}, and no saved dat "
+                               "holds it")
             if "art" in entry:
                 return "art", os.path.join(self._require_art_folder(text), entry["art"])
             return "dat", entry["dat"]
@@ -1083,16 +1086,33 @@ class DatManager:
                     entries.setdefault(sidecar["sha256"], {"art": rel})
                 for name in _sidecar_names(sidecar):
                     entries[name] = {"art": rel}
+        for root, sha256 in self._saved_dats():
+            entries.setdefault(sha256, {"dat": self._get_path_name(root)})
+        with self._index_update() as index:
+            index.clear()
+            index.update(entries)
+        return len(entries)
+
+    def _saved_dats(self) -> Iterator[Tuple[str, str]]:
+        """`(folder, sha256)` of every saved dat under the dat folders: a folder holding a
+        spec and a `_result_.yaml` that records its hash, read from that yaml, never re-hashed."""
         for folder in self._dat_folders:
             for root, _, files in os.walk(folder):
                 if RESULT_YAML in files and (SPEC_YAML in files or SPEC_JSON in files):
                     result = yaml.safe_load(Path(root, RESULT_YAML).read_text()) or {}
                     if (sha256 := Dat.get(result, DAT_SHA256, None)):
-                        entries.setdefault(sha256, {"dat": self._get_path_name(root)})
+                        yield root, sha256
+
+    def _rekey_dat(self, urn: str) -> Optional[Dict[str, str]]:
+        """The index entry of the first saved dat whose stored hash is `urn`, written to the
+        index, else None: the miss path of `_locate`."""
+        root = next((r for r, h in self._saved_dats() if h == urn), None)
+        if root is None:
+            return None
+        entry = {"dat": self._get_path_name(root)}
         with self._index_update() as index:
-            index.clear()
-            index.update(entries)
-        return len(entries)
+            index[urn] = entry
+        return entry
 
     def _check_urn(self, name: Union[str, Path], dat: "Dat") -> None:
         """A dat loaded by URN must still hash to it."""
@@ -1634,12 +1654,17 @@ class DatManager:
 
     def _refuse_wipe(self, path: str, template: str) -> None:
         """`overwrite` never deletes a folder holding the working directory, a dat folder, the
-        artifact folder or the config's folder: a name such as `.` or `..` expands to one."""
+        artifact folder or the config's folder: a name such as `.` or `..` expands to one. Nor
+        one outside every dat folder and the artifact folder: an absolute name (or a `..`) may
+        place a dat anywhere, but overwrite deletes only inside the store (1467 Q13 (A))."""
         real = os.path.realpath(path)
         for keep in (os.getcwd(), *self._dat_folders, self._art_folder, self._config_dir):
             if keep and _within(os.path.realpath(keep), real):
                 raise ValueError(f"dat.target_exists overwrite: {template!r} names {real!r}, which "
                                  f"holds {keep!r}; refusing to delete it")
+        if not any(f and _within(real, os.path.realpath(f)) for f in (*self._dat_folders, self._art_folder)):
+            raise ValueError(f"dat.target_exists overwrite: {template!r} names {real!r}, outside the dat "
+                             "folders and the art folder; refusing to delete it")
 
     def _resolve_path(self, name: Union[str, Path]) -> str:
         name = str(name)

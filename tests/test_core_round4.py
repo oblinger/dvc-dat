@@ -304,3 +304,38 @@ def test_an_array_mounted_as_a_value_loads(world):
     np = pytest.importorskip("numpy")
     world.ns.mount(at="arr", value=np.arange(3))
     assert list(world.ns.load("arr")) == [0, 1, 2]
+
+
+# --- 1467 Q4 (A): a URN whose index key a same-hash twin's delete dropped is found by a walk on the miss ------
+def test_urn_survives_deleting_a_same_hash_twin(world):
+    world.ns.mount(at="seal_fn", value=_seal)
+    a = world.run({"dat": {"do": "seal_fn", "name": "twin_a"}, "k": 1})
+    b = world.run({"dat": {"do": "seal_fn", "name": "twin_b"}, "k": 1})
+    urn = a._sha256()
+    assert urn == b._sha256()                       # the hash leaves out dat.name
+    b.delete()
+    assert urn not in world._read_index()           # the later twin held the key; its delete dropped it
+    assert world.load(urn).get_path() == a.get_path()
+    assert world._read_index()[urn] == {"dat": "twin_a"}    # re-keyed: the next load is the index's
+    a.delete()
+    with pytest.raises(KeyError, match="no saved dat holds it"):
+        world.load(urn)
+
+
+# --- 1467 Q13 (A): overwrite deletes only inside dat_folders or the art_folder --------------------------------
+def test_overwrite_outside_the_dat_folders_is_refused_and_deletes_nothing(world, tmp_path):
+    outside = tmp_path / "elsewhere" / "exp"
+    outside.mkdir(parents=True)
+    (outside / "precious.txt").write_text("only copy")
+    for name in (str(outside), "../elsewhere/exp"):
+        with pytest.raises(ValueError, match="outside the dat folders and the art folder"):
+            world.create({"dat": {"name": name, "target_exists": "overwrite"}})
+        assert (outside / "precious.txt").read_text() == "only copy"
+
+
+def test_overwrite_inside_the_dat_folders_still_overwrites(world, tmp_path):
+    first = world.create({"dat": {"name": "ow_in", "target_exists": "overwrite"}, "v": 1})
+    Path(first.get_path(), "stale.txt").write_text("old")
+    absolute = str(tmp_path / "data" / "ow_in")
+    second = world.create({"dat": {"name": absolute, "target_exists": "overwrite"}, "v": 2})
+    assert second.get_spec()["v"] == 2 and not Path(second.get_path(), "stale.txt").exists()

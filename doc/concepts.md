@@ -283,7 +283,7 @@ URN. The store keeps one index file, `_index_.json` in the artifact folder
 (`index:` in `.datconfig.yaml` moves it), keyed by every artifact name and
 every `sha256:` URN — an artifact's, and each saved dat's current hash. It is
 written through a lock and a rename, so it is never torn; `m.reindex()`
-rebuilds it from the folders. A named artifact's folder is found without it,
+rebuilds it from the folders. Two dats with equal content share one hash and the index keys it to one of them; a URN the index misses is looked for in the dat folders (each saved dat's stored hash, nothing re-hashed) and re-keyed to the first dat holding it, so deleting one twin never strands the other, and only a URN no saved dat holds is `KeyError`. A named artifact's folder is found without it,
 so a store written before 2.14 loads by name as it stands, and `art:` names
 written then still load, the prefix stripped.
 
