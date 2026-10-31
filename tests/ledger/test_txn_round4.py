@@ -148,6 +148,47 @@ def test_the_clock_takes_the_highest_version_one_body_ran(L):
     assert t.rev["db/repo/testrepo/pkg", "db/version"] == "1.1.0"
 
 
+# --- 1467 Q3 (A): an unlocked transaction re-checks the clock and a value's names at commit, in the lock ---
+def test_an_unlocked_clock_never_moves_back_past_a_commit_made_meanwhile(L):
+    subj = "db/repo/testrepo/pkg"
+    write(L, (subj, "db/version", "1.0.0"))
+    with L.transaction(by="a") as t:                        # unlocked: the snapshot is rev 1
+        write(L, (subj, "db/version", "1.2.0"))              # another writer commits meanwhile
+        t._advance_clock("testrepo", "pkg", "1.1.0", "abc1234")
+    assert L.at()[subj, "db/version"] == "1.2.0"
+    assert not t.rev.all(subj, "db/version", since=L.at(t.rev.id - 1))     # the add was dropped
+
+
+def test_an_unlocked_clock_equal_to_a_commit_made_meanwhile_adds_nothing(L):
+    subj = "db/repo/testrepo/pkg"
+    write(L, (subj, "db/version", "1.0.0"))
+    with L.transaction(by="a") as t:
+        write(L, (subj, "db/version", "1.1.0"))
+        t._advance_clock("testrepo", "pkg", "1.1.0", "abc1234")
+    assert not t.rev.all(subj, "db/version", since=L.at(t.rev.id - 1))
+
+
+def test_an_unlocked_clock_still_moves_forward(L):
+    subj = "db/repo/testrepo/pkg"
+    write(L, (subj, "db/version", "1.0.0"))
+    with L.transaction(by="a") as t:
+        write(L, (subj, "db/version", "1.1.0"))
+        t._advance_clock("testrepo", "pkg", "1.2.0", "abc1234")
+    assert L.at()[subj, "db/version"] == "1.2.0"
+
+
+def test_unlocked_naming_race_leaves_one_name(L):
+    from dvc_dat.ledger.rev import Ref
+
+    with L.transaction(by="t") as t:
+        Value.Blob({"k": 1}).seal(t, name="orig")
+    with L.transaction(by="A") as ta:                       # unlocked, snapshot rev 1
+        with L.transaction(by="B") as tb:                   # another writer renames it meanwhile
+            Value.Blob({"k": 1}).seal(tb, name="b")
+        Value.Blob({"k": 1}).seal(ta, name="a")
+    assert sorted(Ref(L.at(), "a").aliases) == ["a"]
+
+
 def test_create_refuses_a_config_that_is_not_a_mapping(tmp_path, monkeypatch):
     from dvc_dat.ledger import LedgerError
 

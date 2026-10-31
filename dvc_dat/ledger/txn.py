@@ -179,6 +179,7 @@ class Transaction:
         self._pending: Dict[int, Tuple[Value, str]] = {}
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
         self._codes: set = set()
+        self._namings: List[_Op] = []         # the name adds of _name_value: one name, re-checked at commit
         self._clocks: Dict[Tuple[str, str], Tuple[int, int, int]] = {}   # the highest version seen
         self._commits: Dict[str, str] = {}
         #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
@@ -430,6 +431,14 @@ class Transaction:
                     Kept().drop(entry)          # saved: the seal record (and its kept bytes' claim) goes
 
     def _write(self, w: Any) -> int:
+        """Write this transaction's rows as revision ``rev``, inside the write lock.
+
+        The head ``before`` (``rev - 1``) is read here, so what an unlocked transaction decided at open from its
+        snapshot is re-checked against what other writers committed meanwhile (1467 Q3 (A)): a value sealed
+        meanwhile is not sealed again; a clock add (``db/repo/<repo>/<package> db/version``) at or below the
+        head's version is dropped, so the clock never moves back; a naming's name add (``db/alias`` from
+        ``_name_value``) retracts every other name the head holds for that value, so a value has one name. Only a
+        commit carrying such ops pays: one row lookup each."""
         from .rev import Rev
 
         rev = w.next_rev()
@@ -439,11 +448,15 @@ class Transaction:
             before = Rev(self._ledger, rev - 1)
             dropped = {op.seal_of for op in self._ops
                        if op.seal_of and op.p == "db/value" and before._held(op.seal_of, "db/value")}
+            stale = {id(op) for op in self._ops if self._stale_clock(before, op)}
+            retract = self._other_names(before)
         rows: List[Tuple[str, str, str, bool]] = []
         kept: List[_Op] = []
-        for op in self._ops:
+        for op in self._ops + retract:
             if op.seal_of in dropped:
                 continue            # sealed meanwhile by another writer: idempotent
+            if id(op) in stale:
+                continue            # the clock moved meanwhile to this version or past it: never back
             s = txs if op.s == self.tx else op.s
             o = "str:" + txs if op.o == "str:" + self.tx else op.o
             rows.append((s, op.p, o, op.added))
@@ -467,6 +480,31 @@ class Transaction:
             if op.added and op.p == "db/index" and op.s.startswith("db/pred/") and op.o == "str:true":
                 w.create_index(op.s[len("db/pred/"):])
         return rev
+
+    @staticmethod
+    def _stale_clock(before: "Rev", op: _Op) -> bool:
+        """``op`` adds a package clock the head ``before`` already holds at its version or higher."""
+        if not (op.added and op.p == "db/version" and op.s.startswith("db/repo/")):
+            return False
+        held = before._held(op.s, "db/version")
+        head = _semver(show(held[0].obj)) if held else None
+        seen = _semver(show(op.o))
+        return head is not None and seen is not None and head >= seen
+
+    def _other_names(self, before: "Rev") -> List[_Op]:
+        """The retractions a naming (``_name_value``: a seal's ``name=``, ``v.name = ...``) needs at commit: every
+        other name the head ``before`` holds for the value it names, unless this transaction already retracts it or
+        names the value by it. A bare ``t.add(name, "db/alias", ...)`` adds a name and retracts none, as at open."""
+        out: List[_Op] = []
+        live = {id(o) for o in self._ops} if self._namings else set()
+        for op in self._namings:
+            if id(op) not in live:
+                continue            # dropped from the body (a refused record write)
+            mine = {(o.s, o.added) for o in self._ops + out if o.p == "db/alias" and o.o == op.o}
+            for other in before._aliases_of(show(op.o)):
+                if other != op.s and (other, False) not in mine and (other, True) not in mine:
+                    out.append(_Op(other, "db/alias", op.o, False))
+        return out
 
     def _validate(self, R: "Rev", ops: List[_Op]) -> None:
         from .rev import Ref, type_ok
@@ -839,12 +877,15 @@ class Transaction:
 
     def _name_value(self, subject: str, name: Optional[str]) -> None:
         """Name ``subject`` (Q36, A70): ``name db/alias subject``, every other name of it retracted, so a
-        value has one name; ``None`` unnames it."""
+        value has one name; ``None`` unnames it. The other names are read at open; ``_write`` retracts any added
+        meanwhile."""
         for other in self._snapshot()._aliases_of(subject):
             if other != name:
                 self._ops.append(_Op(other, "db/alias", "str:" + subject, False))
         if name is not None:
-            self._ops.append(_Op(name, "db/alias", "str:" + subject, True))
+            op = _Op(name, "db/alias", "str:" + subject, True)
+            self._ops.append(op)
+            self._namings.append(op)
 
     def _ensure_code(self, subject: str, rows: Sequence[Tuple[str, str]]) -> None:
         """Write the ``db/code/<hash 16>`` item once (DAT 1037): many results, and many functions, share it."""
@@ -864,9 +905,10 @@ class Transaction:
         the source).
 
         Only a plain ``MAJOR.MINOR.PATCH`` counts: a dirty checkout's ``<commit 8>+dirty``, a bare commit
-        or a ``#hash`` moves neither. Read through the snapshot at open. The version, per package (the
-        highest this body ran): absent or lower, this transaction adds it; equal, nothing; higher on the row, a warning and nothing (the
-        clock never moves back). The commit: added whenever it differs from the row."""
+        or a ``#hash`` moves neither. Read through the snapshot at open, and re-checked at commit in the write
+        lock (``_write``). The version, per package (the highest this body ran): absent or lower, this transaction
+        adds it; equal, nothing; higher on the row, a warning and nothing (the clock never moves back). The commit:
+        added whenever it differs from the row."""
         seen = _semver(version)
         if seen is None:
             return
