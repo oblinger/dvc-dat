@@ -59,11 +59,12 @@ def show(name):
 
 
 def show_file(path):
-    """A file's contents under its path, each line behind `  | `."""
+    """A file's contents under its path, each line behind `  | `, then a blank line."""
     path = Path(path)
     print(f"file: {path.relative_to(scratch_path)}")
     for line in path.read_text().splitlines():
         print(f"  | {line}")
+    print()
 
 
 # %% [markdown]
@@ -523,7 +524,6 @@ print("its name:", ns.name_of(dist_fn))     # → its name: math.dist
 # %%
 show_file(repo_path / "geometry/__init__.py")
 show_file(repo_path / "geometry/main.py")
-print()
 distance_fn = L.at().ns.load("geometry.main.distance")
 print("fn:", repr(distance_fn), " code:", repr(distance_fn.code))
 # → fn: <Fn geometry.main.distance@5.3.9>  code: <Code geometry@5.3.9>
