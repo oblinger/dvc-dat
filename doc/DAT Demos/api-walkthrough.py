@@ -211,27 +211,35 @@ with L.transaction(by="human:dan") as t:
 
 # %% [markdown]
 # ## Naming a revision
+#
+# A revision is named by a row on the ledger's own subject, `db`.
+
+# %% [markdown]
+# ### By version
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.add("db", "db/version", "0.1.0")            # a version: a row on the ledger's own subject, db
-version_rev = t.rev
-with L.transaction(by="human:dan") as t:
-    t.add("db", "db/tag", "2026-Q4-official")     # a tag: another row on db
-tag_rev = t.rev
-print(f"version 0.1.0 was written at rev {version_rev.id}; L.at('0.1.0') is rev {L.at('0.1.0').id}")
-print(f"tag 2026-Q4-official was written at rev {tag_rev.id}; L.at('2026-Q4-official') is rev {L.at('2026-Q4-official').id}")
-print(f"court at L.at('0.1.0'): {L.at('0.1.0')['game/G1', 'court']}")
-# version 0.1.0 was written at rev 8; L.at('0.1.0') is rev 8
-# tag 2026-Q4-official was written at rev 9; L.at('2026-Q4-official') is rev 9
-# court at L.at('0.1.0'): west
+    t.add("db", "db/version", "0.1.0")            # the ledger's version: a row on db
+print(f"written at rev {t.rev.id}; L.at('0.1.0') is rev {L.at('0.1.0').id}, court {L.at('0.1.0')['game/G1', 'court']}")
+# written at rev 8; L.at('0.1.0') is rev 8, court west
 
 # %% [markdown]
-# A revision is named by a row on the ledger's own subject `db`:
-# `(db, db/version, M.m.p)` or `(db, db/tag, name)` names the
-# revision its transaction commits, and `L.at("0.1.0")` or
-# `L.at(name)` reads through the row to that revision. `bump`, under
-# "Locking the ledger", advances the version row for you.
+# `(db, db/version, M.m.p)` names the revision its transaction
+# commits, and `L.at("M.m.p")` reads through the row to it. `bump`,
+# under "Locking the ledger", advances the version row for you.
+
+# %% [markdown]
+# ### By tag
+
+# %%
+with L.transaction(by="human:dan") as t:
+    t.add("db", "db/tag", "2026-Q4-official")     # a tag: another row on db
+print(f"written at rev {t.rev.id}; L.at('2026-Q4-official') is rev {L.at('2026-Q4-official').id}")
+# written at rev 9; L.at('2026-Q4-official') is rev 9
+
+# %% [markdown]
+# `(db, db/tag, name)` names the revision the same way, and
+# `L.at(name)` is that revision.
 
 # %% [markdown]
 # ## Typing a predicate
