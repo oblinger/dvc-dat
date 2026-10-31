@@ -37,6 +37,12 @@ class ConfinedNetwork(LedgerError, PermissionError):
     """A sandboxed function resolved a host name or opened a network connection."""
 
 
+class ConfinedProcess(LedgerError, PermissionError):
+    """A sandboxed function created a process (``subprocess``, ``os.system``, ``os.exec*``, ``os.posix_spawn``,
+    ``os.fork``): what a child process reads and writes is beyond the audit hook. A body that needs a tool runs
+    unsandboxed (base mode) (SVP 1467 Q8 (A))."""
+
+
 class LockTimeout(LedgerError, TimeoutError):
     """A ``lock=`` body ran past its limit, or the lock was not had within it; nothing written."""
 

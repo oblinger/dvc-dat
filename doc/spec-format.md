@@ -59,7 +59,7 @@ is caught (see **References** below).
 | `increment` | Count up (`_2`, `_3`, …) until the path is free |
 
 A template with `{unique}` in its `dat.name` increments whether or not
-`increment` is set. `overwrite` is refused on `{cwd}`.
+`increment` is set. `overwrite` is refused on `{cwd}`, and deletes only inside a dat folder or the art folder: an absolute name (or a `..`) outside them with `overwrite` is `ValueError`, raised before anything is removed.
 
 ## Running a dat
 

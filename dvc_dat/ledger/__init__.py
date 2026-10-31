@@ -19,7 +19,7 @@ The environment is found by discovery; ``set_env_provider``, ``Env`` and
 
 from .code import Code
 from .env import Checkout, Env, set_env_provider  # noqa: F401  (the test seam, importable by name)
-from .errors import (AliasLoop, ConfinedNetwork, ConfinedWrite, Exists, LedgerError, LockTimeout, Multiple, NotClean, NotEvaluated, SealBroken, Undeclared, Unlocked,
+from .errors import (AliasLoop, ConfinedNetwork, ConfinedProcess, ConfinedWrite, Exists, LedgerError, LockTimeout, Multiple, NotClean, NotEvaluated, SealBroken, Undeclared, Unlocked,
                      Unindexed,
                      UnmountedImport, UntracedRead)
 from .fn import Fn, ledger_fn
@@ -35,5 +35,5 @@ from ..core import Dat                  # one class: a dat is a Value (DAT 1038)
 
 __all__ = ["Ledger", "ledgers", "L", "Rev", "Ref", "Row", "Transaction", "Value", "Dat", "Fn", "Code", "LedgerNamespace",
            "ledger_fn", "ledger_class", "register_policy", "bump", "bump_source", "SourceBump", "attr", "LedgerError", "Multiple", "NotEvaluated", "NotClean",
-           "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
+           "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "ConfinedProcess", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
            "AliasLoop", "SealBroken"]

@@ -7,7 +7,7 @@ import textwrap
 import backends
 import pytest
 
-from dvc_dat.ledger import (ConfinedNetwork, ConfinedWrite, LedgerError, NotClean, NotEvaluated, UnmountedImport,
+from dvc_dat.ledger import (ConfinedNetwork, ConfinedProcess, ConfinedWrite, LedgerError, NotClean, NotEvaluated, UnmountedImport,
                              UntracedRead, set_env_provider)
 from dvc_dat.ledger import sandbox
 from dvc_dat.ledger.codec import sha256
@@ -352,6 +352,37 @@ PKG = {
         def f(rev, *, game: str) -> dict:
             return {}
     '''),
+    "sbx/stage/procs.py": textwrap.dedent('''
+        import os
+        import subprocess
+        from dvc_dat.ledger import ledger_fn
+
+        @ledger_fn
+        def shell(rev, *, how: str, out: str) -> dict:
+            cmd = f"cat /etc/hosts > {out}"
+            if how == "run":
+                subprocess.run(["sh", "-c", cmd], check=True)
+            elif how == "system":
+                os.system(cmd)
+            elif how == "posix_spawn":
+                os.waitpid(os.posix_spawn("/bin/sh", ["sh", "-c", cmd], dict(os.environ)), 0)
+            elif how == "fork":
+                pid = os.fork()
+                if pid == 0:
+                    os._exit(0)
+                os.waitpid(pid, 0)
+            elif how == "exec":
+                os.execv("/bin/sh", ["sh", "-c", cmd])
+            return {"ran": how}
+    '''),
+    "sbx/tools.py": textwrap.dedent('''
+        import subprocess
+        from dvc_dat.ledger import ledger_fn
+
+        @ledger_fn
+        def echo(rev, *, text: str) -> dict:
+            return {"out": subprocess.run(["echo", text], capture_output=True, text=True, check=True).stdout}
+    '''),
     "sbx/stage/net.py": textwrap.dedent('''
         import socket
         from dvc_dat.ledger import ledger_fn
@@ -682,6 +713,33 @@ def test_network_refused(sbx):
     with pytest.raises(ConfinedNetwork):
         L.at().run("mnt.sbx.stage.net.datagram", port=9)
     assert L.at().run("mnt.sbx.stage.net.pair", text="hi").obj == {"echo": "hi"}   # a local socket is not the network
+
+
+# --- 1467 Q8 (A): a sandboxed body creates no process; a body that needs a tool runs unsandboxed ---------------
+PROC_HOWS = {"run": "subprocess.Popen", "system": "os.system", "posix_spawn": "os.posix_spawn", "fork": "os.fork",
+             "exec": "os.exec"}
+
+
+def test_a_sandboxed_body_creates_no_process(sbx, tmp_path):
+    L, _repo = sbx
+    assert issubclass(ConfinedProcess, PermissionError) and issubclass(ConfinedProcess, LedgerError)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    for how, event in PROC_HOWS.items():
+        out = outside / f"{how}.txt"
+        with pytest.raises(ConfinedProcess, match=f"{event}: a sandboxed function creates no process"):
+            L.at().run("mnt.sbx.stage.procs.shell", how=how, out=str(out))
+        assert not out.exists()
+        assert L.at().run("mnt.sbx.stage.procs.shell", how=how, out=str(out), seal="get") is None   # nothing sealed
+    assert list(outside.iterdir()) == []
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1").obj == {"n": 6}   # the next call's fork is the server's
+
+
+def test_an_unsandboxed_body_may_run_a_tool(sbx):
+    L, _repo = sbx
+    assert not L.at().ns.load("sbx.tools.echo").code.sandboxed
+    v = L.at().run("sbx.tools.echo", text="hi")
+    assert v.obj == {"out": "hi\n"} and L.at()[v.subject, "db/provenance"] == "eval:unsandboxed"
 
 
 def test_the_ledgers_own_endpoint_is_allowed():

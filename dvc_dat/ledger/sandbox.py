@@ -32,6 +32,9 @@ body's ``path`` folder, the dat being produced
 writes inside a body (a nested eval's seal, a dat materialised into the art
 store) run ``unguarded``. The same hook refuses a host-name lookup or an internet
 send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
+And it refuses process creation (``ConfinedProcess``: ``subprocess``, ``os.system``,
+``os.exec*``, ``os.posix_spawn``, ``os.fork``), whose reads and writes it could not see; a body
+that needs a tool runs unsandboxed (base mode). The worker's own fork happens in the server, outside the guard.
 A nested eval under the running body's own mount runs in-process and its loads count toward its own
 entry (Q37 (ii)); one under another mount runs in a fresh child of the server, asked for up the child's
 channel. A nested unsandboxed (base-mode) call is refused, ``NotEvaluated`` naming the mount and the
@@ -91,7 +94,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tupl
 
 from .codec import sha256
 from .env import Env, current_env, platform_items
-from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
+from .errors import ConfinedNetwork, ConfinedProcess, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
 from ..core import Dat, DatManager
 from .fn import (Fn, alias_reads, attach_run, dat_spec, drop_work, mounted_name, mounts_at, mounts_hash,
@@ -827,6 +830,9 @@ def _network(event: str, args: Any) -> None:
         raise ConfinedNetwork(f"{addr[0]}:{addr[1]}: a sandboxed function does not use the network")
 
 
+# process creation: what a child reads and writes is beyond this hook (1467 Q8 (A)). The worker's own fork is the
+# server's, outside the guard.
+_PROCESS = frozenset({"subprocess.Popen", "os.exec", "os.posix_spawn", "os.fork", "os.system"})
 _OS_READS = ("os.listdir", "os.scandir", "os.listxattr", "os.getxattr")
 _DEV_NULL = [os.path.realpath(os.devnull)]
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC
@@ -884,6 +890,9 @@ def _check_write(p: Optional[str]) -> None:
 def _audit(event: str, args: Any) -> None:
     if not STATE.guard:
         return
+    if event in _PROCESS:
+        raise ConfinedProcess(f"{event}: a sandboxed function creates no process; one that needs a tool runs "
+                              "unsandboxed")
     if event in _NET_NAME or event in _NET_SEND:
         _network(event, args)
         return
