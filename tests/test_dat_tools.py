@@ -13,8 +13,9 @@ from dvc_dat.dat_tools import to_excel, Cube, from_dat
 
 ns.mount(at="test_dat_tools", module="tests.test_dat_tools")
 
-TMP_PATH = "/tmp/job_test"
-TMP_PATH2 = "/tmp/job_test2"
+# inside the test world's dat folder: `overwrite` deletes only there or in the art folder (1467 Q13 (A))
+TMP_PATH = os.path.join(Dat.manager._dat_folders[0], "test_dats", "job_test")
+TMP_PATH2 = os.path.join(Dat.manager._dat_folders[0], "test_dats", "job_test2")
 
 
 def run_capture(line: str) -> str:

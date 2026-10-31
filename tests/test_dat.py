@@ -7,8 +7,9 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from dvc_dat import Dat, DatContainer  # noqa
 
 
-TMP_PATH = "/tmp/job_test"
-TMP_PATH2 = "/tmp/job_test2"
+# inside the test world's dat folder: `overwrite` deletes only there or in the art folder (1467 Q13 (A))
+TMP_PATH = os.path.join(Dat.manager._dat_folders[0], "test_dats", "job_test")
+TMP_PATH2 = os.path.join(Dat.manager._dat_folders[0], "test_dats", "job_test2")
 
 
 @pytest.fixture
