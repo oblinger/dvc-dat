@@ -58,6 +58,14 @@ def show(name):
     display(SVG(filename=str(demos_path / f"{name}.svg")))
 
 
+def show_file(path):
+    """A file's contents under its path, each line behind `  | `."""
+    path = Path(path)
+    print(f"file: {path.relative_to(scratch_path)}")
+    for line in path.read_text().splitlines():
+        print(f"  | {line}")
+
+
 # %% [markdown]
 # # Triples
 #
@@ -275,7 +283,7 @@ except TypeError as e:
 
 # %%
 with L.transaction(by="human:dan", lock=10) as t:
-    g2 = t["game/G2"]                              # the record as it stands now
+    g2 = t["game/G2"]                              # the record immediately before this transaction
     t["game/G2"] = {**g2, "officials": g2["officials"] + ["vance"]}   # one more, written back
 print("officials:", t.rev.all("game/G2", "officials"))
 
@@ -513,6 +521,9 @@ print("its name:", ns.name_of(dist_fn))     # → its name: math.dist
 # ### Accessing and using Python functions
 
 # %%
+show_file(repo_path / "geometry/__init__.py")
+show_file(repo_path / "geometry/main.py")
+print()
 distance_fn = L.at().ns.load("geometry.main.distance")
 print("fn:", repr(distance_fn), " code:", repr(distance_fn.code))
 # → fn: <Fn geometry.main.distance@5.3.9>  code: <Code geometry@5.3.9>
@@ -553,6 +564,8 @@ with L.transaction(by="human:dan") as t:
     t.ns.mount("plane", root="plane", repo="geometry-app")   # the two db/mount/plane rows
 print("mounts:", L.at().ns.mounts())
 # → mounts: {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
+show_file(repo_path / "plane/__init__.py")
+show_file(repo_path / "plane/measure.py")
 
 # %%
 length_fn = L.at().ns.load("plane.measure.length")
