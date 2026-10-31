@@ -130,7 +130,7 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
     The folder relative to the dat folder holding it — the dat's name; the absolute path when it lies outside every dat folder. ^get-path-name
 
 **delete**`(*, must_exist: bool = True) -> bool`
-    Remove the folder; `True` when removed. ^delete
+    Remove the folder; `True` when removed. On a ledger project it is `TypeError`, as is `target_exists: overwrite` onto an existing dat: retract the dat's rows (`del t[s]`) instead ([DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md#Revisions%20and%20transactions)). ^delete
 
 **copy**`(new_path: str | Path, *, run: bool = True) -> Dat`
     The same spec in a new folder, loaded, same class; `run=False` leaves `run/` behind, which changes nothing about the copy's hash. ^copy
