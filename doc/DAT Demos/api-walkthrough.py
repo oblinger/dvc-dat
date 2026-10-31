@@ -29,7 +29,7 @@ os.chdir(demos_path)
 scratch_path = demos_path / "scratch/api-walkthrough"
 shutil.rmtree(scratch_path, ignore_errors=True)   # a re-run starts clean
 for module_name in [m for m in sys.modules
-                    if m.split(".")[0] in ("geometry", "plane", "clips", "mymodule")]:
+                    if m.split(".")[0] in ("geometry", "plane", "mymodule")]:
     del sys.modules[module_name]                  # the modules the parts write into scratch
 sys.path[:] = [p for p in sys.path if not p.startswith(str(scratch_path))]
 scratch_path.mkdir(parents=True)
@@ -467,6 +467,8 @@ from dvc_dat.ledger import ledger_fn
 
 @ledger_fn
 def distance(rev, a, b) -> float:
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    print(f"ran: sqrt({dx}² + {dy}²) = {math.dist(a, b)}")
     return math.dist(a, b)
 ''')
 
@@ -623,16 +625,16 @@ print("old result's code:", segment_value.dependencies["code"], " fn:", segment_
 #
 # `rev.run(name, **keys)` is a lookup and a call, traced: the result
 # records what it depended on, and is remembered, so asking again is
-# answered from the ledger.
+# answered from the ledger. `distance` prints a `ran:` line when it
+# runs: once below.
 
 # %%
 far_value = L.at().run("geometry.main.distance", a=(0, 0), b=(6, 8))
-print("result:", far_value.obj)                       # → 10.0
-top_id = L.at().id
+# → ran: sqrt(6² + 8²) = 10.0
+print("result:", far_value.obj)                       # → result: 10.0
 
-again_value = L.at().run("geometry.main.distance", a=(0, 0), b=(6, 8))
-print("same value:", again_value.subject == far_value.subject, " nothing written:",
-      L.at().id == top_id)                 # → True True: a hit, nothing written
+again_value = L.at().run("geometry.main.distance", a=(0, 0), b=(6, 8))   # no ran: line: a hit
+print("same value:", again_value.subject == far_value.subject)           # → same value: True
 
 # %% [markdown]
 # ### Splitting the run method into discrete actions
@@ -666,69 +668,24 @@ print("hit:", kept_value.subject == draft_value.subject)            # → True: 
 # name and value it read. That record is its provenance.
 
 # %% [markdown]
-# ### When a name is pointed to a new value, a result goes stale
-#
-# A result records every name it read and the value it pointed at.
-# Seal a new video under the same name and the name is pointed to
-# it; the old result no longer matches the ledger, so `run`
-# recomputes.
-
-# %%
-(repo_path / "clips.py").write_text('''\
-from dvc_dat.ledger import ledger_fn
-from demo_game.game import Video
-
-@ledger_fn
-def clip(rev, *, video: str, start: int, end: int) -> Video:
-    return Video(rev.load(video).frames[start:end])
-''')
-
-git_commit("clips", cwd=repo_path)
-
-# Computing a Value on the Ledger
-opening_clip = L.at().run("clips.clip", video="video/G1", start=0, end=8)
-print("opening clip:", opening_clip.frames)                 # → b'G1 wide '
-
-retake_video = Video(b"G1 retake, 9100 frames")
-retake_video.preds.update(game="G1", camera="wide")
-with L.transaction(by="human:dan", why="the retake") as t:
-    retake_video.seal(t, name="video/G1")   # video/G1 is pointed to the retake
-rev4 = L.at()
-print("opening clip still holds:", opening_clip.matches(rev4))          # → False: video/G1 points to the retake
-retake_clip = rev4.run("clips.clip", video="video/G1", start=0, end=8)
-print("retake clip:", retake_clip.frames)                  # → b'G1 retak'
-print("first video, by hash:", rev4.load(video_subject).frames)     # → b'G1 wide camera, 9000 frames'
-
-# %% [markdown]
-# A value never changes; a name is pointed to a progression of new
-# values. The old video and the old clip stay, found by their hashes.
-
-# %% [markdown]
 # ### What a result depends on
 
 # %%
-for dep_key, dep_value in sorted(retake_clip.dependencies.items()):
+for dep_key, dep_value in sorted(far_value.dependencies.items()):
     print(f"{dep_key[:28]:30}= {dep_value[:56]}")
 
 # %% [markdown]
 # - `code/geometry-app`: the commit of the repo `geometry-app` the function
 #   ran at.
 # - `code`: the snapshot of the code the function ran from, by its
-#   subject; here the package `clips` at its version, as for the
+#   subject; here the package `geometry` at its version, as for the
 #   sandbox above.
 # - `fn`: the function's dotted name inside that snapshot.
-# - `platform`: the operating system, CPU and Python version it ran
-#   on, a tag, not a file.
-# - `ref:…`: the video bytes it loaded.
-# - `video/G1 db/alias`: the value the name `video/G1` pointed at.
+# - `platform`, `platform/record`: the operating system, CPU and
+#   Python version it ran on, as a tag and as a record, not a file.
 #
-# That last row is how `matches` knew the opening clip was stale: it
-# names the first video, and the name now points to the retake.
-
-# %%
-first_hash = rev4.load(video_subject).hash
-print("opening clip read the first video:", opening_clip.dependencies["video/G1 db/alias"].endswith(first_hash))   # → True: the first video
-print("retake clip read the retake:", retake_clip.dependencies["video/G1 db/alias"].endswith(retake_video.hash))   # → True: the retake
+# A name the function read, and the value it pointed at, is a row
+# here too; `matches(rev)` is whether every row still holds.
 
 # %% [markdown]
 # ### Sealing a value by hand
