@@ -41,6 +41,24 @@ def test_mount_is_refused_off_a_transaction_and_without_its_rows(L):
     assert L.at().ns.mounts() == {}
 
 
+def test_a_ledger_mount_at_starting_mnt_is_refused(L):
+    with L.transaction(by="t") as t:
+        for at in ("mnt", "mnt.x", "mnt.plane.measure"):
+            with pytest.raises(ValueError, match="resolver adds mnt"):
+                t.ns.mount(at, root="x", repo="r")
+        t.ns.mount("mntx", root="x", repo="r")                  # only the whole first segment is reserved
+    assert L.at().ns.mounts() == {"mntx": {"root": "x", "repo": "r"}}
+
+
+def test_mnt_alone_or_under_no_mount_is_an_import_error_naming_the_mounts(L):
+    with L.transaction(by="t") as t:
+        t.ns.mount("pkg", root="pkg", repo="r")
+    with pytest.raises(ImportError, match="mnt.pkg"):
+        L.at().ns.load("mnt")
+    with pytest.raises(ImportError, match="no ledger mount answers to 'other.x'"):
+        L.at().ns.load("mnt.other.x")
+
+
 def test_plain_ns_mounts_is_the_mount_table(tmp_path):
     (tmp_path / "data").mkdir()
     (tmp_path / "cfg.yaml").write_text("a: 1\n")

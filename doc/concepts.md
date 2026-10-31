@@ -30,7 +30,7 @@ dat = Dat.load("runs/2026-09/exp")
 **Dotted names** (`catalog.experiment`, `os.path.join`) name source code:
 templates, functions, constants. `ns.load` resolves them — first against the
 names the program mounted with `ns.mount(...)` (in code; the config's `mounts:`
-key is the ledger's, asserted by `Ledger()` as `db/mount/<prefix>` rows), then by import: the longest importable
+key is the ledger's, asserted by `Ledger()` as `db/mount/<prefix>` rows, whose names load as `mnt.<prefix>...`), then by import: the longest importable
 prefix of the name is imported and the rest is `getattr`-ed. So any importable
 object has a name whether or not it was mounted, and `ns.name_of(obj)` gives the
 name that loads back to it.

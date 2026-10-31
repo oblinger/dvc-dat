@@ -21,7 +21,7 @@ def daily_comfort(rev, *, city: str) -> Days:
 @ledger_fn
 def city_comfort(rev, *, city: str, start: str, end: str) -> ComfortCounts:
     """A city's days from `start` up to `end`, counted per comfort level."""
-    days = rev.run("comfort.stages.daily_comfort", city=city)
+    days = rev.run("mnt.comfort.stages.daily_comfort", city=city)
     counts = [0] * 10
     for day, _temp, _humidity, level in days.days:
         if start <= day < end:

@@ -87,7 +87,7 @@ def git(*args: str) -> str:
     return done.stdout.strip()
 
 
-spec_record = {"main": "demo_game.etl.model.train", "game": "G1"}
+spec_record = {"main": "mnt.demo_game.etl.model.train", "game": "G1"}
 Path("model-G1.yaml").write_text(yaml.safe_dump(spec_record))
 Path(".gitignore").write_text(".dat/\n")
 git("init", "-q")
@@ -180,7 +180,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # %%
 # !cat model-G1.yaml
 # → game: G1
-# → main: demo_game.etl.model.train
+# → main: mnt.demo_game.etl.model.train
 
 # %%
 # !just run model-G1.yaml alias=model/prod
@@ -188,7 +188,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 
 # %% [markdown]
 # The dat is a value. It is
-# `rev.run("demo_game.etl.model.train", game="G1", path="model/prod")`:
+# `rev.run("mnt.demo_game.etl.model.train", game="G1", path="model/prod")`:
 # `path=` names the result and builds its folder there (Q36).
 #
 # The file's contents are the whole set of keys; a key on the line
@@ -211,7 +211,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # in `.datconfig.yaml`); `run` reads the commands off the mounted
 # files and writes one recipe per command into `.dat/targets.just`,
 # which the justfile imports. It is
-# `just run demo_game.etl.model.train game=G1`: the same keys as the
+# `just run mnt.demo_game.etl.model.train game=G1`: the same keys as the
 # spec, so a hit. Anything not marked stays `just run <target>`.
 
 # %% [markdown]

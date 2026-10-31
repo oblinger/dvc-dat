@@ -72,6 +72,15 @@ def test_mounts_sugar_asserted_once_on_walk_up(tmp_path, monkeypatch):
     assert Ledger().at().id == rev.id                       # unchanged: nothing written
 
 
+def test_mounts_sugar_refuses_an_at_starting_mnt(tmp_path, monkeypatch):
+    monkeypatch.delenv("DAT_LEDGER", raising=False)
+    monkeypatch.chdir(tmp_path)
+    Ledger(create=True)
+    (tmp_path / ".datconfig.yaml").write_text("ledger: .dat/ledger\nmounts:\n  mnt.etl: pkg/etl\n")
+    with pytest.raises(ValueError, match="resolver adds mnt"):
+        Ledger()
+
+
 # -- transactions ---------------------------------------------------------------------------------
 
 def test_one_transaction_one_revision_and_tx_rows_last(L):

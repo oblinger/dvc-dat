@@ -555,7 +555,7 @@ print("db/repo/geometry-app:", L.at()["db/repo/geometry-app"])
 # ### Sandboxed functions
 #
 # `t.ns.mount(at, root=, repo=)` puts the repo's folder `plane`
-# under the name `plane`: two `db/mount/plane` rows; `ns.mounts()` is
+# under the names `mnt.plane...`: two `db/mount/plane` rows; `ns.mounts()` is
 # the mount table at a revision. A name under a mount loads in a
 # sandbox, a fresh interpreter holding only that folder. Its version
 # is the mounted package's `__version__`; the checksum of the files
@@ -570,10 +570,10 @@ show_file(repo_path / "plane/__init__.py")
 show_file(repo_path / "plane/measure.py")
 
 # %%
-length_fn = L.at().ns.load("plane.measure.length")
+length_fn = L.at().ns.load("mnt.plane.measure.length")
 segment_value = length_fn(a=(0, 0), b=(3, 4))
 print("fn:", repr(length_fn), " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
-# → fn: <Fn plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
+# → fn: <Fn mnt.plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
 print("result:", segment_value.obj)                 # → result: 2.5
 print("geometry db/version:", L.at()["db/repo/geometry-app/geometry", "db/version"])   # → geometry db/version: 5.3.9
 print("plane db/version:", L.at()["db/repo/geometry-app/plane", "db/version"])         # → plane db/version: 2.7.1
@@ -601,7 +601,7 @@ print("result's code:", segment_value.dependencies["code"], " is the sandbox:",
       segment_value.dependencies["code"] == sandbox.subject)
 # → result's code: db/code/1fa8b8c101e51d7a  is the sandbox: True
 print("result's fn:", segment_value.dependencies["fn"])
-# → result's fn: plane.measure.length
+# → result's fn: mnt.plane.measure.length
 
 # %% [markdown]
 # Change the code, and bump the version with it, and the snapshot is
@@ -612,13 +612,13 @@ measure_path = repo_path / "plane/measure.py"
 measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
 (repo_path / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
 git_commit("quarter metres", cwd=repo_path)
-new_length_fn = L.at().ns.load("plane.measure.length")
+new_length_fn = L.at().ns.load("mnt.plane.measure.length")
 print("new fn:", repr(new_length_fn), " sandbox:", repr(new_length_fn.code))
-# → new fn: <Fn plane.measure.length@2.7.2>  sandbox: <Code plane@2.7.2>
+# → new fn: <Fn mnt.plane.measure.length@2.7.2>  sandbox: <Code plane@2.7.2>
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → new result: 1.25
 print("old result's code:", segment_value.dependencies["code"], " fn:", segment_value.dependencies["fn"],
       " holds:", segment_value.obj)
-# → old result's code: db/code/1fa8b8c101e51d7a  fn: plane.measure.length  holds: 2.5
+# → old result's code: db/code/1fa8b8c101e51d7a  fn: mnt.plane.measure.length  holds: 2.5
 
 # %% [markdown]
 # ## Ledger evaluation
@@ -896,7 +896,8 @@ print("files:", sorted(os.listdir(again_dat.get_path())))
 # through it. In a ledger project names come from the ledger's
 # mounts alone and `Dat.ns.mount` is refused, so `mymodule` is
 # mounted with `t.ns.mount`, which writes two `db/mount` rows; the
-# earlier mount went with the old world.
+# earlier mount went with the old world. A ledger-mounted name starts
+# `mnt.`, so the spec's `base:` and `do:` become `mnt.mymodule...`.
 #
 # #### Setup
 
@@ -908,6 +909,9 @@ print(".datconfig.yaml:", Path(".datconfig.yaml").read_text().splitlines())
 import mymodule                      # discovery finds the checkout, the repo q-dats
 with L.transaction(by="human:dan", why="mount mymodule") as t:
     t.ns.mount("mymodule", root="mymodule")   # the two db/mount rows: the folder, and the repo, by default this project's, q-dats
+spec_file_path = Path("mymodule/specs/table12.yaml")   # a ledger-mounted name starts mnt.: base: and do: name the mount
+spec_file_path.write_text(spec_file_path.read_text().replace(" mymodule.", " mnt.mymodule."))
+git_commit("mymodule: ledger names", "mymodule")
 try:
     Dat.ns.mount(folder="mymodule", at="mymodule")
 except TypeError as e:
@@ -923,7 +927,7 @@ except TypeError as e:
 # and remembers it.
 
 # %%
-table12_value = L.at().run("mymodule.specs.table12")
+table12_value = L.at().run("mnt.mymodule.specs.table12")
 print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: the spec's template, filled in the ledger's data folder
 
 # %% [markdown]
@@ -937,8 +941,8 @@ print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: the spec'
 
 # %%
 # print results
-print("SPEC:    ", Dat.ns.load("mymodule.specs.table12"))
-print("EXPANDED:", Dat.manager.expand_spec(Dat.ns.load("mymodule.specs.table12")))
+print("SPEC:    ", Dat.ns.load("mnt.mymodule.specs.table12"))
+print("EXPANDED:", Dat.manager.expand_spec(Dat.ns.load("mnt.mymodule.specs.table12")))
 print("DB/KEYS: ", L.at()[table12_value.subject, "db/keys"])   # the memo key
 
 # %% [markdown]
@@ -950,7 +954,7 @@ print("DB/KEYS: ", L.at()[table12_value.subject, "db/keys"])   # the memo key
 
 # %%
 # print results
-run_fn = Dat.ns.load("mymodule.mult.build_table")
+run_fn = Dat.ns.load("mnt.mymodule.mult.build_table")
 print("FN:         ", repr(run_fn), " kind:", run_fn.kind, " sandboxed:", run_fn.code.sandboxed)
 print("DB/FN:      ", L.at()[table12_value.subject, "db/fn"])
 print("DB/VERSION: ", L.at()["db/repo/q-dats/mymodule", "db/version"])   # db/repo/q-dats/mymodule
@@ -961,7 +965,7 @@ print("DB/VERSION: ", L.at()["db/repo/q-dats/mymodule", "db/version"])   # db/re
 
 # %%
 top_id = L.at().id
-again_value = L.at().run("mymodule.specs.table12")
+again_value = L.at().run("mnt.mymodule.specs.table12")
 print("hit:", again_value.subject == table12_value.subject,
       " nothing written:", L.at().id == top_id)   # hit: True  nothing written: True
 
@@ -1002,7 +1006,7 @@ print("preds:", dict(sorted(loaded_dat.preds.items())))
 
 # %%
 for n in (5, 9):
-    L.at().run("mymodule.specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.manager.run
+    L.at().run("mnt.mymodule.specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.manager.run
 
 # %%
 # print results

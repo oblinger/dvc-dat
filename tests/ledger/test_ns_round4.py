@@ -28,7 +28,7 @@ EXTRA = {
 
         def cfg(dat):
             from dvc_dat import Dat
-            dat.get_results()["n"] = Dat.manager.ns.load("sbx.stage.specs.base.dat.kwargs.n")
+            dat.get_results()["n"] = Dat.manager.ns.load("mnt.sbx.stage.specs.base.dat.kwargs.n")
             dat.save()
     '''),
     "sbx/stage/aliased.py": textwrap.dedent('''
@@ -85,13 +85,13 @@ def world(tmp_path):
 # -- F1: a name segment that is an absolute path escapes the mount ------------------------------------
 
 def test_f1_a_mounted_name_cannot_read_outside_its_mount(sbx, tmp_path):
-    """breaks when a segment is an absolute path ("sbx.stage./x/y") because _mounted does
+    """breaks when a segment is an absolute path ("mnt.sbx.stage./x/y") because _mounted does
     root.joinpath(*rest) and Path.joinpath('/abs') discards root."""
     L, _repo = sbx
     secret = tmp_path / "outside" / "secret"
     secret.parent.mkdir()
     secret.with_suffix(".yaml").write_text("password: hunter2\n")
-    name = "sbx.stage." + str(secret)           # every segment non-empty: passes the dotted-name check
+    name = "mnt.sbx.stage." + str(secret)           # every segment non-empty: passes the dotted-name check
     with pytest.raises((ImportError, KeyError)):
         L.at().ns.load(name)
 
@@ -104,9 +104,9 @@ def test_f1b_a_sandboxed_body_reads_outside_the_mounts_through_ns_load(sbx, worl
     secret.parent.mkdir()
     secret.with_suffix(".yaml").write_text("password: hunter2\n")
     with pytest.raises(UntracedRead):           # the guard holds for a plain read ...
-        L.at().run({"dat": {"do": "sbx.stage.runs.opened"}}, where=str(secret.with_suffix(".yaml")))
+        L.at().run({"dat": {"do": "mnt.sbx.stage.runs.opened"}}, where=str(secret.with_suffix(".yaml")))
     with pytest.raises(Exception):               # ... and must for the namespace too
-        v = L.at().run({"dat": {"do": "sbx.stage.runs.peek"}}, where="sbx.stage." + str(secret))
+        v = L.at().run({"dat": {"do": "mnt.sbx.stage.runs.peek"}}, where="mnt.sbx.stage." + str(secret))
         print("LEAKED:", v.get_results()["got"])
 
 
@@ -116,11 +116,11 @@ def test_f2_editing_a_mounted_yaml_a_body_loaded_recomputes(sbx, world):
     """A body reading a mounted spec through Dat.manager.ns.load depends on its bytes: a committed edit
     to the yaml is a miss, not a stale hit (the code item hashed only the .py modules it loaded)."""
     L, repo = sbx
-    v = L.at().run({"dat": {"do": "sbx.stage.runs.cfg"}})
+    v = L.at().run({"dat": {"do": "mnt.sbx.stage.runs.cfg"}})
     assert v.get_results()["n"] == 3
     (repo / "sbx/stage/specs/base.yaml").write_text("dat:\n  kwargs: {n: 4}\n")
     git(repo, "commit", "-q", "-am", "n=4")
-    again = L.at().run({"dat": {"do": "sbx.stage.runs.cfg"}})
+    again = L.at().run({"dat": {"do": "mnt.sbx.stage.runs.cfg"}})
     assert again.get_results()["n"] == 4, "stale memo hit: the body's input moved, the entry did not"
 
 
@@ -128,8 +128,8 @@ def test_f2_editing_a_mounted_yaml_a_body_loaded_recomputes(sbx, world):
 
 def test_f6_an_aliased_ledger_fn_decorator_is_still_a_ledger_fn(sbx):
     L, _repo = sbx
-    assert L.at().ns.load("sbx.stage.aliased.area").kind == "ledger"
-    assert L.at().run("sbx.stage.aliased.area", side=3).obj == {"area": 9}
+    assert L.at().ns.load("mnt.sbx.stage.aliased.area").kind == "ledger"
+    assert L.at().run("mnt.sbx.stage.aliased.area", side=3).obj == {"area": 9}
 
 
 

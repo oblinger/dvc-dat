@@ -272,6 +272,24 @@ def encode_keys(kw: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+MNT = "mnt"
+"""The reserved top segment of a ledger-mounted name (1467 Q14 (B)): ``mnt.<at>...`` names what the mount
+``db/mount/<at>`` serves; a name not starting ``mnt.`` is never a mount and is imported. The resolver adds it;
+the rows, ``mounts()`` and the in-process module names never carry it."""
+
+
+def mounted_name(dotted: str) -> str:
+    """The ledger name of ``dotted`` under a mount: ``plane.measure.length`` -> ``mnt.plane.measure.length``."""
+    return f"{MNT}.{dotted}"
+
+
+def refuse_mnt(at: str, where: str) -> None:
+    """``ValueError`` when a mount's ``at`` starts with the reserved segment ``mnt``."""
+    if at.split(".")[0] == MNT:
+        raise ValueError(f"{where}: {at!r} starts with {MNT!r}; mount at the bare prefix, the resolver adds "
+                         f"{MNT}. (a mounted name is {MNT}.<at>...)")
+
+
 def mounts_at(rev: "Rev") -> Dict[str, Dict[str, str]]:
     """``prefix -> {"root", "repo", "salt"}``: the ``db/mount/<prefix>`` rows as of ``rev``."""
     from .codec import show
@@ -863,10 +881,10 @@ def code_holds(rev: "Rev", subject: str, name: Optional[str]) -> bool:
     if show(mounts[0].obj) != "none":           # a mounts hash: sandboxed
         from .sandbox import sandbox_code_at
 
-        return sandbox_code_at(rev, name, json.loads(show(mods[0].obj))) == subject
+        if not name.startswith(MNT + "."):
+            return False
+        return sandbox_code_at(rev, name[len(MNT) + 1:], json.loads(show(mods[0].obj))) == subject
     try:
-        if any(name.startswith(prefix + ".") for prefix in mounts_at(rev._plain())):
-            return False                        # mounted since: the code is the mount's now
         modname, src = source_of(name, resolve_in_process(name))
         return installed_code(modname, src, current_env()).subject == subject
     except (ImportError, TypeError):

@@ -14,7 +14,7 @@ def tracks(rev, *, game: str, path: Path) -> StageDat:
 
 
 def link(rev, path, *, game, **_):
-    dets = rev.run("demo_game.etl.detect.detections", game=game)
+    dets = rev.run("mnt.demo_game.etl.detect.detections", game=game)
     boxes = json.loads((dets.path / "boxes.json").read_text())
     runs = [b for a, b in zip(boxes, boxes[1:]) if a <= b]
     (path / "tracks.json").write_text(json.dumps(runs))

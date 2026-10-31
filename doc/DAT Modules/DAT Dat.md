@@ -269,7 +269,7 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
     From `dvc_dat.ledger.named`: `ledgers.<name>` or `ledgers["jb-26"]`, that entry of the `ledgers:` section. ^ledgers
 
 **__version__**`: str`
-    The package version, `"2.40.1"` at this checkout. ^--version--
+    The package version, `"2.41.0"` at this checkout. ^--version--
 
 
 

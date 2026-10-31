@@ -77,7 +77,7 @@ One world's namespace; it is not callable — running is `manager.run(target, ..
     The mount table: each mounted prefix and where it loads from — a file, a folder entry, or a module's import name. A `value` mount has no location and is not listed; `just mounts` (`x --list`) prints every mounted name. ^mounts
 
 ## On a ledger
-A `LedgerNamespace`: the same interface, its names the ledger's `db/mount` rows at one revision, longest prefix first; a name under no mount is imported. A mounted `.yaml`/`.json` comes back a dict, a mounted function its `Fn` (read off the file, never imported here), a mounted literal its value; a `@ledger_fn` it imports to comes back its `Fn`.
+A `LedgerNamespace`: the same interface, its mounted names the ledger's `db/mount` rows at one revision, longest prefix first. A mounted name starts `mnt.` (`mnt.<at>...`, the resolver adds `mnt`, never the row); everything else imports, so the two never clash, and `mnt` alone or a `mnt.` name under no mount is `ImportError` naming the mounts. A mounted `.yaml`/`.json` comes back a dict, a mounted function its `Fn` (read off the file, never imported here), a mounted literal its value; a `@ledger_fn` it imports to comes back its `Fn`.
 
 | Where | Is |
 | --- | --- |
@@ -86,7 +86,7 @@ A `LedgerNamespace`: the same interface, its names the ledger's `db/mount` rows 
 | `Dat.manager.ns` | in a ledger project, the namespace at the head |
 
 ```python
-f = L.at().ns.load("plane.measure.length")   # an Fn
+f = L.at().ns.load("mnt.plane.measure.length")   # an Fn, sandboxed; "plane.measure.length" imports
 L.at().ns.mounts()
 # {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
 with L.transaction(by="human:dan") as t:
@@ -94,7 +94,7 @@ with L.transaction(by="human:dan") as t:
     t.ns.mount("mymodule", root="mymodule")   # this project's repo
 ```
 
-`mounts()` is the `db/mount` rows, `{prefix: {"root": ..., "repo": ...}}`. `t.ns.mount(at, *, root, repo=None)` writes the two rows `db/mount/<at> db/root` and `db/repo` through `t.update`, and needs no `lock=`; `repo` defaults to the project's own repository, the git checkout holding the `.datconfig.yaml` the manager loaded, named as discovery names repos, and with no such file is `ValueError`; `t.ns.load` reads `previous_rev`, so it does. `mount` anywhere else — `rev.ns`, `Dat.ns` in a ledger project — is `TypeError` naming `t.ns.mount`. Full ledger reference: [DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md).
+`mounts()` is the `db/mount` rows, `{prefix: {"root": ..., "repo": ...}}`. `t.ns.mount(at, *, root, repo=None)` writes the two rows `db/mount/<at> db/root` and `db/repo` through `t.update`, and needs no `lock=`; an `at` whose first segment is `mnt` is `ValueError` (as is such a `.datconfig.yaml` `mounts:` key); `repo` defaults to the project's own repository, the git checkout holding the `.datconfig.yaml` the manager loaded, named as discovery names repos, and with no such file is `ValueError`; `t.ns.load` reads `previous_rev`, so it does. `mount` anywhere else — `rev.ns`, `Dat.ns` in a ledger project — is `TypeError` naming `t.ns.mount`. Full ledger reference: [DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 
 

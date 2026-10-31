@@ -12,7 +12,7 @@ ledger) and `ledgers` (the project's ledgers by name, `ledgers.record`); the
 ledger, the dat's record in time, is its own subpackage: `from dvc_dat.ledger import Ledger`.
 """
 
-__version__ = "2.40.1"
+__version__ = "2.41.0"
 
 from . import ledger  # noqa: F401  (first: core's Dat is a ledger Value, and the ledger names Dat)
 from .core import Dat, DatContainer, DatManager

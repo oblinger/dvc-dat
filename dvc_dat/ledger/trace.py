@@ -182,10 +182,11 @@ class _RefText(str):
 
 def salt_at(rev: "Rev", nm: Optional[str]) -> str:
     """The ``salt`` of the mount the function named ``nm`` (an ``fn`` item) resolves under, at ``rev``."""
-    from .fn import mounts_at
+    from .fn import MNT, mounts_at
 
-    if not nm:
-        return NONE
+    if not nm or not nm.startswith(MNT + "."):
+        return NONE                             # an installed function: under no mount
+    nm = nm[len(MNT) + 1:]
     best = None
     for prefix, info in mounts_at(rev).items():
         if nm.startswith(prefix + ".") and (best is None or len(prefix) > len(best[0])):

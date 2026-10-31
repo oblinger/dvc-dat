@@ -87,26 +87,26 @@ def test_installed_version_is_the_attr_only_from_a_clean_checkout(installed):
 def test_mounted_version_under_a_dirty_checkout(mounted):
     L, repo = mounted
     (repo / "code_anchor.py").write_text("# edited\n")        # tracked, not loaded by plane
-    f = L.at().ns.load("plane.measure.length")
+    f = L.at().ns.load("mnt.plane.measure.length")
     assert re.fullmatch(r"[0-9a-f]{8}\+dirty", f.code.version)
     assert git(repo, "rev-parse", "HEAD").startswith(f.code.version[:8])
     git(repo, "commit", "-q", "-am", "edit")
-    assert L.at().ns.load("plane.measure.length").code.version == "2.7.1"
+    assert L.at().ns.load("mnt.plane.measure.length").code.version == "2.7.1"
 
 
 def test_a_clean_seal_moves_the_clock_once(mounted):
     L, repo = mounted
     head = git(repo, "rev-parse", "HEAD")
-    L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
+    L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4))
     assert L.at()["db/repo/code-repo/plane"] == {"db/version": "2.7.1"}
     assert L.at()["db/repo/code-repo"] == {"db/commit": head}
     n = len(L.at().history("db/repo/code-repo/plane", "db/version"))
-    L.at().run("plane.measure.length", a=(0, 0), b=(6, 8))      # the same version: nothing written
+    L.at().run("mnt.plane.measure.length", a=(0, 0), b=(6, 8))      # the same version: nothing written
     assert len(L.at().history("db/repo/code-repo/plane", "db/version")) == n
     assert len(L.at().history("db/repo/code-repo", "db/commit")) == 1
     (repo / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
     git(repo, "commit", "-q", "-am", "bump")
-    L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
+    L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4))
     assert L.at()["db/repo/code-repo/plane", "db/version"] == "2.7.2"
     assert L.at()["db/repo/code-repo", "db/commit"] == git(repo, "rev-parse", "HEAD")
     assert not [r for r in L.at().history() if r.subject.startswith("code/")]
@@ -117,7 +117,7 @@ def test_the_clocks_are_db_predicates(mounted):
     fixed at ``one``; no bare ``version`` or ``commit`` row is written."""
     L, repo = mounted
     head = git(repo, "rev-parse", "HEAD")
-    L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
+    L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4))
     assert Ref(L.at(), "db/repo/code-repo/plane").preds == {} and Ref(L.at(), "db/repo/code-repo").preds == {}
     assert not [r for r in L.at().history() if r.predicate in ("version", "commit")]
     with L.transaction(by="t", lock=10) as t:
@@ -134,8 +134,8 @@ def test_two_packages_in_one_checkout_each_keep_a_clock(mounted):
     git(repo, "commit", "-q", "-am", "bare versioned")
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
-        L.at().run("bare.calc.length", a=(0, 0), b=(3, 4))
+        L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4))
+        L.at().run("mnt.bare.calc.length", a=(0, 0), b=(3, 4))
     assert L.at()["db/repo/code-repo/plane", "db/version"] == "2.7.1"
     assert L.at()["db/repo/code-repo/bare", "db/version"] == "0.4.0"
 
@@ -144,16 +144,16 @@ def test_the_commit_row_follows_the_latest_clean_run(mounted):
     L, repo = mounted
     (repo / "bare/__init__.py").write_text('__version__ = "0.4.0"\n')
     git(repo, "commit", "-q", "-am", "bare versioned")
-    L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
+    L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4))
     first = git(repo, "rev-parse", "HEAD")
     assert L.at()["db/repo/code-repo", "db/commit"] == first
     (repo / "bare/__init__.py").write_text('__version__ = "0.4.1"\n')
     git(repo, "commit", "-q", "-am", "bare bump")
-    L.at().run("bare.calc.length", a=(0, 0), b=(3, 4))
+    L.at().run("mnt.bare.calc.length", a=(0, 0), b=(3, 4))
     second = git(repo, "rev-parse", "HEAD")
     assert second != first and L.at()["db/repo/code-repo", "db/commit"] == second
     assert L.at()["db/repo/code-repo/plane", "db/version"] == "2.7.1"   # plane's clock stays
-    L.at().run("plane.measure.length", a=(0, 0), b=(6, 8))           # plane at 2.7.1, the new commit
+    L.at().run("mnt.plane.measure.length", a=(0, 0), b=(6, 8))           # plane at 2.7.1, the new commit
     assert L.at()["db/repo/code-repo", "db/commit"] == second
     assert len(L.at().history("db/repo/code-repo", "db/commit")) == 2
 
@@ -161,7 +161,7 @@ def test_the_commit_row_follows_the_latest_clean_run(mounted):
 def test_a_dirty_run_leaves_the_clock(mounted):
     L, repo = mounted
     (repo / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')     # uncommitted
-    v = L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
+    v = L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4))
     assert v.sealed and L.at().get("db/repo/code-repo/plane", "db/version") is None
     assert L.at().get("db/repo/code-repo", "db/commit") is None
 
@@ -174,14 +174,14 @@ def test_a_lower_version_on_one_package_warns_and_keeps_its_row(mounted):
         t.add("db/repo/code-repo/plane", "db/version", "9.0.0")
     msg = "db/repo/code-repo/plane: the run's code is 2.7.1, below the ledger's 9.0.0; the clock keeps 9.0.0"
     with pytest.warns(UserWarning, match=re.escape(msg)):       # sealed in the worker, warned here
-        L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
+        L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4))
     assert L.at()["db/repo/code-repo/plane", "db/version"] == "9.0.0"
     assert L.at()["db/repo/code-repo", "db/commit"] == git(repo, "rev-parse", "HEAD")
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        L.at().run("bare.calc.length", a=(0, 0), b=(3, 4))
+        L.at().run("mnt.bare.calc.length", a=(0, 0), b=(3, 4))
     assert L.at()["db/repo/code-repo/bare", "db/version"] == "0.4.0"
-    f = L.at().ns.load("plane.measure.length")
+    f = L.at().ns.load("mnt.plane.measure.length")
     with pytest.warns(UserWarning, match=re.escape(msg)):
         with L.transaction(by="t") as t:                       # a hand seal, in this process
             Value.Blob({"x": 3}).seal(t, deps=[f])
@@ -193,7 +193,7 @@ def test_the_workers_warning_reaches_the_caller(mounted, capfd):
         t.add("db/repo/code-repo/plane", "db/version", "9.0.0")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
+        L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4))
     assert [str(w.message) for w in caught if "db/repo/code-repo/plane" in str(w.message)] == \
         ["db/repo/code-repo/plane: the run's code is 2.7.1, below the ledger's 9.0.0; the clock keeps 9.0.0"]
     assert "db/repo/code-repo/plane" not in capfd.readouterr().err     # not the worker's stderr
@@ -202,21 +202,21 @@ def test_the_workers_warning_reaches_the_caller(mounted, capfd):
 def test_clean_reads_the_repos_commit_row(mounted):
     L, repo = mounted
     with pytest.raises(NotClean, match="names no db/repo/code-repo db/commit"):
-        L.at().run("plane.measure.length", a=(0, 0), b=(3, 4), clean=True)
-    L.at().run("plane.measure.length", a=(0, 0), b=(3, 4))
-    assert L.at().run("plane.measure.length", a=(0, 0), b=(3, 4), clean=True).obj == 2.5
+        L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4), clean=True)
+    L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4))
+    assert L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4), clean=True).obj == 2.5
     with L.transaction(by="t") as t:
         t.add("db/repo/code-repo", "db/commit", "0" * 40)
     with pytest.raises(NotClean, match="binds db/repo/code-repo to 00000000"):
-        L.at().run("plane.measure.length", a=(0, 0), b=(3, 4), clean=True)
+        L.at().run("mnt.plane.measure.length", a=(0, 0), b=(3, 4), clean=True)
 
 
 def test_codes_package_is_the_root_whose_version_it_read(mounted, installed):
     L, repo = mounted
-    assert L.at().ns.load("plane.measure.length").code.package == "plane"
-    assert L.at().ns.load("bare.calc.length").code.package is None        # named by its commit
+    assert L.at().ns.load("mnt.plane.measure.length").code.package == "plane"
+    assert L.at().ns.load("mnt.bare.calc.length").code.package is None        # named by its commit
     (repo / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')     # dirty
-    assert L.at().ns.load("plane.measure.length").code.package is None
+    assert L.at().ns.load("mnt.plane.measure.length").code.package is None
     assert L.at().ns.load("geom1037.dist.distance").code.package == "geom1037"
 
 
@@ -231,7 +231,7 @@ def test_a_hand_seal_with_no_code_writes_no_clock(mounted):
 
 def test_a_hand_seal_with_an_fn_dep_moves_the_clock(mounted):
     L, repo = mounted
-    f = L.at().ns.load("plane.measure.length")
+    f = L.at().ns.load("mnt.plane.measure.length")
     with L.transaction(by="t") as t:
         Value.Blob({"x": 2}).seal(t, deps=[f])
     assert L.at()["db/repo/code-repo/plane", "db/version"] == "2.7.1"

@@ -172,7 +172,7 @@ A dat whose folder holds dats.
 
 
 ## dvc_dat Interface
-`from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers` is the whole export; everything else hangs off those classes and the two ledger handles. `dvc_dat.__version__` is `"2.40.1"`.
+`from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers` is the whole export; everything else hangs off those classes and the two ledger handles. `dvc_dat.__version__` is `"2.41.0"`.
 
 
 

@@ -1,13 +1,16 @@
 """The ledger's namespace: a dotted name resolved through the ``db/mount`` rows at a revision (DAT 1046).
 
-``resolve_name(rev, name)`` is ``rev.ns.load(name)``. The ``db/mount/<prefix>``
-rows as of the rev are walked longest prefix first; under a mount the name is a
+``resolve_name(rev, name)`` is ``rev.ns.load(name)``. A mounted name starts with
+the reserved segment ``mnt`` (1467 Q14 (B)): ``mnt.<prefix>...``, the segment
+stripped, is matched against the ``db/mount/<prefix>`` rows as of the rev,
+longest prefix first; under a mount the name is a
 path in the mount's tree in the checkout discovery reports for its ``db/repo``:
 a ``.yaml``/``.yml``/``.json`` file is read and comes back a dict (a dotted
 tail below the file walks into it); a function in a ``.py`` file comes back its
 ``Fn``, read off the file and never imported here, its ``kind`` the decorator
 (``@ledger_fn``: a ledger function; none: a dat's run function); a module-level
-literal (``NAME = {...}``) its value. A name under no mount is imported, and a
+literal (``NAME = {...}``) its value. A name not starting ``mnt.`` is never a
+mount: it is imported, and a
 ``@ledger_fn`` it imports to comes back its ``Fn``, an undecorated function
 itself.
 
@@ -29,7 +32,7 @@ import yaml
 
 from ..do import Namespace
 from .errors import NotEvaluated
-from .fn import Fn, installed_fn, mounts_at
+from .fn import MNT, Fn, installed_fn, mounted_name, mounts_at, refuse_mnt
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -38,13 +41,23 @@ DATA_SUFFIXES = (".yaml", ".yml", ".json")
 
 
 def resolve_name(rev: "Rev", name: str) -> Any:
-    """What the dotted ``name`` denotes at ``rev``: a dict, an ``Fn``, a literal, or the imported object."""
+    """What the dotted ``name`` denotes at ``rev``: a dict, an ``Fn``, a literal, or the imported object.
+
+    ``mnt.<prefix>...`` resolves through the mount ``db/mount/<prefix>`` (longest prefix first), and one under no
+    mount is ``ImportError``, as is ``mnt`` alone (naming the mounts); any other name is imported."""
     if not _dotted(name):
         raise ImportError(f"{name!r} is not a dotted name")
-    plain = rev._plain()
-    for prefix, info in sorted(mounts_at(plain).items(), key=lambda kv: -len(kv[0])):
-        if name == prefix or name.startswith(prefix + "."):
-            return _mounted(rev, name, prefix, info)
+    if name == MNT or name.startswith(MNT + "."):
+        plain = rev._plain()
+        mounts = mounts_at(plain)
+        inner = name[len(MNT) + 1:]
+        for prefix, info in sorted(mounts.items(), key=lambda kv: -len(kv[0])):
+            if inner == prefix or inner.startswith(prefix + "."):
+                return _mounted(rev, name, inner, prefix, info)
+        listed = ", ".join(mounted_name(p) for p in sorted(mounts)) or "none"
+        what = f"{MNT!r} alone names no mount" if not inner else f"{name!r}: no ledger mount answers to {inner!r}"
+        raise ImportError(f"{what}; a mounted name is {MNT}.<prefix>..., and the mounts at rev {plain.id} are: "
+                          f"{listed}")
     obj = Namespace._load_static(name)
     if callable(obj) and getattr(obj, "__ledger_fn__", False):
         return installed_fn(rev, name, obj)
@@ -89,11 +102,12 @@ def mount_root(name: str, prefix: str, info: Dict[str, str]) -> Path:
     return Path(code.path) / info["root"]
 
 
-def _mounted(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Any:
+def _mounted(rev: "Rev", name: str, inner: str, prefix: str, info: Dict[str, str]) -> Any:
+    """``name`` (``mnt.<inner>``) under the mount ``prefix``; ``inner`` is the name the mount's tree serves."""
     from .env import current_env
     from .sandbox import load_sandboxed, note_read, unguarded
 
-    rest = name[len(prefix) + 1:].split(".") if name != prefix else []
+    rest = inner[len(prefix) + 1:].split(".") if inner != prefix else []
     with unguarded():                       # the ledger's own reads, also inside a sandboxed body
         root = mount_root(name, prefix, info)
         checkout = Path(current_env().code[info["repo"]].path)
@@ -175,7 +189,7 @@ def mounted_commands(rev: "Rev") -> Iterator[Tuple[str, Dict[str, str], Path]]:
             except NotEvaluated:
                 continue
             for data in sorted(f for s in DATA_SUFFIXES for f in root.rglob("*" + s)):
-                name = ".".join([prefix, *data.relative_to(root).with_suffix("").parts])
+                name = mounted_name(".".join([prefix, *data.relative_to(root).with_suffix("").parts]))
                 try:
                     text = data.read_text()
                     spec = json.loads(text) if data.suffix == ".json" else yaml.safe_load(text)
@@ -200,7 +214,7 @@ def mounted_commands(rev: "Rev") -> Iterator[Tuple[str, Dict[str, str], Path]]:
                                              or (isinstance(f, ast.Attribute) and f.attr == "command")):
                             continue
                         kw = {k.arg: k.value for k in d.keywords if k.arg in ("args", "help")}
-                        target = f"{modname}.{node.name}"
+                        target = mounted_name(f"{modname}.{node.name}")
                         try:
                             decl = {k: ast.literal_eval(v) for k, v in kw.items()}
                             args, help = _check(decl.get("args", ""), decl.get("help", ""), target)
@@ -261,8 +275,9 @@ class LedgerNamespace(Namespace):
     def mount(self, at: Optional[str] = None, *, root: Optional[str] = None,  # type: ignore[override]
               repo: Optional[str] = None, **kwargs: Any) -> None:
         """``t.ns.mount(at, root=..., repo=None)``: the ``db/mount/<at>`` rows ``db/root`` and ``db/repo``,
-        written through ``t.update``. ``repo`` defaults to the project's own repository (``project_repo``).
-        Only a transaction's namespace mounts."""
+        written through ``t.update``; its names load as ``mnt.<at>...``. ``repo`` defaults to the project's own
+        repository (``project_repo``). Only a transaction's namespace mounts; an ``at`` starting ``mnt`` is
+        ``ValueError`` (the resolver adds ``mnt.``)."""
         if self._txn is None:
             raise TypeError("a ledger project names things through its db/mount rows (`mounts:` in "
                             ".datconfig.yaml, or t.ns.mount(at, root=...) in a transaction); "
@@ -276,6 +291,7 @@ class LedgerNamespace(Namespace):
                 raise TypeError(f"t.ns.mount: {key} is a non-empty str, got {v!r}")
         if not _dotted(at):
             raise ValueError(f"t.ns.mount: at is a dotted name (non-empty segments, no '/'), got {at!r}")
+        refuse_mnt(at, "t.ns.mount")
         self._txn.update(f"db/mount/{at}", {"db/root": root, "db/repo": repo})
 
     def mounts(self) -> Dict[str, Dict[str, str]]:  # type: ignore[override]
@@ -284,8 +300,8 @@ class LedgerNamespace(Namespace):
         return mounts_at(self.rev()._plain())
 
     def _mounted_names(self) -> List[str]:
-        """The manager's own names and the ledger's mount prefixes."""
-        return sorted(set(super()._mounted_names()) | set(self.mounts()))
+        """The manager's own names and the ledger's mounted names, ``mnt.<prefix>``."""
+        return sorted(set(super()._mounted_names()) | {mounted_name(p) for p in self.mounts()})
 
     def _commands(self) -> List[Tuple[str, Dict[str, str], Path]]:
         """The ``@command`` functions in the mounted trees (``just.commands``)."""

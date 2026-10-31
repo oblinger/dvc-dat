@@ -236,7 +236,10 @@ class Ledger:
         if not isinstance(mounts, dict) or not mounts:
             return
         from .env import _toplevel, repo_name
+        from .fn import refuse_mnt
 
+        for prefix in mounts:
+            refuse_mnt(str(prefix), f"{cfg} mounts:")
         top = _toplevel(str(cfg.parent))
         repo = repo_name(Path(top)) if top else cfg.parent.name
         rev = self.at()
