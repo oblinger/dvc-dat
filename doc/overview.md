@@ -26,7 +26,7 @@ ns = Dat.ns     # the namespace shortcut; follows Dat.manager
 | `DatManager` | Creates, finds, loads and runs dats; `Dat.manager` is the default, assign to replace |
 | `Namespace` | A namespace; every manager has one |
 | `L` | The active ledger: `DAT_LEDGER`, else the config's `ledgers:` default or `ledger:` |
-| `ledgers` | The project's ledgers by name: `ledgers.<name>`, `ledgers["jb-26"]` |
+| `ledgers` | The project's ledgers by name: `ledgers.<name>`, `ledgers["do26"]` |
 
 Everything else hangs off those four classes:
 

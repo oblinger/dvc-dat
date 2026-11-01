@@ -6,7 +6,7 @@ from dvc_dat import DatManager, L, ledgers
 from dvc_dat.ledger import Ledger, LedgerError
 
 
-def project(tmp, config, override=None, make=("games", "record", "exp-jb-26", "exp-do-26")):
+def project(tmp, config, override=None, make=("games", "record", "do26", "prod_run26")):
     """A project folder: `.datconfig.yaml`, optionally `.datconfig.override.yaml`, and a SQLite ledger per name."""
     (tmp / ".datconfig.yaml").write_text(config)
     if override is not None:
@@ -17,7 +17,7 @@ def project(tmp, config, override=None, make=("games", "record", "exp-jb-26", "e
 
 
 SECTION = ("ledgers:\n  games: led/games\n  record: led/record\n"
-           "  exp-jb-26: led/exp-jb-26\n  exp-do-26: led/exp-do-26\n")
+           "  do26: led/do26\n  prod_run26: led/prod_run26\n")
 
 
 @pytest.fixture
@@ -37,30 +37,38 @@ def test_two_named_ledgers_are_distinct_stores(here):
     assert ledgers.record.at().get("game/G1", "home") is None
     assert ledgers.games is ledgers["games"]                    # one handle per ledger
     assert isinstance(ledgers.games, Ledger)
-    assert list(ledgers) == ["games", "record", "exp-jb-26", "exp-do-26"]
+    assert list(ledgers) == ["games", "record", "do26", "prod_run26"]
     assert "record" in ledgers and "nope" not in ledgers
 
 
-def test_hyphenated_names_take_the_item_form(here):
+def test_a_name_is_an_identifier_and_its_attribute(here):
     project(here, SECTION)
-    assert ledgers["exp-jb-26"].path == (here / "led" / "exp-jb-26").resolve()
-    with pytest.raises(AttributeError, match=r"ledgers\['exp-jb-26'\]"):
-        ledgers.exp_jb_26
+    assert ledgers.prod_run26 is ledgers["prod_run26"]
+    assert ledgers.prod_run26.path == (here / "led" / "prod_run26").resolve()
+    assert ledgers.do26.path == (here / "led" / "do26").resolve()
+    assert sorted(n for n in dir(ledgers)) == ["do26", "games", "prod_run26", "record"]
     with pytest.raises(KeyError, match="nope"):
         ledgers["nope"]
     with pytest.raises(AttributeError, match="nope"):
         ledgers.nope
 
 
+@pytest.mark.parametrize("bad", ["exp-jb-26", "do-26", "tmp-1", "Games", "1st", "_tmp", "class"])
+def test_a_name_that_is_not_an_identifier_is_refused(here, bad):
+    project(here, f"ledgers:\n  {bad}: led/x\n", make=())
+    with pytest.raises(LedgerError, match="identifier"):
+        ledgers.games
+
+
 def test_L_from_the_env_naming_an_entry(here, monkeypatch):
     project(here, SECTION)
-    monkeypatch.setenv("DAT_LEDGER", "exp-do-26")
-    assert L.path == (here / "led" / "exp-do-26").resolve()
+    monkeypatch.setenv("DAT_LEDGER", "do26")
+    assert L.path == (here / "led" / "do26").resolve()
     assert isinstance(L, Ledger)
     with L.transaction(by="t") as t:
         t.add("s", "p", "o")
-    assert ledgers["exp-do-26"].at()["s", "p"] == "o"
-    assert L.at().ledger is ledgers["exp-do-26"]                 # one handle per ledger, L's and the name's
+    assert ledgers["do26"].at()["s", "p"] == "o"
+    assert L.at().ledger is ledgers["do26"]                 # one handle per ledger, L's and the name's
     assert Ledger().path == L.path                               # Ledger() is the active ledger too
 
 
@@ -72,14 +80,14 @@ def test_L_from_the_env_as_a_location_still(here, monkeypatch):
 
 
 def test_L_from_the_override_file(here):
-    project(here, SECTION, override="ledgers:\n  default: exp-jb-26\n")
-    assert L.path == (here / "led" / "exp-jb-26").resolve()
+    project(here, SECTION, override="ledgers:\n  default: prod_run26\n")
+    assert L.path == (here / "led" / "prod_run26").resolve()
     assert Ledger().path == L.path
 
 
 def test_the_override_default_wins_over_the_committed_one(here):
-    project(here, SECTION + "  default: record\n", override="ledgers:\n  default: exp-jb-26\n")
-    assert L.path == (here / "led" / "exp-jb-26").resolve()
+    project(here, SECTION + "  default: record\n", override="ledgers:\n  default: prod_run26\n")
+    assert L.path == (here / "led" / "prod_run26").resolve()
     (here / ".datconfig.override.yaml").unlink()
     assert L.path == (here / "led" / "record").resolve()        # the committed default, when present
 
@@ -116,7 +124,7 @@ def test_ledger_and_ledgers_together_are_refused(here):
 
 def test_bad_sections_are_refused(here):
     project(here, "ledgers:\n  Games: led/games\n", make=())
-    with pytest.raises(LedgerError, match="lowercase"):
+    with pytest.raises(LedgerError, match="identifier"):
         ledgers.games
     project(here, "ledgers:\n  games: led/games\n  default: record\n", make=())
     with pytest.raises(LedgerError, match="record"):
@@ -140,9 +148,9 @@ def test_create_in_a_ledgers_project_makes_the_active_one(here):
 def test_a_dsn_entry_is_passed_through(here):
     from dvc_dat.ledger.ledger import _entries
 
-    dsn = "postgresql://u@h:5432/exp_jb_26?art=art/exp-jb-26"
-    (here / ".datconfig.yaml").write_text(f"ledgers:\n  exp-jb-26: '{dsn}'\n")
-    assert _entries(here / ".datconfig.yaml")["exp-jb-26"] == dsn
+    dsn = "postgresql://u@h:5432/prod_run26?art=art/prod_run26"
+    (here / ".datconfig.yaml").write_text(f"ledgers:\n  prod_run26: '{dsn}'\n")
+    assert _entries(here / ".datconfig.yaml")["prod_run26"] == dsn
 
 
 def test_a_ledgers_section_keeps_the_plain_namespace(here):

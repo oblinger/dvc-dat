@@ -8,6 +8,9 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.43.0 — 2026-10-31
+
+- **A ledger name is a Python identifier, `[a-z][a-z0-9_]*`, and is its database name (SVP 1491; minor).** The 2.40.0 rule is inverted: a name in `ledgers:` is lowercase letters, digits and underscores, a letter first, and not a Python keyword; a hyphen is `LedgerError` naming the rule. Every entry therefore has the attribute form `ledgers.<name>` (the hyphen hint on `AttributeError` is gone, and `dir(ledgers)` lists every name), and a Postgres ledger's database carries the ledger name unchanged, no hyphen-to-underscore mapping. Naming convention (DAT Ledger § Many ledgers): `games`, `prod_assets`, `dev_assets`, `prod_run26`, `results`, `official`, `exp`, owner generations `do26`, `ar26`, `ci26`, throwaways `tmp<n>`, branches `branch_<name>`. **No legacy:** a config with a hyphenated name is refused; rename the entry (ledgers restart from scratch, Dan 2026-10-31).
 - The site carries a generated API reference (`just docs`).
 
 ## 2.42.1 — 2026-10-31

@@ -2,7 +2,7 @@
 
     from dvc_dat import L, ledgers
     ledgers.record.at()          # the entry `record` of .datconfig.yaml's `ledgers:` section
-    ledgers["exp-jb-26"]         # a hyphenated name takes the item form
+    ledgers.prod_run26           # a name is a Python identifier; ledgers["prod_run26"] is the same handle
     L.at()                       # the active ledger: DAT_LEDGER, else `ledgers: {default: ...}`
 
 Both resolve from the working directory at each use, never at import, so a
@@ -37,8 +37,8 @@ def _handle(target: Any, given: Any, base: Path, cfg: Optional[Path]) -> Ledger:
 
 class Ledgers:
     """The ``ledgers:`` section of the nearest ``.datconfig.yaml`` (the override file's entries merged in):
-    ``ledgers.<name>`` or ``ledgers["<name>"]`` is that ledger's ``Ledger``. A name with a hyphen has no
-    attribute form; ``ledgers.exp_jb_26`` is ``AttributeError`` naming ``ledgers['exp-jb-26']``."""
+    ``ledgers.<name>`` or ``ledgers["<name>"]`` is that ledger's ``Ledger``; every name is a Python identifier
+    (``ledger.NAME``), so every entry has the attribute form."""
 
     def _section(self) -> Tuple[Path, Dict[str, str]]:
         cfg, searched = _walk_up(Path.cwd().resolve())
@@ -63,10 +63,6 @@ class Ledgers:
         cfg, entries = self._section()
         if name in entries:
             return self[name]
-        hyphen = name.replace("_", "-")
-        if hyphen != name and hyphen in entries:
-            raise AttributeError(f"ledgers.{name}: no such ledger; a hyphenated name takes the item form, "
-                                 f"ledgers['{hyphen}']")
         raise AttributeError(f"ledgers.{name}: no such ledger in {cfg} ledgers: ({', '.join(entries) or 'none'})")
 
     def __iter__(self) -> Iterator[str]:
@@ -80,7 +76,7 @@ class Ledgers:
 
     def __dir__(self) -> List[str]:
         try:
-            return [n for n in self._section()[1] if n.isidentifier()]
+            return list(self._section()[1])
         except LedgerError:
             return []
 
