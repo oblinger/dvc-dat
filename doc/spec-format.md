@@ -267,15 +267,13 @@ the `run/` sub-dat. `_spec_.yaml` is hashed as its sorted-key YAML dump with
 `dat.name` left out (the name is the dat's address, not its content), and
 `_result_.yaml` as its sorted-key dump with `dat.sha256` set to `excluded`,
 so the hash can live inside the file it covers. `dat.hash: functional` marks
-a file hashed this way; a file without it was written before 3.0 and hashes
-by the 2.x rule, every file as its bytes, the name and all. `dat.verify()`
+a file hashed this way, the only rule; a hash a 2.x save stamped does not
+verify. `dat.verify()`
 recomputes it the same way and is `True` while the content is exactly as it
 was last saved — a changed data file, recipe or result makes it `False`;
-reformatting the YAML, renaming the dat or anything under `run/` does not. A file written before 2.14 carries no `dat.standing` and reads by
-the 2.13 rule: sealed when it has `dat.run_time` or `$MANUAL` and no
-`unsealed` entry, referenceable when it says `dat.referenceable: true`,
-rolling when its spec says `dat.rolling: true`, else open. A dat saved before
-2.9 carries no hash and is open until saved.
+reformatting the YAML, renaming the dat or anything under `run/` does not. A results file with no `dat.standing` (never saved, or written
+before 2.14, whose 2.13 keys are not read) is open, rolling when its spec
+demands `dat.standing: rolling`, until saved.
 
 ```yaml
 dat:
