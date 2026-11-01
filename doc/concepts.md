@@ -1,4 +1,4 @@
-:>> [DAT](DAT%20Track/DAT.md) → [DAT concepts](ha://p/DAT%20concepts) 
+:>> [DAT](DAT.md) → [DAT concepts](ha://p/DAT%20concepts) 
 # Core Concepts
 The core ideas of dvc_dat: dats, specs, results and the namespace `ns`.
 The record in time — values found by their inputs, `L` and `rev.run` — is the

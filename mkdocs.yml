@@ -15,4 +15,5 @@ exclude_docs: |
   DAT Track/
   DAT Design/
   DAT Hooks.md
+  DAT.md
   .obsidian/

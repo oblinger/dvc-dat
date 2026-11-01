@@ -1,7 +1,7 @@
 ---
 description: "`from dvc_dat import Dat`: the `Dat` class, `Dat.manager.run`, `Dat.ns`, the spec file, the config"
 ---
-:>> [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Class API](ha://p/DAT%20Class%20API) 
+:>> [DAT](../../DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Class API](ha://p/DAT%20Class%20API) 
 # DAT Class API
 The `Dat` class — what a run makes, and everything you can do with one.
 
