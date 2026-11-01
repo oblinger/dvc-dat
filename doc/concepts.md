@@ -94,10 +94,10 @@ differently from its twin wrote something undeclared, which is usually
 sitting in `work/`. Dependencies key on the hash, so nothing can depend on a
 run: a run loaded inside a recording is recorded `unsealed`, as any dat
 without a hash is. A run sub-dat carries `dat.standing: sealed` once it has
-finished and no `dat.sha256` of its own (its scratch may be large). A dat
-written before 3.0 holds its run's record in its own results and hashes by
-the 2.x rule, whole folder and name included; `dat.hash: functional` in
-`_result_.yaml` marks the rule a file follows.
+finished and no `dat.sha256` of its own (its scratch may be large).
+`dat.hash: functional` in `_result_.yaml` names the rule, the only one: a dat
+written before 3.0 is not read as one (its 2.x hash does not verify, and a run
+record in its own results is not its run).
 
 ## Standing
 
@@ -256,7 +256,7 @@ Dat.save_artifact("/tmp/lock.json")
 
 `Dat.save_artifact` and `Dat.load_artifact` forward to the default world's
 `save_artifact(source, *, type=None, name=None, link=False)` and
-`load_artifact(name, *, verify=None)`, `name` a name, an `art:` name or a
+`load_artifact(name, *, verify=None)`, `name` a name or a
 URN; `Dat.load` stays a dat's, and `dat.save()` a
 dat's seal. `save_artifact` returns the artifact's
 URN, `sha256:<hex>`. **The type** is what `load_artifact` hands the payload's path
@@ -283,9 +283,9 @@ URN. The store keeps one index file, `_index_.json` in the artifact folder
 (`index:` in `.datconfig.yaml` moves it), keyed by every artifact name and
 every `sha256:` URN — an artifact's, and each saved dat's current hash. It is
 written through a lock and a rename, so it is never torn; `m.reindex()`
-rebuilds it from the folders. Two dats with equal content share one hash and the index keys it to one of them; a URN the index misses is looked for in the dat folders (each saved dat's stored hash, nothing re-hashed) and re-keyed to the first dat holding it, so deleting one twin never strands the other, and only a URN no saved dat holds is `KeyError`. A named artifact's folder is found without it,
-so a store written before 2.14 loads by name as it stands, and `art:` names
-written then still load, the prefix stripped.
+rebuilds it from the folders. Two dats with equal content share one hash and the index keys it to one of them; a URN the index misses is looked for in the dat folders (each saved dat's stored hash, nothing re-hashed) and re-keyed to the first dat holding it, so deleting one twin never strands the other, and only a URN no saved dat holds is `KeyError`. A named artifact's folder is found without it.
+A store written before 2.14 is not read: an `art:` name is a plain name, and a
+2.13 sidecar's single `name` is no key.
 
 The artifact folder is `art_folder:` in `.datconfig.yaml`, else `art/`
 beside the config file — a sibling of `data/`. The artifact folder and the

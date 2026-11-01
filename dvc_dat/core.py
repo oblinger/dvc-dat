@@ -192,7 +192,7 @@ DAT_DEPENDENCIES = "dat.dependencies"  # result: every dat and artifact the run 
 DAT_SHA256 = "dat.sha256"              # result: the dat's content hash, stamped by save()
 _HASH_PLACEHOLDER = "excluded"         # what dat.sha256 reads while the dat is hashed
 DAT_HASH = "dat.hash"                  # result: `functional` since 3.0 -- the rule dat.sha256 follows
-HASH_FUNCTIONAL = "functional"         # ... name and run/ left out; absent: the 2.x whole-folder rule
+HASH_FUNCTIONAL = "functional"         # ... name and run/ left out; the only rule (SVP 1467 Q9)
 DEP_MANUAL = "$MANUAL"                 # dependency of a dat sealed without a run
 DEP_UNSEALED = "unsealed"              # the hash recorded for a dat still open
 DAT_STANDING = "dat.standing"          # spec: a demand; results: what the last save earned
@@ -205,11 +205,8 @@ STANDINGS = (ROLLING, OPEN, SEALED, REFERENCEABLE)
 _FROZEN = (SEALED, REFERENCEABLE)
 _RANK = {OPEN: 0, SEALED: 1, REFERENCEABLE: 2}   # as an input, rolling counts as sealed
 _SPEC_DEMANDS = (ROLLING, REFERENCEABLE)          # what a spec may ask for
-_LEGACY_ROLLING = "dat.rolling"                   # 2.13, read only
-_LEGACY_REFERENCEABLE = "dat.referenceable"       # 2.13, read only
 
 URN_PREFIX = "sha256:"                 # every stored thing answers to sha256:<hex>
-ART_PREFIX = "art:"                    # written before 2.14; stripped from a name
 ART_FILE = "_art_.yaml"                # an artifact's sidecar
 INDEX_FILE = "_index_.json"            # names and URNs of the store, one namespace
 _URN_FOLDER = "sha256"                 # where an unnamed artifact lives: sha256/<hex>/
@@ -268,34 +265,18 @@ def _record_dat(dat: "Dat") -> None:
 
 
 def _standing_of(spec: Dict[str, Any], result: Dict[str, Any]) -> str:
-    """A dat's standing from its spec and its results as written.  A file saved
-    before 2.14 carries none: open unless a run finished it or a hand saved it
-    and no input was open, then referenceable when 2.13 stamped it so."""
+    """A dat's standing from its spec and its results as written: the one every
+    save stamps; with none (never saved), rolling when the spec demands it,
+    else open."""
     stamped = Dat.get(result, DAT_STANDING, None)
     if stamped is not None:
         return stamped
-    if (Dat.get(spec, DAT_STANDING, None) == ROLLING
-            or Dat.get(spec, _LEGACY_ROLLING, None) is True):
-        return ROLLING
-    deps = Dat.get(result, DAT_DEPENDENCIES, None) or {}
-    if DEP_UNSEALED in deps.values() or not (
-            Dat.get(result, DAT_RUN_TIME, None) is not None or DEP_MANUAL in deps):
-        return OPEN
-    return REFERENCEABLE if Dat.get(result, _LEGACY_REFERENCEABLE, None) is True else SEALED
-
-
-def _art_key(name: Union[str, Path]) -> str:
-    """A name as the store keys it: the `art:` prefix of a name written before
-    2.14 stripped."""
-    name = str(name)
-    return name[len(ART_PREFIX):] if name.startswith(ART_PREFIX) else name
+    return ROLLING if Dat.get(spec, DAT_STANDING, None) == ROLLING else OPEN
 
 
 def _sidecar_names(sidecar: Dict[str, Any]) -> List[str]:
-    """Every name an artifact's sidecar gives it (a 2.13 sidecar holds one)."""
-    if "names" in sidecar:
-        return list(sidecar["names"] or [])
-    return [_art_key(sidecar["name"])] if sidecar.get("name") else []
+    """Every name an artifact's sidecar gives it."""
+    return list(sidecar.get("names") or [])
 
 
 def _payload_size(path: Path) -> int:
@@ -334,38 +315,35 @@ def _hash_payload(folder: str, payload: str) -> str:
 
 
 def _hash_dat(folder: Union[str, Path], results: Dict[str, Any]) -> str:
-    """`"sha256:<hex>"` over a dat's folder: the functional rule when the
-    results say `dat.hash: functional` (every save since 3.0), else the 2.x
-    rule a file written before carries.
+    """`"sha256:<hex>"` over a dat's folder by the functional rule, the only one
+    (`dat.hash: functional`, stamped by every save, names it; a hash a 2.x save
+    stamped does not verify, SVP 1467 Q9).
 
-    Functional: every file but the `run/` sub-dat and `dat.name` -- the run is
+    Every file but the `run/` sub-dat and `dat.name` -- the run is
     the record of one execution and the name is the dat's address, neither is
     content -- so two runs of one recipe at two places hash the same when the
     code is functional.  `_spec_.yaml` counts as its sorted-key dump with
     `dat.name` left out, `_result_.yaml` as its sorted-key dump with
     `dat.sha256` set to `excluded`, so the hash can sit inside the file it
-    covers and a later check recomputes it the same way.  2.x: every file as
-    its bytes, `_result_.yaml` as above."""
+    covers and a later check recomputes it the same way."""
     folder = os.fspath(folder)          # a Path would never equal os.walk's str root
-    functional = Dat.get(results or {}, DAT_HASH, None) == HASH_FUNCTIONAL
     lines = []
     for root, dirs, files in os.walk(folder):
-        if root == folder and functional:
+        if root == folder:
             dirs[:] = [d for d in dirs if d != RUN_FOLDER]
         for file in files:
             rel = os.path.relpath(os.path.join(root, file), folder)
-            if rel == RESULT_YAML or (functional and rel in (SPEC_YAML, SPEC_JSON)):
+            if rel in (RESULT_YAML, SPEC_YAML, SPEC_JSON):
                 continue
             lines.append(f"{rel}\0{_sha256_file(os.path.join(root, file))}\n")
-    if functional:
-        if os.path.exists(os.path.join(folder, SPEC_YAML)):
-            spec = yaml.safe_load(Path(folder, SPEC_YAML).read_text()) or {}
-        else:                           # a `_spec_.json` is read too (spec-format), and hashed as its spec
-            spec = json.loads(Path(folder, SPEC_JSON).read_text()) or {}
-        if isinstance(spec.get("dat"), dict):
-            spec["dat"].pop("name", None)
-        text = yaml.dump(spec, Dumper=_SpecDumper, sort_keys=True)
-        lines.append(f"{SPEC_YAML}\0{hashlib.sha256(text.encode()).hexdigest()}\n")
+    if os.path.exists(os.path.join(folder, SPEC_YAML)):
+        spec = yaml.safe_load(Path(folder, SPEC_YAML).read_text()) or {}
+    else:                               # a `_spec_.json` is read too (spec-format), and hashed as its spec
+        spec = json.loads(Path(folder, SPEC_JSON).read_text()) or {}
+    if isinstance(spec.get("dat"), dict):
+        spec["dat"].pop("name", None)
+    text = yaml.dump(spec, Dumper=_SpecDumper, sort_keys=True)
+    lines.append(f"{SPEC_YAML}\0{hashlib.sha256(text.encode()).hexdigest()}\n")
     canonical = deepcopy(results or {})
     _dotted_set(canonical, DAT_SHA256.split("."), _HASH_PLACEHOLDER)
     text = yaml.dump(canonical, Dumper=_SpecDumper, sort_keys=True)
@@ -961,8 +939,8 @@ class DatManager:
         A URN not in the index is looked for in the dat folders, as `reindex()` does
         (each saved dat's stored hash, nothing re-hashed); the first dat holding it
         is keyed to it and found, so deleting one of two same-hash dats never strands
-        the other (1467 Q4 (A)). `KeyError` when none does; an `art:` name with no
-        artifact is `FileNotFoundError`; a name both hold is `ValueError`."""
+        the other (1467 Q4 (A)). `KeyError` when none does; a name both hold is
+        `ValueError`."""
         text = str(name)
         if text.startswith(URN_PREFIX):
             entry = self._read_index().get(text) or self._rekey_dat(text)
@@ -972,12 +950,6 @@ class DatManager:
             if "art" in entry:
                 return "art", os.path.join(self._require_art_folder(text), entry["art"])
             return "dat", entry["dat"]
-        if text.startswith(ART_PREFIX):
-            self._require_art_folder(text)
-            folder = self._artifact_folder(text)
-            if folder is None:
-                raise FileNotFoundError(f"load: no artifact {text!r}")
-            return "art", folder
         folder = None if os.path.isabs(text) else self._artifact_folder(text)
         if folder is not None:
             if self._dat_exists(text):
@@ -994,11 +966,11 @@ class DatManager:
         return self._art_folder
 
     def _artifact_folder(self, name: Union[str, Path]) -> Optional[str]:
-        """The folder of the artifact `name` (a name, an `art:` name or a URN)
-        holds, else None: the index first, then the folder the name is."""
+        """The folder of the artifact `name` (a name or a URN) holds, else None:
+        the index first, then the folder the name is."""
         if self._art_folder is None:
             return None
-        key = _art_key(name)
+        key = str(name)
         entry = self._read_index().get(key)
         if entry is not None:
             return os.path.join(self._art_folder, entry["art"]) if "art" in entry else None
@@ -1142,7 +1114,7 @@ class DatManager:
         """
         art = self._require_art_folder(str(name or source))
         type_name = self._type_name(type)
-        key = None if name is None else _art_key(name)
+        key = None if name is None else str(name)
         if key is not None and not self._valid_name(key):
             raise ValueError(f"save_artifact: an artifact name is a relative path of plain "
                              f"segments, got {name!r}")
@@ -1220,7 +1192,6 @@ class DatManager:
                              f"{sidecar.get('type')!r}, not {type_name!r}")
         if key is not None:
             sidecar["names"] = _sidecar_names(sidecar) + [key]
-            sidecar.pop("name", None)
             sidecar_path.write_text(yaml.safe_dump(sidecar, sort_keys=False))
             index[key] = {"art": rel}
 
@@ -1275,7 +1246,7 @@ class DatManager:
             if actual != sidecar["sha256"]:
                 raise ValueError(f"load: artifact {name!r} hashes to {actual}, "
                                  f"not its stored {sidecar['sha256']}")
-        _record(_art_key(name), sidecar.get("sha256"))
+        _record(str(name), sidecar.get("sha256"))
         return (Path(folder) if payload == "." else Path(folder, payload)), sidecar
 
     def _check(self, dat: "Dat", verify: Optional[bool]) -> None:
@@ -1381,8 +1352,8 @@ class DatManager:
     def _earned(self, dat: "Dat", deps: Dict[str, Any]) -> Tuple[str, str]:
         """The standing a seal earns, and why it is no higher: the least of its
         inputs' (rolling counts as sealed), capped at sealed by a run's code
-        that is dirty or outside a checkout.  The run is `dat.run`; a dat
-        written before 3.0 holds the run's record in its own results."""
+        that is dirty or outside a checkout.  The run is `dat.run`; a dat with
+        none has no run record to cap it."""
         earned, why = REFERENCEABLE, ""
 
         def cap(to: str, reason: str) -> None:
@@ -1390,7 +1361,7 @@ class DatManager:
             if _RANK[to] < _RANK[earned]:
                 earned, why = to, reason
         run = dat.run
-        record = run.get_results() if run is not None else dat.get_results()
+        record = run.get_results() if run is not None else {}
         if Dat.get(record, DAT_RUN_AT, None) is not None:
             code = Dat.get(record, DAT_CODE, None)
             if code is None:
@@ -1813,8 +1784,7 @@ class Dat(Value, metaclass=_DatMeta):
         """The run that made this dat: the sub-dat `run/`, whose results hold
         `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and
         `dat.content`, and whose `work/` is the run's scratch.  None for a dat
-        never run (one filled by hand, or written before 3.0, which holds its
-        run's record in its own results).  A run is not content: it is outside
+        never run (one filled by hand).  A run is not content: it is outside
         the dat's hash, and nothing may depend on it."""
         if self._run_dat is None:
             path = os.path.join(self._path, RUN_FOLDER)
