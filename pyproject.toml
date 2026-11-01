@@ -38,3 +38,36 @@ dev = [
     "pytest-xdist>=3.8.0",
     "xlsxwriter>=3.2.9",
 ]
+# the documentation site (`just docs`): pinned to releases at least two weeks old
+docs = [
+    "mkdocs-material==9.7.7",
+    "mkdocstrings[python]==1.0.7",
+    "mkdocstrings-python==2.0.9",
+]
+
+[tool.uv.exclude-newer-package]
+# the docs group's packages (and only theirs) resolve to releases at least two weeks old (2026-10-31)
+babel = "2026-10-17T00:00:00Z"
+backrefs = "2026-10-17T00:00:00Z"
+certifi = "2026-10-17T00:00:00Z"
+charset-normalizer = "2026-10-17T00:00:00Z"
+click = "2026-10-17T00:00:00Z"
+ghp-import = "2026-10-17T00:00:00Z"
+griffelib = "2026-10-17T00:00:00Z"
+idna = "2026-10-17T00:00:00Z"
+markdown = "2026-10-17T00:00:00Z"
+mergedeep = "2026-10-17T00:00:00Z"
+mkdocs = "2026-10-17T00:00:00Z"
+mkdocs-autorefs = "2026-10-17T00:00:00Z"
+mkdocs-get-deps = "2026-10-17T00:00:00Z"
+mkdocs-material = "2026-10-17T00:00:00Z"
+mkdocs-material-extensions = "2026-10-17T00:00:00Z"
+mkdocstrings = "2026-10-17T00:00:00Z"
+mkdocstrings-python = "2026-10-17T00:00:00Z"
+paginate = "2026-10-17T00:00:00Z"
+pathspec = "2026-10-17T00:00:00Z"
+pymdown-extensions = "2026-10-17T00:00:00Z"
+pyyaml-env-tag = "2026-10-17T00:00:00Z"
+requests = "2026-10-17T00:00:00Z"
+urllib3 = "2026-10-17T00:00:00Z"
+watchdog = "2026-10-17T00:00:00Z"

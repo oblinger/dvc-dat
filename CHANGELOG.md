@@ -6,6 +6,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 [Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
+## Unreleased
+
+- The site carries a generated API reference (`just docs`).
+
 ## 2.42.1 — 2026-10-31
 
 - **No legacy ledgers: the branches that read older forms are removed (SVP 1467 Q9 ruling; patch).** Ruled by Dan 2026-10-31: nothing in an existing ledger or store is retained, so the new form is the only form. Removed: (1) `_hash_dat`'s 2.x rule (every file as bytes, name included, when `_result_.yaml` lacks `dat.hash: functional`): every dat hashes by the functional rule, so a 2.x hash fails `verify()` and a verifying load is `ValueError`; (2) `_standing_of`'s 2.13 rule (`dat.rolling`, `dat.referenceable`, sealed inferred from `dat.run_time` or `$MANUAL`): a results file with no stamped `dat.standing` is `open`, `rolling` when its spec demands it; (3) `art:` names (`ART_PREFIX`, `_art_key`): `load("art:x")` is a plain name, `KeyError` when no dat or artifact holds it; (4) a 2.13 sidecar's singular `name`: `reindex()` keys `names` only; (5) `_earned` reading a run record from a dat's own results (pre-3.0): a dat with no `run/` has no run record to cap it. Docs: `concepts.md`, `spec-format.md`, `DAT Dat`, `DAT Manager API`. Migration: none; a ledger or store written before this is not read.

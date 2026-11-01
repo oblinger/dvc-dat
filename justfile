@@ -19,6 +19,10 @@ demo:
     uv run jupytext --sync "doc/DAT Demos"/demo-*.ipynb "doc/DAT Demos"/demo-*.py
     for nb in "doc/DAT Demos"/demo-*.ipynb; do JUPYTER_PATH={{justfile_directory()}}/.venv/share/jupyter uv run jupyter nbconvert --execute --to notebook --inplace "$nb"; done
 
-# the documentation site (doc/ -> site/)
+# the documentation site (doc/ -> site/), with the generated API reference (doc/api/)
 docs:
-    uv run --with mkdocs-material mkdocs build
+    uv run --group docs mkdocs build
+
+# the documentation site, served with live reload
+docs-serve:
+    uv run --group docs mkdocs serve

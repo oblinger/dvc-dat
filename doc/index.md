@@ -46,6 +46,7 @@ result = Dat.manager.run("catalog.experiment", epochs=200)
 ## API Reference
 
 - **[Overview](overview.md)** — what `dvc_dat` exports, and every method
+- **[API reference](api/index.md)** — generated from the source by `just docs`: every public class and function, with its signature and docstring
 
 ## Demos
 

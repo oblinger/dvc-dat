@@ -8,6 +8,31 @@ nav:
   - Overview: overview.md
   - Command Line: cli.md
   - Ledger: DAT Modules/ledger/DAT Ledger.md
+  - API Reference:
+      - api/index.md
+      - Dat, DatManager, DatContainer: api/core.md
+      - Namespace: api/do.md
+      - Ledger: api/ledger.md
+      - Commands: api/just.md
+      - Dat tools: api/dat_tools.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            show_source: false
+            members_order: source
+            show_root_heading: true
+            show_root_full_path: false
+            heading_level: 2
+            merge_init_into_class: true
+            show_signature_annotations: true
+            filters: ["!^_[^_]"]
 
 
 # The anchor pages that share doc/ with the site source (2026-10-19): never built into the site
