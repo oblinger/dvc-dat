@@ -266,7 +266,7 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
     From `dvc_dat.ledger.named`: the active ledger, `DAT_LEDGER`, else the `ledgers:` section's `default:` or `ledger:`, resolved at each use ([DAT Ledger § Many ledgers](ledger/DAT%20Ledger.md#Many%20ledgers)). ^l
 
 **ledgers**
-    From `dvc_dat.ledger.named`: `ledgers.<name>` or `ledgers["jb-26"]`, that entry of the `ledgers:` section. ^ledgers
+    From `dvc_dat.ledger.named`: `ledgers.<name>` or `ledgers["<name>"]`, a name being a Python identifier, that entry of the `ledgers:` section. ^ledgers
 
 **__version__**`: str`
     The package version, `"2.41.0"` at this checkout. ^--version--

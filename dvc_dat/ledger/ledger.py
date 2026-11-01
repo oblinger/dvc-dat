@@ -18,6 +18,7 @@ object, are ``named``.
 
 from __future__ import annotations
 
+import keyword
 import os
 import re
 from pathlib import Path
@@ -35,7 +36,7 @@ ENV = "DAT_LEDGER"
 CONFIG = ".datconfig.yaml"
 OVERRIDE = ".datconfig.override.yaml"
 DEFAULT = ".dat/ledger"
-NAME = re.compile(r"^[a-z][a-z0-9-]*$")    # a ledger's name in ``ledgers:``: lowercase, digits, hyphens
+NAME = re.compile(r"^[a-z][a-z0-9_]*$")    # a ledger's name in ``ledgers:``: a Python identifier, its database name
 _VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 
 Target = Union[str, Path]                  # a DSN, or a folder
@@ -83,6 +84,12 @@ def _target(cfg: Path, led: str) -> Target:
     return led if is_dsn(led) else _relative(cfg, led)
 
 
+def _is_name(name: Any) -> bool:
+    """A ledger name: ``[a-z][a-z0-9_]*`` and not a Python keyword, so ``ledgers.<name>`` reaches it and it is
+    the Postgres database name unchanged."""
+    return isinstance(name, str) and bool(NAME.match(name)) and not keyword.iskeyword(name)
+
+
 def _section(cfg: Path, values: Dict[str, Any]) -> Tuple[Dict[str, str], Optional[str]]:
     """The ``ledgers:`` section, checked: ``({name: location}, default name or None)``."""
     if values.get("ledger"):
@@ -95,9 +102,9 @@ def _section(cfg: Path, values: Dict[str, Any]) -> Tuple[Dict[str, str], Optiona
     for name, loc in section.items():
         if name == "default":
             continue
-        if not (isinstance(name, str) and NAME.match(name)):
-            raise LedgerError(f"{cfg}: ledgers: {name!r} is not a ledger name (lowercase letters, digits and "
-                              "hyphens, a letter first)")
+        if not _is_name(name):
+            raise LedgerError(f"{cfg}: ledgers: {name!r} is not a ledger name (a Python identifier: lowercase "
+                              "letters, digits and underscores, a letter first, not a keyword)")
         if not (isinstance(loc, str) and loc.strip()):
             raise LedgerError(f"{cfg}: ledgers: {name} is a folder or a DSN, got {loc!r}")
         entries[name] = loc
@@ -120,7 +127,7 @@ def _resolve(cfg: Optional[Path], values: Dict[str, Any],
     ``default:``, then the one-ledger ``ledger:`` key."""
     if env:
         given: Any = env
-        if cfg is not None and "ledgers" in values and NAME.match(env):
+        if cfg is not None and "ledgers" in values and _is_name(env):
             entries, _ = _section(cfg, values)
             if env in entries:
                 return _target(cfg, entries[env]), f"{env} ({ENV}, {cfg})", cfg.parent, cfg

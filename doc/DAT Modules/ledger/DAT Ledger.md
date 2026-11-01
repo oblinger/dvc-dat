@@ -463,7 +463,7 @@ The package's other exports: the two ledger handles (also exported from `dvc_dat
     The active ledger as one object: `from dvc_dat import L`. A `Ledger` (`isinstance` holds, so `v.seal(L)` and `seal=L` take it) whose every attribute is the ledger `Ledger()` would open, resolved from the working directory and `DAT_LEDGER` at each use and never at import; a checkout with a `ledgers:` section and no default imports it fine and raises the one-line `LedgerError` at the first use. `L.at()` is a `Rev` of the real handle, the same handle `ledgers.<name>` gives for that ledger; `repr(L)` names it, or says why it is unresolved. See [Many ledgers](#Many%20ledgers). ^active-l
 
 **ledgers**`: Ledgers`
-    The `ledgers:` section of the nearest `.datconfig.yaml` (the override file's entries merged in), by name: `ledgers.record` or `ledgers["record"]` is that entry's `Ledger`, opened on first use and kept for the process; a name with a hyphen takes the item form only, `ledgers["jb-26"]`, and `ledgers.jb_26` is `AttributeError` naming it. `list(ledgers)` is the names in file order, `"games" in ledgers` a test; an unknown name is `KeyError` (`AttributeError` as an attribute) listing the section. A named handle asserts no `mounts:`; only the active ledger does. A project with the one-ledger `ledger:` key has no section: `ledgers.<name>` is `LedgerError` and its ledger is `L`. ^ledgers
+    The `ledgers:` section of the nearest `.datconfig.yaml` (the override file's entries merged in), by name: `ledgers.record` or `ledgers["record"]` is that entry's `Ledger`, opened on first use and kept for the process; every name is a Python identifier, so every entry has the attribute form, `ledgers.do26`. `list(ledgers)` is the names in file order, `"games" in ledgers` a test; an unknown name is `KeyError` (`AttributeError` as an attribute) listing the section. A named handle asserts no `mounts:`; only the active ledger does. A project with the one-ledger `ledger:` key has no section: `ledgers.<name>` is `LedgerError` and its ledger is `L`. ^ledgers
 
 **ledger_fn**`(func: Callable) -> Callable`
     Marks `func` as a value function and returns it unchanged, still a plain callable: a plain call runs the body with whatever `Rev` it is given, records nothing and seals nothing, which is how it is unit-tested. A missing return annotation or a non-callable is `TypeError` at decoration. ^ledger-fn
@@ -597,26 +597,26 @@ ledgers:
   games: postgresql://dat@db/games?art=/data/art/games
   record: postgresql://dat@db/record?art=/data/art/record
   experiments: postgresql://dat@db/experiments?art=/data/art/experiments
-  jb-26: postgresql://dat@db/jb_26?art=/data/art/jb-26
-  do-26: postgresql://dat@db/do_26?art=/data/art/do-26
-  ar: postgresql://dat@db/ar?art=/data/art/ar
-  ci-26: postgresql://dat@db/ci_26?art=/data/art/ci-26
-  tmp-1: .dat/tmp-1
+  do26: postgresql://dat@db/do26?art=/data/art/do26
+  ar26: postgresql://dat@db/ar26?art=/data/art/ar26
+  ci26: postgresql://dat@db/ci26?art=/data/art/ci26
+  prod_run26: postgresql://dat@db/prod_run26?art=/data/art/prod_run26
+  tmp1: .dat/tmp1
 ```
 
-**Names** are lowercase letters, digits and hyphens, a letter first; `default` is reserved. A rolling ledger is a *generation* named `<owner>-<yy>` or `<kind>-<yy>`, the two-digit year: `jb-26`, `do-26`, `ci-26`; a second generation in the same year appends a letter, `jb-26b`. A ledger that does not roll by year has a plain name (`ar`, an automated researcher's runs); a throwaway one is `tmp-<n>`, the prefix saying it may be gone. A ledger name is never reused, not even after the ledger is dropped.
+**Names** are Python identifiers, `[a-z][a-z0-9_]*` and not a keyword; a hyphen is refused, and `default` is reserved. So every ledger is an attribute, `ledgers.<name>`, and its name is a dotted-name segment as it stands (a mount at `<name>` loads as `mnt.<name>...`). A Postgres ledger's database is named the ledger name, unchanged: `do26` lives in the database `do26`. A rolling ledger is a *generation* named `<owner><yy>` or `<kind><yy>`, the two-digit year with no separator: `do26`, `ar26`, `ci26`, `prod_run26`, `dev_run26`; a second generation in the same year appends a letter, `do26b`. A ledger that does not roll by year has a plain name (`games`, `prod_assets`, `dev_assets`, `results`, `official`, `exp`); a throwaway one is `tmp<n>`, the prefix saying it may be gone, and a branch's is `branch_<name>`. A ledger name is never reused, not even after the ledger is dropped.
 
 **The active ledger** is where work lands when a script names none: `L`, and `Ledger()`. It is, first to last:
 
-1. `DAT_LEDGER`: an entry's name (`DAT_LEDGER=jb-26`), else a location as before.
+1. `DAT_LEDGER`: an entry's name (`DAT_LEDGER=do26`), else a location as before.
 2. `ledgers: {default: <name>}` in `.datconfig.override.yaml` beside the config, which is never committed: whose ledger is active is a per-checkout choice.
 3. `default:` in the committed section, only if one is there.
 
-A section with no default and no `DAT_LEDGER` is `LedgerError`, one line: `no active ledger: <config> lists ledgers (games, record, ...) and names no default; set DAT_LEDGER=<name>, or 'ledgers: {default: <name>}' in <folder>/.datconfig.override.yaml`. Nothing falls back to a shared ledger. CI and long-running agents set `DAT_LEDGER` in their environment. The override file's `ledgers:` merges over the committed one by name, so it may also add a personal entry. A script written for a specialty ledger names it: `ledgers.record`, `ledgers["jb-26"]`.
+A section with no default and no `DAT_LEDGER` is `LedgerError`, one line: `no active ledger: <config> lists ledgers (games, record, ...) and names no default; set DAT_LEDGER=<name>, or 'ledgers: {default: <name>}' in <folder>/.datconfig.override.yaml`. Nothing falls back to a shared ledger. CI and long-running agents set `DAT_LEDGER` in their environment. The override file's `ledgers:` merges over the committed one by name, so it may also add a personal entry. A script written for a specialty ledger names it: `ledgers.record`, `ledgers.do26`.
 
 **Every ledger is a universe.** Provenance never crosses ledgers: a function may read another ledger (or anything else), but what it writes is a value on its own ledger, so a ledger can be iced whole. Promoting a value to another ledger copies it with its provenance chain.
 
-**The global reference** to a value on any ledger is `<ledger>@<revision>:<name-or-sha>`, e.g. `jb-26@512:run/0-3-0/G1` or `jb-26@512:sha256:…`. It is unique because a ledger name is never reused, and it stays meaningful after the ledger is iced: it says which ledger held the value at which revision, even when the value can no longer be fetched. It is an informal pointer, for summaries and docs; nothing resolves it across ledgers.
+**The global reference** to a value on any ledger is `<ledger>@<revision>:<name-or-sha>`, e.g. `do26@512:run/0-3-0/G1` or `do26@512:sha256:…`. It is unique because a ledger name is never reused, and it stays meaningful after the ledger is iced: it says which ledger held the value at which revision, even when the value can no longer be fetched. It is an informal pointer, for summaries and docs; nothing resolves it across ledgers.
 
 **One ledger** is the single key `ledger: <location>`, unchanged: a project with no named ledgers, its ledger the active one (`L`, `Ledger()`). A config with both `ledger:` and `ledgers:` is `LedgerError`; keep one.
 

@@ -54,7 +54,7 @@ from dvc_dat import Dat, L, ledgers
 
 m = Dat.manager              # the default world
 L                            # the active ledger: DAT_LEDGER, else the config's
-ledgers["jb-26"]             # a named one, ledgers.<name> too (DAT Ledger)
+ledgers.do26                 # a named one, ledgers["do26"] too (DAT Ledger)
 Dat.save_artifact("clips/G1.mp4", name="games/G1/video")
 
 Dat.manager.run("mymodule.train.baseline")          # -> data/runs/2026-09/baseline/
