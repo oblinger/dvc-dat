@@ -793,7 +793,7 @@ Dat.ns.mount(folder="mymodule", at="mymodule")   # mymodule's files join the dat
 #
 # 1. **Look up** its spec by name: `Dat.ns.load(name)` is the object
 #    a dotted name names, here the spec file's dict as written.
-# 2. **Expand** it: `Dat.manager.expand_spec(spec)` merges the spec
+# 2. **Expand** it: `Dat.ns.expand_spec(spec)` merges the spec
 #    over its `dat.base`, which it drops, then fills every template
 #    variable `{}`; `{YYYY}` is the year, `{unique}` empty.
 # 3. **Instantiate** it: `Dat.create(spec=expanded_spec)` is the Dat
@@ -801,7 +801,7 @@ Dat.ns.mount(folder="mymodule", at="mymodule")   # mymodule's files join the dat
 
 # %%
 spec = Dat.ns.load("mymodule.specs.table12")    # 1. the spec as written
-expanded_spec = Dat.manager.expand_spec(spec)   # 2. dat.base merged in, every {…} filled
+expanded_spec = Dat.ns.expand_spec(spec)   # 2. dat.base merged in, every {…} filled
 table12_dat = Dat.create(spec=expanded_spec)    # 3. the Dat and its folder
 
 # %%
@@ -942,7 +942,7 @@ print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: the spec'
 # %%
 # print results
 print("SPEC:    ", Dat.ns.load("mnt.mymodule.specs.table12"))
-print("EXPANDED:", Dat.manager.expand_spec(Dat.ns.load("mnt.mymodule.specs.table12")))
+print("EXPANDED:", Dat.ns.expand_spec(Dat.ns.load("mnt.mymodule.specs.table12")))
 print("DB/KEYS: ", L.at()[table12_value.subject, "db/keys"])   # the memo key
 
 # %% [markdown]

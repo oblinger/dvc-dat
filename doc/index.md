@@ -40,6 +40,7 @@ result = Dat.manager.run("catalog.experiment", epochs=200)
 - **[Concepts](concepts.md)** — the fork rule, the two kinds of name,
   configuration on first use, `dat.base`, the `{}` grammar, validation
 - **[Spec Format](spec-format.md)** — `_spec_.yaml` / `_result_.yaml` reference
+- **[Expansion](expand.md)** — the `{}` grammar: `ns.expand`, the built-ins, what the namespace holds, `{unique}`
 - **[Mounts](mount-commands.md)** — giving a name to something that is not an import
 - **[Command Line](cli.md)** — `just run` (`x`), `dvc_dat.just`, exit codes
 

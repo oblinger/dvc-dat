@@ -188,3 +188,10 @@ def test_a_ledger_project_gets_the_ledgers_do_and_a_plain_one_the_plain_do(tmp_p
     assert type(p.ns) is Namespace
     p.ns.mount(value={"dat": {}}, at="specs.x")
     assert p.ns.load("specs.x") == {"dat": {}}
+
+
+def test_a_path_template_counts_a_whole_segment_through_rev_ns(coded, world):
+    """SVP 1500: ``dat.name``'s ``{unique}`` on a ledger run is ``rev.ns.expand``'s counter."""
+    spec = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/{unique}", "kwargs": {"n": 12, "start": 1}}}
+    assert str(coded.at().run(spec, n=5)) == "tables/1"
+    assert str(coded.at().run(spec, n=6)) == "tables/2"

@@ -23,7 +23,6 @@ transaction's own ``db/tx/<rev>`` rows (A50).
 from __future__ import annotations
 
 import ctypes
-import datetime as _dt
 import json
 import re
 import signal
@@ -36,7 +35,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, 
 
 from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, sha256, show, strip_hint, tag
 from .errors import Exists, LockTimeout, SealBroken, Undeclared, Unlocked
-from .value import Value, check_loadable, dotted
+from .value import Value, check_loadable, dotted, restamp, stamp
 
 if TYPE_CHECKING:
     from .ledger import Ledger
@@ -180,6 +179,7 @@ class Transaction:
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
         self._codes: set = set()
         self._namings: List[_Op] = []         # the name adds of _name_value: one name, re-checked at commit
+        self._minted: set = set()             # the names t.ns.expand counted {unique} to (distinct per mint)
         self._clocks: Dict[Tuple[str, str], Tuple[int, int, int]] = {}   # the highest version seen
         self._commits: Dict[str, str] = {}
         #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
@@ -255,6 +255,10 @@ class Transaction:
     def __getitem__(self, key: Any) -> Any:
         """``t[s, p]`` / ``t[s]`` read at ``previous_rev``; ``t[s, p] = o`` and ``t[s] = {...}`` write."""
         return self.previous_rev[key]
+
+    def _names_minted(self, name: str) -> bool:
+        """``name`` was minted by ``t.ns.expand`` in this transaction, or is pending as a ``db/alias`` subject."""
+        return name in self._minted or any(op.added and op.p == "db/alias" and op.s == name for op in self._ops)
 
     def _snapshot(self) -> "Rev":
         """The top at open, for the package's own declaration and seal checks; no lock required."""
@@ -468,8 +472,7 @@ class Transaction:
             if not any(r[0] == SUBJECT and r[1] == PREDICATE for r in rows):
                 rows.append((SUBJECT, PREDICATE, "str:" + DEFAULT, True))      # the memo policy (SVP 1474)
         rows.append((txs, "db/by", self._by, True))
-        stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        rows.append((txs, "db/time", "str:" + stamp, True))
+        rows.append((txs, "db/time", "str:" + stamp(self._ledger.tz), True))
         rows.extend((txs, k, o, True) for k, o in self._preds)
         self._store_all()
         w.insert(rev, rows)
@@ -581,6 +584,13 @@ class Transaction:
             raise ValueError(f"{subject} db/version: the object is a MAJOR.MINOR.PATCH str, not {object!r}")
         if predicate == "db/tag":
             _tag_name(subject, object)
+        if predicate == "db/tz":
+            from .ledger import _zone
+
+            if subject != "db" or self._snapshot().id != 0:
+                raise ValueError("db db/tz is the ledger's zone, written once by the creating transaction "
+                                 "(Ledger(location, create=True, tz=...)); it never changes")
+            _zone(object)
         o = self._encode(object)
         if predicate == "db/alias" and tag(o) != "str":
             raise TypeError("a db/alias row's object is the subject it names, a str")
@@ -614,6 +624,8 @@ class Transaction:
         self._open("remove")
         _name(subject, "subject")
         _name(predicate, "predicate")
+        if predicate == "db/tz":
+            raise ValueError("db db/tz is the ledger's zone, fixed when it was created; it is never removed")
         self._ops.append(_Op(subject, predicate, self._encode(object), False))
 
     # -- declarations as the body sees them: the snapshot at open plus this transaction's own rows ---------------
@@ -820,7 +832,7 @@ class Transaction:
                 raise SealBroken(f"{type(value).__name__} sealed at {value.sealed}: its bytes changed since; "
                                  "seal a new value (or seal with keep=True to keep the bytes)")
             deps, provenance, env = local["deps"], local["provenance"], local["env"]
-            extra.append(("db/sealed-at", "str:" + str(value.sealed)))
+            extra.append(("db/sealed-at", "str:" + restamp(value.sealed, self._ledger.tz)))
         provenance = check_provenance(provenance)
         if name is None:
             name = value.__dict__.get("_name")          # Value(name=...): the name it is saved under
@@ -847,7 +859,7 @@ class Transaction:
         else:
             self._frozen.append((value, dict(value.preds)))
             value.__dict__["_preds"] = FrozenPreds(value.preds)
-            value.sealed = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            value.sealed = stamp(self._ledger.tz)
         value.subject = subject
         value.dependencies = MappingProxyType(dict(trace))
         value.__dict__["_hash"] = h

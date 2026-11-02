@@ -98,7 +98,8 @@ def test_one_transaction_one_revision_and_tx_rows_last(L):
 def test_every_transaction_is_stamped_and_time_is_refused(L):
     with L.transaction(by="t") as t:
         t.add("s", "p", "1")
-    assert len(t.rev[t.rev.tx, "db/time"]) == 20                 # UTC, YYYY-MM-DDTHH:MM:SSZ
+    assert t.rev[t.rev.tx, "db/time"].endswith("+00:00")        # a UTC ledger: ISO 8601, the zone's offset
+    assert len(t.rev[t.rev.tx, "db/time"]) == 25
     with pytest.raises(TypeError, match="time= is gone"):
         L.transaction(by="t", time=True)
 

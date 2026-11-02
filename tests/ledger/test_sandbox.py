@@ -78,8 +78,8 @@ PKG = {
             r["base"] = ns.load("mnt.sbx.stage.specs.base")                # a mounted yaml
             r["literal"] = ns.load("mnt.sbx.stage.runs.TABLE")["dat"]["kwargs"]
             r["fn"] = ns.load("mnt.sbx.stage.runs.table").kind             # a mounted run function: its Fn
-            r["spec"] = Dat.manager.expand_spec(ns.load("mnt.sbx.stage.specs.table"))["dat"]  # base merged, {…} filled
-            r["expanded"] = Dat.manager.expand_spec({"n": "{sbx.stage.runs.TABLE}"})["n"]["dat"]["kwargs"]
+            r["spec"] = ns.expand_spec(ns.load("mnt.sbx.stage.specs.table"))["dat"]  # base merged, {…} filled
+            r["expanded"] = ns.expand_spec({"n": "{sbx.stage.runs.TABLE}"})["n"]["dat"]["kwargs"]
             try:
                 ns.mount(value={}, at="x")
                 r["mount"] = "allowed"

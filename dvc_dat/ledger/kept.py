@@ -134,8 +134,8 @@ class Kept:
     def purge(self, older: _dt.timedelta) -> List[str]:
         """Drop every entry sealed more than ``older`` ago (and every unreadable one), then every blob
         no entry names and older than an hour (a concurrent ``put`` may not have written its entry yet)."""
-        cut = (_dt.datetime.now(_dt.timezone.utc) - older).strftime("%Y-%m-%dT%H:%M:%SZ")
-        gone = [e["entry"] for e in self.listing() if (e.get("sealed_at") or "") <= cut]
+        cut = _dt.datetime.now(_dt.timezone.utc) - older
+        gone = [e["entry"] for e in self.listing() if _sealed_before(e.get("sealed_at"), cut)]
         for entry in gone:
             self.drop(entry)
         live = set()
@@ -148,6 +148,14 @@ class Kept:
             if p.name not in live and not p.name.endswith(".tmp") and p.stat().st_mtime < settled:
                 p.unlink(missing_ok=True)
         return gone
+
+
+def _sealed_before(stamp: Any, cut: "_dt.datetime") -> bool:
+    """A record's ``sealed_at`` (ISO 8601 with an offset) is at or before ``cut``; an unreadable one is."""
+    try:
+        return _dt.datetime.fromisoformat(stamp) <= cut
+    except (TypeError, ValueError):
+        return True
 
 
 # -- the record's deps, preds and environment ---------------------------------------------------

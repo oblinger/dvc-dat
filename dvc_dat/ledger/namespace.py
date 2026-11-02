@@ -25,11 +25,14 @@ from __future__ import annotations
 
 import ast
 import json
+import os
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import yaml
 
+from ..core import _builtins
 from ..do import Namespace
 from .errors import NotEvaluated
 from .fn import MNT, Fn, installed_fn, mounted_name, mounts_at, refuse_mnt
@@ -263,6 +266,49 @@ class LedgerNamespace(Namespace):
             if self._ledger is None:
                 raise RuntimeError(f"{self._config}: names no ledger")
         return self._ledger.at()
+
+    def _ledger_of(self) -> Any:
+        """The ``Ledger`` this namespace names things in (a transaction's needs no lock)."""
+        if self._rev is not None:
+            return self._rev.ledger
+        if self._txn is not None:
+            return self._txn._ledger
+        return self.rev().ledger
+
+    def _tz(self) -> Any:
+        """The ledger's zone (``db db/tz``, fixed at creation; UTC when none was given)."""
+        return self._ledger_of().tz
+
+    def expand(self, text: str, /, **vars: Any) -> str:  # type: ignore[override]
+        """``Namespace.expand``, with dotted names resolved through this ledger namespace, the clock in the
+        ledger's zone, and ``{unique}`` counted: the expansion is tried with the counter at 1, 2, 3, ... until
+        no ``db/alias`` row names a value by it and no folder is at it under the data folder. A path segment
+        that is exactly ``{unique}`` counts ``1``, ``2``, ``3``; a suffix ``""``, ``_2``, ``_3``. The probe
+        is this namespace's revision; a transaction's ``t.ns`` probes its snapshot at open and the names it
+        has minted or aliased already, so a loop minting in one transaction gets distinct names. An absolute
+        result names nothing and is not probed; a keyword ``unique=`` is used as given."""
+        from ..core import _has_unique, expand
+
+        if not isinstance(text, str) or "unique" in vars or not _has_unique(text):
+            return super().expand(text, **vars)
+        ledger = self._ledger_of()
+        txn = self._txn
+        probe = txn._snapshot() if txn is not None else self.rev()
+        data = ledger._store.art.root / "dats"
+        now = datetime.now(ledger.tz)
+        names = {k: v for k, v in _builtins(now).items() if k != "unique"}      # one moment for every try
+        names.update(vars)
+        for count in range(1, 100000):
+            name = expand(text, names, resolver=self.load, tz=ledger.tz, count=count)
+            if os.path.isabs(name):
+                return name
+            if txn is not None and txn._names_minted(name):
+                continue
+            if not probe._held(name, "db/alias") and not (data / name).exists():
+                if txn is not None:
+                    txn._minted.add(name)
+                return name
+        raise RuntimeError(f"expand: {text!r}: no free name for {{unique}} in 100,000 tries")
 
     def _load_unmounted(self, dotted_name: str) -> Any:
         if not self._unguarded:

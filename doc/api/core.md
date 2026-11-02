@@ -1,5 +1,5 @@
 # Dat, DatManager, DatContainer
-`dvc_dat.core`: the dat, the manager that creates, loads and runs dats, and spec expansion.
+`dvc_dat.core`: the dat, the manager that creates, loads and runs dats. Expansion is a namespace's: [Namespace](do.md) `expand`.
 
 ::: dvc_dat.core
     options:
@@ -15,7 +15,3 @@
 ## Spec helpers
 
 ::: dvc_dat.core.merge_dicts
-
-::: dvc_dat.core.expand
-
-::: dvc_dat.core.expand_spec

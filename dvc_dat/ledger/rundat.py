@@ -53,7 +53,7 @@ def memo_key(rev: "Rev", ns: "LedgerNamespace", target: Any, obj: Any,
              kwargs: Dict[str, Any]) -> Tuple[Fn, Dict[str, Any]]:
     """``(fn, keys)`` of a dat run: the run function's ``Fn`` (its template and class set) and the memo key,
     the spec expanded with ``dat.name`` removed."""
-    from ..core import Dat, _builtins, _kind_name, expand_spec
+    from ..core import Dat, _kind_name
 
     if isinstance(obj, Dat):
         raise TypeError(f"run takes a spec, a spec's name or a function's name, not the dat {obj!r}")
@@ -67,7 +67,7 @@ def memo_key(rev: "Rev", ns: "LedgerNamespace", target: Any, obj: Any,
         raise TypeError(f"run: spec['dat'] is a mapping, got {spec['dat']!r}")
     spec["dat"]["kind"] = _kind_name(Dat.manager._class_of(spec["dat"].get("kind")))
     template: Optional[str] = spec["dat"].pop("name", None)
-    keys = expand_spec(spec, _builtins(), resolver=ns.load)
+    keys = ns.expand_spec(spec)
     fn = run_fn(rev, ns, keys)
     return dataclasses.replace(fn, _template=template, _returns=keys["dat"]["kind"]), keys
 

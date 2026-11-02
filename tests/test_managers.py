@@ -82,8 +82,8 @@ class TestTwoWorlds:
         assert "base" not in dat.get_spec()["dat"]
         with pytest.raises(Exception):                     # the default world has no `tmpl`
             Dat.create(spec="tmpl")
-        assert mb.expand("{consts.who}") == "world b"
-        assert ma.expand_spec({"x": "{consts.tag}"}) == {"x": "a"}
+        assert mb.ns.expand("{consts.who}") == "world b"
+        assert ma.ns.expand_spec({"x": "{consts.tag}"}) == {"x": "a"}
 
     def test_a_managers_do_is_bound_to_it(self, worlds):
         ma, _ = worlds
