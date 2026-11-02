@@ -4,6 +4,7 @@
     ns.name_of(obj)               # the dotted name that loads back to obj
     ns.mount(folder=..., at=...)  # add names to the namespace, in code
     ns.mounts()                   # the mount table: {prefix: location}
+    ns.expand("runs/{YYYY}/{a.b}", k=v)  # a template filled through these names, a str
 
 Running is the manager's: `Dat.manager.run(target, *args, **kwargs)` runs a
 dat, a template spec or a plain callable, loading names through this namespace.
@@ -28,7 +29,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, tzinfo
 from importlib import import_module
 from pathlib import Path
 from types import ModuleType
@@ -38,7 +39,7 @@ import yaml
 
 from .core import (
     DAT_ARGS, DAT_BASE, DAT_CONFIG_FILE, DAT_DO, DAT_KWARGS, DAT_NAME, DAT_RUN_AT, DAT_RUN_TIME,
-    DAT_TARGET_EXISTS, Dat, DatManager, _escape_braces, merge_dicts,
+    DAT_TARGET_EXISTS, Dat, DatManager, expand, expand_spec, merge_dicts, quote_spec,
 )
 
 _DO_EXTENSIONS = [".json", ".yaml", ".py"]
@@ -89,12 +90,12 @@ class Namespace:
         the spec's expansion at create hands the run exactly what was passed, while the spec's own
         template strings still expand."""
         spec = copy.deepcopy(spec)
-        args = _escape_braces(list(args))
+        args = quote_spec(list(args))
         if args:
             Dat.set(spec, DAT_ARGS, args)
         if kwargs:
             merged = dict(Dat.get(spec, DAT_KWARGS, None) or {})
-            merged.update(_escape_braces(kwargs))
+            merged.update(quote_spec(kwargs))
             Dat.set(spec, DAT_KWARGS, merged)
         return spec
 
@@ -117,6 +118,38 @@ class Namespace:
         return manager.create(spec, path=path), False
 
     # -- specs ---------------------------------------------------------------
+
+    def _tz(self) -> Optional[tzinfo]:
+        """The zone of the clock built-ins: `None`, the machine's local zone (a ledger namespace: its
+        ledger's)."""
+        return None
+
+    def expand(self, text: str, /, **vars: Any) -> str:
+        """`text` with its `{}` references filled, always a str (doc/expand.md).
+
+        `{name}` (undotted) is an expansion variable: a keyword of this call, else a built-in
+        (`YYYY YY MM DD HH mm SS now cwd unique`, one moment in this namespace's zone); anything else
+        is `KeyError`.  `{a.b}` (dotted) is `self.load("a.b")`, called when it is a function or
+        method; `{a.b(1, k=2)}` calls it with those literals.  `{{` and `}}` are literal braces.
+        Every reference must come back a str or a number; anything else is `TypeError` (the object
+        a name refers to is `ns.load(name)`).  References do not nest: a lone `{` or `}` is
+        `ValueError`.  `{unique}` is `""` here; a ledger namespace counts it."""
+        return expand(text, vars, resolver=self.load, tz=self._tz())
+
+    def expand_spec(self, spec: Any, /, **vars: Any) -> Any:
+        """A copy of `spec` merged over its `dat.base` chain, then with every string value expanded as
+        `expand` does (keys left alone, the built-ins one moment).  A string value that is exactly one
+        reference is replaced by the object it names: `cfg: "{svp.defaults}"` inlines the dict.  A
+        spec that is not a dict has no bases and is only filled."""
+        if isinstance(spec, dict):
+            spec = self._merge_bases(copy.deepcopy(spec))
+        return expand_spec(spec, vars, resolver=self.load, tz=self._tz())
+
+    @staticmethod
+    def quote_spec(spec: Any) -> Any:
+        """A copy of `spec` that `expand_spec` turns back into `spec`: every brace in a string doubled."""
+        return quote_spec(spec)
+
 
     def _merge_bases(self, spec: Union[Spec, str], _chain: Tuple[str, ...] = ()) -> Spec:
         """A spec (or the name of one) merged over its `dat.base` (a name, a spec, or a list of them, later

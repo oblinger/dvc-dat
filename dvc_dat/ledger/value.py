@@ -379,10 +379,26 @@ class Value:
         return repr(self) if label is None else label
 
 
-def _now() -> str:
+def stamp(tz: Any) -> str:
+    """This moment as a ledger stamps it (``db/time``, ``sealed``): ISO 8601 to the second with the offset of
+    ``tz``, the ledger's zone (``2026-11-01T14:03:22-07:00``; ``+00:00`` on a UTC ledger)."""
     import datetime as _dt
 
-    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return _dt.datetime.now(tz).isoformat(timespec="seconds")
+
+
+def restamp(text: str, tz: Any) -> str:
+    """A stamp moved into ``tz``: a ``v.seal()`` made with no ledger (UTC) is written in the saving ledger's zone."""
+    import datetime as _dt
+
+    return _dt.datetime.fromisoformat(text).astimezone(tz).isoformat(timespec="seconds")
+
+
+def _now() -> str:
+    """A seal with no ledger: UTC."""
+    import datetime as _dt
+
+    return stamp(_dt.timezone.utc)
 
 
 def check_name(name: Any) -> str:

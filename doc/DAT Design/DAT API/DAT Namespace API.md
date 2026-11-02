@@ -60,6 +60,9 @@ One world's namespace; it is not callable — running is `manager.run(target, ..
 | [name_of](#^name-of) | The dotted name `load` takes back to `obj` |
 | [mount](#^mount) | Add one mount: folder, file, module or value |
 | [mounts](#^mounts) | The mount table, `{prefix: location}` |
+| [expand](#^expand) | A template filled through this namespace's names, a str |
+| [expand_spec](#^expand-spec) | Merge `dat.base`, then `expand` every string |
+| [quote_spec](#^quote-spec) | Every brace doubled: survives one expansion |
 
 **manager**`: DatManager`
     The world this namespace belongs to; one `ns` per manager, one manager per `ns`. On `Dat.ns` it is `Dat.manager`. A bare `Namespace()` has none and is a plain namespace of Python objects: `mount`, `load`, `name_of` and `mounts` all work with no manager and no default world built; reading `manager` before `Namespace(manager=m)`, or a manager built with `ns=` adopting it, raises `RuntimeError`. ^manager
@@ -76,8 +79,17 @@ One world's namespace; it is not callable — running is `manager.run(target, ..
 **mounts**`() -> Dict[str, str]`
     The mount table: each mounted prefix and where it loads from — a file, a folder entry, or a module's import name. A `value` mount has no location and is not listed; `just mounts` (`x --list`) prints every mounted name. ^mounts
 
+**expand**`(text: str, /, **vars) -> str`
+    `text` with its `{}` references filled, always a str (2.44, SVP 1500; was `Dat.manager.expand`). An undotted name is an expansion variable: a keyword of the call, else a built-in (`YYYY YY MM DD HH mm SS now cwd unique`, one moment in this namespace's zone: the machine's, a ledger's `tz`); anything else is `KeyError` naming both. A dotted name is `load`, called when it is a function or method; `{a.b(1, k=2)}` calls it with literal arguments. A reference that is not a str or a number is `TypeError`; a lone `{` or `}` (references do not nest) is `ValueError`. `{unique}` is `""` here; on a ledger it counts ([Expansion](../../expand.md)). ^expand
+
+**expand_spec**`(spec: Any, /, **vars) -> Any`
+    A copy of `spec` merged over its `dat.base` chain (bases named through this namespace), then with every string value expanded as `expand` does, the built-ins one moment; keys are left alone. A string value that is exactly one reference is the object it names (`cfg: "{svp.defaults}"` inlines the dict). `create` stores what this returns, except `dat.name`. ^expand-spec
+
+**quote_spec**`(spec: Any) -> Any`
+    A copy of `spec` with every brace in a string doubled, so `expand_spec` gives `spec` back; call-site run arguments are quoted so. ^quote-spec
+
 ## On a ledger
-A `LedgerNamespace`: the same interface, its mounted names the ledger's `db/mount` rows at one revision, longest prefix first. A mounted name starts `mnt.` (`mnt.<at>...`, the resolver adds `mnt`, never the row); everything else imports, so the two never clash, and `mnt` alone or a `mnt.` name under no mount is `ImportError` naming the mounts. A mounted `.yaml`/`.json` comes back a dict, a mounted function its `Fn` (read off the file, never imported here), a mounted literal its value; a `@ledger_fn` it imports to comes back its `Fn`.
+A `LedgerNamespace`: the same interface, its mounted names the ledger's `db/mount` rows at one revision, longest prefix first. A mounted name starts `mnt.` (`mnt.<at>...`, the resolver adds `mnt`, never the row); everything else imports, so the two never clash, and `mnt` alone or a `mnt.` name under no mount is `ImportError` naming the mounts. A mounted `.yaml`/`.json` comes back a dict, a mounted function its `Fn` (read off the file, never imported here), a mounted literal its value; a `@ledger_fn` it imports to comes back its `Fn`. `rev.ns.expand` resolves dotted names through those rows, takes its clock in the ledger's zone, and counts `{unique}`: tried at 1, 2, 3, … until no `db/alias` names a value by it and no folder is at it under the data folder; a whole path segment counts `1, 2, 3`, a suffix `"", _2, _3`; `t.ns.expand` also skips the names the transaction minted or aliased already.
 
 | Where | Is |
 | --- | --- |

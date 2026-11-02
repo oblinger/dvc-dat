@@ -24,7 +24,7 @@ import time
 import weakref
 from copy import deepcopy
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from pathlib import Path
 from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Tuple, Type, TypeVar, Union
 
@@ -425,12 +425,18 @@ DatType = TypeVar("DatType", bound="Dat")
 # Expansion: the `{}` grammar
 # =============================================================================
 
-_REFERENCE = re.compile(r"\{\{|\}\}|\{([^{}]*)\}")
+_REFERENCE = re.compile(r"\{\{|\}\}|\{([^{}]*)\}|[{}]")
 _WHOLE_VALUE = re.compile(r"^\{([^{}]+)\}$")
+_BUILTIN_NAMES = ("YYYY", "YY", "MM", "DD", "HH", "mm", "SS", "now", "cwd", "unique")
 
 
-def _builtins(now: Optional[datetime] = None) -> Dict[str, str]:
-    now = now or datetime.now()
+def _builtins(now: Optional[datetime] = None, tz: Optional[tzinfo] = None) -> Dict[str, str]:
+    """The built-in expansion variables at one moment, `now` (default: this moment) in the zone `tz`
+    (`None`: the machine's local zone, a namespace with no ledger; a ledger namespace passes its ledger's)."""
+    if now is None:
+        now = datetime.now(tz)
+    elif tz is not None:
+        now = now.astimezone(tz)
     return {
         "now": now.strftime("%y-%m-%d_%H-%M-%S"),
         "YYYY": now.strftime("%Y"),
@@ -469,7 +475,7 @@ def _literal_args(text: str, reference: str) -> Tuple[List[Any], Dict[str, Any]]
     return args, kwargs
 
 
-def _resolve_name(name: str, vars: Dict[str, Any], resolver: Optional[Callable[[str], Any]]) -> Any:
+def _resolve_name(name: str, vars: Dict[str, Any], resolver: Callable[[str], Any]) -> Any:
     """What one `{}` reference expands to.  A dotted name that resolves to a
     function or method is called with no arguments; `{a.b(1, k=2)}` calls
     whatever `a.b` resolves to with those literals.  A class, or any other
@@ -492,81 +498,102 @@ def _resolve_name(name: str, vars: Dict[str, Any], resolver: Optional[Callable[[
     return value
 
 
-def _lookup_name(name: str, vars: Dict[str, Any],
-                 resolver: Optional[Callable[[str], Any]]) -> Any:
+def _lookup_name(name: str, vars: Dict[str, Any], resolver: Callable[[str], Any]) -> Any:
     if "." in name:
-        if resolver is None:
-            from .do import ns          # the default world; a manager passes its own
-            resolver = ns.load
         return resolver(name)
     if name in vars:
         return vars[name]
+    given = sorted(k for k in vars if k not in _BUILTIN_NAMES)
     raise KeyError(
-        f"expand: unknown name {{{name}}}; undotted names are the built-ins "
-        f"{sorted(_builtins())} and the vars given, a dotted name resolves through ns.load"
+        f"expand: unknown name {{{name}}}; an undotted name is an expansion variable, a built-in "
+        f"{sorted(_BUILTIN_NAMES)} or a keyword given to the call ({', '.join(given) or 'none given'}); "
+        "a dotted name resolves through the namespace"
     )
 
 
-def expand(text: str, vars: Optional[Dict[str, Any]] = None, *,
-           resolver: Optional[Callable[[str], Any]] = None) -> Any:
-    """Expand the `{}` references in `text`.
+def _whole_segment(text: str, start: int, end: int) -> bool:
+    """The reference at `text[start:end]` is a whole path segment (`events/{unique}`)."""
+    return (start == 0 or text[start - 1] == "/") and (end == len(text) or text[end] == "/")
 
-    `{name}` with an undotted name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`)
-    or a key of `vars`; `{dotted.name}` is resolved through `ns.load` (or `resolver`),
-    and called when it is a function or method; `{dotted.fn(1, "x", k=2)}` calls it
-    with those literal arguments;
-    `{{` and `}}` are the literal braces.  A `text` that is exactly one reference returns
-    the referenced object itself, not its string form; a reference inside a longer
-    string must be a string or a number.
+
+def _has_unique(text: str) -> bool:
+    """`text` holds the reference `{unique}` (not the literal `{{unique}}`)."""
+    return any((m.group(1) or "").strip() == "unique" for m in _REFERENCE.finditer(text))
+
+
+def expand(text: str, vars: Dict[str, Any], *, resolver: Callable[[str], Any],
+           tz: Optional[tzinfo] = None, count: Optional[int] = None) -> str:
+    """The body of `Namespace.expand` (see it): `text` with its `{}` references filled, a str.
+
+    `vars` are the call's keywords, over the built-ins at one moment in `tz`; dotted names go to
+    `resolver`.  `count` (a ledger namespace's counter) gives `{unique}` its value: a whole path
+    segment `str(count)`, a suffix `""` then `_2`, `_3`, ...; a keyword `unique=` wins over it.
     """
     if not isinstance(text, str):
-        return text
-    names = {**_builtins(), **(vars or {})}
+        raise TypeError(f"expand takes a str, not {type(text).__name__}; a spec is expand_spec's")
+    return _fill(text, {**_builtins(None, tz), **vars}, resolver,
+                 None if "unique" in vars else count)
 
-    def resolve(name: str) -> Any:
-        return _resolve_name(name, names, resolver)
 
-    if (whole := _WHOLE_VALUE.match(text)):
-        return resolve(whole.group(1))
-
+def _fill(text: str, names: Dict[str, Any], resolver: Callable[[str], Any],
+          count: Optional[int] = None) -> str:
     def replace(match: "re.Match") -> str:
         token = match.group(0)
         if token == "{{":
             return "{"
         if token == "}}":
             return "}"
-        value = resolve(match.group(1))
+        if token in ("{", "}"):
+            raise ValueError(
+                f"expand: {text!r}: a lone {token!r} -- references do not nest (a reference holds no "
+                "'{' or '}'; build a name chosen by a variable first), and a literal brace is '{{' or '}}'")
+        name = match.group(1)
+        if count is not None and name.strip() == "unique":
+            if _whole_segment(text, match.start(), match.end()):
+                return str(count)
+            return "" if count == 1 else f"_{count}"
+        value = _resolve_name(name, names, resolver)
         if not isinstance(value, (str, int, float)):
             raise TypeError(
-                f"expand: {{{match.group(1)}}} inside a longer string must be a string "
-                f"or a number, got {type(value).__name__}; a reference that is the whole "
-                "value may be anything")
+                f"expand: {{{name}}} must be a string or a number, got {type(value).__name__}; "
+                "expand returns a str (the object a name refers to is ns.load(name); a spec "
+                "value that is exactly one reference is inlined by expand_spec)")
         return str(value)
 
     return _REFERENCE.sub(replace, text)
 
 
-def _escape_braces(spec: Any) -> Any:
-    """A copy of `spec` that `expand_spec` turns back into `spec`: every brace in a string doubled."""
+def quote_spec(spec: Any) -> Any:
+    """The body of `Namespace.quote_spec`: a copy of `spec` that `expand_spec` turns back into
+    `spec`, every brace in a string doubled."""
     if isinstance(spec, dict):
-        return {k: _escape_braces(v) for k, v in spec.items()}
+        return {k: quote_spec(v) for k, v in spec.items()}
     if isinstance(spec, list):
-        return [_escape_braces(v) for v in spec]
+        return [quote_spec(v) for v in spec]
     if isinstance(spec, str):
         return spec.replace("{", "{{").replace("}", "}}")
     return spec
 
 
-def expand_spec(spec: Any, vars: Optional[Dict[str, Any]] = None, *,
-                resolver: Optional[Callable[[str], Any]] = None) -> Any:
-    """Return a copy of `spec` with every string value expanded (keys are left alone)."""
-    if isinstance(spec, dict):
-        return {k: expand_spec(v, vars, resolver=resolver) for k, v in spec.items()}
-    if isinstance(spec, list):
-        return [expand_spec(v, vars, resolver=resolver) for v in spec]
-    if isinstance(spec, str):
-        return expand(spec, vars, resolver=resolver)
-    return spec
+def expand_spec(spec: Any, vars: Dict[str, Any], *, resolver: Callable[[str], Any],
+                tz: Optional[tzinfo] = None) -> Any:
+    """The body of `Namespace.expand_spec`: a copy of `spec` with every string value expanded (keys are
+    left alone), the built-ins taken at one moment.  A string value that is exactly one reference is
+    replaced by what it names, any object (`cfg: "{svp.defaults}"` inlines the dict)."""
+    names = {**_builtins(None, tz), **vars}
+
+    def walk(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {k: walk(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [walk(v) for v in value]
+        if isinstance(value, str):
+            if (whole := _WHOLE_VALUE.match(value)):
+                return _resolve_name(whole.group(1), names, resolver)
+            return _fill(value, names, resolver)
+        return value
+
+    return walk(spec)
 
 
 # =============================================================================
@@ -729,23 +756,6 @@ class DatManager:
             Dat.manager = manager
         return manager
 
-    def expand(self, text: str, vars: Optional[Dict[str, Any]] = None) -> Any:
-        """`expand`, with dotted names resolved through this manager's `ns`."""
-        return expand(text, vars, resolver=self.ns.load)
-
-    def expand_spec(self, spec: Any, vars: Optional[Dict[str, Any]] = None) -> Any:
-        """A copy of `spec` merged over its `dat.base` chain, then with every `{…}`
-        filled; dotted names (bases and references alike) resolve through this
-        manager's `ns`.
-
-        `dat.base` is a name, a spec, or a list of them, later entries winning,
-        merged recursively and dropped from the result.  A spec that is not a dict
-        has no bases and is only filled.
-        """
-        if isinstance(spec, dict):
-            spec = self.ns._merge_bases(deepcopy(spec))
-        return expand_spec(spec, vars, resolver=self.ns.load)
-
     def create(
         self,
         spec: Union[Dict, str, None] = None,
@@ -784,7 +794,7 @@ class DatManager:
 
         path = self._resolve_path(expanded_path)
         own = Dat.get(spec, DAT_NAME, None)
-        spec = expand_spec(spec, names, resolver=self.ns.load)  # bases merged in _spec_of
+        spec = self.ns.expand_spec(spec, **names)  # bases merged in _spec_of
         if own is not None:
             Dat.set(spec, DAT_NAME, own)            # the template, never its expansion (Q36)
         within = _within(os.path.realpath(path), self._dat_folders[0])
@@ -1411,7 +1421,7 @@ class DatManager:
                 # the stored spec is expanded already: its braces are literal, so the fork's
                 # create (which expands) is handed them escaped; dat.name stays the path template
                 name = Dat.get(obj.get_spec(), DAT_NAME, None)
-                obj = _escape_braces(obj.get_spec())
+                obj = quote_spec(obj.get_spec())
                 if name is not None:
                     Dat.set(obj, DAT_NAME, name)
                 # a fork lands beside its parent, whatever the parent's own target_exists says:
@@ -1587,16 +1597,12 @@ class DatManager:
         path_spec = str(path_spec)
         if target_exists == "increment" and "{unique}" not in path_spec:
             path_spec += "{unique}"      # a plain name counts up as `_2`, `_3`, ...
-        now, count = datetime.now(), 1
+        now, count = datetime.now(self.ns._tz()), 1
         while True:
             names = {**_builtins(now),
                      "unique": "" if count == 1 else f"_{count}",
                      **(variables or {})}
-            expanded = self.expand(path_spec, names)
-            if not isinstance(expanded, str):
-                raise TypeError(
-                    f"path template {path_spec!r} expanded to {expanded!r}, "
-                    "not a string")
+            expanded = self.ns.expand(path_spec, **names)
             expanded_path = os.path.join(self._dat_folders[0], expanded)
             if not os.path.exists(expanded_path):
                 return expanded_path, False, names

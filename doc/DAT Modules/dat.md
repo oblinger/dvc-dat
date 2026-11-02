@@ -55,9 +55,6 @@ and `ledgers`. Part of the
   `run/work/` as cwd; a sealed dat `RuntimeError`; a non-callable
   `dat.do` `TypeError`; a `referenceable` demand unmet `RuntimeError`;
   each re-raised as `Exception("In <target>")`.
-- `expand(text, vars=None)`, `expand_spec(spec, vars=None)`: the `{}`
-  grammar through this manager's `ns`; `expand_spec` first merges the
-  spec over its `dat.base` chain.
 - `ns`: the manager's `Namespace`, its only other public attribute.
 
 `Dat`:
@@ -87,7 +84,7 @@ its folder, lazily, a child's `run/` skipped.
 `mounts()`, `mount(*, folder, file, module, value, at, relative_to)`
 (`ValueError` when a mounted name would shadow an importable one).
 
-Module functions: `merge_dicts`, `expand`, `expand_spec`.
+Module function: `merge_dicts`. The `{}` grammar is a namespace's: `ns.expand`, `ns.expand_spec`, `ns.quote_spec` (2.44; `core.expand`, `core.expand_spec` and `core.quote_spec` are their bodies).
 
 ## Invariants
 

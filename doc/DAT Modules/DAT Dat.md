@@ -132,8 +132,6 @@ A world of dats: the dat folders searched by name (the first is where new dats a
 | [save_artifact](#^datmanager-save-artifact) | Store a file or folder by hash |
 | [load_artifact](#^datmanager-load-artifact) | An artifact only, by name or URN |
 | [reindex](#^reindex) | Rebuild the index from the folders |
-| [expand](#^expand) | Expand `{}` references through this world |
-| [expand_spec](#^expand-spec) | Merge a spec's `dat.base`, then expand every string, through this world |
 
 **__init__**`(*, dat_folders: list[str], art_folder: str | None = None, index: str | None = None, ns: Namespace | None = None, verify: bool = False)`
     A world on `dat_folders`, searched in order, the first written to; `art_folder` holds the artifacts, and with none this world holds no artifacts. `index` is the index file, default `_index_.json` in the artifact folder, else in the first dat folder. `ns` adopts an existing namespace with its mounts, and adopting the default world's `ns` makes this manager the default world; with none the manager builds a fresh `Namespace`. Every manager mounts `dvc_dat.dat_tools` at `dt`. `verify` sets the default of every load's `verify`. Reads nothing from disk. A string for `dat_folders` is `TypeError`, an empty list `ValueError`, an artifact folder nested with a dat folder `ValueError`, a non-bool `verify` `TypeError`. ^--init--
@@ -185,14 +183,6 @@ A world of dats: the dat folders searched by name (the first is where new dats a
 **reindex**`() -> int`
     Rebuild the index from the folders: every artifact's names and URN from its `_art_.yaml`, every saved dat's URN from its `_result_.yaml`. Returns the number of keys. ^reindex
 
-**expand**`(text: str, vars: Dict[str, Any] | None = None) -> Any`
-    Expand the `{}` references in `text`, dotted names resolved through this manager's `ns`; the module function `dvc_dat.core.expand` with this world's resolver. A text that is exactly one reference returns the object itself. ^expand
-
-**expand_spec**`(spec: Any, vars: Dict[str, Any] | None = None) -> Any`
-    A copy of `spec` merged over its `dat.base` chain (a name, a spec, or a list of them, later entries winning, bases named through this `ns`), recursively, with `dat.base` dropped, then with every string value expanded as `expand` does; keys are left alone. A spec that is not a dict has no bases and is only expanded. `create` stores what this returns, except `dat.name`. ^expand-spec
-
-
-
 ## DatContainer Interface
 A `Dat` whose folder holds other dats: every folder below it carrying a spec file, found lazily and loaded through the container's own world. A child's `run/` sub-dat is not a child. Made and loaded like any dat, with `dat.kind` naming `DatContainer` or a subclass.
 
@@ -238,7 +228,7 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
 
 
 ## dvc_dat Interface
-`from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers` is the package's `__all__`; importing it reads no file. `dvc_dat.do` is the submodule, not the namespace: the default world's namespace is `Dat.ns`, or `dvc_dat.do.ns`. The module functions `expand`, `expand_spec` and `merge_dicts` are importable from `dvc_dat.core`. The ledger is its own subpackage, `dvc_dat.ledger`.
+`from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers` is the package's `__all__`; importing it reads no file. `dvc_dat.do` is the submodule, not the namespace: the default world's namespace is `Dat.ns`, or `dvc_dat.do.ns`. The module function `merge_dicts` is importable from `dvc_dat.core`; the `{}` grammar is a namespace's, `ns.expand`, `ns.expand_spec`, `ns.quote_spec` ([Expansion](../expand.md)). The ledger is its own subpackage, `dvc_dat.ledger`.
 
 | dvc_dat | |
 | --- | --- |

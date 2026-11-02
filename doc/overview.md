@@ -35,7 +35,7 @@ Everything else hangs off those four classes:
 | `Dat.ns` | The default world's namespace, forwarding to `Dat.manager.ns`; not callable |
 | `Dat.cli_main` | The command line (`just run`) for a program's own main |
 | `Dat.merge_dicts` | The zipper merge `dat.base` uses |
-| `Dat.manager.expand` / `expand_spec` | The `{}` grammar |
+| `ns.expand` / `expand_spec` / `quote_spec` | The `{}` grammar, a method of every namespace |
 
 ## Running — `Dat.manager.run`; loading — `ns`
 
@@ -123,10 +123,14 @@ Dat.get(x, "a.b.c")      # 1
 
 | Function | Description |
 |----------|-------------|
-| `Dat.manager.expand(TEXT, vars=None)` | Resolve the `{}` references in one string |
-| `Dat.manager.expand_spec(SPEC, vars=None)` | Merge the spec's `dat.base`, then resolve them throughout it |
+| `ns.expand(TEXT, **vars) -> str` | Resolve the `{}` references in one string, through `ns`'s names; always a str |
+| `ns.expand_spec(SPEC, **vars)` | Merge the spec's `dat.base`, then resolve them throughout it; a value that is exactly one reference is the object |
+| `ns.quote_spec(SPEC)` | Double every brace, so a spec survives one expansion unchanged |
+| `Ledger(location, create=True, tz="America/Los_Angeles")` | A ledger's zone, fixed at creation (UTC default): its `rev.ns.expand` clock and its stamps |
 
-See [Spec Format](spec-format.md) for the grammar and the YAML quoting rule.
+`ns` is any namespace: `Dat.ns`, `manager.ns`, `rev.ns`, `t.ns`; on a ledger
+`{unique}` counts until the name is free. See [Expansion](expand.md) for the
+grammar and the YAML quoting rule.
 
 ## dat_tools — DataFrames and Excel
 

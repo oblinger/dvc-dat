@@ -177,7 +177,7 @@ m = DatManager(dat_folders=["/work/dats"])
 m.ns.mount(folder="catalog", at="catalog", relative_to=root)
 m.run("catalog.experiment", lr=0.5)  # created and run inside m
 m.load("runs/experiment1")           # searched in m's folders
-m.expand_spec(spec)                  # dat.base merged, {} filled, through m's namespace
+m.ns.expand_spec(spec)               # dat.base merged, {} filled, through m's namespace
 ```
 
 The constructor is keyword-only and `dat_folders` is a required list: all are
@@ -331,26 +331,30 @@ never appears in a stored spec: what is on disk is the whole recipe.
 Any string in a spec may carry `{…}` references. `Dat.create` expands them
 once, with the same `now` and `unique` the folder got, and writes the result:
 `get_spec()` returns the stored values, and nothing is expanded on read.
+Expansion is a method of a namespace, `ns.expand(text, **vars)`, so each
+namespace (`Dat.ns`, `manager.ns`, `rev.ns`) expands through its own names.
 
 ```python
 from dvc_dat import Dat
 
-expand = Dat.manager.expand
+ns = Dat.ns
 
 # 'runs/2026-09/exp'
-expand("runs/{YYYY}-{MM}/exp")
+ns.expand("runs/{YYYY}-{MM}/exp")
 
-# the object ns.load('svp.CONFIG') returns
-expand("{svp.CONFIG}")
+# 'runs/G7/exp': an expansion variable is a keyword
+ns.expand("runs/{game}/exp", game="G7")
 ```
 
-- an **undotted** name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`)
-  or a key of the `vars` dict you pass; anything else is a `KeyError`
-- a **dotted** name resolves through `ns.load`, at create; a function is
+- an **undotted** name is an expansion variable: a keyword of the call, else a
+  built-in (`YYYY YY MM DD HH mm SS now cwd unique`); anything else is a `KeyError`
+- a **dotted** name resolves through the namespace's `load`; a function is
   called (`{meta.commit}`), and `{meta.tag("v", 2)}` calls it with literals
-- `{{` and `}}` are the literal braces
-- a string that is *exactly* one reference returns the referenced **object**;
-  otherwise references are substituted as text
+- `{{` and `}}` are the literal braces; references do not nest
+- `expand` always returns a string; in a spec (`ns.expand_spec`), a value that
+  is *exactly* one reference is replaced by the **object** it names
+
+The whole grammar, `{unique}` and the ledger's zone: [Expansion](expand.md).
 
 In YAML, a value that *begins* with `{` must be quoted — `name: "{svp.CONFIG}"`
 — or YAML reads it as a flow mapping and the spec arrives with a dict where a

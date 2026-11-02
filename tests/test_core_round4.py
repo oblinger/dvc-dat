@@ -106,7 +106,7 @@ def test_base_cycle_is_a_clear_error(world):
     world.ns.mount(at="cyc_a", value={"dat": {"base": "cyc_b"}})
     world.ns.mount(at="cyc_b", value={"dat": {"base": "cyc_a"}})
     with pytest.raises((ValueError, TypeError, KeyError)):
-        world.expand_spec({"dat": {"base": "cyc_a"}})
+        world.ns.expand_spec({"dat": {"base": "cyc_a"}})
 
 
 # --- F6: save() of a dat whose spec is _spec_.json (spec-format: "a _spec_.json is read too")

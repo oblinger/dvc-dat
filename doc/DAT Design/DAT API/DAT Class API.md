@@ -233,13 +233,16 @@ Expanded once, when the dat is created, with the same `now` and `unique` its fol
 
 | Form | Resolves to |
 | --- | --- |
-| `{YYYY} {YY} {MM} {DD} {HH} {mm} {SS} {now} {cwd} {unique}` | The built-ins (undotted names are reserved for them and for `vars`) |
+| `{YYYY} {YY} {MM} {DD} {HH} {mm} {SS} {now} {cwd} {unique}` | The built-ins (undotted names are reserved for them and for the call's keywords) |
 | `{pkg.mod.NAME}` inside a longer string | `Dat.ns.load("pkg.mod.NAME")`, which must be a string or a number — `"{cfg.root}/x"` concatenates |
 | `"{pkg.CONFIG}"` as a whole value | The object itself, inlined as data — quote it in YAML, or the parser reads a mapping; a class or other object here is a `TypeError` at create |
 | `{meta.commit}` naming a function or method | Called with no arguments; its value expands (2.16). A class or callable object is not called |
 | `{meta.tag("v", n=2)}` | Called with those arguments — Python literals only, no `{` inside (2.16) |
 | `{{` `}}` | Literal braces |
 | `{anything_else}` | `KeyError` naming the reference and the built-ins — a stray brace never passes silently |
+| a lone `{` or `}`, `{a.{b}}` | `ValueError` — references do not nest (2.44) |
+
+The whole grammar, as `ns.expand`: [Expansion](../../expand.md).
 
 
 
@@ -285,6 +288,7 @@ Expanded once, when the dat is created, with the same `now` and `unique` its fol
 | `Dat.manager.save(...)` / `load(...)` for artifacts | 2.15: `Dat.save_artifact` / `Dat.load_artifact` |
 | `cli_main(config=DataConfig)` | `cli_main(config=folder_or_file)` |
 | `dvc_dat.do`, `cli_main`, `merge_dicts`, `expand` | `Dat.do`, `Dat.cli_main`, `Dat.merge_dicts`, `Dat.manager.expand` (2.8) |
+| `Dat.manager.expand(text, vars)` / `expand_spec(spec, vars)` | `Dat.ns.expand(text, **vars)` / `Dat.ns.expand_spec(spec, **vars)` (2.44) |
 
 
 

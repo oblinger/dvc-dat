@@ -38,7 +38,7 @@ from .env import Env, current_env, platform_items, repo_of
 from .errors import NotClean, NotEvaluated
 from .policy import DETERMINISTIC
 from .code import Code
-from .value import Blob, Value, check_loadable, dotted
+from .value import Blob, Value, check_loadable, dotted, restamp
 from ..core import Dat
 
 if TYPE_CHECKING:
@@ -187,7 +187,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
         t._advance_clock(*run.clock)
     extra = [("db/fn", "str:" + run.name), ("db/keys", "json:" + run.enc), ("db/returns", "str:" + run.returns)]
     if value.sealed and value.subject is None:
-        extra.append(("db/sealed-at", "str:" + str(value.sealed)))
+        extra.append(("db/sealed-at", "str:" + restamp(value.sealed, t._ledger.tz)))
     if name is None:
         name = value.__dict__.get("_name")
     value.__dict__["_run"] = run            # an abandoned transaction leaves a draft that can be saved again
@@ -519,7 +519,7 @@ class Fn:
         # False: a draft; True: the memo entry in a transaction of its own; a Transaction: into it
         save: Any = True if isinstance(level, str) and level == "save" else (into if into is not None else False)
         if into is not None and target is None and self._takes_path:
-            target = fresh_name(plain.ledger, self._template or ANONYMOUS, self._name_keys(kw))
+            target = fresh_name(into.ns, self._template or ANONYMOUS, self._name_keys(kw))
         name = target if into is not None and target is not None and not os.path.isabs(target) else None
         if into is not None and target is not None and name is None:
             raise ValueError(f"{self.name}: path={target!r} is absolute; with seal=t the result is saved at "
@@ -539,7 +539,7 @@ class Fn:
         if into is not None:
             return value
         if target is None and self._takes_path and isinstance(value, Dat):
-            target = fresh_name(plain.ledger, self._template or ANONYMOUS, self._name_keys(kw))
+            target = fresh_name(plain.ns, self._template or ANONYMOUS, self._name_keys(kw))
         return place(plain.ledger, value, target) if target is not None else value
 
     def _name_keys(self, kw: Dict[str, Any]) -> Dict[str, Any]:
@@ -727,27 +727,14 @@ def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
                        f"the checkout is at {(code.commit or '?')[:8]}")
 
 
-def fresh_name(ledger: Any, template: str, keys: Dict[str, Any]) -> str:
-    """The path template expanded with the call's keys (Q36): ``{unique}`` counts up (``""``,
-    ``_2``, ...) until no name holds a value there and no folder is at it; without ``{unique}`` the
-    name moves to the new value (A70)."""
-    import datetime as _dt
-
-    from ..core import _builtins, expand
-
-    now = _dt.datetime.now()
-    data = ledger._store.art.root / "dats"
-    head = ledger.at()
-    for count in range(1, 100000):
-        unique = "" if count == 1 else f"_{count}"
-        text = expand(template, {**_builtins(now), **keys, "unique": unique})
-        if not isinstance(text, str) or not text:
-            raise TypeError(f"path template {template!r} expanded to {text!r}, not a path")
-        if "{unique}" not in template:
-            return text
-        if os.path.isabs(text) or (not head._held(text, "db/alias") and not (data / text).exists()):
-            return text
-    raise RuntimeError(f"path template {template!r}: no free name")
+def fresh_name(ns: Any, template: str, keys: Dict[str, Any]) -> str:
+    """The path template expanded with the call's keys through the ledger namespace ``ns`` (Q36):
+    ``ns.expand`` counts ``{unique}`` until no name holds a value there and no folder is at it; without
+    ``{unique}`` the name moves to the new value (A70)."""
+    text = ns.expand(template, **keys)
+    if not text:
+        raise TypeError(f"path template {template!r} expanded to {text!r}, not a path")
+    return text
 
 
 def place(ledger: Any, value: Value, target: str) -> Value:
