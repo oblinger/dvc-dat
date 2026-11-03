@@ -389,10 +389,10 @@ del tele_video.preds["lens"]
 # %%
 try:
     with L.transaction(by="human:dan") as t:
-        tele_video.seal(t, provenance="eval:sandbox")
+        tele_video.seal(t, provenance="eval:fenced")
 except ValueError as e:
     print("ValueError:", e)
-# → ValueError: provenance 'eval:sandbox': eval: provenance is written
+# → ValueError: provenance 'eval:fenced': eval: provenance is written
 #   by eval alone
 
 # %% [markdown]
@@ -582,8 +582,8 @@ print("log:", git("log", "--oneline"))
 # %%
 rev = L.at()
 distance_fn = rev.ns.load("geometry.distance")
-print("fn:", repr(distance_fn), " sandboxed:", distance_fn.code.sandboxed)
-# → fn: <Fn geometry.distance@<commit, 8 hex>>  sandboxed: False  (no __version__: the last commit)
+print("fn:", repr(distance_fn), " fenced:", distance_fn.code.fenced)
+# → fn: <Fn geometry.distance@<commit, 8 hex>>  fenced: False  (no __version__: the last commit)
 print("signature:", distance_fn.signature)
 # → signature: (a, b=(0, 0), *, metric='euclidean')
 print("code:", repr(distance_fn.code), " subject:", distance_fn.code.subject)
@@ -592,7 +592,7 @@ print("code:", repr(distance_fn.code), " subject:", distance_fn.code.subject)
 # %% [markdown]
 # `rev.ns.load(name)` is what a dotted name denotes at `rev`; for a
 # function, an `Fn` saying which code the name resolves to: its
-# repr is `<Fn name@version>`, the version its code's, `code.sandboxed` is
+# repr is `<Fn name@version>`, the version its code's, `code.fenced` is
 # False for a function installed in this process, `signature` the
 # keywords it takes. Only the code has identity, `code.subject`: the
 # function is a name looked up inside it, and has no subject.
@@ -613,9 +613,9 @@ print("commit matches:", hypotenuse_value.dependencies["code/geometry"] == git("
 # the result came from.
 
 # %% [markdown]
-# ### Sandboxed functions
+# ### Fenced functions
 #
-# A sandboxed function is one the ledger controls: its source is
+# A fenced function is one the ledger controls: its source is
 # mounted into an isolated Python run where every import is traced
 # and every write is confined, so its version is a checksum over the
 # source files the run loaded, with no reference to the host Python
@@ -671,8 +671,8 @@ print("mount rows:", rev["db/mount/plane"])
 
 # %%
 length_fn = rev.ns.load("mnt.plane.measure.length")
-print("code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed, " mount:", length_fn.mount)
-# → code: <Code plane@<commit, 8 hex>>  sandboxed: True  mount: plane
+print("code:", repr(length_fn.code), " fenced:", length_fn.code.fenced, " mount:", length_fn.mount)
+# → code: <Code plane@<commit, 8 hex>>  fenced: True  mount: plane
 segment_value = length_fn(a=(0, 0), b=(3, 4))
 print("result:", segment_value.obj, " depends on:", sorted(segment_value.dependencies))
 # → result: 2.5  depends on: ['code', 'fn', 'platform']
@@ -689,14 +689,14 @@ print("modules:", L.at()[segment_value.dependencies["code"], "db/modules"])
 # dependencies carry no `code/geometry` item.
 
 # %% [markdown]
-# #### What the sandbox refuses
+# #### What the fence refuses
 #
 # A function under the mount that imports `geometry` by its global
 # name.
 
 # %%
 reach_source = '''\
-"""`plane.reach`: two functions the sandbox refuses."""
+"""`plane.reach`: two functions the fence refuses."""
 from pathlib import Path
 
 from dvc_dat.ledger import ledger_fn
@@ -724,7 +724,7 @@ except UnmountedImport as e:
 # → UnmountedImport: geometry from plane.reach; mount it or move it
 
 # %% [markdown]
-# The sandbox looks up every import that is not under a mount in
+# The fence looks up every import that is not under a mount in
 # the mounted repo's checkout; `geometry.py` is there, outside
 # `plane/`, so the import is refused by name rather than silently
 # reaching code the dependencies would not record. A module found nowhere
@@ -732,7 +732,7 @@ except UnmountedImport as e:
 # sealed.
 
 # %% [markdown]
-# #### Where a sandboxed function writes
+# #### Where a fenced function writes
 #
 # A write outside the function's own folder is refused.
 
@@ -742,12 +742,12 @@ try:
     note_fn(text="hello")
 except ConfinedWrite as e:
     print("ConfinedWrite:", e)
-# → ConfinedWrite: /private/tmp/plane-note.txt: a sandboxed function
+# → ConfinedWrite: /private/tmp/plane-note.txt: a fenced function
 #   writes only in its path folder
 
 # %% [markdown]
 # The refusal is raised as `ConfinedWrite`; a read outside the
-# allowed folders is `UntracedRead`. The sandbox confines writes
+# allowed folders is `UntracedRead`. The fence confines writes
 # to the function's own folder, the dat being produced (not the
 # worker's scratch, not the store); reads are confined to the
 # mounted folders, the store and that folder. A function that

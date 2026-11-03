@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.46.0 — 2026-11-02
+
+- **"Sandboxed" code is "fenced", "unsandboxed" code is "resident" (SVP 1505 Q3; minor).** A rename, behavior unchanged: fenced code runs in a fresh interpreter with the loader hooked, its version the files it imported; resident code runs in the ledger's own process, its version the whole repo commit. The module `dvc_dat.ledger.sandbox` is `dvc_dat.ledger.fence` (`run_fenced`, `load_fenced`, `fence_code_at`), `Code.sandboxed` is `Code.fenced`, the provenance `eval:sandbox` is `eval:fenced` and `eval:unsandboxed` is `eval:resident`; error messages, docstrings, docs, figures and the demo notebooks (re-executed) say the new words. **Breaks:** the import path, `Code.fenced`, and the two provenance strings a `where={"db/provenance": ...}` query names; rows already written keep the old strings.
+
 ## 2.45.0 — 2026-11-02
 
 - **`t.ns.mount` names the mount `mnt.<prefix>` explicitly (SVP 1505 Q1 (A); minor).** `t.ns.mount("mnt.plane", root="plane", repo=...)` writes the rows `db/mount/plane` and its names load as `mnt.plane...`, so the source shows which code is mounted. An `at` outside `mnt.` (`"plane"`, `"mntx"`, `mnt` alone) is `ValueError` naming the `mnt.<prefix>` form; nothing is prefixed for you. The rows, `ns.mounts()` keys and `.datconfig.yaml` `mounts:` keys stay the bare prefix. Docs: `DAT Namespace API`, `DAT Ledger`, `mount-commands.md`; the demo notebooks mount under `mnt.` and are re-executed. **Breaks:** `t.ns.mount("plane", ...)` → `t.ns.mount("mnt.plane", ...)`.

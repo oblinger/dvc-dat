@@ -1,4 +1,4 @@
-"""Contracts of functions and run unsandboxed: ledger_fn, rev.ns.load, the memo, the dependencies, NotEvaluated."""
+"""Contracts of functions and run resident: ledger_fn, rev.ns.load, the memo, the dependencies, NotEvaluated."""
 
 import re
 
@@ -40,7 +40,7 @@ def f_code(world):
 
 def test_resolve_fields(world):
     f = world.at().ns.load("ledger_kinds.cut")
-    assert f.code.sandboxed is False and f.mount is None and str(f.signature) == "(*, game: str, version: str = '1.0.0')"
+    assert f.code.fenced is False and f.mount is None and str(f.signature) == "(*, game: str, version: str = '1.0.0')"
     assert f.name == "ledger_kinds.cut" and re.fullmatch(r"db/code/[0-9a-f]{16}", f.code.subject)
     assert not hasattr(f, "subject") and not hasattr(f, "sha")
     assert f.kind == "ledger" and world.at().ns.load("ledger_kinds.Video") is ledger_kinds.Video
@@ -55,7 +55,7 @@ def test_eval_seals_once_and_hits(world):
     assert b.subject == a.subject and CALLS["cut"] == 1 and world.at().id == top and b.rev.id == a.rev.id
     r = world.at()
     assert r[a.subject, "db/keys"] == {"game": "G1", "version": "1.0.0"}
-    assert r[a.subject, "db/fn"] == "ledger_kinds.cut" and r[a.subject, "db/provenance"] == "eval:unsandboxed"
+    assert r[a.subject, "db/fn"] == "ledger_kinds.cut" and r[a.subject, "db/provenance"] == "eval:resident"
     assert a.dependencies["fn"] == "ledger_kinds.cut" and a.dependencies["code"] == f_code(world)
     assert r[a.subject, "db/returns"] == "Cut" and r[a.dependencies["code"], "db/mounts"] == "none" and "ledger_kinds.py" in r[a.dependencies["code"], "db/modules"]
     assert [x.subject for x in r.refs(fn="ledger_kinds.cut")] == [a.subject]

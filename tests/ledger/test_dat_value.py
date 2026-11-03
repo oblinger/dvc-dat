@@ -114,7 +114,7 @@ def test_rev_run_of_a_spec_runs_once_then_hits(coded, world, tmp_path):
     assert keys == {"dat": {"do": "ledger_kinds.build_table", "kind": "dvc_dat.core.Dat",
                             "kwargs": {"n": 12, "start": 1}}}             # the memo key: the spec, dat.name removed
     assert first.dependencies["code"].startswith("db/code/") and first.dependencies["fn"] == "ledger_kinds.build_table"
-    assert rows.get(first.subject, "db/provenance") == "eval:unsandboxed"     # installed: in this process
+    assert rows.get(first.subject, "db/provenance") == "eval:resident"     # installed: in this process
     assert first.dependencies["code/testrepo"] == "abc1234"
 
 
@@ -141,7 +141,7 @@ def test_rev_resolve_hands_back_what_a_name_denotes(coded):
     rev = coded.at()
     assert rev.ns.load("ledger_kinds.TABLE_SPEC") == ledger_kinds.TABLE_SPEC
     cut_fn = rev.ns.load("ledger_kinds.cut")
-    assert isinstance(cut_fn, Fn) and cut_fn.kind == "ledger" and cut_fn.code.sandboxed is False
+    assert isinstance(cut_fn, Fn) and cut_fn.kind == "ledger" and cut_fn.code.fenced is False
     assert rev.ns.load("ledger_kinds.build_table") is ledger_kinds.build_table   # installed, undecorated: itself
     assert rev.ns.load("ledger_kinds.NotedDat") is NotedDat              # anything else: the object
 

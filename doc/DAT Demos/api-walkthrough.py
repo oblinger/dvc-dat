@@ -447,7 +447,7 @@ print("G2 aliases:", g2_ref.aliases, " name:", g2_ref.name)            # → ['g
 #
 # One git repository, `geometry-app`, holds two packages and both
 # functions used below: `geometry.main.distance` runs in this process;
-# `plane.measure.length` runs sandboxed. Each package declares its
+# `plane.measure.length` runs fenced. Each package declares its
 # version in its `__init__.py`; `geometry` is the app, so its version
 # is the app's.
 
@@ -552,12 +552,12 @@ print("db/repo/geometry-app:", L.at()["db/repo/geometry-app"])
 # the packages `geometry` and `plane`. This first clean run wrote both rows.
 
 # %% [markdown]
-# ### Sandboxed functions
+# ### Fenced functions
 #
 # `t.ns.mount("mnt.plane", root=, repo=)` puts the repo's folder `plane`
 # under the names `mnt.plane...` (a mount is always named `mnt.<prefix>`): two `db/mount/plane` rows; `ns.mounts()` is
 # the mount table at a revision. A name under a mount loads in a
-# sandbox, a fresh interpreter holding only that folder. Its version
+# fence, a fresh interpreter holding only that folder. Its version
 # is the mounted package's `__version__`; the checksum of the files
 # it loaded is its identity.
 
@@ -572,8 +572,8 @@ show_file(repo_path / "plane/measure.py")
 # %%
 length_fn = L.at().ns.load("mnt.plane.measure.length")
 segment_value = length_fn(a=(0, 0), b=(3, 4))
-print("fn:", repr(length_fn), " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
-# → fn: <Fn mnt.plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
+print("fn:", repr(length_fn), " code:", repr(length_fn.code), " fenced:", length_fn.code.fenced)
+# → fn: <Fn mnt.plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  fenced: True
 print("result:", segment_value.obj)                 # → result: 2.5
 print("geometry db/version:", L.at()["db/repo/geometry-app/geometry", "db/version"])   # → geometry db/version: 5.3.9
 print("plane db/version:", L.at()["db/repo/geometry-app/plane", "db/version"])         # → plane db/version: 2.7.1
@@ -582,10 +582,10 @@ print("plane db/version:", L.at()["db/repo/geometry-app/plane", "db/version"])  
 # `geometry` and `plane` share one checkout, the repo `geometry-app`, and each package keeps its own version clock, written by its first clean run.
 
 # %% [markdown]
-# #### A sandbox is a snapshot of the code
+# #### A fence is a snapshot of the code
 #
-# Loading a sandboxed function takes a snapshot of the code it runs;
-# `code` is that snapshot, the sandbox: `modules` are the files in
+# Loading a fenced function takes a snapshot of the code it runs;
+# `code` is that snapshot, the fence: `modules` are the files in
 # it, `version` the name the package gives it. The function is looked
 # up by name inside it, and the version it shows is the snapshot's.
 # Only the snapshot has identity, `subject` `db/code/<16 hex>`; a
@@ -594,12 +594,12 @@ print("plane db/version:", L.at()["db/repo/geometry-app/plane", "db/version"])  
 # (`plane/__init__.py` too).
 
 # %%
-sandbox = length_fn.code
-print("sandbox:", repr(sandbox), " version:", sandbox.version, " modules:", sandbox.modules)
-# → sandbox: <Code plane@2.7.1>  version: 2.7.1  modules: ['plane/__init__.py', 'plane/measure.py']
-print("result's code:", segment_value.dependencies["code"], " is the sandbox:",
-      segment_value.dependencies["code"] == sandbox.subject)
-# → result's code: db/code/1fa8b8c101e51d7a  is the sandbox: True
+fence = length_fn.code
+print("fence:", repr(fence), " version:", fence.version, " modules:", fence.modules)
+# → fence: <Code plane@2.7.1>  version: 2.7.1  modules: ['plane/__init__.py', 'plane/measure.py']
+print("result's code:", segment_value.dependencies["code"], " is the fence:",
+      segment_value.dependencies["code"] == fence.subject)
+# → result's code: db/code/1fa8b8c101e51d7a  is the fence: True
 print("result's fn:", segment_value.dependencies["fn"])
 # → result's fn: mnt.plane.measure.length
 
@@ -613,8 +613,8 @@ measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
 (repo_path / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
 git_commit("quarter metres", cwd=repo_path)
 new_length_fn = L.at().ns.load("mnt.plane.measure.length")
-print("new fn:", repr(new_length_fn), " sandbox:", repr(new_length_fn.code))
-# → new fn: <Fn mnt.plane.measure.length@2.7.2>  sandbox: <Code plane@2.7.2>
+print("new fn:", repr(new_length_fn), " fence:", repr(new_length_fn.code))
+# → new fn: <Fn mnt.plane.measure.length@2.7.2>  fence: <Code plane@2.7.2>
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → new result: 1.25
 print("old result's code:", segment_value.dependencies["code"], " fn:", segment_value.dependencies["fn"],
       " holds:", segment_value.obj)
@@ -679,7 +679,7 @@ for dep_key, dep_value in sorted(far_value.dependencies.items()):
 #   ran at.
 # - `code`: the snapshot of the code the function ran from, by its
 #   subject; here the package `geometry` at its version, as for the
-#   sandbox above.
+#   fence above.
 # - `fn`: the function's dotted name inside that snapshot.
 # - `platform`, `platform/record`: the operating system, CPU and
 #   Python version it ran on, as a tag and as a record, not a file.
@@ -947,15 +947,15 @@ print("DB/KEYS: ", L.at()[table12_value.subject, "db/keys"])   # the memo key
 
 # %% [markdown]
 # The run function loads as an `Fn`, a ledger function: kind `dat`
-# (undecorated, run through a spec), sandboxed because it is
-# mounted. It ran in a sandboxed worker, its code the mounted files
+# (undecorated, run through a spec), fenced because it is
+# mounted. It ran in a fenced worker, its code the mounted files
 # it loaded; `db/fn` names it, and the first clean run wrote the
 # package's version clock, `db/repo/q-dats/mymodule` `db/version`.
 
 # %%
 # print results
 run_fn = Dat.ns.load("mnt.mymodule.mult.build_table")
-print("FN:         ", repr(run_fn), " kind:", run_fn.kind, " sandboxed:", run_fn.code.sandboxed)
+print("FN:         ", repr(run_fn), " kind:", run_fn.kind, " fenced:", run_fn.code.fenced)
 print("DB/FN:      ", L.at()[table12_value.subject, "db/fn"])
 print("DB/VERSION: ", L.at()["db/repo/q-dats/mymodule", "db/version"])   # db/repo/q-dats/mymodule
 

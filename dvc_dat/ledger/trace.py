@@ -5,7 +5,7 @@ Items (Module § Value ``Dependencies``):
 ``code``
     the ``db/code/<hash 16>`` subject of the code that ran (DAT 1037); holds when
     the function the ``fn`` item names resolves at the rev to the same subject
-    (unsandboxed: the static import closure; sandbox: exactly the modules the
+    (resident: the static import closure; fence: exactly the modules the
     run loaded, re-hashed as they are now, on disk or installed, A38, Q37, Q39).
 ``fn``
     the function's dotted name inside that code (``plane.measure.length``);
@@ -20,7 +20,7 @@ Items (Module § Value ``Dependencies``):
     the short tag ``<os>-<machine>-py<X.Y>`` of the platform it ran on; holds when the
     ledger's memo policy (``policy``, the ``(db, db/memo-policy)`` row at the top) reduces the
     stored record and the environment's to the same string, card and driver added under
-    ``deterministic=True`` (SVP 1474). (A sandboxed entry's third-party modules are in
+    ``deterministic=True`` (SVP 1474). (A fenced entry's third-party modules are in
     ``code``, each by its bytes or its distribution's ``RECORD``; there is no
     whole-``uv.lock`` item.)
 ``platform/record``
@@ -37,7 +37,7 @@ Items (Module § Value ``Dependencies``):
     a nested eval: holds iff the nested lookup at the rev, never running,
     yields an entry with the recorded hash (A42, A45).
 ``salt``
-    the ``db/salt`` of the mount a sandboxed function ran under, when set.
+    the ``db/salt`` of the mount a fenced function ran under, when set.
 ``q:{...}``
     a ``refs``/``values``/``value``/``select`` query (the whole query as
     canonical JSON, ``kind`` dotted, A41, A47) -> the sorted ``ref:`` list it

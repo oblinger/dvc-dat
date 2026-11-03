@@ -196,7 +196,7 @@ show("comfort/report.py")
 # %% [markdown]
 # ### Mounting the code
 #
-# Mounting `comfort` makes its stages sandboxed under the names `mnt.comfort...` (a mounted name starts `mnt.`; the bare `comfort...` imports): each call runs in a fresh process of its own, and its code is the hash of every module file the run loaded.
+# Mounting `comfort` makes its stages fenced under the names `mnt.comfort...` (a mounted name starts `mnt.`; the bare `comfort...` imports): each call runs in a fresh process of its own, and its code is the hash of every module file the run loaded.
 # Its version is `comfort.__version__`, in the source; the first run from the clean checkout writes it to the ledger's `db/repo/comfort-repo/comfort` `db/version` clock, one per versioned package.
 # A `# same as` line is the shell form, typed in the code's repo, whose justfile imports `run` and the ledger verbs from dvc-dat (`dvc_dat.just`).
 
@@ -204,8 +204,8 @@ show("comfort/report.py")
 with L.transaction(by="human:dan", why="mount the stages") as t:
     t.ns.mount("mnt.comfort", root="comfort", repo="comfort-repo")   # the two db/mount/comfort rows
 report_fn = L.at().ns.load("mnt.comfort.report.comfort_report")
-print("sandboxed:", report_fn.code.sandboxed, " code:", report_fn.code)
-# → sandboxed: True  code: comfort@0.1.0
+print("fenced:", report_fn.code.fenced, " code:", report_fn.code)
+# → fenced: True  code: comfort@0.1.0
 
 # %% [markdown]
 # ### Asking for the comfort report
@@ -311,7 +311,7 @@ print(ran_since(counts_before))
 
 # %% [markdown]
 # Only the comfort report ran: its run loaded `report.py`, and no other stage's run did.
-# No version bump was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a miss, and a miss runs at HEAD, clean or dirty (F520 Q39).
+# No version bump was needed: a fenced stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a miss, and a miss runs at HEAD, clean or dirty (F520 Q39).
 
 # %% [markdown]
 # ## Reading a result's dependencies back

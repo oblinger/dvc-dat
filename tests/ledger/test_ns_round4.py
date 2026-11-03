@@ -8,7 +8,7 @@ import pytest
 
 import backends
 from dvc_dat.ledger import UntracedRead, set_env_provider
-from dvc_dat.ledger.sandbox import shutdown
+from dvc_dat.ledger.fence import shutdown
 
 EXTRA = {
     "pyproject.toml": '[project]\nname = "sbx-repo"\nversion = "0.1.0"\n',
@@ -96,7 +96,7 @@ def test_f1_a_mounted_name_cannot_read_outside_its_mount(sbx, tmp_path):
         L.at().ns.load(name)
 
 
-def test_f1b_a_sandboxed_body_reads_outside_the_mounts_through_ns_load(sbx, world, tmp_path):
+def test_f1b_a_fenced_body_reads_outside_the_mounts_through_ns_load(sbx, world, tmp_path):
     """The same hole inside the worker: Path.read_text of the file is UntracedRead, but
     Dat.manager.ns.load of it returns the contents (the namespace reads under unguarded())."""
     L, _repo = sbx
@@ -110,7 +110,7 @@ def test_f1b_a_sandboxed_body_reads_outside_the_mounts_through_ns_load(sbx, worl
         print("LEAKED:", v.get_results()["got"])
 
 
-# -- F2: a mounted yaml a sandboxed body loads through the ns is part of its code item ------------------
+# -- F2: a mounted yaml a fenced body loads through the ns is part of its code item ------------------
 
 def test_f2_editing_a_mounted_yaml_a_body_loaded_recomputes(sbx, world):
     """A body reading a mounted spec through Dat.manager.ns.load depends on its bytes: a committed edit
