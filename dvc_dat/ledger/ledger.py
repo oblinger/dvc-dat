@@ -245,15 +245,15 @@ class Ledger:
         self.close()
 
     def _assert_mounts(self, cfg: Path) -> None:
-        """``mounts:`` sugar: assert the rows when they differ from what the ledger holds (A47, A54.3)."""
+        """``mounts:`` sugar: assert the rows when they differ from what the ledger holds (A47, A54.3). A key is
+        the mount's name, ``mnt.<prefix>`` as ``t.ns.mount`` takes it (1505 Q1); the rows are ``db/mount/<prefix>``."""
         mounts = _read_config(cfg).get("mounts") or {}
         if not isinstance(mounts, dict) or not mounts:
             return
         from .env import _toplevel, repo_name
-        from .fn import refuse_mnt
+        from .fn import mount_prefix
 
-        for prefix in mounts:
-            refuse_mnt(str(prefix), f"{cfg} mounts:")
+        mounts = {mount_prefix(str(at), f"{cfg} mounts:"): root for at, root in mounts.items()}
         top = _toplevel(str(cfg.parent))
         repo = repo_name(Path(top)) if top else cfg.parent.name
         rev = self.at()

@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.48.0 — 2026-11-02
+
+- **A `.datconfig.yaml` `mounts:` key is the mount's name, `mnt.<prefix>`, as `t.ns.mount` takes it (SVP 1505 Q1; minor).** One spelling for a mount: `mounts: {mnt.demo_game.etl: demo_game/etl}` asserts the rows `db/mount/demo_game.etl`; a key outside `mnt.` (`demo_game.etl`, `mnt` alone) is `ValueError` naming the `mnt.<prefix>` form, and nothing is written. `t.ns.mount` and the config share the one check (`dvc_dat.ledger.fn.mount_prefix`, replacing `refuse_mnt`). Docs: `DAT Ledger`, `DAT Namespace API`, `concepts.md`; ledger-just, ledger-dats and ledger-values re-executed. **Breaks:** a config key `pkg.etl: pkg/etl` → `mnt.pkg.etl: pkg/etl`.
+
 ## 2.47.0 — 2026-11-02
 
 - **Stamps are stored UTC; the zone times print in is a ledger setting, `db db/timezone` (SVP 1505 Q2; minor).** Reverses 2.44.0's fixed zone. `db/time` and `sealed` are UTC again, `YYYY-MM-DDTHH:MM:SSZ`, whatever the setting. `t.add("db", "db/timezone", "America/Los_Angeles")` sets the display zone from that revision on; any revision may change or remove it (absent: UTC); the name is checked with `zoneinfo` when added (`ValueError` on an unknown zone or a subject other than `db`). `rev.timezone` is the `ZoneInfo` as of a revision and `rev.show_time(stamp)` a stored stamp printed in it (ISO 8601 with the offset); a `Row` of `db/time` or `db/sealed-at` prints in its revision's zone, `just history` in the head's, and the clock built-ins of a ledger namespace's `expand` are in its revision's zone (a transaction's `t.ns`, its snapshot's). Docs: `DAT Ledger` (`timezone`, `show_time`, `sealed`, stamps, `db` rows, `ledgers:`), `DAT Namespace API`, `expand.md`, `overview.md`, `concepts.md`; three demo notebooks re-executed. **Breaks, no shim:** `Ledger(..., tz=)`, `L.tz`, the `db/tz` row and a `ledgers:` entry's `{location: ..., tz: ...}` form are gone (an entry is a location again); stamps end `Z`, not an offset.

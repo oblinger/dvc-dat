@@ -406,7 +406,7 @@ def make_ledger_project(root: Path, hand: str = "", targets: bool = True) -> Non
     `cli_main`, and a justfile importing the generated commands."""
     from dvc_dat.ledger import Ledger
     (root / ".datconfig.yaml").write_text(
-        f"ledger: .dat/ledger\nmounts:\n  proj: proj\nrun: {sys.executable} -m ledger_main\n")
+        f"ledger: .dat/ledger\nmounts:\n  mnt.proj: proj\nrun: {sys.executable} -m ledger_main\n")
     Ledger(root / ".dat" / "ledger", create=True)
     targets_line = "import? '.dat/targets.just'\n" if targets else ""
     (root / "justfile").write_text(f"import '{RECIPES}'\n{targets_line}{hand}")

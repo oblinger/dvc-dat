@@ -274,9 +274,9 @@ def encode_keys(kw: Dict[str, Any]) -> Dict[str, Any]:
 
 MNT = "mnt"
 """The reserved top segment of a ledger-mounted name (1467 Q14 (B)): ``mnt.<at>...`` names what the mount
-``db/mount/<at>`` serves; a name not starting ``mnt.`` is never a mount and is imported. ``t.ns.mount`` names
-it (``at="mnt.<at>"``, 1505 Q1); the rows, ``mounts()``, a ``.datconfig.yaml`` ``mounts:`` key and the in-process
-module names never carry it."""
+``db/mount/<at>`` serves; a name not starting ``mnt.`` is never a mount and is imported. A mount is named with
+it, ``t.ns.mount("mnt.<at>", ...)`` and a ``.datconfig.yaml`` ``mounts:`` key ``mnt.<at>`` alike (1505 Q1); the
+rows, ``mounts()`` and the in-process module names never carry it."""
 
 
 def mounted_name(dotted: str) -> str:
@@ -284,11 +284,16 @@ def mounted_name(dotted: str) -> str:
     return f"{MNT}.{dotted}"
 
 
-def refuse_mnt(at: str, where: str) -> None:
-    """``ValueError`` when a mount's ``at`` starts with the reserved segment ``mnt``."""
-    if at.split(".")[0] == MNT:
-        raise ValueError(f"{where}: {at!r} starts with {MNT!r}; mount at the bare prefix, the resolver adds "
-                         f"{MNT}. (a mounted name is {MNT}.<at>...)")
+def mount_prefix(at: str, where: str) -> str:
+    """The prefix of the ``db/mount/<prefix>`` rows a mount named ``at`` writes: ``at`` is ``mnt.<prefix>``
+    (1505 Q1), and anything outside ``mnt.`` (``mnt`` alone included) is ``ValueError``; nothing is prefixed for
+    you."""
+    rest = at[len(MNT) + 1:] if at.startswith(MNT + ".") else ""
+    if not rest or not all(rest.split(".")):
+        hint = mounted_name(at) if at and at != MNT and all(at.split(".")) else MNT + ".<prefix>"
+        raise ValueError(f"{where}: a mount is named {MNT}.<prefix>, got {at!r} (write {hint!r}); a mount is "
+                         f"outside {MNT}. never")
+    return rest
 
 
 def mounts_at(rev: "Rev") -> Dict[str, Dict[str, str]]:
