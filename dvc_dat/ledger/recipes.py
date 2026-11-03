@@ -22,6 +22,7 @@ from pathlib import Path
 
 from dvc_dat.do import arg_value
 from dvc_dat.ledger import Ledger, LedgerError, bump, bump_source
+from dvc_dat.ledger.rev import TIME_PREDICATES
 
 BY = f"human:{os.environ.get('USER', 'dan')}"
 
@@ -104,6 +105,8 @@ def history(args):
     for row in rev.history():
         if row.subject == args[0]:
             obj = short(row.object) if isinstance(row.object, str) else row.object
+            if row.predicate in TIME_PREDICATES and isinstance(row.object, str):
+                obj = rev.show_time(row.object)       # stored UTC, printed in the display zone (SVP 1505 Q2)
             sign = "" if row.added else "-"
             by = rev[row.rev.tx, "db/by"]       # a str, or a JSON dict printed canonically (DAT 1024)
             by = by if isinstance(by, str) else json.dumps(by, sort_keys=True, separators=(",", ":"))

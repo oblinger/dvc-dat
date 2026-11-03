@@ -38,7 +38,7 @@ from .env import Env, current_env, platform_items, repo_of
 from .errors import NotClean, NotEvaluated
 from .policy import DETERMINISTIC
 from .code import Code
-from .value import Blob, Value, check_loadable, dotted, restamp
+from .value import Blob, Value, check_loadable, dotted
 from ..core import Dat
 
 if TYPE_CHECKING:
@@ -187,7 +187,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
         t._advance_clock(*run.clock)
     extra = [("db/fn", "str:" + run.name), ("db/keys", "json:" + run.enc), ("db/returns", "str:" + run.returns)]
     if value.sealed and value.subject is None:
-        extra.append(("db/sealed-at", "str:" + restamp(value.sealed, t._ledger.tz)))
+        extra.append(("db/sealed-at", "str:" + str(value.sealed)))
     if name is None:
         name = value.__dict__.get("_name")
     value.__dict__["_run"] = run            # an abandoned transaction leaves a draft that can be saved again

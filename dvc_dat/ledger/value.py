@@ -379,26 +379,47 @@ class Value:
         return repr(self) if label is None else label
 
 
-def stamp(tz: Any) -> str:
-    """This moment as a ledger stamps it (``db/time``, ``sealed``): ISO 8601 to the second with the offset of
-    ``tz``, the ledger's zone (``2026-11-01T14:03:22-07:00``; ``+00:00`` on a UTC ledger)."""
+def stamp() -> str:
+    """This moment as the ledger stores it (``db/time``, ``sealed``): UTC, ISO 8601 to the second,
+    ``2026-11-01T21:03:22Z``."""
     import datetime as _dt
 
-    return _dt.datetime.now(tz).isoformat(timespec="seconds")
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def restamp(text: str, tz: Any) -> str:
-    """A stamp moved into ``tz``: a ``v.seal()`` made with no ledger (UTC) is written in the saving ledger's zone."""
+def shown_in(text: str, zone: Any) -> str:
+    """A stored UTC stamp as it prints in ``zone``: ISO 8601 with the zone's offset
+    (``2026-11-01T14:03:22-07:00``); in UTC it is the stamp unchanged."""
     import datetime as _dt
 
-    return _dt.datetime.fromisoformat(text).astimezone(tz).isoformat(timespec="seconds")
+    if getattr(zone, "key", None) == "UTC":
+        return text
+    return _dt.datetime.fromisoformat(text).astimezone(zone).isoformat(timespec="seconds")
+
+
+#: The display-zone setting (SVP 1505 Q2): the row ``db db/timezone <IANA name>``; absent, UTC.
+TIMEZONE = "db/timezone"
+
+
+def zone_named(subject: str, name: Any) -> Any:
+    """The ``ZoneInfo`` a ``db/timezone`` row names; ``ValueError`` on a subject other than ``db`` or a name
+    that is not an IANA zone."""
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    if subject != "db":
+        raise ValueError(f"{TIMEZONE} is the ledger's display zone, a row of the subject db, not {subject!r}")
+    if not (isinstance(name, str) and name):
+        raise ValueError(f"db {TIMEZONE}: an IANA zone name such as 'America/Los_Angeles', not {name!r}")
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValueError(f"db {TIMEZONE}: {name!r} is not an IANA zone name (such as 'America/Los_Angeles' "
+                         "or 'UTC')") from None
 
 
 def _now() -> str:
     """A seal with no ledger: UTC."""
-    import datetime as _dt
-
-    return stamp(_dt.timezone.utc)
+    return stamp()
 
 
 def check_name(name: Any) -> str:
