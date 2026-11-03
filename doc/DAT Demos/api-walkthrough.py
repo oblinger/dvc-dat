@@ -554,8 +554,8 @@ print("db/repo/geometry-app:", L.at()["db/repo/geometry-app"])
 # %% [markdown]
 # ### Sandboxed functions
 #
-# `t.ns.mount(at, root=, repo=)` puts the repo's folder `plane`
-# under the names `mnt.plane...`: two `db/mount/plane` rows; `ns.mounts()` is
+# `t.ns.mount("mnt.plane", root=, repo=)` puts the repo's folder `plane`
+# under the names `mnt.plane...` (a mount is always named `mnt.<prefix>`): two `db/mount/plane` rows; `ns.mounts()` is
 # the mount table at a revision. A name under a mount loads in a
 # sandbox, a fresh interpreter holding only that folder. Its version
 # is the mounted package's `__version__`; the checksum of the files
@@ -563,7 +563,7 @@ print("db/repo/geometry-app:", L.at()["db/repo/geometry-app"])
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.ns.mount("plane", root="plane", repo="geometry-app")   # the two db/mount/plane rows
+    t.ns.mount("mnt.plane", root="plane", repo="geometry-app")   # the two db/mount/plane rows
 print("mounts:", L.at().ns.mounts())
 # → mounts: {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
 show_file(repo_path / "plane/__init__.py")
@@ -908,7 +908,7 @@ print(".datconfig.yaml:", Path(".datconfig.yaml").read_text().splitlines())
 # → .datconfig.yaml: ['dat_folders: data', 'ledger: .dat/ledger']
 import mymodule                      # discovery finds the checkout, the repo q-dats
 with L.transaction(by="human:dan", why="mount mymodule") as t:
-    t.ns.mount("mymodule", root="mymodule")   # the two db/mount rows: the folder, and the repo, by default this project's, q-dats
+    t.ns.mount("mnt.mymodule", root="mymodule")   # the two db/mount rows: the folder, and the repo, by default this project's, q-dats
 spec_file_path = Path("mymodule/specs/table12.yaml")   # a ledger-mounted name starts mnt.: base: and do: name the mount
 spec_file_path.write_text(spec_file_path.read_text().replace(" mymodule.", " mnt.mymodule."))
 git_commit("mymodule: ledger names", "mymodule")

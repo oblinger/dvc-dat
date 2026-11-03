@@ -653,7 +653,7 @@ git("commit", "-m", "plane: measure, units")
 
 with L.transaction(by="human:dan", why="mount plane") as t:
     # the two db/mount/plane rows: mnt.plane.measure loads from plane/measure.py in the geometry repo
-    t.ns.mount("plane", root="plane", repo="geometry")
+    t.ns.mount("mnt.plane", root="plane", repo="geometry")
 rev = L.at()
 print("mount rows:", rev["db/mount/plane"])
 # → mount rows: {'db/root': 'plane', 'db/repo': 'geometry'}

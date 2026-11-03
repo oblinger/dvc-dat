@@ -23,7 +23,7 @@ def test_rev_ns_expands_through_the_ledgers_mounts_and_the_plain_ns_does_not(L, 
     (tree / "names.yaml").write_text("word: mine\n")
     envbox.set(code={**envbox.env.code, "myrepo": Checkout(None, "abc1234", False, tmp_path / "proj")})
     with L.transaction(by="t") as t:
-        t.ns.mount("cfg", root="cfgs", repo="myrepo")
+        t.ns.mount("mnt.cfg", root="cfgs", repo="myrepo")
     assert L.at().ns.expand("runs/{mnt.cfg.names.word}/x") == "runs/mine/x"
     with L.transaction(by="t", lock=10) as t:
         assert t.ns.expand("{mnt.cfg.names.word}") == "mine"

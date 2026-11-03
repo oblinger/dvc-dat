@@ -274,8 +274,9 @@ def encode_keys(kw: Dict[str, Any]) -> Dict[str, Any]:
 
 MNT = "mnt"
 """The reserved top segment of a ledger-mounted name (1467 Q14 (B)): ``mnt.<at>...`` names what the mount
-``db/mount/<at>`` serves; a name not starting ``mnt.`` is never a mount and is imported. The resolver adds it;
-the rows, ``mounts()`` and the in-process module names never carry it."""
+``db/mount/<at>`` serves; a name not starting ``mnt.`` is never a mount and is imported. ``t.ns.mount`` names
+it (``at="mnt.<at>"``, 1505 Q1); the rows, ``mounts()``, a ``.datconfig.yaml`` ``mounts:`` key and the in-process
+module names never carry it."""
 
 
 def mounted_name(dotted: str) -> str:

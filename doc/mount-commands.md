@@ -12,7 +12,7 @@ Mounts are made in code, by `ns.mount(...)`, by your own program — the
 namespace is whatever the running program imported. A ledger-namespace project
 (`ledger:` or `namespace: ledger`) refuses `Dat.ns.mount`: its mounts are ledger
 rows, written by `t.ns.mount` in a transaction, and its mounted names start
-`mnt.` (`mnt.<at>...`; any other name imports). For the shell, your
+`mnt.` (`t.ns.mount("mnt.<prefix>", ...)`; any other name imports). For the shell, your
 program's main does the mounting and hands the command line to `Dat.cli_main()`,
 and `.datconfig.yaml` names that main as `run:`:
 

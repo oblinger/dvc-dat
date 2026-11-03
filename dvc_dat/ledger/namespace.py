@@ -18,7 +18,7 @@ itself.
 ``.datconfig.yaml`` names a ledger: the ``Namespace`` interface (``load``, the ``dat.base`` merge and ``{}`` expansion, the
 ``dat.do`` lookup in a run) answered from these mounts, at the head, or at
 the rev it was made for. In a ledger project the mounts are rows: ``t.ns.mount``
-writes them, and ``mount`` anywhere else is refused.
+(``at="mnt.<prefix>"``, named in full) writes them, and ``mount`` anywhere else is refused.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ import yaml
 from ..core import _builtins
 from ..do import Namespace
 from .errors import NotEvaluated
-from .fn import MNT, Fn, installed_fn, mounted_name, mounts_at, refuse_mnt
+from .fn import MNT, Fn, installed_fn, mounted_name, mounts_at
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -320,10 +320,11 @@ class LedgerNamespace(Namespace):
 
     def mount(self, at: Optional[str] = None, *, root: Optional[str] = None,  # type: ignore[override]
               repo: Optional[str] = None, **kwargs: Any) -> None:
-        """``t.ns.mount(at, root=..., repo=None)``: the ``db/mount/<at>`` rows ``db/root`` and ``db/repo``,
-        written through ``t.update``; its names load as ``mnt.<at>...``. ``repo`` defaults to the project's own
-        repository (``project_repo``). Only a transaction's namespace mounts; an ``at`` starting ``mnt`` is
-        ``ValueError`` (the resolver adds ``mnt.``)."""
+        """``t.ns.mount(at, root=..., repo=None)``: ``at`` is ``mnt.<prefix>``, and the ``db/mount/<prefix>`` rows
+        ``db/root`` and ``db/repo`` are written through ``t.update``; its names load as ``at`` names them,
+        ``mnt.<prefix>...``. ``repo`` defaults to the project's own repository (``project_repo``). Only a
+        transaction's namespace mounts; an ``at`` outside ``mnt.`` (``mnt`` alone included) is ``ValueError``
+        (1505 Q1 (A): nothing is prefixed for you)."""
         if self._txn is None:
             raise TypeError("a ledger project names things through its db/mount rows (`mounts:` in "
                             ".datconfig.yaml, or t.ns.mount(at, root=...) in a transaction); "
@@ -337,8 +338,11 @@ class LedgerNamespace(Namespace):
                 raise TypeError(f"t.ns.mount: {key} is a non-empty str, got {v!r}")
         if not _dotted(at):
             raise ValueError(f"t.ns.mount: at is a dotted name (non-empty segments, no '/'), got {at!r}")
-        refuse_mnt(at, "t.ns.mount")
-        self._txn.update(f"db/mount/{at}", {"db/root": root, "db/repo": repo})
+        if not at.startswith(MNT + "."):
+            raise ValueError(f"t.ns.mount: at names the mount as {MNT}.<prefix>, got {at!r} (write "
+                             f"{mounted_name(at) if at != MNT else MNT + '.<prefix>'!r}); a mount is outside "
+                             f"{MNT}. never")
+        self._txn.update(f"db/mount/{at[len(MNT) + 1:]}", {"db/root": root, "db/repo": repo})
 
     def mounts(self) -> Dict[str, Dict[str, str]]:  # type: ignore[override]
         """The mount table at this revision: ``{prefix: {"root": ..., "repo": ...}}``, the ``db/mount``

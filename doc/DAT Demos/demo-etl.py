@@ -202,7 +202,7 @@ show("comfort/report.py")
 
 # %%
 with L.transaction(by="human:dan", why="mount the stages") as t:
-    t.ns.mount("comfort", root="comfort", repo="comfort-repo")   # the two db/mount/comfort rows
+    t.ns.mount("mnt.comfort", root="comfort", repo="comfort-repo")   # the two db/mount/comfort rows
 report_fn = L.at().ns.load("mnt.comfort.report.comfort_report")
 print("sandboxed:", report_fn.code.sandboxed, " code:", report_fn.code)
 # → sandboxed: True  code: comfort@0.1.0
