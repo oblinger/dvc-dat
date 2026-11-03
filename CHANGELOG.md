@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.49.0 — 2026-11-02
+
+- **`L.at` names a revision by a timestamp (SVP 1507; minor).** `L.at("2026-11-02")`, `"2026-11-02T14"`, `"2026-11-02T14:30"`, `"2026-11-02T14:30:15"` (a space may replace `T`) is the latest revision whose `db/time` is at or before the start of that span, read in the display zone (`db db/timezone` at the top, UTC with none) unless the stamp ends `Z` or `±hh:mm`; a DST-ambiguous or skipped local time is read with `fold=0`; before the first stamped revision it is `KeyError`. Both stored `db/time` forms parse (`Z` and the 2.44.0 offset form). Order: digits, version, timestamp, tag; a `db/tag` that parses as a timestamp is `ValueError`. Docs: `DAT Ledger` (`at`, `db` rows). **Breaks:** a tag named like a timestamp can no longer be added.
+
 ## 2.48.0 — 2026-11-02
 
 - **A `.datconfig.yaml` `mounts:` key is the mount's name, `mnt.<prefix>`, as `t.ns.mount` takes it (SVP 1505 Q1; minor).** One spelling for a mount: `mounts: {mnt.demo_game.etl: demo_game/etl}` asserts the rows `db/mount/demo_game.etl`; a key outside `mnt.` (`demo_game.etl`, `mnt` alone) is `ValueError` naming the `mnt.<prefix>` form, and nothing is written. `t.ns.mount` and the config share the one check (`dvc_dat.ledger.fn.mount_prefix`, replacing `refuse_mnt`). Docs: `DAT Ledger`, `DAT Namespace API`, `concepts.md`; ledger-just, ledger-dats and ledger-values re-executed. **Breaks:** a config key `pkg.etl: pkg/etl` → `mnt.pkg.etl: pkg/etl`.

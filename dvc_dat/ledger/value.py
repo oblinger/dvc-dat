@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 import pickle
+import re
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterable, Mapping, Optional, Tuple, Union
@@ -395,6 +396,53 @@ def shown_in(text: str, zone: Any) -> str:
     if getattr(zone, "key", None) == "UTC":
         return text
     return _dt.datetime.fromisoformat(text).astimezone(zone).isoformat(timespec="seconds")
+
+
+#: A moment named by an ISO 8601 prefix (SVP 1507): a date, then optionally the hour, minute and second; a
+#: single space may replace ``T``; with a time, an optional zone suffix ``Z`` or ``+hh:mm`` / ``-hh:mm``.
+_MOMENT = re.compile(r"(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2})(?::(\d{2})(?::(\d{2}))?)?(Z|[+-]\d{2}:\d{2})?)?")
+
+
+def is_moment(text: Any) -> bool:
+    """Whether ``text`` has the form of a moment ``Ledger.at`` reads (``2026-11-02``, ``2026-11-02T14:30Z``),
+    valid calendar or not; a ``db/tag`` of this form is refused."""
+    return isinstance(text, str) and _MOMENT.fullmatch(text) is not None
+
+
+def moment(text: str, zone: Any) -> Any:
+    """The UTC ``datetime`` a moment names: the START of its span (``2026-11-02`` is 00:00, ``2026-11-02T01``
+    is exactly 01:00), read in ``zone`` unless it carries ``Z`` or an offset. A local time a DST change makes
+    ambiguous or skips is read with ``fold=0``: the earlier of two, and a skipped one at the offset before the
+    change. ``ValueError`` on a form that is not a moment or a field out of range."""
+    import datetime as _dt
+
+    m = _MOMENT.fullmatch(text) if isinstance(text, str) else None
+    if m is None:
+        raise ValueError(f"not a moment, an ISO 8601 prefix such as '2026-11-02' or '2026-11-02T14:30': {text!r}")
+    y, mo, d, h, mi, s, z = m.groups()
+    if z is None:
+        tz = zone
+    elif z == "Z":
+        tz = _dt.timezone.utc
+    else:
+        sign = -1 if z[0] == "-" else 1
+        hh, mm = int(z[1:3]), int(z[4:6])
+        if hh > 23 or mm > 59:
+            raise ValueError(f"moment {text!r}: the offset {z} is out of range")
+        tz = _dt.timezone(sign * _dt.timedelta(hours=hh, minutes=mm))
+    try:
+        local = _dt.datetime(int(y), int(mo), int(d), int(h or 0), int(mi or 0), int(s or 0), tzinfo=tz, fold=0)
+    except ValueError as e:
+        raise ValueError(f"moment {text!r}: {e}") from None
+    return local.astimezone(_dt.timezone.utc)
+
+
+def stored_moment(text: str) -> Any:
+    """A stored stamp (``db/time``) as a UTC ``datetime``: ``2026-11-01T21:03:22Z``, or the offset form
+    ``2026-11-01T14:03:22-07:00`` that 2.44.0 to 2.46.x wrote."""
+    import datetime as _dt
+
+    return _dt.datetime.fromisoformat(text).astimezone(_dt.timezone.utc)
 
 
 #: The display-zone setting (SVP 1505 Q2): the row ``db db/timezone <IANA name>``; absent, UTC.
