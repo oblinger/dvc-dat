@@ -82,18 +82,13 @@ A keyword given to the call shadows a built-in of the same name. The template
 is positional only, so a variable may be called `text`.
 
 **Time zone.** The clock built-ins are in the namespace's zone, and a name
-never carries a zone suffix. A ledger's zone is fixed when the ledger is
-created (`Ledger(location, create=True, tz="America/Los_Angeles")`, an IANA
-name, or `tz:` in a `ledgers:` entry, `games: {location: .dat/games, tz:
-America/Los_Angeles}`; UTC when none is given), is the row `db db/tz` and
-`L.tz`, and never changes, so it is read once when the ledger is opened, not
-looked up per expansion, and it means the same thing at every revision. Every
-date the ledger writes is in it: the clock built-ins in names, and the
-machine stamps (`db/time` on every transaction, `sealed`), which are ISO 8601
-with the zone's offset, `2026-11-01T14:03:22-07:00`. UTC is the default
-because a ledger's writers are laptops and boxes in different zones and one
-moment must mint one name from all of them. A namespace with no ledger uses
-the machine's local zone, as `dat.name` always has.
+never carries a zone suffix. On a ledger namespace the zone is the display
+zone as of its revision, the row `db db/timezone` (an IANA name,
+`t.add("db", "db/timezone", "America/Los_Angeles")`; UTC with none), which
+any revision may change; a transaction's `t.ns` uses its snapshot's. The
+ledger's stamps (`db/time`, `sealed`) are stored UTC whatever the setting;
+it changes only how they print (`rev.show_time`). A namespace with no ledger
+uses the machine's local zone, as `dat.name` always has.
 
 ## What the namespace holds
 

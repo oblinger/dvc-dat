@@ -126,7 +126,7 @@ Dat.get(x, "a.b.c")      # 1
 | `ns.expand(TEXT, **vars) -> str` | Resolve the `{}` references in one string, through `ns`'s names; always a str |
 | `ns.expand_spec(SPEC, **vars)` | Merge the spec's `dat.base`, then resolve them throughout it; a value that is exactly one reference is the object |
 | `ns.quote_spec(SPEC)` | Double every brace, so a spec survives one expansion unchanged |
-| `Ledger(location, create=True, tz="America/Los_Angeles")` | A ledger's zone, fixed at creation (UTC default): its `rev.ns.expand` clock and its stamps |
+| `t.add("db", "db/timezone", "America/Los_Angeles")` | The zone times print in, from this revision on (UTC with none): `rev.show_time`, `just history`, the `rev.ns.expand` clock; stamps stay UTC |
 
 `ns` is any namespace: `Dat.ns`, `manager.ns`, `rev.ns`, `t.ns`; on a ledger
 `{unique}` counts until the name is free. See [Expansion](expand.md) for the

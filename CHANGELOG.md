@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.47.0 — 2026-11-02
+
+- **Stamps are stored UTC; the zone times print in is a ledger setting, `db db/timezone` (SVP 1505 Q2; minor).** Reverses 2.44.0's fixed zone. `db/time` and `sealed` are UTC again, `YYYY-MM-DDTHH:MM:SSZ`, whatever the setting. `t.add("db", "db/timezone", "America/Los_Angeles")` sets the display zone from that revision on; any revision may change or remove it (absent: UTC); the name is checked with `zoneinfo` when added (`ValueError` on an unknown zone or a subject other than `db`). `rev.timezone` is the `ZoneInfo` as of a revision and `rev.show_time(stamp)` a stored stamp printed in it (ISO 8601 with the offset); a `Row` of `db/time` or `db/sealed-at` prints in its revision's zone, `just history` in the head's, and the clock built-ins of a ledger namespace's `expand` are in its revision's zone (a transaction's `t.ns`, its snapshot's). Docs: `DAT Ledger` (`timezone`, `show_time`, `sealed`, stamps, `db` rows, `ledgers:`), `DAT Namespace API`, `expand.md`, `overview.md`, `concepts.md`; three demo notebooks re-executed. **Breaks, no shim:** `Ledger(..., tz=)`, `L.tz`, the `db/tz` row and a `ledgers:` entry's `{location: ..., tz: ...}` form are gone (an entry is a location again); stamps end `Z`, not an offset.
+
 ## 2.46.0 — 2026-11-02
 
 - **"Sandboxed" code is "fenced", "unsandboxed" code is "resident" (SVP 1505 Q3; minor).** A rename, behavior unchanged: fenced code runs in a fresh interpreter with the loader hooked, its version the files it imported; resident code runs in the ledger's own process, its version the whole repo commit. The module `dvc_dat.ledger.sandbox` is `dvc_dat.ledger.fence` (`run_fenced`, `load_fenced`, `fence_code_at`), `Code.sandboxed` is `Code.fenced`, the provenance `eval:sandbox` is `eval:fenced` and `eval:unsandboxed` is `eval:resident`; error messages, docstrings, docs, figures and the demo notebooks (re-executed) say the new words. **Breaks:** the import path, `Code.fenced`, and the two provenance strings a `where={"db/provenance": ...}` query names; rows already written keep the old strings.

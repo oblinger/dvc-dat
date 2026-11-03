@@ -276,12 +276,13 @@ class LedgerNamespace(Namespace):
         return self.rev().ledger
 
     def _tz(self) -> Any:
-        """The ledger's zone (``db db/tz``, fixed at creation; UTC when none was given)."""
-        return self._ledger_of().tz
+        """The display zone of this namespace's revision (``db db/timezone``, UTC with none; SVP 1505 Q2); a
+        transaction's is its snapshot at open's."""
+        return (self._txn._snapshot() if self._txn is not None else self.rev()).timezone
 
     def expand(self, text: str, /, **vars: Any) -> str:  # type: ignore[override]
         """``Namespace.expand``, with dotted names resolved through this ledger namespace, the clock in the
-        ledger's zone, and ``{unique}`` counted: the expansion is tried with the counter at 1, 2, 3, ... until
+        revision's display zone, and ``{unique}`` counted: the expansion is tried with the counter at 1, 2, 3, ... until
         no ``db/alias`` row names a value by it and no folder is at it under the data folder. A path segment
         that is exactly ``{unique}`` counts ``1``, ``2``, ``3``; a suffix ``""``, ``_2``, ``_3``. The probe
         is this namespace's revision; a transaction's ``t.ns`` probes its snapshot at open and the names it
@@ -295,11 +296,12 @@ class LedgerNamespace(Namespace):
         txn = self._txn
         probe = txn._snapshot() if txn is not None else self.rev()
         data = ledger._store.art.root / "dats"
-        now = datetime.now(ledger.tz)
+        zone = probe.timezone
+        now = datetime.now(zone)
         names = {k: v for k, v in _builtins(now).items() if k != "unique"}      # one moment for every try
         names.update(vars)
         for count in range(1, 100000):
-            name = expand(text, names, resolver=self.load, tz=ledger.tz, count=count)
+            name = expand(text, names, resolver=self.load, tz=zone, count=count)
             if os.path.isabs(name):
                 return name
             if txn is not None and txn._names_minted(name):

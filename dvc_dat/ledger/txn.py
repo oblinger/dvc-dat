@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, 
 
 from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, sha256, show, strip_hint, tag
 from .errors import Exists, LockTimeout, SealBroken, Undeclared, Unlocked
-from .value import Value, check_loadable, dotted, restamp, stamp
+from .value import TIMEZONE, Value, check_loadable, dotted, stamp, zone_named
 
 if TYPE_CHECKING:
     from .ledger import Ledger
@@ -472,7 +472,7 @@ class Transaction:
             if not any(r[0] == SUBJECT and r[1] == PREDICATE for r in rows):
                 rows.append((SUBJECT, PREDICATE, "str:" + DEFAULT, True))      # the memo policy (SVP 1474)
         rows.append((txs, "db/by", self._by, True))
-        rows.append((txs, "db/time", "str:" + stamp(self._ledger.tz), True))
+        rows.append((txs, "db/time", "str:" + stamp(), True))
         rows.extend((txs, k, o, True) for k, o in self._preds)
         self._store_all()
         w.insert(rev, rows)
@@ -584,13 +584,8 @@ class Transaction:
             raise ValueError(f"{subject} db/version: the object is a MAJOR.MINOR.PATCH str, not {object!r}")
         if predicate == "db/tag":
             _tag_name(subject, object)
-        if predicate == "db/tz":
-            from .ledger import _zone
-
-            if subject != "db" or self._snapshot().id != 0:
-                raise ValueError("db db/tz is the ledger's zone, written once by the creating transaction "
-                                 "(Ledger(location, create=True, tz=...)); it never changes")
-            _zone(object)
+        if predicate == TIMEZONE:
+            zone_named(subject, object)
         o = self._encode(object)
         if predicate == "db/alias" and tag(o) != "str":
             raise TypeError("a db/alias row's object is the subject it names, a str")
@@ -624,8 +619,6 @@ class Transaction:
         self._open("remove")
         _name(subject, "subject")
         _name(predicate, "predicate")
-        if predicate == "db/tz":
-            raise ValueError("db db/tz is the ledger's zone, fixed when it was created; it is never removed")
         self._ops.append(_Op(subject, predicate, self._encode(object), False))
 
     # -- declarations as the body sees them: the snapshot at open plus this transaction's own rows ---------------
@@ -832,7 +825,7 @@ class Transaction:
                 raise SealBroken(f"{type(value).__name__} sealed at {value.sealed}: its bytes changed since; "
                                  "seal a new value (or seal with keep=True to keep the bytes)")
             deps, provenance, env = local["deps"], local["provenance"], local["env"]
-            extra.append(("db/sealed-at", "str:" + restamp(value.sealed, self._ledger.tz)))
+            extra.append(("db/sealed-at", "str:" + str(value.sealed)))
         provenance = check_provenance(provenance)
         if name is None:
             name = value.__dict__.get("_name")          # Value(name=...): the name it is saved under
@@ -859,7 +852,7 @@ class Transaction:
         else:
             self._frozen.append((value, dict(value.preds)))
             value.__dict__["_preds"] = FrozenPreds(value.preds)
-            value.sealed = stamp(self._ledger.tz)
+            value.sealed = stamp()
         value.subject = subject
         value.dependencies = MappingProxyType(dict(trace))
         value.__dict__["_hash"] = h

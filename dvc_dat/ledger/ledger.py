@@ -12,12 +12,10 @@ create=True)``), or a project in the working directory (``Ledger(create=True)``:
 ``.datconfig.yaml`` with ``ledger: .dat/ledger``, or the active entry of its
 ``ledgers:``). Without it nothing is ever created.
 
-A ledger's zone is fixed when it is created: ``Ledger(location, create=True,
-tz="America/Los_Angeles")`` (an IANA name; a ``ledgers:`` entry's ``tz:``) writes
-the row ``db db/tz`` in the creating transaction, and it never changes. It is
-read once at open (``L.tz``, a ``ZoneInfo``; UTC when none was given) and every
-date the ledger writes is in it: the clock built-ins of ``rev.ns.expand``, and
-the stamps ``db/time`` and ``sealed`` (ISO 8601 with the zone's offset).
+Every stamp the ledger writes (``db/time``, ``sealed``) is UTC. The zone a time
+is shown in is a setting, the row ``db db/timezone <IANA name>``, read as of a
+revision (``rev.timezone``; UTC with no row): it changes only how times print, so
+it may change at any revision (SVP 1505 Q2).
 
 The named handles (``ledgers.record``) and ``L``, the active ledger as one
 object, are ``named``.
@@ -28,7 +26,6 @@ from __future__ import annotations
 import keyword
 import os
 import re
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -113,15 +110,8 @@ def _section(cfg: Path, values: Dict[str, Any]) -> Tuple[Dict[str, str], Optiona
         if not _is_name(name):
             raise LedgerError(f"{cfg}: ledgers: {name!r} is not a ledger name (a Python identifier: lowercase "
                               "letters, digits and underscores, a letter first, not a keyword)")
-        if isinstance(loc, dict):
-            extra = sorted(set(loc) - {"location", "tz"})
-            if extra:
-                raise LedgerError(f"{cfg}: ledgers: {name}: an entry's keys are location and tz, not "
-                                  f"{', '.join(map(str, extra))}")
-            loc = loc.get("location")
         if not (isinstance(loc, str) and loc.strip()):
-            raise LedgerError(f"{cfg}: ledgers: {name} is a folder or a DSN (or {{location: ..., tz: ...}}), "
-                              f"got {loc!r}")
+            raise LedgerError(f"{cfg}: ledgers: {name} is a folder or a DSN, got {loc!r}")
         entries[name] = loc
     default = section.get("default")
     if default is not None and not (isinstance(default, str) and default in entries):
@@ -130,26 +120,6 @@ def _section(cfg: Path, values: Dict[str, Any]) -> Tuple[Dict[str, str], Optiona
     return entries, default
 
 
-def _zone(tz: Any) -> ZoneInfo:
-    """``tz`` (an IANA name) as a ``ZoneInfo``; ``ValueError`` for anything else."""
-    if not (isinstance(tz, str) and tz):
-        raise ValueError(f"tz is an IANA zone name such as 'America/Los_Angeles', not {tz!r}")
-    try:
-        return ZoneInfo(tz)
-    except (ZoneInfoNotFoundError, ValueError):
-        raise ValueError(f"tz={tz!r} is not an IANA zone name (such as 'America/Los_Angeles' or 'UTC')") from None
-
-
-def _configured_tz(cfg: Optional[Path]) -> Optional[str]:
-    """The ``tz:`` of the ``ledgers:`` default entry ``Ledger(create=True)`` makes, else ``None``."""
-    if cfg is None:
-        return None
-    values = _values(cfg)
-    if "ledgers" not in values:
-        return None
-    _, default = _section(cfg, values)
-    entry = values["ledgers"].get(default) if default is not None else None
-    return entry.get("tz") if isinstance(entry, dict) else None
 
 
 def _entries(cfg: Path) -> Dict[str, str]:
@@ -217,43 +187,22 @@ def _find(create: bool) -> Tuple[Target, Any, Path, Optional[Path]]:
 class Ledger:
     """One logical store of quads ``(rev, subject, predicate, object)``."""
 
-    def __init__(self, location: Union[str, Path, None] = None, *, create: bool = False,
-                 tz: Optional[str] = None) -> None:
+    def __init__(self, location: Union[str, Path, None] = None, *, create: bool = False) -> None:
         """Open the ledger at ``location``: a folder or a DSN (a ``Path``, or a ``str`` that is not a DSN, is a
         folder); ``None`` opens the active ledger (``DAT_LEDGER``, else ``.datconfig.yaml``'s ``ledgers:``
-        default or ``ledger:``). ``tz`` (an IANA name, with ``create=True`` only) is the zone of a ledger
-        being created, the row ``db db/tz``; default the entry's ``tz:``, else UTC. ``create=True`` on an
-        existing ledger with a different ``tz`` is ``LedgerError``: the zone never changes."""
-        if tz is not None and not create:
-            raise TypeError("tz= is given when a ledger is created (create=True); an open ledger's zone is L.tz")
+        default or ``ledger:``)."""
         cfg: Optional[Path] = None
         target: Target
         if location is None:
             target, given, base, cfg = _find(create)
-            if create and tz is None:
-                tz = _configured_tz(cfg)
         else:
             if isinstance(location, str) and not location.strip():
                 raise TypeError("Ledger(location): an empty location; pass a folder or a DSN, or None to find it")
             target = location if is_dsn(location) else Path(location).expanduser()
             given, base = location, Path.cwd()      # where a DSN's relative art= resolves
-        zone = _zone(tz) if tz is not None else None
         self._open(target, given, base, create)
-        if zone is not None:
-            self._fix_zone(zone)
         if cfg is not None and not create:
             self._assert_mounts(cfg)
-
-    def _fix_zone(self, zone: ZoneInfo) -> None:
-        """``create=True, tz=``: write ``db db/tz`` as the creating transaction; on a ledger made already,
-        refuse a zone other than the one it has."""
-        if self._store.top() == 0:
-            with self.transaction(by="create") as t:
-                t.add("db", "db/tz", zone.key)
-            self.tz = zone
-        elif self.tz.key != zone.key:
-            raise LedgerError(f"{self._shown}: the ledger's zone is {self.tz.key}, fixed when it was created; "
-                              f"tz={zone.key!r} cannot change it")
 
     @classmethod
     def _opened(cls, target: Target, given: Any, base: Path, cfg: Optional[Path]) -> "Ledger":
@@ -281,9 +230,6 @@ class Ledger:
             self.path = folder
             self._shown = str(folder)
             self._store = SqliteStore(folder)
-        top = self._store.top()
-        #: The ledger's zone (``db db/tz``), read once: every date it writes is in it.
-        self.tz: ZoneInfo = ZoneInfo(Rev(self, top).get("db", "db/tz", default="UTC") if top else "UTC")
 
     def __repr__(self) -> str:
         return f"Ledger({self._shown!r})"
@@ -351,7 +297,7 @@ class Ledger:
     def transaction(self, *, by: Union[str, Dict[str, Any]], lock: Optional[float] = None,
                     **preds: Any) -> Transaction:
         """A write set that becomes one revision on exit; use it only as ``with ... as t:``. Its
-        ``db/tx/<rev>`` carries ``db/by``, ``db/time`` (every transaction, in the ledger's zone) and the keywords.
+        ``db/tx/<rev>`` carries ``db/by``, ``db/time`` (UTC, every transaction) and the keywords.
         ``by`` is a non-empty ``str`` or a JSON ``dict`` (DAT 1024), read back as written."""
         return Transaction(self, by, lock, preds)
 

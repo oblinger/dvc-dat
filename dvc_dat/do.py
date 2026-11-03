@@ -120,8 +120,8 @@ class Namespace:
     # -- specs ---------------------------------------------------------------
 
     def _tz(self) -> Optional[tzinfo]:
-        """The zone of the clock built-ins: `None`, the machine's local zone (a ledger namespace: its
-        ledger's)."""
+        """The zone of the clock built-ins: `None`, the machine's local zone (a ledger namespace: its revision's display
+        zone, `db db/timezone`)."""
         return None
 
     def expand(self, text: str, /, **vars: Any) -> str:

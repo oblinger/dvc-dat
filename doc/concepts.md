@@ -354,7 +354,7 @@ ns.expand("runs/{game}/exp", game="G7")
 - `expand` always returns a string; in a spec (`ns.expand_spec`), a value that
   is *exactly* one reference is replaced by the **object** it names
 
-The whole grammar, `{unique}` and the ledger's zone: [Expansion](expand.md).
+The whole grammar, `{unique}` and the clock's zone: [Expansion](expand.md).
 
 In YAML, a value that *begins* with `{` must be quoted — `name: "{svp.CONFIG}"`
 — or YAML reads it as a flow mapping and the spec arrives with a dict where a

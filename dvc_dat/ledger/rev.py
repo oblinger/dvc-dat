@@ -20,7 +20,7 @@ from .codec import canonical, encode_plain, is_hash, parse_ref, ref_text, show, 
 from .errors import AliasLoop, Multiple, Unindexed
 from .fn import OWN
 from .fold import Held, fold
-from .value import FrozenPreds, Value, dotted, takes_name
+from .value import TIMEZONE, FrozenPreds, Value, dotted, shown_in, takes_name, zone_named
 
 if TYPE_CHECKING:
     from .namespace import LedgerNamespace
@@ -41,6 +41,10 @@ def fixed_one(p: str) -> bool:
     return p.startswith("db/") and p not in FIXED_MANY
 
 
+#: The predicates whose object is a stored UTC stamp, printed in the display zone (``Rev.show_time``).
+TIME_PREDICATES = frozenset({"db/time", "db/sealed-at"})
+
+
 class Row(NamedTuple):
     """A single row in the ledger: revision, subject, predicate, object, and ``added`` (false on a remove, A48)."""
 
@@ -57,6 +61,8 @@ class Row(NamedTuple):
             text = obj._text()
         elif isinstance(obj, (dict, list)):
             text = canonical(obj)
+        elif self.predicate in TIME_PREDICATES and isinstance(obj, str):
+            text = self.rev.show_time(obj)
         else:
             text = str(obj)
         return f"<Row {self.subject} {self.predicate} {text} rev={self.rev.id} {'+' if self.added else '-'}>"
@@ -148,6 +154,22 @@ class Rev:
 
     def __repr__(self) -> str:
         return f"Rev({self.id})"
+
+    # -- the display zone (SVP 1505 Q2) ----------------------------------------------------------------------
+
+    @property
+    def timezone(self) -> Any:
+        """The zone this revision shows times in: the ``ZoneInfo`` its ``db db/timezone`` row names, UTC with
+        none. Stamps are stored UTC; this decides only how they print, and any revision may change it."""
+        from zoneinfo import ZoneInfo
+
+        held = self._held("db", TIMEZONE) if self.id else []
+        return zone_named("db", show(held[0].obj)) if held else ZoneInfo("UTC")
+
+    def show_time(self, stamp: str) -> str:
+        """A stored UTC stamp (``db/time``, ``db/sealed-at``, ``v.sealed``) as this revision prints it, in its
+        ``timezone``: ``2026-11-01T14:03:22-07:00``; with no ``db/timezone`` row the stamp unchanged."""
+        return shown_in(stamp, self.timezone)
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, Rev) and other.ledger is self.ledger and other.id == self.id
