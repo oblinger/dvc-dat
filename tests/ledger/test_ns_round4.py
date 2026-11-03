@@ -149,7 +149,7 @@ def test_f3_folder_mounted_at_a_dotted_at_is_reachable(tmp_path):
 
 # -- F4: t.ns.mount takes any non-empty str for `at` --------------------------------------------------
 
-@pytest.mark.parametrize("at", ["pkg.", ".pkg", "a..b"])
+@pytest.mark.parametrize("at", ["mnt.pkg.", "mnt..pkg", "mnt.a..b"])
 def test_f4_t_ns_mount_refuses_an_at_that_no_dotted_name_can_reach(L, at):
     with pytest.raises((TypeError, ValueError)):
         with L.transaction(by="t") as t:

@@ -89,7 +89,7 @@ One world's namespace; it is not callable — running is `manager.run(target, ..
     A copy of `spec` with every brace in a string doubled, so `expand_spec` gives `spec` back; call-site run arguments are quoted so. ^quote-spec
 
 ## On a ledger
-A `LedgerNamespace`: the same interface, its mounted names the ledger's `db/mount` rows at one revision, longest prefix first. A mounted name starts `mnt.` (`mnt.<at>...`, the resolver adds `mnt`, never the row); everything else imports, so the two never clash, and `mnt` alone or a `mnt.` name under no mount is `ImportError` naming the mounts. A mounted `.yaml`/`.json` comes back a dict, a mounted function its `Fn` (read off the file, never imported here), a mounted literal its value; a `@ledger_fn` it imports to comes back its `Fn`. `rev.ns.expand` resolves dotted names through those rows, takes its clock in the ledger's zone, and counts `{unique}`: tried at 1, 2, 3, … until no `db/alias` names a value by it and no folder is at it under the data folder; a whole path segment counts `1, 2, 3`, a suffix `"", _2, _3`; `t.ns.expand` also skips the names the transaction minted or aliased already.
+A `LedgerNamespace`: the same interface, its mounted names the ledger's `db/mount` rows at one revision, longest prefix first. A mounted name starts `mnt.` (`mnt.<prefix>...`, as `t.ns.mount` names it; the row never carries `mnt`); everything else imports, so the two never clash, and `mnt` alone or a `mnt.` name under no mount is `ImportError` naming the mounts. A mounted `.yaml`/`.json` comes back a dict, a mounted function its `Fn` (read off the file, never imported here), a mounted literal its value; a `@ledger_fn` it imports to comes back its `Fn`. `rev.ns.expand` resolves dotted names through those rows, takes its clock in the ledger's zone, and counts `{unique}`: tried at 1, 2, 3, … until no `db/alias` names a value by it and no folder is at it under the data folder; a whole path segment counts `1, 2, 3`, a suffix `"", _2, _3`; `t.ns.expand` also skips the names the transaction minted or aliased already.
 
 | Where | Is |
 | --- | --- |
@@ -102,11 +102,11 @@ f = L.at().ns.load("mnt.plane.measure.length")   # an Fn, sandboxed; "plane.meas
 L.at().ns.mounts()
 # {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
 with L.transaction(by="human:dan") as t:
-    t.ns.mount("plane", root="plane", repo="geometry-app")
-    t.ns.mount("mymodule", root="mymodule")   # this project's repo
+    t.ns.mount("mnt.plane", root="plane", repo="geometry-app")
+    t.ns.mount("mnt.mymodule", root="mymodule")   # this project's repo
 ```
 
-`mounts()` is the `db/mount` rows, `{prefix: {"root": ..., "repo": ...}}`. `t.ns.mount(at, *, root, repo=None)` writes the two rows `db/mount/<at> db/root` and `db/repo` through `t.update`, and needs no `lock=`; an `at` whose first segment is `mnt` is `ValueError` (as is such a `.datconfig.yaml` `mounts:` key); `repo` defaults to the project's own repository, the git checkout holding the `.datconfig.yaml` the manager loaded, named as discovery names repos, and with no such file is `ValueError`; `t.ns.load` reads `previous_rev`, so it does. `mount` anywhere else — `rev.ns`, `Dat.ns` in a ledger project — is `TypeError` naming `t.ns.mount`. Full ledger reference: [DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md).
+`mounts()` is the `db/mount` rows, `{prefix: {"root": ..., "repo": ...}}`. `t.ns.mount(at, *, root, repo=None)` takes `at` as `mnt.<prefix>` and writes the two rows `db/mount/<prefix> db/root` and `db/repo` through `t.update`, and needs no `lock=`; an `at` outside `mnt.` (`mnt` alone included) is `ValueError`, nothing prefixed for you (1505 Q1); a `.datconfig.yaml` `mounts:` key is the bare prefix, and one starting `mnt` is `ValueError`; `repo` defaults to the project's own repository, the git checkout holding the `.datconfig.yaml` the manager loaded, named as discovery names repos, and with no such file is `ValueError`; `t.ns.load` reads `previous_rev`, so it does. `mount` anywhere else — `rev.ns`, `Dat.ns` in a ledger project — is `TypeError` naming `t.ns.mount`. Full ledger reference: [DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 
 
@@ -163,7 +163,7 @@ Each is one call in your program; build paths from `__file__`, since `relative_t
 | `do.keys()` | `ns.mounts()`, the mount table |
 | `rev.resolve(name)` | `rev.ns.load(name)` |
 | `LedgerDo` | `LedgerNamespace` |
-| `t.update("db/mount/<p>", {"db/root": ..., "db/repo": ...})` | `t.ns.mount("<p>", root=...)`, `repo=` only for another repo (the `update` still works) |
+| `t.update("db/mount/<p>", {"db/root": ..., "db/repo": ...})` | `t.ns.mount("mnt.<p>", root=...)`, `repo=` only for another repo (the `update` still works) |
 
 ## 2.3 – 2.8
 

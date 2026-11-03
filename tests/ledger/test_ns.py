@@ -22,37 +22,38 @@ def test_rev_ns_load_is_the_dotted_name_at_the_revision(world):
 
 def test_t_ns_mount_writes_the_db_mount_rows_and_rev_ns_mounts_shows_them(L):
     with L.transaction(by="t") as t:
-        t.ns.mount("pkg", root="pkg", repo="r")
+        t.ns.mount("mnt.pkg", root="pkg", repo="r")
     assert L.at()["db/mount/pkg"] == {"db/root": "pkg", "db/repo": "r"}
     assert L.at().ns.mounts() == {"pkg": {"root": "pkg", "repo": "r"}}
 
 
 def test_mount_is_refused_off_a_transaction_and_without_its_rows(L):
     with pytest.raises(TypeError, match=r"t\.ns\.mount"):
-        L.at().ns.mount("pkg", root="pkg", repo="r")
+        L.at().ns.mount("mnt.pkg", root="pkg", repo="r")
     with L.transaction(by="t") as t:
         with pytest.raises(TypeError, match="root"):
-            t.ns.mount("pkg", repo="r")
+            t.ns.mount("mnt.pkg", repo="r")
         with pytest.raises(TypeError, match="repo"):
-            t.ns.mount("pkg", root="pkg", repo="")
+            t.ns.mount("mnt.pkg", root="pkg", repo="")
         with pytest.raises(TypeError, match="folder"):
-            t.ns.mount(at="pkg", folder="pkg")
+            t.ns.mount(at="mnt.pkg", folder="pkg")
         t.add("x", "y", "z")
     assert L.at().ns.mounts() == {}
 
 
-def test_a_ledger_mount_at_starting_mnt_is_refused(L):
+def test_a_ledger_mount_at_outside_mnt_is_refused(L):
     with L.transaction(by="t") as t:
-        for at in ("mnt", "mnt.x", "mnt.plane.measure"):
-            with pytest.raises(ValueError, match="resolver adds mnt"):
+        for at in ("mnt", "pkg", "mntx", "plane.measure", "x.mnt.y"):
+            with pytest.raises(ValueError, match=r"mnt\.<prefix>"):
                 t.ns.mount(at, root="x", repo="r")
-        t.ns.mount("mntx", root="x", repo="r")                  # only the whole first segment is reserved
-    assert L.at().ns.mounts() == {"mntx": {"root": "x", "repo": "r"}}
+        t.ns.mount("mnt.x", root="x", repo="r")
+        t.ns.mount("mnt.plane.measure", root="m", repo="r")
+    assert L.at().ns.mounts() == {"x": {"root": "x", "repo": "r"}, "plane.measure": {"root": "m", "repo": "r"}}
 
 
 def test_mnt_alone_or_under_no_mount_is_an_import_error_naming_the_mounts(L):
     with L.transaction(by="t") as t:
-        t.ns.mount("pkg", root="pkg", repo="r")
+        t.ns.mount("mnt.pkg", root="pkg", repo="r")
     with pytest.raises(ImportError, match="mnt.pkg"):
         L.at().ns.load("mnt")
     with pytest.raises(ImportError, match="no ledger mount answers to 'other.x'"):
@@ -130,8 +131,8 @@ def test_t_ns_mount_defaults_repo_to_the_project_repository(L, tmp_path, monkeyp
     root = _project(tmp_path, "My_Proj")
     monkeypatch.setattr(core, "_default_manager", DatManager.load_dat_config(root))
     with L.transaction(by="t") as t:
-        t.ns.mount("pkg", root="pkg")                         # repo: the checkout holding .datconfig.yaml
-        t.ns.mount("other", root="o", repo="elsewhere")       # a separate repo still names it
+        t.ns.mount("mnt.pkg", root="pkg")                         # repo: the checkout holding .datconfig.yaml
+        t.ns.mount("mnt.other", root="o", repo="elsewhere")       # a separate repo still names it
     assert L.at().ns.mounts() == {"pkg": {"root": "pkg", "repo": "my-proj"},
                                   "other": {"root": "o", "repo": "elsewhere"}}
 
@@ -143,10 +144,10 @@ def test_t_ns_mount_without_repo_needs_a_project_in_a_checkout(L, tmp_path, monk
     monkeypatch.setattr(core, "_default_manager", DatManager(dat_folders=[str(tmp_path / "bare")]))
     with pytest.raises(ValueError, match=r"repo=.*\.datconfig\.yaml"):
         with L.transaction(by="t") as t:
-            t.ns.mount("pkg", root="pkg")
+            t.ns.mount("mnt.pkg", root="pkg")
     root = _project(tmp_path, "loose", git=False)
     monkeypatch.setattr(core, "_default_manager", DatManager.load_dat_config(root))
     with pytest.raises(ValueError, match="no git checkout"):
         with L.transaction(by="t") as t:
-            t.ns.mount("pkg", root="pkg")
+            t.ns.mount("mnt.pkg", root="pkg")
     assert L.at().ns.mounts() == {}
