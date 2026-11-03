@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, 
 
 from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, sha256, show, strip_hint, tag
 from .errors import Exists, LockTimeout, SealBroken, Undeclared, Unlocked
-from .value import TIMEZONE, Value, check_loadable, dotted, stamp, zone_named
+from .value import TIMEZONE, Value, check_loadable, dotted, is_moment, stamp, zone_named
 
 if TYPE_CHECKING:
     from .ledger import Ledger
@@ -129,11 +129,13 @@ def _semver(text: Any) -> Optional[Tuple[int, int, int]]:
 
 def _tag_name(subject: str, name: Any) -> None:
     """A ``db/tag`` row names the revision its transaction commits: on ``db``, a str that is neither a revision
-    number nor a version, which ``Ledger.at`` reads first."""
+    number, a version nor a moment (``2026-11-02T14``), which ``Ledger.at`` reads first."""
     if subject != "db":
         raise ValueError(f"db/tag names a revision: its subject is db, not {subject!r}")
-    if not isinstance(name, str) or not name.strip() or name.isdigit() or _semver(name) is not None:
-        raise ValueError(f"a db/tag is a name, a str neither digits nor MAJOR.MINOR.PATCH, not {name!r}")
+    if (not isinstance(name, str) or not name.strip() or name.isdigit() or _semver(name) is not None
+            or is_moment(name)):
+        raise ValueError(f"a db/tag is a name, a str neither digits, MAJOR.MINOR.PATCH nor an ISO 8601 "
+                         f"timestamp, not {name!r}")
 
 
 def code_token(env_commit: Optional[str]) -> str:

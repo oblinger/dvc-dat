@@ -31,11 +31,13 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import yaml
 
+from .codec import show
 from .errors import LedgerError
 from .rev import Rev
 from .pgstore import PostgresStore, is_dsn
 from .store import SqliteStore, Store
 from .txn import Transaction
+from .value import is_moment, moment, stored_moment
 
 ENV = "DAT_LEDGER"
 CONFIG = ".datconfig.yaml"
@@ -269,8 +271,13 @@ class Ledger:
                     t.add(s, p, o)
 
     def at(self, which: Union[int, str, None] = None) -> Rev:
-        """A frozen view: ``None`` the top, an ``int`` (or digit string) a revision, ``"M.m.p"`` the latest revision whose
-        ``db db/version`` row (the release, ``bump(t, "db")``) added that version, any other str the revision whose
+        """A frozen view, ``which`` read in this order: ``None`` the top; an ``int`` (or digit string) a revision;
+        ``"M.m.p"`` the latest revision whose ``db db/version`` row (the release, ``bump(t, "db")``) added that
+        version; a timestamp, an ISO 8601 prefix at any precision (``2026-11-02``, ``2026-11-02T14``,
+        ``2026-11-02T14:30``, ``2026-11-02T14:30:15``, a space for ``T``), the latest revision whose ``db/time``
+        is at or before the START of its span, read in the display zone (``db db/timezone`` at the top, UTC
+        with none) unless it ends ``Z`` or ``+hh:mm``; a DST-ambiguous or skipped local time is read with
+        ``fold=0`` (``KeyError`` before the first stamped revision); any other str the revision whose
         ``db db/tag`` row added that name."""
         top = self._store.top()
         if which is None:
@@ -288,11 +295,26 @@ class Ledger:
             if not found:
                 raise KeyError(f"no revision set the ledger version {which}")
             return found[-1]
+        if is_moment(which):
+            return self._at_moment(which, top)
         if isinstance(which, str) and which:
             found = [r.rev for r in Rev(self, top).history("db", "db/tag", which) if r.added]
             if found:
                 return found[-1]
-        raise TypeError(f"at takes None, an int revision, a version string M.m.p or a db/tag name, not {which!r}")
+        raise TypeError(f"at takes None, an int revision, a version string M.m.p, an ISO 8601 timestamp or a "
+                        f"db/tag name, not {which!r}")
+
+    def _at_moment(self, text: str, top: int) -> Rev:
+        """The latest revision whose ``db/time`` is at or before the moment ``text`` names (SVP 1507)."""
+        when = moment(text, Rev(self, top).timezone)
+        stamped = [(rev, stored_moment(show(obj))) for rev, _o, subject, _p, obj, added
+                   in self._store.rows(top, predicate="db/time") if added and subject == f"db/tx/{rev}"]
+        found = [rev for rev, t in stamped if t <= when]
+        if not found:
+            first = min(stamped, key=lambda x: x[1])[1].isoformat() if stamped else None
+            raise KeyError(f"no revision at or before {text} ({when.isoformat()}): the first is stamped {first}"
+                           if first else f"no revision at or before {text}: the ledger has no stamped revision")
+        return Rev(self, max(found))
 
     def transaction(self, *, by: Union[str, Dict[str, Any]], lock: Optional[float] = None,
                     **preds: Any) -> Transaction:
