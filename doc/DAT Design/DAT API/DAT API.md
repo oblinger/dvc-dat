@@ -63,7 +63,8 @@ Dat.manager.run("mymodule.train.baseline", lr=0.5)  # a fork -> .../baseline_2/
 d = Dat.load("runs/2026-09/baseline_2")
 d.get_results()["accuracy"]   # 0.95
 Dat.standing(d)               # 'referenceable': runs no more
-Dat.manager.run(d, lr=0.01)   # forks a new dat; baseline_2 untouched
+# its recipe again: a new dat
+Dat.manager.run(d.get_spec(), lr=0.01)
 Dat.load_artifact("games/G1/video")  # a Path, or its type's
 ```
 
@@ -108,7 +109,8 @@ dat:
 - **The spec on disk is the record.** Every `{…}` in the template was expanded once, when the fork created the folder — `notes` is the moment it was made, `lr: 0.5` is what ran; `name` alone keeps its template, and the folder it filled to (`runs/2026-09/baseline_2`) is the dat's name. Nothing is expanded again, and nothing is re-supplied to reproduce it.
 - **`_result_.yaml` carries no arguments** — only what the function stored, plus when it ran, how long, which code, what it loaded, and its own content hash ([DAT Manager API](DAT%20Manager%20API.md) § What a run records).
 - **A run saves nothing; `save()` seals, once.** `run` ends with `dat.save()`, which seals the dat when the run returns; a save anywhere else adds the dependency `$MANUAL` ([DAT Class API](DAT%20Class%20API.md) § save).
-- **Arguments never ride beside a spec.** `Dat.manager.run(d)` re-runs a dat only while it is open; `Dat.manager.run(d, lr=0.01)` forks — the copy lands beside its parent as `baseline_2_2` — and the dat on disk is never rewritten.
+- **Arguments never ride beside a spec.** A dat runs once, when it is made; `Dat.manager.run(d.get_spec(), lr=0.01)` runs its recipe again as a new dat, and the dat on disk is never rewritten. `Dat.create(spec, **kwargs)` makes a dat from the same keywords and runs nothing.
+- **Keywords fill the spec** (SVP 1508). The keywords of `run` and `create` merge into `dat.kwargs` and are the expansion variables of the spec, over `dat.defaults`: `dat.name: runs/{lr}` with `lr=0.5` is `runs/0.5`. `dat.preds`, a map of pred names to such templates, is expanded with the rest and carried as the dat's preds, sealed onto its value on a ledger ([spec-format](../../spec-format.md)).
 - **A dat is a ledger value.** `Dat` is a `dvc_dat.ledger.Value`, one class (DAT 1038): `seal`, `preds` and `subject` are on every dat, and `dat.kind` names the kind of its ledger row too. `d.seal(t, name="runs/baseline_2")` keeps the saved folder on a ledger, its preds `epochs`, `lr`, `accuracy` read from the spec's kwargs and the results; `L.at().run("mymodule.train.baseline", lr=0.5)` is the fork above, made once and then found, one `run` for a dat and a ledger function alike (DAT 1046), a mounted run function running in the fence worker ([DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md#Running)).
 
 

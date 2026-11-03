@@ -18,11 +18,9 @@ from dvc_dat.core import ART_FILE, DAT_CONFIG_FILE, INDEX_FILE, RESULT_YAML  # n
 
 
 def run_cause(m, dat):
-    """`m.run(dat)`, re-raising what the run raised, unwrapped from its `In <dat>`."""
-    try:
-        return m.run(dat)
-    except Exception as e:
-        raise (e.__cause__ or e) from None
+    """The run of a dat just created, `m._execute(dat)`: the step `m.run(spec)` takes after the create
+    (a dat runs once, by the call that makes it, SVP 1508), raising what the run raised."""
+    return m._execute(dat)
 
 
 def sha(data: bytes) -> str:
@@ -377,7 +375,7 @@ class TestCapture:
     def test_a_runs_loads_land_in_its_dependencies(self, world):
         dat = world.create({"dat": {"do": "uses_both", "kwargs": {"prev": "prev"}}},
                            path="run")
-        assert world.run(dat) == "ran"
+        assert world._execute(dat) == "ran"
         deps = stored_results(dat)["dat"]["dependencies"]
         assert deps == {"prev": world.load("prev").get_results()["dat"]["sha256"],
                         "video/G1": self.digest}
@@ -391,12 +389,12 @@ class TestCapture:
     def test_a_run_with_no_loads_says_so(self, world):
         world.ns.mount(value=lambda dat: dat.save(), at="quiet")
         dat = world.create({"dat": {"do": "quiet"}}, path="quiet_run")
-        world.run(dat)
+        world._execute(dat)
         assert stored_results(dat)["dat"]["dependencies"] == {}
 
     def test_a_nested_run_records_its_own_and_appears_once_outside(self, world):
         dat = world.create({"dat": {"do": "outer"}}, path="outer_run")
-        world.run(dat)
+        world._execute(dat)
         inner = world.load("inner")
         assert stored_results(dat)["dat"]["dependencies"] == \
             {"inner": inner.get_results()["dat"]["sha256"], "video/G1": self.digest}
@@ -435,7 +433,7 @@ class TestCapture:
         m = Store(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "art"))
         m.ns.mount(value=lambda dat: dat.save(), at="quiet")
         dat = m.create({"dat": {"do": "quiet"}}, path="wrapped")
-        m.run(dat)
+        m._execute(dat)
         assert stored_results(dat)["dat"]["dependencies"] == {}
 
     def test_two_threads_recording_at_once_do_not_mix(self, world):
@@ -483,7 +481,7 @@ class TestSeal:
     def test_run_does_not_save(self, m, clean_code):
         m.ns.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="unsaved")
-        assert m.run(dat) == "ran"
+        assert m._execute(dat) == "ran"
         assert not Path(dat.get_path(), RESULT_YAML).exists()
         assert "run_at" not in dat.get_results()["dat"]     # the run is the sub-dat's
         assert dat.run.get_results()["dat"]["run_at"]
@@ -501,7 +499,7 @@ class TestSeal:
             seen["checkpoint"] = stored_results(dat)["dat"]["sha256"]
         m.ns.mount(value=fn, at="saves")
         dat = m.create({"dat": {"do": "saves"}}, path="inside")
-        m.run(dat)
+        m._execute(dat)
         assert seen["inside"] == "open" and seen["checkpoint"]
         results = stored_results(dat)["dat"]
         assert "run_time" not in results
@@ -510,15 +508,19 @@ class TestSeal:
         run = stored_results(dat.run)["dat"]
         assert run["run_time"] and run["content"] == results["sha256"]
 
-    def test_an_open_dat_runs_again_in_place(self, m):
+    def test_run_refuses_a_dat_and_names_its_spec(self, m):
         m.ns.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="twice")
-        assert m.run(dat) == "ran" and m.run(dat) == "ran"
+        with pytest.raises(Exception) as e:
+            m.run(dat)
+        assert isinstance(e.value.__cause__, TypeError) and "get_spec()" in str(e.value.__cause__)
+        assert dat.run is None                                   # nothing ran
+        assert m.run(dat.get_spec() | {"dat": {**dat.get_spec()["dat"], "name": "again"}}) == "ran"
 
-    def test_run_refuses_a_sealed_dat(self, m):
+    def test_the_run_step_refuses_a_sealed_dat(self, m):
         m.ns.mount(value=lambda dat: dat.save(), at="saves")
         dat = m.create({"dat": {"do": "saves"}}, path="ran_once")
-        m.run(dat)
+        m._execute(dat)
         with pytest.raises(RuntimeError, match="sealed"):
             run_cause(m, dat)
 
@@ -558,19 +560,19 @@ class TestStanding:
     def test_a_rolling_dat_runs_again(self, m):
         m.ns.mount(value=lambda dat: dat.save(), at="saves")
         dat = m.create({"dat": {"do": "saves", "standing": "rolling"}}, path="roll")
-        m.run(dat)
-        m.run(dat)
+        m._execute(dat)
+        m._execute(dat)
         assert m.standing("roll") == "rolling"
 
     def test_referenceable_inputs_and_clean_code_earn_referenceable(self, w, clean_code):
         for src in ("base", "video/G1"):
             dat = w.create({"dat": {"do": "reads", "args": [src]}}, path=f"r_{src}")
-            w.run(dat)
+            w._execute(dat)
             assert w.standing(dat) == "referenceable"
 
     def test_a_rolling_input_caps_the_run_at_sealed(self, w, clean_code):
         dat = w.create({"dat": {"do": "reads", "args": ["roll"]}}, path="r1")
-        w.run(dat)
+        w._execute(dat)
         assert stored_results(dat)["dat"]["standing"] == "sealed"
 
     def test_dirty_code_caps_the_run_at_sealed(self, w, monkeypatch):
@@ -578,12 +580,12 @@ class TestStanding:
         monkeypatch.setattr(core, "_code_of", lambda fn: {
             "branch": "main", "commit": "c", "dirty": True})
         dat = w.create({"dat": {"do": "reads", "args": ["base"]}}, path="dirty")
-        w.run(dat)
+        w._execute(dat)
         assert w.standing("dirty") == "sealed"
 
     def test_an_open_input_keeps_the_run_open_for_good(self, w):
         dat = w.create({"dat": {"do": "reads", "args": ["draft"]}}, path="r2")
-        w.run(dat)
+        w._execute(dat)
         results = stored_results(dat)
         assert results["dat"]["dependencies"]["draft"] == "unsealed"
         assert results["dat"]["standing"] == "open" == w.standing("r2")
@@ -757,7 +759,7 @@ class TestTheRun:
     def test_the_run_is_a_sub_dat_with_the_execution_facts(self, m, clean_code):
         m.ns.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="runs/one")
-        m.run(dat)
+        m._execute(dat)
         run = dat.run
         assert run.get_path() == os.path.join(dat.get_path(), "run")
         assert (Path(run.get_path()) / "_spec_.yaml").exists()
@@ -804,10 +806,10 @@ class TestTheRun:
     def test_a_rolling_dat_replaces_its_run(self, m, clean_code):
         m.ns.mount(value=lambda dat: dat.save(), at="roll")
         dat = m.create({"dat": {"do": "roll", "standing": "rolling"}}, path="runs/roll")
-        m.run(dat)
+        m._execute(dat)
         first = stored_results(dat.run)["dat"]
         Path(dat.run.get_path(), "work", "left.txt").write_text("from the first run")
-        m.run(dat)
+        m._execute(dat)
         second = stored_results(dat.run)["dat"]
         assert second["content"] == dat.get_results()["dat"]["sha256"]
         assert not (Path(dat.run.get_path()) / "work" / "left.txt").exists()

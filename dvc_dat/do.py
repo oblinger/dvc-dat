@@ -108,14 +108,7 @@ class Namespace:
         `dat.target_exists: use` found the dat already there.
         """
         manager = manager or self.manager
-        spec = self._merge_bases(copy.deepcopy(spec))
-        path = path or Dat.get(spec, DAT_NAME, None)
-        target_exists = Dat.get(spec, DAT_TARGET_EXISTS, "error")
-        if target_exists == "use":
-            expanded, exists = manager._prepare_dat_path(path, target_exists="use")
-            if exists:
-                return manager.load(expanded), True
-        return manager.create(spec, path=path), False
+        return manager._create(spec, path=path)
 
     # -- specs ---------------------------------------------------------------
 

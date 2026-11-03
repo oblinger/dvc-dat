@@ -549,9 +549,10 @@ class Fn:
         return place(plain.ledger, value, target) if target is not None else value
 
     def _name_keys(self, kw: Dict[str, Any]) -> Dict[str, Any]:
-        """What a path template expands with: the keys; for a dat, its spec's ``dat.kwargs``."""
+        """What a path template expands with: the keys; for a dat, its spec's expansion variables,
+        ``dat.defaults`` overridden by ``dat.kwargs`` (SVP 1508)."""
         if self.kind == "dat":
-            return dict(Dat.get(kw, "dat.kwargs", None) or {})
+            return {**(Dat.get(kw, "dat.defaults", None) or {}), **(Dat.get(kw, "dat.kwargs", None) or {})}
         return kw
 
     def _function(self) -> Callable:
@@ -664,10 +665,15 @@ def _dats(plain: "Rev", work: Optional[Path]) -> List[Any]:
 
 
 def dat_spec(keys: Dict[str, Any], template: Optional[str]) -> Dict[str, Any]:
-    """The spec a dat is created from: its memo key (the expanded spec) with its ``dat.name`` template back."""
-    import copy
+    """The spec a dat is created from: its memo key (the expanded spec) quoted, so ``create``'s expansion hands
+    its values back as they are, with its ``dat.preds`` template (SVP 1508) and its ``dat.name`` template
+    back, which that expansion fills."""
+    from ..core import quote_spec
 
-    spec = copy.deepcopy(keys)
+    spec = quote_spec(keys)
+    preds = keys["dat"].get("preds")
+    if preds is not None:
+        spec["dat"]["preds"] = preds
     if template is not None:
         spec["dat"]["name"] = template
     return spec

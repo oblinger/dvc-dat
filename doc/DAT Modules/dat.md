@@ -25,8 +25,10 @@ and `ledgers`. Part of the
   from the nearest `.datconfig.yaml` walking up from `start`, then
   `.datconfig.override.yaml`, then `DAT_FOLDERS` (one folder, not split) / `DAT_ART_FOLDER`; an
   unknown key `ValueError`; `manager:` names a subclass to build.
-- `create(spec=None, *, path=None) -> Dat`: merge `dat.base`,
-  validate, place, expand every `{}` once, write `_spec_.yaml`; an
+- `create(spec=None, *, path=None, **kwargs) -> Dat`: merge `dat.base`,
+  merge `kwargs` into `dat.kwargs`, validate, place, expand every `{}`
+  once (the variables `dat.defaults` overridden by `dat.kwargs`, SVP
+  1508; `dat.preds` checked), write `_spec_.yaml`, run nothing; an
   existing folder follows `dat.target_exists` (`FileExistsError` by
   default); a bad spec `TypeError`.
 - `load(name, *, cache_after_load=True, verify=None)`: a dat (as its
@@ -49,7 +51,8 @@ and `ledgers`. Part of the
   the repo's `.gitattributes` marks `dat-noncode` (`CODE_PATHSPEC`).
 - `run(target, *args, **kwargs)`: the one run, fixed (2.35). A
   callable is called; a template spec (or its name) is forked into a new
-  dat that runs; a `Dat` runs in place, or forks with arguments. A dat's
+  dat that runs (its keywords also fill `dat.name` and `dat.preds` over
+  `dat.defaults`, SVP 1508); a `Dat` is `TypeError`. A dat's
   run (private `_execute`) calls `fn(dat, *args, **kwargs)` for
   `dat.do`, inside `recording(dat)`, in a fresh `run/` sub-dat with
   `run/work/` as cwd; a sealed dat `RuntimeError`; a non-callable
@@ -62,7 +65,7 @@ and `ledgers`. Part of the
 - `Dat.manager` (class, assignable; built on first read from
   `load_dat_config()`), `Dat.ns` (forwards to `Dat.manager.ns`; not callable).
 - `Dat.load(name_or_path, *, cache_after_load=True)`,
-  `Dat.create(path=None, spec=None)`: in the default world; a
+  `Dat.create(spec=None, *, path=None, **kwargs)`: in the default world; a
   `dat.kind` outside `cls` is `TypeError`.
 - `get_spec()`, `get_results()`, `get_path()`, `get_path_name()`,
   `run` (the `run/` sub-dat or `None`), `manager`.

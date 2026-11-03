@@ -93,8 +93,8 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
 **ns**`: Namespace`
     The default world's namespace: a forwarder to `Dat.manager.ns`, whichever manager that is when it is used. `Dat.ns.mount(...)` and `Dat.ns.load(...)` name things; `ns = Dat.ns` binds a shortcut that follows a later reassignment of `Dat.manager`. It is not callable: `Dat.manager.run("x", lr=0.5)` runs ([Running](#Running); 2.35, DAT 1049). ^ns
 
-**create**`(path: str | None = None, spec: dict | str | None = None) -> Dat`
-    Classmethod. `Dat.manager.create(spec, path=path)`, typed: a `dat.kind` naming a class outside `cls` is `TypeError`, checked before any folder is made; with no `dat.kind`, the class it is called on is written. `spec` is a dict or a dotted name; `path` is a template under the first dat folder, default `dat.name`, else `anonymous/Dat{unique}`, with `dat.target_exists` settling a collision. ^create
+**create**`(spec: dict | str | None = None, *, path: str | None = None, **kwargs) -> Dat`
+    Classmethod. `Dat.manager.create(spec, path=path, **kwargs)`, typed, running nothing: the keywords merge into `dat.kwargs` and fill `{…}` in `dat.name`, `dat.preds` and the rest of the spec over `dat.defaults` (SVP 1508); a `dat.kind` naming a class outside `cls` is `TypeError`, checked before any folder is made; with no `dat.kind`, the class it is called on is written. `spec` is a dict or a dotted name; `path` is a template under the first dat folder, default `dat.name`, else `anonymous/Dat{unique}`, with `dat.target_exists` settling a collision. ^create
 
 **load**`(name_or_path: str | Path, *, cache_after_load: bool = True) -> Dat`
     Classmethod. `Dat.manager.load(name_or_path)`, as the class its `dat.kind` names; `TypeError` unless the result is an instance of `cls`. Tried absolute, then a mounted dat name, then each dat folder in order. Inside a run, recorded in its `dat.dependencies`. ^load
@@ -181,13 +181,13 @@ A dat whose folder holds dats.
 
 ## Running
 
-`Dat.manager.run(target, *args, **kwargs)` is the one way to run a dat outside a ledger, a fixed `DatManager` method ([DAT Manager API](DAT%20Manager%20API.md) § run). With no arguments a spec runs as written; with arguments it **forks** — `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key — and the forked spec creates the dat that runs.
+`Dat.manager.run(target, *args, **kwargs)` is the one way to run a dat outside a ledger, a fixed `DatManager` method ([DAT Manager API](DAT%20Manager%20API.md) § run). With no arguments a spec runs as written; with arguments it **forks** — `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key and are the expansion variables of `dat.name`, `dat.preds` and the rest of the spec over `dat.defaults` (SVP 1508) — and the forked spec creates the dat that runs. `Dat.create(spec, path=None, **kwargs)` is that create alone.
 
 | `target` is … | With no `args`/`kwargs` | With `args`/`kwargs` |
 | --- | --- | --- |
 | a **callable** (or a name loading to one) | `target()` | `target(*args, **kwargs)` — a plain call, no dat |
 | a **template spec** (dict, or a name loading to one) | create the dat, run it | fork, then the forked spec creates the dat, which runs |
-| a **`Dat`** | re-run in place while open or rolling; refused once sealed | fork a new dat from its spec; the dat on disk is never rewritten |
+| a **`Dat`** | `TypeError`: a dat runs once, when made | `TypeError`; `run(dat.get_spec(), ...)` runs its recipe as a new dat |
 
 `Dat.manager.run` remembers nothing: a template makes a fresh folder every time. On a ledger, `rev.run(target, **kwargs)` takes the same targets (a template spec, its name, or a run function's dotted name) and remembers the answer: the dat made, run and sealed as a value once, then found ([DAT Ledger § run](../../DAT%20Modules/ledger/DAT%20Ledger.md#Rev%20Interface)).
 

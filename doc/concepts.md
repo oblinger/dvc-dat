@@ -56,9 +56,27 @@ Dat.manager.run("catalog.experiment", 3, epochs=200)
 ```
 
 The consequence is the point: **the spec is the record.** Nothing about the
-arguments goes into `_result_.yaml`, and no sealed dat is ever rewritten by a
-run. Handing a dat arguments forks a new one and leaves the original
-byte-identical; `Dat.manager.run(dat)` with none re-runs it in place while it is open.
+arguments goes into `_result_.yaml`, and no dat is ever rewritten by a run. A
+dat is run once, by the call that makes it; running its recipe again is
+`Dat.manager.run(dat.get_spec(), **kwargs)`, a new dat beside it.
+`Dat.create(spec, **kwargs)` is the same create with no run.
+
+**Keywords are also expansion variables** (SVP 1508). The keywords of `run` and
+`create` -- together with the spec's own `dat.kwargs`, over its `dat.defaults` --
+fill the undotted `{name}` references of the spec, `dat.name` included, each as
+the run receives it. `dat.preds` maps pred names to such templates; expanded at
+create, they are preds the dat carries, sealed onto its value on a ledger:
+
+```yaml
+dat:
+  name: fp/{pipe}/{card}/{game}{posture}
+  defaults: {posture: ""}
+  preds: {card: "{card}", game: "{game}"}
+```
+
+`Dat.create(spec, pipe="1-3-5", card="h100", game="G1")` makes
+`fp/1-3-5/h100/G1`, with `dat.kwargs` those three and the preds `card: h100`,
+`game: G1`.
 
 ## The seal
 
@@ -221,9 +239,9 @@ A manager takes no class: `m.create(spec)` and `m.load(name)` build the class
 the spec's `dat.kind` names. `Run.load(name)` and `Run.create(...)` are the
 typed forms on the default world — the result is a `Run`, or a `TypeError`.
 
-`m.run(target, ...)` is the one way to run a dat outside a ledger: a dat
-runs in place, a spec or its name is forked, created and run, a callable is
-called. It is fixed; a project wanting other run machinery subclasses the
+`m.run(target, ...)` is the one way to run a dat outside a ledger: a spec or
+its name is forked, created and run, a callable is called; a `Dat` is
+`TypeError` (run its spec, `m.run(dat.get_spec())`). It is fixed; a project wanting other run machinery subclasses the
 manager, not `Dat`. Every run in a world goes through the manager's private
 `_execute(dat)`: `m.run(...)`, each `m.run(...)` a running function makes,
 and a ledger's dat runs land there, so a subclass of `DatManager` that

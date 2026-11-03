@@ -132,12 +132,12 @@ print((Path(d.get_path()) / "_result_.yaml").read_text())
 #
 # A created dat's spec never changes. A variation is a new dat made from an edited
 # copy. The copy's `dat.name` is the folder the original landed in, so ask for
-# `increment` (or pass `path=`) to land beside it. `Dat.manager.run(dat)` runs a dat as it is.
+# `increment` (or pass `path=`) to land beside it. `Dat.manager.run(spec)` creates the dat and runs it.
 
 # %%
 spec = merge_dicts(d.get_spec(), {"dat": {"target_exists": "increment"},
                                   "model": {"width": 256}})
-d3 = Dat.manager.run(Dat.create(spec=spec))
+d3 = Dat.manager.run(spec)
 print(d3.get_path_name(), d3.get_spec()["model"], d3.get_results()["loss"])
 
 

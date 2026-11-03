@@ -2,7 +2,7 @@
 
 SVP's handoff, 2026-09-22: `dat.kind` is a dotted `module.qualname`, imported
 on load; `manager.load` / `manager.create` take no class; `Cls.load` is typed;
-`manager.run(dat)` is the run (DAT 1049; `execute` until 2.35), nested runs included, and records the code.
+`manager.run(spec)` is the run (DAT 1049; `execute` until 2.35), nested runs included, and records the code.
 """
 import subprocess
 import sys
@@ -121,22 +121,22 @@ class TestExecute:
         assert seen == ["outer", "inner"]
 
     def test_a_run_records_the_checkout_of_the_code_it_ran(self, m):
-        dat = m.create({"dat": {"do": "inner", "name": "a", "args": [1]}})
-        assert m.run(dat) == 10
+        assert m.run({"dat": {"do": "inner", "name": "a", "args": [1]}}) == 10
+        dat = m.load("a")
         code = dat.run.get_results()["dat"]["code"]
         head = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
                               capture_output=True, text=True).stdout.strip()
         assert code["commit"] == head
         assert isinstance(code["dirty"], bool)
         assert "run_at" in dat.run.get_results()["dat"]
-        assert "run_at" not in dat.get_results()["dat"]
+        assert "run_at" not in dat.get_results().get("dat", {})
 
     def test_code_outside_a_checkout_records_nothing(self, m):
         m.ns.mount(value=id, at="builtin")
-        dat = m.create({"dat": {"do": "builtin", "name": "b"}})
-        m.run(dat)
+        m.run({"dat": {"do": "builtin", "name": "b"}})
+        dat = m.load("b")
         assert "code" not in dat.run.get_results()["dat"]
 
     def test_no_do_returns_the_dat(self, m):
-        dat = m.create({"dat": {"name": "c"}})
-        assert m.run(dat) is dat
+        dat = m.run({"dat": {"name": "c"}})
+        assert isinstance(dat, Dat) and dat.get_path_name() == "c" and dat.run is None

@@ -46,10 +46,12 @@ Dat.manager.run(TARGET, *args, **kwargs)
 | `TARGET` | What happens |
 |----------|--------------|
 | a **callable** | called as `TARGET(*args, **kwargs)` |
-| a **spec** (dict) | forked with the arguments, created, run |
-| a **Dat**, no arguments | re-run in place; refused once sealed (a rolling dat runs again) |
-| a **Dat**, with arguments | forked into a new dat; the original is untouched |
+| a **spec** (dict) | forked with the arguments, created, run; the keywords also fill `{…}` in `dat.name`, `dat.preds` and the rest, over `dat.defaults` |
+| a **Dat** | `TypeError`: a dat runs once, when made; `run(dat.get_spec(), ...)` runs its recipe as a new dat |
 | a **string** | `ns.load`-ed first, then one of the above |
+
+`Dat.create(spec, path=None, **kwargs)` (and `Dat.manager.create`) is the same
+create, keywords and all, with no run.
 
 The run itself is `fn(dat, *spec.dat.args, **spec.dat.kwargs)`, where `fn` is
 what `dat.do` names, run with `run/work/` as the working directory.
