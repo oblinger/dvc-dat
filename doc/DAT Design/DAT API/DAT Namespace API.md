@@ -98,7 +98,7 @@ A `LedgerNamespace`: the same interface, its mounted names the ledger's `db/moun
 | `Dat.manager.ns` | in a ledger project, the namespace at the head |
 
 ```python
-f = L.at().ns.load("mnt.plane.measure.length")   # an Fn, sandboxed; "plane.measure.length" imports
+f = L.at().ns.load("mnt.plane.measure.length")   # an Fn, fenced; "plane.measure.length" imports
 L.at().ns.mounts()
 # {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
 with L.transaction(by="human:dan") as t:

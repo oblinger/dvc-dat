@@ -14,7 +14,7 @@ import pytest
 import backends
 from dvc_dat.ledger import Code, set_env_provider
 from dvc_dat.ledger.codec import canonical, hash_text
-from dvc_dat.ledger.sandbox import shutdown
+from dvc_dat.ledger.fence import shutdown
 
 FN = textwrap.dedent('''
     import math
@@ -85,7 +85,7 @@ def mounted(tmp_path, monkeypatch):
 def test_installed_code_takes_its_packages_version(L, installed):
     f = L.at().ns.load("geom1037.dist.distance")
     assert isinstance(f.code, Code)
-    assert f.code.sandboxed is False and f.code.version == "5.3.9" and f.code.mounts == {}
+    assert f.code.fenced is False and f.code.version == "5.3.9" and f.code.mounts == {}
     assert "geom1037/dist.py" in f.code.modules
     assert f.code.commit is None and f.code.lock is None        # outside any checkout
     assert str(f) == "geom1037.dist.distance@5.3.9" and repr(f) == "<Fn geom1037.dist.distance@5.3.9>"
@@ -103,7 +103,7 @@ def test_installed_code_without_a_version_falls_back_to_its_hash(L, installed):
 def test_mounted_code_takes_the_roots_version(mounted):
     L, repo = mounted
     f = L.at().ns.load("mnt.plane.measure.length")
-    assert f.code.sandboxed is True and f.code.version == "2.7.1"
+    assert f.code.fenced is True and f.code.version == "2.7.1"
     assert f.code.modules == ["plane/__init__.py", "plane/measure.py"]
     assert f.code.mounts == {"plane": {"repo": "code-repo", "root": "plane"},
                              "bare": {"repo": "code-repo", "root": "bare"}}
@@ -152,7 +152,7 @@ def test_fn_has_no_mode(L, installed):
 
 def test_codes_properties_are_read_only(L, installed):
     code = L.at().ns.load("geom1037.dist.distance").code
-    for prop in ("modules", "mounts", "commit", "lock", "sandboxed", "version", "name"):
+    for prop in ("modules", "mounts", "commit", "lock", "fenced", "version", "name"):
         with pytest.raises(AttributeError):
             setattr(code, prop, None)
     code.modules.append("x.py")                 # a copy: the content does not change

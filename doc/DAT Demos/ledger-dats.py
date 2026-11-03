@@ -193,7 +193,7 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 #     return build(rev, spec, path, **kwargs)
 # ```
 #
-# `demo_game.etl` is mounted, so `dat`, loaded as `mnt.demo_game.etl.dat.dat` (a mounted name starts `mnt.`), runs in the sandbox. Its
+# `demo_game.etl` is mounted, so `dat`, loaded as `mnt.demo_game.etl.dat.dat` (a mounted name starts `mnt.`), runs in the fence. Its
 # version is `demo_game/etl/__init__.py`'s `__version__`, and the
 # ledger's `db/repo/demo-game/demo_game.etl` `db/version` clock starts at
 # the first clean run, with the commit beside it as `db/repo/demo-game`
@@ -204,7 +204,7 @@ with L.transaction(by="human:dan", why="mount the etl") as t:
     t.ns.mount("mnt.demo_game.etl", root="demo_game/etl", repo="demo-game")   # two db/mount rows
 rev = L.at()
 dat_fn = rev.ns.load("mnt.demo_game.etl.dat.dat")
-print("sandboxed:", dat_fn.code.sandboxed, " mount:", dat_fn.mount)     # → sandboxed: True  mount: demo_game.etl
+print("fenced:", dat_fn.code.fenced, " mount:", dat_fn.mount)     # → fenced: True  mount: demo_game.etl
 print("code:", dat_fn.code)     # → code: demo_game.etl@0.1.0
 
 # %%
@@ -393,7 +393,7 @@ print("track code:", L.at().ns.load("mnt.demo_game.etl.track.tracks").code)
 # %%
 git("commit", "-q", "-am", "tidy track")
 import demo_game.etl.track
-importlib.reload(demo_game.etl.track)    # sandbox workers import anew
+importlib.reload(demo_game.etl.track)    # fence workers import anew
 rev = L.at()
 print("track code:", rev.ns.load("mnt.demo_game.etl.track.tracks").code)   # → track code: demo_game.etl@0.1.0
 print("detections match:", detections_dat.matches(rev),
@@ -401,7 +401,7 @@ print("detections match:", detections_dat.matches(rev),
 print("model matches:", model_dat.matches(rev))     # → model matches: False, for now
 
 # %% [markdown]
-# A sandboxed value's dependencies pin the modules a stage loaded,
+# A fenced value's dependencies pin the modules a stage loaded,
 # not the repo's commit, so `detections` still matches. `track.py` changed, so the tracks' `code` item moved. The
 # model reads as stale too: `matches` never runs a stage (A42), and
 # its nested `tracks` item has no entry that holds at this rev yet.
@@ -462,7 +462,7 @@ rev = L.at()
 model_refs = rev.refs(kind=StageDat, stage="model", game="G3")
 print("models:", len(model_refs))                         # → models: 2
 proof_refs = rev.refs(kind=StageDat, stage="model", game="G3",
-                      where={"db/provenance": "eval:sandbox"})
+                      where={"db/provenance": "eval:fenced"})
 print("traced models:", len(proof_refs))                  # → traced models: 1
 
 # %% [markdown]
@@ -562,7 +562,7 @@ except NotClean as e:
     print("NotClean:", e)       # → NotClean: … binds db/repo/demo-game
 
 # %% [markdown]
-# A revision can be read forever. A sandboxed miss runs at HEAD,
+# A revision can be read forever. A fenced miss runs at HEAD,
 # clean or dirty, and its `code` item records the bytes of every
 # module it loaded, which is its identity. `clean=True` is for a
 # reader who must say which version ran: the checkout clean and at
@@ -641,7 +641,7 @@ print("config:", Path(".datconfig.yaml").read_text())   # → config: ledger: .d
 # `Ledger(create=True)` wrote it. `Ledger()`, with no path, walks up
 # from the cwd to the nearest `.datconfig.yaml` with a `ledger:` key
 # and opens the ledger it names; `DAT_LEDGER`, when set, overrides
-# the walk, which is how a sandbox worker in a scratch cwd finds its
+# the walk, which is how a fence worker in a scratch cwd finds its
 # parent's ledger (A44). A `mounts:` key is sugar for the mount
 # rows this notebook wrote by hand:
 #
@@ -655,7 +655,7 @@ print("config:", Path(".datconfig.yaml").read_text())   # → config: ledger: .d
 # missing, the repo being the checkout the file sits in.
 
 # %% [markdown]
-# ### What the sandbox refuses
+# ### What the fence refuses
 #
 # `demo_game.etl.stray` holds two functions that reach past the
 # mount. The first imports `demo_game.shots`, which is in the repo

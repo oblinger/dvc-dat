@@ -1,13 +1,13 @@
 """``Code``: the code a function is loaded from, at a version, as a ``Value`` (DAT 1037).
 
 One object whether the function is installed in the ledger's own Python environment or mounted from a
-checkout (``code.sandboxed``). Only the snapshot has identity; a function is a name looked up inside it
+checkout (``code.fenced``). Only the snapshot has identity; a function is a name looked up inside it
 (``fn.name`` + ``fn.code``). The identity is the bytes: ``encode()`` is the canonical
 ``{"modules": relpath -> sha256, "mounts": <hash of the db/mount rows, or None>}``, ``hash`` its sha256 and
 ``subject`` ``db/code/<hash 16>``, the 16 hex the memo key carried as ``db/fn/<name>/<hash 16>`` before.
 Beside it, fixed at load and not hashed, the description: ``mounts`` (``prefix -> {repo, root}``; empty for
 installed code), ``commit`` (the checkout's at load), ``lock`` (the blob id of that checkout's
-``uv.lock``), ``sandboxed``, ``version`` and ``package`` (the dotted root whose declared version it is, or
+``uv.lock``), ``fenced``, ``version`` and ``package`` (the dotted root whose declared version it is, or
 ``None``). The version is a name over the hash, never the identity, and the commit is a result's
 ``code/<repo>`` dependency item, so neither moves the hash. Its name is
 ``<unit>@<version>``: the unit is the mount prefix for mounted code (``plane``, ``algs.ocr``) and the
@@ -62,7 +62,7 @@ class Code(Value):
         self.__dict__["_manifest"] = {
             "modules": dict(sorted(manifest["modules"].items())), "mounts_hash": manifest["mounts_hash"],
             "mounts": {k: dict(v) for k, v in manifest["mounts"].items()},
-            "commit": manifest["commit"], "lock": manifest["lock"], "sandboxed": bool(manifest["sandboxed"]),
+            "commit": manifest["commit"], "lock": manifest["lock"], "fenced": bool(manifest["fenced"]),
             "version": str(manifest["version"]), "package": manifest.get("package")}
         self.__dict__["_unit"] = unit
         self.__dict__["_hash"] = sha256(self.encode())
@@ -99,9 +99,9 @@ class Code(Value):
         return self._manifest["lock"]
 
     @property
-    def sandboxed(self) -> bool:
+    def fenced(self) -> bool:
         """True for code mounted from a checkout (boxed); False for code installed in the ledger's env."""
-        return bool(self._manifest["sandboxed"])
+        return bool(self._manifest["fenced"])
 
     @property
     def version(self) -> str:

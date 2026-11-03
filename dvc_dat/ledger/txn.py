@@ -428,7 +428,7 @@ class Transaction:
                 records.append(local["entry"])
         if records:
             from .kept import Kept
-            from .sandbox import unguarded
+            from .fence import unguarded
 
             with unguarded():
                 for entry in records:

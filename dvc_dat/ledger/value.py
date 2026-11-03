@@ -195,7 +195,7 @@ class Value:
         from .fn import Fn
         from .kept import Kept, SealedFn, SealedRef, env_record, preds_record, ref_record
         from .rev import Ref
-        from .sandbox import unguarded
+        from .fence import unguarded
         from .txn import check_provenance
 
         if self.subject is not None:
@@ -228,7 +228,7 @@ class Value:
                       provenance=provenance, env=env_record(env), bytes=self._seal_bytes(data))
         if run is not None:
             record["run"] = run.record()
-        with unguarded():                       # the ledger's own write, also inside a sandboxed body
+        with unguarded():                       # the ledger's own write, also inside a fenced body
             entry = Kept().seal(record, data if keep else None, self._parts() if keep else ())
         self._forget()              # the hash is fixed: a later check (SealBroken) hashes the source anew
         self.__dict__["_local"] = {"hash": h, "deps": deps, "provenance": provenance, "env": env,

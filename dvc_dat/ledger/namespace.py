@@ -108,10 +108,10 @@ def mount_root(name: str, prefix: str, info: Dict[str, str]) -> Path:
 def _mounted(rev: "Rev", name: str, inner: str, prefix: str, info: Dict[str, str]) -> Any:
     """``name`` (``mnt.<inner>``) under the mount ``prefix``; ``inner`` is the name the mount's tree serves."""
     from .env import current_env
-    from .sandbox import load_sandboxed, note_read, unguarded
+    from .fence import load_fenced, note_read, unguarded
 
     rest = inner[len(prefix) + 1:].split(".") if inner != prefix else []
-    with unguarded():                       # the ledger's own reads, also inside a sandboxed body
+    with unguarded():                       # the ledger's own reads, also inside a fenced body
         root = mount_root(name, prefix, info)
         checkout = Path(current_env().code[info["repo"]].path)
         for cut in range(len(rest), -1, -1):
@@ -154,7 +154,7 @@ def _mounted(rev: "Rev", name: str, inner: str, prefix: str, info: Dict[str, str
             raise TypeError(f"{name!r}: {modname}.{tail[0]} in {py} is not a function or a literal")
         else:
             raise ImportError(f"{name!r}: nothing answers to it under the mount {prefix!r} ({root})")
-    return load_sandboxed(rev, f"{modname}.{tail[0]}", prefix, info)
+    return load_fenced(rev, f"{modname}.{tail[0]}", prefix, info)
 
 
 def _top_level(py: Path, attr: str) -> Optional[ast.AST]:
@@ -182,7 +182,7 @@ def mounted_commands(rev: "Rev") -> Iterator[Tuple[str, Dict[str, str], Path]]:
     """``(dotted name, decl, file)`` of every function marked ``@command(args=..., help=...)`` and every
     spec with a ``command:`` key in the mounted trees, read off the files (nothing imported)."""
     from ..just import _check, declared
-    from .sandbox import unguarded
+    from .fence import unguarded
 
     plain = rev._plain()
     with unguarded():
@@ -313,9 +313,9 @@ class LedgerNamespace(Namespace):
     def _load_unmounted(self, dotted_name: str) -> Any:
         if not self._unguarded:
             return resolve_name(self.rev(), dotted_name)
-        from .sandbox import unguarded
+        from .fence import unguarded
 
-        with unguarded():                          # rev.ns in a sandboxed body: the ledger's own machinery
+        with unguarded():                          # rev.ns in a fenced body: the ledger's own machinery
             return resolve_name(self.rev(), dotted_name)
 
     def mount(self, at: Optional[str] = None, *, root: Optional[str] = None,  # type: ignore[override]

@@ -1,4 +1,4 @@
-"""`demo_game.etl.stray`: two functions the sandbox refuses."""
+"""`demo_game.etl.stray`: two functions the fence refuses."""
 from pathlib import Path
 
 from dvc_dat.ledger import ledger_fn
