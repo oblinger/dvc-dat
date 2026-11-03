@@ -32,6 +32,8 @@ dat:
   do: scripts.run_experiment
   args: [1, 2, 3]
   kwargs: {verbose: true}
+  defaults: {tag: base}
+  preds: {tag: "{tag}"}
   target_exists: error
 ```
 
@@ -43,6 +45,8 @@ dat:
 | `do` | Dotted name of the function to run. |
 | `args` | Positional arguments for it, after the dat itself. |
 | `kwargs` | Keyword arguments for it. |
+| `defaults` | Expansion variables a keyword does not set (SVP 1508): `{tag}` anywhere in the spec is `dat.kwargs.tag` when there is one, else `dat.defaults.tag`. |
+| `preds` | Pred names to templates (SVP 1508), expanded at create like every string; each must come out a string, number or bool. They are the dat's own preds, sealed onto its value on a ledger. |
 | `target_exists` | What to do when the folder is already there. |
 
 `kind`, `name`, `do` and `target_exists` are strings. A value that arrives as
@@ -79,6 +83,13 @@ runs with no call-site arguments. So the arguments of every run are on disk, in
 the spec of the dat that run produced.
 A call-site argument is literal data: its braces are escaped before the merge,
 so the `{…}` expansion at create leaves it exactly as passed.
+`Dat.create(template, **kwargs)` merges its keywords the same way and runs nothing.
+
+The keywords are also the spec's **expansion variables** (SVP 1508): an
+undotted `{name}` anywhere in the spec -- `dat.name` and `dat.preds` included --
+is `dat.kwargs.name` (the spec's own, updated by the call's), else
+`dat.defaults.name`, else a built-in; each is the value the run receives, so a
+call-site `{x}` passed as data stays `{x}` when it fills a name.
 
 ## Custom fields
 

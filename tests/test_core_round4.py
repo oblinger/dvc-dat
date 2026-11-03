@@ -29,17 +29,15 @@ def _seal(dat, *a, **k):
     return dat
 
 
-# --- F1: forking a Dat whose spec says target_exists: overwrite deletes the parent ---------
-def test_fork_of_overwrite_dat_keeps_parent(world):
+# --- F1 (SVP 1508): a Dat is not a run target; its folder is untouched by the refusal --------
+def test_run_of_a_dat_is_refused_and_keeps_it(world):
     world.ns.mount(at="seal_fn", value=_seal)
     parent = world.run({"dat": {"do": "seal_fn", "name": "exp1", "target_exists": "overwrite",
                                 "kwargs": {"x": 1}}})
     Path(parent.get_path(), "precious.txt").write_text("only copy")
-    try:
+    with pytest.raises(Exception) as e:
         world.run(parent, x=2)
-    except Exception:
-        pass        # today: the fork rmtree's the parent, then trips on the stale cached (sealed) parent
-    # docstring: "forks a new dat from its spec ... a fork lands beside its parent"
+    assert isinstance(e.value.__cause__, TypeError) and "get_spec()" in str(e.value.__cause__)
     assert Path(parent.get_path(), "precious.txt").exists()
 
 
@@ -53,22 +51,16 @@ def test_overwrite_create_returns_fresh_dat(world):
     assert second.get_spec()["v"] == 2
 
 
-# --- F2: forking a Dat whose spec says target_exists: use returns the parent, args dropped --
-def test_fork_of_use_dat_runs_with_new_args(world):
+# --- F4: a stored spec is expanded already; its recipe runs again quoted, dat.name put back ----
+def test_rerun_of_a_stored_spec_with_a_literal_brace(world):
     world.ns.mount(at="seal_fn", value=_seal)
-    parent = world.run({"dat": {"do": "seal_fn", "name": "exp2", "target_exists": "use",
-                                "kwargs": {"x": 1}}})
-    child = world.run(parent, x=2)
-    assert Dat.get(child.get_spec(), "dat.kwargs.x") == 2
-
-
-# --- F4: forking a stored dat re-expands its already-expanded spec ------------------------
-def test_fork_of_dat_with_literal_brace_in_spec(world):
-    world.ns.mount(at="seal_fn", value=_seal)
-    parent = world.run({"dat": {"do": "seal_fn", "name": "exp4"}, "note": "{{literal}}"})
+    parent = world.run({"dat": {"do": "seal_fn", "name": "exp4{unique}"}, "note": "{{literal}}"})
     assert parent.get_spec()["note"] == "{literal}"       # expanded once, as documented
-    child = world.run(parent, x=2)                         # today: KeyError unknown name {literal}
+    spec = world.ns.quote_spec(parent.get_spec())
+    spec["dat"]["name"] = parent.get_spec()["dat"]["name"]
+    child = world.run(spec, x=2)
     assert child.get_spec()["note"] == "{literal}"
+    assert child.get_path_name() == "exp4_2" and Dat.get(child.get_spec(), "dat.kwargs.x") == 2
 
 
 # --- 1467 Q2 (A): a call-site argument is data; the run receives exactly what was passed ---

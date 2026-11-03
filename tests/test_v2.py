@@ -85,7 +85,7 @@ class TestForkRule:
         assert Dat.manager.run("v2_args", 1, 2) == {"args": [1, 2], "kwargs": {}}   # not [4,5,6,1,2]
         assert stored(Dat.load(name))["dat"]["args"] == [1, 2]
 
-    def test_a_sealed_dat_does_not_rerun_and_forks_when_given_arguments(self):
+    def test_a_dat_is_refused_and_its_spec_runs_beside_it(self):
         ns.mount(at="v2_forkable", value={
             "dat": {"do": "v2_echo", "name": f"{V2}/forkable{{unique}}"}})
         for stale in (f"{V2}/forkable", f"{V2}/forkable_2"):
@@ -97,15 +97,15 @@ class TestForkRule:
         spec_file = Path(dat.get_path(), SPEC_YAML)
         before = spec_file.read_bytes()
 
-        # No arguments: a sealed dat does not run again.
+        # A dat is not a run target (SVP 1508): it ran once, when made.
         with pytest.raises(Exception) as err:
-            Dat.manager.run(dat)
-        assert "sealed" in str(err.value.__cause__)
+            Dat.manager.run(dat, 9)
+        assert isinstance(err.value.__cause__, TypeError)
         assert spec_file.read_bytes() == before
         assert not Dat.manager.exists(f"{V2}/forkable_2")
 
-        # Arguments: a new dat, and the original spec is untouched.
-        assert Dat.manager.run(dat, 9) == {"args": [9], "kwargs": {}}
+        # Its recipe again: a new dat beside it, and the original spec is untouched.
+        assert Dat.manager.run(dat.get_spec(), 9) == {"args": [9], "kwargs": {}}
         assert spec_file.read_bytes() == before
         forked = Dat.load(f"{V2}/forkable_2")
         assert forked.get_path() != dat.get_path()
@@ -306,16 +306,15 @@ class TestGetSpec:
                 "dat": {"kind": "Dat", "target_exists": "overwrite"}, "fn": "{collections.OrderedDict}"})
         assert not Dat.manager.exists(f"{V2}/notdata")
 
-    def test_a_fork_from_a_dat_lands_beside_it(self):
+    def test_a_run_of_a_dats_spec_lands_beside_it(self):
         template = {"dat": {"do": "v2_echo", "name": f"{V2}/parent{{unique}}"}}
         Dat.manager.run(template, 1)
         parent = Dat.load(f"{V2}/parent")
         assert parent.get_spec()["dat"]["name"] == f"{V2}/parent{{unique}}"   # the template (Q36)
         assert parent.get_path_name() == f"{V2}/parent"                      # its expansion, the folder
-        Dat.manager.run(parent, 2)
+        Dat.manager.run(parent.get_spec(), 2)
         child = Dat.load(f"{V2}/parent_2")
         assert child.get_spec()["dat"]["args"] == [2]
-        assert child.get_spec()["dat"]["target_exists"] == "increment"
 
 
 class Strict(Dat):

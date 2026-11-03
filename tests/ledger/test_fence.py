@@ -962,8 +962,8 @@ def test_a_ledger_projects_do_names_through_the_mounts(sbx, tmp_path):
 
     L, _repo = sbx
     m = DatManager(dat_folders=[str(tmp_path / "data")], ns=LedgerNamespace(L))
-    dat = m.create("mnt.sbx.stage.specs.table")                             # the spec, through the mounts
-    m.run(dat)                                                           # its run function, here
+    m.run("mnt.sbx.stage.specs.table")                                   # the spec through the mounts, run here
+    dat = m.load("tables/y")
     assert dat.get_path_name() == "tables/y" and dat.get_results()["out"] == 6
     assert dat.subject is None and L.at().values(kind=Dat) == []
     with pytest.raises(TypeError, match="db/mount"):

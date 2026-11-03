@@ -844,15 +844,19 @@ print("SHORTHAND _SPEC_.YAML:\n" + textwrap.indent((shorthand_path / "_spec_.yam
 # %% [markdown]
 # ## Running a dat
 #
-# `Dat.manager.run(dat)` is the one way to run a dat: it calls the
-# spec's run function with the dat and the spec's kwargs, in place,
-# and records the run in `dat.run`. `save()` in the run function
-# seals the folder, its results in `_result_.yaml`.
-# The cell runs once: a sealed dat refuses a second run, which
-# `RuntimeError: ... is sealed` reports.
+# `Dat.manager.run(spec)` is the one way to run a dat: it creates
+# the dat from the spec, as `Dat.create` does, calls the spec's run
+# function with it and the spec's kwargs, and records the run in
+# `dat.run`. A dat runs once, by the call that makes it, so the
+# folders made above stay as they are and the run makes its own,
+# `table12_3`. `save()` in the run function seals the folder, its
+# results in `_result_.yaml`.
 
 # %%
-Dat.manager.run(table12_dat)   # calls build_table in mult.py with this dat and n=12, start=1
+# creates tables/2026/table12_3, then calls build_table in mult.py
+# with it and n=12, start=1; build_table returns the dat
+table12_dat = Dat.manager.run("mymodule.specs.table12")
+table12_path = Path(table12_dat.get_path())
 
 # %%
 # print results
@@ -868,19 +872,19 @@ print("_RESULT_.YAML:\n" + textwrap.indent((table12_path / "_result_.yaml").read
 
 # %%
 run_results = table12_dat.run.get_results()["dat"]
-print("run:", repr(table12_dat.run))   # run: <Dat: tables/2026/table12/run>
+print("run:", repr(table12_dat.run))   # run: <Dat: tables/2026/table12_3/run>
 print("run_at:", run_results["run_at"])   # run_at: when the run started
 print("run_time:", run_results["run_time"])   # run_time: how long build_table took
 print("code:", run_results["code"])   # code: the branch, commit and dirty flag of the checkout holding mult.py
 
 # %% [markdown]
-# Given a name, `Dat.manager.run` creates the dat from the spec
-# first: it returns what the run function returned, a new folder
-# every call.
+# Each call makes a new folder and returns what the run function
+# returned. Running a dat's recipe again is a run of its spec,
+# `Dat.manager.run(dat.get_spec())`; a `Dat` itself is refused.
 
 # %%
-again_dat = Dat.manager.run("mymodule.specs.table12")   # same as: Dat.manager.run(Dat.create(spec="mymodule.specs.table12"))
-print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_3>
+again_dat = Dat.manager.run("mymodule.specs.table12")
+print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_4>
 print("files:", sorted(os.listdir(again_dat.get_path())))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
 
@@ -970,10 +974,10 @@ print("hit:", again_value.subject == table12_value.subject,
       " nothing written:", L.at().id == top_id)   # hit: True  nothing written: True
 
 # %% [markdown]
-# ### Storing a handmade dat on the ledger
+# ### Storing a dat on the ledger
 #
 # On a ledger a dat is a value: sealed under a name, loaded back,
-# found by its preds. The hand-made `table12_dat` is sealed here; nothing
+# found by its preds. The run's `table12_dat` is sealed here; nothing
 # runs. Its preds are its spec's `kwargs` and its result's entries,
 # read from the folder.
 

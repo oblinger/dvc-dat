@@ -21,15 +21,19 @@ template = ns.load("catalog.experiment")
 # _spec_.yaml, and the run reads them back from there.
 result = Dat.manager.run("catalog.experiment", epochs=200)
 
-# Create and open dats directly.
-dat = Dat.create(spec="catalog.experiment", path="runs/exp1")
+# Create a dat without running it, and open one.
+dat = Dat.create("catalog.experiment", path="runs/exp1",
+                 epochs=10)
 dat = Dat.load("runs/exp1")
 ```
 
-`Dat.manager.run` is the one way to run a dat; `dat.run` is the record a run
-leaves. Arguments never ride beside a spec at the call site.
-`Dat.manager.run(dat, x=1)` forks a new dat and leaves the original untouched;
-`Dat.manager.run(dat)` re-runs a dat that is not yet sealed. A run saves nothing by itself: `dat.save()` inside it seals the
+`Dat.manager.run(spec, **kw)` creates a dat and runs it; `Dat.create(spec, **kw)`
+creates one and runs nothing; `dat.run` is the record a run leaves. Both take
+keywords: they are merged into `dat.kwargs` and are the variables that fill `{…}`
+in `dat.name`, `dat.preds` and the rest of the spec, over the spec's
+`dat.defaults`. `dat.preds` are preds the dat carries onto the value it seals as.
+A dat is run once, by the call that makes it; its recipe runs again as a new dat
+with `Dat.manager.run(dat.get_spec(), x=1)`. A run saves nothing by itself: `dat.save()` inside it seals the
 dat when the run returns, stamping its `dat.standing`; `dat.standing: rolling`
 in a spec declares one that is saved at will. Nothing about the arguments is recorded in `_result_.yaml` — the
 spec is the record.

@@ -182,6 +182,8 @@ DAT_TARGET_EXISTS = "dat.target_exists"  # error | use | overwrite | increment
 DAT_DO = "dat.do"                      # the function to run
 DAT_ARGS = "dat.args"                  # its positional arguments
 DAT_KWARGS = "dat.kwargs"              # its keyword arguments
+DAT_DEFAULTS = "dat.defaults"          # expansion variables a keyword does not set
+DAT_PREDS = "dat.preds"                # preds the value carries, each an expanded string
 DAT_RUN_AT = "dat.run_at"              # run: when it started
 DAT_RUN_TIME = "dat.run_time"          # run: how long it took
 DAT_CODE = "dat.code"                  # run: branch, commit, dirty of the code it ran
@@ -596,6 +598,49 @@ def expand_spec(spec: Any, vars: Dict[str, Any], *, resolver: Callable[[str], An
     return walk(spec)
 
 
+def spec_variables(spec: Dict[str, Any], *, resolver: Callable[[str], Any], tz: Optional[tzinfo] = None,
+                   now: Optional[datetime] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """`(spec, variables)`: the expansion variables of a spec (SVP 1508), `dat.defaults` overridden by
+    `dat.kwargs`, each value as the run receives it (both maps expanded once here, the built-ins at
+    `now`), and a copy of `spec` whose two maps hold those values quoted, so the spec's own expansion
+    hands them back unchanged and evaluates no reference in them twice.  A `dat.defaults` or
+    `dat.kwargs` that is not a mapping with str keys is `TypeError`."""
+    dat = spec.get("dat") if isinstance(spec, dict) else None
+    if not isinstance(dat, dict):
+        return spec, {}
+    names = _builtins(now, tz)
+    variables: Dict[str, Any] = {}
+    out = None
+    for key in ("defaults", "kwargs"):
+        given = dat.get(key)
+        if given is None:
+            continue
+        if not isinstance(given, dict) or not all(isinstance(k, str) for k in given):
+            raise TypeError(f"dat.{key} is a mapping of names to values, not {given!r}")
+        values = expand_spec(given, names, resolver=resolver, tz=tz)
+        variables.update(values)
+        if out is None:
+            out = dict(spec)
+            out["dat"] = dict(dat)
+        out["dat"][key] = quote_spec(values)
+    return (out if out is not None else spec), variables
+
+
+def check_preds(spec: Dict[str, Any]) -> None:
+    """Refuse an expanded spec's `dat.preds` (SVP 1508) unless it is a mapping of pred names (str, not
+    `db/...`) to strings, numbers or bools."""
+    preds = Dat.get(spec, DAT_PREDS, None)
+    if preds is None:
+        return
+    if not isinstance(preds, dict):
+        raise TypeError(f"dat.preds is a mapping of pred names to values, not {preds!r}")
+    for k, v in preds.items():
+        if not isinstance(k, str) or not k or k.startswith("db/"):
+            raise ValueError(f"dat.preds: {k!r} is not a pred name (a non-empty str outside db/)")
+        if not isinstance(v, (str, int, float, bool)):
+            raise TypeError(f"dat.preds: {k} expanded to {type(v).__name__}, not a string, number or bool")
+
+
 # =============================================================================
 # DatManager
 # =============================================================================
@@ -756,26 +801,37 @@ class DatManager:
             Dat.manager = manager
         return manager
 
-    def create(
-        self,
-        spec: Union[Dict, str, None] = None,
-        *,
-        path: Union[str, Path, None] = None,
-    ) -> "Dat":
-        """Create a dat, as the class its `dat.kind` names: merge `dat.base`,
-        validate, place it, write `_spec_.yaml`.
+    def create(self, spec: Union[Dict, str, None] = None, *, path: Union[str, Path, None] = None,
+               **kwargs: Any) -> "Dat":
+        """Create a dat, as the class its `dat.kind` names, and run nothing: merge `dat.base`, merge
+        `kwargs` into `dat.kwargs`, validate, place it, write `_spec_.yaml`.
 
-        `spec` may be a dict or a dotted name loaded through the namespace.  The
-        folder is `path` if given, else the spec's `dat.name` template, else
-        `anonymous/Dat{unique}`; `dat.target_exists` says what happens when the
-        folder is already there.  Every `{}` in the spec is expanded here, once,
-        with the same values the folder got, and the expanded spec is what is
-        written, except `dat.name`: the spec stores the path template as given
-        (`path`, else the spec's own), never the path it expanded to (F447
-        Q36); the folder's path is the dat's name.  `dat.kind` is written as
-        the class's dotted `module.qualname`.
+        `spec` may be a dict or a dotted name loaded through the namespace.  `kwargs` are data (1467
+        Q2 (A)): they reach `dat.kwargs` as given, braces and all (`spec` and `path` are this call's own
+        names, never keywords).  The folder is `path` if given,
+        else the spec's `dat.name` template, else `anonymous/Dat{unique}`; `dat.target_exists` says
+        what happens when the folder is already there.  Every `{}` in the spec is expanded here,
+        once, with the same values the folder got: the built-ins, dotted names, and the expansion
+        variables (SVP 1508), `dat.defaults` overridden by `dat.kwargs` (the spec's own and these
+        keywords), each as the run receives it.  `dat.preds` (a mapping) is expanded with the rest,
+        and each value must come out a string, number or bool: they are the dat's own preds, carried
+        onto the value when it is sealed.  The expanded spec is what is written, except
+        `dat.name`: the spec stores the path template as given (`path`, else the spec's own),
+        never the path it expanded to (F447 Q36); the folder's path is the dat's name.
+        `dat.kind` is written as the class's dotted `module.qualname`.  `run` is `create` and
+        then the run.
         """
+        return self._create(spec, path=path, kwargs=kwargs)[0]
+
+    def _create(self, spec: Union[Dict, str, None], *, path: Union[str, Path, None] = None,
+                kwargs: Optional[Dict[str, Any]] = None) -> Tuple["Dat", bool]:
+        """`create`, returning `(dat, skipped)`: `skipped` when `dat.target_exists: use` found the
+        dat already there (it is loaded, not made)."""
+        from .do import Namespace
+
         spec = self._spec_of(spec)
+        if kwargs:
+            spec = Namespace._fork_spec(spec, (), kwargs)
         dat_class = self._class_of(spec["dat"].get("kind"))
         spec["dat"]["kind"] = _kind_name(dat_class)
         spec = dat_class.validate_spec(spec)
@@ -788,13 +844,17 @@ class DatManager:
         if target_exists == "overwrite" and path.lower() == "{cwd}":
             target_exists = "error"  # never wipe the working directory
 
-        expanded_path, skip_execution, names = self._place(path, target_exists=target_exists, wipe=False)
+        now = datetime.now(self.ns._tz())
+        spec, variables = spec_variables(spec, resolver=self.ns.load, tz=self.ns._tz(), now=now)
+        expanded_path, skip_execution, names = self._place(path, variables=variables, target_exists=target_exists,
+                                                           wipe=False, now=now)
         if skip_execution:
-            return self.load(expanded_path)
+            return self.load(expanded_path), True
 
         path = self._resolve_path(expanded_path)
         own = Dat.get(spec, DAT_NAME, None)
         spec = self.ns.expand_spec(spec, **names)  # bases merged in _spec_of
+        check_preds(spec)
         if own is not None:
             Dat.set(spec, DAT_NAME, own)            # the template, never its expansion (Q36)
         within = _within(os.path.realpath(path), self._dat_folders[0])
@@ -821,7 +881,7 @@ class DatManager:
         os.makedirs(path, exist_ok=True)
         logger.info("Creating Dat %s under path: <%s>", dat_class, path)
         Path(path, SPEC_YAML).write_text(text)
-        return self._load(path, dat_class=dat_class)
+        return self._load(path, dat_class=dat_class), False
 
     def _spec_of(self, spec: Union[Dict, str, None]) -> Dict:
         """A private copy of `spec` (a dict, or a dotted name loaded through `ns`),
@@ -1393,44 +1453,34 @@ class DatManager:
         return path
 
     def run(self, target: Any, /, *args: Any, **kwargs: Any) -> Any:
-        """Run `target` in this world: the one way to run a dat outside a ledger.
+        """Create a dat and run it, in this world: the one way to run a dat outside a ledger.
 
-        - a **Dat** runs in place when no arguments are given -- refused once it
-          is sealed -- and forks a new dat from its spec when they are;
-        - a **template spec** (dict, or a dotted name that loads to one) is
-          forked -- `args` replace `dat.args`, `kwargs` update `dat.kwargs` --
-          the new spec creates a dat, and that dat runs with no call-site
-          arguments;
-        - a **callable** (or a dotted name that loads to one) is called with
-          `args`/`kwargs`.
+        - a **spec** (dict, or a dotted name that loads to one) is a template: `args` replace
+          `dat.args`, `kwargs` merge into `dat.kwargs` and are expansion variables of `dat.name`,
+          `dat.preds` and the rest of the spec, over `dat.defaults` (see `create`, which this is
+          followed by the run); the new dat runs with no call-site arguments;
+        - a **callable** (or a dotted name that loads to one) is called with `args`/`kwargs`.
 
-        A dat's run calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the
-        object `dat.do` names, and records the run in `dat.run` (see
-        `_execute`); the return value is `fn`'s.  A template with no `dat.do`
-        just creates the dat and returns it, as does `dat.target_exists: use`
-        finding the dat already there.  Names load through this world's `ns`,
-        so in a ledger project they are the ledger's.  Fixed: a project needing
-        other run machinery subclasses the manager, not `Dat`.
+        A dat's run calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do` names,
+        and records the run in `dat.run` (see `_execute`); the return value is `fn`'s.  A spec with
+        no `dat.do` just creates the dat and returns it, as does `dat.target_exists: use` finding
+        the dat already there.  A `Dat` is `TypeError`: a dat is run once, by the call that makes
+        it; another run of its recipe is `run(dat.get_spec(), **kwargs)`, a new dat (SVP 1508).
+        Names load through this world's `ns`, so in a ledger project they are the ledger's.
+        Fixed: a project needing other run machinery subclasses the manager, not `Dat`.
         """
         ns = self.ns
         obj = ns.load(target) if isinstance(target, str) else target
         try:
             if isinstance(obj, Dat):
-                if not args and not kwargs:
-                    return self._execute(obj)
-                # the stored spec is expanded already: its braces are literal, so the fork's
-                # create (which expands) is handed them escaped; dat.name stays the path template
-                name = Dat.get(obj.get_spec(), DAT_NAME, None)
-                obj = quote_spec(obj.get_spec())
-                if name is not None:
-                    Dat.set(obj, DAT_NAME, name)
-                # a fork lands beside its parent, whatever the parent's own target_exists says:
-                # `overwrite` would wipe the parent, `use` would hand it back unrun
-                Dat.set(obj, DAT_TARGET_EXISTS, "increment")
-            elif callable(obj):
+                raise TypeError(f"run: {obj!r} is a dat, made and run once; run its recipe again as a new dat "
+                                "with Dat.manager.run(dat.get_spec(), **kwargs) (a stored spec is expanded "
+                                "already: one holding a literal brace is quoted first, Dat.ns.quote_spec, its "
+                                "dat.name put back)")
+            if callable(obj):
                 return obj(*args, **kwargs)
             if not isinstance(obj, dict):
-                raise TypeError(f"run: cannot run {obj!r}; expected a callable, a spec or a Dat")
+                raise TypeError(f"run: cannot run {obj!r}; expected a callable or a spec")
             spec = ns._fork_spec(obj, args, kwargs)
             dat, skip_execution = ns._dat_from_template(spec, manager=self)
             if skip_execution:
@@ -1478,8 +1528,8 @@ class DatManager:
         if not callable(fn):
             raise TypeError(f"{DAT_DO} in {dat!r} is {fn!r}, not callable")
         if dat._standing() in _FROZEN:
-            raise RuntimeError(f"run: {dat!r} is sealed; fork it with Dat.manager.run(dat, ...) "
-                               "or copy it")
+            raise RuntimeError(f"run: {dat!r} is sealed; run its recipe as a new dat with "
+                               "Dat.manager.run(dat.get_spec(), ...), or copy it")
         code = _code_of(fn)
         if dat._demands_referenceable() and (code is None or code.get("dirty")):
             raise RuntimeError(f"run: {dat!r} demands dat.standing: referenceable, and "
@@ -1565,22 +1615,6 @@ class DatManager:
             return obj
         raise ImportError(f"dat.kind {kind!r}: no module of it can be imported")
 
-    def _prepare_dat_path(
-        self,
-        path_spec: Union[str, Path, None],
-        *,
-        variables: Optional[Dict[str, Any]] = None,
-        target_exists: str = "error",
-    ) -> Tuple[str, bool]:
-        """Expand a path template under the dat folder and settle a collision.
-
-        Returns `(path, skip_execution)`; `skip_execution` is True only for
-        `target_exists: use` on an existing folder.  `overwrite` deletes the folder;
-        `increment` (or a `{unique}` in the template) counts up `_2`, `_3`, …
-        """
-        path, skip, _ = self._place(path_spec, variables=variables, target_exists=target_exists)
-        return path, skip
-
     def _place(
         self,
         path_spec: Union[str, Path, None],
@@ -1588,16 +1622,21 @@ class DatManager:
         variables: Optional[Dict[str, Any]] = None,
         target_exists: str = "error",
         wipe: bool = True,
+        now: Optional[datetime] = None,
     ) -> Tuple[str, bool, Dict[str, Any]]:
-        """`_prepare_dat_path`, also returning the names the path expanded with, so the
-        spec can be expanded with the very same `now` and `unique`.  `wipe=False`: an
-        `overwrite` leaves the folder for the caller to remove (`create`, once its spec is made)."""
+        """Expand a path template under the dat folder and settle a collision: `(path,
+        skip_execution, names)`.  `skip_execution` is True only for `target_exists: use` on an
+        existing folder; `overwrite` deletes the folder (`wipe=False`: leaves it for the caller to
+        remove, `create` once its spec is made); `increment` (or a `{unique}` in the template)
+        counts up `_2`, `_3`, ...  `names` are what the path expanded with -- the built-ins at
+        `now` (default: this moment), `unique`, and `variables` -- so the spec can be expanded
+        with the very same values."""
         if path_spec is None:
             path_spec = _DEFAULT_PATH_TEMPLATE
         path_spec = str(path_spec)
         if target_exists == "increment" and "{unique}" not in path_spec:
             path_spec += "{unique}"      # a plain name counts up as `_2`, `_3`, ...
-        now, count = datetime.now(self.ns._tz()), 1
+        now, count = now or datetime.now(self.ns._tz()), 1
         while True:
             names = {**_builtins(now),
                      "unique": "" if count == 1 else f"_{count}",
@@ -1866,12 +1905,16 @@ class Dat(Value, metaclass=_DatMeta):
     @classmethod
     def create(
         cls: Type[DatType],
-        path: Optional[Union[str, Path]] = None,
         spec: Union[Dict, str, None] = None,
+        *,
+        path: Optional[Union[str, Path]] = None,
+        **kwargs: Any,
     ) -> DatType:
-        """Create a dat at `path` (or the spec's `dat.name` template) from `spec`, in
-        the default world.  A spec with no `dat.kind` gets `cls`; one naming a class
-        outside `cls` is `TypeError` before anything is written."""
+        """Create a dat from `spec` at `path` (or the spec's `dat.name` template), in the default world,
+        and run nothing: `Dat.manager.create(spec, path=path, **kwargs)`, the keywords merged into
+        `dat.kwargs` and expanding `dat.name` and `dat.preds` over `dat.defaults`.  A spec with no
+        `dat.kind` gets `cls`; one naming a class outside `cls` is `TypeError` before anything is
+        written."""
         manager = cls.manager
         spec = manager._spec_of(spec)
         kind = spec["dat"].get("kind")
@@ -1880,7 +1923,7 @@ class Dat(Value, metaclass=_DatMeta):
         elif not issubclass(named := manager._class_of(kind), cls):
             raise TypeError(f"{cls.__name__}.create: dat.kind {kind!r} is "
                             f"{named.__name__}, not a {cls.__name__}")
-        return cls._require(manager.create(spec, path=path), f"{cls.__name__}.create")
+        return cls._require(manager.create(spec, path=path, **kwargs), f"{cls.__name__}.create")
 
     @classmethod
     def _require(cls: Type[DatType], dat: "Dat", what: str) -> DatType:
@@ -2055,12 +2098,14 @@ class Dat(Value, metaclass=_DatMeta):
 
     def _default_preds(self) -> Dict[str, Any]:
         """A dat's own preds: the scalar entries of its spec's `dat.kwargs`, then the scalar top-level
-        entries of `_result_.yaml` other than `dat:` (a result entry wins a clash), read from the folder."""
+        entries of `_result_.yaml` other than `dat:`, then its spec's `dat.preds` (SVP 1508), read from the
+        folder; a later source wins a clash."""
         spec, result = _read_folder(self._path)
         dat = spec.get("dat")
         kwargs = dat.get("kwargs") if isinstance(dat, dict) else None
+        preds = dat.get("preds") if isinstance(dat, dict) else None
         out: Dict[str, Any] = {}
-        for source in (kwargs if isinstance(kwargs, dict) else {}, result):
+        for source in (kwargs if isinstance(kwargs, dict) else {}, result, preds if isinstance(preds, dict) else {}):
             for k, v in source.items():
                 if source is result and k == "dat":
                     continue

@@ -3,6 +3,7 @@
     from dvc_dat import Dat, DatManager
 
     Dat.manager.run("catalog.experiment", epochs=10)  # forks a new spec, creates a dat, runs it
+    Dat.create("catalog.experiment", epochs=10)       # the same dat, not run
     Dat.load("runs/2026-09/exp")             # opens a dat on disk
     Dat.manager = DatManager(dat_folders=["/work"])   # replaces the default world
     ns = Dat.ns                              # the namespace: ns.load, ns.mount, ns.mounts()
@@ -12,7 +13,7 @@ ledger) and `ledgers` (the project's ledgers by name, `ledgers.record`); the
 ledger, the dat's record in time, is its own subpackage: `from dvc_dat.ledger import Ledger`.
 """
 
-__version__ = "2.49.0"
+__version__ = "2.50.0"
 
 from . import ledger  # noqa: F401  (first: core's Dat is a ledger Value, and the ledger names Dat)
 from .core import Dat, DatContainer, DatManager
