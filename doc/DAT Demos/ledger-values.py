@@ -664,7 +664,7 @@ print("mount rows:", rev["db/mount/plane"])
 # to (`db/root`, relative to the repo's checkout) and the repo
 # (`db/repo`). Every name `mnt.plane...` now resolves inside that
 # folder: `mnt.plane.measure` is `plane/measure.py`; a name not starting `mnt.` is imported. A `.datconfig.yaml`
-# `mounts:` entry is sugar for these rows.
+# `mounts:` entry, `mnt.plane: plane`, is sugar for these rows.
 
 # %% [markdown]
 # #### A function under a mount

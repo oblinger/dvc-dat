@@ -648,7 +648,7 @@ print("config:", Path(".datconfig.yaml").read_text())   # → config: ledger: .d
 # ```yaml
 # ledger: .dat/ledger
 # mounts:
-#   demo_game.etl: demo_game/etl
+#   mnt.demo_game.etl: demo_game/etl
 # ```
 #
 # `Ledger()` asserts the `db/root` and `db/repo` rows when they are

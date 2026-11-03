@@ -67,7 +67,7 @@ os.chdir(scratch_project_path)
 L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
 with open(".datconfig.yaml", "a") as config_file:
     config_file.write("mounts:\n"                       # db/mount rows:
-                      "  demo_game.etl: demo_game/etl\n"  # the ETL stages
+                      "  mnt.demo_game.etl: demo_game/etl\n"  # the ETL stages
                       "run: python3 -m demo_main\n")     # the main: cli
 dvc_dat_just_path = files("dvc_dat") / "dvc_dat.just"
 Path("justfile").write_text(
@@ -207,7 +207,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 
 # %% [markdown]
 # `train` carries `@command(args="game=…", help="…")`, and its
-# module is under the ledger's mount of `demo_game.etl` (`mounts:`
+# module is under the ledger's mount `mnt.demo_game.etl` (`mounts:`
 # in `.datconfig.yaml`); `run` reads the commands off the mounted
 # files and writes one recipe per command into `.dat/targets.just`,
 # which the justfile imports. It is
@@ -474,7 +474,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # !cat .datconfig.yaml
 # → ledger: .dat/ledger
 # → mounts:
-# →   demo_game.etl: demo_game/etl
+# →   mnt.demo_game.etl: demo_game/etl
 # → run: python3 -m demo_main
 
 # %% [markdown]

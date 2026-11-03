@@ -190,7 +190,7 @@ def test_namespace_key_is_checked(here):
 
 
 def test_the_active_ledger_asserts_the_mounts(here):
-    project(here, SECTION + "  default: games\nmounts:\n  pkg.etl: pkg/etl\n")
+    project(here, SECTION + "  default: games\nmounts:\n  mnt.pkg.etl: pkg/etl\n")
     assert L.at()["db/mount/pkg.etl"]["db/root"] == "pkg/etl"
     assert ledgers.record.at().get("db/mount/pkg.etl", "db/root") is None     # a named handle asserts nothing
 

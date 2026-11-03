@@ -64,7 +64,7 @@ def test_mounts_sugar_asserted_once_on_walk_up(tmp_path, monkeypatch):
     monkeypatch.delenv("DAT_LEDGER", raising=False)
     monkeypatch.chdir(tmp_path)
     Ledger(create=True)
-    (tmp_path / ".datconfig.yaml").write_text("ledger: .dat/ledger\nmounts:\n  pkg.etl: pkg/etl\n")
+    (tmp_path / ".datconfig.yaml").write_text("ledger: .dat/ledger\nmounts:\n  mnt.pkg.etl: pkg/etl\n")
     L = Ledger()
     rev = L.at()
     assert rev["db/mount/pkg.etl"] == {"db/root": "pkg/etl", "db/repo": tmp_path.name}
@@ -72,13 +72,15 @@ def test_mounts_sugar_asserted_once_on_walk_up(tmp_path, monkeypatch):
     assert Ledger().at().id == rev.id                       # unchanged: nothing written
 
 
-def test_mounts_sugar_refuses_an_at_starting_mnt(tmp_path, monkeypatch):
+@pytest.mark.parametrize("key", ["etl", "pkg.etl", "mnt", "mntx.etl", "mnt..etl"])
+def test_mounts_sugar_refuses_a_key_outside_mnt(tmp_path, monkeypatch, key):
     monkeypatch.delenv("DAT_LEDGER", raising=False)
     monkeypatch.chdir(tmp_path)
     Ledger(create=True)
-    (tmp_path / ".datconfig.yaml").write_text("ledger: .dat/ledger\nmounts:\n  mnt.etl: pkg/etl\n")
-    with pytest.raises(ValueError, match="resolver adds mnt"):
+    (tmp_path / ".datconfig.yaml").write_text(f"ledger: .dat/ledger\nmounts:\n  {key}: pkg/etl\n")
+    with pytest.raises(ValueError, match=r"mounts:: a mount is named mnt\.<prefix>"):
         Ledger()
+    assert Ledger(tmp_path / ".dat" / "ledger").at().ns.mounts() == {}
 
 
 # -- transactions ---------------------------------------------------------------------------------

@@ -35,7 +35,7 @@ import yaml
 from ..core import _builtins
 from ..do import Namespace
 from .errors import NotEvaluated
-from .fn import MNT, Fn, installed_fn, mounted_name, mounts_at
+from .fn import MNT, Fn, installed_fn, mount_prefix, mounted_name, mounts_at
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -340,11 +340,7 @@ class LedgerNamespace(Namespace):
                 raise TypeError(f"t.ns.mount: {key} is a non-empty str, got {v!r}")
         if not _dotted(at):
             raise ValueError(f"t.ns.mount: at is a dotted name (non-empty segments, no '/'), got {at!r}")
-        if not at.startswith(MNT + "."):
-            raise ValueError(f"t.ns.mount: at names the mount as {MNT}.<prefix>, got {at!r} (write "
-                             f"{mounted_name(at) if at != MNT else MNT + '.<prefix>'!r}); a mount is outside "
-                             f"{MNT}. never")
-        self._txn.update(f"db/mount/{at[len(MNT) + 1:]}", {"db/root": root, "db/repo": repo})
+        self._txn.update(f"db/mount/{mount_prefix(at, 't.ns.mount')}", {"db/root": root, "db/repo": repo})
 
     def mounts(self) -> Dict[str, Dict[str, str]]:  # type: ignore[override]
         """The mount table at this revision: ``{prefix: {"root": ..., "repo": ...}}``, the ``db/mount``

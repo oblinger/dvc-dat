@@ -168,9 +168,9 @@ def test_f5_config_remount_replaces_the_root(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     Ledger(create=True)
     cfg = tmp_path / ".datconfig.yaml"
-    cfg.write_text("ledger: .dat/ledger\nmounts:\n  pkg.etl: pkg/etl\n")
+    cfg.write_text("ledger: .dat/ledger\nmounts:\n  mnt.pkg.etl: pkg/etl\n")
     Ledger()
-    cfg.write_text("ledger: .dat/ledger\nmounts:\n  pkg.etl: pkg/etl2\n")
+    cfg.write_text("ledger: .dat/ledger\nmounts:\n  mnt.pkg.etl: pkg/etl2\n")
     L = Ledger()
     assert L.at().ns.mounts()["pkg.etl"]["root"] == "pkg/etl2"
     top = L.at().id
