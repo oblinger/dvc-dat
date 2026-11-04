@@ -162,10 +162,32 @@ def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bo
 
 
 class ArtStore:
-    """Bytes by ``sha256:<hex>``, write-once, in a folder."""
+    """Bytes by ``sha256:<hex>``, write-once, in a folder; on a miss inside ``fetching``, fetched into it."""
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
+        self._scope = threading.local()
+
+    @contextmanager
+    def fetching(self, fetch: Optional[Callable[[str, Path], None]]) -> Iterator[None]:
+        """For the block, in this thread, a miss in ``get``/``get_to`` calls ``fetch(h, path)`` first, which puts
+        the bytes of ``h`` at ``path`` (a value's store, SVP 1511); ``None`` fetches nothing."""
+        old = getattr(self._scope, "fetch", None)
+        self._scope.fetch = fetch
+        try:
+            yield
+        finally:
+            self._scope.fetch = old
+
+    def _have(self, h: str) -> Path:
+        p = self.path(h)
+        if not p.exists():
+            fetch = getattr(self._scope, "fetch", None)
+            if fetch is not None:
+                fetch(h, p)
+            if not p.exists():
+                raise FileNotFoundError(f"art store {self.root}: no bytes for {h}")
+        return p
 
     def path(self, h: str) -> Path:
         return self.root / "sha256" / h[:2] / h
@@ -190,17 +212,11 @@ class ArtStore:
         return place(source, self.path(h), h)
 
     def get(self, h: str) -> bytes:
-        p = self.path(h)
-        if not p.exists():
-            raise FileNotFoundError(f"art store {self.root}: no bytes for {h}")
-        return p.read_bytes()
+        return self._have(h).read_bytes()
 
     def get_to(self, h: str, dest: Path) -> None:
         """Put the bytes of ``h`` at ``dest`` (a hardlink on the same filesystem, else a streamed copy)."""
-        p = self.path(h)
-        if not p.exists():
-            raise FileNotFoundError(f"art store {self.root}: no bytes for {h}")
-        place(p, Path(dest), h)
+        place(self._have(h), Path(dest), h)
 
 
 def index_name(pred: str) -> str:
@@ -225,9 +241,11 @@ class Writer(ABC):
 
 
 class Store(ABC):
-    """What the ledger reads and writes; ``art`` is the art store (a folder, whatever the backend)."""
+    """What the ledger reads and writes; ``art`` is the art store (a folder, whatever the backend); ``name`` the
+    ledger's name on a value store (SVP 1511): a SQLite ledger's folder name, a Postgres ledger's database."""
 
     art: ArtStore
+    name: str
 
     @abstractmethod
     def top(self) -> int:
@@ -275,6 +293,7 @@ class SqliteStore(Store):
     def __init__(self, folder: Path) -> None:
         self.folder = Path(folder)
         self.path = self.folder / "ledger.db"
+        self.name = self.folder.name
         self.art = ArtStore(self.folder / "art")
         self._local = threading.local()
         self._readers: List[sqlite3.Connection] = []
