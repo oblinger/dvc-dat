@@ -811,6 +811,15 @@ class Ref:
     def __reduce__(self) -> Any:
         raise TypeError("a Ref is bound to an open ledger and does not pickle")
 
+    def _fetch(self) -> Any:
+        """The fetch from the store the value's ``db/store`` row names (SVP 1511), for a miss in the local
+        folder; ``None`` with no row, or ``folder``: the folder alone, as before."""
+        from .remote import FOLDER, PREDICATE, fetcher
+
+        held = self._p._held(self.subject, PREDICATE) if self.subject is not None else []
+        name = show(held[0].obj) if held else FOLDER
+        return None if name == FOLDER else fetcher(name, self._p.ledger._store.name)
+
     def load(self) -> Value:
         """Fetch the bytes, decode them by ``type``, restore provenance and preds: the same Value every time
         while it is still there (a ``Dat`` whose folder was moved or replaced since is loaded afresh)."""
@@ -827,8 +836,9 @@ class Ref:
             cls = self.type
             assert cls is not None
             loaded_as = self._given if self._given != s else None
-            data = store.get(self._hash)
-            v = cls.decode(data, store, name=loaded_as) if takes_name(cls) else cls.decode(data, store)
+            with store.fetching(self._fetch()):
+                data = store.get(self._hash)
+                v = cls.decode(data, store, name=loaded_as) if takes_name(cls) else cls.decode(data, store)
             if not isinstance(v, Value):
                 raise TypeError(f"{cls.__name__}.decode returned {type(v).__name__}, not a Value")
             from ..core import Dat

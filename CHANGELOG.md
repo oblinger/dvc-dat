@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.52.0 — 2026-11-03
+
+- **A ledger names its value store, `db/store`; consumers register stores (SVP 1511; minor).** `register_store(name, factory)` and the `Remote` protocol (`exists(h)`, `put_path(path, h)`, `get_to(h, dest)`, by sha256 hex) are the public extension point for remote byte stores; dvc-dat ships no cloud code. The row `(db, db/store, <name>)` names a ledger's store, `local` when absent; `local` resolves per process (`DAT_STORE_LOCAL`, then a 0.3 s cloud metadata probe when that cloud is registered, then `stores: {local: ...}` in `.datconfig.yaml`/its override, then `folder`, the ledger's art folder alone). A seal uploads its value's parts and encoding before the write lock and writes `(<subject>, db/store, <name>)`; a read that misses the local folder fetches from the store the value's row names, checked against the hash. Remote layout convention `ledgers/<ledger>/sha256/<2>/<hash>` (`remote.blob_name`). A ledger with no store registered behaves exactly as 2.51.0. Docs: `DAT Ledger` (`register_store`, `Remote`, `db/store`, § Value stores), `api/ledger.md`.
+
 ## 2.51.0 — 2026-11-03
 
 - **"Fenced" code is "sandboxed" again, "resident" code is "unsandboxed" again (SVP 1520, reversing SVP 1505 Q3 / 2.46.0; minor).** A rename, behavior unchanged. The module `dvc_dat.ledger.fence` is `dvc_dat.ledger.sandbox` (`run_sandboxed`, `load_sandboxed`, `sandbox_code_at`), `Code.fenced` is `Code.sandboxed`, the provenance `eval:fenced` is `eval:sandbox` and `eval:resident` is `eval:unsandboxed`; error messages, docstrings, docs, figures and the demo notebooks (re-executed) say the old words. No aliases. **Breaks:** the import path, `Code.fenced`, and the two provenance strings a `where={"db/provenance": ...}` query names; rows written by 2.46.0–2.50.0 keep `eval:fenced` / `eval:resident`.

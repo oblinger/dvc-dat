@@ -23,7 +23,9 @@ transaction's own ``db/tx/<rev>`` rows (A50).
 from __future__ import annotations
 
 import ctypes
+import io
 import json
+import os
 import re
 import signal
 import tempfile
@@ -82,6 +84,25 @@ class _Op:
     def __init__(self, s: str, p: str, o: str, added: bool, seal_of: Optional[str] = None,
                  pred: bool = False) -> None:
         self.s, self.p, self.o, self.added, self.seal_of, self.pred = s, p, o, added, seal_of, pred
+
+
+def _put_remote(r: Any, h: str, source: Any) -> None:
+    """Upload one part to the remote ``r`` unless it holds it: a file as it stands, an opener spilled to a temp
+    file first (checked against ``h``)."""
+    from pathlib import Path
+
+    from .store import _copy
+
+    if r.exists(h):
+        return
+    if isinstance(source, (str, os.PathLike)):
+        r.put_path(Path(source), h)
+        return
+    with tempfile.TemporaryDirectory(prefix="dat-upload-") as d:
+        p = Path(d) / h
+        with source() as f:
+            _copy(f, p, h)
+        r.put_path(p, h)
 
 
 def _name(x: Any, what: str) -> str:
@@ -187,6 +208,8 @@ class Transaction:
         #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
         self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
         self._to_store: List[Value] = []
+        self._new_seals: List[Tuple[Value, str]] = []      # values this transaction writes db/value for
+        self._encodings: Dict[int, bytes] = {}             # id(value) -> encoding, read once by the upload
         self._created: List[Any] = []
         self._cm: Any = None
         self._w: Any = None
@@ -341,6 +364,13 @@ class Transaction:
                 self._cm.__exit__(et, ev, tb)
             return False
         self._state = "committing"
+        try:
+            self._upload()                      # before the write lock (unless lock= holds it already)
+        except BaseException as e:
+            self._abandon()
+            if self._cm is not None:
+                self._cm.__exit__(type(e), e, e.__traceback__)
+            raise
         wrote = False
         try:
             if self._cm is not None:
@@ -393,6 +423,30 @@ class Transaction:
                 pass
         self._created = []
 
+    def _upload(self) -> None:
+        """Put every part and the encoding of each value this transaction seals on the ledger's value store
+        (SVP 1511), and add ``(<subject>, db/store, <name>)`` naming it: nothing when the store resolves to
+        ``folder``, or inside a sandboxed body (its seal's upload runs in the parent). Write-once by hash, so a
+        blob a failed commit leaves behind is harmless."""
+        from .remote import FOLDER, PREDICATE, remote, resolve, store_name
+        from .sandbox import STATE
+
+        if not self._new_seals or STATE.guard:
+            return
+        name = resolve(store_name(self._snapshot()))
+        if name == FOLDER:
+            return
+        r = remote(name, self._ledger._store.name)
+        for v, subject in self._new_seals:
+            data = v._stored_bytes()
+            if sha256(data) != v.hash:
+                raise ValueError(f"{type(v).__name__}.encode is not deterministic: two calls gave two hashes")
+            self._encodings[id(v)] = data
+            for h, source in v._stored_parts():
+                _put_remote(r, h, source)
+            _put_remote(r, v.hash, lambda data=data: io.BytesIO(data))
+            self._ops.append(_Op(subject, PREDICATE, "str:" + name, True, seal_of=subject))
+
     def _store_all(self) -> None:
         """The bytes of every seal, written at commit so bytes and rows land together (or neither).
 
@@ -401,7 +455,8 @@ class Transaction:
         against the sealed hash before anything of the value is written."""
         art = self._ledger._store.art
         for v in self._to_store:
-            data = v._stored_bytes()
+            data = self._encodings.pop(id(v), None)
+            data = v._stored_bytes() if data is None else data
             if sha256(data) != v.hash:
                 raise ValueError(f"{type(v).__name__}.encode is not deterministic: two calls gave two hashes")
             for h, source in v._stored_parts():
@@ -588,6 +643,10 @@ class Transaction:
             _tag_name(subject, object)
         if predicate == TIMEZONE:
             zone_named(subject, object)
+        if predicate == "db/store":
+            from .remote import check_name
+
+            check_name(object, f"{subject} db/store")
         o = self._encode(object)
         if predicate == "db/alias" and tag(o) != "str":
             raise TypeError("a db/alias row's object is the subject it names, a str")
@@ -869,6 +928,7 @@ class Transaction:
         self._pending[id(value)] = (value, subject)
         self._finalize.append((value, subject, dict(trace), alias))
         if not already and not self._snapshot()._held(subject, "db/value"):
+            self._new_seals.append((value, subject))
             ops: List[Tuple[str, str, bool]] = [
                 ("db/value", ref_text(dotted(type(value)), h), False),
                 ("db/kind", "str:" + dotted(type(value)), False),

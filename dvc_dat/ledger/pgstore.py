@@ -98,6 +98,8 @@ class PostgresStore(Store):
     def __init__(self, dsn: str, *, base: Path, create: bool) -> None:
         self.dsn, self._conninfo, art, self.redacted = split_dsn(dsn, base)
         self.art = ArtStore(art)
+        parts = urlsplit(self.dsn)
+        self.name = parts.path.lstrip("/") or (parts.username or "")      # libpq's default database: the user
         self._pg = _psycopg()
         self._local = threading.local()
         self._readers: List[Any] = []

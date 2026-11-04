@@ -40,6 +40,10 @@
 
 ::: dvc_dat.ledger.register_policy
 
+::: dvc_dat.ledger.register_store
+
+::: dvc_dat.ledger.Remote
+
 ## The namespace over a ledger
 
 ::: dvc_dat.ledger.LedgerNamespace

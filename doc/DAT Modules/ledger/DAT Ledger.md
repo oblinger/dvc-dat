@@ -451,6 +451,8 @@ The package's other exports: the two ledger handles (also exported from `dvc_dat
 | [bump_source](#^bump-source) | Raise a module's `__version__` in its source |
 | [attr](#^attr) | Walk a dotted path into an object |
 | [register_policy](#^register-policy) | Name a memo policy a ledger's `db/memo-policy` row can select |
+| [register_store](#^register-store) | Name a value store a ledger's `db/store` row can select |
+| [Remote](#^remote) | What a value store is: bytes by hash on a remote place |
 | [LedgerError](#^ledgererror) | Base of every ledger exception |
 | [Multiple](#^multiple) | Several matched where one was required |
 | [NotEvaluated](#^notevaluated) | A miss this environment cannot run |
@@ -484,6 +486,12 @@ The package's other exports: the two ledger handles (also exported from `dvc_dat
 
 **register_policy**`(name: str, fn: Callable[[Mapping], str]) -> None`
     Registers `fn`, a function from a platform record to a `str`, as the memo policy `name`, for a `(db, db/memo-policy, name)` row to select ([Memoization and the platform](#Memoization%20and%20the%20platform)). A built-in name (`platform`, `card`) is `ValueError`; registering a name again replaces it. Process-local: every process that looks up under the name registers it first, else the lookup is `LedgerError`. ^register-policy
+
+**register_store**`(name: str, factory: Callable[[str], Remote]) -> None`
+    Registers `factory`, called once per process with a ledger's name and returning a `Remote`, as the value store `name`, for a `(db, db/store, name)` row or `local` to select ([Value stores](#Value%20stores)). `name` is `[a-z][a-z0-9_]*`; the built-ins `local` and `folder` are `ValueError`, a non-callable `TypeError`; registering a name again replaces it. Process-local, as `register_policy`: a process that seals onto the store, or misses on a value stored there, registers it first, else `LedgerError` naming the store. dvc-dat ships no cloud code; the consumer brings it (sv-pipe registers `gcp` and `azure`). ^register-store
+
+**Remote**`(Protocol)`
+    One ledger's bytes on a remote place, by sha256 hex: `exists(h) -> bool`; `put_path(path: Path, h)`, upload the file at `path` (its bytes hash to `h`), write-once; `get_to(h, dest: Path)`, download to the new file `dest`. Any of them may raise: a failed upload fails the commit with nothing written, a failed download fails the read (`LedgerError`). The conventional layout is `<bucket>/ledgers/<ledger>/sha256/<2>/<hash>` (`dvc_dat.ledger.remote.blob_name(ledger, h)`). A fetched file is checked against its hash by the ledger, not the remote. ^remote
 
 **bump_source**`(module: str, part: str = "patch", *, confirm=None) -> SourceBump`
     Raises a module's `__version__` by `part` in its source and returns `SourceBump(module, old, new, path, repo, package)`. `module` is a dotted name importable in this process; the version is the innermost on its dotted path, the module's own file then each enclosing package's `__init__.py`, the first holding one line `__version__ = "X.Y.Z"` (so `demo_game.etl`, a mount root declaring its own, finds `demo_game/etl/__init__.py`). One line is rewritten; nothing is committed and no ledger is touched. `minor` and `major` need `confirm(old, new)` to return `True`. A module that does not resolve is `ModuleNotFoundError`; no `__version__` line, or one not `MAJOR.MINOR.PATCH`, is `ValueError`, nothing written. `repo` is the checkout's name, `None` outside one; `package` is the dotted root whose file holds the version, the `<package>` of the `db/repo/<repo>/<package>` clock the next clean run moves. A mount name is reached by its dotted module name, not by `db/mount/<prefix>`. `just bump <module> [part]` is this call. ^bump-source
@@ -578,7 +586,7 @@ A read turns the rows at or before its revision into what they hold, by each pre
 
 | subject | what it holds |
 | --- | --- |
-| `db` | `db/version`, the release, the name of a whole state (`bump(t, "db")`, `L.at("M.m.p")`); `db/tag`, a name for the revision its transaction commits (`t.add("db", "db/tag", "2026-Q4-official")`, `L.at("2026-Q4-official")`): cardinality `many`, never reused (a name added before is `Exists`, nothing written), neither digits, `M.m.p` nor an ISO 8601 timestamp (a tag `2026-11-02` is `ValueError`); `db/format`; `db/timezone`, the IANA zone times print in, any revision may change it, validated when added, on the subject `db` only ([`timezone`](#^timezone)); `db/memo-policy`, the memo policy's name ([Memoization and the platform](#Memoization%20and%20the%20platform)) |
+| `db` | `db/version`, the release, the name of a whole state (`bump(t, "db")`, `L.at("M.m.p")`); `db/tag`, a name for the revision its transaction commits (`t.add("db", "db/tag", "2026-Q4-official")`, `L.at("2026-Q4-official")`): cardinality `many`, never reused (a name added before is `Exists`, nothing written), neither digits, `M.m.p` nor an ISO 8601 timestamp (a tag `2026-11-02` is `ValueError`); `db/format`; `db/timezone`, the IANA zone times print in, any revision may change it, validated when added, on the subject `db` only ([`timezone`](#^timezone)); `db/memo-policy`, the memo policy's name ([Memoization and the platform](#Memoization%20and%20the%20platform)); `db/store`, the value store its values' bytes go to, `local` when absent ([Value stores](#Value%20stores)) |
 | `db/tx/<rev>` | `db/by`, `db/time`, the transaction's keywords |
 | `db/pred/<name>` | `db/cardinality`, `db/index`, `db/type` |
 | `db/code/<16 hex>` | `db/modules` (`relpath -> sha256` of every module the run loaded, a module its caller loaded first included, and every mounted file it read, through the namespace or by opening it), `db/mounts` (the mounts hash when sandboxed, `none` when installed): a snapshot of code, shared by every function in it and every result it made |
@@ -586,7 +594,7 @@ A read turns the rows at or before its revision into what they hold, by each pre
 | `db/repo/<repo>` | `db/commit`, the full commit of the latest clean run of any package in the repo: written by that run's seal, never by a person |
 | `db/repo/<repo>/<package>` | `db/version`, the clock of one versioned package (`plane`, `demo_game.etl`, `geometry`): written by the first clean run at a new `__version__`, never by a person (`bump_source` edits the source) |
 | `db/kind/<dotted>` | `db/moved`: a renamed class |
-| a sealed value's subject | `db/value`, `db/kind`, `db/provenance`, `db/preds`, `db/fn` (the function's dotted name), `db/keys`, `db/returns`, `db/sealed-at`, `db/deps/<item>` ([Value Provenance](#Value%20Provenance)) |
+| a sealed value's subject | `db/value`, `db/kind`, `db/provenance`, `db/preds`, `db/fn` (the function's dotted name), `db/keys`, `db/returns`, `db/sealed-at`, `db/deps/<item>` ([Value Provenance](#Value%20Provenance)); `db/store`, the store its bytes were put on (none: the writer's folder alone) ([Value stores](#Value%20stores)) |
 
 A `(db/pred/<p>, db/index, true)` row builds a partial SQL index on `<p>` in the transaction that commits it. A release is a `bump` of `db`, which moves its `db/version`, and `ledger.at("3.2.0")` reads that moment.
 
@@ -595,6 +603,23 @@ A `(db/pred/<p>, db/index, true)` row builds a partial SQL index on `<p>` in the
 The quads live in one table, `quads(rev, ord, subject, predicate, object, added)`, keyed by `(rev, ord)` and indexed on `(subject, predicate, rev)` and `(predicate, object, rev)`: in `ledger.db` (SQLite, WAL mode) for a folder ledger, in a Postgres schema for a DSN ledger (`pip install 'dvc_dat[pg]'`). The object is a tagged string, `str:`, `json:` or `ref:<class>:<hash>[:<subject>]`, so a row reads without a schema.
 
 The art store holds bytes by sha256 at `sha256/<2>/<hex>`, write-once, so the same bytes are stored once however many subjects point at them. A value's parts enter by `put_path` (a hardlink on the same filesystem, else a streamed copy checked against the hash) and leave by `get_to`. A stored `Dat`'s files and its materialised folder under `art/dats/` share inodes. The ledger's art store and the dat manager's `art/` are separate folders keyed the same way.
+
+### Value stores
+The art store is a folder on the machine that opened the ledger. A **value store** is where the bytes also go, so a value sealed on one machine loads on another (SVP 1511). The ledger names it in one row, `(db, db/store, <name>)`, read at the sealing transaction's snapshot; absent, it is `local`. A name other than `local` and `folder` is a store some code in the process registered (`register_store`): dvc-dat carries no cloud code.
+
+- **Sealing.** A transaction that seals values on a store uploads each new value's parts and encoding (skipping any the remote holds) *before* it takes the write lock, so a large push never holds the ledger's other writers; under `lock=` the lock is already held. A blob a commit leaves behind when it then fails is harmless: write-once, by hash. A failed upload fails the commit, nothing written. The seal adds `(<value subject>, db/store, <name>)`, naming where its bytes went, and the local folder keeps its copy. A sandboxed body never uploads: its seal runs in the parent.
+- **Reading.** A read takes the bytes from the local folder; on a miss it reads the value's own `db/store` row and fetches from that store into the folder, which is so a cache, checked against the hash (`LedgerError` on a failed fetch or a wrong hash). A value with no row is read from the folder alone, as before 1511. A value stored on `azure` loads in a process whose `local` is `gcp`: the row, not the reader, names the store.
+- **`local`** is resolved once per process, first to last: `DAT_STORE_LOCAL` (a registered name, or `folder`); the cloud this machine is a VM of, by a 0.3 s probe of the link-local metadata endpoint (`169.254.169.254`: `gcp` on Compute Engine, `azure` on Azure), when this process registered that name; `stores: {local: <name>}` in the nearest `.datconfig.yaml` (its `.datconfig.override.yaml` winning); else `folder`. With no store registered, `local` is `folder` and nothing is probed.
+- **`folder`** is the built-in store: the ledger's own art folder alone, nothing uploaded, no per-value row.
+
+```python
+from dvc_dat.ledger import register_store
+# GcsRemote: your Remote
+register_store("gcp",
+               lambda ledger: GcsRemote("gs://data", ledger))
+with L.transaction(by="dan") as t:
+    t.add("db", "db/store", "gcp")
+```
 
 
 ## Many ledgers
