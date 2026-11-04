@@ -14,7 +14,7 @@ every value stored by its content. The dat half is the package
   `DatContainer`, `Namespace`; specs, sealing, standing, the manager.
 - [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md): `Ledger`, `Rev`,
   `Ref`, `Transaction`, `Value`, `Fn`; the fold, sealing and saving,
-  the fence, evaluation and the dependencies.
+  the sandbox, evaluation and the dependencies.
 
 ![The dat and the ledger](DAT%20Architecture.svg) 
 

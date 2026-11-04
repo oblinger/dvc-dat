@@ -1,6 +1,6 @@
-"""Fence mode: a function under a ``db/mount/<prefix>`` row, loaded from the mounted tree, run in a process of its own.
+"""Sandbox mode: a function under a ``db/mount/<prefix>`` row, loaded from the mounted tree, run in a process of its own.
 
-Parent side (``load_fenced``, ``run_fenced``): the name resolves through
+Parent side (``load_sandboxed``, ``run_sandboxed``): the name resolves through
 the mounts as of the rev to a file under ``<checkout>/<db/root>``, the checkout
 being what discovery reports for the mount's ``db/repo`` (A40); no checkout is
 ``NotEvaluated`` naming the repo. A miss runs at HEAD, clean or dirty (Q39 (A));
@@ -34,10 +34,10 @@ store) run ``unguarded``. The same hook refuses a host-name lookup or an interne
 send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
 And it refuses process creation (``ConfinedProcess``: ``subprocess``, ``os.system``,
 ``os.exec*``, ``os.posix_spawn``, ``os.fork``), whose reads and writes it could not see; a body
-that needs a tool runs resident (base mode). The worker's own fork happens in the server, outside the guard.
+that needs a tool runs unsandboxed (base mode). The worker's own fork happens in the server, outside the guard.
 A nested eval under the running body's own mount runs in-process and its loads count toward its own
 entry (Q37 (ii)); one under another mount runs in a fresh child of the server, asked for up the child's
-channel. A nested resident (base-mode) call is refused, ``NotEvaluated`` naming the mount and the
+channel. A nested unsandboxed (base-mode) call is refused, ``NotEvaluated`` naming the mount and the
 function. An in-process nested eval's code includes a module its
 caller loaded first: the worker's ``__import__`` credits every import a body makes, loaded
 already or not, with what that module's first import pulled in.
@@ -270,7 +270,7 @@ def closure(mounts: List[Mount], start: List[str]) -> Dict[str, Tuple[Mount, Pat
 
 
 def static_closure(root: Path, start: str, within: Path) -> Dict[str, Path]:
-    """Resident (Q37 (iii)): every module under ``within`` reachable from ``start`` by import statements,
+    """Unsandboxed (Q37 (iii)): every module under ``within`` reachable from ``start`` by import statements,
     resolving a dotted name under ``root`` (the ``sys.path`` entry the start module was imported from)."""
     within = Path(os.path.realpath(within))
     seen: Dict[str, Path] = {}
@@ -290,7 +290,7 @@ def static_closure(root: Path, start: str, within: Path) -> Dict[str, Path]:
 
 def module_shas(mods: Dict[str, Tuple[Mount, Path]]) -> Dict[str, str]:
     """``relpath -> sha256`` of mounted modules, the bytes on disk: what a run reads, what a lookup
-    compares (a fenced entry is its modules' bytes, whatever commit a rev names, Q39)."""
+    compares (a sandboxed entry is its modules' bytes, whatever commit a rev names, Q39)."""
     out = {}
     for _d, (m, path) in mods.items():
         rel = path.relative_to(m.checkout).as_posix()
@@ -432,7 +432,7 @@ def _signature(fdef: ast.FunctionDef, name: str,
     return inspect.Signature(keep), folder is not None, template, returns, _decorated(fdef, marks)
 
 
-def load_fenced(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Fn:
+def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Fn:
     plain = rev._plain()
     env = current_env()
     repo = info.get("repo")
@@ -447,7 +447,7 @@ def load_fenced(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Fn:
     f = m.file_of(modname)
     if f is None:
         raise ImportError(f"{name!r}: no module {modname!r} under {m.path}")
-    with unguarded():                               # the ledger's own reads, also inside a fenced body
+    with unguarded():                               # the ledger's own reads, also inside a sandboxed body
         tree = ast.parse(f[0].read_text())
         fdef = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == attr_name), None)
         if fdef is None:
@@ -495,7 +495,7 @@ def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str,
 
     files = dict(mods)
     parts = modname.split(".")
-    with unguarded():                       # the ledger's own reads, also inside a fenced body
+    with unguarded():                       # the ledger's own reads, also inside a sandboxed body
         for i in range(len(m.prefix.split(".")), len(parts)):
             f = m.file_of(".".join(parts[:i]))
             if f is not None and f[1]:
@@ -510,7 +510,7 @@ def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str,
     mounts = {p: {"repo": r["repo"], "root": r["root"]} for p, r in mounts_at(plain).items() if "repo" in r}
     return Code({"modules": files, "mounts_hash": mh, "mounts": mounts,
                  "commit": co.commit if co is not None else None,
-                 "lock": lock, "fenced": True, "version": version,
+                 "lock": lock, "sandboxed": True, "version": version,
                  "package": m.prefix if attr is not None and version == str(attr) else None}, unit=m.prefix)
 
 
@@ -537,7 +537,7 @@ def import_version(prefix: str) -> Optional[str]:
     return None if v is None else str(v)
 
 
-def fence_code_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Optional[str]:
+def sandbox_code_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Optional[str]:
     """The ``code`` subject the recorded modules hash to at ``rev`` (memo only: nothing loads or runs)."""
     plain = rev._plain()
     env = current_env()
@@ -552,7 +552,7 @@ def fence_code_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Optional[st
     return "db/code/" + identity_hash(now, mounts_hash(plain))[:16]
 
 
-def run_fenced(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
+def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
                   name: Optional[str] = None) -> Any:
     """A miss: at HEAD, clean or dirty (Q39 (A)); the ``code`` item records the bytes it loaded.
 
@@ -704,7 +704,7 @@ def unguarded() -> Iterator[None]:
 def _importer() -> str:
     for fr in inspect.stack()[2:]:
         name = fr.frame.f_globals.get("__name__", "")
-        if not name.startswith(("importlib", "dvc_dat.ledger.fence")) and name != "<frozen importlib._bootstrap>":
+        if not name.startswith(("importlib", "dvc_dat.ledger.sandbox")) and name != "<frozen importlib._bootstrap>":
             return name
     return "?"
 
@@ -821,13 +821,13 @@ def _network(event: str, args: Any) -> None:
         if isinstance(host, bytes):
             host = host.decode(errors="replace")
         if host is not None and host not in STATE.hosts and not any(host == a for a, _p in STATE.addrs):
-            raise ConfinedNetwork(f"{host}: a fenced function does not use the network")
+            raise ConfinedNetwork(f"{host}: a sandboxed function does not use the network")
         return
     sock, addr = args[0], args[1]
     if getattr(sock, "family", None) not in (socket.AF_INET, socket.AF_INET6) or not isinstance(addr, tuple):
         return                                      # a local (AF_UNIX) socket is not the network
     if (str(addr[0]), int(addr[1])) not in STATE.addrs:
-        raise ConfinedNetwork(f"{addr[0]}:{addr[1]}: a fenced function does not use the network")
+        raise ConfinedNetwork(f"{addr[0]}:{addr[1]}: a sandboxed function does not use the network")
 
 
 # process creation: what a child reads and writes is beyond this hook (1467 Q8 (A)). The worker's own fork is the
@@ -871,7 +871,7 @@ def _resolve(path: Any, dir_fd: Any = None) -> Optional[str]:
     if isinstance(dir_fd, int) and dir_fd >= 0 and not os.path.isabs(text):
         base = _fd_path(dir_fd)
         if base is None:
-            raise ConfinedWrite(f"{text} under descriptor {dir_fd}: a fenced function writes only in its "
+            raise ConfinedWrite(f"{text} under descriptor {dir_fd}: a sandboxed function writes only in its "
                                 "path folder")
         text = os.path.join(base, text)
     return os.path.realpath(text)
@@ -884,15 +884,15 @@ def _writable() -> List[str]:
 
 def _check_write(p: Optional[str]) -> None:
     if p is not None and not _under(p, _writable()):
-        raise ConfinedWrite(f"{p}: a fenced function writes only in its path folder")
+        raise ConfinedWrite(f"{p}: a sandboxed function writes only in its path folder")
 
 
 def _audit(event: str, args: Any) -> None:
     if not STATE.guard:
         return
     if event in _PROCESS:
-        raise ConfinedProcess(f"{event}: a fenced function creates no process; one that needs a tool runs "
-                              "resident")
+        raise ConfinedProcess(f"{event}: a sandboxed function creates no process; one that needs a tool runs "
+                              "unsandboxed")
     if event in _NET_NAME or event in _NET_SEND:
         _network(event, args)
         return
@@ -939,7 +939,7 @@ def _note_open(p: str, caller: Any) -> None:
         note_read(checkout, Path(p))
 
 
-# -- base mode: a resident body's repo reads (Eval § 5.3) -----------------------------------------
+# -- base mode: an unsandboxed body's repo reads (Eval § 5.3) -----------------------------------------
 
 class _BaseGuards(threading.local):
     def __init__(self) -> None:
@@ -953,7 +953,7 @@ _SOURCE_READERS = ("linecache", "tokenize", "traceback", "inspect")
 
 @contextmanager
 def base_confined(repo: Optional[Path], allowed: List[Any]) -> Iterator[None]:
-    """While a resident body runs (in this thread): a file of its repo checkout ``repo`` opened to
+    """While an unsandboxed body runs (in this thread): a file of its repo checkout ``repo`` opened to
     read, outside ``allowed`` (the dats, the art store, the ledger, the body's path folder) and the
     interpreter's folders, is ``UntracedRead`` (Eval § 5.3); the ``code/<repo>`` commit vouches for the
     code it imports, not for a config it opens. The import system and the ledger's own machinery read
@@ -999,7 +999,7 @@ def _base_audit(event: str, args: Any) -> None:
         if file.startswith("<") or not _under(os.path.realpath(file), _BASE.stack[-1][1]):
             break                                   # the body's own code (a library passes it on)
         f = f.f_back
-    raise UntracedRead(f"{p}: a resident function reads a file of its repo outside the dats; mount the "
+    raise UntracedRead(f"{p}: an unsandboxed function reads a file of its repo outside the dats; mount the "
                        "function (its reads are then traced by their bytes) or read it through the ledger")
 
 
@@ -1044,7 +1044,7 @@ def _os_open(path: Any, flags: int, mode: int = 0o777, *, dir_fd: Optional[int] 
         return _REAL_OS_OPEN(text, flags, mode)
     base = _fd_path(dir_fd)
     if base is None:
-        raise ConfinedWrite(f"{text} under descriptor {dir_fd}: a fenced function opens a path only by "
+        raise ConfinedWrite(f"{text} under descriptor {dir_fd}: a sandboxed function opens a path only by "
                             "a descriptor naming a folder")
     return _REAL_OS_OPEN(os.path.join(base, text), flags, mode)
 
@@ -1201,7 +1201,7 @@ def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], frame: _Frame, mounts:
                value: Any, work: Optional[Path]) -> Any:
     """A run's code (the modules it loaded and the mounted files it read, beside ``fn``'s), its trace, and
     the result: a draft carrying its ``RunTrace`` (``save`` False) or the memo entry, provenance
-    ``eval:fenced``."""
+    ``eval:sandbox``."""
     loaded = frame.loaded
     mounted = sorted(n for n in loaded if _mount_of(mounts, n) is not None)
     mods = module_shas(closure(mounts, [fn._info["modname"], *mounted]))
@@ -1213,10 +1213,10 @@ def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], frame: _Frame, mounts:
     if salt is not None:
         trace["salt"] = salt
     if save is False:
-        attach_run(value, run_trace(fn, plain, trace, enc, "eval:fenced", ran))
+        attach_run(value, run_trace(fn, plain, trace, enc, "eval:sandbox", ran))
         drop_work(work, value)
         return value
-    sealed = seal_entry(fn, plain, value, trace, enc, "eval:fenced", ran, into=save, name=name)
+    sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", ran, into=save, name=name)
     drop_work(work, sealed)
     return sealed
 
@@ -1485,7 +1485,7 @@ def _fork_call(req: Dict[str, Any]) -> Dict[str, Any]:
     _pid, status = os.waitpid(pid, 0)
     if resp is None:
         resp = {"ok": False, "exc": None, "type": "WorkerDied",
-                "message": f"the fenced call's process ended (exit code "
+                "message": f"the sandboxed call's process ended (exit code "
                            f"{os.waitstatus_to_exitcode(status)}) before it replied",
                 "traceback": ""}
     return resp

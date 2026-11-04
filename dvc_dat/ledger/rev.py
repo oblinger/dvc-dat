@@ -626,13 +626,13 @@ class Rev:
         ``Fn`` called with ``kwargs`` as its keys. A spec, a spec's name or a dat's run function's name
         (the spec ``{dat: {do: <name>}}``): a dat, ``kwargs`` merged into its ``dat.kwargs``; the memo key
         is the spec with ``dat.base`` merged, ``dat.kind`` set, every ``{}`` expanded and ``dat.name``
-        removed; a miss creates the dat in a work folder and runs it there, in the fence worker when its
-        run function is mounted (provenance ``eval:fenced``), here when installed (``eval:resident``,
+        removed; a miss creates the dat in a work folder and runs it there, in the sandbox worker when its
+        run function is mounted (provenance ``eval:sandbox``), here when installed (``eval:unsandboxed``,
         a clean checkout to save). ``seal``, ``clean``, ``path`` and ``deterministic`` as ``Fn.__call__``'s; a dat's name is
         ``path=``, else its ``dat.name`` template, else ``anonymous/Dat{unique}``."""
-        from .fence import unguarded
+        from .sandbox import unguarded
 
-        with unguarded():                          # in a fenced body: the lookup and seal are the ledger's
+        with unguarded():                          # in a sandboxed body: the lookup and seal are the ledger's
             from .rundat import run
 
             return run(self, target, seal=seal, clean=clean, path=path, kwargs=kwargs, deterministic=deterministic)

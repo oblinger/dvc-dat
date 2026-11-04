@@ -10,9 +10,9 @@ class Multiple(LedgerError, LookupError):
 
 
 class NotEvaluated(LedgerError, RuntimeError):
-    """A call this environment will not run: its repo has no checkout here, or (resident, a
-    miss) its code is outside any git checkout or the checkout is dirty; or it is resident and called
-    inside a fenced body."""
+    """A call this environment will not run: its repo has no checkout here, or (unsandboxed, a
+    miss) its code is outside any git checkout or the checkout is dirty; or it is unsandboxed and called
+    inside a sandboxed body."""
 
 
 class NotClean(NotEvaluated):
@@ -21,26 +21,26 @@ class NotClean(NotEvaluated):
 
 
 class UnmountedImport(LedgerError, ImportError):
-    """A fenced function imported a module of a mounted repo outside that repo's mounts."""
+    """A sandboxed function imported a module of a mounted repo outside that repo's mounts."""
 
 
 class UntracedRead(LedgerError, PermissionError):
-    """A fenced function read a path outside the mounts, the dats and its path folder; or a resident
+    """A sandboxed function read a path outside the mounts, the dats and its path folder; or an unsandboxed
     one read a file of its repo outside the dats (Eval § 5.3)."""
 
 
 class ConfinedWrite(LedgerError, PermissionError):
-    """A fenced function wrote outside its path folder, the dat being produced."""
+    """A sandboxed function wrote outside its path folder, the dat being produced."""
 
 
 class ConfinedNetwork(LedgerError, PermissionError):
-    """A fenced function resolved a host name or opened a network connection."""
+    """A sandboxed function resolved a host name or opened a network connection."""
 
 
 class ConfinedProcess(LedgerError, PermissionError):
-    """A fenced function created a process (``subprocess``, ``os.system``, ``os.exec*``, ``os.posix_spawn``,
+    """A sandboxed function created a process (``subprocess``, ``os.system``, ``os.exec*``, ``os.posix_spawn``,
     ``os.fork``): what a child process reads and writes is beyond the audit hook. A body that needs a tool runs
-    resident (base mode) (SVP 1467 Q8 (A))."""
+    unsandboxed (base mode) (SVP 1467 Q8 (A))."""
 
 
 class LockTimeout(LedgerError, TimeoutError):

@@ -66,7 +66,7 @@ def test_numbers_coerced_and_eval_provenance_refused(L):
     v = Video(b"f")
     v.preds.update(game=5)
     with pytest.raises(ValueError):
-        seal(L, v, provenance="eval:resident")
+        seal(L, v, provenance="eval:unsandboxed")
     seal(L, v, provenance="import:x")
     assert L.at()[v.subject, "game"] == "5" and L.at()[v.subject, "db/provenance"] == "import:x"
 

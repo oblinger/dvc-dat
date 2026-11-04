@@ -52,7 +52,7 @@ def test_sealed_is_local_and_off_the_ledger(world):
 def test_saved_to_the_ledger_hits_and_the_default_is_the_fns_ledger(world):
     a = fn(world)(seal=world, **KEYS)
     assert a.subject and entry_rows(world, a.subject) == ("ledger_kinds.cut", {"game": "G1", "version": "1.0.0"},
-                                                         "eval:resident")
+                                                         "eval:unsandboxed")
     b = fn(world)(**KEYS)
     assert b.subject == a.subject and CALLS["cut"] == 1
 
@@ -83,7 +83,7 @@ def test_a_draft_sealed_later_to_the_ledger_is_the_memo_entry(world):
     d = fn(world)(seal=False, **KEYS)
     s = d.seal(world)
     assert s == d.subject and entry_rows(world, s)[0] == "ledger_kinds.cut"
-    assert world.at()[s, "db/provenance"] == "eval:resident"
+    assert world.at()[s, "db/provenance"] == "eval:unsandboxed"
     assert "ledger_kinds.py" in world.at()[d.dependencies["code"], "db/modules"]
     assert fn(world)(**KEYS).subject == s and CALLS["cut"] == 1    # a hit
     assert fn(world)(seal="get", **KEYS).subject == s

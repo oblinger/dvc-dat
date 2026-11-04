@@ -2239,7 +2239,7 @@ class Dat(Value, metaclass=_DatMeta):
         placed by `store.get_to` (hardlinks on the same filesystem); a named folder holding other
         content is replaced by a new folder, never edited in place."""
         from .ledger.codec import sha256
-        from .ledger.fence import unguarded     # the store's own write, also inside a fenced body
+        from .ledger.sandbox import unguarded     # the store's own write, also inside a sandboxed body
 
         manifest = json.loads(data.decode())
         files: Dict[str, str] = manifest["files"]

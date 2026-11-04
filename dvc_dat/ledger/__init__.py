@@ -3,8 +3,8 @@
 One logical store: every fact is a quad ``(rev, subject, predicate, object)``;
 every read is a function of a ``Rev``; every write is a ``Transaction``;
 everything held or handed back is a ``Value``; a sealed computation is a memo
-entry findable by ``Rev.run``. SQLite backend; ``run`` resident (in this
-process) or fenced (under a ``db/mount/<prefix>``, in a worker).
+entry findable by ``Rev.run``. SQLite backend; ``run`` unsandboxed (in this
+process) or sandboxed (under a ``db/mount/<prefix>``, in a worker).
 
     from dvc_dat.ledger import Ledger, Ref, ledger_fn, ledger_class, bump, bump_source, attr
     from dvc_dat import L, ledgers       # L: the active ledger; ledgers.record: one by name
