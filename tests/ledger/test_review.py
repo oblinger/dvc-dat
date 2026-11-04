@@ -127,8 +127,8 @@ def test_8_base_fn_hashes_the_static_closure(coded):
 
 
 def test_9_salt_item_is_named_salt():
-    """Covered with a real mount in test_fence.test_salt_item (needs a worker)."""
-    from test_fence import test_salt_item  # noqa: F401
+    """Covered with a real mount in test_sandbox.test_salt_item (needs a worker)."""
+    from test_sandbox import test_salt_item  # noqa: F401
 
 
 def test_10_refs_equal_by_subject_not_bytes(L):

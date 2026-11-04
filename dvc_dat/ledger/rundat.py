@@ -14,7 +14,7 @@ value), and ``dat.name`` removed (the folder template is not part of the key, it
 names the result, filled with the same variables). The
 run function named by ``dat.do`` resolves to an ``Fn`` of kind ``"dat"``, called
 with the memo key as its keys; ``Fn.__call__`` does the rest, as for any ledger
-function: the lookup, and on a miss the run (in the fence worker when the run
+function: the lookup, and on a miss the run (in the sandbox worker when the run
 function is mounted, in this process when installed), the seal and the place.
 ``db/fn`` is the run function's dotted name, ``db/keys`` the memo key,
 ``db/returns`` the dat's class.

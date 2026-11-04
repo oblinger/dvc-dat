@@ -3,8 +3,8 @@
 ``@ledger_fn`` declares and returns the function unchanged (A52): a plain call
 runs the body and returns an unsealed ``Value``, recording nothing.
 ``rev.ns.load(name)`` resolves a dotted name at a revision; a function comes
-back an ``Fn``: under a mounted prefix (``db/mount/<prefix>`` rows) a fenced
-function, read off the mounted file and run in a worker (``fence``);
+back an ``Fn``: under a mounted prefix (``db/mount/<prefix>`` rows) a sandboxed
+function, read off the mounted file and run in a worker (``sandbox``);
 otherwise an installed one, resolved in this process. Its ``kind`` is
 ``"ledger"`` for a ``@ledger_fn`` (its keys are its memo key and it receives
 them) and ``"dat"`` for an undecorated function, a dat's run function (its memo
@@ -16,7 +16,7 @@ candidate's dependencies matched against the rev, the latest-sealed match winnin
 says (DAT 1028): ``"get"`` never runs; ``False`` keeps nothing; ``True`` seals it
 locally; a ``Ledger`` (the default: the fn's own) or an open ``Transaction`` saves
 it as the memo entry, ``db/fn``, ``db/keys`` and ``db/provenance
-eval:resident|eval:fenced``. Every run attaches its trace to the result
+eval:unsandboxed|eval:sandbox``. Every run attaches its trace to the result
 (``RunTrace``, ``v.__dict__["_run"]``), so a draft sealed later with ``v.seal(L)``
 or ``v.seal(t)`` becomes the same memo entry.
 """
@@ -77,8 +77,8 @@ class RunTrace:
 
     ``trace`` is the dependencies (``code``, ``fn``, platform, ``code/<repo>``, every read); ``code_rows``
     the ``db/code/<hash 16>`` item's rows; ``repo`` and ``dirty`` the checkout that vouches for an
-    resident run (``repo`` ``None`` outside any), for the code check at a late save. ``clock`` is
-    ``(repo, package, version, commit)`` of the code that ran, fenced or not, for the
+    unsandboxed run (``repo`` ``None`` outside any), for the code check at a late save. ``clock`` is
+    ``(repo, package, version, commit)`` of the code that ran, sandboxed or not, for the
     ``db/repo/<repo>/<package> db/version`` and ``db/repo/<repo> db/commit`` a seal advances (DAT 1043, 1044);
     ``None`` outside any checkout or when the code declares no version."""
 
@@ -89,7 +89,7 @@ class RunTrace:
     code_subject: str
     code_rows: Tuple[Tuple[str, str], ...]
     ledger: str
-    fenced: bool
+    sandboxed: bool
     repo: Optional[str] = None
     dirty: bool = False
     returns: str = ""
@@ -112,9 +112,9 @@ class RunTrace:
 
 def clock_of(fn: "Fn", code: Code) -> Optional[Tuple[str, str, str, str]]:
     """``(repo, package, version, commit)`` of ``code`` as ``fn`` ran it: the repo its checkout is (the
-    mount's for fenced code), the package whose declared version it is (``code.package``), that version
+    mount's for sandboxed code), the package whose declared version it is (``code.package``), that version
     and the checkout's commit at load; ``None`` outside any checkout or with no declared version."""
-    repo = fn._info.get("repo") if fn.code.fenced else repo_of(fn.env, fn.module)
+    repo = fn._info.get("repo") if fn.code.sandboxed else repo_of(fn.env, fn.module)
     if not repo or not code.commit or code.package is None:
         return None
     return (repo, code.package, code.version, code.commit)
@@ -122,9 +122,9 @@ def clock_of(fn: "Fn", code: Code) -> Optional[Tuple[str, str, str, str]]:
 
 def run_trace(fn: "Fn", plain: "Rev", trace: Dict[str, str], enc: str, provenance: str,
               code: Code, repo: Optional[str] = None, dirty: bool = False) -> RunTrace:
-    """``code`` is what ran: ``fn.code``, with a fenced run's run-time loads beside its own."""
+    """``code`` is what ran: ``fn.code``, with a sandboxed run's run-time loads beside its own."""
     return RunTrace(name=fn.name, enc=enc, trace=dict(trace), provenance=provenance, code_subject=code.subject,
-                    code_rows=tuple(code._rows()), ledger=ledger_key(plain.ledger), fenced=fn.code.fenced,
+                    code_rows=tuple(code._rows()), ledger=ledger_key(plain.ledger), sandboxed=fn.code.sandboxed,
                     repo=repo, dirty=dirty, returns=fn._returns, clock=clock_of(fn, code))
 
 
@@ -137,9 +137,9 @@ def attach_run(value: Value, run: RunTrace) -> Value:
 
 
 def check_late_code(run: RunTrace, env: Env) -> None:
-    """A late save of a resident run (DAT 1028): the code that ran is vouched for by a clean
+    """A late save of an unsandboxed run (DAT 1028): the code that ran is vouched for by a clean
     checkout at the commit the trace names, as a memoised run's ``_check_code``; ``NotEvaluated``."""
-    if run.fenced:
+    if run.sandboxed:
         return                              # the code item records the bytes it loaded
     if run.repo is None:
         raise NotEvaluated(f"{run.name}: its code is outside any git checkout, so no commit can vouch "
@@ -384,7 +384,7 @@ def source_of(name: str, obj: Any) -> Tuple[str, Path]:
 def _closure_files(modname: str, src: Path, env: Env) -> Tuple[Path, Path, List[Path]]:
     """The installed function's static import closure (Q37 (iii)): ``(root, within, files)``, ``root`` the
     ``sys.path`` entry its top-level package sits in, ``within`` its checkout (else ``root``)."""
-    from .fence import static_closure
+    from .sandbox import static_closure
 
     parts = modname.split(".")
     root = src.parent if src.name != "__init__.py" else src.parent.parent
@@ -400,11 +400,11 @@ def installed_code(modname: str, src: Path, env: Env) -> Code:
     """An installed function's ``Code`` (DAT 1037): its top-level package at the version its environment
     carries; ``modules`` the static import closure within its checkout (Q37 (iii)), relative to the
     top-level package's parent, each by its sha256 (outside any checkout, the module file alone); never
-    fenced, no mounts."""
+    sandboxed, no mounts."""
     from .code import declared_version, identity_hash, installed_version, lock_of
-    from .fence import unguarded
+    from .sandbox import unguarded
 
-    with unguarded():                       # the ledger's own reads, also inside a fenced body
+    with unguarded():                       # the ledger's own reads, also inside a sandboxed body
         root, _within, files = _closure_files(modname, src, env)
         real = os.path.realpath(root)
         modules = {os.path.relpath(os.path.realpath(f), real).replace(os.sep, "/"): sha256(f.read_bytes())
@@ -418,7 +418,7 @@ def installed_code(modname: str, src: Path, env: Env) -> Code:
         lock = lock_of(co.path) if co is not None else None
     return Code({"modules": modules, "mounts_hash": None, "mounts": {},
                  "commit": co.commit if co is not None else None,
-                 "lock": lock, "fenced": False, "version": version,
+                 "lock": lock, "sandboxed": False, "version": version,
                  "package": top if declared else None}, unit=top)
 
 
@@ -484,7 +484,7 @@ class Fn:
         or ``v.seal(t)`` of a ``False``/``True`` result writes the same memo entry.
         ``clean=True``: the code must be a clean representation of a version,
         the checkout clean and at the commit the rev's ``db/repo/<repo> db/commit`` row names, else ``NotClean``
-        (Q39), before any lookup; ``False`` (default): a fenced call runs at HEAD, clean or dirty.
+        (Q39), before any lookup; ``False`` (default): a sandboxed call runs at HEAD, clean or dirty.
         ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder
         there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
         (Q36). A hit asked for under a new name takes that name. ``kwargs``: the function's whole key
@@ -493,12 +493,12 @@ class Fn:
         on top of the ledger's memo policy (SVP 1474); the entry written is the same either way."""
         from .txn import Transaction
 
-        if not self.code.fenced:
-            from . import fence
+        if not self.code.sandboxed:
+            from . import sandbox
 
-            if fence.IN_WORKER and fence.STATE.frames:
-                raise NotEvaluated(f"{self.name} is resident (under no mount): it does not run nested inside "
-                                   f"the fenced body of mount {fence.STATE.frames[-1].mount!r}; mount it")
+            if sandbox.IN_WORKER and sandbox.STATE.frames:
+                raise NotEvaluated(f"{self.name} is unsandboxed (under no mount): it does not run nested inside "
+                                   f"the sandboxed body of mount {sandbox.STATE.frames[-1].mount!r}; mount it")
         rev = self._rev
         plain = rev._plain()
         level = seal_level(self.name, plain, seal, clean, path)
@@ -530,10 +530,10 @@ class Fn:
         if into is not None and target is not None and name is None:
             raise ValueError(f"{self.name}: path={target!r} is absolute; with seal=t the result is saved at "
                              "commit, so it takes a name (a relative path) or none")
-        if self.code.fenced:
-            from .fence import run_fenced
+        if self.code.sandboxed:
+            from .sandbox import run_sandboxed
 
-            value = run_fenced(self, plain, kw, enc, save, name)
+            value = run_sandboxed(self, plain, kw, enc, save, name)
         else:
             value = self._run_base(plain, kw, enc, save, name)
         if level is True:
@@ -557,10 +557,10 @@ class Fn:
 
     def _function(self) -> Callable:
         """The function itself, for a plain ``Dat.ns`` run (nothing memoised): installed, the object;
-        mounted, imported in this process through the mounts as of ``_rev`` (``fence.import_mounted``)."""
+        mounted, imported in this process through the mounts as of ``_rev`` (``sandbox.import_mounted``)."""
         if self._obj is not None:
             return self._obj
-        from .fence import import_mounted
+        from .sandbox import import_mounted
 
         return import_mounted(self)
 
@@ -580,7 +580,7 @@ class Fn:
         """Run in this process. ``save``: ``False``, a draft carrying its ``RunTrace``; ``True``, the
         memo entry in a transaction of its own; a ``Transaction``, the memo entry in it (named ``name``)."""
         from .rev import Rev
-        from .fence import base_confined
+        from .sandbox import base_confined
         from .txn import code_token
 
         env = current_env()
@@ -603,9 +603,9 @@ class Fn:
                 trace[f"code/{repo}"] = code_token(env.code[repo].commit)
             if save is False:
                 dirty = bool(repo is not None and env.code[repo].dirty)
-                return attach_run(value, run_trace(self, plain, trace, enc, "eval:resident", self.code,
+                return attach_run(value, run_trace(self, plain, trace, enc, "eval:unsandboxed", self.code,
                                                    repo=repo, dirty=dirty))
-            value = seal_entry(self, plain, value, trace, enc, "eval:resident", self.code, into=save,
+            value = seal_entry(self, plain, value, trace, enc, "eval:unsandboxed", self.code, into=save,
                                name=name, repo=repo)
             return value
         finally:
@@ -615,7 +615,7 @@ class Fn:
                  env: Env, repo: Optional[str]) -> Value:
         """A dat's run function, run here (``_run_base``): the dat made from the spec in a work folder and
         run (``manager._execute``), its recorded dependencies that are ledger names entered as alias reads."""
-        from .fence import base_confined
+        from .sandbox import base_confined
         from .txn import code_token
 
         rec: Dict[str, str] = {}
@@ -634,10 +634,10 @@ class Fn:
                 trace[f"code/{repo}"] = code_token(env.code[repo].commit if repo in env.code else None)
             if save is False:
                 dirty = bool(repo is not None and repo in env.code and env.code[repo].dirty)
-                value = attach_run(dat, run_trace(self, plain, trace, enc, "eval:resident", self.code,
+                value = attach_run(dat, run_trace(self, plain, trace, enc, "eval:unsandboxed", self.code,
                                                   repo=repo, dirty=dirty))
             else:
-                value = seal_entry(self, plain, dat, trace, enc, "eval:resident", self.code, into=save,
+                value = seal_entry(self, plain, dat, trace, enc, "eval:unsandboxed", self.code, into=save,
                                    name=name, repo=repo)
         finally:
             drop_work(work, value)
@@ -647,13 +647,13 @@ class Fn:
 
 
 def _checkout(env: Env, repo: Optional[str]) -> Optional[Path]:
-    """The checkout a resident body's repo is, for its open hook (``None``: none, nothing checked)."""
+    """The checkout an unsandboxed body's repo is, for its open hook (``None``: none, nothing checked)."""
     co = env.code.get(repo) if repo else None
     return co.path if co is not None else None
 
 
 def _dats(plain: "Rev", work: Optional[Path]) -> List[Any]:
-    """Where a resident body may read inside its repo (Eval § 5.3): the dats (the dat world's folders
+    """Where an unsandboxed body may read inside its repo (Eval § 5.3): the dats (the dat world's folders
     and art folder, the ledger's art store), the ledger's own folder, and the body's path folder."""
     from .pgstore import is_dsn
 
@@ -724,7 +724,7 @@ def seal_level(name: str, plain: "Rev", seal: Any, clean: Any, path: Any) -> Any
 
 def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
     """``clean=True`` (Q39): the checkout clean and at the commit ``plain``'s ``db/repo/<repo> db/commit`` row names."""
-    repo = fn._info.get("repo") if fn.code.fenced else repo_of(env, fn.module)
+    repo = fn._info.get("repo") if fn.code.sandboxed else repo_of(env, fn.module)
     code = env.code.get(repo) if repo else None
     if code is None:
         raise NotClean(f"{fn.name}: clean=True, and its code ({fn.module}) is in no git checkout here")
@@ -877,12 +877,12 @@ def code_holds(rev: "Rev", subject: str, name: Optional[str]) -> bool:
     mods = top._held(subject, "db/modules")
     if not mounts or not mods:
         return False
-    if show(mounts[0].obj) != "none":           # a mounts hash: fenced
-        from .fence import fence_code_at
+    if show(mounts[0].obj) != "none":           # a mounts hash: sandboxed
+        from .sandbox import sandbox_code_at
 
         if not name.startswith(MNT + "."):
             return False
-        return fence_code_at(rev, name[len(MNT) + 1:], json.loads(show(mods[0].obj))) == subject
+        return sandbox_code_at(rev, name[len(MNT) + 1:], json.loads(show(mods[0].obj))) == subject
     try:
         modname, src = source_of(name, resolve_in_process(name))
         return installed_code(modname, src, current_env()).subject == subject

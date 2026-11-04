@@ -1,4 +1,4 @@
-"""Fence mode: a mounted package in a real tiny git checkout, run in a worker (discovery, no stand-in)."""
+"""Sandbox mode: a mounted package in a real tiny git checkout, run in a worker (discovery, no stand-in)."""
 
 import subprocess
 import sys
@@ -9,9 +9,9 @@ import pytest
 
 from dvc_dat.ledger import (ConfinedNetwork, ConfinedProcess, ConfinedWrite, LedgerError, NotClean, NotEvaluated, UnmountedImport,
                              UntracedRead, set_env_provider)
-from dvc_dat.ledger import fence
+from dvc_dat.ledger import sandbox
 from dvc_dat.ledger.codec import sha256
-from dvc_dat.ledger.fence import _ledger_endpoints, shutdown
+from dvc_dat.ledger.sandbox import _ledger_endpoints, shutdown
 
 PKG = {
     "pyproject.toml": '[project]\nname = "sbx-repo"\nversion = "0.1.0"\n',
@@ -68,7 +68,7 @@ PKG = {
             dat.save()
 
         def scribble(dat, n=1):
-            Path("/tmp/ledger-fence-dat-scribble.txt").write_text("x")
+            Path("/tmp/ledger-sandbox-dat-scribble.txt").write_text("x")
             dat.save()
 
         def names(dat):
@@ -215,7 +215,7 @@ PKG = {
 
         @ledger_fn
         def scribble(rev, *, game: str) -> dict:
-            Path("/tmp/ledger-fence-scribble.txt").write_text("x")
+            Path("/tmp/ledger-sandbox-scribble.txt").write_text("x")
             return {}
     '''),
     "sbx/stage/writes.py": textwrap.dedent('''
@@ -449,13 +449,13 @@ def sbx(tmp_path, monkeypatch, backend):
 def test_a_mnt_name_resolves_through_the_mount(sbx):
     L, repo = sbx
     f = L.at().ns.load("mnt.sbx.stage.fns.count")
-    assert f.code.fenced and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
+    assert f.code.sandboxed and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
 
 
 def test_the_bare_name_imports_and_never_touches_the_mount(sbx):
     L, _repo = sbx
     f = L.at().ns.load("sbx.stage.fns.count")                 # sbx is importable here: installed
-    assert not f.code.fenced and f.mount is None and f.name == "sbx.stage.fns.count"
+    assert not f.code.sandboxed and f.mount is None and f.name == "sbx.stage.fns.count"
     with pytest.raises(ImportError, match="flatpkg"):          # mounted, not installed: the import's own error
         L.at().ns.load("flatpkg.calc.area")
     assert L.at().ns.load("mnt.flatpkg.calc.area").mount == "flatpkg"
@@ -472,12 +472,12 @@ def test_a_mounted_fns_name_starts_mnt_and_loads_back(sbx):
     assert v.dependencies["fn"] == f.name and L.at()[v.subject, "db/fn"] == f.name
 
 
-def test_fenced_eval_seals_records_loaded_modules_and_hits(sbx):
+def test_sandboxed_eval_seals_records_loaded_modules_and_hits(sbx):
     L, repo = sbx
     f = L.at().ns.load("mnt.sbx.stage.fns.count")
-    assert f.code.fenced and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
+    assert f.code.sandboxed and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
     v = L.at().run("mnt.sbx.stage.fns.count", game="G1")
-    assert v.sealed and v.obj == {"n": 6} and L.at()[v.subject, "db/provenance"] == "eval:fenced"
+    assert v.sealed and v.obj == {"n": 6} and L.at()[v.subject, "db/provenance"] == "eval:sandbox"
     mods = L.at()[v.dependencies["code"], "db/modules"]
     assert sorted(mods) == ["sbx/stage/__init__.py", "sbx/stage/fns.py", "sbx/stage/helper.py"]
     assert v.dependencies["fn"] == "mnt.sbx.stage.fns.count"
@@ -527,16 +527,16 @@ def test_a_module_the_caller_loaded_is_recorded_for_the_nested_entry(sbx):
     assert L.at()[v.dependencies["code"], "db/modules"]["py:colorsys.py"] == want
 
 
-def test_a_resident_body_reading_its_repo_outside_the_dats_is_refused(sbx):
+def test_an_unsandboxed_body_reading_its_repo_outside_the_dats_is_refused(sbx):
     L, repo = sbx
     git(repo, "commit", "-q", "--allow-empty", "-m", "clean")
-    assert not L.at().ns.load("sbx.plain.peek").code.fenced
+    assert not L.at().ns.load("sbx.plain.peek").code.sandboxed
     for how in ("open", "read_text", "library"):
-        with pytest.raises(UntracedRead, match="conf.yaml: a resident function reads a file of its repo"):
+        with pytest.raises(UntracedRead, match="conf.yaml: an unsandboxed function reads a file of its repo"):
             L.at().run("sbx.plain.peek", how=how)
     v = L.at().run("sbx.plain.calm", game="G1")
     assert v.obj == {"x": 1, "w": {"g": "G1"}, "inner": {"g": "G1"}}
-    assert L.at()[v.subject, "db/provenance"] == "eval:resident"
+    assert L.at()[v.subject, "db/provenance"] == "eval:unsandboxed"
     assert (repo / "sbx/stage/conf.yaml").read_text() == "k: 1\n"     # outside a body: nothing checked
 
 
@@ -554,9 +554,9 @@ def test_a_nested_eval_under_another_mount_runs_in_a_fresh_child(sbx):
     assert w.sealed and w.obj["other"]["pid"] != w.obj["me"]
 
 
-def test_a_resident_eval_nested_in_a_fenced_body_is_refused_by_name(sbx):
+def test_an_unsandboxed_eval_nested_in_a_sandboxed_body_is_refused_by_name(sbx):
     L, _repo = sbx
-    with pytest.raises(NotEvaluated, match="colorsys.rgb_to_hsv is resident .* mount 'sbx.stage'; mount it"):
+    with pytest.raises(NotEvaluated, match="colorsys.rgb_to_hsv is unsandboxed .* mount 'sbx.stage'; mount it"):
         L.at().run("mnt.sbx.stage.fns.base_inside", game="G1")
 
 
@@ -602,7 +602,7 @@ def test_salt_item(sbx):
 def test_a_mount_root_without_init_imports_namespace_style(sbx):
     L, _repo = sbx
     f = L.at().ns.load("mnt.flatpkg.calc.area")
-    assert f.code.fenced and f.mount == "flatpkg"
+    assert f.code.sandboxed and f.mount == "flatpkg"
     v = L.at().run("mnt.flatpkg.calc.area", side=3)
     assert v.obj == {"area": 9}
     assert sorted(L.at()[v.dependencies["code"], "db/modules"]) == ["flat/calc.py", "flat/util.py"]
@@ -647,7 +647,7 @@ def test_each_call_is_a_fresh_process(sbx):
     a = L.at().run("mnt.sbx.stage.fns.pid", game="G1", seal=False).obj
     b = L.at().run("mnt.sbx.stage.fns.pid", game="G1", seal=False).obj
     assert a["calls"] == b["calls"] == 1 and a["pid"] != b["pid"]
-    assert fence._server().alive()
+    assert sandbox._server().alive()
     with pytest.raises(RuntimeError, match=r"ended \(exit code 3\) before it replied"):
         L.at().run("mnt.sbx.stage.fns.die", game="G1")
     assert L.at().run("mnt.sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1   # the server lives on
@@ -657,17 +657,17 @@ def test_an_idle_server_is_retired_and_the_next_call_starts_one(sbx, monkeypatch
     import time
 
     L, _repo = sbx
-    monkeypatch.setattr(fence, "IDLE_SECONDS", 0.5)
+    monkeypatch.setattr(sandbox, "IDLE_SECONDS", 0.5)
     shutdown()
     assert L.at().run("mnt.sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1
-    s = fence._SERVERS[sys.executable]
+    s = sandbox._SERVERS[sys.executable]
     for _ in range(100):
         if s.proc.poll() is not None:
             break
         time.sleep(0.1)
-    assert s.proc.poll() is not None and s.retired and sys.executable not in fence._SERVERS
+    assert s.proc.poll() is not None and s.retired and sys.executable not in sandbox._SERVERS
     assert L.at().run("mnt.sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1
-    assert fence._SERVERS[sys.executable] is not s and fence._SERVERS[sys.executable].alive()
+    assert sandbox._SERVERS[sys.executable] is not s and sandbox._SERVERS[sys.executable].alive()
 
 
 def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
@@ -682,8 +682,8 @@ def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
     assert mods["dist:xlsxwriter"].startswith(md.version("xlsxwriter") + ":")
     assert not any(k.startswith(("dist:dvc-dat", "py:dvc_dat", "dist:pyyaml")) for k in mods)
     assert v.matches(L.at())
-    real = fence.third_party_now
-    monkeypatch.setattr(fence, "third_party_now", lambda k: "9.9:x" if k == "dist:xlsxwriter" else real(k))
+    real = sandbox.third_party_now
+    monkeypatch.setattr(sandbox, "third_party_now", lambda k: "9.9:x" if k == "dist:xlsxwriter" else real(k))
     assert not v.matches(L.at())                    # a new install of a loaded distribution: a new value
 
 
@@ -691,7 +691,7 @@ def test_resolve_refuses_an_unmounted_import_at_load(sbx):
     L, _repo = sbx
     with pytest.raises(UnmountedImport, match="sbx.other from sbx.stage.fns; mount it or move it"):
         L.at().ns.load("mnt.sbx.stage.fns.borrow")
-    assert L.at().ns.load("mnt.sbx.stage.fns.snoop").code.fenced   # same module, no such import
+    assert L.at().ns.load("mnt.sbx.stage.fns.snoop").code.sandboxed   # same module, no such import
 
 
 def test_network_refused(sbx):
@@ -699,7 +699,7 @@ def test_network_refused(sbx):
 
     L, _repo = sbx
     assert issubclass(ConfinedNetwork, PermissionError) and issubclass(ConfinedNetwork, LedgerError)
-    with pytest.raises(ConfinedNetwork, match="example.com: a fenced function does not use the network"):
+    with pytest.raises(ConfinedNetwork, match="example.com: a sandboxed function does not use the network"):
         L.at().run("mnt.sbx.stage.net.resolve", host="example.com")
     with socket.socket() as srv:
         srv.bind(("127.0.0.1", 0))
@@ -715,19 +715,19 @@ def test_network_refused(sbx):
     assert L.at().run("mnt.sbx.stage.net.pair", text="hi").obj == {"echo": "hi"}   # a local socket is not the network
 
 
-# --- 1467 Q8 (A): a fenced body creates no process; a body that needs a tool runs resident ---------------
+# --- 1467 Q8 (A): a sandboxed body creates no process; a body that needs a tool runs unsandboxed ---------------
 PROC_HOWS = {"run": "subprocess.Popen", "system": "os.system", "posix_spawn": "os.posix_spawn", "fork": "os.fork",
              "exec": "os.exec"}
 
 
-def test_a_fenced_body_creates_no_process(sbx, tmp_path):
+def test_a_sandboxed_body_creates_no_process(sbx, tmp_path):
     L, _repo = sbx
     assert issubclass(ConfinedProcess, PermissionError) and issubclass(ConfinedProcess, LedgerError)
     outside = tmp_path / "outside"
     outside.mkdir()
     for how, event in PROC_HOWS.items():
         out = outside / f"{how}.txt"
-        with pytest.raises(ConfinedProcess, match=f"{event}: a fenced function creates no process"):
+        with pytest.raises(ConfinedProcess, match=f"{event}: a sandboxed function creates no process"):
             L.at().run("mnt.sbx.stage.procs.shell", how=how, out=str(out))
         assert not out.exists()
         assert L.at().run("mnt.sbx.stage.procs.shell", how=how, out=str(out), seal="get") is None   # nothing sealed
@@ -735,11 +735,11 @@ def test_a_fenced_body_creates_no_process(sbx, tmp_path):
     assert L.at().run("mnt.sbx.stage.fns.count", game="G1").obj == {"n": 6}   # the next call's fork is the server's
 
 
-def test_a_resident_body_may_run_a_tool(sbx):
+def test_an_unsandboxed_body_may_run_a_tool(sbx):
     L, _repo = sbx
-    assert not L.at().ns.load("sbx.tools.echo").code.fenced
+    assert not L.at().ns.load("sbx.tools.echo").code.sandboxed
     v = L.at().run("sbx.tools.echo", text="hi")
-    assert v.obj == {"out": "hi\n"} and L.at()[v.subject, "db/provenance"] == "eval:resident"
+    assert v.obj == {"out": "hi\n"} and L.at()[v.subject, "db/provenance"] == "eval:unsandboxed"
 
 
 def test_the_ledgers_own_endpoint_is_allowed():
@@ -766,7 +766,7 @@ def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
     (outside / "tree" / "f").write_text("f")
     before = sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*"))
     for how in WRITE_HOWS:
-        with pytest.raises(ConfinedWrite, match="a fenced function writes only in its path folder"):
+        with pytest.raises(ConfinedWrite, match="a sandboxed function writes only in its path folder"):
             L.at().run("mnt.sbx.stage.writes.write", how=how, where=str(outside))
     assert sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*")) == before
     assert (outside / "seed").read_text() == "s"
@@ -808,16 +808,16 @@ def test_reads_confined_to_the_mounts_the_dats_and_the_work_folder(sbx, tmp_path
         L.at().run("mnt.sbx.stage.eager.f", game="G1")
 
 
-def test_a_fenced_draft_saved_later_is_the_memo_entry(sbx):
+def test_a_sandboxed_draft_saved_later_is_the_memo_entry(sbx):
     L, _repo = sbx
     d = L.at().run("mnt.sbx.stage.fns.count", game="G1", seal=False)
     assert d.subject is None and "_run" in d.__dict__
     d.seal(L)
-    assert L.at()[d.subject, "db/provenance"] == "eval:fenced"
+    assert L.at()[d.subject, "db/provenance"] == "eval:sandbox"
     assert L.at().run("mnt.sbx.stage.fns.count", game="G1", seal="get").subject == d.subject
 
 
-def test_a_fenced_run_saves_into_a_transaction(sbx):
+def test_a_sandboxed_run_saves_into_a_transaction(sbx):
     L, _repo = sbx
     with L.transaction(by="t") as t:
         v = L.at().run("mnt.sbx.stage.fns.count", game="G1", seal=t)
@@ -853,7 +853,7 @@ def test_a_mounted_dat_run_runs_in_the_worker_and_hits_after_a_commit(sbx, world
     assert v.get_results()["out"] == 6 and v.get_results()["pid"] != os.getpid()
     assert "sbx.stage.runs" not in sys.modules                     # never imported here
     rows = L.at()
-    assert rows[v.subject, "db/provenance"] == "eval:fenced" and rows[v.subject, "db/fn"] == "mnt.sbx.stage.runs.table"
+    assert rows[v.subject, "db/provenance"] == "eval:sandbox" and rows[v.subject, "db/fn"] == "mnt.sbx.stage.runs.table"
     assert "code/sbx-repo" not in v.dependencies
     mods = rows[v.dependencies["code"], "db/modules"]
     assert {"sbx/stage/runs.py", "sbx/stage/helper.py"} <= set(mods)    # what the run loaded
@@ -895,8 +895,8 @@ def test_resolve_hands_back_a_dict_an_fn_or_the_object(sbx):
                                                             "do": "mnt.sbx.stage.runs.table"}}
     assert rev.ns.load("mnt.sbx.stage.specs.base.dat.kwargs") == {"n": 3}      # a dotted tail walks into the file
     run_fn, ledger_fn_ = rev.ns.load("mnt.sbx.stage.runs.table"), rev.ns.load("mnt.sbx.stage.fns.count")
-    assert isinstance(run_fn, Fn) and run_fn.kind == "dat" and run_fn.code.fenced
-    assert isinstance(ledger_fn_, Fn) and ledger_fn_.kind == "ledger" and ledger_fn_.code.fenced
+    assert isinstance(run_fn, Fn) and run_fn.kind == "dat" and run_fn.code.sandboxed
+    assert isinstance(ledger_fn_, Fn) and ledger_fn_.kind == "ledger" and ledger_fn_.code.sandboxed
     assert rev.ns.load("mnt.sbx.stage.runs.TABLE")["dat"]["kwargs"] == {"n": 3}
     assert rev.ns.load("os.path.join") is os.path.join                  # under no mount: imported
     with pytest.raises(ImportError):
@@ -911,7 +911,7 @@ def test_update_writes_a_mount_that_resolve_sees(sbx):
     with L.transaction(by="t") as t:
         t.update("db/mount/flat2", {"db/root": "flat", "db/repo": "sbx-repo"})
     f = L.at().ns.load("mnt.flat2.calc.area")
-    assert f.code.fenced and f.mount == "flat2"
+    assert f.code.sandboxed and f.mount == "flat2"
 
 
 def test_a_mounted_dat_run_draft_and_transaction(sbx, world):
@@ -919,16 +919,16 @@ def test_a_mounted_dat_run_draft_and_transaction(sbx, world):
     d = L.at().run(RUN, n=4, seal=False)
     assert d.subject is None and (d.path / "t.txt").read_text() == "8" and "_run" in d.__dict__
     d.seal(L)
-    assert L.at()[d.subject, "db/provenance"] == "eval:fenced"
+    assert L.at()[d.subject, "db/provenance"] == "eval:sandbox"
     assert L.at().run(RUN, n=4, seal="get").subject == d.subject
     with L.transaction(by="t") as t:
         v = L.at().run(RUN, n=5, seal=t, path="t/five")
-    assert L.at().load("t/five").subject == v.subject and L.at()[v.subject, "db/provenance"] == "eval:fenced"
+    assert L.at().load("t/five").subject == v.subject and L.at()[v.subject, "db/provenance"] == "eval:sandbox"
 
 
 def test_a_mounted_dat_runs_body_is_confined(sbx, world):
     L, _repo = sbx
-    with pytest.raises(ConfinedWrite, match="ledger-fence-dat-scribble"):
+    with pytest.raises(ConfinedWrite, match="ledger-sandbox-dat-scribble"):
         L.at().run({"dat": {"do": "mnt.sbx.stage.runs.scribble"}})
 
 
@@ -938,8 +938,8 @@ def test_a_spec_naming_a_mounted_ledger_function_is_refused(sbx, world):
         L.at().run({"dat": {"do": "mnt.sbx.stage.fns.count"}})
 
 
-def test_a_fenced_dat_body_names_through_the_ledger_mounts(sbx, world):
-    """DAT 1047: inside a fenced dat body ``Dat.manager.ns`` is a ``LedgerNamespace`` at the run's rev, so a
+def test_a_sandboxed_dat_body_names_through_the_ledger_mounts(sbx, world):
+    """DAT 1047: inside a sandboxed dat body ``Dat.manager.ns`` is a ``LedgerNamespace`` at the run's rev, so a
     mounted spec, literal or function resolves through the mounts the caller used; ``mount`` is refused.
     The caller's own world (here a plain ``Namespace``) is not what the body sees."""
     from dvc_dat.do import Namespace
@@ -988,7 +988,7 @@ def test_a_call_interrupted_while_the_worker_runs_leaves_the_next_call_its_own_r
     assert L.at().run("mnt.sbx.stage.slow.fast", n=2).obj == {"who": "fast", "n": 2}
 
 
-def test_a_fenced_entry_records_the_platform_of_the_worker_it_ran_in(sbx, monkeypatch):
+def test_a_sandboxed_entry_records_the_platform_of_the_worker_it_ran_in(sbx, monkeypatch):
     """SVP 1474: the record is captured where the function runs, not where the caller sits."""
     import json
 

@@ -489,5 +489,5 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 
 # %% [markdown]
 # Set, `DAT_LEDGER` names the ledger and the walk never runs (A44.4):
-# a recipe run from a scratch folder, or a fence worker, reaches
+# a recipe run from a scratch folder, or a sandbox worker, reaches
 # the project's ledger this way.

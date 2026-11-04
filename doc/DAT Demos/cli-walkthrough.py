@@ -139,7 +139,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 # is `mnt.mymodule.specs.table12`. `just run` of a spec makes the dat,
 # runs it and seals it as a value; `alias=` names it. The spec is the
 # memo key. `mymodule` is mounted, so its run function runs in a
-# fenced worker, and its code is the files that run loaded.
+# sandboxed worker, and its code is the files that run loaded.
 
 # %%
 # !just run mnt.mymodule.specs.table12 alias=table/12
@@ -195,7 +195,7 @@ just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True) 
 
 # %% [markdown]
 # `just why` is what a value was computed from, and whether that all
-# still holds. A fenced run names no commit: `code` is the bytes of
+# still holds. A sandboxed run names no commit: `code` is the bytes of
 # the files it loaded, so a commit that leaves them alone leaves the
 # value current.
 

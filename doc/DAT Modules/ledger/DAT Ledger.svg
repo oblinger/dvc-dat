@@ -59,7 +59,7 @@
 
     <text x="1410" y="406" font-size="24" font-weight="bold">Worker</text>
     <text x="1410" y="432" font-size="15" fill="#607d8b">process · python -I, one per mount</text>
-    <text x="1410" y="460" font-size="15">runs a fenced body, confined</text>
+    <text x="1410" y="460" font-size="15">runs a sandboxed body, confined</text>
   </g>
 
   <!-- topic annotations -->
@@ -98,7 +98,7 @@
     <text x="1005" y="30" text-anchor="middle">resolve() · run()</text>
     <text x="1022" y="290">load()</text>
     <text x="1222" y="300">returns, sealed</text>
-    <text x="1422" y="300">fence mode</text>
+    <text x="1422" y="300">sandbox mode</text>
     <text x="812" y="408" text-anchor="middle">seal(t)</text>
     <text x="392" y="408" text-anchor="middle">rows</text>
     <text x="408" y="570">bytes</text>
