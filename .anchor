@@ -3,7 +3,7 @@ traits:
 - code
 page: doc/DAT.md
 backlog: doc/DAT Track/DAT Backlog/DAT Backlog.md
-inbox: doc/DAT Track/DAT Inbox.md
+inbox: doc/DAT Track/DAT Inbox/DAT Inbox.md
 agent: SVP
 stones:
   pebbles:
@@ -19,4 +19,5 @@ stones:
     prefix: ""
     start: 100
     counter: own
+  inbox:
 namespace: true
