@@ -39,7 +39,7 @@ the dat manager's `dvc_dat.Dat`: it hashes every file in the folder and
 reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 
 - **The dat constructor is a value function.** A function marked
-  `@ledger_fn` declares `path: Path`; `run` binds a fresh folder under
+  `@dat.fn` declares `path: Path`; `run` binds a fresh folder under
   `$DAT_WORK`, the body writes the dat there and returns `Dat(path)`,
   the seal moves the files into the ledger's art store, and the call's
   `path=` names the result, its folder a view at the name.

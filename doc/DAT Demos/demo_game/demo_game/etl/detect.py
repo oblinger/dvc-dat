@@ -2,14 +2,14 @@
 import json
 from pathlib import Path
 
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 from demo_game.etl.dat import StageDat, build
 
 SPEC = {"main": "demo_game.etl.detect.find", "stage": "detect",
         "bins": 16}
 
 
-@ledger_fn
+@dat.fn
 def detections(rev, *, game: str, path: Path) -> StageDat:
     return build(rev, {**SPEC, "game": game}, path)
 

@@ -16,7 +16,7 @@ $ x --version
 $ x --help
 ```
 
-Below `run` and `mounts`, `dvc_dat.just` carries the ledger verbs `values value history why set index bump`; `run` writes `.dat/targets.just` for `@command` targets ([cli.md](../../cli.md)).
+Below `run` and `mounts`, `dvc_dat.just` carries the ledger verbs `values value history why set index bump pin rerun`; `run` writes `.dat/targets.just` for `@dat.command` targets ([cli.md](../../cli.md)).
 
 ## x CLI
 Every line you can type: a word runs a target, a flag asks `x` about itself.
@@ -69,7 +69,7 @@ Every line you can type: a word runs a target, a flag asks `x` about itself.
 A word in first position is always a `TARGET`; the four commands that are not a target are flags. A target named `list`, `info` or `version` runs like any other. `-h` is the same as `--help`.
 
 ## With a ledger: `just run <spec>`
-In a project whose `.datconfig.yaml` has a `ledger:` line or `namespace: ledger` (a `ledgers:` section alone keeps the bare run), `just run` (and `x`) is `rev.run(TARGET, k=v …)` (DAT 1046), its names the ledger's `db/mount` rows (`mounts:` in the config). A dat spec (a mounted name such as `mnt.mymodule.specs.table12`, a spec file whose `dat:` names its run function, or a run function's name) runs as a dat: found if this spec, these kwargs and this code were run before, else made, run and sealed; it prints `ran` or `hit`, the dat's name and its preds (`ran  table/12  start=1 n=12 cells=144`), and `alias=NAME` names it (`path=` in the API). A ledger function (`@ledger_fn`, or a spec whose `main` names one) runs with the line's keys. Fixed words are refused there: keywords only. A mounted spec with `command: true`, or a mounted function marked `@command`, is also its own recipe, read off the mounted files: `just table12` runs `just run mnt.mymodule.specs.table12` ([DAT Ledger § Running](../../DAT%20Modules/ledger/DAT%20Ledger.md#Running)).
+In a project whose `.datconfig.yaml` has a `ledger:` line or `namespace: ledger` (a `ledgers:` section alone keeps the bare run), `just run` (and `x`) is `rev.run(TARGET, k=v …)` (DAT 1046), its names the ledger's `db/mount` rows (`mounts:` in the config). A dat spec (a mounted name such as `mnt.mymodule.specs.table12`, a spec file whose `dat:` names its run function, or a run function's name) runs as a dat: found if this spec, these kwargs and this code were run before, else made, run and sealed; it prints `ran` or `hit`, the dat's name and its preds (`ran  table/12  start=1 n=12 cells=144`), and `alias=NAME` names it (`path=` in the API). A ledger function (`@dat.fn`, or a spec whose `main` names one) runs with the line's keys. Fixed words are refused there: keywords only. A mounted spec with `command: true`, or a mounted function marked `@dat.command`, is also its own recipe, read off the mounted files: `just table12` runs `just run mnt.mymodule.specs.table12` ([DAT Ledger § Running](../../DAT%20Modules/ledger/DAT%20Ledger.md#Running)).
 
 ## Exit codes
 `0` ran, `1` the run raised or the line was malformed, `2` the target does not load, `3` no `.datconfig.yaml` above (the `run` recipe); one line on stderr, `DAT_DEBUG=1` for the traceback.

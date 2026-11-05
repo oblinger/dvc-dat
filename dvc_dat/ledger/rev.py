@@ -25,6 +25,7 @@ from .value import TIMEZONE, FrozenPreds, Value, dotted, shown_in, takes_name, z
 if TYPE_CHECKING:
     from .namespace import LedgerNamespace
     from .ledger import Ledger
+    from .pin import Rerun
 
 ALIAS_HOPS = 8
 _OMIT = object()
@@ -609,16 +610,16 @@ class Rev:
         """The ledger's namespace at this revision (DAT 1051): ``rev.ns.load(name)`` is what the dotted
         ``name`` denotes here: the ``db/mount`` rows longest prefix first, a mounted ``.yaml``/``.json``
         read from the checkout as a dict, a mounted function its ``Fn`` (read off the file, never
-        imported here; ``kind`` ``"ledger"`` for a ``@ledger_fn``, ``"dat"`` for an undecorated run
+        imported here; ``kind`` ``"ledger"`` for a ``@dat.fn``, ``"dat"`` for an undecorated run
         function), a mounted module-level literal its value; a name under no mount imported, a
-        ``@ledger_fn`` its ``Fn``. ``ImportError`` / ``KeyError`` when nothing answers.
+        ``@dat.fn`` its ``Fn``. ``ImportError`` / ``KeyError`` when nothing answers.
         ``rev.ns.mounts()`` is the mount table, ``{prefix: {"root", "repo"}}``."""
         from .namespace import LedgerNamespace
 
         return LedgerNamespace(rev=self, unguarded=True)
 
     def run(self, target: Any, /, *, seal: Any = OWN, clean: bool = False, path: Any = None,
-            deterministic: bool = False, **kwargs: Any) -> Optional[Value]:
+            **kwargs: Any) -> Optional[Value]:
         """The API form of ``just run TARGET KEY=VALUE``: the result found if computed before by this code,
         else run and sealed as the memo entry (DAT 1046).
 
@@ -628,14 +629,65 @@ class Rev:
         is the spec with ``dat.base`` merged, ``dat.kind`` set, every ``{}`` expanded and ``dat.name``
         removed; a miss creates the dat in a work folder and runs it there, in the sandbox worker when its
         run function is mounted (provenance ``eval:sandbox``), here when installed (``eval:unsandboxed``,
-        a clean checkout to save). ``seal``, ``clean``, ``path`` and ``deterministic`` as ``Fn.__call__``'s; a dat's name is
+        a clean checkout to save). ``seal``, ``clean`` and ``path`` as ``Fn.__call__``'s; a dat's name is
         ``path=``, else its ``dat.name`` template, else ``anonymous/Dat{unique}``."""
         from .sandbox import unguarded
 
         with unguarded():                          # in a sandboxed body: the lookup and seal are the ledger's
             from .rundat import run
 
-            return run(self, target, seal=seal, clean=clean, path=path, kwargs=kwargs, deterministic=deterministic)
+            return run(self, target, seal=seal, clean=clean, path=path, kwargs=kwargs)
+
+    def rerun(self, value: Any) -> "Rerun":
+        """Run the pinned function behind ``value`` again, at its tag, over its recorded keys, and compare the
+        hash (SVP 250): a ``Rerun`` whose ``outcome`` is ``reproduced``, ``differed-nondeterministic`` or
+        ``differed-deterministic``. ``value`` is a sealed ``Value``, a ``Ref`` or a name. The commit must be
+        pinned on this ledger (``t.pin``), else ``NotPinned``; every input must still resolve here. The run is a
+        fresh interpreter over a worktree at the tag (fetched at depth 1 when the checkout here lacks the
+        commit), sandboxed functions in that interpreter's worker; nothing is written. See ``dvc_dat.ledger.pin``."""
+        from .pin import rerun
+
+        return rerun(self, value)
+
+
+def default_by() -> str:
+    """The ``db/by`` of a one-shot write through the head (``L.at().pin(v)``): ``human:<user>``."""
+    import os
+
+    return f"human:{os.environ.get('USER', 'user')}"
+
+
+def _one_shot(name: str) -> Any:
+    """``Head.<name>``: the ``Transaction`` method of that name, in a transaction of its own (SVP 250 A13): declared
+    once, on ``Transaction``; here opened (``by=``, default ``default_by()``), called and committed."""
+    import functools
+
+    from .txn import Transaction
+
+    method = getattr(Transaction, name)
+
+    @functools.wraps(method)
+    def call(self: "Head", *args: Any, by: Any = None, **kwargs: Any) -> Any:
+        with self.ledger.transaction(by=by if by is not None else default_by()) as t:
+            return method(t, *args, **kwargs)
+    call.__doc__ = (f"``L.at().{name}(...)``: ``Transaction.{name}`` in a transaction of its own, committed on "
+                    f"return (``by=`` names the writer, ``human:<user>`` by default).\n\n" + (method.__doc__ or ""))
+    return call
+
+
+class Head(Rev):
+    """The top of the ledger, ``L.at()`` with no argument (SVP 250 A13): a ``Rev`` that is also a transaction.
+    Every read is the ``Rev``'s; each transaction method listed in ``ONE_SHOT`` is here the one-shot form,
+    opening a transaction, calling the method on it and committing: ``L.at().pin(value)``."""
+
+    ONE_SHOT = ("pin",)
+
+    def __repr__(self) -> str:
+        return f"Head({self.id})"
+
+
+for _name in Head.ONE_SHOT:
+    setattr(Head, _name, _one_shot(_name))
 
 
 def describe(s: Any, kind: Any, fn: Any, where: Optional[Dict[str, Any]], preds: Dict[str, Any]) -> str:

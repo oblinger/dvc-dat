@@ -7,8 +7,8 @@ These pages are built from the code, so they always say what the installed versi
 |------|----------------|
 | [Dat, DatManager, DatContainer](core.md) | `dvc_dat.core`: the dat folder, the manager that creates, loads and runs dats, and `merge_dicts`; the `{}` grammar is `Namespace.expand` |
 | [Namespace](do.md) | `dvc_dat.do`: `ns`, dotted names to objects, mounts, and `cli_main`, the command line |
-| [Ledger](ledger.md) | `dvc_dat.ledger`: `Ledger`, `Rev`, `Transaction`, `Value`, `ledger_fn`, the active ledger `L` and `ledgers`, the release helpers, the errors |
-| [Commands](just.md) | `dvc_dat.just`: `@command`, the declared commands that become `just <name>` recipes |
+| [Ledger](ledger.md) | `dvc_dat.ledger`: `Ledger`, `Rev`, `Transaction`, `Value`, the decorators `dat.fn`, `dat.warm`, `dat.command`, pin and rerun, the active ledger `L` and `ledgers`, the release helpers, the errors |
+| [Commands](just.md) | `dvc_dat.just`: `@dat.command`, the declared commands that become `just <name>` recipes |
 | [Dat tools](dat_tools.md) | `dvc_dat.dat_tools`, mounted as `dt`: listing dats and reporting over them |
 
 **How it is built.** `just docs` runs `mkdocs build` with the [mkdocstrings](https://mkdocstrings.github.io/) plugin, which imports nothing: it reads the source statically (griffe) and renders each `::: dvc_dat.<name>` directive in these pages. `just docs-serve` serves the site with live reload. Names starting with an underscore are left out.

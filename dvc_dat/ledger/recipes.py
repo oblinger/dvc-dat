@@ -1,6 +1,6 @@
 """The ledger's just verbs: `python -m dvc_dat.ledger.recipes <verb> [args]`.
 
-`values`, `value`, `history`, `why`, `set`, `index` and `bump`, the recipes
+`values`, `value`, `history`, `why`, `set`, `index`, `bump`, `pin` and `rerun`, the recipes
 `dvc_dat.just` ships beside `run` and `mounts` (SVP 1465 Q1 (A)); a project
 that does not import that file trampolines to this module. Each verb is one
 ledger call; running a function or a spec is not here but `just run`, the one
@@ -205,8 +205,31 @@ def bump_recipe(args):
     print(f'commit it: git commit -am "{name} {b.new}"')
 
 
+def pin_recipe(args):
+    """`pin VALUE [recursive=true] [rerun=true]`: tag and push the value's commit, write the rows (SVP 250)."""
+    import_checkout()                       # the checkout the tag is made in is found by discovery
+    name, kw = args[0], parse(args[1:])
+    bad = set(kw) - {"recursive", "rerun"}
+    if bad:
+        sys.exit(f"pin takes recursive= and rerun=, not {', '.join(sorted(bad))}")
+    L = Ledger()
+    head = L.at()
+    tag = head.pin(name, by=BY, **{k: bool(v) for k, v in kw.items()})
+    subject = head.load(name).subject
+    top = L.at()
+    print(f"{name}: {short(subject)} pinned at {tag}, {top[subject, 'db/rerunnable']}"
+          + (f", rerun {top[subject, 'db/rerun']}" if kw.get("rerun") else ""))
+
+
+def rerun_recipe(args):
+    """`rerun VALUE`: run the pinned function again at its tag and compare the hash (SVP 250)."""
+    import_checkout()
+    out = Ledger().at().rerun(args[0])
+    print(f"{args[0]}: {out.outcome} at {out.tag} ({out.hash[:12]} vs {out.expected[:12]})")
+
+
 RECIPES = {"values": values, "value": value, "history": history, "why": why, "set": set_recipe,
-           "index": index, "bump": bump_recipe}
+           "index": index, "bump": bump_recipe, "pin": pin_recipe, "rerun": rerun_recipe}
 
 USAGE = "usage: python -m dvc_dat.ledger.recipes {" + ",".join(RECIPES) + "} [ARG ...]"
 

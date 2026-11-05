@@ -19,9 +19,9 @@ from dvc_dat.ledger.sandbox import shutdown
 
 FN = textwrap.dedent('''
     import math
-    from dvc_dat.ledger import ledger_fn
+    from dvc_dat import dat
 
-    @ledger_fn
+    @dat.fn
     def length(rev, a, b) -> float:
         return math.dist(a, b) * 0.5
 ''')
@@ -200,8 +200,8 @@ def test_a_changed_module_changes_the_subject(mounted):
 
 def test_two_functions_in_one_snapshot_share_its_subject(mounted):
     L, repo = mounted
-    (repo / "plane/measure.py").write_text(FN + FN.split("@ledger_fn")[1].replace("length", "width")
-                                           .replace("def ", "@ledger_fn\ndef ", 1))
+    (repo / "plane/measure.py").write_text(FN + FN.split("@dat.fn")[1].replace("length", "width")
+                                           .replace("def ", "@dat.fn\ndef ", 1))
     git(repo, "commit", "-q", "-am", "width")
     length, width = L.at().ns.load("mnt.plane.measure.length"), L.at().ns.load("mnt.plane.measure.width")
     assert length.code.subject == width.code.subject and length.name != width.name
@@ -222,8 +222,8 @@ def test_a_result_names_the_snapshot_and_the_function_apart(mounted):
 
 def test_another_function_in_the_snapshot_does_not_hit(mounted):
     L, repo = mounted
-    (repo / "plane/measure.py").write_text(FN + FN.split("@ledger_fn")[1].replace("length", "width")
-                                           .replace("def ", "@ledger_fn\ndef ", 1))
+    (repo / "plane/measure.py").write_text(FN + FN.split("@dat.fn")[1].replace("length", "width")
+                                           .replace("def ", "@dat.fn\ndef ", 1))
     v = L.at().ns.load("mnt.plane.measure.length")(a=(0, 0), b=(3, 4))
     w = L.at().ns.load("mnt.plane.measure.width")(a=(0, 0), b=(3, 4))
     assert w.subject != v.subject and w.dependencies["code"] == v.dependencies["code"]

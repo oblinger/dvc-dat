@@ -1,6 +1,6 @@
 # dvc-dat's recipes, for a project's justfile to import. `just run TARGET`
 # is the one way to run; `x TARGET` (bin/x) is `just run TARGET`. Below
-# `mounts`, the ledger verbs: values, value, history, why, set, index, bump.
+# `mounts`, the ledger verbs: values, value, history, why, set, index, bump, pin, rerun.
 #
 #     import 'dvc_dat.just'    # a link to the installed dvc_dat/dvc_dat.just
 #
@@ -121,3 +121,15 @@ index pred:
 [positional-arguments]
 bump name part="patch":
     @"{{_dat_python}}" -m dvc_dat.ledger.recipes bump "$@"
+
+# pin VALUE [recursive=true] [rerun=true]: tag and push the commit behind a value, so its run can be rerun
+[no-cd]
+[positional-arguments]
+pin name *args:
+    @"{{_dat_python}}" -m dvc_dat.ledger.recipes pin "$@"
+
+# rerun VALUE: run a pinned value's function again at its tag and compare the hash
+[no-cd]
+[positional-arguments]
+rerun name:
+    @"{{_dat_python}}" -m dvc_dat.ledger.recipes rerun "$@"

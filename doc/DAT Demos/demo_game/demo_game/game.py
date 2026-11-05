@@ -8,7 +8,8 @@ Written to the ledger design of 2026-10-18 (T534).
 import random
 import time
 
-from dvc_dat.ledger import Ref, Value, ledger_class, ledger_fn
+from dvc_dat.ledger import Ref, Value, ledger_class
+from dvc_dat import dat
 
 
 class PlainVideo(Value):
@@ -64,7 +65,7 @@ def cut_video(raw: Video, home: str, away: str) -> bytes:
     return raw.frames[:16] + f"|{home}-{away}".encode()
 
 
-@ledger_fn
+@dat.fn
 def cut(rev, *, game: str, version: str) -> Cut:
     """Cut a game: rows read through `rev`, the video by preds."""
     home = rev[f"game/{game}", "home"]      # traced: game/G1 home
@@ -77,7 +78,7 @@ def cut(rev, *, game: str, version: str) -> Cut:
     return c
 
 
-@ledger_fn
+@dat.fn
 def thumb(rev, *, clip: Ref) -> dict:
     """Downstream of one cut, keyed by the cut itself.
 
@@ -88,14 +89,14 @@ def thumb(rev, *, clip: Ref) -> dict:
     return {"bytes": len(c.clip), "head": c.clip[:4].hex()}
 
 
-@ledger_fn
+@dat.fn
 def poster(rev, *, game: str) -> dict:
     """Downstream of the game's current cut, reached by its alias."""
     c = rev.load(f"game/{game}")    # traced: game/G1 db/alias
     return {"game": game, "bytes": len(c.clip)}
 
 
-@ledger_fn
+@dat.fn
 def noisy(rev, *, game: str) -> dict:
     """A nondeterministic stand-in (T527's case): runs disagree."""
     time.sleep(1)                   # long enough for two to race

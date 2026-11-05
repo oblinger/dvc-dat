@@ -552,12 +552,12 @@ geometry_source = '''\
 """`geometry`: any Python function can be a ledger function."""
 import math
 
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
 ORIGIN = (0, 0)
 
 
-@ledger_fn
+@dat.fn
 def distance(rev, a, b=ORIGIN, *, metric="euclidean") -> float:
     """The distance between points `a` and `b`, by default the origin."""
     if metric == "manhattan":
@@ -571,7 +571,7 @@ print("log:", git("log", "--oneline"))
 # → log: <7 hex> geometry: distance
 
 # %% [markdown]
-# `@ledger_fn` marks `distance` as a ledger function and leaves it a
+# `@dat.fn` marks `distance` as a ledger function and leaves it a
 # plain function: nothing is wrapped and no row is written on
 # import; the return annotation is required. `a` is positional, `b`
 # defaults to the module's `ORIGIN`, and `metric` is keyword-only:
@@ -638,12 +638,12 @@ measure_source = '''\
 """`plane.measure`: a length in metres."""
 import math
 
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
 from .units import SCALE                   # the one import of its own
 
 
-@ledger_fn
+@dat.fn
 def length(rev, a, b) -> float:
     """The length of the segment from `a` to `b`, in metres."""
     return math.dist(a, b) * SCALE
@@ -700,16 +700,16 @@ reach_source = '''\
 """`plane.reach`: two functions the sandbox refuses."""
 from pathlib import Path
 
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
 
-@ledger_fn
+@dat.fn
 def from_origin(rev, p) -> float:
     from geometry import distance       # geometry.py, outside plane/
     return distance(rev, p)
 
 
-@ledger_fn
+@dat.fn
 def note(rev, text) -> int:
     return Path("/tmp/plane-note.txt").write_text(text)   # outside its folder
 '''
@@ -878,11 +878,11 @@ print("returns:", L.at()[far_value.subject, "db/returns"])
 # %%
 clips_source = '''\
 """`clips`: a ledger function that returns a Video."""
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 from demo_game.game import Video
 
 
-@ledger_fn
+@dat.fn
 def clip(rev, *, video: str, start: int, end: int) -> Video:
     """Frames `start` to `end` of the video `video` names."""
     source = rev.load(video)                 # traced: the alias, the bytes

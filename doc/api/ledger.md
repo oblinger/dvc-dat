@@ -32,8 +32,6 @@
 
 ::: dvc_dat.ledger.ledger_class
 
-::: dvc_dat.ledger.ledger_fn
-
 ::: dvc_dat.ledger.Fn
 
 ::: dvc_dat.ledger.Code
@@ -43,6 +41,34 @@
 ::: dvc_dat.ledger.register_store
 
 ::: dvc_dat.ledger.Remote
+
+## Decorators
+
+`from dvc_dat import dat`: `@dat.fn`, `@dat.warm`, `@dat.command` (SVP 250).
+
+::: dvc_dat.dat
+    options:
+      show_root_heading: false
+      members: false
+
+::: dvc_dat.ledger.fn.fn
+
+::: dvc_dat.ledger.FnMark
+
+::: dvc_dat.ledger.warm.Warm
+
+::: dvc_dat.just.command
+
+## Rerunnability
+
+::: dvc_dat.ledger.pin
+    options:
+      show_root_heading: false
+      members: false
+
+::: dvc_dat.ledger.Rerun
+
+::: dvc_dat.ledger.Head
 
 ## The namespace over a ledger
 

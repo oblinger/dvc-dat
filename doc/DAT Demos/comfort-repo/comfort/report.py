@@ -1,8 +1,8 @@
 """`comfort.report`: the most comfortable cities in a city set."""
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
 
-@ledger_fn
+@dat.fn
 def comfort_report(rev, *, cityset: str, start: str, end: str) -> dict:
     """The city set's share of comfortable days (level 7+) from `start` up to `end`, and its two most comfortable cities."""
     cities = sorted(rev.all(cityset, "contains"))   # traced: the set's rows; sorted, so a tie breaks by name, not by when a city joined
