@@ -8,6 +8,8 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **The API walkthrough shows a run step by step (SVP 1524).** Docs only: the 3-step create is now the seven steps of a run (load the spec, apply keywords, expand, memo key, create, run, seal), with one expansion cell showing a keyword; the table example is `timestables` (`specs.times12`, its folder named `times{n}`); a base-case pipeline runs on one game (`game="G1"`). `api-walkthrough.ipynb` is generated from its `.py` by `just walkthrough` (`build_notebook.py`), with cell ids that a re-run leaves alone, and the test suite now runs it.
+
 ## 2.52.0 — 2026-11-03
 
 - **A ledger names its value store, `db/store`; consumers register stores (SVP 1511; minor).** `register_store(name, factory)` and the `Remote` protocol (`exists(h)`, `put_path(path, h)`, `get_to(h, dest)`, by sha256 hex) are the public extension point for remote byte stores; dvc-dat ships no cloud code. The row `(db, db/store, <name>)` names a ledger's store, `local` when absent; `local` resolves per process (`DAT_STORE_LOCAL`, then a 0.3 s cloud metadata probe when that cloud is registered, then `stores: {local: ...}` in `.datconfig.yaml`/its override, then `folder`, the ledger's art folder alone). A seal uploads its value's parts and encoding before the write lock and writes `(<subject>, db/store, <name>)`; a read that misses the local folder fetches from the store the value's row names, checked against the hash. Remote layout convention `ledgers/<ledger>/sha256/<2>/<hash>` (`remote.blob_name`). A ledger with no store registered behaves exactly as 2.51.0. Docs: `DAT Ledger` (`register_store`, `Remote`, `db/store`, § Value stores), `api/ledger.md`.

@@ -19,6 +19,12 @@ demo:
     uv run jupytext --sync "doc/DAT Demos"/demo-*.ipynb "doc/DAT Demos"/demo-*.py
     for nb in "doc/DAT Demos"/demo-*.ipynb; do JUPYTER_PATH={{justfile_directory()}}/.venv/share/jupyter uv run jupyter nbconvert --execute --to notebook --inplace "$nb"; done
 
+# the API walkthrough: its notebook generated from api-walkthrough.py, with cell ids that a re-run leaves
+# alone, then executed in place with its outputs kept. Edit the .py, never the .ipynb.
+walkthrough:
+    uv run python "doc/DAT Demos/build_notebook.py" api-walkthrough
+    JUPYTER_PATH={{justfile_directory()}}/.venv/share/jupyter uv run jupyter nbconvert --execute --to notebook --inplace "doc/DAT Demos/api-walkthrough.ipynb"
+
 # the documentation site (doc/ -> site/), with the generated API reference (doc/api/)
 docs:
     uv run --group docs mkdocs build
