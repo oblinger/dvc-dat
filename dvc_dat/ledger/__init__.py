@@ -19,8 +19,8 @@ The environment is found by discovery; ``set_env_provider``, ``Env`` and
 
 from .code import Code
 from .env import Checkout, Env, set_env_provider  # noqa: F401  (the test seam, importable by name)
-from .errors import (AliasLoop, ConfinedNetwork, ConfinedProcess, ConfinedWrite, Differed, Exists, LedgerError, LockTimeout, Multiple, NotClean, NotEvaluated, NotPinned,
-                     SealBroken, Undeclared, Unlocked, Unindexed,
+from .errors import (AliasLoop, ConfinedNetwork, ConfinedProcess, ConfinedWrite, Differed, Exists, LedgerError, LockTimeout, Multiple, NotClean, NotCopied, NotEvaluated, NotPinned,
+                     SealBroken, SpecOnly, Undeclared, Unlocked, Unindexed,
                      UnmountedImport, UntracedRead)
 from .fn import Fn, FnMark
 from .namespace import LedgerNamespace
@@ -38,6 +38,6 @@ from ..core import Dat                  # one class: a dat is a Value (DAT 1038)
 __all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Transaction", "Value", "Dat", "Fn", "FnMark", "Code",
            "LedgerNamespace", "Rerun",
            "ledger_class", "register_policy", "register_store", "Remote", "bump", "bump_source", "SourceBump", "attr",
-           "LedgerError", "Multiple", "NotEvaluated", "NotClean", "NotPinned", "Differed",
+           "LedgerError", "Multiple", "NotEvaluated", "NotClean", "NotPinned", "NotCopied", "SpecOnly", "Differed",
            "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "ConfinedProcess", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
            "AliasLoop", "SealBroken"]

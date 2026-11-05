@@ -20,7 +20,7 @@ Items (Module § Value ``Dependencies``):
     the short tag ``<os>-<machine>-py<X.Y>`` of the platform it ran on; holds when the
     ledger's memo policy (``policy``, the ``(db, db/memo-policy)`` row at the top) reduces the
     stored record and the environment's to the same string, card and driver added under
-    ``deterministic=True`` (SVP 1474). (A sandboxed entry's third-party modules are in
+    a claim of ``exact`` (SVP 1474). (A sandboxed entry's third-party modules are in
     ``code``, each by its bytes or its distribution's ``RECORD``; there is no
     whole-``uv.lock`` item.)
 ``platform/record``
@@ -354,7 +354,7 @@ def _query_of(item: str) -> Optional[Dict[str, Any]]:
 
 def trace_matches(rev: "Rev", trace: Dict[str, str], widen: Sequence[str] = ()) -> bool:
     """Every item holds at ``rev``: the memo's hit test. Never runs a function. The ``platform`` item is
-    judged by the ledger's memo policy at its top, ``widen`` (``policy.DETERMINISTIC``) added."""
+    judged by the ledger's memo policy at its top, ``widen`` (``policy.EXACT_FIELDS``) added."""
     from .env import current_env
     from .policy import judge, policy_at
 

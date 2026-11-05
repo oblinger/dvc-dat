@@ -2,7 +2,7 @@
 
 Every memo entry stores the platform record where its function ran (``platform/record``); a lookup
 hits when ``policy(stored) == policy(current)``, the policy named by the ``(db, db/memo-policy)``
-triple; a ``@dat.fn(deterministic=True)`` function adds card and driver; an entry lacking a field the policy reads misses.
+triple; a ``@dat.fn(reproducible="exact")`` function adds card and driver; an entry lacking a field the policy reads misses.
 """
 
 import json
@@ -47,7 +47,7 @@ def cut(L, **kw):
 
 
 def cut_det(L, **kw):
-    """``ledger_kinds.cut_det``: ``@dat.fn(deterministic=True)``, the same body and keys as ``cut``."""
+    """``ledger_kinds.cut_det``: ``@dat.fn(reproducible="exact")``, the same body and keys as ``cut``."""
     return L.at().run("ledger_kinds.cut_det", game="G1", **kw)
 
 
@@ -105,10 +105,10 @@ def test_changing_the_policy_triple_rejudges_old_entries(world, envbox):
 
 
 def test_a_deterministic_function_adds_card_and_driver(world, envbox):
-    """SVP 250 A11: the claim is the function's (``@dat.fn(deterministic=True)``), not a call-time keyword."""
+    """SVP 250 A11, 251 Q2: the claim is the function's (``@dat.fn(reproducible="exact")``), not a call-time keyword."""
     a = cut_det(world)
-    assert world.at().ns.load("ledger_kinds.cut_det").deterministic is True
-    assert world.at().ns.load("ledger_kinds.cut").deterministic is None
+    assert world.at().ns.load("ledger_kinds.cut_det").reproducible == "exact"
+    assert world.at().ns.load("ledger_kinds.cut").reproducible is None
     on(envbox, PRO6000)
     assert cut_det(world, seal="get") is None
     on(envbox, H100, driver="560.35.03")            # same card, another driver
@@ -117,7 +117,7 @@ def test_a_deterministic_function_adds_card_and_driver(world, envbox):
     assert cut_det(world, seal="get").subject == a.subject
     assert world.at().ns.load("ledger_kinds.cut_det")(game="G1", seal="get").subject == a.subject
     with pytest.raises(TypeError):
-        cut(world, seal="get", deterministic=True)  # the keyword is gone: it would be a key the function lacks
+        cut(world, seal="get", reproducible="exact")  # the keyword is gone: it would be a key the function lacks
 
 
 def test_an_old_short_record_entry_never_false_hits(world, envbox, monkeypatch):

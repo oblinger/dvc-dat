@@ -470,7 +470,7 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
               _rev=rev, _takes_path=takes_path, _template=template, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name},
               kind="ledger" if mark is not None else "dat",
-              deterministic=mark.deterministic if mark is not None else None)
+              reproducible=mark.reproducible if mark is not None else None)
 
 
 def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str, str]) -> Code:

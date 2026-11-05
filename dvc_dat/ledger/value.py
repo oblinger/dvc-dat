@@ -144,6 +144,14 @@ class Value:
         the store one at a time; never held in memory whole."""
         return ()
 
+    @classmethod
+    def _stored_hashes(cls, store: "ArtStore", h: str) -> Iterable[str]:
+        """The parts of the value stored under ``h``, read off the store: what a copy carries beside the encoding,
+        never decoded. A class with ``_parts`` says here where they are recorded."""
+        if cls._parts is not Value._parts:
+            raise NotImplementedError(f"{cls.__name__} has parts and does not say how they are found (_stored_hashes)")
+        return ()
+
     def _after_seal(self, store: "ArtStore", name: Optional[str] = None) -> None:
         """Hook run once the value is sealed (a ``Dat`` moves to its stored folder, at its name if named)."""
 

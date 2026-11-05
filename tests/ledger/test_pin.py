@@ -32,17 +32,17 @@ JOBS = textwrap.dedent('''
         return {"n": 2 * n}
 
 
-    @dat.fn(deterministic=True)
+    @dat.fn(reproducible="exact")
     def stable(rev, *, n: int) -> dict:
         return {"n": n + 1}
 
 
-    @dat.fn(deterministic=False)
+    @dat.fn(reproducible=False)
     def noisy(rev, *, n: int) -> dict:
         return {"r": random.random(), "n": n}
 
 
-    @dat.fn(deterministic=True)
+    @dat.fn(reproducible="exact")
     def liar(rev, *, n: int) -> dict:
         return {"r": random.random(), "n": n}
 
@@ -221,7 +221,7 @@ def test_rerun_reproduces_from_a_fresh_clone_after_the_branch_is_squashed_and_co
     assert subprocess.run(["git", "cat-file", "-e", f"{w.commit}^{{commit}}"], cwd=clone).returncode != 0
     out = w.L.at().rerun(v)
     assert isinstance(out, Rerun) and out.outcome == REPRODUCED and out.reproduced
-    assert out.hash == out.expected == v.hash and out.deterministic is None and out.tag == tag_of(w.commit)
+    assert out.hash == out.expected == v.hash and out.reproducible is None and out.tag == tag_of(w.commit)
     assert out.worktree.is_dir() and git(out.worktree, "rev-parse", "HEAD") == w.commit
     assert str(out.worktree).startswith(str(w.L.path)), "the worktree lives under the ledger"
     again = w.L.at().rerun(v)
@@ -232,16 +232,16 @@ def test_the_three_outcomes_and_the_deterministic_claim(world):
     w = world
     plain, stable, noisy, liar = (run(w, n, n=4) for n in ("double", "stable", "noisy", "liar"))
     head = w.L.at()
-    assert head.ns.load("pinpkg.jobs.stable").deterministic is True
-    assert head.ns.load("pinpkg.jobs.noisy").deterministic is False
-    assert head.ns.load("pinpkg.jobs.double").deterministic is None
+    assert head.ns.load("pinpkg.jobs.stable").reproducible == "exact"
+    assert head.ns.load("pinpkg.jobs.noisy").reproducible is False
+    assert head.ns.load("pinpkg.jobs.double").reproducible is None
     for v in (plain, stable, noisy, liar):
         head.pin(v)
     assert w.L.at().rerun(plain).outcome == REPRODUCED
     assert w.L.at().rerun(stable).outcome == REPRODUCED
     assert w.L.at().rerun(noisy).outcome == DIFFERED_NONDETERMINISTIC
     bad = w.L.at().rerun(liar)
-    assert bad.outcome == DIFFERED_DETERMINISTIC and bad.deterministic is True and bad.hash != bad.expected
+    assert bad.outcome == DIFFERED_DETERMINISTIC and bad.reproducible == "exact" and bad.hash != bad.expected
 
 
 def test_pin_with_rerun_records_the_outcome_and_a_deterministic_difference_is_the_one_error(world):
@@ -272,7 +272,7 @@ def test_a_sandboxed_value_pins_and_reruns_in_the_worker(world):
     w.L.at().pin(v)
     assert w.L.at()[v.subject, RERUNNABLE] == "true"
     out = w.L.at().rerun(v)
-    assert out.outcome == REPRODUCED and out.deterministic is True
+    assert out.outcome == REPRODUCED and out.reproducible == "exact"
 
 
 def test_a_sandboxed_run_from_a_dirty_checkout_is_refused(world):

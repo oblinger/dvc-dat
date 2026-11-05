@@ -2,7 +2,7 @@
 
 ``@dat.fn`` (``from dvc_dat import dat``) declares and returns the function unchanged (A52): a plain call
 runs the body and returns an unsealed ``Value``, recording nothing;
-``@dat.fn(deterministic=True|False)`` adds a claim about the function (``FnMark``, SVP 250 A11).
+``@dat.fn(reproducible=...)`` adds a claim about the function (``FnMark``, ``claim``, SVP 251 Q2).
 ``rev.ns.load(name)`` resolves a dotted name at a revision; a function comes
 back an ``Fn``: under a mounted prefix (``db/mount/<prefix>`` rows) a sandboxed
 function, read off the mounted file and run in a worker (``sandbox``);
@@ -34,10 +34,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+from .claim import PREDICATE as REPRODUCIBLE, claim_text, clauses, widens
 from .codec import canonical, hash_text, ref_text, sha256
 from .env import Env, current_env, platform_items, repo_of
 from .errors import NotClean, NotEvaluated
-from .policy import DETERMINISTIC
+from .policy import EXACT_FIELDS
 from .code import Code
 from .value import Blob, Value, check_loadable, dotted
 from ..core import Dat
@@ -81,7 +82,8 @@ class RunTrace:
     unsandboxed run (``repo`` ``None`` outside any), for the code check at a late save. ``clock`` is
     ``(repo, package, version, commit)`` of the code that ran, sandboxed or not, for the
     ``db/repo/<repo>/<package> db/version`` and ``db/repo/<repo> db/commit`` a seal advances (DAT 1043, 1044);
-    ``None`` outside any checkout or when the code declares no version."""
+    ``None`` outside any checkout or when the code declares no version. ``reproducible`` is the function's claim as
+    its ``db/reproducible`` row holds it (``claim``), ``None`` for no row."""
 
     name: str
     enc: str
@@ -95,6 +97,7 @@ class RunTrace:
     dirty: bool = False
     returns: str = ""
     clock: Optional[Tuple[str, str, str, str]] = None
+    reproducible: Optional[str] = None
 
     def record(self) -> Dict[str, Any]:
         """As JSON, for a ``v.seal()`` seal record."""
@@ -126,7 +129,8 @@ def run_trace(fn: "Fn", plain: "Rev", trace: Dict[str, str], enc: str, provenanc
     """``code`` is what ran: ``fn.code``, with a sandboxed run's run-time loads beside its own."""
     return RunTrace(name=fn.name, enc=enc, trace=dict(trace), provenance=provenance, code_subject=code.subject,
                     code_rows=tuple(code._rows()), ledger=ledger_key(plain.ledger), sandboxed=fn.code.sandboxed,
-                    repo=repo, dirty=dirty, returns=fn._returns, clock=clock_of(fn, code))
+                    repo=repo, dirty=dirty, returns=fn._returns, clock=clock_of(fn, code),
+                    reproducible=claim_text(fn.reproducible))
 
 
 def attach_run(value: Value, run: RunTrace) -> Value:
@@ -163,7 +167,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     """Write ``value`` as ``run``'s memo entry into the open transaction ``t``; its subject.
 
     The entry ``seal_entry`` always wrote: ``db/fn`` (the dotted name), ``db/keys``, ``db/returns``
-    (the function's return annotation), the trace as
+    (the function's return annotation), ``db/reproducible`` (its claim, when it makes one), the trace as
     ``db/deps/*`` (``code`` naming the ``db/code/<hash 16>`` item, written once), ``db/value``, under
     ``<hash of (fn, keys, trace, preds, value)>``. ``refuse_held``: an
     identical entry already on the ledger raises ``_AlreadySealed`` (the caller loads it)."""
@@ -181,12 +185,14 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     vtext = ref_text(dotted(type(value)), t._hash_of(value))
     subject = hash_text(canonical({"fn": run.name, "keys": json.loads(run.enc), "trace": run.trace,
                                    "preds": canon, "value": vtext}))
-    if refuse_held and t._snapshot()._held(subject, "db/value"):
-        raise _AlreadySealed(subject)
+    if refuse_held and t._snapshot()._held(subject, "db/value") and not _spec_only(t._snapshot(), subject):
+        raise _AlreadySealed(subject)           # a spec-only entry takes the bytes of this run (SVP 251)
     t._ensure_code(run.code_subject, run.code_rows)
     if run.clock is not None:
         t._advance_clock(*run.clock)
     extra = [("db/fn", "str:" + run.name), ("db/keys", "json:" + run.enc), ("db/returns", "str:" + run.returns)]
+    if run.reproducible is not None:
+        extra.append((REPRODUCIBLE, "json:" + run.reproducible))
     if value.sealed and value.subject is None:
         extra.append(("db/sealed-at", "str:" + str(value.sealed)))
     if name is None:
@@ -203,35 +209,35 @@ MARK = "__dat_fn__"
 
 @dataclass(frozen=True)
 class FnMark:
-    """What ``@dat.fn`` declares of a function, held on the function object (SVP 250 A11): ``deterministic``
-    is ``True`` (the same inputs give the same bytes, on one card), ``False`` (they need not), or ``None``
-    (no claim). Immutable: a property of the function, never a ledger row."""
+    """What ``@dat.fn`` declares of a function, held on the function object: ``reproducible``, its claim as
+    written (``claim``, SVP 251 Q2). A run writes it as the ``db/reproducible`` row."""
 
-    deterministic: Optional[bool] = None
+    reproducible: Any = None
 
 
-def fn(func: Optional[Callable] = None, *, deterministic: Optional[bool] = None) -> Any:
-    """``@dat.fn`` / ``@dat.fn(deterministic=True|False)``: mark a value function. It takes the ``Rev`` first
-    and keywords after, and returns a ``Value``.
+def fn(func: Optional[Callable] = None, *, reproducible: Any = None) -> Any:
+    """``@dat.fn`` / ``@dat.fn(reproducible=...)``: mark a value function. It takes the ``Rev`` first and keywords
+    after, and returns a ``Value``.
 
     The return annotation is required (``TypeError`` at decoration): a ``Value`` subclass means the
     result must be one; any other annotation means a bare result is wrapped in ``Value.Blob`` (A31).
-    The function comes back unchanged and still callable (A52); nothing is written on import. ``deterministic``
-    (``FnMark``) is a claim about the function: ``True`` makes every memo lookup of it ask for the same card and
-    driver on top of the ledger's memo policy, and a rerun that differs an error; ``False`` says a rerun may
-    differ; ``None`` (default) claims nothing.
+    The function comes back unchanged and still callable (A52); nothing is written on import. ``reproducible``
+    (``FnMark``, the grammar in ``claim``) is how far a rerun of it can be trusted: ``"exact"`` (bit-identical;
+    every memo lookup of it also asks for the same card and driver, and a rerun that differs is an error), ``True``
+    (good enough: a rerun that differs is allowed), ``None`` (default, unknown), ``False`` (flaky), a clause
+    ``(level, predicate, ...)``, or a list of clauses, first match wins. ``TypeError`` for anything else.
     """
     if func is None:
-        return lambda f: fn(f, deterministic=deterministic)
+        clauses(reproducible)
+        return lambda f: fn(f, reproducible=reproducible)
     if not callable(func) or isinstance(func, type):
         raise TypeError(f"@dat.fn goes on a function, not {func!r}")
-    if deterministic is not None and not isinstance(deterministic, bool):
-        raise TypeError(f"deterministic is True, False or None, not {deterministic!r}")
+    clauses(reproducible)
     ann = getattr(func, "__annotations__", {})
     if "return" not in ann:
         raise TypeError(f"@dat.fn {getattr(func, '__qualname__', func)!r}: a return annotation is required "
                         "(-> a Value subclass, or any type to be wrapped in Value.Blob)")
-    setattr(func, MARK, FnMark(deterministic))
+    setattr(func, MARK, FnMark(reproducible))
     return func
 
 
@@ -260,7 +266,7 @@ def _dat_names(tree: Any) -> Tuple[set, set]:
 
 def fn_mark_in_source(tree: Any, fdef: Any) -> Optional[FnMark]:
     """The ``FnMark`` a function definition carries, read off its source (a mounted function is never imported
-    in the caller): ``@dat.fn``, ``@dat.fn(deterministic=...)``, ``dat`` being any name the module binds to
+    in the caller): ``@dat.fn``, ``@dat.fn(reproducible=...)``, ``dat`` being any name the module binds to
     ``dvc_dat.dat`` (``from dvc_dat import dat``), or ``@dvc_dat.dat.fn``; ``None`` when unmarked."""
     import ast
 
@@ -279,14 +285,16 @@ def fn_mark_in_source(tree: Any, fdef: Any) -> Optional[FnMark]:
         if is_fn(d):
             return FnMark()
         if isinstance(d, ast.Call) and is_fn(d.func):
-            det = None
+            claim = None
             for kw in d.keywords:
-                if kw.arg == "deterministic":
+                if kw.arg == "reproducible":
                     try:
-                        det = ast.literal_eval(kw.value)
+                        claim = ast.literal_eval(kw.value)
                     except ValueError:
-                        det = None
-            return FnMark(det if isinstance(det, bool) else None)
+                        raise TypeError(f"@dat.fn on {fdef.name}: a mounted function is read off its file, so "
+                                        "reproducible= is a literal") from None
+                    clauses(claim)
+            return FnMark(claim)
     return None
 
 
@@ -448,7 +456,7 @@ def installed_fn(rev: "Rev", name: str, obj: Any) -> "Fn":
     sig, takes_path, template = signature_of(name, obj)
     return Fn(name=name, module=src, mount=None, signature=sig, env=env, code=code,
               _rev=rev, _obj=obj, _takes_path=takes_path, _template=template, _returns=returns_text(obj),
-              deterministic=mark.deterministic)
+              reproducible=mark.reproducible)
 
 
 def source_of(name: str, obj: Any) -> Tuple[str, Path]:
@@ -507,8 +515,8 @@ class Fn:
     ``name`` is the dotted string it was loaded by; ``code`` the snapshot it is looked up in, which alone
     has identity (``code.subject``, DAT 1037). ``kind`` is read off the function: ``"ledger"`` for a
     ``@dat.fn``, ``"dat"`` for an undecorated one, a dat's run function, which runs only through a
-    spec (``rev.run(spec)``; its keys are the expanded spec, DAT 1046). ``deterministic`` is the function's
-    own claim (``@dat.fn(deterministic=...)``, SVP 250 A11): ``True``, ``False`` or ``None``."""
+    spec (``rev.run(spec)``; its keys are the expanded spec, DAT 1046). ``reproducible`` is the function's
+    own claim as written (``@dat.fn(reproducible=...)``, SVP 251 Q2)."""
 
     name: str
     module: Path
@@ -523,7 +531,7 @@ class Fn:
     _returns: str = field(repr=False, compare=False, default="")
     _info: Dict[str, Any] = field(repr=False, compare=False, default_factory=dict)
     kind: str = "ledger"
-    deterministic: Optional[bool] = None
+    reproducible: Any = None
 
     def __repr__(self) -> str:
         """``<Fn plane.measure.length@2.7.1>``: the name, ``@`` its code's version (DAT 1036, 1037)."""
@@ -569,7 +577,7 @@ class Fn:
         there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
         (Q36). A hit asked for under a new name takes that name. ``kwargs``: the function's whole key
         set, for a key that is also a control option's name; inline keys beside it are ``TypeError``.
-        A function claiming ``deterministic=True`` (``@dat.fn(deterministic=True)``, SVP 250 A11): the lookup
+        A function claiming ``exact`` in any clause (``@dat.fn(reproducible="exact")``, SVP 251 Q2): the lookup
         also asks that the entry ran on the same ``card`` and ``driver``, on top of the ledger's memo policy
         (SVP 1474); the entry written is the same either way."""
         from .txn import Transaction
@@ -597,7 +605,7 @@ class Fn:
         item = f"eval:{self.name}{enc}"
         target = None if path is None else os.fspath(path)
         if level not in (True, False):
-            hit = lookup(plain, self.name, enc, widen=DETERMINISTIC if self.deterministic else ())
+            hit = lookup(plain, self.name, enc, widen=EXACT_FIELDS if widens(self.reproducible) else ())
             if hit is not None or level == "get":
                 rev._record_run(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
                 at = target if target is not None or hit is None or self.kind != "dat" else hit.name
@@ -915,10 +923,17 @@ def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: s
     return value
 
 
+def _spec_only(rev: "Rev", subject: str) -> bool:
+    from .rev import Ref
+
+    return Ref(rev, subject)._spec_only()
+
+
 def lookup(plain: "Rev", name: str, enc: str, widen: Sequence[str] = ()) -> Optional[Value]:
     """The latest-sealed entry for ``(name, keys)`` whose dependencies hold at ``plain``; never runs.
     The memo index (``policy.reduced``) skips a candidate whose platform the policy already rules out;
-    every other candidate is judged in full (``trace_matches``, ``widen`` added to the policy)."""
+    every other candidate is judged in full (``trace_matches``, ``widen`` added to the policy). A spec-only copy
+    (SVP 251) holds no bytes to hand back: it is no hit."""
     from .policy import judge, policy_at, reduced
     from .rev import Ref
     from .trace import trace_matches
@@ -936,6 +951,8 @@ def lookup(plain: "Rev", name: str, enc: str, widen: Sequence[str] = ()) -> Opti
     for _r, _o, s in sorted(cands, reverse=True):
         if s in keys and (keys[s] is None or keys[s] != want):
             continue                                # the policy rules its platform out: no row read
+        if _spec_only(top, s):
+            continue
         trace = {p[len("db/deps/"):]: h.obj.partition(":")[2]
                  for _s, p, h in top._held_rows(subject=s) if p.startswith("db/deps/")}
         if trace_matches(plain, trace, widen):

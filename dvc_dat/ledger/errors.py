@@ -26,8 +26,17 @@ class NotPinned(LedgerError, RuntimeError):
     the commit, an input is on no ledger, the remote refused the push, or the value's commit is not pinned."""
 
 
+class NotCopied(LedgerError, RuntimeError):
+    """A copy refused, nothing written (SVP 251): a value not on a ledger, an input that cannot be found, a ledger
+    declaring no lifetime for ``safe`` to read."""
+
+
+class SpecOnly(LedgerError, LookupError):
+    """A value this ledger holds as its spec alone (SVP 251): its rows, no bytes; ``rev.rerun`` makes it again."""
+
+
 class Differed(LedgerError, RuntimeError):
-    """A rerun of a function claiming ``deterministic=True`` produced a different hash (SVP 250 A4)."""
+    """A rerun of a function claiming ``exact`` produced a different hash (SVP 250 A4, SVP 251 Q2)."""
 
 
 class UnmountedImport(LedgerError, ImportError):

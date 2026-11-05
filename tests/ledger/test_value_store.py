@@ -271,3 +271,19 @@ def test_a_fresh_process_with_an_empty_cache_fetches(tmp_path, monkeypatch, clou
     out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=env, cwd=tmp_path)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "G1 frames"
+
+
+def test_a_copy_fetches_from_the_sources_store_and_lands_on_the_destinations(L, clouds, tmp_path):
+    """SVP 251: the bytes reach a copy by hash, through both stores; the store row is the destination's."""
+    from dvc_dat.ledger import Ref
+
+    store(L, "gcp")
+    v = seal_video(L)
+    drop_cache(L)
+    other = Ledger(tmp_path / "other", create=True)
+    store(other, "azure")
+    other.at().copy(Ref(L.at(), v.subject), safe=False)
+    assert clouds["azure"].exists(v.hash) and other._store.art.exists(v.hash)
+    assert other.at()[v.subject, "db/store"] == "azure" and L.at()[v.subject, "db/store"] == "gcp"
+    drop_cache(other)
+    assert Ref(other.at(), v.subject).load().frames == b"G1 frames"
