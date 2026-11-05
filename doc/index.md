@@ -52,7 +52,7 @@ result = Dat.manager.run("catalog.experiment", epochs=200)
 ## Demos
 
 Notebooks in [`DAT Demos/`](https://github.com/oblinger/dvc-dat/tree/main/doc/DAT%20Demos), each paired with a `py:percent` script and executed with its
-outputs kept (`just demo` re-syncs and re-runs them; the tests run every one):
+outputs kept (`just demo` re-syncs and re-runs the `demo-*` ones, `just walkthrough` generates and runs `api-walkthrough` from its script):
 
 - **[`api-walkthrough`](DAT%20Demos/api-walkthrough.ipynb)** — the one API sheet: dats, the namespace, values and the ledger, in one notebook
 - **[`cli-walkthrough`](DAT%20Demos/cli-walkthrough.ipynb)** — the shell side: `just run` and the ledger verbs, each beside the API call it makes
