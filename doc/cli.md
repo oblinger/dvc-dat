@@ -5,7 +5,7 @@ The command line, `just run` and `x`: where it finds its config, and every subco
 ```
 x TARGET [ARG ...] [KEY=VALUE ...]      run TARGET (just run)
 just mounts [PREFIX]                    the mounted names (x --list)
-just values|value|history|why|set|index|bump ...   the ledger verbs
+just values|value|history|why|set|index|bump|pin|rerun ...   the ledger verbs
 x --info                                version, folders, config
 x --version                             the version
 x --help                                the usage message
@@ -108,8 +108,8 @@ records nothing.
 | TARGET | The function and its keys |
 |--------|---------------------------|
 | a spec file, `.yaml` / `.json` | `main` names it; the other keys are its keys |
-| a mounted name | the `@ledger_fn` it loads to, or a spec with `main` |
-| a dotted name | the `@ledger_fn` itself |
+| a mounted name | the `@dat.fn` it loads to, or a spec with `main` |
+| a dotted name | the `@dat.fn` itself |
 
 ```bash
 x demo_game.game.cut game=G1 version=1.5.3   # ran, then hit
@@ -123,15 +123,15 @@ that is not a ledger function, and a positional argument, are refused.
 It runs in the active ledger, as `Ledger()` opens it: `DAT_LEDGER` (a
 `ledgers:` name or a location), else the section's `default:`.
 
-## Commands: `@command` and `.dat/targets.just`
+## Commands: `@dat.command` and `.dat/targets.just`
 
-A function marked `@command` also runs as `just NAME`:
+A function marked `@dat.command` also runs as `just NAME`:
 
 ```python
-from dvc_dat.just import command
+from dvc_dat import dat
 
-@command(args="game=…", help="train the model on one game's tracks")
-@ledger_fn
+@dat.command(args="game=…", help="train the model on one game's tracks")
+@dat.fn
 def train(rev, *, game: str, path: Path) -> StageDat: ...
 ```
 
@@ -227,6 +227,8 @@ short kind names and hash prefixes.
 | `just set SUBJECT k=v ... [alias=TARGET]` | rows on a subject; `alias=` points the name at a value (a hash prefix expands) | `t[s, p] = o`, `t.add(s, "db/alias", ...)` |
 | `just index PRED` | declares the pred indexed | `t.add("db/pred/PRED", "db/index", "true")` |
 | `just bump NAME [patch\|minor\|major]` | a module: its `__version__` in the source; `db` or a `a/b` subject: a ledger clock | `bump_source`, `bump` |
+| `just pin VALUE [recursive=true] [rerun=true]` | tag and push the commit behind a value; assert it is rerunnable (SVP 250) | `L.at().pin(value, ...)` |
+| `just rerun VALUE` | run a pinned value's function again at its tag and compare the hash | `rev.rerun(value)` |
 
 A `k=v` value is JSON when it parses, else the text as typed. A refusal
 prints `<Error>: <message>` and exits `1`. The interpreter is

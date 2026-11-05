@@ -4,7 +4,8 @@ resolves a class by its dotted name, ``rev.ns.load`` a function by its)."""
 from pathlib import Path
 
 import ledger_helper
-from dvc_dat.ledger import Dat, Ref, Value, ledger_class, ledger_fn
+from dvc_dat.ledger import Dat, Ref, Value, ledger_class
+from dvc_dat import dat
 
 CALLS = {}
 
@@ -54,7 +55,7 @@ class Plain(Value):
         return cls(src.read())
 
 
-@ledger_fn
+@dat.fn
 def cut(rev, *, game: str, version: str = "1.0.0") -> Cut:
     _count("cut")
     home = rev[f"game/{game}", "home"]
@@ -64,78 +65,89 @@ def cut(rev, *, game: str, version: str = "1.0.0") -> Cut:
     return c
 
 
-@ledger_fn
+@dat.fn(deterministic=True)
+def cut_det(rev, *, game: str, version: str = "1.0.0") -> Cut:
+    """``cut`` claiming determinism (SVP 250 A11): its lookups ask for the same card and driver."""
+    _count("cut_det")
+    home = rev[f"game/{game}", "home"]
+    raw = rev.value(kind=Video, game=game)
+    c = Cut(raw.frames[:4] + home.encode())
+    c.preds.update(game=game, version=version, video=raw)
+    return c
+
+
+@dat.fn
 def thumb(rev, *, clip) -> dict:
     _count("thumb")
     return {"n": len(clip.load().clip)}
 
 
-@ledger_fn
+@dat.fn
 def poster(rev, *, game: str) -> dict:
     _count("poster")
     return {"n": len(rev.load(f"game/{game}").clip)}
 
 
-@ledger_fn
+@dat.fn
 def chain(rev, *, game: str) -> dict:
     _count("chain")
     return {"thumb": rev.run("ledger_kinds.cut", game=game).hash[:8]}
 
 
-@ledger_fn
+@dat.fn
 def folder(rev, *, game: str, path: Path) -> Dat:
     _count("folder")
     (path / "a.txt").write_text(game)
     return Dat(path)
 
 
-@ledger_fn
+@dat.fn
 def placed(rev, *, game: str, path: Path = "games/{game}") -> Dat:
     _count("placed")
     (path / "g.txt").write_text(game)
     return Dat(path)
 
 
-@ledger_fn
+@dat.fn
 def controls(rev, *, seal: int, clean: str, kwargs: dict, n: int = 0) -> dict:
     return {"seal": seal, "clean": clean, "kwargs": kwargs, "n": n}
 
 
-@ledger_fn
+@dat.fn
 def wrong(rev, *, game: str) -> Cut:
     return {"not": "a cut"}
 
 
-@ledger_fn
+@dat.fn
 def via_ref(rev, *, name: str) -> dict:
     return {"n": ledger_helper.twice(len(Ref(rev, name).load().data))}
 
 
-@ledger_fn
+@dat.fn
 def via_ref_preds(rev, *, name: str) -> dict:
     return {"game": Ref(rev, name).preds.get("game")}
 
 
-@ledger_fn
+@dat.fn
 def via_refs_rev(rev, *, game: str) -> dict:
     r = rev.refs(game=game)[0]
     return {"note": r.rev.get(r.subject, "note")}
 
 
-@ledger_fn
+@dat.fn
 def maybe(rev, *, game: str) -> dict:
     hit = rev.run("ledger_kinds.cut", game=game, seal="get")
     return {"had": hit is not None}
 
 
-@ledger_fn
+@dat.fn
 def scratchy(rev, *, game: str, path: Path) -> dict:
     CALLS["work"] = path
     (path / "tmp.txt").write_text(game)
     return {"game": game}
 
 
-@ledger_fn
+@dat.fn
 def sealed_early(rev, *, game: str) -> Cut:
     c = Cut(game.encode())
     c.seal()

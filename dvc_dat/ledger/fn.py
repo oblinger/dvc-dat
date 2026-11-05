@@ -1,12 +1,13 @@
-"""``ledger_fn``, ``Fn`` and ``run`` (``Fn.__call__``): a revision function resolved at a ``Rev``.
+"""``dat.fn``, ``Fn`` and ``run`` (``Fn.__call__``): a revision function resolved at a ``Rev``.
 
-``@ledger_fn`` declares and returns the function unchanged (A52): a plain call
-runs the body and returns an unsealed ``Value``, recording nothing.
+``@dat.fn`` (``from dvc_dat import dat``) declares and returns the function unchanged (A52): a plain call
+runs the body and returns an unsealed ``Value``, recording nothing;
+``@dat.fn(deterministic=True|False)`` adds a claim about the function (``FnMark``, SVP 250 A11).
 ``rev.ns.load(name)`` resolves a dotted name at a revision; a function comes
 back an ``Fn``: under a mounted prefix (``db/mount/<prefix>`` rows) a sandboxed
 function, read off the mounted file and run in a worker (``sandbox``);
 otherwise an installed one, resolved in this process. Its ``kind`` is
-``"ledger"`` for a ``@ledger_fn`` (its keys are its memo key and it receives
+``"ledger"`` for a ``@dat.fn`` (its keys are its memo key and it receives
 them) and ``"dat"`` for an undecorated function, a dat's run function (its memo
 key is the expanded spec, and it receives the dat made from it; DAT 1046).
 Calling the ``Fn`` is ``run``: a memo lookup over
@@ -46,7 +47,7 @@ if TYPE_CHECKING:
 
 #: The control options of a call (Q41): never keys, never hashed. A function may declare one as a
 #: key and is then called through ``kwargs=``; a declared ``path`` is the folder it builds (Q36).
-RESERVED_KEYS = ("seal", "clean", "path", "kwargs", "deterministic")
+RESERVED_KEYS = ("seal", "clean", "path", "kwargs")
 #: The name a folder-producing miss gets with neither ``path=`` nor a template (as ``Dat.create``).
 ANONYMOUS = "anonymous/Dat{unique}"
 
@@ -196,21 +197,97 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     return subject
 
 
-def ledger_fn(func: Callable) -> Callable:
-    """Mark a value function: it takes the ``Rev`` first and keywords after, and returns a ``Value``.
+#: The attribute ``@dat.fn`` leaves on a function: its ``FnMark``.
+MARK = "__dat_fn__"
+
+
+@dataclass(frozen=True)
+class FnMark:
+    """What ``@dat.fn`` declares of a function, held on the function object (SVP 250 A11): ``deterministic``
+    is ``True`` (the same inputs give the same bytes, on one card), ``False`` (they need not), or ``None``
+    (no claim). Immutable: a property of the function, never a ledger row."""
+
+    deterministic: Optional[bool] = None
+
+
+def fn(func: Optional[Callable] = None, *, deterministic: Optional[bool] = None) -> Any:
+    """``@dat.fn`` / ``@dat.fn(deterministic=True|False)``: mark a value function. It takes the ``Rev`` first
+    and keywords after, and returns a ``Value``.
 
     The return annotation is required (``TypeError`` at decoration): a ``Value`` subclass means the
     result must be one; any other annotation means a bare result is wrapped in ``Value.Blob`` (A31).
-    The function comes back unchanged and still callable (A52); nothing is written on import.
+    The function comes back unchanged and still callable (A52); nothing is written on import. ``deterministic``
+    (``FnMark``) is a claim about the function: ``True`` makes every memo lookup of it ask for the same card and
+    driver on top of the ledger's memo policy, and a rerun that differs an error; ``False`` says a rerun may
+    differ; ``None`` (default) claims nothing.
     """
-    if not callable(func):
-        raise TypeError(f"@ledger_fn goes on a function, not {func!r}")
+    if func is None:
+        return lambda f: fn(f, deterministic=deterministic)
+    if not callable(func) or isinstance(func, type):
+        raise TypeError(f"@dat.fn goes on a function, not {func!r}")
+    if deterministic is not None and not isinstance(deterministic, bool):
+        raise TypeError(f"deterministic is True, False or None, not {deterministic!r}")
     ann = getattr(func, "__annotations__", {})
     if "return" not in ann:
-        raise TypeError(f"@ledger_fn {getattr(func, '__qualname__', func)!r}: a return annotation is required "
+        raise TypeError(f"@dat.fn {getattr(func, '__qualname__', func)!r}: a return annotation is required "
                         "(-> a Value subclass, or any type to be wrapped in Value.Blob)")
-    func.__ledger_fn__ = True  # type: ignore[attr-defined]
+    setattr(func, MARK, FnMark(deterministic))
     return func
+
+
+def fn_mark(obj: Any) -> Optional[FnMark]:
+    """The ``FnMark`` of a function marked ``@dat.fn``, else ``None`` (an undecorated function: a dat's run
+    function)."""
+    mark = getattr(obj, MARK, None)
+    return mark if isinstance(mark, FnMark) else None
+
+
+def _dat_names(tree: Any) -> Tuple[set, set]:
+    """``(names bound to dvc_dat.dat, names bound to dvc_dat.dat.fn)`` by a module's top-level imports."""
+    import ast
+
+    dats, fns = {"dat"}, set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "dvc_dat":
+                dats.update(a.asname or a.name for a in node.names if a.name == "dat")
+            elif node.module in ("dvc_dat.dat", "dvc_dat.ledger.fn"):
+                fns.update(a.asname or a.name for a in node.names if a.name == "fn")
+        elif isinstance(node, ast.Import):
+            dats.update(a.asname for a in node.names if a.name == "dvc_dat.dat" and a.asname)
+    return dats, fns
+
+
+def fn_mark_in_source(tree: Any, fdef: Any) -> Optional[FnMark]:
+    """The ``FnMark`` a function definition carries, read off its source (a mounted function is never imported
+    in the caller): ``@dat.fn``, ``@dat.fn(deterministic=...)``, ``dat`` being any name the module binds to
+    ``dvc_dat.dat`` (``from dvc_dat import dat``), or ``@dvc_dat.dat.fn``; ``None`` when unmarked."""
+    import ast
+
+    dats, fns = _dat_names(tree)
+
+    def is_fn(node: Any) -> bool:
+        if isinstance(node, ast.Name):
+            return node.id in fns
+        if isinstance(node, ast.Attribute) and node.attr == "fn":
+            v = node.value
+            return (isinstance(v, ast.Name) and v.id in dats) or (
+                isinstance(v, ast.Attribute) and v.attr == "dat" and isinstance(v.value, ast.Name)
+                and v.value.id == "dvc_dat")
+        return False
+    for d in fdef.decorator_list:
+        if is_fn(d):
+            return FnMark()
+        if isinstance(d, ast.Call) and is_fn(d.func):
+            det = None
+            for kw in d.keywords:
+                if kw.arg == "deterministic":
+                    try:
+                        det = ast.literal_eval(kw.value)
+                    except ValueError:
+                        det = None
+            return FnMark(det if isinstance(det, bool) else None)
+    return None
 
 
 def returns_text(func: Callable) -> str:
@@ -358,18 +435,20 @@ def signature_of(name: str, obj: Callable) -> Tuple[inspect.Signature, bool, Opt
 
 def installed_fn(rev: "Rev", name: str, obj: Any) -> "Fn":
     """The ``Fn`` of a function resolved in this process (no mount): ``kind`` ``"ledger"`` when it is a
-    ``@ledger_fn``, else ``"dat"`` (a dat's run function), its ``Code`` the static closure of its module."""
+    ``@dat.fn``, else ``"dat"`` (a dat's run function), its ``Code`` the static closure of its module."""
     if not callable(obj):
         raise TypeError(f"{name!r} is {obj!r}, not a function")
     modname, src = source_of(name, obj)
     env = current_env()
     code = installed_code(modname, src, env)
-    if not getattr(obj, "__ledger_fn__", False):
+    mark = fn_mark(obj)
+    if mark is None:
         return Fn(name=name, module=src, mount=None, signature=inspect.Signature(), env=env, code=code,
                   _rev=rev, _obj=obj, _takes_path=True, kind="dat")
     sig, takes_path, template = signature_of(name, obj)
     return Fn(name=name, module=src, mount=None, signature=sig, env=env, code=code,
-              _rev=rev, _obj=obj, _takes_path=takes_path, _template=template, _returns=returns_text(obj))
+              _rev=rev, _obj=obj, _takes_path=takes_path, _template=template, _returns=returns_text(obj),
+              deterministic=mark.deterministic)
 
 
 def source_of(name: str, obj: Any) -> Tuple[str, Path]:
@@ -427,8 +506,9 @@ class Fn:
     """A revision function, resolved at ``_rev``; calling it is ``run``. Not on the timeline: no subject.
     ``name`` is the dotted string it was loaded by; ``code`` the snapshot it is looked up in, which alone
     has identity (``code.subject``, DAT 1037). ``kind`` is read off the function: ``"ledger"`` for a
-    ``@ledger_fn``, ``"dat"`` for an undecorated one, a dat's run function, which runs only through a
-    spec (``rev.run(spec)``; its keys are the expanded spec, DAT 1046)."""
+    ``@dat.fn``, ``"dat"`` for an undecorated one, a dat's run function, which runs only through a
+    spec (``rev.run(spec)``; its keys are the expanded spec, DAT 1046). ``deterministic`` is the function's
+    own claim (``@dat.fn(deterministic=...)``, SVP 250 A11): ``True``, ``False`` or ``None``."""
 
     name: str
     module: Path
@@ -443,6 +523,7 @@ class Fn:
     _returns: str = field(repr=False, compare=False, default="")
     _info: Dict[str, Any] = field(repr=False, compare=False, default_factory=dict)
     kind: str = "ledger"
+    deterministic: Optional[bool] = None
 
     def __repr__(self) -> str:
         """``<Fn plane.measure.length@2.7.1>``: the name, ``@`` its code's version (DAT 1036, 1037)."""
@@ -472,8 +553,7 @@ class Fn:
         return out
 
     def __call__(self, *, seal: Any = OWN, clean: bool = False, path: Any = None,
-                 kwargs: Optional[Dict[str, Any]] = None, deterministic: bool = False,
-                 **keys: Any) -> Optional[Value]:
+                 kwargs: Optional[Dict[str, Any]] = None, **keys: Any) -> Optional[Value]:
         """``f(k=v, ...)`` or ``f(kwargs={...})``: eval. The control options (Q41), never keys:
 
         ``seal``: where the result goes (DAT 1028). ``"get"``: the saved result if one holds, else
@@ -489,8 +569,9 @@ class Fn:
         there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
         (Q36). A hit asked for under a new name takes that name. ``kwargs``: the function's whole key
         set, for a key that is also a control option's name; inline keys beside it are ``TypeError``.
-        ``deterministic=True``: the lookup also asks that the entry ran on the same ``card`` and ``driver``,
-        on top of the ledger's memo policy (SVP 1474); the entry written is the same either way."""
+        A function claiming ``deterministic=True`` (``@dat.fn(deterministic=True)``, SVP 250 A11): the lookup
+        also asks that the entry ran on the same ``card`` and ``driver``, on top of the ledger's memo policy
+        (SVP 1474); the entry written is the same either way."""
         from .txn import Transaction
 
         if not self.code.sandboxed:
@@ -516,7 +597,7 @@ class Fn:
         item = f"eval:{self.name}{enc}"
         target = None if path is None else os.fspath(path)
         if level not in (True, False):
-            hit = lookup(plain, self.name, enc, widen=DETERMINISTIC if deterministic else ())
+            hit = lookup(plain, self.name, enc, widen=DETERMINISTIC if self.deterministic else ())
             if hit is not None or level == "get":
                 rev._record(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
                 at = target if target is not None or hit is None or self.kind != "dat" else hit.name

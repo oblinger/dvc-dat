@@ -187,7 +187,7 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 # From `dat.py`:
 #
 # ```python
-# @ledger_fn
+# @dat.fn
 # def dat(rev, *, spec: dict, path: Path, **kwargs) -> StageDat:
 #     """The dat constructor: `spec` the memo key, `path` the folder."""
 #     return build(rev, spec, path, **kwargs)
@@ -287,7 +287,7 @@ print("count:", detections_ref.preds["metrics.count"])        # → count: 40
 # `track.py`:
 #
 # ```python
-# @ledger_fn
+# @dat.fn
 # def tracks(rev, *, game: str, path: Path) -> StageDat:
 #     return build(rev, {**SPEC, "game": game}, path)
 #
@@ -305,8 +305,8 @@ print("count:", detections_ref.preds["metrics.count"])        # → count: 40
 # name:
 #
 # ```python
-# @command(args="game=…", help="train the model on one game's tracks")
-# @ledger_fn
+# @dat.command(args="game=…", help="train the model on one game's tracks")
+# @dat.fn
 # def train(rev, *, game: str, path: Path) -> StageDat:
 #     epochs = int(rev["cfg/train", "epochs"])            # traced
 #     d = build(rev, {"main": "demo_game.etl.model.fit",

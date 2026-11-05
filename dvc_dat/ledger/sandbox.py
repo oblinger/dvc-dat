@@ -97,8 +97,8 @@ from .env import Env, current_env, platform_items
 from .errors import ConfinedNetwork, ConfinedProcess, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
 from ..core import Dat, DatManager
-from .fn import (Fn, alias_reads, attach_run, dat_spec, drop_work, mounted_name, mounts_at, mounts_hash,
-                 path_template, run_trace, save_run, seal_entry, wrap_result)
+from .fn import (Fn, alias_reads, attach_run, dat_spec, drop_work, fn_mark, fn_mark_in_source, mounted_name, mounts_at,
+                 mounts_hash, path_template, run_trace, save_run, seal_entry, wrap_result)
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -397,8 +397,7 @@ def third_party_now(key: str) -> str:
     return "<missing>"
 
 
-def _signature(fdef: ast.FunctionDef, name: str,
-               marks: Set[str] = frozenset({"ledger_fn"})) -> Tuple[inspect.Signature, bool, Optional[str], str, bool]:
+def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, bool, Optional[str], str]:
     a = fdef.args
     params = []
     pos = a.posonlyargs + a.args
@@ -429,7 +428,7 @@ def _signature(fdef: ast.FunctionDef, name: str,
     keep = [p for p in rest if p.name != "path"]
     template = path_template(folder.default) if folder is not None else None
     returns = ast.unparse(fdef.returns) if fdef.returns is not None else ""
-    return inspect.Signature(keep), folder is not None, template, returns, _decorated(fdef, marks)
+    return inspect.Signature(keep), folder is not None, template, returns
 
 
 def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Fn:
@@ -452,10 +451,9 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
         fdef = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == attr_name), None)
         if fdef is None:
             raise ImportError(f"{name!r}: no function {attr_name!r} in {f[0]}")
-        marks = _ledger_fn_names(tree)
-        decorated = _decorated(fdef, marks)
-        if decorated:
-            sig, takes_path, template, returns, _ = _signature(fdef, name, marks)
+        mark = fn_mark_in_source(tree, fdef)     # @dat.fn, read off the source (SVP 250 Q4, A11)
+        if mark is not None:
+            sig, takes_path, template, returns = _signature(fdef, name)
         else:                                       # a dat's run function: its keys are a spec (DAT 1046)
             sig, takes_path, template, returns = inspect.Signature(), True, None, ""
         check_mounted_imports(mounts, modname, attr_name)
@@ -465,24 +463,8 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
               code=mounted_code(plain, env, m, modname, mods),
               _rev=rev, _takes_path=takes_path, _template=template, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name},
-              kind="ledger" if decorated else "dat")
-
-
-def _ledger_fn_names(tree: ast.Module) -> Set[str]:
-    """The names ``ledger_fn`` is bound to in a module, read off its source: ``ledger_fn`` itself and
-    every ``from ... import ledger_fn as <alias>`` at its top level."""
-    names = {"ledger_fn"}
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom):
-            names.update(a.asname for a in node.names if a.name == "ledger_fn" and a.asname)
-    return names
-
-
-def _decorated(fdef: ast.FunctionDef, marks: Set[str] = frozenset({"ledger_fn"})) -> bool:
-    """Is the function marked ``@ledger_fn`` (by name, an import alias of it in ``marks``, or attribute),
-    read off its source."""
-    return any((isinstance(d, ast.Name) and d.id in marks)
-               or (isinstance(d, ast.Attribute) and d.attr == "ledger_fn") for d in fdef.decorator_list)
+              kind="ledger" if mark is not None else "dat",
+              deterministic=mark.deterministic if mark is not None else None)
 
 
 def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str, str]) -> Code:
@@ -1103,10 +1085,10 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
                 try:
                     obj = getattr(importlib.import_module(modname), attr_name)
                     if fn.kind == "dat":
-                        if not callable(obj) or getattr(obj, "__ledger_fn__", False):
+                        if not callable(obj) or fn_mark(obj) is not None:
                             raise TypeError(f"{fn.name} is {obj!r}, not a dat's run function")
-                    elif not getattr(obj, "__ledger_fn__", False):
-                        raise TypeError(f"{fn.name!r} is not a ledger function (mark it @ledger_fn)")
+                    elif fn_mark(obj) is None:
+                        raise TypeError(f"{fn.name!r} is not a ledger function (mark it @dat.fn)")
                     else:
                         args = dict(kw, path=work) if work is not None else kw
                         out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)

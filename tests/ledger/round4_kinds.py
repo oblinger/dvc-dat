@@ -1,17 +1,18 @@
 """Ledger functions the round-4 leftover tests run (module level, so `rev.run` resolves them by name)."""
 
-from dvc_dat.ledger import ledger_fn, Value
+from dvc_dat.ledger import Value
+from dvc_dat import dat
 
 CALLS = {}
 
 
-@ledger_fn
+@dat.fn
 def reads(rev, *, s: str, p: str) -> dict:
     CALLS[s] = CALLS.get(s, 0) + 1
     return {"o": rev.get(s, p)}
 
 
-@ledger_fn
+@dat.fn
 def local_value(rev, *, n: int) -> Value:
     class Inner(Value):
         def __init__(self, d):
@@ -27,6 +28,6 @@ def local_value(rev, *, n: int) -> Value:
     return Inner(b"x" * n)
 
 
-@ledger_fn
+@dat.fn
 def echo(rev, *, x: object) -> dict:
     return {"x": x}

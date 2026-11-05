@@ -19,25 +19,26 @@ PKG = {
     "sbx/other.py": "X = 1\n",
     "sbx/stage/__init__.py": "",
     "flat/calc.py": textwrap.dedent('''
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
         from flatpkg import util
 
-        @ledger_fn
+        @dat.fn
         def area(rev, *, side: int) -> dict:
             return {"area": util.square(side)}
     '''),
     "flat/util.py": "def square(x):\n    return x * x\n",
     "flat/where.py": textwrap.dedent('''
         import os
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
-        @ledger_fn
+        @dat.fn
         def pid(rev, *, side: int) -> dict:
             import sys
             return {"pid": os.getpid(), "stage": [m for m in sys.modules if m.startswith("sbx.stage")]}
     '''),
     "sbx/stage/kinds.py": textwrap.dedent('''
-        from dvc_dat.ledger import Value, ledger_class, ledger_fn
+        from dvc_dat.ledger import Value, ledger_class
+        from dvc_dat import dat
 
         @ledger_class(preds=("game",))
         class Tagged(Value):
@@ -49,7 +50,7 @@ PKG = {
             def decode(cls, src, store):
                 return cls(src.read())
 
-        @ledger_fn
+        @dat.fn
         def tagged(rev, *, game: str) -> Tagged:
             v = Tagged(game.encode())
             v.preds["game"] = game
@@ -91,14 +92,14 @@ PKG = {
     '''),
     "sbx/stage/slow.py": textwrap.dedent('''
         import time
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
-        @ledger_fn
+        @dat.fn
         def slow(rev, *, n: int) -> dict:
             time.sleep(3)
             return {"who": "slow", "n": n}
 
-        @ledger_fn
+        @dat.fn
         def fast(rev, *, n: int) -> dict:
             return {"who": "fast", "n": n}
     '''),
@@ -107,11 +108,11 @@ PKG = {
         import json
         from pathlib import Path
         import yaml
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
         CONF = Path(__file__).parent / "stage" / "conf.yaml"
 
-        @ledger_fn
+        @dat.fn
         def peek(rev, *, how: str) -> dict:
             if how == "open":
                 return {"n": len(open(CONF).read())}
@@ -119,7 +120,7 @@ PKG = {
                 return {"n": len(yaml.safe_load(CONF.open()))}
             return {"n": len(CONF.read_text())}
 
-        @ledger_fn
+        @dat.fn
         def calm(rev, *, game: str, path: Path) -> dict:
             from sbx import other                    # importing a repo module reads it: the import system
             (path / "x.json").write_text(json.dumps({"g": game}))
@@ -127,7 +128,7 @@ PKG = {
             return {"x": other.X, "w": json.loads((path / "x.json").read_text()),
                     "inner": rev.run("sbx.plain.leaf", game=game).obj}
 
-        @ledger_fn
+        @dat.fn
         def leaf(rev, *, game: str) -> dict:
             return {"g": game}
     '''),
@@ -142,78 +143,79 @@ PKG = {
     "sbx/stage/fns.py": textwrap.dedent('''
         import importlib
         from pathlib import Path
-        from dvc_dat.ledger import Dat, ledger_fn
+        from dvc_dat.ledger import Dat
+        from dvc_dat import dat
 
-        @ledger_fn
+        @dat.fn
         def count(rev, *, game: str) -> dict:
             n = int(rev[f"game/{game}", "n"])
             return {"n": importlib.import_module("sbx.stage.helper").double(n)}
 
-        @ledger_fn
+        @dat.fn
         def nested(rev, *, game: str) -> dict:
             return {"inner": rev.run("mnt.sbx.stage.fns.count", game=game).obj}
 
-        @ledger_fn
+        @dat.fn
         def members(rev, *, s: str) -> list:
             return sorted(rev.all(s, "contains"))
 
-        @ledger_fn
+        @dat.fn
         def folder(rev, *, game: str, path: Path) -> Dat:
             (path / "f.txt").write_text(game)
             return Dat(path)
 
-        @ledger_fn
+        @dat.fn
         def pid(rev, *, game: str) -> dict:
             from sbx.stage import helper
             helper.CALLS = getattr(helper, "CALLS", 0) + 1
             import os
             return {"pid": os.getpid(), "calls": helper.CALLS}
 
-        @ledger_fn
+        @dat.fn
         def die(rev, *, game: str) -> dict:
             import os
             os._exit(3)
 
-        @ledger_fn
+        @dat.fn
         def libs(rev, *, game: str) -> dict:
             import colorsys
             import xlsxwriter
             return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0], "x": bool(xlsxwriter.__version__)}
 
-        @ledger_fn
+        @dat.fn
         def borrow(rev, *, game: str) -> dict:
             from sbx import other
             return {"x": other.X}
 
-        @ledger_fn
+        @dat.fn
         def conf(rev, *, game: str) -> dict:
             return {"text": (Path(__file__).parent / "conf.yaml").read_text()}
 
-        @ledger_fn
+        @dat.fn
         def hue(rev, *, game: str) -> dict:
             import colorsys
             return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0]}
 
-        @ledger_fn
+        @dat.fn
         def outer_hue(rev, *, game: str) -> dict:
             import colorsys                         # loaded here first: the nested hue imports it again
             return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0], "inner": rev.run("mnt.sbx.stage.fns.hue", game=game).obj}
 
-        @ledger_fn
+        @dat.fn
         def cross(rev, *, game: str) -> dict:
             import os
             return {"me": os.getpid(), "same": rev.run("mnt.sbx.stage.fns.pid", game=game).obj["pid"],
                     "other": rev.run("mnt.flatpkg.where.pid", side=2).obj}
 
-        @ledger_fn
+        @dat.fn
         def base_inside(rev, *, game: str) -> dict:
             return {"x": rev.run("colorsys.rgb_to_hsv").obj}
 
-        @ledger_fn
+        @dat.fn
         def snoop(rev, *, game: str) -> dict:
             return {"n": len(Path("/etc/hosts").read_text())}
 
-        @ledger_fn
+        @dat.fn
         def scribble(rev, *, game: str) -> dict:
             Path("/tmp/ledger-sandbox-scribble.txt").write_text("x")
             return {}
@@ -224,7 +226,7 @@ PKG = {
         import sqlite3
         import tempfile
         from pathlib import Path
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
         def _dirfd(d, w):
             fd = os.open(d, os.O_RDONLY)
@@ -280,7 +282,7 @@ PKG = {
             (d / "tree").mkdir()
             (d / "tree" / "f").write_text("f")
 
-        @ledger_fn
+        @dat.fn
         def write(rev, *, how: str, where: str, path: Path) -> dict:
             if where == "work":                     # every way, inside the dat being produced: all allowed
                 for name, act in HOWS.items():
@@ -306,7 +308,7 @@ PKG = {
         from pathlib import Path
         import dvc_dat
         import yaml
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
         HOWS = {
             "open": lambda p: Path(p).read_text(),
@@ -319,7 +321,7 @@ PKG = {
             "copy": lambda p: shutil.copy(p, Path.cwd() / "copied"),
         }
 
-        @ledger_fn
+        @dat.fn
         def read(rev, *, how: str, where: str, path: Path) -> dict:
             places = {"stdlib": os.__file__, "site": yaml.__file__, "dvc_dat": dvc_dat.__file__,
                       "prefix": os.path.join(sys.prefix, "pyvenv.cfg"), "repo": Path(__file__).parents[2] / "pyproject.toml",
@@ -327,7 +329,7 @@ PKG = {
             out = HOWS[how](places.get(where) or where)
             return {"n": len(out) if isinstance(out, list) else -1}
 
-        @ledger_fn
+        @dat.fn
         def allowed(rev, *, game: str, path: Path) -> dict:
             (path / "mine.txt").write_text(game)
             n = len(Path(__file__).read_text()) > 0 and sorted(os.listdir(Path(__file__).parent)) != []
@@ -337,27 +339,27 @@ PKG = {
             return {"n": bool(n), "mine": Path("mine.txt").read_text(), "art": art.is_dir() and bool(os.listdir(art)),
                     "registry": len(jsonschema_specifications.REGISTRY) > 0, "h": colorsys.rgb_to_hsv(0, 0, 0)}
 
-        @ledger_fn
+        @dat.fn
         def library_data(rev, *, game: str) -> dict:
             from importlib.resources import files
             return {"n": len(list(files("jsonschema_specifications").joinpath("schemas").iterdir()))}
     '''),
     "sbx/stage/eager.py": textwrap.dedent('''
         from pathlib import Path
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
         HOSTS = Path("/etc/hosts").read_text()     # at load: the module's own load is confined too
 
-        @ledger_fn
+        @dat.fn
         def f(rev, *, game: str) -> dict:
             return {}
     '''),
     "sbx/stage/procs.py": textwrap.dedent('''
         import os
         import subprocess
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
-        @ledger_fn
+        @dat.fn
         def shell(rev, *, how: str, out: str) -> dict:
             cmd = f"cat /etc/hosts > {out}"
             if how == "run":
@@ -377,33 +379,33 @@ PKG = {
     '''),
     "sbx/tools.py": textwrap.dedent('''
         import subprocess
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
-        @ledger_fn
+        @dat.fn
         def echo(rev, *, text: str) -> dict:
             return {"out": subprocess.run(["echo", text], capture_output=True, text=True, check=True).stdout}
     '''),
     "sbx/stage/net.py": textwrap.dedent('''
         import socket
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
-        @ledger_fn
+        @dat.fn
         def resolve(rev, *, host: str) -> dict:
             return {"n": len(socket.getaddrinfo(host, 80))}
 
-        @ledger_fn
+        @dat.fn
         def dial(rev, *, port: int) -> dict:
             with socket.socket() as s:
                 s.connect(("127.0.0.1", port))
             return {}
 
-        @ledger_fn
+        @dat.fn
         def datagram(rev, *, port: int) -> dict:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.sendto(b"x", ("127.0.0.1", port))
             return {}
 
-        @ledger_fn
+        @dat.fn
         def pair(rev, *, text: str) -> dict:
             a, b = socket.socketpair()
             with a, b:

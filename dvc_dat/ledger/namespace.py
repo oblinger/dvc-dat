@@ -8,10 +8,10 @@ path in the mount's tree in the checkout discovery reports for its ``db/repo``:
 a ``.yaml``/``.yml``/``.json`` file is read and comes back a dict (a dotted
 tail below the file walks into it); a function in a ``.py`` file comes back its
 ``Fn``, read off the file and never imported here, its ``kind`` the decorator
-(``@ledger_fn``: a ledger function; none: a dat's run function); a module-level
+(``@dat.fn``: a ledger function; none: a dat's run function); a module-level
 literal (``NAME = {...}``) its value. A name not starting ``mnt.`` is never a
 mount: it is imported, and a
-``@ledger_fn`` it imports to comes back its ``Fn``, an undecorated function
+``@dat.fn`` it imports to comes back its ``Fn``, an undecorated function
 itself.
 
 ``LedgerNamespace`` is ``rev.ns``, ``t.ns``, and ``Dat.manager.ns`` in a project whose
@@ -35,7 +35,7 @@ import yaml
 from ..core import _builtins
 from ..do import Namespace
 from .errors import NotEvaluated
-from .fn import MNT, Fn, installed_fn, mount_prefix, mounted_name, mounts_at
+from .fn import MNT, Fn, fn_mark, installed_fn, mount_prefix, mounted_name, mounts_at
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -62,7 +62,7 @@ def resolve_name(rev: "Rev", name: str) -> Any:
         raise ImportError(f"{what}; a mounted name is {MNT}.<prefix>..., and the mounts at rev {plain.id} are: "
                           f"{listed}")
     obj = Namespace._load_static(name)
-    if callable(obj) and getattr(obj, "__ledger_fn__", False):
+    if callable(obj) and fn_mark(obj) is not None:
         return installed_fn(rev, name, obj)
     return obj
 

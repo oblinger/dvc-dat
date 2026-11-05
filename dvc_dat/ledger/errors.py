@@ -20,6 +20,16 @@ class NotClean(NotEvaluated):
     is dirty, or not at the commit the rev's ``db/repo/<repo> db/commit`` row names (or the rev names none)."""
 
 
+class NotPinned(LedgerError, RuntimeError):
+    """A pin or rerun refused (SVP 250): the value is no run's result, its revision names no commit, the
+    commit is unknown here or does not hold the code that ran, the function is not importable by its name at
+    the commit, an input is on no ledger, the remote refused the push, or the value's commit is not pinned."""
+
+
+class Differed(LedgerError, RuntimeError):
+    """A rerun of a function claiming ``deterministic=True`` produced a different hash (SVP 250 A4)."""
+
+
 class UnmountedImport(LedgerError, ImportError):
     """A sandboxed function imported a module of a mounted repo outside that repo's mounts."""
 

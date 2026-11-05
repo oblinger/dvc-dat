@@ -206,7 +206,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # → hit  model/prod  game=G1 stage=model metrics.count=12 …
 
 # %% [markdown]
-# `train` carries `@command(args="game=…", help="…")`, and its
+# `train` carries `@dat.command(args="game=…", help="…")`, and its
 # module is under the ledger's mount `mnt.demo_game.etl` (`mounts:`
 # in `.datconfig.yaml`); `run` reads the commands off the mounted
 # files and writes one recipe per command into `.dat/targets.just`,

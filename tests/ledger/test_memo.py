@@ -1,11 +1,12 @@
-"""Contracts of functions and run unsandboxed: ledger_fn, rev.ns.load, the memo, the dependencies, NotEvaluated."""
+"""Contracts of functions and run unsandboxed: dat.fn, rev.ns.load, the memo, the dependencies, NotEvaluated."""
 
 import re
 
 import pytest
 
 import ledger_kinds
-from dvc_dat.ledger import Dat, NotClean, NotEvaluated, Ref, Value, ledger_fn
+from dvc_dat.ledger import Dat, NotClean, NotEvaluated, Ref, Value
+from dvc_dat import dat
 from ledger_kinds import CALLS, Cut, Video
 
 
@@ -25,9 +26,9 @@ def world(coded):
     return L
 
 
-def test_ledger_fn_needs_an_annotation_and_stays_callable(world):
+def test_dat_fn_needs_an_annotation_and_stays_callable(world):
     with pytest.raises(TypeError):
-        @ledger_fn
+        @dat.fn
         def f(rev, *, a):
             return a
     v = ledger_kinds.cut(world.at(), game="G1")

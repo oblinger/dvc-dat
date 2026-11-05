@@ -1,7 +1,7 @@
 """``rev.run(target, **kwargs)``: one call for a ledger function and a dat (DAT 1038, 1045, 1046).
 
 The target is resolved through the ledger's namespace (``rev.ns.load``): a
-``@ledger_fn`` comes back its ``Fn`` and is called with the kwargs as its keys.
+``@dat.fn`` comes back its ``Fn`` and is called with the kwargs as its keys.
 Anything else is a dat: a spec (a dict, or a name resolving to one, from a
 mounted ``.yaml``/``.json`` or a literal in a mounted module) or a dat's run
 function by its dotted name, which is the spec ``{dat: {do: <name>}}``. Its memo
@@ -33,8 +33,7 @@ if TYPE_CHECKING:
     from .rev import Rev
 
 
-def run(rev: "Rev", target: Any, *, seal: Any, clean: bool, path: Any, kwargs: Dict[str, Any],
-        deterministic: bool = False) -> Any:
+def run(rev: "Rev", target: Any, *, seal: Any, clean: bool, path: Any, kwargs: Dict[str, Any]) -> Any:
     """``Rev.run``: see the module doc."""
     from .namespace import LedgerNamespace
 
@@ -42,14 +41,14 @@ def run(rev: "Rev", target: Any, *, seal: Any, clean: bool, path: Any, kwargs: D
     if isinstance(target, str):
         obj = ns.load(target)
         if isinstance(obj, Fn) and obj.kind == "ledger":
-            return obj(seal=seal, clean=clean, path=path, deterministic=deterministic, **kwargs)
+            return obj(seal=seal, clean=clean, path=path, **kwargs)
     elif isinstance(target, dict):
         obj = target
     else:
         raise TypeError(f"run takes a dotted name or a spec dict, not {type(target).__name__}; a function "
                         "object would resolve in this process")
     fn, keys = memo_key(rev, ns, target, obj, kwargs)
-    return fn(seal=seal, clean=clean, path=path, kwargs=keys, deterministic=deterministic)
+    return fn(seal=seal, clean=clean, path=path, kwargs=keys)
 
 
 def memo_key(rev: "Rev", ns: "LedgerNamespace", target: Any, obj: Any,

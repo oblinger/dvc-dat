@@ -699,6 +699,23 @@ class Transaction:
         _name(predicate, "predicate")
         self._ops.append(_Op(subject, predicate, self._encode(object), False))
 
+    def pin(self, value: Any, *, recursive: bool = False, rerun: bool = False) -> str:
+        """Pin ``value`` (SVP 250): tag the commit its run names, ``dat/<commit12>``, push the tag to the repo's
+        remote and wait, then add ``(db/repo/<repo>/<commit12>, db/pinned, dat/<commit12>)`` (once per commit
+        per ledger) and ``(<value>, db/rerunnable, true|recursive)``, the value's claim that its run can be
+        rerun: its commit pinned, its function importable by its dotted name from that commit, every input on
+        this ledger; ``recursive=True`` asserts the claim of every input that is a run's result too, down to
+        values with no run. ``value`` is a sealed ``Value``, a ``Ref`` or a name. Refused with ``NotPinned``
+        (nothing written, no tag pushed): a value that is no run's result, a revision naming no commit for its
+        repo, a commit unknown to the checkout here or not holding the bytes the run loaded, a function not
+        importable by its name at the commit, an input on no ledger, a push the remote refuses. A pinned commit
+        pays no push; a pinned value adds no row. ``rerun=True`` reruns now (``rev.rerun``) and adds
+        ``(<value>, db/rerun, <outcome>)``; ``differed-deterministic`` is ``Differed`` and writes nothing.
+        Returns the tag. ``L.at().pin(value)`` is the one-shot form."""
+        from .pin import pin
+
+        return pin(self, value, recursive=recursive, rerun=rerun)
+
     # -- declarations as the body sees them: the snapshot at open plus this transaction's own rows ---------------
 
     def _decl_now(self, p: str, which: str) -> Optional[str]:

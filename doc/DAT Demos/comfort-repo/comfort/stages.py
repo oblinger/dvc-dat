@@ -1,5 +1,5 @@
 """`comfort.stages`: a city's daily comfort, and its days binned by comfort level over a date range."""
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
 from .values import ComfortCounts, Days
 
@@ -9,7 +9,7 @@ def comfort(temp: int, humidity: int) -> int:
     return max(0, 9 - abs(temp - 72) // 4 - abs(humidity - 45) // 10)
 
 
-@ledger_fn
+@dat.fn
 def daily_comfort(rev, *, city: str) -> Days:
     """A city's days with a comfort column added: [date, °F, humidity %, comfort]."""
     weather = rev.load(f"weather/{city}")   # traced: the alias and the bytes it names
@@ -18,7 +18,7 @@ def daily_comfort(rev, *, city: str) -> Days:
     return days
 
 
-@ledger_fn
+@dat.fn
 def city_comfort(rev, *, city: str, start: str, end: str) -> ComfortCounts:
     """A city's days from `start` up to `end`, counted per comfort level."""
     days = rev.run("mnt.comfort.stages.daily_comfort", city=city)

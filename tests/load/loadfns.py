@@ -4,7 +4,8 @@ Kept free of repo imports beyond ``dvc_dat.ledger`` so its ``fn`` subject (the s
 closure inside ``tests/load``) is this one file.
 """
 
-from dvc_dat.ledger import Value, ledger_class, ledger_fn
+from dvc_dat.ledger import Value, ledger_class
+from dvc_dat import dat
 
 #: Runs of ``square`` in this process: an eval that moved it missed the memo.
 CALLS = {"square": 0}
@@ -28,7 +29,7 @@ def expected(n: int, salt: str) -> str:
     return f"{n}:{salt}:{n * n}"
 
 
-@ledger_fn
+@dat.fn
 def square(rev, *, n: int) -> str:
     CALLS["square"] += 1
     salt = rev["load/config", "salt"]

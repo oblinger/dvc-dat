@@ -33,7 +33,7 @@ import yaml
 
 from .codec import show
 from .errors import LedgerError
-from .rev import Rev
+from .rev import Head, Rev
 from .pgstore import PostgresStore, is_dsn
 from .store import SqliteStore, Store
 from .txn import Transaction
@@ -278,10 +278,11 @@ class Ledger:
         is at or before the START of its span, read in the display zone (``db db/timezone`` at the top, UTC
         with none) unless it ends ``Z`` or ``+hh:mm``; a DST-ambiguous or skipped local time is read with
         ``fold=0`` (``KeyError`` before the first stamped revision); any other str the revision whose
-        ``db db/tag`` row added that name."""
+        ``db db/tag`` row added that name. With no argument the view is the ``Head``: a ``Rev`` that is also a
+        transaction, each transaction method the one-shot form (``L.at().pin(v)``, SVP 250 A13)."""
         top = self._store.top()
         if which is None:
-            return Rev(self, top)
+            return Head(self, top)
         if isinstance(which, bool):
             raise TypeError("at takes None, an int revision or a version string")
         if isinstance(which, str) and which.isdigit():

@@ -13,7 +13,8 @@ from pathlib import Path
 
 import yaml
 
-from dvc_dat.ledger import Dat, attr, ledger_class, ledger_fn
+from dvc_dat.ledger import Dat, attr, ledger_class
+from dvc_dat import dat as dvc
 
 SPEC_PREDS = ("game", "stage", "bins")
 METRICS = ("count", "score")
@@ -49,7 +50,7 @@ def build(rev, spec: dict, path: Path, **kwargs) -> StageDat:
     return d
 
 
-@ledger_fn
+@dvc.fn
 def dat(rev, *, spec: dict, path: Path, **kwargs) -> StageDat:
     """The dat constructor: `spec` the memo key, `path` the folder."""
     return build(rev, spec, path, **kwargs)

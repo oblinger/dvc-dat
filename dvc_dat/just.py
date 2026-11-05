@@ -1,13 +1,13 @@
 """`dvc_dat.just`: declared commands and the generated `.dat/targets.just`.
 
-    from dvc_dat.just import command
+    from dvc_dat import dat
 
-    @command(args="game=…", help="train the model on one game")
-    @ledger_fn
+    @dat.command(args="game=…", help="train the model on one game")
+    @dat.fn
     def train(rev, *, game: str, path: Path) -> StageDat: ...
 
 `just run TARGET` runs any target; a *command* also runs as `just <name>`.
-A function is a command when `@command` marks it; a spec (a mounted mapping)
+A function is a command when `@dat.command` marks it; a spec (a mounted mapping)
 when its `command:` key is `true` or `{args: …, help: …}`.  Each mounted name
 that is a command, or each command defined in a mounted module, gets one
 recipe in `.dat/targets.just` beside `.datconfig.yaml`: `just <name> k=v …` is

@@ -32,9 +32,9 @@ EXTRA = {
             dat.save()
     '''),
     "sbx/stage/aliased.py": textwrap.dedent('''
-        from dvc_dat.ledger import ledger_fn as lfn
+        from dvc_dat import dat as d
 
-        @lfn
+        @d.fn
         def area(rev, *, side: int) -> dict:
             return {"area": side * side}
     '''),
@@ -124,9 +124,9 @@ def test_f2_editing_a_mounted_yaml_a_body_loaded_recomputes(sbx, world):
     assert again.get_results()["n"] == 4, "stale memo hit: the body's input moved, the entry did not"
 
 
-# -- F6: a mounted @ledger_fn imported under another name is still a ledger function --------------------
+# -- F6: a mounted @dat.fn with dat imported under another name is still a ledger function --------------------
 
-def test_f6_an_aliased_ledger_fn_decorator_is_still_a_ledger_fn(sbx):
+def test_f6_an_aliased_dat_fn_decorator_is_still_a_ledger_fn(sbx):
     L, _repo = sbx
     assert L.at().ns.load("mnt.sbx.stage.aliased.area").kind == "ledger"
     assert L.at().run("mnt.sbx.stage.aliased.area", side=3).obj == {"area": 9}

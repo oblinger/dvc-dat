@@ -2,7 +2,7 @@
 
 Every memo entry stores the platform record where its function ran (``platform/record``); a lookup
 hits when ``policy(stored) == policy(current)``, the policy named by the ``(db, db/memo-policy)``
-triple; ``deterministic=True`` adds card and driver; an entry lacking a field the policy reads misses.
+triple; a ``@dat.fn(deterministic=True)`` function adds card and driver; an entry lacking a field the policy reads misses.
 """
 
 import json
@@ -44,6 +44,11 @@ def on(envbox, record, **kw):
 
 def cut(L, **kw):
     return L.at().run("ledger_kinds.cut", game="G1", **kw)
+
+
+def cut_det(L, **kw):
+    """``ledger_kinds.cut_det``: ``@dat.fn(deterministic=True)``, the same body and keys as ``cut``."""
+    return L.at().run("ledger_kinds.cut_det", game="G1", **kw)
 
 
 def policy(L, name):
@@ -99,25 +104,30 @@ def test_changing_the_policy_triple_rejudges_old_entries(world, envbox):
     assert cut(world, seal="get").subject == a.subject
 
 
-def test_deterministic_adds_card_and_driver(world, envbox):
-    a = cut(world)
+def test_a_deterministic_function_adds_card_and_driver(world, envbox):
+    """SVP 250 A11: the claim is the function's (``@dat.fn(deterministic=True)``), not a call-time keyword."""
+    a = cut_det(world)
+    assert world.at().ns.load("ledger_kinds.cut_det").deterministic is True
+    assert world.at().ns.load("ledger_kinds.cut").deterministic is None
     on(envbox, PRO6000)
-    assert cut(world, seal="get").subject == a.subject
-    assert cut(world, seal="get", deterministic=True) is None
+    assert cut_det(world, seal="get") is None
     on(envbox, H100, driver="560.35.03")            # same card, another driver
-    assert cut(world, seal="get", deterministic=True) is None
+    assert cut_det(world, seal="get") is None
     on(envbox, H100, cuda="12.6", torch="2.6.0")    # card and driver agree; the rest is the policy's
-    assert cut(world, seal="get", deterministic=True).subject == a.subject
-    assert world.at().ns.load("ledger_kinds.cut")(game="G1", seal="get", deterministic=True).subject == a.subject
+    assert cut_det(world, seal="get").subject == a.subject
+    assert world.at().ns.load("ledger_kinds.cut_det")(game="G1", seal="get").subject == a.subject
+    with pytest.raises(TypeError):
+        cut(world, seal="get", deterministic=True)  # the keyword is gone: it would be a key the function lacks
 
 
 def test_an_old_short_record_entry_never_false_hits(world, envbox, monkeypatch):
     monkeypatch.setattr(fn_module, "platform_items", lambda env: {"platform": env.platform})
     a = cut(world)                                  # as written before 1474: the short item alone
+    d = cut_det(world)
     monkeypatch.undo()
-    assert "platform/record" not in a.dependencies
+    assert "platform/record" not in a.dependencies and "platform/record" not in d.dependencies
     assert cut(world, seal="get").subject == a.subject      # the default still hits it
-    assert cut(world, seal="get", deterministic=True) is None
+    assert cut_det(world, seal="get") is None               # the deterministic claim needs the record's card
     policy(world, "card")
     for rec in (H100, CPU):
         on(envbox, rec)
@@ -149,11 +159,11 @@ def test_the_index_is_built_once_then_reused(world, envbox):
         assert cut(world, seal="get").subject == a.subject
     assert idx.builds == built == 1
     on(envbox, PRO6000)
-    b = cut(world, seal=world, deterministic=True)  # a new entry: the next lookup adds it, no rebuild
-    assert cut(world, seal="get").subject == b.subject
+    b = cut_det(world, seal=world)                  # a new entry (another card): the next lookup adds it, no rebuild
+    assert cut_det(world, seal="get").subject == b.subject
     assert b.subject != a.subject and idx.builds == 1 and idx.keys[b.subject] == idx.keys[a.subject] == TAG
     policy(world, "card")
-    assert cut(world, seal="get").subject == b.subject and idx.builds == 2
+    assert cut_det(world, seal="get").subject == b.subject and idx.builds == 2
     assert idx.stamp[0] == "card" and idx.keys[a.subject] != idx.keys[b.subject]
     on(envbox, H100)
     assert cut(world, seal="get").subject == a.subject and idx.builds == 2

@@ -463,9 +463,9 @@ __version__ = "5.3.9"
 
 (repo_path / "geometry/main.py").write_text('''\
 import math
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
-@ledger_fn
+@dat.fn
 def distance(rev, a, b) -> float:
     dx, dy = b[0] - a[0], b[1] - a[1]
     print(f"ran: sqrt({dx}² + {dy}²) = {math.dist(a, b)}")
@@ -478,9 +478,9 @@ __version__ = "2.7.1"
 
 (repo_path / "plane/measure.py").write_text('''\
 import math
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
-@ledger_fn
+@dat.fn
 def length(rev, a, b) -> float:
     return math.dist(a, b) * 0.5     # metres per unit
 ''')

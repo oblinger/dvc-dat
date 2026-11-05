@@ -9,7 +9,8 @@ suite's pinned one (repo `testrepo`); `model/demo` stands for a versioned subjec
 import backends
 import pytest
 
-from dvc_dat.ledger import Exists, Ledger, Ref, Rev, Value, attr, bump, ledger_class, ledger_fn  # noqa: F401
+from dvc_dat.ledger import Exists, Ledger, Ref, Rev, Value, attr, bump, ledger_class  # noqa: F401
+from dvc_dat import dat
 from ledger_kinds import Cut, Video
 
 
