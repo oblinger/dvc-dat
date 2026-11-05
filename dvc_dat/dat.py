@@ -5,7 +5,7 @@
     @dat.fn                              # a value function: the Rev first, keywords after, a Value back
     def cut(rev, *, game: str) -> Cut: ...
 
-    @dat.fn(deterministic=True)          # ... claiming the same inputs give the same bytes (on one card)
+    @dat.fn(reproducible="exact")        # ... claiming a rerun gives the same bytes (on one card)
     def detect(rev, *, video: Video) -> Table: ...
 
     @dat.warm                            # a process-level memo by the canonical hash of the arguments

@@ -2242,6 +2242,11 @@ class Dat(Value, metaclass=_DatMeta):
         return list(seen.items())
 
     @classmethod
+    def _stored_hashes(cls, store: Any, h: str) -> List[str]:
+        """The files of the manifest stored under `h`."""
+        return list(dict.fromkeys(cls._stored_manifest(store, h).values()))
+
+    @classmethod
     def kind_ok(cls, kind: str) -> bool:
         """Does a folder whose `_spec_` names `dat.kind` `kind` load as this class, the class its
         `db/value` row names?  Default: `kind` names this class or a subclass (dotted, or a bare name

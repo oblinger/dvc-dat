@@ -18,7 +18,8 @@ deleted leaves it unreachable, and ``git gc`` or the host's collector removes it
 that is not a run's result, a run whose revision names no ``db/repo/<repo> db/commit`` (code with no
 ``__version__``, or outside any checkout), a commit the repo's checkout here does not hold, a commit that does
 not hold the bytes the run loaded (a sandboxed run at a dirty HEAD), a function not importable by its name
-at the commit, an input that resolves to nothing, and a push the remote refuses. ``rerun=True`` reruns at
+at the commit, an input that resolves to nothing (a ``foreign:`` read on the ledger it names), and a push the remote
+refuses. ``rerun=True`` reruns at
 once (``rerun``) and writes ``(<value>, db/rerun, <outcome>)``; ``differed-deterministic`` is ``Differed``.
 ``L.at().pin(value)`` is the one-shot form (``Head``). Idempotent: a pinned commit pays no push, a pinned value
 adds no row.
@@ -27,9 +28,12 @@ adds no row.
 worktree of the checkout here when it holds the commit, else ``git clone --depth 1 --branch dat/<commit12>``
 from the remote: one commit's tree, no history, reused across reruns), syncs its ``uv.lock`` when it has one,
 and runs the function there in a fresh interpreter (``python -m dvc_dat.ledger.pin``) over the value's recorded
-keys at the value's revision, writing nothing. The hash of what it returns against the value's: ``reproduced``,
-``differed-nondeterministic`` (the function claims ``deterministic=False`` or makes no claim) or
-``differed-deterministic`` (it claims ``True``; the one error, raised by ``pin(rerun=True)`` alone). Nothing
+keys at the value's revision, writing nothing. A copied value runs at its origin, ``db/copied-from``, while that
+ledger can be found, else at this ledger's copy. The hash of what it returns against the value's: ``reproduced``,
+else judged by the value's claim (the ``db/reproducible`` row, ``claim``): the listed predicates of the old and new
+values are compared and the first clause that matches gives the level: ``exact``, ``differed-deterministic``, the one
+error, raised by ``pin(rerun=True)`` alone; ``True``, ``differed-as-allowed``, since judging "good enough" needs a
+comparator that does not exist yet; ``None`` or ``False``, ``differed-nondeterministic``. Nothing
 is called verified: a match proves bit-identity for this run, not a guarantee. A sandboxed function reruns
 in the sandbox worker of that interpreter, an unsandboxed one in the interpreter itself, its checkout the
 worktree.
@@ -47,9 +51,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
-from .codec import parse_ref, ref_text, sha256, show
+from .claim import EXACT, claim_of, judged
+from .codec import sha256, show
 from .env import current_env
-from .errors import Differed, NotPinned
+from .errors import Differed, LedgerError, NotPinned
 from .fn import MNT, fn_mark_in_source, mounts_at
 
 if TYPE_CHECKING:
@@ -66,7 +71,8 @@ RERUN = "db/rerun"
 REPRODUCED = "reproduced"
 DIFFERED_NONDETERMINISTIC = "differed-nondeterministic"
 DIFFERED_DETERMINISTIC = "differed-deterministic"
-OUTCOMES = (REPRODUCED, DIFFERED_NONDETERMINISTIC, DIFFERED_DETERMINISTIC)
+DIFFERED_AS_ALLOWED = "differed-as-allowed"
+OUTCOMES = (REPRODUCED, DIFFERED_AS_ALLOWED, DIFFERED_NONDETERMINISTIC, DIFFERED_DETERMINISTIC)
 #: Seconds a push, a fetch or a rerun may take.
 GIT_TIMEOUT = 600.0
 
@@ -178,7 +184,7 @@ def run_of(rev: "Rev", subject: str) -> Run:
             raise NotPinned(f"{subject[:12]}…: its run names {len(repos)} repos, not one; its code is outside "
                             "any git checkout")
         repo = repos[0]
-    commit = sealed_at.get(f"db/repo/{repo}", "db/commit")
+    commit = held.get("db/commit") or sealed_at.get(f"db/repo/{repo}", "db/commit")   # a copy's own row, else the clock
     if not isinstance(commit, str) or not commit:
         raise NotPinned(f"{subject[:12]}…: rev {sealed_at.id} names no db/repo/{repo} db/commit (the first clean "
                         "run of code with a __version__ writes it); no commit vouches for this run")
@@ -193,19 +199,38 @@ def run_of(rev: "Rev", subject: str) -> Run:
                trace=trace, sandboxed=sandboxed, repo=repo, commit=commit, modules=modules, mount_root=mount_root)
 
 
-def inputs_of(run: Run) -> List[str]:
-    """The ``ref:`` texts of every value the run consumed: its value keys, and the values and nested results
-    its trace recorded."""
+def value_inputs(keys: Dict[str, Any], trace: Dict[str, str]) -> List[str]:
+    """The ``ref:`` texts of every value a run consumed on its own ledger: its value keys, and the values and
+    nested results its trace recorded."""
     out: List[str] = []
-    for v in run.keys.values():
+    for v in keys.values():
         if isinstance(v, str) and v.startswith("ref:"):
             out.append(v)
-    for k, v in run.trace.items():
+    for k, v in trace.items():
         if k.startswith("ref:"):
             out.append(k)
         elif (k.endswith(" db/alias") or k.startswith("eval:")) and v.startswith("ref:"):
             out.append(v)
     return sorted(set(out))
+
+
+def inputs_of(run: Run) -> List[str]:
+    return value_inputs(run.keys, run.trace)
+
+
+def foreign_inputs(trace: Dict[str, str]) -> List[Tuple[str, str]]:
+    """``(<ledger>@<rev>, ref: text)`` of each value the run reached through another ``Rev`` (SVP 1521)."""
+    from .trace import foreign_of
+
+    return sorted({(body["at"], v) for k, v in trace.items() if (body := foreign_of(k)) is not None})
+
+
+def inputs_in(rev: "Rev", subject: str) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    """``(db/keys, the trace)`` of any sealed value: a hand seal has its deps, and no keys."""
+    held = rev._held(subject, "db/keys")
+    keys = json.loads(show(held[0].obj)) if held else {}
+    trace = {p[len("db/deps/"):]: show(h.obj) for _s, p, h in rev._held_rows(subject=subject) if p.startswith("db/deps/")}
+    return keys, trace
 
 
 def holder_of(rev: "Rev", text: str) -> Optional[str]:
@@ -342,40 +367,63 @@ def pin(t: "Transaction", value: Any, *, recursive: bool = False, rerun: bool = 
     return _pin(t, rev, subject, recursive, rerun, set())
 
 
-def _pin(t: "Transaction", rev: "Rev", subject: str, recursive: bool, rerun: bool, seen: Set[str]) -> str:
-    if subject in seen:
-        return ""
-    seen.add(subject)
+def check_input(rev: "Rev", subject: str) -> Run:
+    """What the claim on ``subject`` rests on, checked: its run, its code at the commit, every input found (a
+    ``foreign:`` read on the ledger it names). ``NotPinned`` otherwise."""
+    from .named import rev_named
+
     run = run_of(rev, subject)
     co = checkout_of(run.repo)
     if not has_commit(co, run.commit):
         raise NotPinned(f"{subject[:12]}…: commit {run.commit[:12]} of {run.repo} is unknown to the checkout at {co} "
                         "(gone with a deleted branch?); it cannot be pinned")
     check_code_at(co, run)
-    inputs: List[Tuple[str, str]] = []
     for text in inputs_of(run):
-        holder = holder_of(rev, text)
-        if holder is None:
+        if holder_of(rev, text) is None:
             raise NotPinned(f"{subject[:12]}…: its input {text[:40]}… is on no ledger here; a rerun could not "
                             "find it, so the claim is refused")
-        inputs.append((text, holder))
-    if recursive:
-        for _text, holder in inputs:
-            if rev._held(holder, "db/fn"):          # a run's result: the same claim; a hand seal is a leaf
-                _pin(t, rev, holder, True, False, seen)
-    ensure_tag(co, run.commit)
+    for at, text in foreign_inputs(run.trace):
+        try:
+            found = holder_of(rev_named(at, rev.ledger), text)
+        except (LedgerError, KeyError):
+            found = None
+        if found is None:
+            raise NotPinned(f"{subject[:12]}…: its input {text[:40]}… at {at} cannot be found, so the claim is refused")
+    return run
+
+
+def assert_claim(t: "Transaction", rev: "Rev", run: Run, want: Optional[str], *, push: bool = False,
+                 pin_only: bool = False) -> None:
+    """The rows of a claim, in ``t`` (``rev`` its snapshot): the commit's ``db/pinned`` once per ledger, and unless
+    ``pin_only`` the value's ``db/rerunnable``; ``push``: the tag made and pushed first."""
+    if push:
+        ensure_tag(checkout_of(run.repo), run.commit)
     pending = {(op.s, op.p): show(op.o) for op in t._ops if op.added}
     if rev.get(run.pin_subject, PINNED) != run.tag and pending.get((run.pin_subject, PINNED)) != run.tag:
         t.add(run.pin_subject, PINNED, run.tag)
-    want = "recursive" if recursive else "true"
-    held = pending.get((subject, RERUNNABLE), rev.get(subject, RERUNNABLE))
+    if pin_only:
+        return
+    held = pending.get((run.subject, RERUNNABLE), rev.get(run.subject, RERUNNABLE))
     if held != "recursive" and held != want:
-        t.add(subject, RERUNNABLE, want)
+        t.add(run.subject, RERUNNABLE, want)
+
+
+def _pin(t: "Transaction", rev: "Rev", subject: str, recursive: bool, rerun: bool, seen: Set[str]) -> str:
+    if subject in seen:
+        return ""
+    seen.add(subject)
+    run = check_input(rev, subject)
+    if recursive:
+        for text in inputs_of(run):
+            holder = holder_of(rev, text)
+            if holder is not None and rev._held(holder, "db/fn"):   # a run's result: the same claim; a hand seal is a leaf
+                _pin(t, rev, holder, True, False, seen)
+    assert_claim(t, rev, run, "recursive" if recursive else "true", push=True)
     if rerun:
         outcome = _rerun(rev, run)
         t.add(subject, RERUN, outcome.outcome)
         if outcome.outcome == DIFFERED_DETERMINISTIC:
-            raise Differed(f"{subject[:12]}…: {run.name} claims deterministic=True, and its rerun at {run.tag} "
+            raise Differed(f"{subject[:12]}…: {run.name} claims reproducible \"exact\", and its rerun at {run.tag} "
                            f"gave {outcome.hash[:12]}, not {outcome.expected[:12]}; nothing written")
     return run.tag
 
@@ -385,12 +433,13 @@ def _pin(t: "Transaction", rev: "Rev", subject: str, recursive: bool, rerun: boo
 @dataclass(frozen=True)
 class Rerun:
     """What a rerun found: ``outcome`` (one of ``OUTCOMES``), the ``hash`` it produced against the ``expected``
-    one, the function's ``deterministic`` claim at the tag, the ``commit``, its ``tag`` and the ``worktree``."""
+    one, ``reproducible``, the level the value's claim gave it (``claim.judged``), the ``commit``, its ``tag``
+    and the ``worktree``."""
 
     outcome: str
     hash: str
     expected: str
-    deterministic: Optional[bool]
+    reproducible: Any
     commit: str
     tag: str
     worktree: Path
@@ -411,7 +460,21 @@ def rerun(rev: "Rev", value: Any) -> Rerun:
     if plain.get(run.pin_subject, PINNED) != run.tag:
         raise NotPinned(f"{subject[:12]}…: commit {run.commit[:12]} of {run.repo} is not pinned on this ledger; "
                         "pin the value first (t.pin(value))")
-    return _rerun(plain, run)
+    home = origin_of(plain, subject)
+    return _rerun(plain, run) if home is None else _rerun(home, run_of(home, subject))
+
+
+def origin_of(rev: "Rev", subject: str) -> Optional["Rev"]:
+    """The revision a copied value was copied from, while its ledger can be found (SVP 251); ``None`` otherwise."""
+    from .named import rev_named
+
+    text = rev.get(subject, "db/copied-from")
+    if not isinstance(text, str):
+        return None
+    try:
+        return rev_named(text)
+    except (LedgerError, KeyError):
+        return None
 
 
 def worktree_root(ledger: Any) -> Path:
@@ -476,7 +539,8 @@ def _rerun(rev: "Rev", run: Run) -> Rerun:
                             "substitute nothing for it")
     py = interpreter_for(where)
     req = {"ledger": str(rev.ledger.path), "rev": run.rev.id, "name": run.name, "keys": run.keys,
-           "repo": run.repo, "commit": run.commit, "worktree": str(where)}
+           "repo": run.repo, "commit": run.commit, "worktree": str(where),
+           "preds": sorted({p for _level, preds in claim_of(rev, run.subject) for p in preds})}
     env = dict(os.environ)
     root = str(where / offset) if offset else str(where)
     env["PYTHONPATH"] = root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
@@ -487,16 +551,27 @@ def _rerun(rev: "Rev", run: Run) -> Rerun:
     if out.returncode != 0 or not lines:
         raise NotPinned(f"the rerun of {run.name} at {run.tag} failed (exit {out.returncode}):\n{out.stderr.strip()}")
     reply = json.loads(lines[-1])
-    h, det = reply["hash"], reply["deterministic"]
-    outcome = REPRODUCED if h == expected else DIFFERED_DETERMINISTIC if det is True else DIFFERED_NONDETERMINISTIC
-    return Rerun(outcome=outcome, hash=h, expected=expected, deterministic=det, commit=run.commit, tag=run.tag,
-                 worktree=where)
+    h = reply["hash"]
+    claim = claim_of(rev, run.subject)
+    old = {p: show(held[0].obj) for _level, preds in claim for p in preds if (held := rev._held(run.subject, p))}
+    level = judged(claim, old, reply["preds"])
+    return Rerun(outcome=outcome_of(h == expected, level), hash=h, expected=expected, reproducible=level,
+                 commit=run.commit, tag=run.tag, worktree=where)
+
+
+def outcome_of(same: bool, level: Any) -> str:
+    """A rerun's outcome: the bits, then the level the claim gave."""
+    if same:
+        return REPRODUCED
+    if level is True:
+        return DIFFERED_AS_ALLOWED
+    return DIFFERED_DETERMINISTIC if level == EXACT else DIFFERED_NONDETERMINISTIC
 
 
 def child_main() -> int:
     """``python -m dvc_dat.ledger.pin``: the rerun's interpreter. Reads the request on stdin, runs the function
     at the worktree (its checkout) over the recorded keys, writing nothing, and prints the hash and the
-    function's ``deterministic`` claim as one JSON line."""
+    predicates its claim lists, as the new value carries them, as one JSON line."""
     from .env import Checkout, Env, platform_record, platform_tag, set_env_provider
     from .fn import work_root
     from .ledger import Ledger
@@ -517,7 +592,8 @@ def child_main() -> int:
     obj = ns.load(req["name"])
     fn = obj if getattr(obj, "kind", None) == "ledger" else run_fn(rev, ns, keys)
     value = fn(kwargs=keys, seal=False)
-    reply = {"hash": value.hash, "deterministic": fn.deterministic}
+    new = value.preds
+    reply = {"hash": value.hash, "preds": {p: str(new[p]) for p in req["preds"] if p in new}}
     if isinstance(value, Dat):
         p = os.path.realpath(value.path)
         if p.startswith(os.path.realpath(work_root()) + os.sep):

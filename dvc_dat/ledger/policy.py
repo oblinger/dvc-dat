@@ -18,7 +18,8 @@ every entry, old or new, is judged by the policy in force at the lookup. Built-i
 
 ``register_policy(name, fn)`` adds one in code; the triple stores the name, so every process that looks
 up under it must register it first (an unregistered name is ``LedgerError`` at the lookup).
-``deterministic=True`` on a call adds ``card`` and ``driver`` to whatever the policy compares.
+A function claiming ``exact`` (``@dat.fn(reproducible="exact")``) adds ``card`` and ``driver`` to whatever the
+policy compares.
 
 The index: each store handle keeps ``subject -> policy(stored record)`` for every memo entry, stamped with
 the policy (name and function) it was built under. A lookup compares the stamp with the policy in force,
@@ -44,8 +45,8 @@ Policy = Callable[[Mapping[str, Any]], str]
 SUBJECT = "db"
 PREDICATE = "db/memo-policy"
 DEFAULT = "platform"
-#: What ``deterministic=True`` adds to the policy's comparison.
-DETERMINISTIC = ("card", "driver")
+#: What a function claiming ``exact`` adds to the policy's comparison.
+EXACT_FIELDS = ("card", "driver")
 
 
 def _platform(r: Mapping[str, Any]) -> str:

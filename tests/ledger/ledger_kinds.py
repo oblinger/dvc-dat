@@ -65,9 +65,9 @@ def cut(rev, *, game: str, version: str = "1.0.0") -> Cut:
     return c
 
 
-@dat.fn(deterministic=True)
+@dat.fn(reproducible="exact")
 def cut_det(rev, *, game: str, version: str = "1.0.0") -> Cut:
-    """``cut`` claiming determinism (SVP 250 A11): its lookups ask for the same card and driver."""
+    """``cut`` claiming ``exact`` (SVP 251 Q2): its lookups ask for the same card and driver."""
     _count("cut_det")
     home = rev[f"game/{game}", "home"]
     raw = rev.value(kind=Video, game=game)

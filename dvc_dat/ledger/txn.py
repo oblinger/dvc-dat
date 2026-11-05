@@ -47,7 +47,8 @@ if TYPE_CHECKING:
 FORMAT = "dvc-dat-ledger/1"
 
 #: A sealed subject's own predicates (besides its preds, named by its ``db/preds`` row).
-SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys", "db/sealed-at"})
+SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys", "db/sealed-at",
+                             "db/reproducible"})
 
 
 def is_seal_predicate(p: str, frozen: Sequence[str]) -> bool:
@@ -208,6 +209,9 @@ class Transaction:
         self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
         self._to_store: List[Value] = []
         self._new_seals: List[Tuple[Value, str]] = []      # values this transaction writes db/value for
+        self._copied: set = set()               # the subjects this transaction copied in (SVP 251)
+        #: (subject, the source's art store, its fetch, the hashes to bring): placed at commit, with the rows.
+        self._copies: List[Tuple[str, Any, Any, List[str]]] = []
         self._staged: Dict[int, Any] = {}       # id(value) -> FileSink: its encoding, written once (DAT 240)
         self._created: List[Any] = []
         self._cm: Any = None
@@ -455,12 +459,17 @@ class Transaction:
         from .remote import FOLDER, PREDICATE, remote, resolve, store_name
         from .sandbox import STATE
 
-        if not self._new_seals or STATE.guard:
+        if not (self._new_seals or self._copies) or STATE.guard:
             return
         name = resolve(store_name(self._snapshot()))
         if name == FOLDER:
             return
         r = remote(name, self._ledger._store.name)
+        for subject, art, fetch, hashes in self._copies:
+            with art.fetching(fetch):
+                for h in hashes:
+                    _put_remote(r, h, art._have(h))
+            self._ops.append(_Op(subject, PREDICATE, "str:" + name, True, seal_of=subject))
         for v, subject in self._new_seals:
             h = self._hash_of(v)
             for ph, source in v._stored_parts():
@@ -482,6 +491,11 @@ class Transaction:
                     self._created.append(art.path(ph))
             if art.put_path(self._staged[id(v)].path, h):
                 self._created.append(art.path(h))
+        for _subject, source, fetch, hashes in self._copies:
+            with source.fetching(fetch):
+                for h in hashes:
+                    if art.put_path(source._have(h), h):
+                        self._created.append(art.path(h))
 
     def _finish(self) -> None:
         from .rev import Ref
@@ -710,11 +724,26 @@ class Transaction:
         repo, a commit unknown to the checkout here or not holding the bytes the run loaded, a function not
         importable by its name at the commit, an input on no ledger, a push the remote refuses. A pinned commit
         pays no push; a pinned value adds no row. ``rerun=True`` reruns now (``rev.rerun``) and adds
-        ``(<value>, db/rerun, <outcome>)``; ``differed-deterministic`` is ``Differed`` and writes nothing.
+        ``(<value>, db/rerun, <outcome>)``; ``differed-deterministic`` (a claim of ``exact``) is ``Differed`` and
+        writes nothing.
         Returns the tag. ``L.at().pin(value)`` is the one-shot form."""
         from .pin import pin
 
         return pin(self, value, recursive=recursive, rerun=rerun)
+
+    def copy(self, *values: Any, deep: bool = False, safe: bool = True, rerunnable: bool = False) -> List[str]:
+        """Copy each sealed ``Value`` or ``Ref`` onto this transaction's ledger (SVP 251): its bytes if absent (same
+        hash), its subject and provenance rows, its name, and ``(<value>, db/copied-from, <ledger>@<rev>)``, landing
+        with this revision. ``deep``: its inputs too, recursively, whatever their ledgers. ``safe``: an input on a
+        ledger whose lifetime ranks below this one's is copied by the same rule, one at or above is referenced; a
+        value its claim lets be rerun keeps only its spec (``db/spec-only``), and a source's ``db/rerunnable`` is
+        asserted again here. ``safe`` reads every lifetime (``(ledger/<name>, ledger/lifetime, ...)``) and refuses
+        when one is undeclared or an input cannot be found; ``safe=False`` never looks and promises nothing.
+        ``rerunnable``: assert the claim here, as ``pin``. Refused with ``NotCopied``, nothing written. Returns the
+        subjects. ``L.at().copy(v)`` is the head form. See ``dvc_dat.ledger.copying``."""
+        from .copying import copy
+
+        return copy(self, values, deep=deep, safe=safe, rerunnable=rerunnable)
 
     # -- declarations as the body sees them: the snapshot at open plus this transaction's own rows ---------------
 

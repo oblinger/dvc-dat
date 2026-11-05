@@ -531,6 +531,11 @@ class Rev:
         name = query_item(self.ledger, s, kind, fn, where, one, since, preds, self)
         self._rec[name] = canonical(sorted(self._plain()._ref_text_of(x) for x in subjects))
 
+    def _spec_only_at(self, subject: str) -> bool:
+        held = self._held(subject, "db/value")
+        return bool(held and self._held(subject, "db/spec-only")
+                    and not self._store.art.exists(parse_ref(held[0].obj)[1]))
+
     def _ref_text_of(self, subject: str) -> str:
         held = self._held(subject, "db/value")
         return strip_hint(held[0].obj) if held else subject
@@ -653,9 +658,11 @@ class Rev:
 
     def rerun(self, value: Any) -> "Rerun":
         """Run the pinned function behind ``value`` again, at its tag, over its recorded keys, and compare the
-        hash (SVP 250): a ``Rerun`` whose ``outcome`` is ``reproduced``, ``differed-nondeterministic`` or
-        ``differed-deterministic``. ``value`` is a sealed ``Value``, a ``Ref`` or a name. The commit must be
-        pinned on this ledger (``t.pin``), else ``NotPinned``; every input must still resolve here. The run is a
+        hash (SVP 250): a ``Rerun`` whose ``outcome`` is ``reproduced``, ``differed-as-allowed``,
+        ``differed-nondeterministic`` or ``differed-deterministic``, read off the value's claim (SVP 251 Q2).
+        ``value`` is a sealed ``Value``, a ``Ref`` or a name. The commit must be pinned on this ledger (``t.pin``),
+        else ``NotPinned``; every input must still resolve here. A copied value runs at its origin
+        (``db/copied-from``) while that ledger can be found, else here. The run is a
         fresh interpreter over a worktree at the tag (fetched at depth 1 when the checkout here lacks the
         commit), sandboxed functions in that interpreter's worker; nothing is written. See ``dvc_dat.ledger.pin``."""
         from .pin import rerun
@@ -691,9 +698,9 @@ def _one_shot(name: str) -> Any:
 class Head(Rev):
     """The top of the ledger, ``L.at()`` with no argument (SVP 250 A13): a ``Rev`` that is also a transaction.
     Every read is the ``Rev``'s; each transaction method listed in ``ONE_SHOT`` is here the one-shot form,
-    opening a transaction, calling the method on it and committing: ``L.at().pin(value)``."""
+    opening a transaction, calling the method on it and committing: ``L.at().pin(value)``, ``L.at().copy(value)``."""
 
-    ONE_SHOT = ("pin",)
+    ONE_SHOT = ("pin", "copy")
 
     def __repr__(self) -> str:
         return f"Head({self.id})"
@@ -893,11 +900,28 @@ class Ref:
         self.rev._record_value(v, self._given)
         return v
 
+    def _spec_only(self) -> bool:
+        """A copy that holds the value's spec and not its bytes (SVP 251): a later run may have brought them."""
+        return self._p._spec_only_at(self.subject) if self.subject is not None else False
+
+    def _stored_hashes(self) -> List[str]:
+        """The hashes of the bytes the value's encoding names, read off the store, never decoded (``copy``)."""
+        cls = self.type
+        assert cls is not None and self._hash is not None
+        store = self._p.ledger._store.art
+        with store.fetching(self._fetch()):
+            return list(cls._stored_hashes(store, self._hash))
+
     def _load(self) -> Value:
         """``load`` unrecorded: the ledger's own read of a value (a memo hit, a query's result)."""
         s = self.subject
         if self._hash is None or s is None:
             raise KeyError(f"{self._given!r} has no value at rev {self.rev.id}")
+        if self._spec_only():
+            from .errors import SpecOnly
+
+            raise SpecOnly(f"{self._given!r}: this ledger holds its spec alone, no bytes; rev.rerun makes it again, "
+                           f"from {show(self._p._held(s, 'db/copied-from')[0].obj)}")
         ledger = self._p.ledger
         key = (s, self.rev.id, self._given)
         v = ledger._values.get(key)
