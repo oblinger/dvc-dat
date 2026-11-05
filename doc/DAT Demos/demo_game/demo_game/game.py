@@ -17,12 +17,12 @@ class PlainVideo(Value):
     def __init__(self, frames: bytes):
         self.frames = frames
 
-    def encode(self) -> bytes:
-        return self.frames
+    def encode(self, out) -> None:
+        out.write(self.frames)
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "PlainVideo":
-        return cls(data)
+    def decode(cls, src, store) -> "PlainVideo":
+        return cls(src.read())
 
 
 @ledger_class(preds=("game", "camera", "span"))
@@ -32,12 +32,12 @@ class Video(Value):
     def __init__(self, frames: bytes):
         self.frames = frames
 
-    def encode(self) -> bytes:
-        return self.frames
+    def encode(self, out) -> None:
+        out.write(self.frames)
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "Video":
-        return cls(data)
+    def decode(cls, src, store) -> "Video":
+        return cls(src.read())
 
 
 @ledger_class(preds=("game", "version", "video", "team"))
@@ -47,12 +47,12 @@ class Cut(Value):
     def __init__(self, clip: bytes):
         self.clip = clip
 
-    def encode(self) -> bytes:
-        return self.clip
+    def encode(self, out) -> None:
+        out.write(self.clip)
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "Cut":
-        return cls(data)
+    def decode(cls, src, store) -> "Cut":
+        return cls(src.read())
 
 
 def cut_video(raw: Video, home: str, away: str) -> bytes:
@@ -109,9 +109,9 @@ class Still(Value):
     def __init__(self, image: bytes):
         self.image = image
 
-    def encode(self) -> bytes:
-        return self.image
+    def encode(self, out) -> None:
+        out.write(self.image)
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "Still":
-        return cls(data)
+    def decode(cls, src, store) -> "Still":
+        return cls(src.read())

@@ -34,7 +34,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import IO, Any, Callable, ContextManager, Iterator, List, Optional, Sequence, Tuple, Union
 
-from .codec import hash_text, sha256
+from .codec import HashSink, hash_text
 from .errors import LedgerError, LockTimeout
 
 #: ``(rev, ord, subject, predicate, object, added)``
@@ -161,6 +161,63 @@ def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bo
     return True
 
 
+class FileSink(HashSink):
+    """A sink backed by a temp file in ``folder`` (DAT 240): the bytes stream to disk as they are hashed,
+    never held whole. At close, with ``dest`` (hash -> path), the file is renamed to ``dest(hash)``, write-once
+    (``created`` says whether it landed here; with ``expect``, a hash other than ``expect`` lands nowhere);
+    without ``dest`` it stays at ``path``, staged, until the owner places or ``discard``s it. Used as a
+    context manager, an exception in the block discards the file."""
+
+    def __init__(self, folder: Path, dest: Optional[Callable[[str], Path]] = None, *,
+                 expect: Optional[str] = None) -> None:
+        super().__init__()
+        folder.mkdir(parents=True, exist_ok=True)
+        self.path: Optional[Path] = folder / f".sink-{uuid.uuid4().hex}"
+        self._f: Optional[IO[bytes]] = open(self.path, "wb")
+        self._dest = dest
+        self._expect = expect
+        self.created = False
+
+    def _out(self, view: memoryview) -> None:
+        assert self._f is not None
+        self._f.write(view)
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        f, self._f = self._f, None
+        try:
+            if f is not None:
+                f.close()
+        finally:
+            super().close()
+        if self._dest is None or self.path is None:
+            return
+        tmp, self.path = self.path, None
+        dest = self._dest(self.hash)
+        if (self._expect is not None and self.hash != self._expect) or dest.exists():
+            tmp.unlink(missing_ok=True)
+            return
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(tmp, dest)
+        self.path, self.created = dest, True
+
+    def discard(self) -> None:
+        """Close and drop a staged (or unfinished) file; a placed one is not touched."""
+        if not self.closed:
+            self._dest = None
+            self.close()
+        if self.path is not None and not self.created:
+            self.path.unlink(missing_ok=True)
+            self.path = None
+
+    def __exit__(self, et: Any, ev: Any, tb: Any) -> None:
+        if et is not None:
+            self.discard()
+        else:
+            self.close()
+
+
 class ArtStore:
     """Bytes by ``sha256:<hex>``, write-once, in a folder; on a miss inside ``fetching``, fetched into it."""
 
@@ -170,7 +227,7 @@ class ArtStore:
 
     @contextmanager
     def fetching(self, fetch: Optional[Callable[[str, Path], None]]) -> Iterator[None]:
-        """For the block, in this thread, a miss in ``get``/``get_to`` calls ``fetch(h, path)`` first, which puts
+        """For the block, in this thread, a miss in ``open``/``get_to`` calls ``fetch(h, path)`` first, which puts
         the bytes of ``h`` at ``path`` (a value's store, SVP 1511); ``None`` fetches nothing."""
         old = getattr(self._scope, "fetch", None)
         self._scope.fetch = fetch
@@ -195,24 +252,20 @@ class ArtStore:
     def exists(self, h: str) -> bool:
         return self.path(h).exists()
 
-    def put(self, data: bytes) -> str:
-        """Store small bytes held in memory (an encoding, a manifest); return their hash."""
-        h = sha256(data)
-        p = self.path(h)
-        if not p.exists():
-            p.parent.mkdir(parents=True, exist_ok=True)
-            tmp = p.with_suffix(".tmp-" + str(threading.get_ident()))
-            tmp.write_bytes(data)
-            tmp.replace(p)
-        return h
+    def sink(self, *, staged: bool = False) -> FileSink:
+        """A write stream for one encoding (DAT 240): hashed as written, renamed at close to its place by hash,
+        write-once (``created``), so a reader never sees a partial file. ``staged``: left at a temp name in
+        the store's folder (``path``) for the owner to place with ``put_path`` or ``discard``."""
+        return FileSink(self.root / "tmp", None if staged else self.path)
 
     def put_path(self, source: Source, h: str) -> bool:
         """Store a part by its hash ``h`` without reading it into memory: a hardlink to the file on the
         same filesystem, else a streamed copy to a temp name and a rename; ``True`` when written here."""
         return place(source, self.path(h), h)
 
-    def get(self, h: str) -> bytes:
-        return self._have(h).read_bytes()
+    def open(self, h: str) -> IO[bytes]:
+        """The bytes of ``h`` as a read stream (a real, seekable file); inside ``fetching`` a miss fetches first."""
+        return open(self._have(h), "rb")
 
     def get_to(self, h: str, dest: Path) -> None:
         """Put the bytes of ``h`` at ``dest`` (a hardlink on the same filesystem, else a streamed copy)."""

@@ -32,7 +32,7 @@ import importlib
 import importlib.metadata as md
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import IO, TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .codec import canonical, sha256
 from .env import Env, _git, code_at
@@ -65,7 +65,7 @@ class Code(Value):
             "commit": manifest["commit"], "lock": manifest["lock"], "sandboxed": bool(manifest["sandboxed"]),
             "version": str(manifest["version"]), "package": manifest.get("package")}
         self.__dict__["_unit"] = unit
-        self.__dict__["_hash"] = sha256(self.encode())
+        self.__dict__["_hash"] = identity_hash(manifest["modules"], manifest["mounts_hash"])
 
     @property
     def name(self) -> Optional[str]:  # type: ignore[override]
@@ -115,9 +115,9 @@ class Code(Value):
         run moves; ``None`` when the version came from a commit or the hash (or a dirty checkout)."""
         return self._manifest["package"]
 
-    def encode(self) -> bytes:
+    def encode(self, out: IO[bytes]) -> None:
         """The identity: ``{"modules": relpath -> sha256, "mounts": <mounts hash or None>}``, canonical."""
-        return identity(self._manifest["modules"], self._manifest["mounts_hash"]).encode()
+        out.write(identity(self._manifest["modules"], self._manifest["mounts_hash"]).encode())
 
     def _rows(self) -> List[Tuple[str, str]]:
         """The ``db/code/<hash 16>`` item's rows: the identity, so a lookup can re-hash it."""
@@ -129,7 +129,7 @@ class Code(Value):
         return Code({**self._manifest, "modules": {**self._manifest["modules"], **more}}, unit=self._unit)
 
     @classmethod
-    def decode(cls, data: bytes, store: "ArtStore", name: Optional[str] = None) -> "Code":
+    def decode(cls, src: IO[bytes], store: "ArtStore", name: Optional[str] = None) -> "Code":
         raise NotImplementedError("a Code is not stored as a value yet: its description arrives with the "
                                   "history tier (DAT 1037)")
 

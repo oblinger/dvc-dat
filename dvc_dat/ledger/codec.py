@@ -18,6 +18,7 @@ A bare ``int``, ``float``, ``bool`` or ``None`` is refused by ``add`` (Q5 (A)).
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import re
 from typing import Any, Optional, Tuple
@@ -34,6 +35,58 @@ def canonical(doc: Any, *, strict: bool = False) -> str:
 def sha256(data: bytes) -> str:
     """The hex sha256 of ``data``."""
     return hashlib.sha256(data).hexdigest()
+
+
+class HashSink(io.RawIOBase):
+    """A write-only, forward-only binary stream that hashes and counts what passes through it (DAT 240):
+    ``hash`` (hex sha256) and ``size`` read what was written so far. A subclass also writes the bytes
+    somewhere (``store.FileSink``). ``seek`` is refused: an encoder that seeks back would make the digest
+    wrong."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._digest = hashlib.sha256()
+        self._size = 0
+
+    def writable(self) -> bool:
+        return True
+
+    def seekable(self) -> bool:
+        return False
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        raise io.UnsupportedOperation(f"{type(self).__name__} is forward-only: an encoder writes its bytes once, "
+                                      "in order, and never seeks")
+
+    def tell(self) -> int:
+        return self._size
+
+    def write(self, b: Any) -> int:
+        if self.closed:
+            raise ValueError(f"write to a closed {type(self).__name__}")
+        view = memoryview(b).cast("B")
+        self._digest.update(view)
+        self._out(view)
+        self._size += len(view)
+        return len(view)
+
+    def _out(self, view: memoryview) -> None:
+        """Where the bytes go besides the digest: nowhere, here."""
+
+    @property
+    def hash(self) -> str:
+        """The hex sha256 of everything written."""
+        return self._digest.hexdigest()
+
+    @property
+    def size(self) -> int:
+        """How many bytes were written."""
+        return self._size
+
+
+def hash_sink() -> HashSink:
+    """A sink backed by nothing: what a value's ``hash`` and a repeat check encode into."""
+    return HashSink()
 
 
 def hash_text(text: str, n: int = 64) -> str:

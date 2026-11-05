@@ -1,6 +1,7 @@
 """``Value``: everything the ledger holds and hands back, with its provenance on it.
 
-A subclass says how it becomes bytes (``encode``) and back (``decode``) and,
+A subclass says how it becomes bytes (``encode`` writes them to a binary stream the store opens) and
+back (``decode`` reads them from one), never holding them whole (DAT 240), and,
 with ``@ledger_class(preds=...)``, which pred names its values may carry.
 ``preds`` is a plain dict while the value is unsealed, filled by whoever builds
 it; the seal (``v.seal(t)`` or an ``run``) freezes it into a
@@ -12,14 +13,14 @@ subclasses: ``Value.Blob`` (any Python object, pickled), ``Value.Table`` (parque
 
 from __future__ import annotations
 
-import io
 import pickle
 import re
+import shutil
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterable, Mapping, Optional, Tuple, Union
+from typing import IO, TYPE_CHECKING, Any, ClassVar, Dict, Iterable, Mapping, Optional, Tuple, Union
 
-from .codec import sha256
+from .codec import hash_sink
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -119,15 +120,23 @@ class Value:
             raise TypeError("cannot modify a sealed value's preds")
         self.__dict__["_preds"] = dict(value)
 
-    def encode(self) -> bytes:
-        """The bytes to store."""
+    def encode(self, out: IO[bytes]) -> None:
+        """Write the bytes to store to ``out``, once, forward: a write-only binary stream that hashes what
+        passes (it refuses ``seek``). Returns nothing; a test that wants the bytes passes ``io.BytesIO()``."""
         raise NotImplementedError(f"{type(self).__name__} does not say how it encodes")
 
     @classmethod
-    def decode(cls, data: bytes, store: "ArtStore") -> "Value":
-        """The object from its bytes. A subclass whose ``decode`` also accepts ``name=`` is passed the
-        name it is loaded by (an alias), or ``None`` when loaded by its subject."""
+    def decode(cls, src: IO[bytes], store: "ArtStore") -> "Value":
+        """The object from its bytes, read from ``src`` (a binary read stream, seekable). A subclass whose
+        ``decode`` also accepts ``name=`` is passed the name it is loaded by (an alias), or ``None`` when
+        loaded by its subject."""
         raise NotImplementedError(f"{cls.__name__} does not say how it decodes")
+
+    def _encoded_hash(self) -> str:
+        """The hex sha256 of ``encode``, written into a sink that keeps nothing."""
+        s = hash_sink()
+        self.encode(s)
+        return s.hash
 
     def _parts(self) -> Iterable["Part"]:
         """Further bytes that ``decode`` will fetch from the store (a folder's files), as
@@ -223,14 +232,17 @@ class Value:
         stamp = _now()
         env = current_env()
         record: Dict[str, Any] = {"preds": preds_record(self.preds), "deps": [ref_record(d) for d in deps]}
-        data = self.encode()
-        h = sha256(data)
+        kept = Kept()
+        with unguarded():                       # the ledger's own write, also inside a sandboxed body
+            with (kept.sink() if keep else hash_sink()) as sink:
+                self.encode(sink)
+        h = sink.hash
         record.update(hash=h, kind=dotted(type(self)), sealed_at=stamp, path=self._seal_path(),
-                      provenance=provenance, env=env_record(env), bytes=self._seal_bytes(data))
+                      provenance=provenance, env=env_record(env), bytes=self._seal_bytes(sink.size))
         if run is not None:
             record["run"] = run.record()
-        with unguarded():                       # the ledger's own write, also inside a sandboxed body
-            entry = Kept().seal(record, data if keep else None, self._parts() if keep else ())
+        with unguarded():
+            entry = kept.seal(record, keep, self._parts() if keep else ())
         self._forget()              # the hash is fixed: a later check (SealBroken) hashes the source anew
         self.__dict__["_local"] = {"hash": h, "deps": deps, "provenance": provenance, "env": env,
                                    "kept": keep, "entry": entry}
@@ -243,9 +255,9 @@ class Value:
         """The folder a seal record names (a ``Dat``'s); ``None`` for a value held in memory."""
         return None
 
-    def _seal_bytes(self, data: bytes) -> int:
-        """The size a seal record lists: of the encoding, for a value held in memory."""
-        return len(data)
+    def _seal_bytes(self, size: int) -> int:
+        """The size a seal record lists: of the encoding (``size`` bytes), for a value held in memory."""
+        return size
 
     def _reopen(self, record: Dict[str, Any], name: Optional[str]) -> None:
         """Make this object the value a seal record describes, sealed as the sealing process left it."""
@@ -275,21 +287,25 @@ class Value:
         try:
             return Kept().entry(local["entry"])
         except KeyError:
-            if sha256(self.encode()) == local["hash"]:
+            if self._encoded_hash() == local["hash"]:
                 return None
             from .errors import SealBroken
 
             raise SealBroken(f"{type(self).__name__} sealed at {self.sealed}: its kept bytes were purged and "
                              "the source changed since; seal a new value") from None
 
-    def _stored_bytes(self) -> bytes:
-        """The encoding a save stores: the kept bytes when ``v.seal(keep=True)`` kept them, else ``encode()``."""
+    def _write_stored(self, out: IO[bytes]) -> None:
+        """Write the encoding a save stores to ``out``: the kept bytes, in blocks, when ``v.seal(keep=True)``
+        kept them, else ``encode(out)``."""
         e = self._kept()
         if e is not None:
             from .kept import Kept
+            from .store import BLOCK
 
-            return Kept().get(e["hash"])
-        return self.encode()
+            with open(Kept().blob(e["hash"]), "rb") as f:
+                shutil.copyfileobj(f, out, BLOCK)
+            return
+        self.encode(out)
 
     def _stored_parts(self) -> Iterable["Part"]:
         """The parts a save stores: the kept blobs when kept, else ``_parts()``."""
@@ -310,11 +326,11 @@ class Value:
 
     @property
     def hash(self) -> str:
-        """The hex sha256 of ``encode()``; fixed once sealed."""
+        """The hex sha256 of what ``encode`` writes; fixed once sealed."""
         cached = self.__dict__.get("_hash")
         if cached is not None:
             return cached
-        h = sha256(self.encode())
+        h = self._encoded_hash()
         if self.sealed:
             self.__dict__["_hash"] = h
         return h
@@ -525,12 +541,12 @@ class Blob(Value):
         self.obj = obj
         super().__init__(name=name)
 
-    def encode(self) -> bytes:
-        return pickle.dumps(self.obj, protocol=4)
+    def encode(self, out: IO[bytes]) -> None:
+        pickle.dump(self.obj, out, protocol=4)
 
     @classmethod
-    def decode(cls, data: bytes, store: "ArtStore") -> "Blob":
-        return cls(pickle.loads(data))
+    def decode(cls, src: IO[bytes], store: "ArtStore") -> "Blob":
+        return cls(pickle.load(src))
 
 
 class Table(Value):
@@ -540,20 +556,18 @@ class Table(Value):
         self.table = table
         super().__init__(name=name)
 
-    def encode(self) -> bytes:
+    def encode(self, out: IO[bytes]) -> None:
         import pyarrow as pa
         import pyarrow.parquet as pq
 
         t = self.table if isinstance(self.table, pa.Table) else pa.Table.from_pandas(self.table)
-        buf = io.BytesIO()
-        pq.write_table(t, buf)
-        return buf.getvalue()
+        pq.write_table(t, out)
 
     @classmethod
-    def decode(cls, data: bytes, store: "ArtStore") -> "Table":
+    def decode(cls, src: IO[bytes], store: "ArtStore") -> "Table":
         import pyarrow.parquet as pq
 
-        return cls(pq.read_table(io.BytesIO(data)))
+        return cls(pq.read_table(src))
 
 
 Blob.__qualname__ = "Value.Blob"

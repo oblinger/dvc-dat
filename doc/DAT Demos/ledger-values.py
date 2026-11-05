@@ -59,16 +59,17 @@ sys.path.insert(0, str(Path("demo_game").resolve()))   # Video, PlainVideo
 #     def __init__(self, frames: bytes):
 #         self.frames = frames
 #
-#     def encode(self) -> bytes:
-#         return self.frames
+#     def encode(self, out) -> None:
+#         out.write(self.frames)
 #
 #     @classmethod
-#     def decode(cls, data: bytes, store) -> "PlainVideo":
-#         return cls(data)
+#     def decode(cls, src, store) -> "PlainVideo":
+#         return cls(src.read())
 # ```
 #
-# `encode` and `decode` say how the object becomes bytes and back;
-# here the bytes are the frames.
+# `encode` writes the object's bytes to a stream the store opens, and
+# `decode` reads them back from one, so a value is never held whole in
+# memory to be stored or loaded; here the bytes are the frames.
 
 # %%
 from demo_game.game import PlainVideo

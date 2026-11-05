@@ -43,11 +43,11 @@ PKG = {
         class Tagged(Value):
             def __init__(self, data: bytes):
                 self.data = data
-            def encode(self) -> bytes:
-                return self.data
+            def encode(self, out) -> None:
+                out.write(self.data)
             @classmethod
-            def decode(cls, data, store):
-                return cls(data)
+            def decode(cls, src, store):
+                return cls(src.read())
 
         @ledger_fn
         def tagged(rev, *, game: str) -> Tagged:

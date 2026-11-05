@@ -282,8 +282,8 @@ f.code               # <Code plane@2.7.1>
 | [hash](#^value-hash)       | The sha256 of its encoding                        |
 | [dependencies](#^dependencies) | What producing it read                       |
 | [Dependencies](#^value-dependencies) | The type of `dependencies`             |
-| [encode](#^encode)         | Abstract: the bytes to store, every subclass implements it |
-| [decode](#^decode)         | Abstract: the object from its bytes, every subclass implements it |
+| [encode](#^encode)         | Abstract: write the bytes to store to a stream, every subclass implements it |
+| [decode](#^decode)         | Abstract: the object read from a stream, every subclass implements it |
 | [seal](#^seal)             | Fix its identity, and save it when given a ledger |
 | [same_as](#^same-as)       | Equal bytes                                       |
 | [matches](#^matches)       | Whether its dependencies still hold at a revision |
@@ -302,7 +302,7 @@ f.code               # <Code plane@2.7.1>
     The moment the identity was fixed, UTC `YYYY-MM-DDTHH:MM:SSZ`, by `seal()` (saved nowhere yet, `subject` `None`) or by a save (printed in a zone by [`rev.show_time`](#^show-time)); `None` while unsealed, so `if v.sealed:` reads as before. A time rather than a revision because a seal can precede any ledger; the revision is `rev`, set at the save. ^sealed
 
 **hash**`: str`
-    The hex sha256 of `encode()`, cached once sealed; after a save, the stored bytes' hash whatever the live object holds. ^value-hash
+    The hex sha256 of what `encode` writes (into a sink that keeps nothing), cached once sealed; after a save, the stored bytes' hash whatever the live object holds. ^value-hash
 
 **dependencies**`: Mapping[str, str]`
     Item name to version or hash: what producing the value read. Empty for a hand-built value until saved; a run's result carries its trace here at every `seal=` level. See [Value Provenance](#Value%20Provenance). ^dependencies
@@ -310,11 +310,11 @@ f.code               # <Code plane@2.7.1>
 **Dependencies**`: Mapping[str, str]` (class attribute)
     The type of `dependencies`, for annotations. ^value-dependencies
 
-**encode**`() -> bytes`
-    Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). The bytes to store. Two calls must return the same bytes: the seal refuses a class whose encoding is not deterministic. ^encode
+**encode**`(out: BinaryIO) -> None`
+    Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). Writes the bytes to store to `out`, once, forward, and returns nothing (DAT 240): `out` is a sink the store opens, a write-only binary stream that hashes and counts what passes and refuses `seek` (`io.UnsupportedOperation`), so no value is held whole in memory to be sealed. `pickle.dump`, `pq.write_table` and `np.save` write to it as to a file. A save encodes once: into a staged file in the art folder, whose hash is the value's, which the upload sends and the commit links into place. Two calls must write the same bytes, or a value sealed by `v.seal()` is `SealBroken` at its save. A test that wants the bytes passes `io.BytesIO()`. ^encode
 
-**decode**`(data: bytes, store: ArtStore) -> Value` (classmethod)
-    Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). The object from its bytes. A `decode` that also accepts `name=` is passed the alias the value is loaded by, `None` when loaded by its subject. ^decode
+**decode**`(src: BinaryIO, store: ArtStore) -> Value` (classmethod)
+    Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). The object read from `src`, the stored bytes as a binary read stream (a real, seekable file, `ArtStore.open`). A `decode` that also accepts `name=` is passed the alias the value is loaded by, `None` when loaded by its subject. A value held only in memory is five lines: `encode(self, out): torch.save(self.t, out)`, `decode(cls, src, store): return cls(torch.load(src))`. ^decode
 
 **seal**`(to=True, *, keep=False, deps=(), name=None, provenance=None, by=None) -> str`
     `to` takes what a run's `seal=` takes, so `f(seal=x)` and a later `v.seal(x)` end in one place. `v.seal()`, the same as `v.seal(True)`, fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by`, a `str` or a JSON `dict` as on [`transaction`](#^transaction) (default the provenance, else `seal`). `name=` writes `(alias, db/alias, subject)` beside it. A run's result (`seal=False` or `True`) carries its trace: `v.seal(t)` or `v.seal(L)` writes the memo entry the run would have written, so the next identical call hits, after the code check of [Running](#Running) (`NotEvaluated`); `deps=` and `provenance=` on it are `TypeError`. `v.seal(False)` and `v.seal("get")` are `TypeError`: nothing to do to an object. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. See [Versioning](#Versioning). ^seal
@@ -363,7 +363,7 @@ A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted
 
 
 ## Dat Interface
-`dvc_dat.ledger.Dat` is `dvc_dat.Dat`, one class (DAT 1038): a dat, the folder that is its own recipe ([DAT Dat](../DAT%20Dat.md)), is a `Value` whose bytes are the folder. It encodes as its content manifest, `{"files": {relpath: sha256}}`, and its files are its parts, streamed into the art store one at a time, so memory is bounded by the manifest, not the folder. Every file in the folder is hashed (`__pycache__` skipped), `_spec_.yaml`, `_result_.yaml` and `run/` included; each in 1 MiB blocks, the per-file hashes cached on the object, keyed by size, mtime and inode, so only a changed file is hashed again. The `db/value` row's kind and the folder's `dat.kind` are the same dotted name, `dvc_dat.core.Dat` or the subclass. A dat made by `Dat.create` or `Dat.manager.run` seals with no subclass once saved: `dat.seal(t, name="table/12")` stores its files and writes its row, and `rev.load("table/12")` returns a `Dat` whose `get_spec()`, `get_results()` and `get_path()` read the rebuilt folder. A folder whose `_spec_` names a `dat.kind` and was never saved (standing `open`) is `ValueError` naming `dat.save()`; a folder with no spec is a plain folder value.
+`dvc_dat.ledger.Dat` is `dvc_dat.Dat`, one class (DAT 1038): a dat, the folder that is its own recipe ([DAT Dat](../DAT%20Dat.md)), is a `Value` whose bytes are the folder. It encodes as its content manifest, `{"files": {relpath: sha256}}`, written to the sink, and its files are its parts, streamed into the art store one at a time, so memory is bounded by the manifest, not the folder. Every file in the folder is hashed (`__pycache__` skipped), `_spec_.yaml`, `_result_.yaml` and `run/` included; each in 1 MiB blocks, the per-file hashes cached on the object, keyed by size, mtime and inode, so only a changed file is hashed again. The `db/value` row's kind and the folder's `dat.kind` are the same dotted name, `dvc_dat.core.Dat` or the subclass. A dat made by `Dat.create` or `Dat.manager.run` seals with no subclass once saved: `dat.seal(t, name="table/12")` stores its files and writes its row, and `rev.load("table/12")` returns a `Dat` whose `get_spec()`, `get_results()` and `get_path()` read the rebuilt folder. A folder whose `_spec_` names a `dat.kind` and was never saved (standing `open`) is `ValueError` naming `dat.save()`; a folder with no spec is a plain folder value.
 
 | Dat | |
 | --- | --- |
@@ -387,8 +387,8 @@ A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted
 **sealed_at_path**`(path, *, name: str | None = None) -> Dat | None` (classmethod)
     The last seal record of the folder `path` not saved since, reopened in this process as the sealing process left it; `None` with no record. `v.seal(t)` on it saves exactly what the sealing process would have saved: the same subject, `SealBroken` on a changed byte unless kept. The record's class must be a subclass of the class called on, else `TypeError`. ^sealed-at-path
 
-**decode**`(data: bytes, store: ArtStore, *, name: str | None = None) -> Dat` (classmethod)
-    The folder of a manifest, placed under `<art>/dats/<name>/` when loaded by a name, else `<art>/dats/<first 16 hex of the manifest hash>/`; each file is placed by `ArtStore.get_to`. A named folder holding other content (the alias was re-pointed) is replaced. The dat's spec and results are read from the placed folder. ^dat-decode
+**decode**`(src: BinaryIO, store: ArtStore, *, name: str | None = None) -> Dat` (classmethod)
+    The folder of the manifest read from `src` (paths and hashes, read whole), placed under `<art>/dats/<name>/` when loaded by a name, else `<art>/dats/<first 16 hex of the manifest hash>/`; each file is placed by `ArtStore.get_to`. A named folder holding other content (the alias was re-pointed) is replaced. The dat's spec and results are read from the placed folder. ^dat-decode
 
 **kind_ok**`(kind: str) -> bool` (classmethod)
     Whether a folder whose `_spec_` names `dat.kind` `kind` loads as this class, the class its `db/value` row names. The default accepts this class or a subclass, by dotted name (or a bare name written before 2.3); a subclass widens it. ^kind-ok
@@ -602,7 +602,7 @@ A `(db/pred/<p>, db/index, true)` row builds a partial SQL index on `<p>` in the
 ## Storage
 The quads live in one table, `quads(rev, ord, subject, predicate, object, added)`, keyed by `(rev, ord)` and indexed on `(subject, predicate, rev)` and `(predicate, object, rev)`: in `ledger.db` (SQLite, WAL mode) for a folder ledger, in a Postgres schema for a DSN ledger (`pip install 'dvc_dat[pg]'`). The object is a tagged string, `str:`, `json:` or `ref:<class>:<hash>[:<subject>]`, so a row reads without a schema.
 
-The art store holds bytes by sha256 at `sha256/<2>/<hex>`, write-once, so the same bytes are stored once however many subjects point at them. A value's parts enter by `put_path` (a hardlink on the same filesystem, else a streamed copy checked against the hash) and leave by `get_to`. A stored `Dat`'s files and its materialised folder under `art/dats/` share inodes. The ledger's art store and the dat manager's `art/` are separate folders keyed the same way.
+The art store holds bytes by sha256 at `sha256/<2>/<hex>`, write-once, so the same bytes are stored once however many subjects point at them. A value's encoding enters through a sink (`ArtStore.sink()`: a temp file hashed as written, renamed to its hash at close) and leaves through `ArtStore.open(h)`, a read stream; its parts enter by `put_path` (a hardlink on the same filesystem, else a streamed copy checked against the hash) and leave by `get_to`. No value's bytes are held in memory whole on either path (DAT 240). A value store (`Remote`) sees one blob per file plus one for the encoding, by the sha256 of the bytes as dvc-dat handed them; it may compress or wrap each blob, provided `get_to(h, dest)` yields bytes hashing to `h`. A stored `Dat`'s files and its materialised folder under `art/dats/` share inodes. The ledger's art store and the dat manager's `art/` are separate folders keyed the same way.
 
 ### Value stores
 The art store is a folder on the machine that opened the ledger. A **value store** is where the bytes also go, so a value sealed on one machine loads on another (SVP 1511). The ledger names it in one row, `(db, db/store, <name>)`, read at the sealing transaction's snapshot; absent, it is `local`. A name other than `local` and `folder` is a store some code in the process registered (`register_store`): dvc-dat carries no cloud code.

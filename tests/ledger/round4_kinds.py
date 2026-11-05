@@ -17,12 +17,13 @@ def local_value(rev, *, n: int) -> Value:
         def __init__(self, d):
             self.d = d
 
-        def encode(self):
-            return self.d
+        def encode(self, out) -> None:
+
+            out.write(self.d)
 
         @classmethod
-        def decode(cls, data, store):
-            return cls(data)
+        def decode(cls, src, store):
+            return cls(src.read())
     return Inner(b"x" * n)
 
 

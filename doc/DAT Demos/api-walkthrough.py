@@ -346,11 +346,11 @@ show("api-walkthrough-values")   # black: the parts every value has; gray: an ex
 # class Video(Value):
 #     def __init__(self, frames: bytes):
 #         self.frames = frames
-#     def encode(self) -> bytes:
-#         return self.frames
+#     def encode(self, out) -> None:
+#         out.write(self.frames)
 #     @classmethod
-#     def decode(cls, data: bytes, store) -> "Video":
-#         return cls(data)
+#     def decode(cls, src, store) -> "Video":
+#         return cls(src.read())
 # ```
 
 # %% [markdown]

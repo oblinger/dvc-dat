@@ -18,12 +18,13 @@ class Video(Value):
     def __init__(self, frames: bytes):
         self.frames = frames
 
-    def encode(self) -> bytes:
-        return self.frames
+    def encode(self, out) -> None:
+
+        out.write(self.frames)
 
     @classmethod
-    def decode(cls, data, store):
-        return cls(data)
+    def decode(cls, src, store):
+        return cls(src.read())
 
 
 @ledger_class(preds=("game", "version", "video", "team"))
@@ -31,24 +32,26 @@ class Cut(Value):
     def __init__(self, clip: bytes):
         self.clip = clip
 
-    def encode(self) -> bytes:
-        return self.clip
+    def encode(self, out) -> None:
+
+        out.write(self.clip)
 
     @classmethod
-    def decode(cls, data, store):
-        return cls(data)
+    def decode(cls, src, store):
+        return cls(src.read())
 
 
 class Plain(Value):
     def __init__(self, data: bytes):
         self.data = data
 
-    def encode(self) -> bytes:
-        return self.data
+    def encode(self, out) -> None:
+
+        out.write(self.data)
 
     @classmethod
-    def decode(cls, data, store):
-        return cls(data)
+    def decode(cls, src, store):
+        return cls(src.read())
 
 
 @ledger_fn
@@ -155,10 +158,10 @@ class Blobby(Value):
     def __init__(self, data: bytes) -> None:
         self.data = data
 
-    def encode(self) -> bytes:
+    def encode(self, out) -> None:
         from dvc_dat.ledger.codec import sha256
 
-        return sha256(self.data).encode()
+        out.write(sha256(self.data).encode())
 
     def _parts(self):
         import io
@@ -168,8 +171,9 @@ class Blobby(Value):
         return [(sha256(self.data), lambda: io.BytesIO(self.data))]
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "Blobby":
-        return cls(store.get(data.decode()))
+    def decode(cls, src, store) -> "Blobby":
+        with store.open(src.read().decode()) as part:
+            return cls(part.read())
 
 
 @ledger_class(preds=("game", "take"))
@@ -198,3 +202,28 @@ def never_saves(dat, n=1):
 @ledger_class(preds=("note",))
 class NotedDat(Dat):
     """A dat kind declaring one pred of its own beside its folder's."""
+
+
+#: One MiB block a ``Streamed`` value writes again and again.
+MIB = bytes(range(256)) * 4096
+#: Encode calls per class name (the one-encode-per-seal tests read it).
+ENCODES = {}
+
+
+class Streamed(Value):
+    """A value of ``blocks`` MiB generated block by block: its bytes are never whole in memory (DAT 240)."""
+
+    def __init__(self, blocks: int):
+        self.blocks = blocks
+
+    def encode(self, out) -> None:
+        ENCODES["Streamed"] = ENCODES.get("Streamed", 0) + 1
+        for _ in range(self.blocks):
+            out.write(MIB)
+
+    @classmethod
+    def decode(cls, src, store):
+        n = 0
+        for block in iter(lambda: src.read(1 << 20), b""):
+            n += len(block)
+        return cls(n >> 20)

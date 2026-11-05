@@ -2158,7 +2158,7 @@ class Dat(Value, metaclass=_DatMeta):
     def _seal_path(self) -> Optional[str]:
         return str(Path(self._path).resolve())
 
-    def _seal_bytes(self, data: bytes) -> int:
+    def _seal_bytes(self, size: int) -> int:
         return sum(sig[0] for sig, _h in (self.__dict__.get("_shas") or {}).values())
 
     @classmethod
@@ -2198,11 +2198,12 @@ class Dat(Value, metaclass=_DatMeta):
             return False
         return stat.S_ISDIR(st.st_mode) and self.__dict__.get("_dir_id") in (None, (st.st_dev, st.st_ino))
 
-    def encode(self) -> bytes:
-        """The folder's content manifest, `{"files": {relpath: sha256}}`, canonical JSON."""
+    def encode(self, out: Any) -> None:
+        """Write the folder's content manifest, `{"files": {relpath: sha256}}`, canonical JSON, to `out`; the
+        files themselves are `_parts`, stored one by one, never read whole."""
         from .ledger.codec import canonical
 
-        return canonical({"files": self._manifest()}).encode()
+        out.write(canonical({"files": self._manifest()}).encode())
 
     def _parts(self) -> List[Tuple[str, Path]]:
         seen: Dict[str, Path] = {}
@@ -2233,25 +2234,28 @@ class Dat(Value, metaclass=_DatMeta):
         return kind if isinstance(kind, str) else None
 
     @staticmethod
-    def _materialise(data: bytes, store: Any, name: Optional[str] = None) -> Path:
-        """The folder of a manifest, under `<store root>/dats/` (the data folder): at `<name>` when a
-        name is given (an absolute path: there), else at the manifest hash's first 16 hex. Files are
+    def _stored_manifest(store: Any, h: str) -> Dict[str, str]:
+        """`{relpath: sha256}` of the manifest stored under `h`, read from the store as a stream."""
+        with store.open(h) as src:
+            return json.load(src)["files"]
+
+    @staticmethod
+    def _materialise(h: str, files: Dict[str, str], store: Any, name: Optional[str] = None) -> Path:
+        """The folder of the manifest `files` (hash `h`), under `<store root>/dats/` (the data folder): at
+        `<name>` when a name is given (an absolute path: there), else at the hash's first 16 hex. Files are
         placed by `store.get_to` (hardlinks on the same filesystem); a named folder holding other
         content is replaced by a new folder, never edited in place."""
-        from .ledger.codec import sha256
         from .ledger.sandbox import unguarded     # the store's own write, also inside a sandboxed body
 
-        manifest = json.loads(data.decode())
-        files: Dict[str, str] = manifest["files"]
         if name is not None and os.path.isabs(name):
             dest = Path(name)
         elif name is not None:
             dest = store.root / "dats" / Path(*Path(check_name(name)).parts)
         else:
-            dest = store.root / "dats" / sha256(data)[:16]
+            dest = store.root / "dats" / h[:16]
         with unguarded():
             if name is not None and dest.exists() and not _holds(dest, files, store):
-                old = dest.with_name(f"{dest.name}.old-{os.getpid()}-{id(data):x}")
+                old = dest.with_name(f"{dest.name}.old-{os.getpid()}-{id(files):x}")
                 dest.rename(old)
                 shutil.rmtree(old, ignore_errors=True)
             for rel, h in files.items():
@@ -2262,18 +2266,24 @@ class Dat(Value, metaclass=_DatMeta):
         return dest
 
     @classmethod
-    def decode(cls, data: bytes, store: Any, *, name: Optional[str] = None) -> "Dat":
-        """The dat a manifest names: its folder rebuilt in the data folder (at `name` when loaded by
-        one), its spec and results read from there."""
-        return cls._from_folder(cls._materialise(data, store, name))
+    def decode(cls, src: Any, store: Any, *, name: Optional[str] = None) -> "Dat":
+        """The dat the manifest read from `src` names: its folder rebuilt in the data folder (at `name`
+        when loaded by one), its spec and results read from there. The manifest is read whole (paths and
+        hashes); the files arrive one by one through `store.get_to`."""
+        from .ledger.codec import sha256
+
+        data = src.read()
+        return cls._from_folder(cls._materialise(sha256(data), json.loads(data)["files"], store, name))
 
     def _after_seal(self, store: Any, name: Optional[str] = None) -> None:
         self._forget()
-        self._move_to(self._materialise(store.get(self.hash), store, name))   # the manifest as stored
+        h = self.hash
+        self._move_to(self._materialise(h, self._stored_manifest(store, h), store, name))   # as stored
 
     def _at_name(self, store: Any, name: str) -> None:
         self._forget()
-        self._move_to(self._materialise(store.get(self.hash), store, name))
+        h = self.hash
+        self._move_to(self._materialise(h, self._stored_manifest(store, h), store, name))
 
     @staticmethod
     def get(source: Union["Dat", dict], keys: Union[str, List[str]],
