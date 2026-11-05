@@ -269,6 +269,16 @@ class Rev:
         if self._rec is not None:
             self._rec[item] = value
 
+    def _record_run(self, item: str, value: str) -> None:
+        """A run reached through this ``Rev``: its ``eval:`` item, or on a ``Rev`` that records nothing the
+        current run's ``foreign:`` item (``trace.note_read``); a lookup that found nothing read nothing."""
+        if self._rec is not None:
+            self._rec[item] = value
+        elif value != NONE_TOKEN:
+            from .trace import note_read
+
+            note_read(self, item, value)
+
     def _record_call(self, call: str, args: Sequence[Any], since: Optional["Rev"], result: Any) -> None:
         if self._rec is not None:
             from .trace import call_item, token
@@ -546,7 +556,7 @@ class Rev:
         plain = self._plain()
         subs = [x for x in plain._subjects(s, kind, fn, where, since, preds) if plain._held(x, "db/value")]
         self._query_record(s, kind, fn, where, False, since, preds, subs)
-        out = [Ref(plain, x).load() for x in subs]
+        out = [Ref(plain, x)._load() for x in subs]
         for v in out:
             self._record_value(v)
         return out
@@ -562,7 +572,7 @@ class Rev:
         if len(subs) > 1:
             raise Multiple(f"{describe(s, kind, fn, where, preds)} matches {len(subs)}: "
                            + ", ".join(display_name(self.ledger, x) for x in subs[:6]))
-        v = Ref(plain, subs[0]).load()
+        v = Ref(plain, subs[0])._load()
         self._record_value(v)
         return v
 
@@ -594,9 +604,12 @@ class Rev:
         return [row(x) for x in subs]
 
     def _record_value(self, v: Value, name: Optional[str] = None) -> None:
-        if self._rec is None:
-            return
         text = ref_text(dotted(type(v)), v.hash)
+        if self._rec is None:
+            from .trace import note_read
+
+            note_read(self, name or str(v.subject), text)
+            return
         self._rec[text] = text
         if name is not None and name != v.subject:
             self._rec[f"{name} db/alias"] = text
@@ -874,7 +887,14 @@ class Ref:
 
     def load(self) -> Value:
         """Fetch the bytes, decode them by ``type``, restore provenance and preds: the same Value every time
-        while it is still there (a ``Dat`` whose folder was moved or replaced since is loaded afresh)."""
+        while it is still there (a ``Dat`` whose folder was moved or replaced since is loaded afresh). Inside a
+        run the read is recorded: a recording ``Rev``'s items, any other ``Rev``'s ``foreign:`` item."""
+        v = self._load()
+        self.rev._record_value(v, self._given)
+        return v
+
+    def _load(self) -> Value:
+        """``load`` unrecorded: the ledger's own read of a value (a memo hit, a query's result)."""
         s = self.subject
         if self._hash is None or s is None:
             raise KeyError(f"{self._given!r} has no value at rev {self.rev.id}")
@@ -908,5 +928,4 @@ class Ref:
             v._provenance(subject=s, rev=sealed_at, dependencies=trace, preds=self._preds(), loaded_as=loaded_as)
             v.__dict__["_hash"] = self._hash
             ledger._values[key] = v
-        self.rev._record_value(v, self._given)
         return v

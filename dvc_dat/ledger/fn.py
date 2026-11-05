@@ -599,7 +599,7 @@ class Fn:
         if level not in (True, False):
             hit = lookup(plain, self.name, enc, widen=DETERMINISTIC if self.deterministic else ())
             if hit is not None or level == "get":
-                rev._record(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
+                rev._record_run(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
                 at = target if target is not None or hit is None or self.kind != "dat" else hit.name
                 return place(plain.ledger, hit, at) if hit is not None and at is not None else hit
         into = level if isinstance(level, Transaction) else None
@@ -622,7 +622,7 @@ class Fn:
                 raise TypeError(f"{self.name} returned a {type(value).__name__} sealed by v.seal(); run seals "
                                 "its own result, so return it unsealed")
             value.seal()
-        rev._record(item, ref_text(dotted(type(value)), value.hash))
+        rev._record_run(item, ref_text(dotted(type(value)), value.hash))
         if into is not None:
             return value
         if target is None and self._takes_path and isinstance(value, Dat):
@@ -660,8 +660,8 @@ class Fn:
                   name: Optional[str] = None) -> Value:
         """Run in this process. ``save``: ``False``, a draft carrying its ``RunTrace``; ``True``, the
         memo entry in a transaction of its own; a ``Transaction``, the memo entry in it (named ``name``)."""
-        from .rev import Rev
         from .sandbox import base_confined
+        from .trace import RunFrame, running
         from .txn import code_token
 
         env = current_env()
@@ -671,12 +671,13 @@ class Fn:
         if self.kind == "dat":
             return self._run_dat(plain, kw, enc, save, name, env, repo)
         rec: Dict[str, str] = {}
+        frame = RunFrame(plain, rec, enc)
         work = work_folder() if self._takes_path else None
         args = dict(kw, path=work) if work is not None else kw
         value = None
         try:
-            with base_confined(_checkout(env, repo), _dats(plain, work)):
-                out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+            with base_confined(_checkout(env, repo), _dats(plain, work)), running(frame):
+                out = self._obj(frame.rev, **args)
             value = wrap_result(self.name, self._obj, out)
             trace = dict(rec)
             trace.update({"code": self.code.subject, "fn": self.name, **platform_items(env)})
@@ -695,8 +696,10 @@ class Fn:
     def _run_dat(self, plain: "Rev", spec: Dict[str, Any], enc: str, save: Any, name: Optional[str],
                  env: Env, repo: Optional[str]) -> Value:
         """A dat's run function, run here (``_run_base``): the dat made from the spec in a work folder and
-        run (``manager._execute``), its recorded dependencies that are ledger names entered as alias reads."""
+        run (``manager._execute``), its recorded dependencies that are ledger names entered as alias reads.
+        The run is the current run, so the manager's namespace and ``dat.at`` are at ``plain`` (SVP 1521)."""
         from .sandbox import base_confined
+        from .trace import RunFrame, running
         from .txn import code_token
 
         rec: Dict[str, str] = {}
@@ -704,7 +707,7 @@ class Fn:
         value: Any = None
         manager = Dat.manager
         try:
-            with base_confined(_checkout(env, repo), _dats(plain, work)):
+            with base_confined(_checkout(env, repo), _dats(plain, work)), running(RunFrame(plain, rec, enc)):
                 dat = manager.create(dat_spec(spec, self._template), path=str(work / "dat"))
                 manager._execute(dat)
             value = dat
@@ -765,9 +768,8 @@ def alias_reads(plain: "Rev", dat: Dat, rec: Dict[str, str]) -> None:
     from .rev import Ref, Rev
 
     recording = Rev(plain.ledger, plain.id, _rec=rec)
-    head = plain.ledger.at()
     for dep in sorted(Dat.get(dat.get_results(), "dat.dependencies", None) or {}):
-        if head._held(dep, "db/alias"):
+        if plain._held(dep, "db/alias"):
             Ref(recording, dep)                     # records `<dep> db/alias`, the binding it read
 
 
@@ -909,7 +911,7 @@ def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: s
         with ledger.transaction(by=f"eval:{fn.name}") as t:
             save_run(t, value, run, None, refuse_held=True)
     except _AlreadySealed as e:
-        return Ref(ledger.at(), e.subject).load()
+        return Ref(ledger.at(), e.subject)._load()
     return value
 
 
@@ -937,7 +939,7 @@ def lookup(plain: "Rev", name: str, enc: str, widen: Sequence[str] = ()) -> Opti
         trace = {p[len("db/deps/"):]: h.obj.partition(":")[2]
                  for _s, p, h in top._held_rows(subject=s) if p.startswith("db/deps/")}
         if trace_matches(plain, trace, widen):
-            return Ref(top, s).load()
+            return Ref(top, s)._load()
     return None
 
 

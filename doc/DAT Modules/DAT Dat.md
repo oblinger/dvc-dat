@@ -68,7 +68,10 @@ A folder of data described by its `_spec_.yaml`, held in memory as the spec as w
     The path relative to the dat folder that holds it, which is the dat's name in every lookup and dependency map; the absolute path for a dat outside every dat folder. ^get-path-name
 
 **run**`: Dat | None` (property)
-    The sub-dat `run/` that the last run (`Dat.manager.run`) made: its results hold `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and `dat.content`, and its `work/` is the run's scratch. `None` for a dat never run. Loaded as a plain `Dat`, outside the load cache. See [The run sub-dat](#The%20run%20sub-dat). ^run
+    The sub-dat `run/` that the last run (`Dat.manager.run`) made: its results hold `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code`, `dat.run_rev` (on a ledger) and `dat.content`, and its `work/` is the run's scratch. `None` for a dat never run. A run function reads the ledger through `dat.at`; a result must not vary with the string `dat.run_rev` itself. Loaded as a plain `Dat`, outside the load cache. See [The run sub-dat](#The%20run%20sub-dat). ^run
+
+**at**`: Rev` (property)
+    The `Rev` the run was against (`dat.run_rev`, `<ledger>@<rev>`): the recording one during the run, a plain one after. A runtime attribute, never in `_spec_.yaml` or the hash; `ValueError` for a dat not run on a ledger. ^dat-at
 
 **save**`() -> None`
     Write `_result_.yaml`, stamping `dat.sha256`, `dat.hash: functional` and `dat.standing`, and key the new hash in the index. Inside the dat's own run it writes a checkpoint (`open`, or `rolling`) and asks for the seal, which comes when the run returns; anywhere else it seals now and adds the dependency `$MANUAL`. A dat already `sealed` or `referenceable` is `RuntimeError`, and so is a seal that earns less than a spec's `dat.standing: referenceable` demand. See [Sealing and the content hash](#Sealing%20and%20the%20content%20hash) and [Standing](#Standing). ^save
@@ -304,6 +307,7 @@ Every run replaces `run/` inside the dat with a fresh sub-dat, a minimal `_spec_
 | --- | --- |
 | `dat.run_at`, `dat.host`, `dat.pid` | before the function starts |
 | `dat.code` | before; `{branch, commit, dirty}`, absent outside a checkout |
+| `dat.run_rev` | before, on a ledger: `<ledger>@<rev>`, the revision it ran against (`dat.at` is that `Rev`) |
 | `dat.run_time` | when the function returns, `HH:MM:SS.mmm` |
 | `dat.content` | after the seal: the `dat.sha256` the run sealed |
 

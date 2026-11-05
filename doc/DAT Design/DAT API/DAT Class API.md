@@ -136,7 +136,10 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
     The same spec in a new folder, loaded, same class; `run=False` leaves `run/` behind, which changes nothing about the copy's hash. ^copy
 
 **run** → `Dat | None` (property)
-    The run that made this dat: the sub-dat `run/`, whose results hold `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and `dat.content` (the `dat.sha256` it sealed), and whose `work/` is the run's scratch. `None` for a dat filled by hand or written before 3.0. Not content: outside the hash, and nothing may depend on it. ^run
+    The run that made this dat: the sub-dat `run/`, whose results hold `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code`, `dat.run_rev` (on a ledger, `<ledger>@<rev>`) and `dat.content` (the `dat.sha256` it sealed), and whose `work/` is the run's scratch. `None` for a dat filled by hand or written before 3.0. Not content: outside the hash, and nothing may depend on it. ^run
+
+**at** → `Rev` (property)
+    The `Rev` the run was against: the recording one during the run, so a read through it is traced; a plain one after. A result must not vary with the string `dat.run_rev`. `ValueError` for a dat not run on a ledger. Never in `_spec_.yaml` or the hash.
 
 **move**`(new_path: str | Path) -> Dat`
     Rename the folder; returns the dat at its new path. ^move

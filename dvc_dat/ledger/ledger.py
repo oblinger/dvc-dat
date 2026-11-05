@@ -26,6 +26,7 @@ from __future__ import annotations
 import keyword
 import os
 import re
+import weakref
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -47,6 +48,20 @@ NAME = re.compile(r"^[a-z][a-z0-9_]*$")    # a ledger's name in ``ledgers:``: a 
 _VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 
 Target = Union[str, Path]                  # a DSN, or a folder
+
+#: Every ledger open in this process, oldest first: what ``<ledger>@<rev>`` resolves through first
+#: (``opened``). The latest handle on a name wins; a name is never reused (SVP 1516).
+_OPEN: List["weakref.ref[Ledger]"] = []
+
+
+def opened(name: str) -> Optional["Ledger"]:
+    """The latest handle open in this process on the ledger named ``name`` (``store.name``), else ``None``."""
+    _OPEN[:] = [r for r in _OPEN if r() is not None]
+    for r in reversed(_OPEN):
+        led = r()
+        if led is not None and led._store.name == name:
+            return led
+    return None
 
 
 def _read_config(cfg: Path) -> Dict[str, Any]:
@@ -232,6 +247,7 @@ class Ledger:
             self.path = folder
             self._shown = str(folder)
             self._store = SqliteStore(folder)
+        _OPEN.append(weakref.ref(self))
 
     def __repr__(self) -> str:
         return f"Ledger({self._shown!r})"

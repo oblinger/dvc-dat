@@ -253,12 +253,18 @@ class LedgerNamespace(Namespace):
         return f"<LedgerNamespace {where}>"
 
     def rev(self) -> "Rev":
-        """The revision names resolve at: the one it was made for (a transaction's ``previous_rev``),
-        else the ledger's head now."""
+        """The revision names resolve at: the one it was made for (a transaction's ``previous_rev``), else, as
+        the manager's namespace inside a run, the run's (SVP 1521, as the sandbox worker's), else the ledger's
+        head now."""
         if self._rev is not None:
             return self._rev
         if self._txn is not None:
             return self._txn.previous_rev
+        from .trace import current_run
+
+        run = current_run()
+        if run is not None and (self._config is not None or self._ledger is run.plain.ledger):
+            return run.plain
         if self._ledger is None:
             from ..do import _ledger_of
 

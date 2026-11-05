@@ -186,6 +186,7 @@ DAT_DEFAULTS = "dat.defaults"          # expansion variables a keyword does not 
 DAT_PREDS = "dat.preds"                # preds the value carries, each an expanded string
 DAT_RUN_AT = "dat.run_at"              # run: when it started
 DAT_RUN_TIME = "dat.run_time"          # run: how long it took
+DAT_RUN_REV = "dat.run_rev"            # run: the `<ledger>@<rev>` it ran against, when it ran on a ledger
 DAT_CODE = "dat.code"                  # run: branch, commit, dirty of the code it ran
 DAT_HOST = "dat.host"                  # run: the machine
 DAT_PID = "dat.pid"                    # run: the process
@@ -1495,9 +1496,10 @@ class DatManager:
         Calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do`
         names, loaded through this world's `ns`, inside `recording(dat)`.  The
         run is a sub-dat, `run/` inside the dat, made fresh here: its results
-        take `dat.run_at`, `dat.host`, `dat.pid` and `dat.code` (the branch,
+        take `dat.run_at`, `dat.host`, `dat.pid`, `dat.code` (the branch,
         commit and dirty flag of the git checkout holding `fn`'s source; nothing
-        outside a checkout) before `fn` starts, `dat.run_time` when it returns,
+        outside a checkout) and, on a ledger, `dat.run_rev` before `fn` starts,
+        `dat.run_time` when it returns,
         and `dat.content`, the hash the dat sealed, after the seal.  `fn` runs
         with `run/work/` as the working directory, so what it writes without
         naming a place lands in scratch, outside the dat's hash.  The dat's own
@@ -1549,6 +1551,8 @@ class DatManager:
         finally:
             os.chdir(cwd)
             dat._running = False
+            if (at := dat.__dict__.get("_at")) is not None:
+                dat.__dict__["_at"] = at._plain()   # the run is over: nothing records any more
         time_ms = (time.time() - before) * 1000
         exec_time = (time.strftime("%H:%M:%S", time.gmtime(time_ms // 1000))
                      + ".{:03d}".format(int(time_ms % 1000)))
@@ -1576,6 +1580,12 @@ class DatManager:
         Dat.set(run.get_results(), DAT_PID, os.getpid())
         if code is not None:
             Dat.set(run.get_results(), DAT_CODE, code)
+        from .ledger.trace import current_run
+        frame = current_run()
+        dat.__dict__.pop("_at", None)
+        if frame is not None:                   # a run on a ledger: `dat.at` is its recording Rev (SVP 1521)
+            Dat.set(run.get_results(), DAT_RUN_REV, frame.at)
+            dat.__dict__["_at"] = frame.rev
         _write_run(run)
         dat._run_dat = run
         return run
@@ -1822,20 +1832,39 @@ class Dat(Value, metaclass=_DatMeta):
         state = dict(self.__dict__)
         state["_manager"] = None
         state["_run_dat"] = None
+        state.pop("_at", None)
         return state
 
     @property
     def run(self) -> Optional["Dat"]:
         """The run that made this dat: the sub-dat `run/`, whose results hold
-        `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and
-        `dat.content`, and whose `work/` is the run's scratch.  None for a dat
-        never run (one filled by hand).  A run is not content: it is outside
-        the dat's hash, and nothing may depend on it."""
+        `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code`,
+        `dat.run_rev` (on a ledger) and `dat.content`, and whose `work/` is the
+        run's scratch.  None for a dat never run (one filled by hand).  A run is
+        not content: it is outside the dat's hash, and nothing may depend on it.
+        So a run function reads the ledger through `dat.at`, and a result must
+        not vary with the revision string `dat.run_rev` itself."""
         if self._run_dat is None:
             path = os.path.join(self._path, RUN_FOLDER)
             if os.path.exists(os.path.join(path, SPEC_YAML)):
                 self._run_dat = self._world()._load(path, dat_class=Dat, cache_after_load=False)
         return self._run_dat
+
+    @property
+    def at(self) -> Any:
+        """The `Rev` the run was against, named by `dat.run_rev` (`<ledger>@<rev>`; SVP 1521): during the run
+        the recording `Rev`, so every read through it is in the entry's provenance and a memo hit stays sound;
+        afterwards a plain one.  A runtime attribute, never in `_spec_.yaml` or the hash.  `ValueError` for a
+        dat not run on a ledger."""
+        held = self.__dict__.get("_at")
+        if held is not None:
+            return held
+        run = self.run
+        text = Dat.get(run.get_results(), DAT_RUN_REV, None) if run is not None else None
+        if text is None:
+            raise ValueError(f"{self!r} ran on no ledger: its run records no {DAT_RUN_REV}")
+        from .ledger.named import rev_named
+        return rev_named(text, self.rev.ledger if self.rev is not None else self.__dict__.get("_ledger"))
 
     def _world(self) -> DatManager:
         """The manager that loaded this dat, else the default one."""
