@@ -200,7 +200,7 @@ def test_a_foreign_item_survives_the_ledger_and_is_in_no_hit_test(coded, games):
 
 
 def test_a_read_on_the_runs_own_ledger_through_a_plain_rev_is_recorded_too(coded):
-    rev = homed(coded).at()
+    homed(coded)
     with coded.transaction(by="test") as t:
         Value.Blob({"game": 7}).seal(t, name="G7")
     v = coded.at().run("ledger_kinds.reads_foreign", where=str(coded.path), name="G7")
