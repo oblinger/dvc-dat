@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from .errors import LedgerError
-from .ledger import CONFIG, Ledger, _find, _section, _target, _values, _walk_up
+from .ledger import CONFIG, Ledger, _find, _section, _target, _values, _walk_up, opened
 
 _handles: Dict[str, Ledger] = {}
 _asserted: Set[Tuple[str, str]] = set()
@@ -86,6 +86,23 @@ class Ledgers:
         except LedgerError as e:
             return f"ledgers (none: {e})"
         return f"ledgers({cfg}: {', '.join(entries)})"
+
+
+def ledger_named(name: str) -> Ledger:
+    """The ledger a ``<ledger>@<rev>`` names: one open in this process under that name, else the entry of
+    ``ledgers:``; ``KeyError`` or ``LedgerError`` when neither knows it."""
+    led = opened(name)
+    return led if led is not None else ledgers[name]
+
+
+def rev_named(text: str, near: Optional[Ledger] = None) -> Any:
+    """The plain ``Rev`` ``<ledger>@<rev>`` names; ``near``, a ledger already in hand, answers first when the name
+    is its."""
+    name, _, rev = text.rpartition("@")
+    if not name or not rev.isdigit():
+        raise ValueError(f"{text!r}: a revision is named <ledger>@<rev>")
+    led = near if near is not None and near._store.name == name else ledger_named(name)
+    return led.at(int(rev))
 
 
 def _active() -> Ledger:

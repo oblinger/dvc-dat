@@ -377,6 +377,7 @@ A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted
 | --- | --- |
 | [Dat](#^dat) | The dat in a folder |
 | [path](#^dat-path) | The folder |
+| [at](#^dat-at) | The revision its run was against |
 | [preds](#^dat-preds) | The folder's facts, under the hand-written ones |
 | [sealed_at_path](#^sealed-at-path) | Reopen a folder sealed in another process |
 | [decode](#^dat-decode) | Materialise the folder from its manifest |
@@ -388,6 +389,9 @@ A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted
 
 **path**`: Path`
     The folder, `get_path()` as a `Path`. After a save it is the stored copy under `art/dats/<16 hex>/`, or `art/dats/<name>/` when named; after a load by an alias, `art/dats/<alias>/`. Those files are hardlinks into the art store where the filesystem allows: write a new folder and seal it, never edit one in place. ^dat-path
+
+**at**`: Rev`
+    The revision the dat's run was against, named by `dat.run_rev` in the run sub-dat's results, `<ledger>@<rev>`, the ledger by name since a run may be on any ledger (SVP 1521). During the run it is the recording `Rev`, so a read through it enters the entry's provenance and a memo hit stays sound; afterwards a plain one, its ledger the value's, else the one open under that name, else the `ledgers:` entry. A runtime attribute, never in `_spec_.yaml` or the hash. A run function reads through it; a result must not vary with the string `dat.run_rev` itself. `ValueError` for a dat not run on a ledger. ^dat-at
 
 **preds**`: dict`
     Unsealed: the scalar entries of the spec's `dat.kwargs`, then the scalar top-level entries of `_result_.yaml` other than `dat:`, then the spec's `dat.preds` (SVP 1508; a later source wins a clash), read from the folder on every access, under every pred written by hand, which wins. Sealed: the read-only mapping the seal fixed. The names are the class's `@ledger_class(preds=...)` plus the folder's own; the `dat:` record of the results (dependencies, standing, sha256) is never a pred. ^dat-preds
@@ -856,8 +860,11 @@ In the table `<value>` is the value's own subject and the other angle-bracketed 
 | `<value>` | `db/deps/<name> db/alias` | `ref:<class>:<hash>` | a name the body loaded through, and the bytes it named |
 | `<value>` | `db/deps/ref:<class>:<hash>` | `ref:<class>:<hash>` | a value the body loaded, named by its bytes |
 | `<value>` | `db/deps/eval:<name>{keys}` | `ref:<class>:<hash>` | a nested `run`, and the result it got |
+| `<value>` | `db/deps/foreign:{"at":"<ledger>@<rev>","name":<name>}` | `ref:<class>:<hash>` | a value or a run the body reached through any `Rev` but its recording one, on any ledger; provenance only |
 | `<value>` | `db/deps/q:{...}` | the sorted `ref:` list, or a token of the result | a query the body made (`refs`, `values`, `value`, `select`; any other read as `__call__`), and what it answered |
 | `<value>` | `db/deps/salt` | the mount's `db/salt` | the salt of the mount a sandboxed run was under, when set |
+
+**Reads on other ledgers (SVP 1521).** While a run is open a process-wide hook sees every `load`, `value`, `values` and `run` through a `Rev` that records nothing, on any ledger, its own included, and adds a `foreign:` item: the revision by `<ledger>@<rev>`, the name asked for (for a run `eval:<name>{keys}`) and the `ref:` it gave. The run's own recording `Rev` is unchanged. A `foreign:` item always holds, so it is no part of the hit test: a name that moves on another ledger is no miss, and a hit may return a result built from the older value. Raw rows on other ledgers (`rev[s, p]`, `all`, `get`) are not tracked. Nested runs each see their own reads; a thread a body starts reads for the latest open run; a child process is not seen, as for the sandbox's audit hook. A value key on the run's own ledger, loaded through its `Ref`, adds nothing: it is in `db/keys`. A sandboxed function opens no other SQLite ledger (`ConfinedWrite` at the open), and a `Ref` key on another ledger holds nothing in the worker (`TypeError`); see [The execution environment](#The%20execution%20environment).
 
 A run records the first nine as it goes: `code`, `fn`, `code/<repo>`, `platform` and `platform/record` from the environment, the rest from each read the body makes through its `Rev`. A hand seal's dependencies are declared instead: a `ref:` row for each of its `deps` (an alias row too when the dep was loaded by name, a `code` and an `fn` row for an `Fn` dep), plus `code/<repo>` for every repo the environment reports, and `platform`. Nothing in the dependencies describes the value; it is the evidence the value was computed from.
 

@@ -38,6 +38,10 @@ Items (Module § Value ``Dependencies``):
     yields an entry with the recorded hash (A42, A45).
 ``salt``
     the ``db/salt`` of the mount a sandboxed function ran under, when set.
+``foreign:{"at": "<ledger>@<rev>", "name": <name>}``
+    a value or a run reached in the body through any ``Rev`` but the recording one, on any ledger
+    (``note_read``, SVP 1521 Q2 (A)) -> the ``ref:`` it gave. Provenance only: always holds, so it never
+    enters the hit test and a name moving on another ledger is no miss. ``deep`` and ``safe`` read it.
 ``q:{...}``
     a ``refs``/``values``/``value``/``select`` query (the whole query as
     canonical JSON, ``kind`` dotted, A41, A47) -> the sorted ``ref:`` list it
@@ -49,8 +53,10 @@ Items (Module § Value ``Dependencies``):
 
 from __future__ import annotations
 
+import contextvars
 import json
-from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Sequence
 
 from .codec import canonical, ref_text, strip_hint
 from .errors import AliasLoop, LedgerError
@@ -61,6 +67,76 @@ if TYPE_CHECKING:
     from .rev import Rev
 
 NONE = "<none>"
+#: The prefix of an item a run read through any ``Rev`` but its recording one (``note_read``).
+FOREIGN = "foreign:"
+
+
+class RunFrame:
+    """The run in progress: its revision, ``plain``; ``rev``, the recording ``Rev`` its body holds; ``rec``, the
+    items it records; and the ``ref:`` keys it was called with, which a body may load through their own ``Ref``
+    with nothing to add."""
+
+    def __init__(self, plain: "Rev", rec: Dict[str, str], enc: str) -> None:
+        from .fn import ledger_key
+        from .rev import Rev
+
+        self.plain = plain
+        self.rec = rec
+        self.rev = Rev(plain.ledger, plain.id, _rec=rec)
+        self.key = ledger_key(plain.ledger)
+        keys = json.loads(enc)
+        self.keys = {v for v in keys.values() if isinstance(v, str) and v.startswith("ref:")}
+
+    @property
+    def at(self) -> str:
+        """``<ledger>@<rev>``: the revision the run is against."""
+        return rev_text(self.plain)
+
+
+_RUN: "contextvars.ContextVar[Optional[RunFrame]]" = contextvars.ContextVar("dvc_dat_run", default=None)
+#: Every run open in this process, innermost last: a thread a body started inherits no context, and reads for
+#: the latest. A child process is out of scope, as for the sandbox's audit hook.
+_OPEN: List[RunFrame] = []
+
+
+def current_run() -> Optional[RunFrame]:
+    """The run this code is inside: this context's, else (a thread its body started) the latest open."""
+    frame = _RUN.get()
+    if frame is None and _OPEN:
+        frame = _OPEN[-1]
+    return frame
+
+
+@contextmanager
+def running(frame: RunFrame) -> Iterator[RunFrame]:
+    """``frame`` is the current run inside the block; blocks nest, so a nested run sees its own reads."""
+    token = _RUN.set(frame)
+    _OPEN.append(frame)
+    try:
+        yield frame
+    finally:
+        _OPEN.remove(frame)
+        _RUN.reset(token)
+
+
+def rev_text(rev: "Rev") -> str:
+    """``<ledger>@<rev>``: a revision by the ledger's name, the global reference of SVP 239."""
+    return f"{rev.ledger._store.name}@{rev.id}"
+
+
+def note_read(rev: "Rev", name: str, text: str) -> None:
+    """The ambient hook (SVP 1521 Q2 (A)): a value or a run reached through ``rev``, which records nothing, joins
+    the current run as a ``foreign:`` item. Raw rows are not tracked. A value the run was called with, on its
+    own ledger, is in its keys already. Outside any run: nothing."""
+    from .fn import ledger_key
+
+    frame = current_run()
+    if frame is None:
+        return
+    text = strip_hint(text)
+    if text in frame.keys and (rev.ledger is frame.plain.ledger or ledger_key(rev.ledger) == frame.key):
+        return
+    frame.rec[FOREIGN + canonical({"at": rev_text(rev), "name": name})] = text
 
 
 def token(obj: Any) -> str:
@@ -221,6 +297,8 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
     # the other items hold no space (a ref, an eval: name, a q: item outside its JSON, a repo by name).
     if " " not in item and item.startswith("ref:"):
         return True
+    if foreign_of(item) is not None:            # provenance only (SVP 1521 Q2 (A))
+        return True
     if item.startswith("code/") and (" " not in item or item[len("code/"):] in env().code):
         code = env().code.get(item[len("code/"):])
         c = code.commit if code is not None else None
@@ -251,6 +329,18 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
     from .codec import show
 
     return (strip_hint(text) if text.startswith("ref:") else show(text)) == recorded
+
+
+def foreign_of(item: str) -> Optional[Dict[str, str]]:
+    """The ``{"at", "name"}`` of a ``foreign:`` item, or ``None`` when the item is anything else (a row read of a
+    subject starting ``foreign:{`` among them)."""
+    if not item.startswith(FOREIGN + "{"):
+        return None
+    try:
+        body = json.loads(item[len(FOREIGN):])
+    except ValueError:
+        return None
+    return body if isinstance(body, dict) and set(body) == {"at", "name"} else None
 
 
 def _query_of(item: str) -> Optional[Dict[str, Any]]:

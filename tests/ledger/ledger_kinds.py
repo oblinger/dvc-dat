@@ -4,7 +4,7 @@ resolves a class by its dotted name, ``rev.ns.load`` a function by its)."""
 from pathlib import Path
 
 import ledger_helper
-from dvc_dat.ledger import Dat, Ref, Value, ledger_class
+from dvc_dat.ledger import Dat, Ledger, Ref, Value, ledger_class
 from dvc_dat import dat
 
 CALLS = {}
@@ -239,3 +239,85 @@ class Streamed(Value):
         for block in iter(lambda: src.read(1 << 20), b""):
             n += len(block)
         return cls(n >> 20)
+
+
+# -- SVP 1521: what a run reads through any Rev but its recording one, and dat.at ------------------------------
+
+@dat.fn
+def reads_foreign(rev, *, where: str, name: str) -> dict:
+    """Reads ``name`` off the ledger at ``where``, through a ``Rev`` that records nothing."""
+    _count("reads_foreign")
+    return {"seen": Ledger(where).at().load(name).obj, "home": rev["game/G1", "home"]}
+
+
+@dat.fn
+def reads_foreign_nested(rev, *, where: str, name: str) -> dict:
+    """Reads one foreign value itself and calls ``reads_foreign``, which reads another."""
+    return {"mine": Ledger(where).at().load("mine").obj,
+            "inner": rev.run("ledger_kinds.reads_foreign", where=where, name=name).obj}
+
+
+@dat.fn
+def reads_foreign_in_threads(rev, *, where: str, name: str) -> dict:
+    """The read in a thread the body started, which inherits no context."""
+    import threading
+
+    out = {}
+    t = threading.Thread(target=lambda: out.update(seen=Ledger(where).at().load(name).obj))
+    t.start()
+    t.join()
+    return out
+
+
+@dat.fn
+def runs_foreign(rev, *, where: str, n: int) -> dict:
+    """A run on another ledger, called from a body."""
+    return {"n": Ledger(where).at().run("ledger_kinds.doubled", n=n).obj}
+
+
+@dat.fn
+def doubled(rev, *, n: int) -> dict:
+    return {"n": 2 * n}
+
+
+@dat.fn
+def reads_row_only(rev, *, where: str) -> dict:
+    """A raw triple on another ledger: not tracked."""
+    return {"home": Ledger(where).at()["game/G1", "home"]}
+
+
+@dat.fn
+def reads_key(rev, *, clip) -> dict:
+    """A value key, loaded through its own ``Ref``: it is in the keys already."""
+    return {"seen": clip.load().obj}
+
+
+def reads_at(dat, name):
+    """A dat's run function reading through ``dat.at``."""
+    dat.get_results()["out"] = dat.at.load(name).obj
+    dat.get_results()["recording"] = dat.at._rec is not None
+    dat.get_results()["rev"] = dat.at.id
+    dat.get_results()["seen"] = dat.run.get_results()["dat"]["run_rev"]
+    dat.save()
+
+
+def reads_mounted(dat):
+    """A dat's run function reading a name through the manager's namespace."""
+    from dvc_dat.core import Dat
+
+    dat.get_results()["rev"] = Dat.manager.ns.rev().id
+    dat.save()
+
+
+@dat.fn
+def calls_doubled(rev, *, n: int) -> dict:
+    return {"n": rev.run("ledger_kinds.doubled", n=n).obj["n"]}
+
+
+def runs_plain_inside(dat):
+    """A dat's run function running a plain dat inside."""
+    from dvc_dat.core import Dat
+
+    inner = Dat.manager.run({"dat": {"do": "ledger_kinds.build_table", "kwargs": {"n": 2}}})
+    dat.get_results()["inner"] = Dat.get(inner.run.get_results(), "dat.run_rev")
+    dat.save()

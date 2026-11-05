@@ -42,6 +42,12 @@ function. An in-process nested eval's code includes a module its
 caller loaded first: the worker's ``__import__`` credits every import a body makes, loaded
 already or not, with what that module's first import pulled in.
 
+Another ledger from a body (SVP 1521): the worker opens the run's ledger alone. A SQLite ledger elsewhere is
+``ConfinedWrite`` at its open (its store makes its folder and connects), a ``Ref`` key on another ledger holds
+nothing in the worker (``TypeError``), and ``ledgers.<name>`` needs a config the body may not read. A Postgres
+ledger on the run's own server passes the network hook and its rows read, unrecorded as any raw row; its bytes are
+outside ``STATE.reads`` (``UntracedRead``). So a body reads another ledger by being given its value.
+
 A dat's run function under a mount (an ``Fn`` of kind ``"dat"``, DAT 1045, 1046)
 runs through the same call: its keys are the spec, expanded in the parent, and the
 caller's dat world (its dat folders, art folder and index, readable in the child)
@@ -1064,7 +1070,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
     A ledger function gets the recording ``Rev``, its keys and, when it takes one, its ``path`` folder; a
     dat's run function (``fn.kind == "dat"``) gets the dat made from its keys, the spec, in the work
     folder, run by the dat world's ``_execute`` (DAT 1046)."""
-    from .rev import Rev
+    from .trace import RunFrame, running
 
     outer_guard = STATE.guard
     STATE.guard = False                             # around the body, the ledger's own machinery runs
@@ -1076,7 +1082,8 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
         work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None)) \
             if fn._takes_path else None
         rec: Dict[str, str] = {}
-        with _body(work, fn._info["prefix"]) as frame:
+        reading = RunFrame(plain, rec, enc)
+        with _body(work, fn._info["prefix"]) as frame, running(reading):
             cwd = os.getcwd()
             try:
                 if work is not None and fn.kind != "dat":
@@ -1091,7 +1098,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
                         raise TypeError(f"{fn.name!r} is not a ledger function (mark it @dat.fn)")
                     else:
                         args = dict(kw, path=work) if work is not None else kw
-                        out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+                        out = obj(reading.rev, **args)
                 finally:
                     STATE.guard = False
                     os.chdir(cwd)
@@ -1350,7 +1357,7 @@ def _result(plain: "Rev", resp: Dict[str, Any], seal: bool) -> Any:
     for category, message in resp.get("warnings", ()):
         warnings.warn(message, category, stacklevel=4)
     if seal:
-        return Ref(plain.ledger.at(), resp["subject"]).load()
+        return Ref(plain.ledger.at(), resp["subject"])._load()
     v = pickle.loads(resp["value"])
     top = plain.ledger.at()
     v.__dict__["_preds"] = {k: _unship(top, x) for k, x in resp.get("preds", {}).items()}

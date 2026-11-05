@@ -172,6 +172,20 @@ PKG = {
             return {"pid": os.getpid(), "calls": helper.CALLS}
 
         @dat.fn
+        def foreign(rev, *, where: str, name: str) -> dict:
+            from dvc_dat.ledger import Ledger
+            return {"seen": Ledger(where).at().load(name).obj}
+
+        @dat.fn
+        def foreign_key(rev, *, clip) -> dict:
+            return {"seen": clip.load().obj}
+
+        @dat.fn
+        def foreign_config(rev, *, name: str) -> dict:
+            from dvc_dat import ledgers
+            return {"seen": ledgers[name].at().load("G1").obj}
+
+        @dat.fn
         def die(rev, *, game: str) -> dict:
             import os
             os._exit(3)
@@ -970,6 +984,25 @@ def test_a_ledger_projects_do_names_through_the_mounts(sbx, tmp_path):
     assert dat.subject is None and L.at().values(kind=Dat) == []
     with pytest.raises(TypeError, match="db/mount"):
         m.ns.mount(value={"dat": {}}, at="x")
+
+
+def test_a_sandboxed_function_cannot_reach_a_sqlite_ledger_of_another_name(sbx, tmp_path):
+    """SVP 1521: the worker opens the run's ledger alone. Another SQLite ledger is ``ConfinedWrite`` at its open (a
+    store makes its folder and connects); a ``Ref`` key on another ledger crosses by subject and holds nothing on
+    the run's ledger, ``TypeError`` in the worker; ``ledgers.<name>`` needs a repo file the body may not read."""
+    from dvc_dat.ledger import Ledger, Ref, Value
+
+    L, repo = sbx
+    other = Ledger(tmp_path / "games", create=True)
+    with other.transaction(by="t") as t:
+        Value.Blob({"game": 1}).seal(t, name="G1")
+    with pytest.raises(ConfinedWrite):
+        L.at().run("mnt.sbx.stage.fns.foreign", where=str(other.path), name="G1")
+    with pytest.raises(TypeError, match="holds no value"):
+        L.at().run("mnt.sbx.stage.fns.foreign_key", clip=Ref(other.at(), "G1"))
+    (repo / ".datconfig.yaml").write_text(f"ledgers:\n  games: {other.path}\n")
+    with pytest.raises((UntracedRead, LedgerError)):
+        L.at().run("mnt.sbx.stage.fns.foreign_config", name="games")
 
 
 def test_rev_has_one_run_and_ns():
