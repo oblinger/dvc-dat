@@ -234,7 +234,8 @@ def checker(path: str, upto: int, out: str) -> None:
 def check(path: Path, setup_top: int, recs: List[Dict[str, Any]], ctx: Any, workdir: Path,
           handles: int) -> Dict[str, Any]:
     from dvc_dat.ledger import Ledger, Ref
-    from dvc_dat.ledger.codec import parse_ref, sha256
+    from dvc_dat.ledger.codec import parse_ref
+    from dvc_dat.ledger.store import file_sha
     from dvc_dat.ledger.trace import trace_matches
     from tests.load.loadfns import expected
 
@@ -362,12 +363,12 @@ def check(path: Path, setup_top: int, recs: List[Dict[str, Any]], ctx: Any, work
     for (o,) in store.read("SELECT object FROM quads WHERE predicate = 'db/value' AND added"):
         h = parse_ref(o)[1]
         try:
-            data = store.art.get(h)
+            got = file_sha(store.art.path(h))
         except FileNotFoundError:
             fail("art", why="db/value bytes missing", hash=h)
             continue
-        if sha256(data) != h:
-            fail("art", why="art bytes do not hash to their name", hash=h, size=len(data))
+        if got != h:
+            fail("art", why="art bytes do not hash to their name", hash=h, size=store.art.path(h).stat().st_size)
 
     # reads
     for r in recs:

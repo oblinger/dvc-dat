@@ -27,8 +27,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from .codec import sha256
-from .store import Part, place
+from .store import FileSink, Part, place
 
 
 def root() -> Path:
@@ -56,9 +55,15 @@ class Kept:
         tmp.write_bytes(data)
         os.replace(tmp, path)
 
-    def seal(self, record: Dict[str, Any], data: Optional[bytes] = None, parts: Iterable[Part] = ()) -> str:
-        """Write the record of one ``v.seal()``; with ``data`` (``keep=True``) keep the encoding and its
-        ``parts`` (``(sha256, source)``) too. Returns the new entry's id.
+    def sink(self) -> FileSink:
+        """A write stream for one kept encoding: hashed as written, renamed at close to ``blobs/<sha256>``
+        (write-once), never held in memory whole (DAT 240)."""
+        return FileSink(self.root / "blobs", self._blob_path)
+
+    def seal(self, record: Dict[str, Any], keep: bool = False, parts: Iterable[Part] = ()) -> str:
+        """Write the record of one ``v.seal()``; with ``keep`` (``keep=True``) the encoding is kept already
+        (written through ``sink``, under the record's ``hash``) and its ``parts`` (``(sha256, source)``) are
+        kept too. Returns the new entry's id.
 
         Each part is cloned into ``blobs/`` copy-on-write where the filesystem can (APFS ``clonefile``,
         Linux reflink: no disk), else copied in 1 MiB blocks; either way checked against its hash, never
@@ -66,16 +71,15 @@ class Kept:
         An unkept record of a folder replaces the unkept records of that folder.
         """
         rec = dict(record)
-        rec["kept"] = data is not None
+        rec["kept"] = bool(keep)
         rec["parts"] = []
-        if data is not None:
+        if keep:
             names = []
             for h, source in parts:
                 place(source, self._blob_path(h), h, link=False, clone_ok=True)
                 names.append(h)
-            b = sha256(data)
-            if not self._blob_path(b).exists():
-                self._write(self._blob_path(b), data)
+            b = rec["hash"]
+            self.blob(b)                        # written through sink() before the record
             rec["parts"] = names
             rec["bytes"] = sum(self._blob_path(n).stat().st_size for n in dict.fromkeys(names + [b]))
         entry = f"{rec['sealed_at'].replace(':', '')}-{time.time_ns():x}-{uuid.uuid4().hex[:8]}"   # sorts by time

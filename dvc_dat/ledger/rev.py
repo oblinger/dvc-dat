@@ -836,9 +836,8 @@ class Ref:
             cls = self.type
             assert cls is not None
             loaded_as = self._given if self._given != s else None
-            with store.fetching(self._fetch()):
-                data = store.get(self._hash)
-                v = cls.decode(data, store, name=loaded_as) if takes_name(cls) else cls.decode(data, store)
+            with store.fetching(self._fetch()), store.open(self._hash) as src:
+                v = cls.decode(src, store, name=loaded_as) if takes_name(cls) else cls.decode(src, store)
             if not isinstance(v, Value):
                 raise TypeError(f"{cls.__name__}.decode returned {type(v).__name__}, not a Value")
             from ..core import Dat

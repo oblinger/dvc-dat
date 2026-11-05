@@ -14,9 +14,9 @@ class Frame(Value):
     def __init__(self, image: bytes):
         self.image = image
 
-    def encode(self) -> bytes:
-        return self.image
+    def encode(self, out) -> None:
+        out.write(self.image)
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "Frame":
-        return cls(data)
+    def decode(cls, src, store) -> "Frame":
+        return cls(src.read())

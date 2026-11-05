@@ -4,6 +4,7 @@ Installed code reads its version from its environment; mounted code from the mou
 ``__version__``, read after import, else from git. ``Fn.mode`` is gone. Only the snapshot has identity
 (``code.hash``, ``code.subject``); a function is a name inside it, with no ``subject`` or ``sha``."""
 
+import io
 import re
 import subprocess
 import sys
@@ -170,7 +171,9 @@ def test_fn_has_no_subject_or_sha(L, installed):
 def test_codes_subject_is_its_hash_16(L, installed):
     code = L.at().ns.load("geom1037.dist.distance").code
     assert SUBJECT.fullmatch(code.subject) and code.subject == "db/code/" + code.hash[:16]
-    assert code.hash == hash_text(code.encode().decode())
+    out = io.BytesIO()
+    code.encode(out)
+    assert code.hash == hash_text(out.getvalue().decode())
 
 
 def test_codes_hash_is_the_memo_keys_hash(L, installed):

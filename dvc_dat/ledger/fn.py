@@ -177,7 +177,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
         raise ValueError(f"{run.name}: the result ran against {run.ledger}; its memo entry goes there, "
                          f"not to {ledger_key(t._ledger)}")
     pred_rows, canon = t._encode_preds(value)
-    vtext = ref_text(dotted(type(value)), value.hash)
+    vtext = ref_text(dotted(type(value)), t._hash_of(value))
     subject = hash_text(canonical({"fn": run.name, "keys": json.loads(run.enc), "trace": run.trace,
                                    "preds": canon, "value": vtext}))
     if refuse_held and t._snapshot()._held(subject, "db/value"):
@@ -757,7 +757,7 @@ def place(ledger: Any, value: Value, target: str) -> Value:
         if isinstance(value, Dat) and value.subject is not None:
             art = ledger._store.art
             value._forget()
-            value.path = Dat._materialise(art.get(value.hash), art, target)
+            value.path = Dat._materialise(value.hash, Dat._stored_manifest(art, value.hash), art, target)
         elif isinstance(value, Dat):
             raise ValueError(f"path={target!r}: an unsaved Dat stays where it was built (seal=False or True)")
         return value

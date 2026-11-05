@@ -15,12 +15,13 @@ class Blob(Value):
     def __init__(self, data: bytes):
         self.data = data
 
-    def encode(self) -> bytes:
-        return self.data
+    def encode(self, out) -> None:
+
+        out.write(self.data)
 
     @classmethod
-    def decode(cls, data, store):
-        return cls(data)
+    def decode(cls, src, store):
+        return cls(src.read())
 
 
 def expected(n: int, salt: str) -> str:

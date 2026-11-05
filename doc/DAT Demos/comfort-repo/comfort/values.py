@@ -11,12 +11,12 @@ class Days(Value):
     def __init__(self, days):
         self.days = [list(day) for day in days]
 
-    def encode(self) -> bytes:
-        return json.dumps(self.days).encode()
+    def encode(self, out) -> None:
+        out.write(json.dumps(self.days).encode())
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "Days":
-        return cls(json.loads(data))
+    def decode(cls, src, store) -> "Days":
+        return cls(json.load(src))
 
 
 @ledger_class(preds=("city",))
@@ -26,9 +26,9 @@ class ComfortCounts(Value):
     def __init__(self, counts):
         self.counts = list(counts)
 
-    def encode(self) -> bytes:
-        return json.dumps(self.counts).encode()
+    def encode(self, out) -> None:
+        out.write(json.dumps(self.counts).encode())
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "ComfortCounts":
-        return cls(json.loads(data))
+    def decode(cls, src, store) -> "ComfortCounts":
+        return cls(json.load(src))

@@ -23,7 +23,6 @@ transaction's own ``db/tx/<rev>`` rows (A50).
 from __future__ import annotations
 
 import ctypes
-import io
 import json
 import os
 import re
@@ -35,7 +34,7 @@ import uuid
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, sha256, show, strip_hint, tag
+from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, show, strip_hint, tag
 from .errors import Exists, LockTimeout, SealBroken, Undeclared, Unlocked
 from .value import TIMEZONE, Value, check_loadable, dotted, is_moment, stamp, zone_named
 
@@ -87,8 +86,8 @@ class _Op:
 
 
 def _put_remote(r: Any, h: str, source: Any) -> None:
-    """Upload one part to the remote ``r`` unless it holds it: a file as it stands, an opener spilled to a temp
-    file first (checked against ``h``)."""
+    """Upload one part or encoding to the remote ``r`` unless it holds it: a file as it stands, an opener
+    spilled to a temp file first (checked against ``h``)."""
     from pathlib import Path
 
     from .store import _copy
@@ -209,7 +208,7 @@ class Transaction:
         self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
         self._to_store: List[Value] = []
         self._new_seals: List[Tuple[Value, str]] = []      # values this transaction writes db/value for
-        self._encodings: Dict[int, bytes] = {}             # id(value) -> encoding, read once by the upload
+        self._staged: Dict[int, Any] = {}       # id(value) -> FileSink: its encoding, written once (DAT 240)
         self._created: List[Any] = []
         self._cm: Any = None
         self._w: Any = None
@@ -398,7 +397,10 @@ class Transaction:
             raise
         self._rev = self._ledger.at(rev)
         self._state = "committed"           # the revision is written, whatever a post-commit hook does
-        self._finish()
+        try:
+            self._finish()
+        finally:
+            self._drop_staged()
         return False
 
     def _abandon(self, drop_bytes: bool = True) -> None:
@@ -422,6 +424,28 @@ class Transaction:
             except OSError:
                 pass
         self._created = []
+        self._drop_staged()
+
+    def _drop_staged(self) -> None:
+        """Remove the staged encodings' temp files (a placed encoding is a hardlink of its own)."""
+        for sink in self._staged.values():
+            sink.discard()
+        self._staged = {}
+
+    def _hash_of(self, value: Value) -> str:
+        """The hash of the encoding a save of ``value`` stores, encoded once per transaction (DAT 240): written
+        through a sink to a staged file in the art store's folder, hashed as it goes, never held whole. The
+        upload sends that file and the commit links it into place; the staged copy goes when the transaction
+        ends, either way."""
+        sink = self._staged.get(id(value))
+        if sink is None:
+            from .sandbox import unguarded
+
+            with unguarded():                   # the ledger's own write, also inside a sandboxed body
+                with self._ledger._store.art.sink(staged=True) as sink:
+                    value._write_stored(sink)
+            self._staged[id(value)] = sink
+        return sink.hash
 
     def _upload(self) -> None:
         """Put every part and the encoding of each value this transaction seals on the ledger's value store
@@ -438,33 +462,26 @@ class Transaction:
             return
         r = remote(name, self._ledger._store.name)
         for v, subject in self._new_seals:
-            data = v._stored_bytes()
-            if sha256(data) != v.hash:
-                raise ValueError(f"{type(v).__name__}.encode is not deterministic: two calls gave two hashes")
-            self._encodings[id(v)] = data
-            for h, source in v._stored_parts():
-                _put_remote(r, h, source)
-            _put_remote(r, v.hash, lambda data=data: io.BytesIO(data))
+            h = self._hash_of(v)
+            for ph, source in v._stored_parts():
+                _put_remote(r, ph, source)
+            _put_remote(r, h, self._staged[id(v)].path)
             self._ops.append(_Op(subject, PREDICATE, "str:" + name, True, seal_of=subject))
 
     def _store_all(self) -> None:
         """The bytes of every seal, written at commit so bytes and rows land together (or neither).
 
         One value at a time, one part at a time: each part is hardlinked or streamed into the art
-        store (``put_path``), never read whole; the encoding (a manifest, for a ``Dat``) is checked
-        against the sealed hash before anything of the value is written."""
+        store (``put_path``), never read whole; the encoding (a manifest, for a ``Dat``), staged once by
+        the seal, is hardlinked into place last."""
         art = self._ledger._store.art
         for v in self._to_store:
-            data = self._encodings.pop(id(v), None)
-            data = v._stored_bytes() if data is None else data
-            if sha256(data) != v.hash:
-                raise ValueError(f"{type(v).__name__}.encode is not deterministic: two calls gave two hashes")
-            for h, source in v._stored_parts():
-                if art.put_path(source, h):
-                    self._created.append(art.path(h))
-            if not art.exists(v.hash):
-                art.put(data)
-                self._created.append(art.path(v.hash))
+            h = self._hash_of(v)
+            for ph, source in v._stored_parts():
+                if art.put_path(source, ph):
+                    self._created.append(art.path(ph))
+            if art.put_path(self._staged[id(v)].path, h):
+                self._created.append(art.path(h))
 
     def _finish(self) -> None:
         from .rev import Ref
@@ -869,7 +886,7 @@ class Transaction:
             if deps or provenance is not None:
                 raise TypeError(f"a run's result carries its trace ({run.name}); deps= and provenance= are "
                                 "a hand seal's")
-            if local is not None and not local["kept"] and sha256(value.encode()) != local["hash"]:
+            if local is not None and not local["kept"] and self._hash_of(value) != local["hash"]:
                 raise SealBroken(f"{type(value).__name__} sealed at {value.sealed}: its bytes changed since; "
                                  "seal a new value (or seal with keep=True to keep the bytes)")
             if name is not None:
@@ -882,7 +899,7 @@ class Transaction:
             if deps or provenance is not None:
                 raise TypeError(f"deps and provenance were fixed by v.seal() at {value.sealed}; "
                                 "save with v.seal(t) alone")
-            if not local["kept"] and sha256(value.encode()) != local["hash"]:
+            if not local["kept"] and self._hash_of(value) != local["hash"]:
                 raise SealBroken(f"{type(value).__name__} sealed at {value.sealed}: its bytes changed since; "
                                  "seal a new value (or seal with keep=True to keep the bytes)")
             deps, provenance, env = local["deps"], local["provenance"], local["env"]
@@ -896,7 +913,7 @@ class Transaction:
         trace: Dict[str, str] = {}
         self._dep_items(deps, trace)
         self._env_items(trace, env=env)
-        vtext = ref_text(dotted(type(value)), value.hash)
+        vtext = ref_text(dotted(type(value)), self._hash_of(value))
         subject = hash_text(canonical({"trace": trace, "preds": canon, "value": vtext}))
         self._seal(value, subject, trace, provenance, pred_rows, extra, name)
         self._freeze(value, subject, trace)
@@ -907,7 +924,7 @@ class Transaction:
         from types import MappingProxyType
         from .value import FrozenPreds
 
-        h = value.hash
+        h = self._hash_of(value)
         if value.sealed:
             self._frozen.append((value, None))
         else:
@@ -921,7 +938,7 @@ class Transaction:
 
     def _seal(self, value: Value, subject: str, trace: Dict[str, str], provenance: str,
               pred_rows: List[Tuple[str, str]], extra: List[Tuple[str, str]], alias: Optional[str]) -> None:
-        h = value.hash
+        h = self._hash_of(value)
         already = any(s == subject for _v, s in self._pending.values())
         if not already:
             self._to_store.append(value)
