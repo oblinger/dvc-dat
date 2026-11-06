@@ -1,6 +1,10 @@
 # API Reference
 The reference generated from `dvc_dat`'s source: every public class and function, with its signature and docstring.
 
+![The dat and the ledger](../DAT%20Architecture.svg)
+
+Module page: [DAT Architecture](../DAT%20Architecture.md).
+
 These pages are built from the code, so they always say what the installed version does. The hand-written guides say why and show the calls together: [Concepts](../concepts.md), [Spec Format](../spec-format.md), [Command Line](../cli.md).
 
 ## What the package exports

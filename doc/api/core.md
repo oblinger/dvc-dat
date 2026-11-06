@@ -1,6 +1,10 @@
 # Dat, DatManager, DatContainer
 `dvc_dat.core`: the dat, the manager that creates, loads and runs dats. Expansion is a namespace's: [Namespace](do.md) `expand`.
 
+![DAT Dat](../DAT%20Modules/DAT%20Dat.svg)
+
+Module page: [DAT Dat](../DAT%20Modules/DAT%20Dat.md).
+
 ::: dvc_dat.core
     options:
       show_root_heading: false
