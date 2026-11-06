@@ -7,6 +7,8 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 
 ![DAT Ledger](DAT%20Ledger.svg) 
 
+api:: [`dvc_dat.ledger`](../../api/ledger.md) — the classes and functions, rendered from the docstrings
+
 **Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [Code](#^fn-code) · [module functions](#dvc_dat.ledger%20Interface) 
 **Topics:** [Ledger Semantics](#Ledger%20Semantics) · [Many ledgers](#Many%20ledgers) · [Execution Semantics](#Execution%20Semantics) · [Rerunnability](#Rerunnability) · [Value Provenance](#Value%20Provenance) · [dvc_dat.dat](#dvc_dat.dat%20Interface) 
 
