@@ -60,6 +60,9 @@ class _Own:
         return "<the fn's ledger>"
 
 
+#: A run's result: the revision its run read (SVP 245), beside ``db/fn`` and ``db/keys``; read back as ``v.at``.
+AT = "db/at"
+
 #: The default of ``seal=`` (``Fn.__call__``, ``Rev.run``): save to the fn's own ledger.
 OWN: Any = _Own()
 
@@ -83,7 +86,8 @@ class RunTrace:
     ``(repo, package, version, commit)`` of the code that ran, sandboxed or not, for the
     ``db/repo/<repo>/<package> db/version`` and ``db/repo/<repo> db/commit`` a seal advances (DAT 1043, 1044);
     ``None`` outside any checkout or when the code declares no version. ``reproducible`` is the function's claim as
-    its ``db/reproducible`` row holds it (``claim``), ``None`` for no row."""
+    its ``db/reproducible`` row holds it (``claim``), ``None`` for no row. ``at`` is the revision the run read, its
+    ``db/at`` row (SVP 245); ``None`` only on a seal record written before the row existed."""
 
     name: str
     enc: str
@@ -98,6 +102,7 @@ class RunTrace:
     returns: str = ""
     clock: Optional[Tuple[str, str, str, str]] = None
     reproducible: Optional[str] = None
+    at: Optional[int] = None
 
     def record(self) -> Dict[str, Any]:
         """As JSON, for a ``v.seal()`` seal record."""
@@ -130,7 +135,7 @@ def run_trace(fn: "Fn", plain: "Rev", trace: Dict[str, str], enc: str, provenanc
     return RunTrace(name=fn.name, enc=enc, trace=dict(trace), provenance=provenance, code_subject=code.subject,
                     code_rows=tuple(code._rows()), ledger=ledger_key(plain.ledger), sandboxed=fn.code.sandboxed,
                     repo=repo, dirty=dirty, returns=fn._returns, clock=clock_of(fn, code),
-                    reproducible=claim_text(fn.reproducible))
+                    reproducible=claim_text(fn.reproducible), at=plain.id)
 
 
 def attach_run(value: Value, run: RunTrace) -> Value:
@@ -167,7 +172,8 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     """Write ``value`` as ``run``'s memo entry into the open transaction ``t``; its subject.
 
     The entry ``seal_entry`` always wrote: ``db/fn`` (the dotted name), ``db/keys``, ``db/returns``
-    (the function's return annotation), ``db/reproducible`` (its claim, when it makes one), the trace as
+    (the function's return annotation), ``db/reproducible`` (its claim, when it makes one), ``db/at`` (the
+    revision the run read: provenance, outside the subject's hash and the hit test, SVP 245), the trace as
     ``db/deps/*`` (``code`` naming the ``db/code/<hash 16>`` item, written once), ``db/value``, under
     ``<hash of (fn, keys, trace, preds, value)>``. ``refuse_held``: an
     identical entry already on the ledger raises ``_AlreadySealed`` (the caller loads it)."""
@@ -193,6 +199,8 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     extra = [("db/fn", "str:" + run.name), ("db/keys", "json:" + run.enc), ("db/returns", "str:" + run.returns)]
     if run.reproducible is not None:
         extra.append((REPRODUCIBLE, "json:" + run.reproducible))
+    if run.at is not None:
+        extra.append((AT, "str:" + str(run.at)))
     if value.sealed and value.subject is None:
         extra.append(("db/sealed-at", "str:" + str(value.sealed)))
     if name is None:

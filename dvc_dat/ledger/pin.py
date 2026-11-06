@@ -55,7 +55,7 @@ from .claim import EXACT, claim_of, judged
 from .codec import sha256, show
 from .env import current_env
 from .errors import Differed, LedgerError, NotPinned
-from .fn import MNT, fn_mark_in_source, mounts_at
+from .fn import AT, MNT, fn_mark_in_source, mounts_at
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -110,6 +110,7 @@ class Run:
 
     subject: str
     rev: Any                                    # the revision it was sealed at
+    at: int                                     # the revision it read: db/at, else the seal's (a copy; before 2.59)
     name: str                                   # db/fn
     keys: Dict[str, Any]                        # db/keys, as stored
     trace: Dict[str, str]                       # db/deps/*
@@ -195,8 +196,9 @@ def run_of(rev: "Rev", subject: str) -> Run:
     code = trace.get("code")
     mods = rev._held(code, "db/modules") if code else []
     modules = json.loads(show(mods[0].obj)) if mods else {}
-    return Run(subject=subject, rev=sealed_at, name=name, keys=json.loads(held.get("db/keys", "{}")),
-               trace=trace, sandboxed=sandboxed, repo=repo, commit=commit, modules=modules, mount_root=mount_root)
+    return Run(subject=subject, rev=sealed_at, at=int(held.get(AT, sealed_at.id)), name=name,
+               keys=json.loads(held.get("db/keys", "{}")), trace=trace, sandboxed=sandboxed, repo=repo, commit=commit,
+               modules=modules, mount_root=mount_root)
 
 
 def value_inputs(keys: Dict[str, Any], trace: Dict[str, str]) -> List[str]:
@@ -538,7 +540,7 @@ def _rerun(rev: "Rev", run: Run) -> Rerun:
             raise NotPinned(f"{run.subject[:12]}…: its input {text[:40]}… is on no ledger here; the rerun would "
                             "substitute nothing for it")
     py = interpreter_for(where)
-    req = {"ledger": str(rev.ledger.path), "rev": run.rev.id, "name": run.name, "keys": run.keys,
+    req = {"ledger": str(rev.ledger.path), "rev": run.at, "name": run.name, "keys": run.keys,
            "repo": run.repo, "commit": run.commit, "worktree": str(where),
            "preds": sorted({p for _level, preds in claim_of(rev, run.subject) for p in preds})}
     env = dict(os.environ)

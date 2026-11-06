@@ -587,6 +587,23 @@ def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):
     assert v.obj == ["G1", "G2"] and any(k.startswith("all") or "contains" in k for k in v.dependencies)
 
 
+def test_a_past_revision_crosses_the_pipe_and_a_draft_saved_later_says_it(sbx):
+    """SVP 245: the worker's ``Rev`` reads at the revision, ``db/at`` is written by either side of the pipe."""
+    L, _repo = sbx
+    read = L.at().id
+    with L.transaction(by="t") as t:
+        t["game/G1", "n"] = "4"
+    v = L.at(read).run("mnt.sbx.stage.fns.count", game="G1")
+    assert v.obj == {"n": 6} and v.at.id == read and L.at()[v.subject, "db/at"] == str(read)
+    with L.transaction(by="t") as t:
+        late = L.at(read + 1).run("mnt.sbx.stage.fns.count", game="G1", seal=t)
+    assert late.obj == {"n": 8} and late.at.id == read + 1
+    draft = L.at(read).run("mnt.sbx.stage.fns.pid", game="G1", seal=False)
+    assert draft.at.id == read
+    draft.seal(L)
+    assert L.at()[draft.subject, "db/at"] == str(read)
+
+
 def test_refusals(sbx):
     L, repo = sbx
     with pytest.raises(UnmountedImport, match="sbx.other from sbx.stage.fns"):

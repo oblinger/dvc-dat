@@ -7,8 +7,8 @@ sealed ``Value`` or a ``Ref``: each knows its ledger, which a name does not.
 A copy writes the value's bytes to the destination's store if absent (dedupe by hash, never decoded), its subject
 rows, its provenance rows (the ``db/code/<hash 16>`` item, the declarations of its preds, its mount, the commit of its
 run as ``(<value>, db/commit, <sha>)``, since one revision's clock cannot carry several commits), its one name, and
-``(<value>, db/copied-from, <ledger>@<rev>)``. The per-ledger rows ``db/store``, ``db/rerunnable``, ``db/rerun`` and an
-earlier ``db/copied-from`` stay behind. The subject is the source's, so a second copy adds nothing.
+``(<value>, db/copied-from, <ledger>@<rev>)``. The per-ledger rows ``db/store``, ``db/at``, ``db/rerunnable``, ``db/rerun``
+and an earlier ``db/copied-from`` stay behind. The subject is the source's, so a second copy adds nothing.
 
 ``deep``
     copies the value's inputs recursively until values with no inputs, whatever their ledgers. Without it they stay
@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple
 from .claim import EXACT, claim_of, unconditional
 from .codec import show
 from .errors import LedgerError, NotCopied, NotPinned
-from .fn import ledger_key, mounts_at
+from .fn import AT, ledger_key, mounts_at
 from .named import rev_named
 from .pin import (PINNED, RERUN, RERUNNABLE, assert_claim, check_input, foreign_inputs, holder_of, inputs_in, run_of,
                   value_inputs)
@@ -55,7 +55,7 @@ COPIED_FROM = "db/copied-from"
 SPEC_ONLY = "db/spec-only"
 COMMIT = "db/commit"
 #: The rows of a value that are about the ledger holding it, not about the value.
-LEFT_BEHIND = frozenset({"db/store", RERUNNABLE, RERUN, COPIED_FROM, SPEC_ONLY, COMMIT})
+LEFT_BEHIND = frozenset({"db/store", AT, RERUNNABLE, RERUN, COPIED_FROM, SPEC_ONLY, COMMIT})
 
 
 def lifetime_of(ledger: Any) -> str:
