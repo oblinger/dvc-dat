@@ -34,6 +34,14 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 ::: dvc_dat.ledger.Value
 
+::: dvc_dat.ledger.value.Blob
+    options:
+      heading: Value.Blob
+
+::: dvc_dat.ledger.value.Table
+    options:
+      heading: Value.Table
+
 ::: dvc_dat.ledger.ledger_class
 
 ::: dvc_dat.ledger.Fn

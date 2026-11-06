@@ -19,9 +19,9 @@ api:: [`dvc_dat.ledger`](../../api/ledger.md) — the classes and functions, ren
 | Ref         | [rev](../../api/ledger.md#dvc_dat.ledger.Ref.rev), [subject](../../api/ledger.md#dvc_dat.ledger.Ref.subject), [name](../../api/ledger.md#dvc_dat.ledger.Ref.name), [aliases](../../api/ledger.md#dvc_dat.ledger.Ref.aliases), [hash](../../api/ledger.md#dvc_dat.ledger.Ref.hash), [type](../../api/ledger.md#dvc_dat.ledger.Ref.type), [preds](../../api/ledger.md#dvc_dat.ledger.Ref.preds), [sealed_at](../../api/ledger.md#dvc_dat.ledger.Ref.sealed_at), [load](../../api/ledger.md#dvc_dat.ledger.Ref.load)                                                                                                                                   |
 | Row         | [rev](../../api/ledger.md#dvc_dat.ledger.Row.rev), [subject](../../api/ledger.md#dvc_dat.ledger.Row.subject), [predicate](../../api/ledger.md#dvc_dat.ledger.Row.predicate), [object](../../api/ledger.md#dvc_dat.ledger.Row.object), [added](../../api/ledger.md#dvc_dat.ledger.Row.added)                                                                                                                                                                                                 |
 | Transaction | [tx](../../api/ledger.md#dvc_dat.ledger.Transaction.tx), [previous_rev](../../api/ledger.md#dvc_dat.ledger.Transaction.previous_rev), [ns](../../api/ledger.md#dvc_dat.ledger.Transaction.ns), [rev](../../api/ledger.md#dvc_dat.ledger.Transaction.rev), [add](../../api/ledger.md#dvc_dat.ledger.Transaction.add), [update](../../api/ledger.md#dvc_dat.ledger.Transaction.update), [`[]=`](../../api/ledger.md#dvc_dat.ledger.Transaction.__setitem__), [remove](../../api/ledger.md#dvc_dat.ledger.Transaction.remove), [`del []`](../../api/ledger.md#dvc_dat.ledger.Transaction.__delitem__), [pin](../../api/ledger.md#dvc_dat.ledger.Transaction.pin)                                                                                                       |
-| Value       | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [at](#^value-at), [sealed](#^sealed), [hash](#^value-hash), [dependencies](#^dependencies), [Dependencies](#^value-dependencies), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
-| Value.Blob  | [obj](#^obj)                                                                                                                                                                                                                                                                                               |
-| Value.Table | [table](#^table-table)                                                                                                                                                                                                                                                                                     |
+| Value       | [preds](../../api/ledger.md#dvc_dat.ledger.Value.preds), [subject](../../api/ledger.md#dvc_dat.ledger.Value.subject), [rev](../../api/ledger.md#dvc_dat.ledger.Value.rev), [at](../../api/ledger.md#dvc_dat.ledger.Value.at), [sealed](../../api/ledger.md#dvc_dat.ledger.Value.sealed), [hash](../../api/ledger.md#dvc_dat.ledger.Value.hash), [dependencies](../../api/ledger.md#dvc_dat.ledger.Value.dependencies), [Dependencies](../../api/ledger.md#dvc_dat.ledger.Value.Dependencies), [encode](../../api/ledger.md#dvc_dat.ledger.Value.encode), [decode](../../api/ledger.md#dvc_dat.ledger.Value.decode), [seal](../../api/ledger.md#dvc_dat.ledger.Value.seal), [same_as](../../api/ledger.md#dvc_dat.ledger.Value.same_as), [matches](../../api/ledger.md#dvc_dat.ledger.Value.matches), [diff](../../api/ledger.md#dvc_dat.ledger.Value.diff) |
+| Value.Blob  | [obj](../../api/ledger.md#dvc_dat.ledger.value.Blob.obj)                                                                                                                                                                                                                                                                                               |
+| Value.Table | [table](../../api/ledger.md#dvc_dat.ledger.value.Table.table)                                                                                                                                                                                                                                                                                     |
 | Dat         | [path](#^dat-path), [preds](#^dat-preds), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind)                                                                                                                                                       |
 | Fn          | [name](#^fn-name), [module](#^module), [code](#^fn-code), [mount](#^mount), [env](#^env), [signature](#^signature), [kind](#^fn-kind), [reproducible](#^fn-reproducible), [()](#^--call--) |
 
@@ -74,81 +74,15 @@ f.code               # <Code plane@2.7.1>
 
 <!-- methods: dvc_dat.ledger.Value -->
 
-**preds**`: dict | FrozenPreds`
-    A `dict` while unsealed, assignable as a whole; a `FrozenPreds` once sealed, whose every mutator is `TypeError`. Each pred is a `str`, number, bool, list, `Value` or `Ref`, and its name must be declared by the class's `@ledger_class` (`Undeclared` at the seal). ^value-preds
-
-**subject**`: str | None`
-    The 64-hex subject the value was saved under; `None` until saved, including when sealed by `seal()` alone. ^value-subject
-
-**rev**`: Rev | None`
-    The revision that saved the value; set at commit or by `load`. ^value-rev
-
-**at**`: Rev | None`
-    The revision the value's run read: its `db/at` row, or a draft's trace (SVP 245). `rev` is where it was saved, `at` what it was computed from, so a run at `L.at(412)` saved at 902 has `v.at.id == 412`, `v.rev.id == 902`. A memo hit hands back the entry it found, whose `at` is the revision that entry ran at. `None` for a hand seal and for a [copy](#Copying), whose row stays on its origin. A `Dat` reads the same revision off its run sub-dat, `ValueError` when it ran on no ledger. ^value-at
-
-**sealed**`: str | None`
-    The moment the identity was fixed, UTC `YYYY-MM-DDTHH:MM:SSZ`, by `seal()` (saved nowhere yet, `subject` `None`) or by a save (printed in a zone by [`rev.show_time`](../../api/ledger.md#dvc_dat.ledger.Rev.show_time)); `None` while unsealed, so `if v.sealed:` reads as before. A time rather than a revision because a seal can precede any ledger; the revision is `rev`, set at the save. ^sealed
-
-**hash**`: str`
-    The hex sha256 of what `encode` writes (into a sink that keeps nothing), cached once sealed; after a save, the stored bytes' hash whatever the live object holds. ^value-hash
-
-**dependencies**`: Mapping[str, str]`
-    Item name to version or hash: what producing the value read. Empty for a hand-built value until saved; a run's result carries its trace here at every `seal=` level. See [Value Provenance](#Value%20Provenance). ^dependencies
-
-**Dependencies**`: Mapping[str, str]` (class attribute)
-    The type of `dependencies`, for annotations. ^value-dependencies
-
-**encode**`(out: BinaryIO) -> None`
-    Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). Writes the bytes to store to `out`, once, forward, and returns nothing (DAT 240): `out` is a sink the store opens, a write-only binary stream that hashes and counts what passes and refuses `seek` (`io.UnsupportedOperation`), so no value is held whole in memory to be sealed. `pickle.dump`, `pq.write_table` and `np.save` write to it as to a file. A save encodes once: into a staged file in the art folder, whose hash is the value's, which the upload sends and the commit links into place. Two calls must write the same bytes, or a value sealed by `v.seal()` is `SealBroken` at its save. A test that wants the bytes passes `io.BytesIO()`. ^encode
-
-**decode**`(src: BinaryIO, store: ArtStore) -> Value` (classmethod)
-    Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). The object read from `src`, the stored bytes as a binary read stream (a real, seekable file, `ArtStore.open`). A `decode` that also accepts `name=` is passed the alias the value is loaded by, `None` when loaded by its subject. A value held only in memory is five lines: `encode(self, out): torch.save(self.t, out)`, `decode(cls, src, store): return cls(torch.load(src))`. ^decode
-
-**seal**`(to=True, *, keep=False, deps=(), name=None, provenance=None, by=None, skip=None) -> str`
-    `to` takes what a run's `seal=` takes, so `f(seal=x)` and a later `v.seal(x)` end in one place. `v.seal()`, the same as `v.seal(True)`, fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by`, a `str` or a JSON `dict` as on [`transaction`](../../api/ledger.md#dvc_dat.ledger.Ledger.transaction) (default the provenance, else `seal`). `name=` writes `(alias, db/alias, subject)` beside it. A run's result (`seal=False` or `True`) carries its trace: `v.seal(t)` or `v.seal(L)` writes the memo entry the run would have written, so the next identical call hits, after the code check of [Running](#Running) (`NotEvaluated`); `deps=` and `provenance=` on it are `TypeError`. `v.seal(False)` and `v.seal("get")` are `TypeError`: nothing to do to an object. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. A save seals a dat's subdats with it ([Subdats](#Subdats)); `skip` lists relative-path suffixes to decline, on top of the class's `skip_subdats`, and `skip=()` declines nothing; `skip` on `v.seal()` is `TypeError`, and so is a bare `str`. See [Versioning](#Versioning). ^seal
-
-**same_as**`(other: Value | None) -> bool`
-    `self.hash == other.hash`; `False` for `None`. ^same-as
-
-**matches**`(rev: Rev) -> bool`
-    Whether every dependency item holds at `rev`: the memo's hit test. Consults the ledger only; never runs anything. ^matches
-
-**diff**`(other: Value) -> dict[str, tuple]`
-    The dependency items whose values differ, item to `(mine, theirs)`, `None` where one lacks the item. ^diff
-
-
-
 ## Value.Blob Interface
 A `Value` holding any Python object, stored with pickle (protocol 4). Declares no preds.
 
-| Value.Blob           |                               |
-| -------------------- | ----------------------------- |
-| [Value.Blob](#^blob) | Constructor to wrap an object |
-| [obj](#^obj)         | The object                    |
-
-**Value.Blob**`(obj, *, name=None)`
-    A value whose bytes are `obj` pickled. A value function whose return annotation is not a `Value` subclass has its result wrapped in one. ^blob
-
-**obj**`: Any`
-    The wrapped object. ^obj
-
-
+<!-- methods: dvc_dat.ledger.value.Blob -->
 
 ## Value.Table Interface
 A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted on encode; a decoded `Value.Table` holds a `pyarrow.Table`. It exists beside `Value.Blob` because the encoding is the identity: pickle bytes change with the Python, pandas and pyarrow versions and nothing outside Python reads them, while parquet encodes the same table the same way, stores it columnar and compact, and any tool that reads parquet can read it from the art store.
 
-| Value.Table            |                             |
-| ---------------------- | --------------------------- |
-| [Value.Table](#^table) | Constructor to wrap a table |
-| [table](#^table-table) | The table                   |
-
-**Value.Table**`(table, *, name=None)`
-    A value whose bytes are `table` as parquet; `table` is a `pyarrow.Table` or a pandas `DataFrame`. ^table
-
-**table**`: pyarrow.Table | pandas.DataFrame`
-    The wrapped table; a `pyarrow.Table` after a load. ^table-table
-
-
+<!-- methods: dvc_dat.ledger.value.Table -->
 
 ## Dat Interface
 `dvc_dat.ledger.Dat` is `dvc_dat.Dat`, one class (DAT 1038): a dat, the folder that is its own recipe ([DAT Dat](../DAT%20Dat.md)), is a `Value` whose bytes are the folder. It encodes as its content manifest, `{"files": {relpath: sha256}}`, written to the sink, and its files are its parts, streamed into the art store one at a time, so memory is bounded by the manifest, not the folder. Every file in the folder is hashed (`__pycache__` and the [subdats](#Subdats) skipped), `_spec_.yaml` and `_result_.yaml` included; each in 1 MiB blocks, the per-file hashes cached on the object, keyed by size, mtime and inode, so only a changed file is hashed again. The `db/value` row's kind and the folder's `dat.kind` are the same dotted name, `dvc_dat.core.Dat` or the subclass. A dat made by `Dat.create` or `Dat.manager.run` seals with no subclass once saved: `dat.seal(t, name="table/12")` stores its files and writes its row, and `rev.load("table/12")` returns a `Dat` whose `get_spec()`, `get_results()` and `get_path()` read the rebuilt folder. A folder whose `_spec_` names a `dat.kind` and was never saved (standing `open`) is `ValueError` naming `dat.save()`; a folder with no spec is a plain folder value.
