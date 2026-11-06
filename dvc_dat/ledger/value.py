@@ -43,7 +43,17 @@ class FrozenPreds(dict):
 
 
 class Value:
-    """The object itself, with its provenance on it."""
+    """The object itself, with its provenance on it.
+
+    Every subclass's encoding is deterministic and lossless. Deterministic: equal values encode to the same
+    bytes, in any process on any machine. Lossless: ``decode`` of those bytes gives back an equal value, so
+    encoding it again gives the same bytes. A worker shares no memory with its caller, so a value crosses by
+    being encoded and decoded; and ``hash`` is the sha256 of ``encode``, so these decide whether a value rebuilt
+    on each call hits a memo and whether two machines agree on its identity. A new subclass has a test that
+    encode, decode, encode gives the same bytes. Changing a class's encoding moves the hash of everything stored
+    under it, so it is a migration, never a fix: the shipped classes' known failures are ``xfail(strict=True)`` in
+    ``tests/ledger/test_value_encoding.py``.
+    """
 
     Dependencies: ClassVar[Any] = Mapping[str, str]
     """The type of ``dependencies``: item name to version or hash."""
