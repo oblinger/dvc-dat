@@ -49,6 +49,8 @@ class Value:
     """The type of ``dependencies``: item name to version or hash."""
     #: The pred names a kind declares (``@ledger_class``); none by default.
     _ledger_preds: ClassVar[tuple] = ()
+    #: Relative-path suffixes of the subdats a seal declines by default (SVP 241); ``seal(skip=)`` adds to them.
+    skip_subdats: ClassVar[Tuple[str, ...]] = ()
 
     subject: Optional[str] = None
     """Its ledger subject once saved."""
@@ -94,7 +96,8 @@ class Value:
         self._rename(ledger, value)
 
     def _rename(self, ledger: Any, name: Optional[str]) -> None:
-        """Make ``name`` this saved value's one name (``None``: unname it); a ``Dat`` moves to its folder."""
+        """Make ``name`` this saved value's one name (``None``: unname it), the alias tree under it moved in the
+        same transaction, so ``<name>/<relpath>`` stays true of each subdat; a ``Dat`` moves to its folder."""
         from .rev import name_of
 
         head = ledger.at()
@@ -102,9 +105,12 @@ class Value:
         others = [n for n in head._aliases_of(self.subject) if n != name]
         owns = name is None or (name_of(head, self.subject) == name
                                 and any(h.obj == "str:" + self.subject for h in head._held(name, "db/alias")))
-        if others or not owns:
+        tree = head._alias_tree(self.subject, name)
+        if others or not owns or tree:
             with ledger.transaction(by="name") as t:
                 t._name_value(self.subject, name)
+                for target, new in tree:
+                    t._name_value(target, new)
         if name is not None:
             self._at_name(ledger._store.art, name)
 
@@ -168,8 +174,13 @@ class Value:
     def _sealable(self) -> None:
         """Hook: refuse a value that may not be sealed as it stands (a ``Dat`` never saved)."""
 
+    def _subdats(self) -> Iterable[Tuple[str, "Value"]]:
+        """Hook: ``(relpath, value)`` of each value a seal of this one seals with it (a ``Dat``'s subdats)."""
+        return ()
+
     def seal(self, to: Any = True, *, keep: bool = False, deps: Iterable[Any] = (), name: Optional[str] = None,
-             provenance: Optional[str] = None, by: Optional[Union[str, Dict[str, Any]]] = None) -> str:
+             provenance: Optional[str] = None, by: Optional[Union[str, Dict[str, Any]]] = None,
+             skip: Optional[Iterable[str]] = None) -> str:
         """Fix the value's identity; with a transaction or a ledger, save it too. ``to`` takes what
         ``seal=`` on a run takes (DAT 1028), so ``f(seal=x)`` and a later ``v.seal(x)`` end in one place.
 
@@ -187,13 +198,21 @@ class Value:
         A run's result (``seal=False`` or ``True``) carries its trace: saving it writes the memo entry
         the run would have, so the next identical call hits, after the code check (``NotEvaluated``).
         ``v.seal(False)`` and ``v.seal("get")`` are ``TypeError``: nothing to do to an object.
+
+        A save of a ``Dat`` seals the subdats in its folder tree in the same transaction (SVP 241): each its
+        own value, named ``<name>/<relpath>``, depending on this one, with its provenance, and a row
+        ``(<subject>, db/subdat/<relpath>, <ref to it>)``. ``skip`` names relative-path suffixes to decline, on
+        top of the class's ``skip_subdats`` (``viz`` declines ``viz/`` and ``run/viz/``; a plain folder named
+        declines every subdat under it): a declined subdat stays on disk, stores no byte, and its row says
+        ``str:declined``. ``skip=()`` declines nothing, the class's ``skip_subdats`` included.
         """
         from .ledger import Ledger
         from .txn import Transaction
 
         if to is True:
-            if name is not None or by is not None:
-                raise TypeError("name= and by= name a ledger write; v.seal() writes none (v.seal(t, name=...))")
+            if name is not None or by is not None or skip is not None:
+                raise TypeError("name=, by= and skip= name a ledger write; v.seal() writes none "
+                                "(v.seal(t, name=...))")
             return self._seal_here(keep, tuple(deps), provenance)
         if to is False or (isinstance(to, str) and to == "get"):
             raise TypeError(f"v.seal({to!r}): {to!r} is a run's seal= level (keep nothing; look up); there is "
@@ -203,13 +222,13 @@ class Value:
         if isinstance(to, Transaction):
             if by is not None:
                 raise TypeError("by= names the writer of a transaction seal opens; this one is open already")
-            return to._seal_value(self, deps=tuple(deps), name=name, provenance=provenance)
+            return to._seal_value(self, deps=tuple(deps), name=name, provenance=provenance, skip=skip)
         if isinstance(to, Ledger):
             local = self.__dict__.get("_local")
             run = self.__dict__.get("_run")
             default = (f"eval:{run.name}" if run is not None else None) or (local and local["provenance"]) or "seal"
             with to.transaction(by=by if by is not None else provenance or default) as t:
-                return t._seal_value(self, deps=tuple(deps), name=name, provenance=provenance)
+                return t._seal_value(self, deps=tuple(deps), name=name, provenance=provenance, skip=skip)
         raise TypeError(f"seal takes True (the default), a Transaction or a Ledger, not {type(to).__name__}")
 
     def _seal_here(self, keep: bool, deps: tuple, provenance: Optional[str]) -> str:

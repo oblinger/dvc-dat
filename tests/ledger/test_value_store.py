@@ -144,6 +144,8 @@ def test_a_dats_parts_travel_with_it(L, clouds, tmp_path):
         drop_cache(L)
         back = L.at().load("table/12")
         assert (back.path / "table.csv").read_text() == "12 from 1\n"
+        assert set(az.gets) < set(az.puts)              # its run is a subdat, fetched by its own name (SVP 241)
+        L.at().load("table/12/run")
         assert set(az.gets) == set(az.puts)
     finally:
         core._default_manager = before

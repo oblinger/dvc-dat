@@ -321,3 +321,17 @@ def runs_plain_inside(dat):
     inner = Dat.manager.run({"dat": {"do": "ledger_kinds.build_table", "kwargs": {"n": 2}}})
     dat.get_results()["inner"] = Dat.get(inner.run.get_results(), "dat.run_rev")
     dat.save()
+
+
+def makes_a_subdat(dat):
+    """A dat's run function that makes a subdat by a nested run inside its own folder (SVP 241)."""
+    Dat.manager.run({"dat": {"do": "ledger_kinds.build_table", "name": str(dat.path / "viz"),
+                             "kwargs": {"n": 2, "start": 1}}})
+    dat.get_results()["cells"] = 4
+    dat.save()
+    return dat
+
+
+@ledger_class(preds=("i",))
+class NumberedDat(Dat):
+    """A dat carrying one declared pred."""

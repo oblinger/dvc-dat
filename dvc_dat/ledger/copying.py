@@ -11,8 +11,9 @@ run as ``(<value>, db/commit, <sha>)``, since one revision's clock cannot carry 
 and an earlier ``db/copied-from`` stay behind. The subject is the source's, so a second copy adds nothing.
 
 ``deep``
-    copies the value's inputs recursively until values with no inputs, whatever their ledgers. Without it they stay
-    where they are, referenced by hash through the origin row and the ``foreign:`` items.
+    copies the value's inputs recursively until values with no inputs, whatever their ledgers, and its subdats (the
+    ``db/subdat/`` rows). Without it they stay where they are, referenced by hash through the origin row, the
+    ``foreign:`` items and those rows.
 ``safe``
     reads each ledger's lifetime (``lifetime_of``): an input on a ledger below the destination's is copied, by the same
     rule; one at or above is referenced. A plain copy never looks. It keeps only the spec of a value that can be
@@ -142,6 +143,9 @@ class _Plan:
         self.items[subject] = Item(rev, subject, spec)
         if not (self.deep or self.safe):
             return
+        if self.deep:                           # a subdat is no input, and deep asks for every byte (SVP 241)
+            for _rel, child in rev._subdat_children(subject):
+                self.add(rev, child)
         for irev, isub in inputs(rev, subject):
             if ledger_key(irev.ledger) != self.dest and (self.deep or rank(irev.ledger) < self.floor):
                 self.add(irev, isub)

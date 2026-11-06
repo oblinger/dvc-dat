@@ -253,18 +253,53 @@ def _record(name: str, sha256: Optional[str]) -> None:
 def _record_dat(dat: "Dat") -> None:
     """Record `dat` in the running dat's dependencies -- by its hash, `unsealed`
     while it is open -- and refuse it when that dat demands `dat.standing:
-    referenceable` and `dat` is not."""
+    referenceable` and `dat` is not.  A dat inside the running dat's folder is
+    its subdat, output and not input: nothing is recorded."""
     stack = _recording.get()
     if not stack:
         return
+    runner = stack[-1][1]
+    if _inside(dat.get_path(), runner.get_path()):
+        return                          # a subdat is the running dat's output, never its input (SVP 241)
     standing = dat._standing()
     sha256 = dat._sha256()
     _record(dat.get_path_name(),
             DEP_UNSEALED if standing == OPEN or sha256 is None else sha256)
-    runner = stack[-1][1]
     if runner._demands_referenceable() and standing != REFERENCEABLE:
         raise RuntimeError(f"{runner!r} demands dat.standing: referenceable, and "
                            f"{dat.get_path_name()!r} is {standing}")
+
+
+def _inside(path: Union[str, Path], folder: Union[str, Path]) -> bool:
+    """Is `path` strictly inside `folder`?"""
+    path, folder = os.path.realpath(path), os.path.realpath(folder)
+    return path.startswith(folder + os.sep)
+
+
+def is_subdat_dir(path: Union[str, Path]) -> bool:
+    """Is the folder `path` a dat: does its `_spec_.yaml` or `_spec_.json` name `dat.kind`?  Inside another
+    dat's folder such a folder is a subdat, like a git repo inside a git repo: out of the enclosing dat's
+    bytes and both its hashes, and sealed as a value of its own (SVP 241)."""
+    path = os.fspath(path)
+    if not (os.path.exists(os.path.join(path, SPEC_YAML)) or os.path.exists(os.path.join(path, SPEC_JSON))):
+        return False
+    return Dat.spec_kind(path) is not None
+
+
+def subdat_dirs(folder: Union[str, Path]) -> Iterator[Tuple[str, Path]]:
+    """`(relpath, path)` of each subdat of the dat folder `folder`, sorted: the nearest dats below it; what
+    lies inside a subdat is that subdat's."""
+    for root, dirs, _names in os.walk(folder):
+        kept = []
+        for d in sorted(dirs):
+            p = Path(root, d)
+            if d == "__pycache__":
+                continue
+            if is_subdat_dir(p):
+                yield p.relative_to(folder).as_posix(), p
+            else:
+                kept.append(d)
+        dirs[:] = kept
 
 
 def _standing_of(spec: Dict[str, Any], result: Dict[str, Any]) -> str:
@@ -322,18 +357,17 @@ def _hash_dat(folder: Union[str, Path], results: Dict[str, Any]) -> str:
     (`dat.hash: functional`, stamped by every save, names it; a hash a 2.x save
     stamped does not verify, SVP 1467 Q9).
 
-    Every file but the `run/` sub-dat and `dat.name` -- the run is
-    the record of one execution and the name is the dat's address, neither is
-    content -- so two runs of one recipe at two places hash the same when the
-    code is functional.  `_spec_.yaml` counts as its sorted-key dump with
+    Every file but its subdats (`is_subdat_dir`: `run/` and any other dat in
+    its folder tree) and `dat.name` -- a subdat is a value of its own, and the
+    name is the dat's address, neither is content -- so two runs of one recipe
+    at two places hash the same when the code is functional.  `_spec_.yaml` counts as its sorted-key dump with
     `dat.name` left out, `_result_.yaml` as its sorted-key dump with
     `dat.sha256` set to `excluded`, so the hash can sit inside the file it
     covers and a later check recomputes it the same way."""
     folder = os.fspath(folder)          # a Path would never equal os.walk's str root
     lines = []
     for root, dirs, files in os.walk(folder):
-        if root == folder:
-            dirs[:] = [d for d in dirs if d != RUN_FOLDER]
+        dirs[:] = [d for d in dirs if not is_subdat_dir(os.path.join(root, d))]
         for file in files:
             rel = os.path.relpath(os.path.join(root, file), folder)
             if rel in (RESULT_YAML, SPEC_YAML, SPEC_JSON):
@@ -1842,8 +1876,11 @@ class Dat(Value, metaclass=_DatMeta):
         """The run that made this dat: the sub-dat `run/`, whose results hold
         `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code`,
         `dat.run_rev` (on a ledger) and `dat.content`, and whose `work/` is the
-        run's scratch.  None for a dat never run (one filled by hand).  A run is
-        not content: it is outside the dat's hash, and nothing may depend on it.
+        run's scratch.  None for a dat never run (one filled by hand), and for
+        one loaded off a ledger with no `run/` in its folder: its run is a subdat,
+        a value of its own under the alias `<name>/run`, placed by a load of that
+        name and by nothing else (SVP 241).
+        A run is not content: it is outside the dat's hash, and nothing may depend on it.
         So a run function reads the ledger through `dat.at`, and a result must
         not vary with the revision string `dat.run_rev` itself."""
         if self._run_dat is None:
@@ -1864,7 +1901,10 @@ class Dat(Value, metaclass=_DatMeta):
         run = self.run
         text = Dat.get(run.get_results(), DAT_RUN_REV, None) if run is not None else None
         if text is None:
-            raise ValueError(f"{self!r} ran on no ledger: its run records no {DAT_RUN_REV}")
+            sealed = super().at                 # off the ledger, its `run/` a subdat left unplaced: its `db/at` row
+            if sealed is None:
+                raise ValueError(f"{self!r} ran on no ledger: its run records no {DAT_RUN_REV}")
+            return sealed
         from .ledger.named import rev_named
         return rev_named(text, self.rev.ledger if self.rev is not None else self.__dict__.get("_ledger"))
 
@@ -2049,7 +2089,7 @@ class Dat(Value, metaclass=_DatMeta):
             _write_run(run)
 
     def verify(self) -> bool:
-        """True when the folder on disk (its `run/` left out) still hashes to
+        """True when the folder on disk (its subdats left out) still hashes to
         the `dat.sha256` its `_result_.yaml` carries -- the dat is exactly as
         it was last saved."""
         result_path = Path(self._path, RESULT_YAML)
@@ -2162,12 +2202,26 @@ class Dat(Value, metaclass=_DatMeta):
                              "(a run function's dat.save() does it when the run returns)")
 
     def _walk(self) -> Iterator[Tuple[str, Path]]:
-        """`(relpath, path)` of every file in the value, in sorted order (`__pycache__` skipped)."""
+        """`(relpath, path)` of every file in the value, in sorted order (`__pycache__` and the subdats
+        skipped: `is_subdat_dir`)."""
         for root, dirs, names in os.walk(self._path):
-            dirs[:] = sorted(d for d in dirs if d != "__pycache__")
+            dirs[:] = sorted(d for d in dirs if d != "__pycache__" and not is_subdat_dir(os.path.join(root, d)))
             for n in sorted(names):
                 p = Path(root, n)
                 yield p.relative_to(self._path).as_posix(), p
+
+    def _subdats(self) -> List[Tuple[str, "Dat"]]:
+        """`(relpath, the subdat)` of each dat in the folder tree, as the class its `dat.kind` names; one
+        sealed by `v.seal()` and not saved since comes back as it was sealed (`sealed_at_path`)."""
+        from .ledger.sandbox import unguarded
+
+        out: List[Tuple[str, Dat]] = []
+        for rel, p in subdat_dirs(self._path):
+            cls = self._world()._class_of(Dat.spec_kind(p))
+            with unguarded():                   # the ledger's own read of the kept folder
+                child = cls.sealed_at_path(p)
+            out.append((rel, child if child is not None else cls._from_folder(p)))
+        return out
 
     def _manifest(self) -> Dict[str, str]:
         """`{relpath: sha256}` of the folder, rehashing only files whose (size, mtime, inode) moved.
@@ -2283,7 +2337,7 @@ class Dat(Value, metaclass=_DatMeta):
         """The folder of the manifest `files` (hash `h`), under `<store root>/dats/` (the data folder): at
         `<name>` when a name is given (an absolute path: there), else at the hash's first 16 hex. Files are
         placed by `store.get_to` (hardlinks on the same filesystem); a named folder holding other
-        content is replaced by a new folder, never edited in place."""
+        content is replaced by a new folder, never edited in place, a subdat placed inside it kept."""
         from .ledger.sandbox import unguarded     # the store's own write, also inside a sandboxed body
 
         if name is not None and os.path.isabs(name):
@@ -2295,7 +2349,11 @@ class Dat(Value, metaclass=_DatMeta):
         with unguarded():
             if name is not None and dest.exists() and not _holds(dest, files, store):
                 old = dest.with_name(f"{dest.name}.old-{os.getpid()}-{id(files):x}")
+                subdats = list(subdat_dirs(dest))
                 dest.rename(old)
+                for rel, _p in subdats:         # a subdat placed here is not this dat's to replace
+                    (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (old / rel).rename(dest / rel)
                 shutil.rmtree(old, ignore_errors=True)
             for rel, h in files.items():
                 p = dest / rel
@@ -2448,11 +2506,13 @@ class _DatPreds(dict):
 
 
 def _holds(dest: Path, files: Dict[str, str], store: Any) -> bool:
-    """Does the folder hold exactly these files with these hashes (a linked file is checked by inode)?"""
+    """Does the folder hold exactly these files with these hashes (a linked file is checked by inode)?  A
+    subdat placed inside it is not among them."""
     from .ledger.store import file_sha
 
     found = set()
-    for root, _dirs, names in os.walk(dest):
+    for root, dirs, names in os.walk(dest):
+        dirs[:] = [d for d in dirs if not is_subdat_dir(os.path.join(root, d))]
         for n in names:
             found.add(Path(root, n).relative_to(dest).as_posix())
     if found != set(files):

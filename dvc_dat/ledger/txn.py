@@ -32,7 +32,7 @@ import threading
 import time as _time
 import uuid
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, show, strip_hint, tag
 from .errors import Exists, LockTimeout, SealBroken, Undeclared, Unlocked
@@ -49,6 +49,11 @@ FORMAT = "dvc-dat-ledger/1"
 #: A sealed subject's own predicates (besides its preds, named by its ``db/preds`` row).
 SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys", "db/sealed-at",
                              "db/reproducible", "db/at"})
+
+
+#: A parent's row per subdat: ``db/subdat/<relpath>``, a ``ref:`` to the child or ``str:declined``. Written with the
+#: seal, outside the subject hash and re-pointable, so it is no seal predicate: ``t.add`` may attach a child later.
+SUBDAT = "db/subdat/"
 
 
 def is_seal_predicate(p: str, frozen: Sequence[str]) -> bool:
@@ -103,6 +108,19 @@ def _put_remote(r: Any, h: str, source: Any) -> None:
         with source() as f:
             _copy(f, p, h)
         r.put_path(p, h)
+
+
+def declined_by(rel: str, skip: Sequence[str]) -> bool:
+    """Is the subdat at ``rel`` (a relpath from the sealing dat) declined by the suffixes ``skip``? An entry names
+    the subdat's folder or a folder above it, by its last path parts: ``viz`` is ``viz`` and ``run/viz``, and
+    ``galleries`` is ``galleries/a``."""
+    parts = rel.split("/")
+    for entry in skip:
+        want = entry.strip("/").split("/")
+        for end in range(len(want), len(parts) + 1):
+            if parts[end - len(want):end] == want:
+                return True
+    return False
 
 
 def _name(x: Any, what: str) -> str:
@@ -686,7 +704,10 @@ class Transaction:
             from .remote import check_name
 
             check_name(object, f"{subject} db/store")
-        o = self._encode(object)
+        if predicate.startswith(SUBDAT) and isinstance(object, Value) and object.subject is not None:
+            o = ref_text(dotted(type(object)), object.hash, object.subject)   # a subdat attached after the fact
+        else:
+            o = self._encode(object)
         if predicate == "db/alias" and tag(o) != "str":
             raise TypeError("a db/alias row's object is the subject it names, a str")
         self._ops.append(_Op(subject, predicate, o, True))
@@ -840,9 +861,14 @@ class Transaction:
         return rows, canon
 
     def _by_name(self, d: Any, h: str, what: str) -> str:
-        """The subject of a dep sealed before it was saved, found by the name it was to be saved under."""
+        """The subject of a dep sealed before it was saved: the value this transaction holds with those bytes
+        (a subdat sealed against its parent, before either was saved), else found by the name it was to be saved
+        under."""
         from .rev import Ref
 
+        for v, s in self._pending.values():
+            if v.hash == h:
+                return s
         name = d.name if hasattr(d, "text") else d.__dict__.get("_loaded_as")
         if name is None:
             raise ValueError(f"{what} {d!r} is sealed but saved nowhere: save it first (v.seal(t))")
@@ -916,13 +942,14 @@ class Transaction:
         trace["platform"] = env.platform
 
     def _seal_value(self, value: Value, *, deps: Sequence[Any] = (), name: Optional[str] = None,
-                    provenance: Optional[str] = None) -> str:
+                    provenance: Optional[str] = None, skip: Optional[Iterable[str]] = None,
+                    plan: Optional[List[Any]] = None) -> str:
         """``value.seal(t)``: seal into the immutable subject ``<hash of (dependencies, preds, bytes)>``; return it.
 
         On this line the seal freezes ``preds`` (read-only), and sets ``sealed``, ``subject`` and
         ``dependencies``; only ``rev`` waits for the commit. A seal refused here, or a transaction abandoned
         later (a body exception, a refusal at commit), leaves the value unsealed with its preds a plain
-        dict (A43).
+        dict (A43). Its subdats seal with it (``_seal_subdats``; ``skip``: ``Value.seal``).
         """
         self._open("seal")
         if not isinstance(value, Value):
@@ -931,6 +958,7 @@ class Transaction:
             raise ValueError(f"{value!r} is sealed already; a different value is a new object")
         value._sealable()
         check_loadable(value)
+        plan = self._subdat_plan(value, skip) if plan is None else plan
         local = value.__dict__.get("_local")
         run = value.__dict__.get("_run")
         if run is not None:                             # a run's result: its memo entry (DAT 1028)
@@ -946,7 +974,12 @@ class Transaction:
             if name is not None:
                 _name(name, "name")
             check_late_code(run, current_env())
-            return save_run(self, value, run, name)
+            return save_run(self, value, run, name, plan=plan)
+        return self._seal_hand(value, deps, name, provenance if local else check_provenance(provenance), local, plan)
+
+    def _seal_hand(self, value: Value, deps: Sequence[Any], name: Optional[str], provenance: str,
+                   local: Optional[Dict[str, Any]], plan: List[Any]) -> str:
+        """Seal a value that is no run's result, then its subdats; its subject."""
         env = None
         extra: List[Tuple[str, str]] = []
         if local is not None:
@@ -958,7 +991,6 @@ class Transaction:
                                  "seal a new value (or seal with keep=True to keep the bytes)")
             deps, provenance, env = local["deps"], local["provenance"], local["env"]
             extra.append(("db/sealed-at", "str:" + str(value.sealed)))
-        provenance = check_provenance(provenance)
         if name is None:
             name = value.__dict__.get("_name")          # Value(name=...): the name it is saved under
         if name is not None:
@@ -971,7 +1003,48 @@ class Transaction:
         subject = hash_text(canonical({"trace": trace, "preds": canon, "value": vtext}))
         self._seal(value, subject, trace, provenance, pred_rows, extra, name)
         self._freeze(value, subject, trace)
+        self._seal_subdats(plan, value, subject, name, provenance)
         return subject
+
+    def _subdat_plan(self, value: Value, skip: Optional[Iterable[str]], base: str = "") -> List[Any]:
+        """``(relpath, the subdat or None when declined, its own plan)`` of each subdat of ``value``, made and
+        checked before anything is sealed, so a subdat that may not seal refuses the whole seal."""
+        if isinstance(skip, str):
+            raise TypeError(f"skip takes relative-path suffixes, a tuple or list, not the str {skip!r}")
+        entries = None if skip is None else tuple(skip)
+        declined = () if entries == () else (*type(value).skip_subdats, *(entries or ()))
+        plan: List[Any] = []
+        for rel, child in value._subdats():
+            if declined_by(base + rel, declined):
+                plan.append((rel, None, []))
+                continue
+            child._sealable()
+            check_loadable(child)
+            plan.append((rel, child, self._subdat_plan(child, declined or None, f"{base}{rel}/")))
+        return plan
+
+    def _seal_subdats(self, plan: List[Any], value: Value, subject: str, name: Optional[str],
+                      provenance: str) -> None:
+        """Seal the subdats of ``value``, just sealed as ``subject``, and write its ``db/subdat/<relpath>`` rows
+        (SVP 241): each a value of its own, ``<name>/<relpath>``, its one dep the parent, the parent's provenance;
+        one carrying a run's trace or a ``v.seal()`` keeps what it carries. The rows are outside the subject hash
+        and re-point: they land even when the subject exists already, each revision reading its own. Children
+        finish before their parent, whose folder a commit may move (a subclass's ``_after_seal``)."""
+        mark = len(self._finalize)
+        for rel, child, below in plan:
+            predicate = f"db/subdat/{rel}"
+            if child is None:
+                self._ops.append(_Op(subject, predicate, "str:declined", True))
+                continue
+            child_name = f"{name}/{rel}" if name else None
+            local = child.__dict__.get("_local")
+            if local is not None or "_run" in child.__dict__:
+                s = self._seal_value(child, name=child_name, plan=below)
+            else:
+                s = self._seal_hand(child, (value,), child_name, provenance, None, below)
+            self._ops.append(_Op(subject, predicate, ref_text(dotted(type(child)), self._hash_of(child), s), True))
+        if len(self._finalize) > mark:
+            self._finalize.append(self._finalize.pop(mark - 1))
 
     def _freeze(self, value: Value, subject: str, trace: Dict[str, str]) -> None:
         """The seal fixes subject, dependencies and preds now; the revision is assigned at commit (Q25 (D))."""
