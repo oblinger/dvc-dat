@@ -16,7 +16,7 @@ api:: [`dvc_dat.ledger`](../../api/ledger.md) — the classes and functions, ren
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ledger      | [path](#^path), [at](#^at), [revs](#^revs), [transaction](#^transaction), [close](#^close)                                                                                                                                                                                                                                 |
 | Rev         | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [history](#^history), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [ns](#^ns), [run](#^run), [rerun](#^rerun), [timezone](#^timezone), [show_time](#^show-time)                                                |
-| Ref         | [rev](#^rev), [subject](#^subject), [name](#^name), [aliases](#^aliases), [hash](#^hash), [type](#^type), [preds](#^preds), [sealed_at](#^sealed-at), [load](#^ref-load)                                                                                                                                   |
+| Ref         | [rev](../../api/ledger.md#dvc_dat.ledger.Ref.rev), [subject](../../api/ledger.md#dvc_dat.ledger.Ref.subject), [name](../../api/ledger.md#dvc_dat.ledger.Ref.name), [aliases](../../api/ledger.md#dvc_dat.ledger.Ref.aliases), [hash](../../api/ledger.md#dvc_dat.ledger.Ref.hash), [type](../../api/ledger.md#dvc_dat.ledger.Ref.type), [preds](../../api/ledger.md#dvc_dat.ledger.Ref.preds), [sealed_at](../../api/ledger.md#dvc_dat.ledger.Ref.sealed_at), [load](../../api/ledger.md#dvc_dat.ledger.Ref.load)                                                                                                                                   |
 | Row         | [rev](../../api/ledger.md#dvc_dat.ledger.Row.rev), [subject](../../api/ledger.md#dvc_dat.ledger.Row.subject), [predicate](../../api/ledger.md#dvc_dat.ledger.Row.predicate), [object](../../api/ledger.md#dvc_dat.ledger.Row.object), [added](../../api/ledger.md#dvc_dat.ledger.Row.added)                                                                                                                                                                                                 |
 | Transaction | [tx](#^transaction-tx), [previous_rev](#^previous-rev), [ns](#^transaction-ns), [rev](#^transaction-rev), [add](#^add), [update](#^update), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--), [pin](#^pin)                                                                                                       |
 | Value       | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [at](#^value-at), [sealed](#^sealed), [hash](#^value-hash), [dependencies](#^dependencies), [Dependencies](#^value-dependencies), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
@@ -120,38 +120,6 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 A reference to one value at one moment, named without fetching a byte: the subject and the revision, nothing loaded until `load`. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is `<Ref label>` and its `str` the bare label: the value's name (the alias naming it written latest), else `#` + the hash's first 8 hex (DAT 1036). Made from a recording `Rev`, it traces its reads into the dependencies like the `Rev` would.
 
 <!-- methods: dvc_dat.ledger.Ref -->
-
-**Ref**`(rev: Rev, name: str)`
-    A reference to whatever `name` (a subject or an alias) names at `rev`. `rev` not a `Rev` or `name` not a non-empty `str` is `TypeError`. ^ref
-
-**rev**`: Rev`
-    The revision this reference reads through: the snapshot it was made from, so every answer it gives is as of that revision. ^rev
-
-**subject**`: str | None`
-    The subject after the alias chain. For a stored hint-less reference, the latest entry holding those bytes as of `rev`. ^subject
-
-**name**`: str`
-    The print name currently associated with the value: its alias at the head (the latest written), else `#` + the hash's first 8 hex; `str(ref)`. Unique one way: a name points at one value at a time, and re-pointing it moves it to another value; a value may carry several names (`aliases`). `subject` is what the reference resolved to. ^name
-
-**aliases**`: list[str]`
-    Every name aliasing the subject as of `rev`. ^aliases
-
-**hash**`: str | None`
-    The 64-hex sha256 of the value's bytes; `None` when the subject holds no value. Byte identity of two refs is `a.hash == b.hash`. ^hash
-
-**type**`: type | None`
-    The `Value` subclass that decodes the bytes, following `db/moved` renames; a class that does not import is `ImportError`. ^type
-
-**preds**`: FrozenPreds`
-    The subject's non-`db/` rows, annotations included; a typed pred is an unloaded `Ref`. ^preds
-
-**sealed_at**`: Rev | None`
-    The revision the value was sealed into the ledger, its `db/value` row's: at or before `rev`, since a reference made later can point at a value sealed earlier. `None` while the subject holds no value. ^sealed-at
-
-**load**`() -> Value`
-    Fetch the bytes from the art store, decode them by `type`, and restore `subject`, `rev` (the sealing revision), `dependencies` and `preds`. Cached per `(subject, rev, name)` on the `Ledger`; a cached `Dat` is handed back only while its folder is still there and the same folder. A `decode` that accepts `name=` is passed the alias the `Ref` was made by, so a `Dat` loaded by an alias lands under `art/dats/<alias>/`. No value is `KeyError`; a `decode` returning a non-`Value` is `TypeError`; a `Dat` whose `_spec_` names a `dat.kind` the row's class does not accept is `TypeError`. ^ref-load
-
-
 
 ## Row Interface
 A named tuple encoding a single row in the ledger: revision, subject, predicate, object, and an added/removed bit. `history()` returns them; `str(row)` is one aligned line: revision, `+` or `-`, subject, predicate, object.

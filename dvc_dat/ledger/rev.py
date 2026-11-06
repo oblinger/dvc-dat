@@ -782,7 +782,17 @@ class Ref:
 
     __slots__ = ("rev", "_given", "_subject", "_cls", "_hash", "_lazy", "_p")
 
+    rev: "Rev"
+    """The revision this reference reads through.
+
+    The snapshot it was made from, so every answer it gives is as of that revision.
+    """
+
     def __init__(self, rev: Rev, name: str) -> None:
+        """A reference to whatever ``name`` (a subject or an alias) names at ``rev``.
+
+        ``rev`` not a ``Rev`` or ``name`` not a non-empty ``str`` is ``TypeError``.
+        """
         if not isinstance(rev, Rev):
             raise TypeError(f"Ref(rev, name): rev is a Rev, not {type(rev).__name__}")
         if not isinstance(name, str) or not name:
@@ -824,8 +834,13 @@ class Ref:
 
     @property
     def name(self) -> str:
-        """The print name of this value: its alias at the head (the latest written), else ``#`` + the
-        hash's first 8 hex (DAT 1036); ``str(ref)``."""
+        """The print name of this value: its alias at the head (the latest written), else ``#`` + the hash's first 8 hex.
+
+        That ``#`` form is DAT 1036; this is also ``str(ref)``.
+
+        Unique one way: a name points at one value at a time, and re-pointing it moves it to another value; a value
+        may carry several names (``aliases``). ``subject`` is what the reference resolved to.
+        """
         return str(self)
 
     def __setattr__(self, k: str, v: Any) -> None:
@@ -833,8 +848,10 @@ class Ref:
 
     @property
     def subject(self) -> Optional[str]:
-        """The value's subject: ``name`` with its alias chain resolved; for a hint-less row ref, the latest
-        entry holding these bytes as of ``rev``."""
+        """The value's subject: ``name`` with its alias chain resolved.
+
+        For a stored hint-less reference, the latest entry holding those bytes as of ``rev``.
+        """
         if self._lazy:
             p = self._p
             text = ref_text(self._cls, self._hash)
@@ -850,12 +867,18 @@ class Ref:
 
     @property
     def hash(self) -> Optional[str]:
-        """The hex sha256 of the bytes, when the subject has a value."""
+        """The 64-hex sha256 of the value's bytes; ``None`` when the subject holds no value.
+
+        Byte identity of two refs is ``a.hash == b.hash``.
+        """
         return self._hash
 
     @property
     def type(self) -> Optional[type]:
-        """The ``Value`` subclass that decodes the bytes (``db/moved`` followed); ``None`` with no value."""
+        """The ``Value`` subclass that decodes the bytes, following ``db/moved`` renames.
+
+        ``None`` with no value; a class that does not import is ``ImportError``.
+        """
         return None if self._cls is None else class_named(self._p.ledger, self._cls)
 
     def _text(self) -> str:
@@ -869,7 +892,10 @@ class Ref:
 
     @property
     def preds(self) -> FrozenPreds:
-        """The subject's non-``db/`` rows at ``rev``, annotations included; one view (A24); unchecked."""
+        """The subject's non-``db/`` rows at ``rev``, annotations included.
+
+        One view (A24); unchecked. A typed pred is an unloaded ``Ref``.
+        """
         out = self._preds()
         self.rev._record_call("preds", (self._given,), None, dict(out))
         return out
@@ -889,7 +915,11 @@ class Ref:
 
     @property
     def sealed_at(self) -> Optional[Rev]:
-        """The revision of the subject's ``db/value`` row; ``None`` with no value (A41)."""
+        """The revision of the subject's ``db/value`` row.
+
+        The value was sealed into the ledger at or before ``rev``, since a reference made later can point at a value
+        sealed earlier; ``None`` while the subject holds no value (A41).
+        """
         out = self._sealed_at()
         self.rev._record_call("sealed_at", (self._given,), None, out)
         return out
@@ -926,9 +956,21 @@ class Ref:
         return None if name == FOLDER else fetcher(name, self._p.ledger._store.name)
 
     def load(self) -> Value:
-        """Fetch the bytes, decode them by ``type``, restore provenance and preds: the same Value every time
-        while it is still there (a ``Dat`` whose folder was moved or replaced since is loaded afresh). Inside a
-        run the read is recorded: a recording ``Rev``'s items, any other ``Rev``'s ``foreign:`` item."""
+        """Fetch the bytes from the art store and decode them by ``type``.
+
+        Restores ``subject``, ``rev`` (the sealing revision), ``dependencies`` and ``preds``.
+
+        Cached per ``(subject, rev, name)`` on the ``Ledger``: the same ``Value`` every time while it is still there,
+        except a cached ``Dat`` whose folder was moved or replaced since is loaded afresh.
+
+        A ``decode`` that accepts ``name=`` is passed the alias the ``Ref`` was made by, so a ``Dat`` loaded by an
+        alias lands under ``art/dats/<alias>/``.
+
+        Inside a run the read is recorded: a recording ``Rev``'s items, any other ``Rev``'s ``foreign:`` item.
+
+        No value is ``KeyError``; a ``decode`` returning a non-``Value`` is ``TypeError``; a ``Dat`` whose ``_spec_``
+        names a ``dat.kind`` the row's class does not accept is ``TypeError``.
+        """
         v = self._load()
         self.rev._record_value(v, self._given)
         return v
