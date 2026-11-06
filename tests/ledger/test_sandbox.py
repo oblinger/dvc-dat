@@ -1,5 +1,6 @@
 """Sandbox mode: a mounted package in a real tiny git checkout, run in a worker (discovery, no stand-in)."""
 
+import contextlib
 import subprocess
 import sys
 import textwrap
@@ -218,9 +219,9 @@ PKG = {
             return {"seen": ledgers[ledger].at()[s, p]}
 
         @dat.fn
-        def reads_a_run(rev, *, ledger: str, game: str, seal: str = "") -> dict:
+        def reads_a_run(rev, *, ledger: str, game: str, mode: str = "") -> dict:
             from dvc_dat import ledgers
-            kw = {"seal": seal} if seal else {}
+            kw = {"seal": mode} if mode else {}
             v = ledgers[ledger].at().run("mnt.sbx.stage.fns.count", game=game, **kw)
             return {"seen": None if v is None else v.obj}
 
@@ -1129,8 +1130,22 @@ def other(sbx, tmp_path, monkeypatch, backend):
     with games.transaction(by="t") as t:
         Value.Blob({"game": 2}).seal(t, name="G1")
     (repo / ".datconfig.yaml").write_text(f"ledgers:\n  games: {games.path}\n  far: {far.path}\n")
-    monkeypatch.chdir(repo)
-    return L, games, first, games.at().id
+    with caller_in(repo, monkeypatch):
+        yield L, games, first, games.at().id
+
+
+@contextlib.contextmanager
+def caller_in(folder, monkeypatch):
+    """The caller's working directory, whose ``.datconfig.yaml`` names the ledgers; the default dat world, which a
+    run there makes from that config, is the one before it again afterwards."""
+    from dvc_dat import core
+
+    before = core._default_manager
+    monkeypatch.chdir(folder)
+    try:
+        yield
+    finally:
+        core._default_manager = before
 
 
 def text_of(v):
@@ -1235,14 +1250,14 @@ def test_a_read_of_a_ledger_not_there_says_so(other):
 def test_a_registered_ledger_not_on_disk_and_a_caller_with_no_section_say_so(sbx, tmp_path, monkeypatch):
     L, repo = sbx
     (repo / ".datconfig.yaml").write_text(f"ledgers:\n  gone: {tmp_path / 'gone'}\n")
-    monkeypatch.chdir(repo)
-    with pytest.raises(LedgerError, match="no ledger at gone"):
-        L.at().run("mnt.sbx.stage.fns.by_name", ledger="gone", at=None, name="G1")
+    with caller_in(repo, monkeypatch):
+        with pytest.raises(LedgerError, match="no ledger at gone"):
+            L.at().run("mnt.sbx.stage.fns.by_name", ledger="gone", at=None, name="G1")
     assert not (tmp_path / "gone").exists()
     (repo / ".datconfig.yaml").unlink()
-    monkeypatch.chdir(tmp_path)
-    with pytest.raises(LedgerError, match="no ledgers: the caller"):
-        L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G1")
+    with caller_in(tmp_path, monkeypatch):
+        with pytest.raises(LedgerError, match="no ledgers: the caller"):
+            L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G1")
 
 
 def test_a_ref_key_on_another_ledger_loads_in_the_worker(other):
@@ -1287,7 +1302,7 @@ def test_a_body_reads_a_run_on_another_ledger_and_never_runs_one(other, sbx):
     """A run read is the memo lookup there: a hit is a ``foreign:`` item, ``seal="get"`` on a miss is ``None``, and a
     miss otherwise is refused, since running there would write there."""
     L, games, _first, _second = other
-    miss = L.at().run("mnt.sbx.stage.fns.reads_a_run", ledger="games", game="G1", seal="get")
+    miss = L.at().run("mnt.sbx.stage.fns.reads_a_run", ledger="games", game="G1", mode="get")
     assert miss.obj == {"seen": None} and foreign_items(miss) == []
     top = games.at().id
     with pytest.raises(ConfinedWrite, match="runs nothing"):
