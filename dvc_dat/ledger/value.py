@@ -641,7 +641,11 @@ def takes_name(cls: type) -> bool:
 
 
 def ledger_class(*, preds: Iterable[str] = ()):
-    """Class decorator: the pred names a ``Value`` subclass's values may carry (Q22); writes nothing."""
+    """Class decorator: the pred names a ``Value`` subclass's values may carry (Q22); writes nothing.
+
+    A name that is empty, not a ``str``, or starts ``db/`` is ``TypeError``, as is decorating a class that is not a
+    ``Value``.
+    """
     names = tuple(preds)
     for n in names:
         if not isinstance(n, str) or not n or n.startswith("db/"):

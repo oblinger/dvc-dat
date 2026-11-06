@@ -81,8 +81,6 @@ exclude_docs: |
   DAT Hooks.md
   Docs.md
   DAT User Docs.md
-  overview.md
-  DAT Modules/dat.md
   *.py
   DAT Demos/*/
   DAT Demos/jupytext.toml

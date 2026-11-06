@@ -22,7 +22,7 @@ api:: [`dvc_dat.ledger`](../../api/ledger.md) — the classes and functions, ren
 | Value       | [preds](../../api/ledger.md#dvc_dat.ledger.Value.preds), [subject](../../api/ledger.md#dvc_dat.ledger.Value.subject), [rev](../../api/ledger.md#dvc_dat.ledger.Value.rev), [at](../../api/ledger.md#dvc_dat.ledger.Value.at), [sealed](../../api/ledger.md#dvc_dat.ledger.Value.sealed), [hash](../../api/ledger.md#dvc_dat.ledger.Value.hash), [dependencies](../../api/ledger.md#dvc_dat.ledger.Value.dependencies), [Dependencies](../../api/ledger.md#dvc_dat.ledger.Value.Dependencies), [encode](../../api/ledger.md#dvc_dat.ledger.Value.encode), [decode](../../api/ledger.md#dvc_dat.ledger.Value.decode), [seal](../../api/ledger.md#dvc_dat.ledger.Value.seal), [same_as](../../api/ledger.md#dvc_dat.ledger.Value.same_as), [matches](../../api/ledger.md#dvc_dat.ledger.Value.matches), [diff](../../api/ledger.md#dvc_dat.ledger.Value.diff) |
 | Value.Blob  | [obj](../../api/ledger.md#dvc_dat.ledger.value.Blob.obj)                                                                                                                                                                                                                                                                                               |
 | Value.Table | [table](../../api/ledger.md#dvc_dat.ledger.value.Table.table)                                                                                                                                                                                                                                                                                     |
-| Dat         | [path](#^dat-path), [preds](#^dat-preds), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind)                                                                                                                                                       |
+| Dat         | [path](../../api/core.md#dvc_dat.core.Dat.path), [preds](../../api/core.md#dvc_dat.core.Dat.preds), [sealed_at_path](../../api/core.md#dvc_dat.core.Dat.sealed_at_path), [decode](../../api/core.md#dvc_dat.core.Dat.decode), [kind_ok](../../api/core.md#dvc_dat.core.Dat.kind_ok), [spec_kind](../../api/core.md#dvc_dat.core.Dat.spec_kind)                                                                                                                                                       |
 | Fn          | [name](../../api/ledger.md#dvc_dat.ledger.Fn.name), [module](../../api/ledger.md#dvc_dat.ledger.Fn.module), [code](../../api/ledger.md#dvc_dat.ledger.Fn.code), [mount](../../api/ledger.md#dvc_dat.ledger.Fn.mount), [env](../../api/ledger.md#dvc_dat.ledger.Fn.env), [signature](../../api/ledger.md#dvc_dat.ledger.Fn.signature), [kind](../../api/ledger.md#dvc_dat.ledger.Fn.kind), [reproducible](../../api/ledger.md#dvc_dat.ledger.Fn.reproducible), [()](../../api/ledger.md#dvc_dat.ledger.Fn.__call__) |
 
 
@@ -87,42 +87,7 @@ A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted
 ## Dat Interface
 `dvc_dat.ledger.Dat` is `dvc_dat.Dat`, one class (DAT 1038): a dat, the folder that is its own recipe ([DAT Dat](../DAT%20Dat.md)), is a `Value` whose bytes are the folder. It encodes as its content manifest, `{"files": {relpath: sha256}}`, written to the sink, and its files are its parts, streamed into the art store one at a time, so memory is bounded by the manifest, not the folder. Every file in the folder is hashed (`__pycache__` and the [subdats](#Subdats) skipped), `_spec_.yaml` and `_result_.yaml` included; each in 1 MiB blocks, the per-file hashes cached on the object, keyed by size, mtime and inode, so only a changed file is hashed again. The `db/value` row's kind and the folder's `dat.kind` are the same dotted name, `dvc_dat.core.Dat` or the subclass. A dat made by `Dat.create` or `Dat.manager.run` seals with no subclass once saved: `dat.seal(t, name="table/12")` stores its files and writes its row, and `rev.load("table/12")` returns a `Dat` whose `get_spec()`, `get_results()` and `get_path()` read the rebuilt folder. A folder whose `_spec_` names a `dat.kind` and was never saved (standing `open`) is `ValueError` naming `dat.save()`; a folder with no spec is a plain folder value.
 
-| Dat | |
-| --- | --- |
-| [Dat](#^dat) | The dat in a folder |
-| [path](#^dat-path) | The folder |
-| [at](#^dat-at) | The revision its run was against |
-| [preds](#^dat-preds) | The folder's facts, under the hand-written ones |
-| [sealed_at_path](#^sealed-at-path) | Reopen a folder sealed in another process |
-| [decode](#^dat-decode) | Materialise the folder from its manifest |
-| [kind_ok](#^kind-ok) | Whether a folder's dat.kind loads as this class |
-| [spec_kind](#^spec-kind) | The dat.kind a folder's spec names |
-
-**Dat**`(path, *, name: str | None = None)`
-    The dat already in the folder `path`: its spec and results read from `_spec_.yaml` and `_result_.yaml` (each `{}` when absent); a value whose bytes are the folder's manifest. `name` is the name a save gives it. `Dat.create(spec=...)` and `Dat.load(name)` make one through the dat manager ([DAT Class API](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Design/DAT%20API/DAT%20Class%20API.md)). ^dat
-
-**path**`: Path`
-    The folder, `get_path()` as a `Path`. After a save it is the stored copy under `art/dats/<16 hex>/`, or `art/dats/<name>/` when named; after a load by an alias, `art/dats/<alias>/`. Those files are hardlinks into the art store where the filesystem allows: write a new folder and seal it, never edit one in place. ^dat-path
-
-**at**`: Rev`
-    The revision the dat's run was against, named by `dat.run_rev` in the run sub-dat's results, `<ledger>@<rev>`, the ledger by name since a run may be on any ledger (SVP 1521). During the run it is the recording `Rev`, so a read through it enters the entry's provenance and a memo hit stays sound; afterwards a plain one, its ledger the value's, else the one open under that name, else the `ledgers:` entry. A runtime attribute, never in `_spec_.yaml` or the hash. A run function reads through it; a result must not vary with the string `dat.run_rev` itself. `ValueError` for a dat not run on a ledger. ^dat-at
-
-**preds**`: dict`
-    Unsealed: the scalar entries of the spec's `dat.kwargs`, then the scalar top-level entries of `_result_.yaml` other than `dat:`, then the spec's `dat.preds` (SVP 1508; a later source wins a clash), read from the folder on every access, under every pred written by hand, which wins. Sealed: the read-only mapping the seal fixed. The names are the class's `@ledger_class(preds=...)` plus the folder's own; the `dat:` record of the results (dependencies, standing, sha256) is never a pred. ^dat-preds
-
-**sealed_at_path**`(path, *, name: str | None = None) -> Dat | None` (classmethod)
-    The last seal record of the folder `path` not saved since, reopened in this process as the sealing process left it; `None` with no record. `v.seal(t)` on it saves exactly what the sealing process would have saved: the same subject, `SealBroken` on a changed byte unless kept. The record's class must be a subclass of the class called on, else `TypeError`. ^sealed-at-path
-
-**decode**`(src: BinaryIO, store: ArtStore, *, name: str | None = None) -> Dat` (classmethod)
-    The folder of the manifest read from `src` (paths and hashes, read whole), placed under `<art>/dats/<name>/` when loaded by a name, else `<art>/dats/<first 16 hex of the manifest hash>/`; each file is placed by `ArtStore.get_to`. A named folder holding other content (the alias was re-pointed) is replaced. The dat's spec and results are read from the placed folder. ^dat-decode
-
-**kind_ok**`(kind: str) -> bool` (classmethod)
-    Whether a folder whose `_spec_` names `dat.kind` `kind` loads as this class, the class its `db/value` row names. The default accepts this class or a subclass, by dotted name (or a bare name written before 2.3); a subclass widens it. ^kind-ok
-
-**spec_kind**`(path: Path) -> str | None` (static)
-    The `dat.kind` the folder's `_spec_.yaml` (or `_spec_.json`) names, if any. ^spec-kind
-
-
+The members a value uses: [path](../../api/core.md#dvc_dat.core.Dat.path) · [at](../../api/core.md#dvc_dat.core.Dat.at) · [preds](../../api/core.md#dvc_dat.core.Dat.preds) · [sealed_at_path](../../api/core.md#dvc_dat.core.Dat.sealed_at_path) · [decode](../../api/core.md#dvc_dat.core.Dat.decode) · [kind_ok](../../api/core.md#dvc_dat.core.Dat.kind_ok) · [spec_kind](../../api/core.md#dvc_dat.core.Dat.spec_kind); the rest are on [DAT Dat](../DAT%20Dat.md#dat-interface).
 
 ## Fn Interface
 A value function resolved at one revision: a frozen dataclass made by `rev.ns.load`, never by hand. Calling it is `run`. Only the snapshot has identity; a function is a name looked up inside it (DAT 1037): it has `name` and `code` and no `subject` or `sha`, since it is not on the timeline. It prints as `<Fn mnt.plane.measure.length@2.7.1>`, `str` `mnt.plane.measure.length@2.7.1`: the dotted name `@` its code's version; a mounted function's name starts `mnt.`. `code` says where the code comes from: installed in the ledger's own Python environment (imported in this process), or mounted from a checkout (`code.sandboxed`, run in a worker).
@@ -134,121 +99,34 @@ The package's other exports: the two ledger handles (also exported from `dvc_dat
 
 | dvc_dat.ledger | |
 | --- | --- |
-| [L](#^active-l) | The active ledger, resolved at each use |
-| [ledgers](#^ledgers) | The project's ledgers by name |
-| [ledger_class](#^ledger-class) | Declare a Value class's pred names |
-| [bump](#^bump) | Move a clock subject's version |
-| [bump_source](#^bump-source) | Raise a module's `__version__` in its source |
-| [attr](#^attr) | Walk a dotted path into an object |
-| [register_policy](#^register-policy) | Name a memo policy a ledger's `db/memo-policy` row can select |
-| [register_store](#^register-store) | Name a value store a ledger's `db/store` row can select |
-| [Remote](#^remote) | What a value store is: bytes by hash on a remote place |
-| [LedgerError](#^ledgererror) | Base of every ledger exception |
-| [Multiple](#^multiple) | Several matched where one was required |
-| [NotEvaluated](#^notevaluated) | A miss this environment cannot run |
-| [NotClean](#^notclean) | `clean=True`, and the code is not a clean version |
-| [NotPinned](#^notpinned) | A pin or rerun refused |
-| [NotCopied](#^notcopied) | A copy refused |
-| [SpecOnly](#^speconly) | A value this ledger holds as its spec alone |
-| [Differed](#^differed) | A rerun of a claim of `exact` gave another hash |
-| [UnmountedImport](#^unmountedimport) | A sandboxed import outside every mount |
-| [UntracedRead](#^untracedread) | A sandboxed read outside the allowed places, or an unsandboxed read of its repo outside the dats |
-| [ConfinedWrite](#^confinedwrite) | A sandboxed write outside the path folder |
-| [ConfinedNetwork](#^confinednetwork) | A sandboxed network use |
-| [LockTimeout](#^locktimeout) | A lock= body past its limit |
-| [Unlocked](#^unlocked) | `previous_rev` or a read-then-write helper without lock= |
-| [Unindexed](#^unindexed) | A query on an unknown dotted predicate |
-| [Exists](#^exists) | A write to a sealed subject's own rows |
-| [Undeclared](#^undeclared) | A pred name the class did not declare |
-| [AliasLoop](#^aliasloop) | An alias chain that loops or runs long |
-| [SealBroken](#^sealbroken) | A sealed value's bytes changed before saving |
-
-**L**`: Ledger`
-    The active ledger as one object: `from dvc_dat import L`. A `Ledger` (`isinstance` holds, so `v.seal(L)` and `seal=L` take it) whose every attribute is the ledger `Ledger()` would open, resolved from the working directory and `DAT_LEDGER` at each use and never at import; a checkout with a `ledgers:` section and no default imports it fine and raises the one-line `LedgerError` at the first use. `L.at()` is the `Head` of the real handle (a `Rev` that is also a transaction), the same handle `ledgers.<name>` gives for that ledger; `repr(L)` names it, or says why it is unresolved. See [Many ledgers](#Many%20ledgers). ^active-l
-
-**ledgers**`: Ledgers`
-    The `ledgers:` section of the nearest `.datconfig.yaml` (the override file's entries merged in), by name: `ledgers.record` or `ledgers["record"]` is that entry's `Ledger`, opened on first use and kept for the process; every name is a Python identifier, so every entry has the attribute form, `ledgers.do26`. `list(ledgers)` is the names in file order, `"games" in ledgers` a test; an unknown name is `KeyError` (`AttributeError` as an attribute) listing the section. A named handle asserts no `mounts:`; only the active ledger does. A project with the one-ledger `ledger:` key has no section: `ledgers.<name>` is `LedgerError` and its ledger is `L`. ^ledgers
-
-**ledger_class**`(*, preds: Iterable[str] = ())`
-    Class decorator naming the preds a `Value` subclass's values may carry. A name that is empty, not a `str`, or starts `db/` is `TypeError`, as is decorating a class that is not a `Value`. Writes nothing. ^ledger-class
-
-**bump**`(t: Transaction, subject: str, part: str = "patch", *, confirm=None) -> str`
-    Reads `db/version` through `t.previous_rev` (`0.0.0` when absent; a bare `version` row is not read), adds the next by `part`, and returns it. `minor` and `major` need `confirm(old, new)` to return `True`. A subject holding a `db/alias` is `TypeError`: a value's version is a pred, not a clock. A `db/repo/` subject is `TypeError` too: a code version lives in its source (`bump_source`), and the first clean run after it moves the `db/repo/<repo>/<package>` clock, which the ledger alone writes (DAT 1043, 1044). It needs `lock=`: unlocked it is `Unlocked` and writes nothing. ^bump
-
-**register_policy**`(name: str, fn: Callable[[Mapping], str]) -> None`
-    Registers `fn`, a function from a platform record to a `str`, as the memo policy `name`, for a `(db, db/memo-policy, name)` row to select ([Memoization and the platform](#Memoization%20and%20the%20platform)). A built-in name (`platform`, `card`) is `ValueError`; registering a name again replaces it. Process-local: every process that looks up under the name registers it first, else the lookup is `LedgerError`. ^register-policy
-
-**register_store**`(name: str, factory: Callable[[str], Remote]) -> None`
-    Registers `factory`, called once per process with a ledger's name and returning a `Remote`, as the value store `name`, for a `(db, db/store, name)` row or `local` to select ([Value stores](#Value%20stores)). `name` is `[a-z][a-z0-9_]*`; the built-ins `local` and `folder` are `ValueError`, a non-callable `TypeError`; registering a name again replaces it. Process-local, as `register_policy`: a process that seals onto the store, or misses on a value stored there, registers it first, else `LedgerError` naming the store. dvc-dat ships no cloud code; the consumer brings it (sv-pipe registers `gcp` and `azure`). ^register-store
-
-**Remote**`(Protocol)`
-    One ledger's bytes on a remote place, by sha256 hex: `exists(h) -> bool`; `put_path(path: Path, h)`, upload the file at `path` (its bytes hash to `h`), write-once; `get_to(h, dest: Path)`, download to the new file `dest`. Any of them may raise: a failed upload fails the commit with nothing written, a failed download fails the read (`LedgerError`). The conventional layout is `<bucket>/ledgers/<ledger>/sha256/<2>/<hash>` (`dvc_dat.ledger.remote.blob_name(ledger, h)`). A fetched file is checked against its hash by the ledger, not the remote. ^remote
-
-**bump_source**`(module: str, part: str = "patch", *, confirm=None) -> SourceBump`
-    Raises a module's `__version__` by `part` in its source and returns `SourceBump(module, old, new, path, repo, package)`. `module` is a dotted name importable in this process; the version is the innermost on its dotted path, the module's own file then each enclosing package's `__init__.py`, the first holding one line `__version__ = "X.Y.Z"` (so `demo_game.etl`, a mount root declaring its own, finds `demo_game/etl/__init__.py`). One line is rewritten; nothing is committed and no ledger is touched. `minor` and `major` need `confirm(old, new)` to return `True`. A module that does not resolve is `ModuleNotFoundError`; no `__version__` line, or one not `MAJOR.MINOR.PATCH`, is `ValueError`, nothing written. `repo` is the checkout's name, `None` outside one; `package` is the dotted root whose file holds the version, the `<package>` of the `db/repo/<repo>/<package>` clock the next clean run moves. A mount name is reached by its dotted module name, not by `db/mount/<prefix>`. `just bump <module> [part]` is this call. ^bump-source
-
-**attr**`(obj, path: str)`
-    Walks a dotted path over mappings, sequences (integer steps) and attributes; `KeyError` at the first missing step, `TypeError` for an empty path. ^attr
-
-**LedgerError**`(Exception)`
-    No ledger found or opened, or the backend refused. ^ledgererror
-
-**Multiple**`(LedgerError, LookupError)`
-    `value`, `refs(one=True)` or `select(one=True)` matched several. ^multiple
-
-**NotEvaluated**`(LedgerError, RuntimeError)`
-    A run the environment cannot make: a mount whose repo has no checkout here, or (unsandboxed) code outside any git checkout or a dirty checkout; or an unsandboxed function called inside a sandboxed body. ^notevaluated
-
-**NotClean**`(NotEvaluated)`
-    A `clean=True` call whose checkout is dirty, or not at the commit the revision's `db/repo/<repo>` row names, or whose revision names none. ^notclean
-
-**NotPinned**`(LedgerError, RuntimeError)`
-    A [`pin`](../../api/ledger.md#dvc_dat.ledger.Transaction.pin) or [`rerun`](../../api/ledger.md#dvc_dat.ledger.Rev.rerun) refused: the value is no run's result, its revision names no commit, the commit is unknown here or does not hold the code that ran, the function is not importable by its name at the commit, an input is on no ledger, the remote refused the push, or (`rerun`) the commit is not pinned. ^notpinned
-
-**NotCopied**`(LedgerError, RuntimeError)`
-    A [`copy`](../../api/ledger.md#dvc_dat.ledger.Transaction.copy) refused, nothing written: a value on no ledger or on this one already, an input that cannot be found, a ledger declaring no lifetime for `safe` to read, a pred declared otherwise here. ^notcopied
-
-**SpecOnly**`(LedgerError, LookupError)`
-    A load of a value this ledger holds as its spec alone: its rows, no bytes ([Copying](#Copying)). `rev.rerun` makes it again. ^speconly
-
-**Differed**`(LedgerError, RuntimeError)`
-    `pin(rerun=True)` of a value claiming `exact` whose rerun gave another hash; nothing written. ^differed
-
-**UnmountedImport**`(LedgerError, ImportError)`
-    A sandboxed body imported a module of a mounted repo that lies under no mount. ^unmountedimport
-
-**UntracedRead**`(LedgerError, PermissionError)`
-    A sandboxed body read outside the mounts, the art store and its `path` folder; or an unsandboxed body read a file of its own repo checkout outside the dats. ^untracedread
-
-**ConfinedWrite**`(LedgerError, PermissionError)`
-    A sandboxed body wrote outside its `path` folder, the dat being produced. ^confinedwrite
-
-**ConfinedNetwork**`(LedgerError, PermissionError)`
-    A sandboxed body resolved a host name or opened a network connection other than to a Postgres ledger's own endpoint. ^confinednetwork
-
-**LockTimeout**`(LedgerError, TimeoutError)`
-    A `lock=` body ran past its limit, or the lock was not had in time; nothing written. ^locktimeout
-
-**Unlocked**`(LedgerError, RuntimeError)`
-    `t.previous_rev`, or a helper reading through it (`bump`, `t[s] = {...}`, `del t[s, p]`, `del t[s]`), in a transaction opened without `lock=`; nothing written. ^unlocked
-
-**Unindexed**`(LedgerError, LookupError)`
-    A where clause or select key named a dotted predicate neither declared nor carried by any row. ^unindexed
-
-**Exists**`(LedgerError, ValueError)`
-    An `add`, `remove`, bracket write or `del` on one of a sealed subject's own predicates, or a `db/tag` name added before, raised at commit. ^exists
-
-**Undeclared**`(LedgerError, TypeError)`
-    At the seal, a pred name the class's `@ledger_class(preds=...)` did not declare. ^undeclared
-
-**AliasLoop**`(LedgerError, LookupError)`
-    A `db/alias` chain loops or runs past 8 hops. ^aliasloop
-
-**SealBroken**`(LedgerError, ValueError)`
-    Saving a value sealed by `seal()` whose bytes are no longer the bytes it was sealed with, and which was not kept. ^sealbroken
-
-
-
+| [L](../../api/ledger.md#dvc_dat.ledger.named) | The active ledger, resolved at each use |
+| [ledgers](../../api/ledger.md#dvc_dat.ledger.named.Ledgers) | The project's ledgers by name |
+| [ledger_class](../../api/ledger.md#dvc_dat.ledger.ledger_class) | Declare a Value class's pred names |
+| [bump](../../api/ledger.md#dvc_dat.ledger.bump) | Move a clock subject's version |
+| [bump_source](../../api/ledger.md#dvc_dat.ledger.bump_source) | Raise a module's `__version__` in its source |
+| [attr](../../api/ledger.md#dvc_dat.ledger.attr) | Walk a dotted path into an object |
+| [register_policy](../../api/ledger.md#dvc_dat.ledger.register_policy) | Name a memo policy a ledger's `db/memo-policy` row can select |
+| [register_store](../../api/ledger.md#dvc_dat.ledger.register_store) | Name a value store a ledger's `db/store` row can select |
+| [Remote](../../api/ledger.md#dvc_dat.ledger.Remote) | What a value store is: bytes by hash on a remote place |
+| [LedgerError](../../api/ledger.md#dvc_dat.ledger.errors.LedgerError) | Base of every ledger exception |
+| [Multiple](../../api/ledger.md#dvc_dat.ledger.errors.Multiple) | Several matched where one was required |
+| [NotEvaluated](../../api/ledger.md#dvc_dat.ledger.errors.NotEvaluated) | A miss this environment cannot run |
+| [NotClean](../../api/ledger.md#dvc_dat.ledger.errors.NotClean) | `clean=True`, and the code is not a clean version |
+| [NotPinned](../../api/ledger.md#dvc_dat.ledger.errors.NotPinned) | A pin or rerun refused |
+| [NotCopied](../../api/ledger.md#dvc_dat.ledger.errors.NotCopied) | A copy refused |
+| [SpecOnly](../../api/ledger.md#dvc_dat.ledger.errors.SpecOnly) | A value this ledger holds as its spec alone |
+| [Differed](../../api/ledger.md#dvc_dat.ledger.errors.Differed) | A rerun of a claim of `exact` gave another hash |
+| [UnmountedImport](../../api/ledger.md#dvc_dat.ledger.errors.UnmountedImport) | A sandboxed import outside every mount |
+| [UntracedRead](../../api/ledger.md#dvc_dat.ledger.errors.UntracedRead) | A sandboxed read outside the allowed places, or an unsandboxed read of its repo outside the dats |
+| [ConfinedWrite](../../api/ledger.md#dvc_dat.ledger.errors.ConfinedWrite) | A sandboxed write outside the path folder |
+| [ConfinedNetwork](../../api/ledger.md#dvc_dat.ledger.errors.ConfinedNetwork) | A sandboxed network use |
+| [LockTimeout](../../api/ledger.md#dvc_dat.ledger.errors.LockTimeout) | A lock= body past its limit |
+| [Unlocked](../../api/ledger.md#dvc_dat.ledger.errors.Unlocked) | `previous_rev` or a read-then-write helper without lock= |
+| [Unindexed](../../api/ledger.md#dvc_dat.ledger.errors.Unindexed) | A query on an unknown dotted predicate |
+| [Exists](../../api/ledger.md#dvc_dat.ledger.errors.Exists) | A write to a sealed subject's own rows |
+| [Undeclared](../../api/ledger.md#dvc_dat.ledger.errors.Undeclared) | A pred name the class did not declare |
+| [AliasLoop](../../api/ledger.md#dvc_dat.ledger.errors.AliasLoop) | An alias chain that loops or runs long |
+| [SealBroken](../../api/ledger.md#dvc_dat.ledger.errors.SealBroken) | A sealed value's bytes changed before saving |
 
 # Ledger Semantics
 The rows themselves: how triples are written, as revisions by transactions; how they are read, by the fold; which rows are the system's own; and where they live.
@@ -567,20 +445,9 @@ The decorators, under one name so code says what each belongs to (SVP 250 Q4): `
 
 | dvc_dat.dat | |
 | --- | --- |
-| [fn](#^dat-fn) | Mark a function as a value function; `reproducible=` its claim |
-| [warm](#^dat-warm) | A process-level memo by the canonical hash of the arguments |
-| [command](#^dat-command) | Mark a function a command: also `just <name>` |
-
-**fn**`(func=None, *, reproducible=None)`
-    `@dat.fn` or `@dat.fn(reproducible=...)`: marks `func` as a value function and returns it unchanged, still a plain callable: a plain call runs the body with whatever `Rev` it is given, records nothing and seals nothing, which is how it is unit-tested. `reproducible` is how far a rerun of it can be trusted ([Reproducibility](#Reproducibility)); a run writes it as the `db/reproducible` row. A missing return annotation, a non-callable, a class, or a claim outside the grammar is `TypeError` at decoration. ^dat-fn
-
-**warm**`(func)`
-    `@dat.warm`: a process-level memo for boot computations the author promises not to mutate (SVP 250 A7). The result is keyed by the canonical hash of the arguments, bound to the signature with defaults: a sealed `Value` by its hash (an unsealed one is `TypeError`), a `Ref` by its subject, a `Rev` by its ledger and revision, a `Ledger` by its location, plain data (a spec dict, a str, a number, a list) by `canonical()`; anything else is `TypeError` at the call. The result stays in the process and comes back to any later call with the same key; the process is at one commit, so the commit is in the key by construction. One bounded LRU per process, by bytes (`dat.warm.max_bytes`, `DAT_WARM_BYTES`, 2 GiB by default; sizes estimated: numpy by `nbytes`, torch by `numel * element_size`, pandas by `memory_usage(deep=True)`, bytes and str by length, containers and objects summed); a result over the whole budget is returned and not kept. `dat.warm.clear()` drops everything, `dat.warm.stats()` reports `entries`, `bytes`, `max_bytes`, `hits`, `misses`. Invisible to the ledger: a value function calling a warm function traces the same reads, so rerunnability is untouched, and a fresh-process rerun catches a broken promise as a hash that differs. In SVP, `kit_at(ledger, rev)` and `load_model(asset)`. ^dat-warm
-
-**command**`(*, args: str, help: str)`
-    `@dat.command(args="game=…", help="…")`: the function also runs as `just <name>` ([Command Line](../../cli.md) § Commands). ^dat-command
-
-
+| [fn](../../api/ledger.md#dvc_dat.ledger.fn.fn) | Mark a function as a value function; `reproducible=` its claim |
+| [warm](../../api/ledger.md#dvc_dat.ledger.warm.Warm) | A process-level memo by the canonical hash of the arguments |
+| [command](../../api/just.md#dvc_dat.just.command) | Mark a function a command: also `just <name>` |
 
 # Value Provenance
 A value's provenance is stored in the ledger as triples whose subject is the value: beside its `db/value` row and its preds, one `db/deps/<item>` row for every input the computation depended on. These rows are the value's *dependencies*. They are written once, at the save, and never change; whether the dependencies still *hold* is computed, by re-asking each item at a revision. Every object is one string, the identity the input had when the value was computed, so two values' dependencies compare row by row and nothing is loaded.
@@ -634,5 +501,5 @@ A sealed value never changes: an `add` or `remove` on one of its own rows is `Ex
 # BRIEF
 
 - Written from `dvc_dat/ledger/*.py` at v2.18.0. Every name here must exist in the code; re-read the code, not this page, before changing a signature.
-- The per-file pages beside this one are the internals and the full refusal lists; this page is the caller's interface. When a public signature changes, change both.
+- Each member's contract and refusals are its docstring; this page is the overview, tables generated from those docstrings, and the topics that span classes (246).
 - The figure is hand-written SVG; edit it directly.

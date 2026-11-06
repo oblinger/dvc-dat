@@ -226,16 +226,21 @@ class FnMark:
 
 
 def fn(func: Optional[Callable] = None, *, reproducible: Any = None) -> Any:
-    """``@dat.fn`` / ``@dat.fn(reproducible=...)``: mark a value function. It takes the ``Rev`` first and keywords
-    after, and returns a ``Value``.
+    """``@dat.fn`` / ``@dat.fn(reproducible=...)``: mark a value function.
 
-    The return annotation is required (``TypeError`` at decoration): a ``Value`` subclass means the
-    result must be one; any other annotation means a bare result is wrapped in ``Value.Blob`` (A31).
-    The function comes back unchanged and still callable (A52); nothing is written on import. ``reproducible``
-    (``FnMark``, the grammar in ``claim``) is how far a rerun of it can be trusted: ``"exact"`` (bit-identical;
+    It takes the ``Rev`` first and keywords after, and returns a ``Value``. ``func`` comes back unchanged and still
+    callable (A52): a plain call runs the body with whatever ``Rev`` it is given, records nothing and seals nothing,
+    which is how it is unit-tested; nothing is written on import.
+
+    The return annotation is required (``TypeError`` at decoration): a ``Value`` subclass means the result must be
+    one; any other annotation means a bare result is wrapped in ``Value.Blob`` (A31). A non-callable or a class is
+    ``TypeError`` too.
+
+    ``reproducible`` (``FnMark``, the grammar in ``claim``) is how far a rerun of it can be trusted
+    ([Reproducibility][reproducibility]); a run writes it as the ``db/reproducible`` row: ``"exact"`` (bit-identical;
     every memo lookup of it also asks for the same card and driver, and a rerun that differs is an error), ``True``
-    (good enough: a rerun that differs is allowed), ``None`` (default, unknown), ``False`` (flaky), a clause
-    ``(level, predicate, ...)``, or a list of clauses, first match wins. ``TypeError`` for anything else.
+    (good enough: a rerun that differs is allowed), ``None`` (default, unknown), ``False`` (flaky), a clause ``(level,
+    predicate, ...)``, or a list of clauses, first match wins. ``TypeError`` for anything else.
     """
     if func is None:
         clauses(reproducible)

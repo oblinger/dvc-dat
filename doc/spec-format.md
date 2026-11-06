@@ -228,7 +228,7 @@ dropped.
 `_result_.yaml` is written only by `dat.save()`: `create` writes no results
 file, and a run leaves its record in memory until the dat is saved. Every
 save stamps `dat.standing` — `rolling`, `open`, `sealed` or
-`referenceable`, what that save earned (see [Standing](concepts.md#standing)).
+`referenceable`, what that save earned (see [Standing](concepts.md#standing-how-far-a-dat-can-be-relied-on)).
 In the spec, `dat.standing` is a demand, `rolling` or `referenceable`.
 `dat.sha256` is the hash of the content saved, stamped by every save: the
 sha256 of sorted `relpath\0sha256` lines over every file in the folder but
@@ -257,7 +257,7 @@ accuracy: 0.95
 
 Arguments are **not** recorded here. They are in the spec.
 
-## The run sub-dat
+## The `run/` folder
 
 Every run makes `run/` inside the dat, a dat of its own with a minimal
 `_spec_.yaml` and a `_result_.yaml` holding the execution — when, how long,

@@ -130,6 +130,15 @@ def test_every_member_in_a_module_pages_table_has_a_first_line(page):
         obj = obj.final_target if obj.is_alias else obj
         empty = [name for name, member in public_members(obj) if not _first_line(member)]
         assert not empty, f"{dotted}: no docstring on {empty}"
+        wrapped = [name for name, member in public_members(obj) if not re.search(r"[.?)`:]$", _first_line(member))]
+        assert not wrapped, f"{dotted}: a first line that is no sentence, so a broken table row: {wrapped}"
+
+
+@pytest.mark.parametrize("page", MODULE_PAGES)
+def test_a_module_page_holds_no_third_level(page):
+    text = (REPO / "doc" / f"{page}.md").read_text()
+    assert not re.findall(r"^\*\*\w+\*\*.*\n    \S", text, re.MULTILINE), "a member paragraph: it belongs in the docstring"
+    assert "#^" not in text, "a link to a block id: member links reach the API reference"
 
 
 @pytest.mark.parametrize("page", sorted((REPO / "doc" / "api").glob("*.md")), ids=lambda p: p.stem)
@@ -170,7 +179,7 @@ def test_every_method_row_resolves_to_an_id_in_the_api_reference(page):
 @needs_site
 def test_only_the_published_paths_are_on_the_site():
     names = {p.relative_to(SITE).as_posix() for p in SITE.rglob("*")}
-    for excluded in ("DAT Track", "DAT Design", "DAT Hooks", "Docs", "DAT User Docs", "overview",
-                     "DAT Modules/dat", "DAT Demos/demo_game", "DAT Demos/demo_kinds", "DAT Demos/comfort-repo"):
+    for excluded in ("DAT Track", "DAT Design", "DAT Hooks", "Docs", "DAT User Docs",
+                     "DAT Demos/demo_game", "DAT Demos/demo_kinds", "DAT Demos/comfort-repo"):
         assert excluded not in names, excluded
     assert not [n for n in names if n.endswith(".py")]

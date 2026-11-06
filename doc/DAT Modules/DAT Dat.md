@@ -13,7 +13,7 @@ api:: [`dvc_dat.core`](../api/core.md) and [`dvc_dat.do`](../api/do.md) — the 
 
 *The spec is the record* is the topic that governs the Namespace node (arguments fork a new spec; they never ride beside one); the other topics annotate the nodes they govern.
 
-This page covers the dat half of `dvc_dat`: `Dat`, `DatManager` and `DatContainer` in `dvc_dat/core.py`, `Namespace` in `dvc_dat/do.py`, and the package's exports; the figure above is the heart. The per-file detail page is [dat.md](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Modules/dat.md); the history half, the ledger, has its own module doc, [DAT Ledger](ledger/DAT%20Ledger.md); the spec file is [Spec Format](../spec-format.md) and the command line [Command Line](../cli.md).
+This page covers the dat half of `dvc_dat`: `Dat`, `DatManager` and `DatContainer` in `dvc_dat/core.py`, `Namespace` in `dvc_dat/do.py`, and the package's exports; the figure above is the heart. The history half, the ledger, has its own module doc, [DAT Ledger](ledger/DAT%20Ledger.md); the spec file is [Spec Format](../spec-format.md) and the command line [Command Line](../cli.md).
 
 
 
@@ -22,131 +22,10 @@ A folder of data described by its `_spec_.yaml`, held in memory as the spec as w
 
 <!-- methods: dvc_dat.core.Dat -->
 
-**manager**`: DatManager`
-    On the class, the process's default world: a plain assignable attribute, built on first read by `DatManager.load_dat_config()`, shared by every subclass, and replaced by assigning a `DatManager` (anything else is `TypeError`; assigning `None` clears it, so the next read builds it again). On an instance, read-only: the manager that loaded the dat, else the default. See [The manager is the world](#The%20manager%20is%20the%20world). ^manager
-
-**ns**`: Any` (class property)
-    The forwarder `dvc_dat.do.ns`: every attribute goes to `Dat.manager.ns`, whichever manager that is at the moment of use, and it is not callable (running is `Dat.manager.run`, 2.35), so `ns = Dat.ns` binds a shortcut that follows a later reassignment. It is defined on the metaclass, so `Dat.ns` works and `some_dat.ns` is `AttributeError`. ^dat-ns
-
-**load**`(name_or_path: str | Path, *, cache_after_load: bool = True) -> Dat` (classmethod)
-    `Dat.manager.load(name_or_path)`, checked to be an instance of `cls`: a dat built as the class its `dat.kind` names, and `TypeError` when that class is not `cls` or a subclass (an artifact's name is `TypeError` too). Takes no `verify`; the default world's own setting applies. Recorded as a dependency inside a run, as every load is. ^load
-
-**create**`(path: str | Path | None = None, spec: dict | str | None = None) -> Dat` (classmethod)
-    `Dat.manager.create(spec, path=path)` with the class filled in: a spec with no `dat.kind` gets `cls`, and one naming a class outside `cls` is `TypeError` before anything is written. `path` comes first, positionally. ^create
-
-**get_spec**`() -> SpecDict`
-    The spec as written to `_spec_.yaml`: every `{}` reference already expanded except `dat.name`, which keeps the path template as given (the folder the dat landed in is `get_path_name()`), `dat.base` already merged in. Nothing rewrites it. ^get-spec
-
-**get_results**`() -> SpecDict`
-    The results dict, mutable; the run's function writes into it and `save` persists it as `_result_.yaml`. Holds `dat.dependencies` during a run before anything is saved. ^get-results
-
-**get_path**`() -> str`
-    The absolute path of the dat's folder. ^get-path
-
-**get_path_name**`() -> str`
-    The path relative to the dat folder that holds it, which is the dat's name in every lookup and dependency map; the absolute path for a dat outside every dat folder. ^get-path-name
-
-**run**`: Dat | None` (property)
-    The sub-dat `run/` that the last run (`Dat.manager.run`) made: its results hold `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code`, `dat.run_rev` (on a ledger) and `dat.content`, and its `work/` is the run's scratch. `None` for a dat never run. A run function reads the ledger through `dat.at`; a result must not vary with the string `dat.run_rev` itself. Loaded as a plain `Dat`, outside the load cache. See [The run sub-dat](#The%20run%20sub-dat). ^run
-
-**at**`: Rev` (property)
-    The `Rev` the run was against (`dat.run_rev`, `<ledger>@<rev>`): the recording one during the run, a plain one after. A runtime attribute, never in `_spec_.yaml` or the hash; `ValueError` for a dat not run on a ledger. ^dat-at
-
-**save**`() -> None`
-    Write `_result_.yaml`, stamping `dat.sha256`, `dat.hash: functional` and `dat.standing`, and key the new hash in the index. Inside the dat's own run it writes a checkpoint (`open`, or `rolling`) and asks for the seal, which comes when the run returns; anywhere else it seals now and adds the dependency `$MANUAL`. A dat already `sealed` or `referenceable` is `RuntimeError`, and so is a seal that earns less than a spec's `dat.standing: referenceable` demand. See [Sealing and the content hash](#Sealing%20and%20the%20content%20hash) and [Standing](#Standing). ^save
-
-**verify**`() -> bool`
-    `True` when the folder on disk, `run/` left out, still hashes to the `dat.sha256` its `_result_.yaml` carries; `False` when it does not, when there is no `_result_.yaml`, or when it carries no hash. Reads the file, not the in-memory results. ^verify
-
-**standing**`(name: str | Path | Dat) -> str | None` (static)
-    `Dat.manager.standing(name)`: `rolling`, `open`, `sealed` or `referenceable`, or `None` when nothing is stored under `name`. ^standing
-
-**save_artifact**`(source: str | Path, *, type: str | Callable | None = None, name: str | None = None, link: bool = False) -> str` (static)
-    `Dat.manager.save_artifact(...)`: store a file or folder as an artifact and return its URN, `sha256:<hex>`. ^save-artifact
-
-**load_artifact**`(name: str | Path, *, verify: bool | None = None) -> Any` (static)
-    `Dat.manager.load_artifact(name, verify=verify)`: an artifact by name or URN, handed to its recorded type, its payload's `Path` with none. ^load-artifact
-
-**delete**`(*, must_exist=True) -> bool`
-    Drop the dat from the load cache and its keys from the index, then remove the folder. `True` when removed; a missing folder raises `Exception` with `must_exist`, else returns `False`. ^delete
-
-**copy**`(new_path: str | Path, *, run: bool = True) -> Dat`
-    Copy the folder to `new_path` (a name resolves under the first dat folder) and load the copy as the same class. `run=False` leaves `run/` behind, which does not change the copy's hash. An existing target raises `Exception`. The copy is not indexed until it is saved. ^copy
-
-**move**`(new_path: str | Path) -> Dat`
-    Move the folder to `new_path`, drop the old name's index keys, and key the moved dat's hash to its new name. Returns the dat loaded from its new place. An existing target raises `Exception`. Dependency maps that recorded the old name keep it. ^move
-
-**validate_spec**`(spec: SpecDict) -> SpecDict` (classmethod)
-    Check a spec on create and on load, on the class `dat.kind` names, and return it, possibly coerced. The default fills `dat.kind` with the class, requires `spec` and `spec['dat']` to be mappings (`TypeError`), `dat.standing` to be `rolling` or `referenceable` (`ValueError`), and `dat.kind`, `dat.name`, `dat.do`, `dat.target_exists` to be strings, which catches a `{reference}` left unquoted in YAML. A subclass calls `super()` and adds its own checks. ^validate-spec
-
-**get**`(source: Dat | dict, keys: str | list[str], default_value: Any = <required>) -> Any` (static)
-    The value at a dotted key path (`"dat.do"` or a list of keys) in a dict tree, or in a dat's spec when `source` is a `Dat`. A missing key, or a value that is `None`, returns `default_value`, and is `KeyError` when none is given; a non-dict on the path is `ValueError`. ^get
-
-**set**`(source: SpecDict, keys, value) -> None` (static)
-    Set `value` at a dotted key path, creating the missing levels as dicts; a non-dict on the path raises `Exception`. ^set
-
-**merge_dicts**`(*dicts: Dict, inplace: bool = False) -> Dict` (static)
-    Merge dicts left to right, each overriding the ones before: mappings merge key by key, lists of mappings that all carry a `name` merge by name (`{name: X, remove: true}` deletes X), and anything else is replaced whole. The first dict is copied unless `inplace`. The merge `dat.base` uses, and the way to vary an existing spec. ^merge-dicts
-
-**cli_main**`(argv: list[str] | None = None, *, config: str | Path | None = None) -> int` (static)
-    The command line (`just run`, `x`), `dvc_dat.do.cli_main`, for a program's own main: the program imports and mounts what it needs, then hands over its arguments. Returns the exit code. ^cli-main
-
-
-
 ## DatManager Interface
 A world of dats: the dat folders searched by name (the first is where new dats are made), the artifact folder beside them, the index of names and URNs, and an `ns` namespace that names things; `run` runs dats, specs and callables. Every dotted spec, `dat.base`, `{}` expansion, path lookup and run goes through the manager's `ns`, so every load inside a run passes through the manager and is recorded. Any number of managers coexist; `Dat.manager` is the default one. `run` is fixed; a subclass that overrides the private `_execute` and calls `super()` wraps every run in its world.
 
 <!-- methods: dvc_dat.core.DatManager -->
-
-**__init__**`(*, dat_folders: list[str], art_folder: str | None = None, index: str | None = None, ns: Namespace | None = None, verify: bool = False)`
-    A world on `dat_folders`, searched in order, the first written to; `art_folder` holds the artifacts, and with none this world holds no artifacts. `index` is the index file, default `_index_.json` in the artifact folder, else in the first dat folder. `ns` adopts an existing namespace with its mounts, and adopting the default world's `ns` makes this manager the default world; with none the manager builds a fresh `Namespace`. Every manager mounts `dvc_dat.dat_tools` at `dt`. `verify` sets the default of every load's `verify`. Reads nothing from disk. A string for `dat_folders` is `TypeError`, an empty list `ValueError`, an artifact folder nested with a dat folder `ValueError`, a non-bool `verify` `TypeError`. ^--init--
-
-**load_dat_config**`(start: str | Path | None = None, *, ns: Namespace | None = None) -> DatManager` (classmethod)
-    A new manager from the `.datconfig.yaml` found walking up from `start` (default the working directory; a file path names the config file itself), with `.datconfig.override.yaml` over it and `DAT_FOLDERS` / `DAT_ART_FOLDER` over both. Relative folders resolve against the config's folder, which goes first on `sys.path`. A `manager:` key builds that dotted subclass instead, and its `CONFIG_KEYS` class attribute names extra keys passed to its constructor. An unknown key, or a malformed value, is `ValueError`; a `manager:` that is not a subclass is `TypeError`. See [Configuration](#Configuration). ^load-dat-config
-
-**ns**`: Namespace`
-    The manager's namespace, its only public attribute: `m.ns.mount(...)` adds names to it, `m.ns.load(...)` resolves them; it is not callable. ^datmanager-ns
-
-**create**`(spec: dict | str | None = None, *, path: str | Path | None = None) -> Dat`
-    Make a dat as the class its `dat.kind` names. `spec` is a dict or a dotted name loaded through `ns`; `dat.base` is merged in, `validate_spec` runs, and the folder is `path`, else the spec's `dat.name` template, else `anonymous/Dat{unique}`, under the first dat folder. `dat.target_exists` settles an existing folder, and `use` returns the dat already there. Every `{}` in the spec is expanded once, with the same `now` and `unique` the folder got, `dat.name` keeps the path template (`path` as given, else the spec's own; a constant path is its own template), never its expansion, and the result is written as `_spec_.yaml`; no `_result_.yaml` is written. A name an artifact holds is `FileExistsError`; a spec that is not YAML data once expanded is `TypeError`, and the folder is removed. See [The spec is the record](#The%20spec%20is%20the%20record). ^datmanager-create
-
-**load**`(name: str | Path, *, cache_after_load: bool = True, verify: bool | None = None) -> Any`
-    What `name` names: a dat, built as the class its `dat.kind` names, or an artifact, handed to the type recorded at its save. `name` is a dat's name or path, an artifact's name, or the `sha256:` URN of either. A dat is searched as an absolute path, then among the dats mounted in `ns`, then in each dat folder; not found is `KeyError`, a folder with no spec `FileNotFoundError`, a name both a dat and an artifact hold `ValueError`. Dats are cached by path, weakly, so a second load returns the same object while it lives; `cache_after_load=False` skips the cache. `verify` (default the manager's) re-hashes and raises `ValueError` naming both hashes on a mismatch. Inside a recording the load lands in the recording dat's `dat.dependencies`. ^datmanager-load
-
-**load_path**`(name: str | Path, *, verify: bool | None = None) -> Path`
-    The dat's folder or the artifact's payload that `load(name)` would use, as a `Path`, with no type called. Recorded and verified exactly as `load`. ^load-path
-
-**exists**`(name: str | Path) -> bool`
-    `True` when `name` (a dat's name, an artifact's, or a URN) names something stored; a dat counts when its folder holds a spec file. ^exists
-
-**standing**`(name: str | Path | Dat) -> str | None`
-    How far `name` can be relied on, read from its files without building it: `rolling`, `open`, `sealed` or `referenceable`; `None` when nothing is stored under it. An artifact is `referenceable`; a `Dat` instance answers from its last write. See [Standing](#Standing). ^datmanager-standing
-
-**run**`(target: str | dict | Callable, *args, **kwargs) -> Any`
-    The one way to run a dat outside a ledger, fixed (2.35, DAT 1049). `target` is first loaded through `ns` when it is a name. A callable is called with `args` and `kwargs`. A template spec is forked: `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key, the new spec creates a dat (`dat.target_exists: use` returns the existing one unrun), and that dat runs with no call-site arguments. The keywords are also the spec's expansion variables (SVP 1508): an undotted `{name}` anywhere in it, `dat.name` and `dat.preds` included, is `dat.kwargs.name` (the spec's own updated by the call's), else `dat.defaults.name`, else a built-in. A `Dat` is `TypeError`: it runs once, when made; `run(dat.get_spec(), ...)` runs its recipe as a new dat (SVP 1508). Anything else is `TypeError`. Returns the run's value, or the dat when the spec has no `dat.do`. Every error is re-raised as `Exception("In <target>")` chained from the original. See [The spec is the record](#The%20spec%20is%20the%20record).
-
-    A dat's run (the private `_execute`) calls `fn(dat, *dat.args, **dat.kwargs)`, with `fn` the object `dat.do` names loaded through this world's `ns`, inside `recording(dat)`, with a fresh `run/` sub-dat holding the run's record and `run/work/` as the working directory. Returns `fn`'s value, or the dat when the spec has no `dat.do`. Saves nothing by itself; a `dat.save()` inside `fn` is answered with the seal when `fn` returns. A sealed dat is `RuntimeError`, a non-callable `dat.do` `TypeError`, and a spec demanding `referenceable` is `RuntimeError` when the code is dirty or outside a git checkout. Every run in the world, nested ones and a ledger's dat runs included, comes there; `dat.run` is the `run/` sub-dat. See [The run sub-dat](#The%20run%20sub-dat). ^datmanager-run
-
-**recording**`(dat: Dat)` (context manager)
-    Every `load`, `load_path` and `save_artifact` inside the block lands in `dat`'s `dat.dependencies`, name to hash. Blocks nest: when an inner block ends, its dat becomes one entry of the outer one. A run calls its function inside one; a builder gathering a dat's inputs outside a run uses it directly. See [Dependency capture](#Dependency%20capture). ^recording
-
-**record_dependency**`(name: str, sha256: str | None = None) -> None`
-    Add `name -> sha256` to the recording dat's dependencies, for an input that reached the run around the manager (a URL, a file read directly). `RuntimeError` when nothing is recording. ^record-dependency
-
-**roots**`(deps: Dict[str, Any]) -> Dict[str, Any]`
-    `deps` less every entry that another entry's dat already lists among its own dependencies; the trim a seal applies. ^roots
-
-**code_of**`(fn: Callable) -> Dict[str, Any] | None` (static)
-    `{branch, commit, dirty}` of the git checkout holding `fn`'s source, as a run records it in `dat.code`: `branch` is `None` on a detached HEAD, `dirty` counts tracked files outside the paths the repo's `.gitattributes` marks `dat-noncode`. `None` when the source is outside a checkout. ^code-of
-
-**save_artifact**`(source: str | Path, *, type: str | Callable | None = None, name: str | None = None, link: bool = False) -> str`
-    Store the file or folder `source` in the artifact folder and return its URN, `sha256:<hex>`. `type` is what a load hands the payload's path to: a class or callable, recorded by its dotted name, or that name as a string, anything `ns.load` resolves; one that does not load back by its name is `TypeError`. `name` is a relative path held once; with none the artifact answers to its URN only. Bytes already stored are not stored again: the new name becomes a second key to them. `link` hard-links instead of copying. Errors: no artifact folder `RuntimeError`, a malformed name `ValueError`, a missing source `FileNotFoundError`, a name already held by a dat or an artifact `FileExistsError`. Recorded inside a recording. See [Artifacts and the index](#Artifacts%20and%20the%20index). ^datmanager-save-artifact
-
-**load_artifact**`(name: str | Path, *, verify: bool | None = None) -> Any`
-    The artifact `name` (a name or a URN) names, handed to its recorded type, or its payload's `Path` with none. A dat's name is `KeyError`; `load` takes either. A type that no longer resolves is `ImportError`. ^datmanager-load-artifact
-
-**reindex**`() -> int`
-    Rebuild the index from the folders: every artifact's names and URN from its `_art_.yaml`, every saved dat's URN from its `_result_.yaml`. Returns the number of keys. ^reindex
 
 ## DatContainer Interface
 A `Dat` whose folder holds other dats: every folder below it carrying a spec file, found lazily and loaded through the container's own world. A child's `run/` sub-dat is not a child. Made and loaded like any dat, with `dat.kind` naming `DatContainer` or a subclass.
@@ -163,37 +42,13 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
 
 | dvc_dat | |
 | --- | --- |
-| [Dat](#^dat) | The folder that is its own recipe |
-| [DatContainer](#^datcontainer) | A dat holding dats |
-| [DatManager](#^datmanager) | A world of dats |
-| [Namespace](#^namespace) | A namespace bound to a world |
-| [L](#^l) | The active ledger |
-| [ledgers](#^ledgers) | The project's ledgers by name |
-| [__version__](#^--version--) | The package version |
-
-**Dat**`(class)`
-    From `dvc_dat.core`; see [Dat Interface](#Dat%20Interface). ^dat
-
-**DatContainer**`(class)`
-    From `dvc_dat.core`; see [DatContainer Interface](#DatContainer%20Interface). ^datcontainer
-
-**DatManager**`(class)`
-    From `dvc_dat.core`; see [DatManager Interface](#DatManager%20Interface). ^datmanager
-
-**Namespace**`(class)`
-    From `dvc_dat.do`; see [Namespace Interface](#Namespace%20Interface). ^namespace
-
-**L**`: Ledger`
-    From `dvc_dat.ledger.named`: the active ledger, `DAT_LEDGER`, else the `ledgers:` section's `default:` or `ledger:`, resolved at each use ([DAT Ledger § Many ledgers](ledger/DAT%20Ledger.md#Many%20ledgers)). ^l
-
-**ledgers**
-    From `dvc_dat.ledger.named`: `ledgers.<name>` or `ledgers["<name>"]`, a name being a Python identifier, that entry of the `ledgers:` section. ^ledgers
-
-**__version__**`: str`
-    The package version, `"2.41.0"` at this checkout. ^--version--
-
-
-
+| [Dat](../api/core.md#dvc_dat.core.Dat) | The folder that is its own recipe |
+| [DatContainer](../api/core.md#dvc_dat.core.DatContainer) | A dat holding dats |
+| [DatManager](../api/core.md#dvc_dat.core.DatManager) | A world of dats |
+| [Namespace](../api/do.md#dvc_dat.do.Namespace) | A namespace bound to a world |
+| [L](../api/ledger.md#dvc_dat.ledger.named) | The active ledger |
+| [ledgers](../api/ledger.md#dvc_dat.ledger.named.Ledgers) | The project's ledgers by name |
+| `__version__` | The package version |
 
 # Dat Semantics
 
@@ -224,7 +79,7 @@ A `{unique}` in the template increments whatever `target_exists` says. The `{}` 
 ## Sealing and the content hash
 Every `save` writes `_result_.yaml` and stamps `dat.sha256`, the hash of the dat's content: the sha256 of sorted `relpath\0sha256` lines over every file in the folder except `run/`, with `_spec_.yaml` counted as its sorted-key YAML dump less `dat.name`, and `_result_.yaml` as its sorted-key dump with `dat.sha256` set to `excluded`, so the hash sits inside the file it covers. `dat.hash: functional` in the results names this rule, the only one; a hash a 2.x save stamped does not verify. The name and the run are not content, so two runs of one recipe at two places hash the same when the code is functional, and a dat that hashes differently from its twin wrote something undeclared.
 
-The save that counts seals the dat, after which `save` and a run refuse it. Inside the dat's own run a save is a checkpoint, written `open`, and asks for the seal, which the run performs when the function returns. A save anywhere else, a folder filled by hand or a run's results saved after it returned, seals at once and adds the dependency `$MANUAL: manual`. At the seal the dependency map keeps its roots only ([roots](#^roots)). `verify()`, and a load with `verify`, recompute the hash the same way: a changed data file, recipe or result fails it; a reformatted YAML file, a renamed dat or anything under `run/` does not.
+The save that counts seals the dat, after which `save` and a run refuse it. Inside the dat's own run a save is a checkpoint, written `open`, and asks for the seal, which the run performs when the function returns. A save anywhere else, a folder filled by hand or a run's results saved after it returned, seals at once and adds the dependency `$MANUAL: manual`. At the seal the dependency map keeps its roots only ([roots](../api/core.md#dvc_dat.core.DatManager.roots)). `verify()`, and a load with `verify`, recompute the hash the same way: a changed data file, recipe or result fails it; a reformatted YAML file, a renamed dat or anything under `run/` does not.
 
 
 
@@ -295,7 +150,13 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 
 
 
+## Invariants
+- The spec on disk is a record: every `{}` is expanded once at create, except `dat.name`, which keeps the path template (never the path it expanded to), and call-site arguments go into a new spec.
+- A sealed (or referenceable) dat is never rewritten: `save` and `run` refuse it.
+- `dat.sha256` hashes the folder without `run/`; a run is not content.
+- Standing is the least of the inputs', capped at `sealed` by dirty code or code outside a checkout.
+- Dats and artifacts share one namespace and one index.
+
 # BRIEF
 - Hand-written against `dvc_dat/core.py` and `dvc_dat/do.py` at 2.18.0; the code is the authority, and every name and signature here was read from it. The figure is hand-written SVG; edit it beside this page.
-- [dat.md](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Modules/dat.md) is the terse per-file list of the same surface and stays as it is; keep the two in step when the surface changes. `dvc_dat.ledger.Dat` is this class since 2.28.0 (DAT 1038); its value side is documented under [DAT Ledger](ledger/DAT%20Ledger.md).
-- Block IDs: `Dat.ns` is `^dat-ns` and `DatManager.ns` `^datmanager-ns`, one page holding both; a prefix with the package name would carry an underscore, which breaks an Obsidian block link.
+- Each member's contract is its docstring; the tables here are generated from them (246). `dvc_dat.ledger.Dat` is this class since 2.28.0 (DAT 1038); its value side is documented under [DAT Ledger](ledger/DAT%20Ledger.md).
