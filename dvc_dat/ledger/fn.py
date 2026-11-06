@@ -168,15 +168,15 @@ def check_late_code(run: RunTrace, env: Env) -> None:
 
 
 def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
-             refuse_held: bool = False) -> str:
+             refuse_held: bool = False, plan: Optional[List[Any]] = None) -> str:
     """Write ``value`` as ``run``'s memo entry into the open transaction ``t``; its subject.
 
     The entry ``seal_entry`` always wrote: ``db/fn`` (the dotted name), ``db/keys``, ``db/returns``
     (the function's return annotation), ``db/reproducible`` (its claim, when it makes one), ``db/at`` (the
     revision the run read: provenance, outside the subject's hash and the hit test, SVP 245), the trace as
     ``db/deps/*`` (``code`` naming the ``db/code/<hash 16>`` item, written once), ``db/value``, under
-    ``<hash of (fn, keys, trace, preds, value)>``. ``refuse_held``: an
-    identical entry already on the ledger raises ``_AlreadySealed`` (the caller loads it)."""
+    ``<hash of (fn, keys, trace, preds, value)>``, its subdats with it (``plan``, ``Transaction._subdat_plan``).
+    ``refuse_held``: an identical entry already on the ledger raises ``_AlreadySealed`` (the caller loads it)."""
 
     if value.sealed and value.subject is None and "_run" not in value.__dict__:
         raise TypeError(f"{run.name} returned a {type(value).__name__} sealed by v.seal(); run seals its "
@@ -184,6 +184,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     t._open("seal")
     value._sealable()
     check_loadable(value)
+    plan = t._subdat_plan(value, None) if plan is None else plan
     if ledger_key(t._ledger) != run.ledger:
         raise ValueError(f"{run.name}: the result ran against {run.ledger}; its memo entry goes there, "
                          f"not to {ledger_key(t._ledger)}")
@@ -208,6 +209,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     value.__dict__["_run"] = run            # an abandoned transaction leaves a draft that can be saved again
     t._seal(value, subject, run.trace, run.provenance, pred_rows, extra, name)
     t._freeze(value, subject, run.trace)
+    t._seal_subdats(plan, value, subject, name, run.provenance)
     return subject
 
 

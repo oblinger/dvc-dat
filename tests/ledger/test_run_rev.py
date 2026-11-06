@@ -68,7 +68,7 @@ SPEC = {"dat": {"do": "ledger_kinds.reads_at", "kwargs": {"name": "seed"}}}
 def test_run_rev_names_the_ledger_and_the_revision_beside_run_at(coded, world):
     rev = blob(coded, "seed")
     v = rev.run(SPEC)
-    results = v.run.get_results()
+    results = coded.at()[v.subject, "db/subdat/run"].load().get_results()
     at = Dat.get(results, "dat.run_rev")
     assert at == f"{coded._store.name}@{rev.id}" and Dat.get(results, "dat.run_at")
     assert v.get_results()["out"] == {"at": "seed"} and v.get_results()["rev"] == rev.id
@@ -79,7 +79,8 @@ def test_run_rev_is_set_before_the_function_runs_and_outside_the_hash(coded, wor
     v = rev.run(SPEC)
     assert v.get_results()["seen"] == f"{coded._store.name}@{rev.id}"       # read in the body
     assert "run_rev" not in (v.path / "_spec_.yaml").read_text()
-    assert "run_rev" not in (v.path / "_result_.yaml").read_text() and "run_rev" in (v.path / "run/_result_.yaml").read_text()
+    assert "run_rev" not in (v.path / "_result_.yaml").read_text() and "run_rev" in (
+        coded.at()[v.subject, "db/subdat/run"].load().path / "_result_.yaml").read_text()
     from dvc_dat.core import _hash_dat
 
     assert _hash_dat(v.path, v.get_results()) == Dat.get(v.get_results(), "dat.sha256")

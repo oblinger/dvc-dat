@@ -232,7 +232,7 @@ save stamps `dat.standing` — `rolling`, `open`, `sealed` or
 In the spec, `dat.standing` is a demand, `rolling` or `referenceable`.
 `dat.sha256` is the hash of the content saved, stamped by every save: the
 sha256 of sorted `relpath\0sha256` lines over every file in the folder but
-the `run/` sub-dat. `_spec_.yaml` is hashed as its sorted-key YAML dump with
+its subdats: `run/` and any other folder inside it whose spec names `dat.kind`. `_spec_.yaml` is hashed as its sorted-key YAML dump with
 `dat.name` left out (the name is the dat's address, not its content), and
 `_result_.yaml` as its sorted-key dump with `dat.sha256` set to `excluded`,
 so the hash can live inside the file it covers. `dat.hash: functional` marks
@@ -240,7 +240,7 @@ a file hashed this way, the only rule; a hash a 2.x save stamped does not
 verify. `dat.verify()`
 recomputes it the same way and is `True` while the content is exactly as it
 was last saved — a changed data file, recipe or result makes it `False`;
-reformatting the YAML, renaming the dat or anything under `run/` does not. A results file with no `dat.standing` (never saved, or written
+reformatting the YAML, renaming the dat or anything under a subdat does not. A results file with no `dat.standing` (never saved, or written
 before 2.14, whose 2.13 keys are not read) is open, rolling when its spec
 demands `dat.standing: rolling`, until saved.
 

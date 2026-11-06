@@ -260,6 +260,32 @@ class Rev:
             raise TypeError(f"{p!r} is declared db/type {decl!r} at rev {self.id}; the stored object is "
                             f"{tag(text)}:{show(text)[:40]!r} (the loose reads, all and rev[s], return it)")
 
+    def _subdat_children(self, subject: str) -> List[Tuple[str, str]]:
+        """``(relpath, child subject)`` of each sealed subdat of ``subject`` (its ``db/subdat/`` rows)."""
+        out = []
+        for _s, p, h in self._held_rows(subject=subject):
+            if p.startswith("db/subdat/") and tag(h.obj) == "ref":
+                child = parse_ref(h.obj)[2]
+                if child:
+                    out.append((p[len("db/subdat/"):], child))
+        return out
+
+    def _alias_tree(self, subject: str, name: Optional[str]) -> List[Tuple[str, Optional[str]]]:
+        """``(value, its new name)`` for the aliases under ``subject``'s name when that name becomes ``name``
+        (``None``: unnamed): every alias with prefix ``<old>/``, each keeping its tail. With no old name, its
+        subdats by their rows, named ``<name>/<relpath>`` for the first time."""
+        old = name_of(self, subject)
+        if old == name:
+            return []
+        if old is not None:
+            return [(show(h.obj), None if name is None else name + s[len(old):])
+                    for s, _p, h in self._held_rows(predicate="db/alias", prefix=old + "/")]
+
+        def named(s: str, at: str) -> List[Tuple[str, Optional[str]]]:
+            return [x for rel, child in self._subdat_children(s)
+                    for x in [(child, f"{at}/{rel}"), *named(child, f"{at}/{rel}")]]
+        return named(subject, name) if name is not None else []
+
     def _aliases_of(self, subject: str) -> List[str]:
         out = []
         for s in self._store.subjects(self.id, predicate="db/alias", obj="str:" + subject):

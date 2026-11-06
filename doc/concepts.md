@@ -104,7 +104,8 @@ the run's scratch, and the working directory while the code runs: a file the
 code writes without naming a place lands there. `dat.run` is the sub-dat
 (`None` for a dat filled by hand).
 
-The run is **not content**. `dat.sha256` leaves `run/` out, and leaves
+The run is **not content**. `dat.sha256` leaves `run/` out, as it leaves out
+every dat inside the folder, a repo inside a repo, and it leaves
 `dat.name` out of the spec, since the name is where the dat is, not what it
 is. So two runs of one recipe hash the same when the code is functional —
 on two machines, at two paths, on two days — and a dat that hashes

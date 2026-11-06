@@ -71,7 +71,7 @@ given.
 | `.get_results() -> dict` | The mutable results tree |
 | `.get_path() -> str` | The dat's absolute path |
 | `.get_path_name() -> str` | Its name, relative to the dat folder |
-| `.save()` | Write `_result_.yaml`, stamp `dat.sha256` (content: `run/` and the name left out) and `dat.standing`; the save that counts seals |
+| `.save()` | Write `_result_.yaml`, stamp `dat.sha256` (content: the subdats, `run/` among them, and the name left out) and `dat.standing`; the save that counts seals |
 | `.verify() -> bool` | True while the content still hashes to its `dat.sha256` |
 | `.run -> Dat` | The run sub-dat `run/`: `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code`, `dat.run_rev`, `dat.content`; its `work/` is the scratch |
 | `.at -> Rev` | The revision its run was against, recording during the run |

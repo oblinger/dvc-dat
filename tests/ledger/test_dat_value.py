@@ -61,8 +61,8 @@ def test_a_dats_preds_default_to_its_kwargs_and_results(L, world):
 
 
 def test_values_of_kind_dat_find_it(L, world):
-    made().seal(L, name="table/12")
-    made(n=5).seal(L, name="table/5")
+    made().seal(L, name="table/12", skip=("run",))
+    made(n=5).seal(L, name="table/5", skip=("run",))
     assert [str(v) for v in L.at().values(kind=Dat)] == ["table/12", "table/5"]
     assert str(L.at().value(n=5)) == "table/5"
 
