@@ -9,7 +9,13 @@ Every user-visible change to `dvc_dat`, newest first.
 ## Unreleased
 
 - **`Value.Table` encodes its columns, not how they were held (SVP 1543).** `encode` drops schema metadata (the table's and each top-level field's, pandas' included), combines chunks, names every parquet writer option, and writes the footer's `created_by` as `dvc-dat Value.Table` in place of `parquet-cpp-arrow version <x>`. Equal tables now give the same bytes whatever their chunking, pandas or arrow origin, metadata, or pyarrow version (25.0.1 and 26.0.0 measured identical), and a table over 131072 rows re-encodes the same after a read. A decoded table carries no metadata: a `DataFrame`'s pandas metadata is not restored. **Stored hashes of every `Value.Table` move**: an old lookup misses and recomputes; nothing wrong is returned.
+
+## 2.62.0 — 2026-11-05
+
 - **A value's encoding is deterministic and lossless (SVP 1542).** The rule is on `Value` and in [DAT Ledger](doc/DAT%20Modules/ledger/DAT%20Ledger.md) § Value Interface, and `tests/ledger/test_value_encoding.py` measures `Value.Blob`, `Value.Table`, `Dat` and `Code` against it; what each breaks today is `xfail(strict=True)`. Docs and tests: no encoding changed.
+- **A sandboxed body reads other registered ledgers (SVP 1521 Q3 (A); minor).** `ledgers.<name>`, `dat.at("<name>@<rev>")` and `dat.load("<name>@<rev>:<value>")` work in a sandboxed function, SQLite and Postgres, over the caller's `ledgers:` section, which crosses to the worker with the call. The handle is read-only (`Ledger.read_only`): `Transaction` refuses it, its connections are read-only, and `rev.run` on it is a lookup, a miss `ConfinedWrite`. Each value or run read is a `foreign:` item with its `<ledger>@<rev>`; a raw row is untracked; a memo hit is unchanged (Q2 (A)). A `Dat` read so is rebuilt in the child, nothing placed on that ledger (`ReadOnlyArt`, `ArtStore.dats`). A `Ref` or sealed `Value` key on another ledger now works in the worker: it crosses with its location and revision. An unsaved `Value` stays refused as a key (Q4). `Ledger(<location>)` in a body stays `ConfinedWrite`.
+- **`rev.last_rev(*pattern, default=None, since=None)` (SVP 1521 A2).** The `Rev` of the last row matching a pattern at or before `rev`, removes included: `history(*pattern)[-1].rev` without decoding. `L.at(412).last_rev("game/G1").id`.
+- **Fix: fetching a value's bytes from its store inside a sandboxed body.** The fetch's own folder and temp file went through the write hook; the whole fetch is now the ledger's machinery.
 - **The Rerunning tutorial (SVP 245).** `demo-rerunning`: a past revision read, today's code over it, a sweep through `L.revs`, what a sweep recomputes, and a value rerun from its pinned commit. Docs only.
 
 ## 2.61.0 — 2026-11-05

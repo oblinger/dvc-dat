@@ -268,3 +268,33 @@ def test_the_row_cannot_be_retracted(world):
     with pytest.raises(Exists, match="is sealed: 'db/at'"):
         with world.L.transaction(by="t") as t:
             t.remove(v.subject, "db/at", "1")
+
+
+def test_last_rev_is_the_last_row_of_a_pattern_removes_included(tmp_path):
+    """SVP 1521 A2: the revision of the last matching row at or before the view, as ``history`` gives it."""
+    from dvc_dat.ledger import Ledger
+
+    L = Ledger(tmp_path / "led", create=True)
+    with L.transaction(by="t") as t:
+        t.add("game/G1", "home", "A")
+    one = L.at().id
+    with L.transaction(by="t") as t:
+        t.add("game/G2", "home", "B")
+    with L.transaction(by="t") as t:
+        t.add("game/G1", "away", "C")
+    three = L.at().id
+    with L.transaction(by="t") as t:
+        t.remove("game/G1", "home", "A")
+    four = L.at().id
+    with L.transaction(by="t") as t:
+        t.add("other", "x", "y")
+    assert L.at().last_rev("game/G1").id == four                   # a remove is a row
+    assert L.at(three).last_rev("game/G1").id == three             # bounded by the view, not the top
+    assert L.at(three).last_rev("game/G1", "home").id == one       # the same pattern rules as get
+    assert L.at().last_rev("game/G1", "home", "A").id == four
+    assert L.at().last_rev("game/*").id == four                    # a glob
+    assert L.at().last_rev("game/G1").id == L.at().history("game/G1")[-1].rev.id
+    assert L.at(one).last_rev("game/G2") is None
+    assert L.at(one).last_rev("game/G2", default=7) == 7
+    assert L.at(three).last_rev("game/G1", since=L.at(three)) is None
+    assert type(L.at().last_rev("game/G1")).__name__ == "Rev" and L.at().last_rev("game/G1").ledger is L

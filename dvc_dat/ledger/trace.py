@@ -46,9 +46,9 @@ Items (Module § Value ``Dependencies``):
     a ``refs``/``values``/``value``/``select`` query (the whole query as
     canonical JSON, ``kind`` dotted, A41, A47) -> the sorted ``ref:`` list it
     answered; any other read (``all``, ``in``, a 1- or
-    3-position bracket, ``history`` (recorded as ``rows``), ``get`` with
+    3-position bracket, ``history`` (recorded as ``rows``), ``last_rev``, ``get`` with
     ``since``) is ``q:{"__call__": …}`` -> a token of its result (for
-    ``history``, its row count).
+    ``history``, its row count; for ``last_rev``, the revision).
 """
 
 from __future__ import annotations
@@ -223,6 +223,9 @@ def _requery(rev: "Rev", body: Dict[str, Any]) -> str:
                 return token(tuple(args) in rev)
             if call == "rows":
                 return token(len(rev.history(*args, since=since)))
+            if call == "last_rev":
+                found = rev.last_rev(*args, since=since)
+                return token(found.id if found is not None else None)
             if call == "preds":
                 return token(dict(Ref(rev, args[0])._preds()))
             if call == "aliases":

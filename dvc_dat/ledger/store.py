@@ -249,6 +249,11 @@ class ArtStore:
     def path(self, h: str) -> Path:
         return self.root / "sha256" / h[:2] / h
 
+    @property
+    def dats(self) -> Path:
+        """The data folder, where a ``Dat``'s folder is rebuilt."""
+        return self.root / "dats"
+
     def exists(self, h: str) -> bool:
         return self.path(h).exists()
 
@@ -270,6 +275,24 @@ class ArtStore:
     def get_to(self, h: str, dest: Path) -> None:
         """Put the bytes of ``h`` at ``dest`` (a hardlink on the same filesystem, else a streamed copy)."""
         place(self._have(h), Path(dest), h)
+
+
+class ReadOnlyArt(ArtStore):
+    """A ledger's art store as a read-only handle sees it (SVP 1521 Q3 (A)): bytes come from ``root``; what a read
+    has to place (a ``Dat``'s folder, bytes fetched from the value's store) lands in ``overlay``, the reader's own,
+    so that nothing lands on the ledger."""
+
+    def __init__(self, root: Path, overlay: Path) -> None:
+        super().__init__(root)
+        self.overlay = Path(overlay)
+
+    def path(self, h: str) -> Path:
+        p = super().path(h)
+        return p if p.exists() else self.overlay / "sha256" / h[:2] / h
+
+    @property
+    def dats(self) -> Path:
+        return self.overlay / "dats"
 
 
 def index_name(pred: str) -> str:
@@ -299,6 +322,7 @@ class Store(ABC):
 
     art: ArtStore
     name: str
+    read_only: bool = False
 
     @abstractmethod
     def top(self) -> int:
@@ -341,17 +365,21 @@ class Store(ABC):
 
 
 class SqliteStore(Store):
-    """One SQLite file. Reads on a per-thread connection; each write on a connection of its own."""
+    """One SQLite file. Reads on a per-thread connection; each write on a connection of its own. Given ``overlay``,
+    read-only: every connection ``mode=ro``, nothing made or changed on open, the art a ``ReadOnlyArt``."""
 
-    def __init__(self, folder: Path) -> None:
+    def __init__(self, folder: Path, overlay: Optional[Path] = None) -> None:
         self.folder = Path(folder)
         self.path = self.folder / "ledger.db"
         self.name = self.folder.name
-        self.art = ArtStore(self.folder / "art")
+        self.read_only = overlay is not None
+        self.art = ReadOnlyArt(self.folder / "art", overlay) if overlay is not None else ArtStore(self.folder / "art")
         self._local = threading.local()
         self._readers: List[sqlite3.Connection] = []
         self._readers_lock = threading.Lock()
         self._gen = 0
+        if self.read_only:
+            return
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             conn = self._connect(30.0)
@@ -363,6 +391,9 @@ class SqliteStore(Store):
             raise LedgerError(f"sqlite ledger {self.path}: cannot open ({e})") from e
 
     def _connect(self, timeout: float) -> sqlite3.Connection:
+        if self.read_only:
+            return sqlite3.connect(f"{self.path.as_uri()}?mode=ro", uri=True, isolation_level=None, timeout=timeout,
+                                   check_same_thread=False)
         return sqlite3.connect(str(self.path), isolation_level=None, timeout=timeout, check_same_thread=False)
 
     @contextmanager
