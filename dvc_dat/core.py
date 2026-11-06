@@ -703,15 +703,18 @@ class DatManager:
     def __init__(self, *, dat_folders: List[str], art_folder: Optional[str] = None,
                  index: Optional[str] = None, ns: Optional["Namespace"] = None,
                  verify: bool = False):
-        """A world on `dat_folders` -- searched in order by name, the first written
-        to -- and `art_folder`, where artifacts live; with none, this world holds
-        no artifacts.  The two never nest: an artifact folder inside a dat
-        folder, or a dat folder inside it, is `ValueError`.  Nothing is read
-        from disk.  `ns` adopts an existing namespace with its mounts; adopting
-        the default world's makes this the default world.  `verify` re-hashes
-        every load against its stored `sha256` (see `load`).  `index` is the
-        file keying every name and `sha256:` URN of the store, default
-        `_index_.json` in the artifact folder, else in the first dat folder."""
+        """A world on `dat_folders` -- searched in order, the first written to -- and `art_folder`, where artifacts live.
+
+        With none, this world holds no artifacts. The two never nest: an artifact folder inside a dat folder, or a dat
+        folder inside it, is `ValueError`. Nothing is read from disk. `ns` adopts an existing namespace with its
+        mounts, and adopting the default world's makes this the default world; with none, a fresh `Namespace` is
+        built. Every manager mounts `dvc_dat.dat_tools` at `dt`. `verify` sets the default of every load's `verify`,
+        which re-hashes against the stored `sha256` (see `load`). `index` is the file keying every name and `sha256:`
+        URN of the store, default `_index_.json` in the artifact folder, else in the first dat folder.
+
+        A string (or any non-list) for `dat_folders` is `TypeError`, an empty list `ValueError`; a non-bool `verify`
+        is also `TypeError`.
+        """
         from .do import Namespace, _DefaultNamespace
         from . import dat_tools
 
@@ -744,7 +747,10 @@ class DatManager:
         elif ns is not None and _default_manager is not None and ns is _default_manager.ns:
             default = True
         self.ns = Namespace(manager=self) if ns is None else ns
-        """The namespace of this world."""
+        """The namespace of this world, its only public attribute.
+
+        `m.ns.mount(...)` adds names to it, `m.ns.load(...)` resolves them; it is not callable.
+        """
         self.ns._manager = self
         self.ns._reg_module("dt", dat_tools, allow_redefine=True)     # the world's own names, any `ns`
         self.ns._reg_value("dt.list", dat_tools.cmd_list)
@@ -754,27 +760,24 @@ class DatManager:
     @classmethod
     def load_dat_config(cls, start: Union[str, Path, None] = None, *,
                         ns: Optional["Namespace"] = None) -> "DatManager":
-        """A new manager from the `.datconfig.yaml` found walking up from `start`
-        (default the working directory; a config file names itself).
+        """A new manager from the `.datconfig.yaml` found walking up from `start`.
 
-        Precedence, lowest to highest: the file, `.datconfig.override.yaml`, then
-        `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment.  Relative folders
-        resolve against the file's folder, which goes first on `sys.path`; with
-        no file they resolve against `start`.  `art_folder` defaults to `art/`
-        beside the file, a sibling of `data/`; `index:` moves the store's index
-        file.  An unknown key is `ValueError`.
-        `ns` as in the constructor.
+        Default the working directory; a file path names the config file itself. Precedence, lowest to highest: the
+        file, `.datconfig.override.yaml`, then `DAT_FOLDERS` (one folder, not split) / `DAT_ART_FOLDER` in the
+        environment. Relative folders resolve against the file's folder, which goes first on `sys.path`; with no file
+        they resolve against `start`. `art_folder` defaults to `art/` beside the file, a sibling of `data/`; `index:`
+        moves the store's index file. An unknown key, or a malformed value, is `ValueError`. `ns` as in the
+        constructor.
 
-        A `ledger:` key, or `namespace: ledger` beside a `ledger:` key or a `ledgers:` section, makes the
-        namespace the active ledger's (DAT 1046): `ns` is a `LedgerNamespace`, its names the ledger's
-        `db/mount` rows at the head, and `mount` refused; an adopted `ns` that is not one is not kept.  A
-        `ledgers:` section alone keeps the plain namespace (SVP 239 A2).
+        A `ledger:` key, or `namespace: ledger` beside a `ledger:` key or a `ledgers:` section, makes the namespace
+        the active ledger's (DAT 1046): `ns` is a `LedgerNamespace`, its names the ledger's `db/mount` rows at the
+        head, and `mount` refused; an adopted `ns` that is not one is not kept. A `ledgers:` section alone keeps the
+        plain namespace (SVP 239 A2).
 
-        A `manager:` key names the class to build, dotted (`mylab.store.Store`):
-        a subclass of the class this is called on, imported once the config
-        folder is on `sys.path`.  Its `CONFIG_KEYS` are extra keys it accepts,
-        handed to its constructor as keyword arguments; any other unknown key is
-        still an error.
+        A `manager:` key names the class to build, dotted (`mylab.store.Store`): a subclass of the class this is
+        called on, imported once the config folder is on `sys.path`; a `manager:` that is not a subclass is
+        `TypeError`. Its `CONFIG_KEYS` are extra keys it accepts, handed to its constructor as keyword arguments; any
+        other unknown key is still an error. See [Configuration][configuration].
         """
         start = Path(start) if start is not None else Path.cwd()
         name = DAT_CONFIG_FILE
@@ -839,23 +842,24 @@ class DatManager:
 
     def create(self, spec: Union[Dict, str, None] = None, *, path: Union[str, Path, None] = None,
                **kwargs: Any) -> "Dat":
-        """Create a dat, as the class its `dat.kind` names, and run nothing: merge `dat.base`, merge
-        `kwargs` into `dat.kwargs`, validate, place it, write `_spec_.yaml`.
+        """Create a dat, as the class its `dat.kind` names, and run nothing.
 
-        `spec` may be a dict or a dotted name loaded through the namespace.  `kwargs` are data (1467
-        Q2 (A)): they reach `dat.kwargs` as given, braces and all (`spec` and `path` are this call's own
-        names, never keywords).  The folder is `path` if given,
-        else the spec's `dat.name` template, else `anonymous/Dat{unique}`; `dat.target_exists` says
-        what happens when the folder is already there.  Every `{}` in the spec is expanded here,
-        once, with the same values the folder got: the built-ins, dotted names, and the expansion
-        variables (SVP 1508), `dat.defaults` overridden by `dat.kwargs` (the spec's own and these
-        keywords), each as the run receives it.  `dat.preds` (a mapping) is expanded with the rest,
-        and each value must come out a string, number or bool: they are the dat's own preds, carried
-        onto the value when it is sealed.  The expanded spec is what is written, except
-        `dat.name`: the spec stores the path template as given (`path`, else the spec's own),
-        never the path it expanded to (F447 Q36); the folder's path is the dat's name.
-        `dat.kind` is written as the class's dotted `module.qualname`.  `run` is `create` and
-        then the run.
+        Merge `dat.base`, merge `kwargs` into `dat.kwargs`, run `validate_spec`, place it, write `_spec_.yaml` (no
+        `_result_.yaml` is written). `spec` may be a dict or a dotted name loaded through `ns`. `kwargs` are data
+        (1467 Q2 (A)): they reach `dat.kwargs` as given, braces and all (`spec` and `path` are this call's own names,
+        never keywords). The folder is `path` if given, else the spec's `dat.name` template, else
+        `anonymous/Dat{unique}`, under the first dat folder; `dat.target_exists` says what happens when the folder is
+        already there -- `FileExistsError` by default, and `use` returns the dat already there. Every `{}` in the spec
+        is expanded here, once, with the same `now` and `unique` the folder got: the built-ins, dotted names, and the
+        expansion variables (SVP 1508), `dat.defaults` overridden by `dat.kwargs` (the spec's own and these keywords),
+        each as the run receives it. `dat.preds` (a mapping) is expanded with the rest, and each value must come out a
+        string, number or bool: they are the dat's own preds, carried onto the value when it is sealed. The expanded
+        spec is what is written, except `dat.name`: the spec stores the path template as given (`path`, else the
+        spec's own), never the path it expanded to (F447 Q36); the folder's path is the dat's name. `dat.kind` is
+        written as the class's dotted `module.qualname`. `run` is `create` and then the run.
+
+        A name an artifact holds is `FileExistsError`; a spec that is not YAML data once expanded is `TypeError`. See
+        [The spec is the record][the-spec-is-the-record].
         """
         return self._create(spec, path=path, kwargs=kwargs)[0]
 
@@ -940,18 +944,18 @@ class DatManager:
         cache_after_load: bool = True,
         verify: Optional[bool] = None,
     ) -> Any:
-        """What `name` names: a dat, as the class its `dat.kind` names, or an
-        artifact, through the type recorded at its save (its payload's `Path`
-        when it has none).  `name` may be a dat's name, an artifact's, or the
-        `sha256:<hex>` URN of either; a name held by both a dat and an
-        artifact is `ValueError`.
+        """What `name` names: a dat, as the class its `dat.kind` names, or an artifact, handed to its recorded type.
 
-        A dat is searched as an absolute path, in the namespace's mounts, then in
-        each dat folder.  Inside a `recording`, the load lands in that dat's
-        `dat.dependencies`.  `cache_after_load` applies to dats only.  `verify`
-        (default: the manager's) re-hashes what is handed back and raises
-        `ValueError` naming both hashes when it differs from the stored one; a
-        dat with no hash has nothing to check.
+        An artifact with no recorded type is handed back as its payload's `Path`. `name` is a dat's name or path, an
+        artifact's name, or the `sha256:` URN (`sha256:<hex>`) of either; a name held by both a dat and an artifact is
+        `ValueError`.
+
+        A dat is searched as an absolute path, in `ns`'s mounts, then in each dat folder; not found is `KeyError`, a
+        folder with no spec `FileNotFoundError`. Dats are cached by path, weakly, so a second load returns the same
+        object while it lives; `cache_after_load` applies to dats only, and `cache_after_load=False` skips the cache.
+        Inside a `recording`, the load lands in that dat's `dat.dependencies`. `verify` (default: the manager's)
+        re-hashes what is handed back and raises `ValueError` naming both hashes when it differs from the stored one;
+        a dat with no hash has nothing to check.
         """
         kind, where = self._locate(name)
         if kind == "art":
@@ -1013,9 +1017,10 @@ class DatManager:
         return dat
 
     def load_path(self, name: Union[str, Path], *, verify: Optional[bool] = None) -> Path:
-        """Where `load(name)` would find its object -- a dat's folder, or an
-        artifact's payload -- as a `Path`, with nothing built: no type is
-        called.  Recorded, and verified, exactly as `load` does."""
+        """Where `load(name)` would find its object -- a dat's folder, or an artifact's payload -- as a `Path`.
+
+        With no type called. Recorded, and verified, exactly as `load` does.
+        """
         kind, where = self._locate(name)
         if kind == "art":
             return self._artifact_payload(str(name), where, verify)[0]
@@ -1026,8 +1031,10 @@ class DatManager:
         return Path(dat.get_path())
 
     def exists(self, name: Union[str, Path]) -> bool:
-        """True if `name` (a dat's name, an artifact's, or a URN) names
-        something stored."""
+        """`True` when `name` (a dat's name, an artifact's, or a URN) names something stored.
+
+        A dat counts when its folder holds a spec file.
+        """
         try:
             kind, where = self._locate(name)
         except (KeyError, FileNotFoundError):
@@ -1149,9 +1156,11 @@ class DatManager:
                 del index[key]
 
     def reindex(self) -> int:
-        """Rebuild the index from the folders: every artifact's names and URN
-        from its sidecar, every saved dat's URN from its results.  Returns the
-        number of keys."""
+        """Rebuild the index -- `_index_.json` by default -- from the folders.
+
+        Every artifact's names and URN come from its `_art_.yaml`, every saved dat's URN from its `_result_.yaml`.
+        Returns the number of keys.
+        """
         entries: Dict[str, Dict[str, str]] = {}
         if self._art_folder is not None and os.path.isdir(self._art_folder):
             for root, dirs, files in os.walk(self._art_folder):
@@ -1203,20 +1212,20 @@ class DatManager:
     def save_artifact(self, source: Union[str, Path], *,
                       type: Union[None, str, Callable] = None,
                       name: Optional[str] = None, link: bool = False) -> str:
-        """Store the file or folder `source` as an artifact and return its URN,
-        `"sha256:<hex>"`.
+        """Store the file or folder `source` as an artifact and return its URN, `sha256:<hex>` (`"sha256:<hex>"`).
 
-        `type` is what `load` hands the payload's path to: a class or callable,
-        recorded as its dotted name, or that name as a string -- anything
-        `ns.load` resolves, a mounted value included.  With no type, `load`
-        returns the path.  `name` is a path-like name of your choosing, held
-        once and never overwritten; with none, the artifact answers to its URN
-        only.  Bytes already stored are not stored again: the new name becomes
-        a second key to them.  A file lands as `<art_folder>/<name>/<basename>`,
-        a folder's contents as `<art_folder>/<name>/` (`sha256/<hex>/` with no
-        name), with the sidecar `_art_.yaml` beside them.  `link` hard-links
-        the payload instead of copying it (same filesystem only).  Inside a
-        `recording` the artifact lands in that dat's `dat.dependencies`.
+        `type` is what `load` hands the payload's path to: a class or callable, recorded as its dotted name, or that
+        name as a string -- anything `ns.load` resolves, a mounted value included; one that does not load back by its
+        name is `TypeError`. With no type, `load` returns the path. `name` is a path-like name of your choosing, held
+        once and never overwritten; with none, the artifact answers to its URN only. Bytes already stored are not
+        stored again: the new name becomes a second key to them. A file lands as `<art_folder>/<name>/<basename>`, a
+        folder's contents as `<art_folder>/<name>/` (`sha256/<hex>/` with no name), with the sidecar `_art_.yaml`
+        beside them. `link` hard-links the payload instead of copying it (same filesystem only). Inside a `recording`
+        the artifact lands in that dat's `dat.dependencies`.
+
+        Errors: no artifact folder `RuntimeError`, a malformed name `ValueError`, a missing source
+        `FileNotFoundError`, a name already held by a dat or an artifact `FileExistsError`. See [Artifacts and the
+        index][artifacts-and-the-index].
         """
         art = self._require_art_folder(str(name or source))
         type_name = self._type_name(type)
@@ -1261,9 +1270,11 @@ class DatManager:
 
     def load_artifact(self, name: Union[str, Path], *,
                       verify: Optional[bool] = None) -> Any:
-        """The artifact `name` (a name, an `art:` name or a URN) names, handed to
-        the type recorded at its save -- its payload's `Path` with none.  A name
-        that is a dat's is `KeyError`; `load` takes either."""
+        """The artifact `name` (a name, an `art:` name or a URN) names, handed to the type recorded at its save.
+
+        With none, its payload's `Path`. A name that is a dat's is `KeyError`; `load` takes either. A type that no
+        longer resolves is `ImportError`.
+        """
         kind, where = self._locate(name)
         if kind != "art":
             raise KeyError(f"load_artifact: no artifact {str(name)!r}"
@@ -1367,9 +1378,11 @@ class DatManager:
                              f"not its stored {stored}")
 
     def standing(self, name: Union[str, Path, "Dat"]) -> Optional[str]:
-        """How far `name` can be relied on, read from its files without
-        building it: `rolling`, `open`, `sealed` or `referenceable`; None when
-        nothing is stored under it.  An artifact is `referenceable`."""
+        """How far `name` can be relied on, read from its files without building it.
+
+        `rolling`, `open`, `sealed` or `referenceable`; `None` when nothing is stored under it. An artifact is
+        `referenceable`; a `Dat` instance answers from its last write. See [Standing][standing].
+        """
         if isinstance(name, Dat):
             return name._standing()
         try:
@@ -1393,9 +1406,12 @@ class DatManager:
 
     @contextlib.contextmanager
     def recording(self, dat: "Dat") -> Iterator[None]:
-        """Every `load` (and `save_artifact`) inside the block lands in `dat.dependencies`.
-        `_execute` runs its function inside one.  Blocks nest: when an inner block
-        ends, its dat becomes one entry of the outer one."""
+        """Every `load`, `load_path` and `save_artifact` inside the block lands in `dat`'s `dat.dependencies`.
+
+        Name to hash. Blocks nest: when an inner block ends, its dat becomes one entry of the outer one. A run
+        (`_execute`) calls its function inside one; a builder gathering a dat's inputs outside a run uses it directly.
+        See [Dependency capture][dependency-capture].
+        """
         with self._capture(dat) as outer:
             yield
         if outer is not None:
@@ -1413,21 +1429,27 @@ class DatManager:
             _recording.reset(token)
 
     def record_dependency(self, name: str, sha256: Optional[str] = None) -> None:
-        """Add `name -> sha256` to the recording dat's `dat.dependencies`, for what
-        a run used without a `load`.  `RuntimeError` when nothing is recording."""
+        """Add `name -> sha256` to the recording dat's `dat.dependencies`, for what a run used without a `load`.
+
+        An input that reached the run around the manager -- a URL, a file read directly. `RuntimeError` when nothing
+        is recording.
+        """
         if not _recording.get():
             raise RuntimeError("record_dependency: no dat is recording")
         _record(name, sha256)
 
     @staticmethod
     def code_of(fn: Callable) -> Optional[Dict[str, Any]]:
-        """`{branch, commit, dirty}` of the git checkout holding `fn`'s source, as a
-        run records it in `dat.code`; None outside a checkout."""
+        """`{branch, commit, dirty}` of the git checkout holding `fn`'s source, as a run records it in `dat.code`.
+
+        `branch` is `None` on a detached HEAD; `dirty` counts tracked files outside the paths the repo's
+        `.gitattributes` marks `dat-noncode` (`CODE_PATHSPEC`). `None` when the source is outside a checkout.
+        """
         return _code_of(fn)
 
     def roots(self, deps: Dict[str, Any]) -> Dict[str, Any]:
-        """`deps` less every entry that some other entry's dat already lists
-        among its own dependencies -- the trim a seal applies."""
+        """`deps` less every entry that another entry's dat lists among its own dependencies -- the trim a seal applies.
+        """
         below: set = set()
         for name in deps:
             if name == DEP_MANUAL or self._artifact_folder(name) is not None:
@@ -1489,21 +1511,30 @@ class DatManager:
         return path
 
     def run(self, target: Any, /, *args: Any, **kwargs: Any) -> Any:
-        """Create a dat and run it, in this world: the one way to run a dat outside a ledger.
+        """Create a dat and run it, in this world: the one way to run a dat outside a ledger, fixed (2.35, DAT 1049).
 
-        - a **spec** (dict, or a dotted name that loads to one) is a template: `args` replace
-          `dat.args`, `kwargs` merge into `dat.kwargs` and are expansion variables of `dat.name`,
-          `dat.preds` and the rest of the spec, over `dat.defaults` (see `create`, which this is
-          followed by the run); the new dat runs with no call-site arguments;
-        - a **callable** (or a dotted name that loads to one) is called with `args`/`kwargs`.
+        `target` is first loaded through `ns` when it is a name. A **spec** (a dict, or a dotted name that loads to
+        one) is a template: `args` replace `dat.args`, `kwargs` merge into `dat.kwargs` and are expansion variables of
+        `dat.name`, `dat.preds` and the rest of the spec, over `dat.defaults` (see `create`, which this is followed by
+        the run); the new dat runs with no call-site arguments, and `dat.target_exists: use` returns the existing one
+        unrun. A **callable** (or a dotted name that loads to one) is called with `args`/`kwargs`. Anything else is
+        `TypeError`. The keywords are also the spec's expansion variables (SVP 1508): an undotted `{name}` anywhere in
+        it, `dat.name` and `dat.preds` included, is `dat.kwargs.name` (the spec's own updated by the call's), else
+        `dat.defaults.name`, else a built-in.
 
-        A dat's run calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do` names,
-        and records the run in `dat.run` (see `_execute`); the return value is `fn`'s.  A spec with
-        no `dat.do` just creates the dat and returns it, as does `dat.target_exists: use` finding
-        the dat already there.  A `Dat` is `TypeError`: a dat is run once, by the call that makes
-        it; another run of its recipe is `run(dat.get_spec(), **kwargs)`, a new dat (SVP 1508).
-        Names load through this world's `ns`, so in a ledger project they are the ledger's.
-        Fixed: a project needing other run machinery subclasses the manager, not `Dat`.
+        A dat's run calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do` names, loaded through this
+        world's `ns`, inside `recording(dat)`, with a fresh `run/` sub-dat holding the run's record and `run/work/` as
+        the working directory, and records the run in `dat.run` (see `_execute`); the return value is `fn`'s, or the
+        dat when the spec has no `dat.do` -- as does `dat.target_exists: use` finding the dat already there. Saves
+        nothing by itself; a `dat.save()` inside `fn` is answered with the seal when `fn` returns. A `Dat` is
+        `TypeError`: a dat is run once, by the call that makes it; another run of its recipe is `run(dat.get_spec(),
+        ...)` (`run(dat.get_spec(), **kwargs)`), a new dat (SVP 1508). A sealed dat is `RuntimeError`, a non-callable
+        `dat.do` `TypeError`, and a spec demanding `referenceable` is `RuntimeError` when the code is dirty or outside
+        a git checkout. Every error is re-raised as `Exception("In <target>")` chained from the original. Every run in
+        the world -- nested ones and a ledger's dat runs included -- is recorded this way; `dat.run` is the `run/`
+        sub-dat. Names load through this world's `ns`, so in a ledger project they are the ledger's. Fixed: a project
+        needing other run machinery subclasses the manager, not `Dat`. See [The spec is the
+        record][the-spec-is-the-record] and [The run sub-dat][the-run-sub-dat].
         """
         ns = self.ns
         obj = ns.load(target) if isinstance(target, str) else target
