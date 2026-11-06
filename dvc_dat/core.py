@@ -710,6 +710,7 @@ class DatManager:
         elif ns is not None and _default_manager is not None and ns is _default_manager.ns:
             default = True
         self.ns = Namespace(manager=self) if ns is None else ns
+        """The namespace of this world."""
         self.ns._manager = self
         self.ns._reg_module("dt", dat_tools, allow_redefine=True)     # the world's own names, any `ns`
         self.ns._reg_value("dt.list", dat_tools.cmd_list)
@@ -1803,6 +1804,7 @@ class Dat(Value, metaclass=_DatMeta):
         self._written = _standing_of(self._spec, self._result)   # as last written
         if name is not None:
             self.name = name
+            """The name a save gives it."""
 
     @classmethod
     def _from_folder(cls: Type[DatType], path: Union[str, Path]) -> DatType:
@@ -1896,6 +1898,7 @@ class Dat(Value, metaclass=_DatMeta):
         return spec
 
     merge_dicts = staticmethod(merge_dicts)
+    """The zipper merge `dat.base` uses."""
 
     @staticmethod
     def cli_main(argv: Optional[List[str]] = None, *,
@@ -1913,6 +1916,7 @@ class Dat(Value, metaclass=_DatMeta):
         return self._result
 
     def get_path(self) -> str:
+        """The absolute path of this dat's folder."""
         return self._path
 
     def get_path_name(self) -> str:
@@ -2086,6 +2090,7 @@ class Dat(Value, metaclass=_DatMeta):
         return manager._load(new_path_, dat_class=type(self))
 
     def move(self: DatType, new_path: Union[str, Path]) -> DatType:
+        """Move this dat's folder to `new_path`; the dat at its new path."""
         manager = self._world()
         manager._dat_cache.pop(self._path, None)
         new_path_ = manager._resolve_path(new_path)

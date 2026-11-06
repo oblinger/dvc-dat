@@ -11,32 +11,6 @@ The dvc_dat API reference: what the package exports and how each part is called.
 A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
 itself. `Dat.manager` is the default world; `Dat.manager.run` runs, and `ns` is its namespace.
 
-## What the package exports
-
-```python
-from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers
-
-ns = Dat.ns     # the namespace shortcut; follows Dat.manager
-```
-
-| Name | What it is |
-|------|------------|
-| `Dat` | A dat folder: its spec, its results, its path |
-| `DatContainer` | A dat whose folder holds other dats |
-| `DatManager` | Creates, finds, loads and runs dats; `Dat.manager` is the default, assign to replace |
-| `Namespace` | A namespace; every manager has one |
-| `L` | The active ledger: `DAT_LEDGER`, else the config's `ledgers:` default or `ledger:` |
-| `ledgers` | The project's ledgers by name: `ledgers.<name>`, `ledgers["do26"]` |
-
-Everything else hangs off those four classes:
-
-| Name | What it is |
-|------|------------|
-| `Dat.ns` | The default world's namespace, forwarding to `Dat.manager.ns`; not callable |
-| `Dat.cli_main` | The command line (`just run`) for a program's own main |
-| `Dat.merge_dicts` | The zipper merge `dat.base` uses |
-| `ns.expand` / `expand_spec` / `quote_spec` | The `{}` grammar, a method of every namespace |
-
 ## Running — `Dat.manager.run`; loading — `ns`
 
 ```python

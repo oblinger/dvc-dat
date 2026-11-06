@@ -445,4 +445,4 @@ See [Mounts](mount-commands.md) for what a program can mount.
 - [Spec Format](spec-format.md) — `_spec_.yaml` and `_result_.yaml` reference
 - [Mounts](mount-commands.md) — names that are not imports
 - [Command Line](cli.md) — `just run`, `x`, and `dvc_dat.just`
-- [Overview](overview.md) — API reference
+- [API Reference](api/index.md) — every public class and function

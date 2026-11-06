@@ -8,6 +8,13 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.58.0 — 2026-11-05
+
+- **The site's vault plugin ships in the package (SVP 246; minor).** `dvc_dat.docs.vault`, the MkDocs plugin `dat-vault` on the `mkdocs.plugins` entry point: Obsidian vault pages rendered for a site (wiki links, breadcrumbs, identity rows, separators, block ids, heading fragments, links out of `docs_dir`), and `<!-- methods: pkg.Class -->`, a table of a class's public members whose every row links to its API anchor and reads its docstring's first line. Read with griffe, importing nothing; `mkdocs` is imported only by the plugin, so a library user needs no new dependency. Options `packages`, `api_dir`, `repo_blob`.
+- **One site, four tabs (SVP 246).** Tutorials, How-to, Architecture, API Reference, with `doc/tutorials.md` and `doc/how-to.md`; the nine notebooks render as pages (mkdocs-jupyter, never executed by the build); `just docs` builds `--strict`. `.github/workflows/docs.yml` deploys every push to `main` to https://oblinger.github.io/dvc-dat/. `tests/test_docs_site.py` checks the plugin and, after a build, the site.
+- **`just demo` generates every notebook from its script (SVP 246).** `build_notebook.py` now runs over all eight it did not cover, so a re-run churns no cell id; edit the `.py`, never the `.ipynb`.
+- **Module pages' class tables are generated (SVP 246).** `DAT Dat` and `DAT Ledger` carry `methods:` directives; the public attributes that had none have docstrings. What the package exports moved from `overview.md` to `api/index.md`.
+
 ## 2.57.0 — 2026-11-05
 
 - **`dat.at` and `dat.load`: the global reference resolves (SVP 248; minor).** `ledger.at(rev)` stays that ledger's alone; across ledgers the verbs are module-level. `dat.at("<ledger>@<rev>")` is the plain `Rev` on any registered ledger (or one open in this process). `dat.load("<ledger>@<rev>:<name-or-sha>")` is the value: `sha256:<hex>` finds it by the hash of its bytes in that ledger's `db/value` rows, `KeyError` when none. Both take an optional default ledger (a `Ledger` or a name; else the active one) for a bare reference: a bare revision for `at`, a bare `<name-or-sha>`, read at the head, for `load`. In a project with no ledger, `dat.load(name)` is `Dat.manager.load(name)`. Docs: `DAT Ledger` § Many ledgers.

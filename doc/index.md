@@ -31,38 +31,11 @@ print(dat.get_spec()["params"]["lr"])   # 0.01
 result = Dat.manager.run("catalog.experiment", epochs=200)
 ```
 
-## Core Concepts
+## Where to read next
 
-- **[Architecture](DAT%20Architecture.md)** — the dat and the ledger, and
-  how they meet; a module doc for each:
-  [DAT Dat](DAT%20Modules/DAT%20Dat.md),
-  [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md) 
-- **[Concepts](concepts.md)** — the fork rule, the two kinds of name,
-  configuration on first use, `dat.base`, the `{}` grammar, validation
-- **[Spec Format](spec-format.md)** — `_spec_.yaml` / `_result_.yaml` reference
-- **[Expansion](expand.md)** — the `{}` grammar: `ns.expand`, the built-ins, what the namespace holds, `{unique}`
-- **[Mounts](mount-commands.md)** — giving a name to something that is not an import
-- **[Command Line](cli.md)** — `just run` (`x`), `dvc_dat.just`, exit codes
-
-## API Reference
-
-- **[Overview](overview.md)** — what `dvc_dat` exports, and every method
-- **[API reference](api/index.md)** — generated from the source by `just docs`: every public class and function, with its signature and docstring
-
-## Demos
-
-Notebooks in [`DAT Demos/`](https://github.com/oblinger/dvc-dat/tree/main/doc/DAT%20Demos), each paired with a `py:percent` script and executed with its
-outputs kept (`just demo` re-syncs and re-runs the `demo-*` ones, `just walkthrough` generates and runs `api-walkthrough` from its script):
-
-- **[`api-walkthrough`](DAT%20Demos/api-walkthrough.ipynb)** — the one API sheet: dats, the namespace, values and the ledger, in one notebook
-- **[`cli-walkthrough`](DAT%20Demos/cli-walkthrough.ipynb)** — the shell side: `just run` and the ledger verbs, each beside the API call it makes
-- **[`demo-walkthrough`](DAT%20Demos/demo-walkthrough.ipynb)** — one project, end to end: mounts,
-  `dat.base`, `Dat.manager.run()` and a fork, `Dat.load`, `merge_dicts`, the command-line main
-- **[`demo-dats`](DAT%20Demos/demo-dats.ipynb)** — dats, dependencies and versions
-- **[`demo-etl`](DAT%20Demos/demo-etl.ipynb)** — an ETL chain over a game set, and what each change to it recomputes
-- **[`ledger-triples`](DAT%20Demos/ledger-triples.ipynb)** — the ledger as a quad store: transactions, reads as of a revision
-- **[`ledger-values`](DAT%20Demos/ledger-values.ipynb)** — values, preds, ledger functions, `run`, the sandbox
-- **[`ledger-dats`](DAT%20Demos/ledger-dats.ipynb)** — a dat as a value
-- **[`ledger-just`](DAT%20Demos/ledger-just.ipynb)** — the human's verbs, one ledger call per recipe
-
-The ledger: [The ledger](DAT%20Modules/ledger/DAT%20Ledger.md).
+| | |
+| --- | --- |
+| **[Tutorials](tutorials.md)** | Learn the library by running it: nine notebooks with their outputs kept |
+| **[How-to](how-to.md)** | One task per row, for a reader who knows the library |
+| **[Architecture](DAT%20Architecture.md)** | The dat and the ledger, how they meet, a module page for each |
+| **[API Reference](api/index.md)** | Every public class and function, generated from the source |

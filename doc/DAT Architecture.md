@@ -75,8 +75,8 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 
 ## Where the detail lives
 
-- [`DAT Modules/`](DAT%20Modules/): the two module docs above, and [`dat.md`](DAT%20Modules/dat.md).
-- The notebooks in [`DAT Demos/`](DAT%20Demos/):
+- `DAT Modules/`: the two module docs above.
+- The notebooks in `DAT Demos/`:
   [`ledger-triples.py`](DAT%20Demos/ledger-triples.ipynb) (the quad store
   alone), [`ledger-values.py`](DAT%20Demos/ledger-values.ipynb) (values,
   functions, evaluation), [`ledger-dats.py`](DAT%20Demos/ledger-dats.ipynb) 
@@ -84,7 +84,7 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
   [`ledger-just.py`](DAT%20Demos/ledger-just.ipynb) (the human's verbs).
 - The dat half's guides: [Concepts](concepts.md),
   [Spec Format](spec-format.md), [Mounts](mount-commands.md),
-  [Command Line](cli.md), [Overview](overview.md).
+  [Command Line](cli.md).
 - The design pages live in the project's design vault, found by name:
   **SVP447 Ledger Module**, **SVP447 Eval**, **SVP447 Versions**,
   **SVP447 Values**.
