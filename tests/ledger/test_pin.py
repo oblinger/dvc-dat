@@ -48,6 +48,11 @@ JOBS = textwrap.dedent('''
 
 
     @dat.fn
+    def home(rev, *, game: str) -> dict:
+        return {"home": rev[f"game/{game}", "home"]}
+
+
+    @dat.fn
     def chain(rev, *, base: Value) -> dict:
         return {"n": base.obj["n"] * 10, "home": rev["game/G1", "home"]}
 
@@ -226,6 +231,19 @@ def test_rerun_reproduces_from_a_fresh_clone_after_the_branch_is_squashed_and_co
     assert str(out.worktree).startswith(str(w.L.path)), "the worktree lives under the ledger"
     again = w.L.at().rerun(v)
     assert again.worktree == out.worktree and again.reproduced     # reused, not fetched again
+
+
+
+def test_a_value_run_at_a_past_revision_reruns_at_the_revision_it_read(world):
+    """SVP 245: the rows moved after the run; the rerun reads ``db/at``, not the revision that saved it."""
+    w = world
+    read = w.L.at().id
+    with w.L.transaction(by="t") as t:
+        t["game/G1", "home"] = "celtics"
+    v = w.L.at(read).run("pinpkg.jobs.home", game="G1")
+    assert v.obj == {"home": "lakers"} and v.at.id == read and v.rev.id > read + 1
+    w.L.at().pin(v)
+    assert w.L.at().rerun(v).outcome == REPRODUCED
 
 
 def test_the_three_outcomes_and_the_deterministic_claim(world):

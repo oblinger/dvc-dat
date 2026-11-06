@@ -48,7 +48,7 @@ FORMAT = "dvc-dat-ledger/1"
 
 #: A sealed subject's own predicates (besides its preds, named by its ``db/preds`` row).
 SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys", "db/sealed-at",
-                             "db/reproducible"})
+                             "db/reproducible", "db/at"})
 
 
 def is_seal_predicate(p: str, frozen: Sequence[str]) -> bool:
