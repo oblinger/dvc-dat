@@ -16,6 +16,8 @@ dynamic = ["version"]
 [project.optional-dependencies]
 excel = ["xlsxwriter"]
 pg = ["psycopg[binary]>=3.1"]
+# Video from a URL (SVP 249); gs:// also needs gcsfs, https:// aiohttp
+video = ["fsspec"]
 
 [project.entry-points."mkdocs.plugins"]
 dat-vault = "dvc_dat.docs.vault:VaultPlugin"
@@ -31,6 +33,7 @@ version = {attr = "dvc_dat.__init__.__version__"}
 
 [dependency-groups]
 dev = [
+    "fsspec",
     "hypothesis>=6.100",
     "ipykernel>=6.29.5",
     "jupytext>=1.17.1",

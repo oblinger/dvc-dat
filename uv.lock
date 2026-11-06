@@ -426,9 +426,13 @@ excel = [
 pg = [
     { name = "psycopg", extra = ["binary"] },
 ]
+video = [
+    { name = "fsspec" },
+]
 
 [package.dev-dependencies]
 dev = [
+    { name = "fsspec" },
     { name = "hypothesis" },
     { name = "ipykernel" },
     { name = "jupytext" },
@@ -449,15 +453,17 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fsspec", marker = "extra == 'video'" },
     { name = "pandas" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'pg'", specifier = ">=3.1" },
     { name = "pyyaml" },
     { name = "xlsxwriter", marker = "extra == 'excel'" },
 ]
-provides-extras = ["excel", "pg"]
+provides-extras = ["excel", "pg", "video"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "fsspec" },
     { name = "hypothesis", specifier = ">=6.100" },
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "jupytext", specifier = ">=1.17.1" },
@@ -501,6 +507,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/20/b5/23b216d9d985a956623b6bd12d4086b60f0059b27799f23016af04a74ea1/fastjsonschema-2.21.2.tar.gz", hash = "sha256:b1eb43748041c880796cd077f1a07c3d94e93ae84bba5ed36800a33554ae05de", size = 374130, upload-time = "2025-08-14T18:49:36.666Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/a8/20d0723294217e47de6d9e2e40fd4a9d2f7c4b6ef974babd482a59743694/fastjsonschema-2.21.2-py3-none-any.whl", hash = "sha256:1c797122d0a86c5cace2e54bf4e819c36223b552017172f32c5c024a6b77e463", size = 24024, upload-time = "2025-08-14T18:49:34.776Z" },
+]
+
+[[package]]
+name = "fsspec"
+version = "2026.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/cd/9be253869fc42e764de7f3dedd6969af7d44ff9c3375214a3442a6f3fc08/fsspec-2026.9.0.tar.gz", hash = "sha256:0f08147951c8cb31d844c3547d631053b127863b60be04cf06e121333ee0e2fe", size = 333545, upload-time = "2026-09-18T17:50:42.825Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/c0/a98505f18594f1bce828bb159cec0fcf9860562f1a2c85913409fc8f3d9e/fsspec-2026.9.0-py3-none-any.whl", hash = "sha256:8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f", size = 221738, upload-time = "2026-09-18T17:50:41.341Z" },
 ]
 
 [[package]]

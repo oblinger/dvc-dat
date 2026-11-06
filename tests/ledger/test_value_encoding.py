@@ -5,13 +5,15 @@ Each shipped class is measured against both clauses. A case the class breaks tod
 changing a class's encoding moves the hash of everything stored under it, a migration the owner decides, so the
 failure stays visible here and turns the suite red the day the class is fixed. ``test_the_harness_...`` prove
 the assertions can fail, and a new class with its own ``encode`` fails ``test_every_encoding_is_measured_here``
-until it is added.
+until it is added. ``Video`` (SVP 249) is measured on its stored form, and its sources' conversion is the limit
+its class states: ``canonical=False`` keeps a source's codec, so equal frames in two encodings are two values.
 """
 
 import hashlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 from collections import defaultdict
@@ -24,8 +26,9 @@ import pytest
 
 import dvc_dat
 from dvc_dat import Dat, DatManager, core
-from dvc_dat.ledger import Code, Value
+from dvc_dat.ledger import Code, Value, Video
 from dvc_dat.ledger.codec import sha256
+from dvc_dat.ledger.video import DEFAULT_STANDARD
 
 Blob, Table = Value.Blob, Value.Table
 HERE = Path(__file__).parent
@@ -68,6 +71,9 @@ def same(a, b):
         return files(a) == files(b)
     if isinstance(a, Code):
         return (a.modules, encoded(a)) == (b.modules, encoded(b))
+    if isinstance(a, Video):
+        return all((x == y).all() for x, y in zip(a.iter(), b.iter())) and \
+            a._info()["frames"] == b._info()["frames"]
     raise TypeError(type(a))
 
 
@@ -163,6 +169,41 @@ def code(modules=None, **description):
     return Code({**fields, **description}, unit="pkg")
 
 
+FFMPEG = shutil.which("ffmpeg") is not None or bool(os.environ.get("CI"))
+needs_ffmpeg = pytest.mark.skipif(not FFMPEG, reason="ffmpeg is not on PATH (CI installs it)")
+
+
+def video_frames():
+    """20 frames, 32x24, each a grey level with a white square that moves."""
+    out = []
+    for i in range(20):
+        f = np.full((24, 32, 3), i * 9, np.uint8)
+        f[i % 16:i % 16 + 8, i:i + 8] = 255
+        out.append(f)
+    return out
+
+
+def standard(video):
+    """``video`` converted to the default standard, as a seal onto a ledger that declares it converts it."""
+    video.__dict__["_mode"] = DEFAULT_STANDARD
+    return video
+
+
+def video_file(folder, name, *args):
+    """``video_frames`` written by ffmpeg to ``folder/name`` with the codec arguments ``args``."""
+    folder.mkdir(parents=True, exist_ok=True)
+    raw = b"".join(f.tobytes() for f in video_frames())
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "32x24", "-r", "10",
+                    "-i", "pipe:0", *args, str(folder / name)], input=raw, check=True)
+    return folder / name
+
+
+def lossless(folder, preset):
+    """The frames in H.264 with no loss, by an encoder preset: other bytes, the same frames."""
+    return video_file(folder, f"{preset}.mp4", "-c:v", "libx264", "-qp", "0", "-preset", preset,
+                      "-pix_fmt", "yuv444p")
+
+
 class Scrambled(Value):
     """The control: what breaks the rule. Its bytes follow a set's order, and ``decode`` keeps none of them."""
 
@@ -194,6 +235,8 @@ BUILT = {
     "code": lambda f: code(),
     "control": lambda f: Scrambled(set(PLAYERS)),
 }
+if FFMPEG:
+    BUILT["video"] = lambda f: standard(Video.from_frames(iter(video_frames()), 10))
 
 
 def child_hashes():
@@ -222,6 +265,7 @@ def breaks(reason, raises=AssertionError):
 
 OBJECT_ORDER = "Blob: an object other than plain data is pickled as pickle writes it, its state in insertion order"
 OBJECT_MEMO = "Blob: an object other than plain data repeated is written as a back-reference, an equal copy in full"
+VIDEO_SOURCE = "Video: canonical=False keeps the source's codec, so equal frames in two encodings are two values"
 
 
 # --- the harness can fail -------------------------------------------------------------------------------------
@@ -249,7 +293,7 @@ def test_every_encoding_is_measured_here():
             yield from under(sub)
 
     own = {c for c in under(Value) if c.__module__.startswith(dvc_dat.__name__) and "encode" in c.__dict__}
-    assert own == {Blob, Table, Dat, Code}
+    assert own == {Blob, Table, Dat, Code, Video}
 
 
 # --- lossless -------------------------------------------------------------------------------------------------
@@ -350,6 +394,23 @@ def test_a_code_decoded_by_its_name_keeps_its_unit_and_version():
     assert (bare.name, bare.hash, bare.sandboxed) == ("code@#" + installed.hash[:8], installed.hash, False)
 
 
+@needs_ffmpeg
+def test_a_video_comes_back_with_the_same_bytes(L, tmp_path, monkeypatch):
+    """A ``Video``'s value is its stored segments and manifest: loaded back, it encodes to the bytes it was
+    saved with, and decodes to the same frames. (``L`` declares no standard, so the seal converts as the hash
+    before it did.)"""
+    from dvc_dat.ledger import video as video_mod
+
+    monkeypatch.setattr(video_mod, "_WARNED", set())
+    v = Video.from_frames(iter(video_frames()), 10)
+    bytes_before = encoded(v)
+    with pytest.warns(UserWarning, match="canonical=False"):
+        v.seal(L, name="video/a")
+    L._values.clear()
+    back = L.at().load("video/a")
+    assert sha256(encoded(back)) == sha256(bytes_before) and same(v, back)
+
+
 # --- deterministic: equal values built separately, here --------------------------------------------------------
 
 def chunked(*cuts):
@@ -395,6 +456,21 @@ PAIRS = [
                  id="code-modules-other-order"),
     pytest.param(lambda f: code(), lambda f: code(version="2.0.0", commit="abc1234", sandboxed=True),
                  id="code-other-description"),
+    pytest.param(lambda f: standard(Video.from_frames(iter(video_frames()), 10)),
+                 lambda f: standard(Video.from_frames(iter(video_frames()), "10/1")), id="video-frames",
+                 marks=needs_ffmpeg),
+    pytest.param(lambda f: Video.from_path(lossless(f / "a", "ultrafast")),
+                 lambda f: Video.from_url(lossless(f / "b", "ultrafast").as_uri()), id="video-path-versus-url",
+                 marks=needs_ffmpeg),
+    pytest.param(lambda f: standard(Video.from_frames(iter(video_frames()), 10)),
+                 lambda f: standard(Video.from_path(video_file(f, "v.mkv", "-c:v", "ffv1", "-pix_fmt", "yuv420p"))),
+                 id="video-standard-frames-versus-file", marks=needs_ffmpeg),
+    pytest.param(lambda f: standard(Video.from_path(lossless(f / "a", "ultrafast"))),
+                 lambda f: standard(Video.from_path(lossless(f / "b", "veryslow"))),
+                 id="video-standard-two-encodings", marks=needs_ffmpeg),
+    pytest.param(lambda f: Video.from_path(lossless(f / "a", "ultrafast")),
+                 lambda f: Video.from_path(lossless(f / "b", "veryslow")),
+                 id="video-source-codec-two-encodings", marks=[needs_ffmpeg, breaks(VIDEO_SOURCE)]),
 ]
 
 
@@ -437,6 +513,7 @@ def test_table_field_metadata_is_not_in_the_bytes():
     "blob-scalars", "blob-nested", "blob-dict", "blob-array", "blob-shared", "blob-copies",
     "blob-set",
     "table-arrow", "table-pandas", "table-long", "dat-plain", "dat-created", "code",
+    pytest.param("video", marks=needs_ffmpeg),
 ])
 def test_every_process_gives_the_same_bytes(name, elsewhere, tmp_path):
     assert_one_hash([sha256(encoded(BUILT[name](tmp_path))), *(elsewhere[seed][name] for seed in SEEDS)])

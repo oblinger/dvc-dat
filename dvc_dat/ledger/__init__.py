@@ -33,9 +33,10 @@ from .named import L, ledgers
 from .rev import Head, Ref, Rev, Row
 from .txn import Transaction, attr
 from .value import Value, ledger_class
+from .video import Video
 from ..core import Dat                  # one class: a dat is a Value (DAT 1038)
 
-__all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Transaction", "Value", "Dat", "Fn", "FnMark", "Code",
+__all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Transaction", "Value", "Video", "Dat", "Fn", "FnMark", "Code",
            "LedgerNamespace", "Rerun",
            "ledger_class", "register_policy", "register_store", "Remote", "bump", "bump_source", "SourceBump", "attr",
            "LedgerError", "Multiple", "NotEvaluated", "NotClean", "NotPinned", "NotCopied", "SpecOnly", "Differed",
