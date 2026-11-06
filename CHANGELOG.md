@@ -8,9 +8,16 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
-## 2.58.0 — 2026-11-05
+## 2.59.0 — 2026-11-05
 
 - **A `.devN` version is a version (SVP 1482; minor).** `db/version` takes `MAJOR.MINOR.PATCH[.devN]` on every subject but `db`, whose release stays `MAJOR.MINOR.PATCH`. A clean run of code at `1.3.6.dev2` moves `db/repo/<repo>/<package>` and `db/repo/<repo> db/commit`, which it skipped before, so its commit can be pinned; the clock orders by PEP 440, `1.3.5 < 1.3.6.dev1 < 1.3.6.dev2 < 1.3.6`. `bump` and `bump_source` still step plain versions only. Docs: `DAT Ledger`.
+
+## 2.58.0 — 2026-11-05
+
+- **The site's vault plugin ships in the package (SVP 246; minor).** `dvc_dat.docs.vault`, the MkDocs plugin `dat-vault` on the `mkdocs.plugins` entry point: Obsidian vault pages rendered for a site (wiki links, breadcrumbs, identity rows, separators, block ids, heading fragments, links out of `docs_dir`), and `<!-- methods: pkg.Class -->`, a table of a class's public members whose every row links to its API anchor and reads its docstring's first line. Read with griffe, importing nothing; `mkdocs` is imported only by the plugin, so a library user needs no new dependency. Options `packages`, `api_dir`, `repo_blob`.
+- **One site, four tabs (SVP 246).** Tutorials, How-to, Architecture, API Reference, with `doc/tutorials.md` and `doc/how-to.md`; the nine notebooks render as pages (mkdocs-jupyter, never executed by the build); `just docs` builds `--strict`. `.github/workflows/docs.yml` deploys every push to `main` to https://oblinger.github.io/dvc-dat/. `tests/test_docs_site.py` checks the plugin and, after a build, the site.
+- **`just demo` generates every notebook from its script (SVP 246).** `build_notebook.py` now runs over all eight it did not cover, so a re-run churns no cell id; edit the `.py`, never the `.ipynb`.
+- **Module pages' class tables are generated (SVP 246).** `DAT Dat` and `DAT Ledger` carry `methods:` directives; the public attributes that had none have docstrings. What the package exports moved from `overview.md` to `api/index.md`.
 
 ## 2.57.0 — 2026-11-05
 

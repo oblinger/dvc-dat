@@ -11,13 +11,11 @@ test *ARGS:
 sealed *ARGS:
     uv run python -m dvc_dat.ledger.kept {{ARGS}}
 
-# the demo notebooks (doc/DAT Demos): each .ipynb is paired by jupytext with a
-# py:percent script beside it (edit either); sync the pairs, then execute each
-# notebook in place with its outputs kept. tests/test_demo_notebooks.py runs
-# them and checks the pairing on every `just test`.
+# the demo notebooks (doc/DAT Demos): each notebook generated from its py:percent script by build_notebook.py,
+# with cell ids a re-run leaves alone, then executed in place with its outputs kept. Edit the .py, never the
+# .ipynb. tests/test_demo_notebooks.py runs them and checks the pairing on every `just test`.
 demo:
-    uv run jupytext --sync "doc/DAT Demos"/demo-*.ipynb "doc/DAT Demos"/demo-*.py
-    for nb in "doc/DAT Demos"/demo-*.ipynb; do JUPYTER_PATH={{justfile_directory()}}/.venv/share/jupyter uv run jupyter nbconvert --execute --to notebook --inplace "$nb"; done
+    for stem in cli-walkthrough demo-dats demo-etl demo-walkthrough ledger-triples ledger-values ledger-dats ledger-just; do uv run python "doc/DAT Demos/build_notebook.py" $stem && JUPYTER_PATH={{justfile_directory()}}/.venv/share/jupyter uv run jupyter nbconvert --execute --to notebook --inplace "doc/DAT Demos/$stem.ipynb" || exit 1; done
 
 # the API walkthrough: its notebook generated from api-walkthrough.py, with cell ids that a re-run leaves
 # alone, then executed in place with its outputs kept. Edit the .py, never the .ipynb.
@@ -27,7 +25,7 @@ walkthrough:
 
 # the documentation site (doc/ -> site/), with the generated API reference (doc/api/)
 docs:
-    uv run --group docs mkdocs build
+    uv run --group docs mkdocs build --strict
 
 # the documentation site, served with live reload
 docs-serve:

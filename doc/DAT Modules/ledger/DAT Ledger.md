@@ -31,13 +31,7 @@ This page is the package `dvc_dat.ledger` as a caller sees it: the figure above,
 ## Ledger Interface
 The handle on one ledger: a folder holding `ledger.db` and the art store `art/`, or a Postgres database named by a DSN with its art store a folder. It finds or opens the ledger, hands out frozen views with `at` and write sets with `transaction`, and holds no reads of its own, so a long run reads one snapshot by construction. Nothing is created on disk without `create=True`. A `Ledger` is a context manager whose exit closes it.
 
-| Ledger | |
-| --- | --- |
-| [Ledger](#^ledger) | Find, open or create a ledger |
-| [path](#^path) | The resolved ledger folder, or the DSN |
-| [at](#^at) | A frozen view at a revision or a release |
-| [transaction](#^transaction) | A write set that becomes one revision |
-| [close](#^close) | Close every database connection the handle opened |
+<!-- methods: dvc_dat.ledger.Ledger -->
 
 **Ledger**`(location: str | Path | None = None, *, create: bool = False)`
     `Ledger(location)` opens the ledger at `location`: a folder or a DSN (a `Path`, or a `str` that is not a DSN, is a folder); a folder without `ledger.db` is `LedgerError`, and so is a file. `Ledger()` opens the active ledger ([Many ledgers](#Many%20ledgers)): `DAT_LEDGER` when set (a name from the config's `ledgers:` section, else a location), else the nearest `.datconfig.yaml` at or above the working directory carrying a `ledgers:` section (its `default:`) or a `ledger:` key (relative to that file), and asserts the config's `mounts:` (each key the mount's name, `mnt.<prefix>: <root>`, as [`t.ns.mount`](#^transaction-ns) takes it; a key outside `mnt.` is `ValueError`) as `db/mount/<prefix>` rows in one transaction `by="config:<path>"` when they differ from the ledger's; none found is `LedgerError` naming every folder searched, and a `ledgers:` section naming no default is `LedgerError` saying how to name one. `Ledger(location, create=True)` makes an empty ledger there if absent. `Ledger(create=True)` makes a project in the working directory, writing `ledger: .dat/ledger` into its `.datconfig.yaml`, or, when that file has a `ledgers:` section, making its active entry; with `DAT_LEDGER` set it is `ValueError`. ^ledger
@@ -59,26 +53,7 @@ The handle on one ledger: a folder holding `ledger.db` and the art store `art/`,
 ## Rev Interface
 A frozen view of the ledger as of one revision, made by `Ledger.at`, never by hand. Every read is bounded by `id`, so a `Rev` gives the same answer forever. Row reads fold the rows by each predicate's cardinality ([The fold](#The%20fold)); `history` takes the same pattern unfolded; subject reads (`refs`, `values`, `value`, `select`) treat the store as a table whose rows are subjects. A stored reference comes back as an unloaded `Ref`. A `Rev` handed to a value function's body also traces every read into its result's dependencies. Ordered and equal by `id` within one ledger.
 
-| Rev                            |                                                            |
-| ------------------------------ | ---------------------------------------------------------- |
-| [id](#^id)                     | The revision number                                        |
-| [ledger](#^rev-ledger)         | The ledger this view reads                                 |
-| [tx](#^tx)                     | The subject carrying this revision's provenance            |
-| [__getitem__](#^--getitem--)   | A record, an object, or when a triple was added            |
-| [get](#^get)                   | __getitem__ with a default                                 |
-| [__contains__](#^--contains--) | Tests whether a triple is currently held                   |
-| [all](#^all)                   | Returns ordered pattern-matched values with folding        |
-| [history](#^history)           | Returns ordered pattern-matched rows without folding       |
-| [refs](#^refs)                 | Returns a Ref to every subject matching a query            |
-| [values](#^values)             | Returns the values whose subjects match a query            |
-| [value](#^value)               | Same as values, but requires exactly one match             |
-| [select](#^select)             | Returns chosen preds of matching values, without loading them |
-| [load](#^load)                 | One value by subject or alias                              |
-| [ns](#^ns)                     | The ledger's namespace here: `ns.load(name)`, `ns.mounts()` |
-| [run](#^run)                   | Run a value function or a dat, memoised (`just run`)       |
-| [timezone](#^timezone)         | The zone this revision prints times in                     |
-| [show_time](#^show-time)       | A stored UTC stamp as this revision prints it              |
-| [rerun](#^rerun)               | Run a pinned value's function again at its tag and compare |
+<!-- methods: dvc_dat.ledger.Rev -->
 
 **id**`: int`
     The revision this view reads as of; revision 0 is the empty ledger. ^id
@@ -120,7 +95,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
     `Ref(self, subject).load()`: the value under a subject or an alias, decoded, its provenance restored. ^load
 
 **ns**`: LedgerNamespace`
-    The ledger's namespace at this revision (DAT 1046, 1051), the `Namespace` interface of [DAT Namespace API](../../DAT%20Design/DAT%20API/DAT%20Namespace%20API.md): `rev.ns.load(name)` is what the dotted `name` denotes here, `rev.ns.mounts()` the `db/mount` rows as `{prefix: {"root": ..., "repo": ...}}`, `rev.ns.expand(template, **vars)` a template filled through these names in this revision's [display zone](#^timezone) with `{unique}` counted against this revision ([Expansion](../../expand.md)), and `mount` is `TypeError` (a transaction's [`t.ns`](#^transaction-ns) mounts). A mounted name is `mnt.<prefix>...`: the `db/mount/<prefix>` rows as of the revision are walked longest prefix first for the name after `mnt.`; under a mount the name is a path in the mount's tree, in the checkout discovery reports for its `db/repo` (none is `NotEvaluated`): a `.yaml`/`.yml`/`.json` file is read and comes back a dict (a dotted tail below the file walks into it), a function in a `.py` file comes back its [`Fn`](#Fn%20Interface), read off the file and never imported in this process, and a module-level literal (`TABLE = {...}`) its value. A mounted prefix owns its names: one nothing answers to is `ImportError`, a file and a module answering to one name `KeyError`. A name not starting `mnt.` is never a mount and is imported (unsandboxed); `mnt` alone, or a `mnt.` name under no mount, is `ImportError`. Imported, a `@dat.fn` coming back its `Fn` and anything else as itself. An `Fn`'s `kind` is read off the function: `"ledger"` for a `@dat.fn`, `"dat"` for an undecorated one, a dat's run function, which runs only through a spec ([`run`](#^run)). In a project whose `.datconfig.yaml` names a ledger, `Dat.manager.ns` is this namespace at the head, `mount` refused; inside a sandboxed dat body it is this namespace at the run's revision (DAT 1047). See [Execution Semantics](#Execution%20Semantics). ^ns
+    The ledger's namespace at this revision (DAT 1046, 1051), the `Namespace` interface of [DAT Namespace API](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Design/DAT%20API/DAT%20Namespace%20API.md): `rev.ns.load(name)` is what the dotted `name` denotes here, `rev.ns.mounts()` the `db/mount` rows as `{prefix: {"root": ..., "repo": ...}}`, `rev.ns.expand(template, **vars)` a template filled through these names in this revision's [display zone](#^timezone) with `{unique}` counted against this revision ([Expansion](../../expand.md)), and `mount` is `TypeError` (a transaction's [`t.ns`](#^transaction-ns) mounts). A mounted name is `mnt.<prefix>...`: the `db/mount/<prefix>` rows as of the revision are walked longest prefix first for the name after `mnt.`; under a mount the name is a path in the mount's tree, in the checkout discovery reports for its `db/repo` (none is `NotEvaluated`): a `.yaml`/`.yml`/`.json` file is read and comes back a dict (a dotted tail below the file walks into it), a function in a `.py` file comes back its [`Fn`](#Fn%20Interface), read off the file and never imported in this process, and a module-level literal (`TABLE = {...}`) its value. A mounted prefix owns its names: one nothing answers to is `ImportError`, a file and a module answering to one name `KeyError`. A name not starting `mnt.` is never a mount and is imported (unsandboxed); `mnt` alone, or a `mnt.` name under no mount, is `ImportError`. Imported, a `@dat.fn` coming back its `Fn` and anything else as itself. An `Fn`'s `kind` is read off the function: `"ledger"` for a `@dat.fn`, `"dat"` for an undecorated one, a dat's run function, which runs only through a spec ([`run`](#^run)). In a project whose `.datconfig.yaml` names a ledger, `Dat.manager.ns` is this namespace at the head, `mount` refused; inside a sandboxed dat body it is this namespace at the run's revision (DAT 1047). See [Execution Semantics](#Execution%20Semantics). ^ns
 
 **timezone**`: ZoneInfo`
     The zone this revision prints times in: the `(db, db/timezone, <IANA name>)` row as of this revision, UTC with none (SVP 1505 Q2). Stamps are stored UTC and never move; the setting decides only how they print, so any revision may add, change or remove it (`t.add("db", "db/timezone", "America/Los_Angeles")`). The clock built-ins of `rev.ns.expand` are in it too ([Expansion](../../expand.md)). ^timezone
@@ -139,18 +114,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 ## Ref Interface
 A reference to one value at one moment, named without fetching a byte: the subject and the revision, nothing loaded until `load`. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is `<Ref label>` and its `str` the bare label: the value's name (the alias naming it written latest), else `#` + the hash's first 8 hex (DAT 1036). Made from a recording `Rev`, it traces its reads into the dependencies like the `Rev` would.
 
-| Ref                      |                                        |
-| ------------------------ | -------------------------------------- |
-| [Ref](#^ref)             | Name a value at a revision             |
-| [rev](#^rev)             | The revision the reference was made at |
-| [subject](#^subject)     | The subject, alias resolved            |
-| [name](#^name)           | The print name currently associated with the value |
-| [aliases](#^aliases)     | Every alias naming the subject         |
-| [hash](#^hash)           | The sha256 of the value's bytes        |
-| [type](#^type)           | The class that decodes it              |
-| [preds](#^preds)         | The subject's user rows                |
-| [sealed_at](#^sealed-at) | The revision it was sealed into the ledger |
-| [load](#^ref-load)       | Fetch, decode and restore the value    |
+<!-- methods: dvc_dat.ledger.Ref -->
 
 **Ref**`(rev: Rev, name: str)`
     A reference to whatever `name` (a subject or an alias) names at `rev`. `rev` not a `Rev` or `name` not a non-empty `str` is `TypeError`. ^ref
@@ -187,13 +151,7 @@ A reference to one value at one moment, named without fetching a byte: the subje
 ## Row Interface
 A named tuple encoding a single row in the ledger: revision, subject, predicate, object, and an added/removed bit. `history()` returns them; `str(row)` is one aligned line: revision, `+` or `-`, subject, predicate, object.
 
-| Row                      |                                    |
-| ------------------------ | ---------------------------------- |
-| [rev](#^row-rev)         | The revision that wrote it         |
-| [subject](#^row-subject) | The subject                        |
-| [predicate](#^predicate) | The predicate                      |
-| [object](#^object)       | The object, decoded                |
-| [added](#^added)         | True/False indicates added/removed |
+<!-- methods: dvc_dat.ledger.Row -->
 
 **rev**`: Rev`
     The revision that wrote the row. ^row-rev
@@ -215,20 +173,7 @@ A named tuple encoding a single row in the ledger: revision, subject, predicate,
 ## Transaction Interface
 The write set of one `with L.transaction(...) as t:` block; it becomes exactly one revision on exit, or nothing. `add`, `update` and `remove` append rows and read nothing; `v.seal(t)` seals a value into it; the bracket forms are helpers over `add` and `remove`. **A transaction reads the previous revision and writes the next; its own pending writes are not seen until it closes.** Its read verbs are `previous_rev`'s: `get`, `all`, `history`, `refs`, `values`, `value`, `select`, `load`, `in`, and `t[s, p]` / `t[s]` as a read (`t[s, p] = o` / `t[s] = {...}` write). `previous_rev` is bound to the previous revision and exists only under `lock=`, because an unlocked transaction has no well-defined previous revision (another writer may commit between open and exit). The helpers that read and then write (`t[s] = {...}`, `del`, `bump`) read through it, so they need `lock=`; unlocked they raise `Unlocked` and write nothing. Whatever must see the transaction's own rows is checked at commit, inside the write lock. Entered once; a verb used outside the block is `RuntimeError`.
 
-| Transaction | |
-| --- | --- |
-| [tx](#^transaction-tx) | A placeholder for this revision's tx subject |
-| [previous_rev](#^previous-rev) | The previous revision, the top while `lock=` holds |
-| [ns](#^transaction-ns) | The namespace at `previous_rev`; `ns.mount` writes a mount |
-| [reads](#^transaction-reads) | `get`, `all`, `history`, `refs`, `values`, `value`, `select`, `load`, `in`, `t[s, p]`: at `previous_rev` |
-| [rev](#^transaction-rev) | The revision the exit wrote |
-| [add](#^add) | Append an add row |
-| [update](#^update) | An add per key of a record |
-| [__setitem__](#^--setitem--) | Assign a predicate, or a whole record |
-| [remove](#^remove) | Append a remove row |
-| [__delitem__](#^--delitem--) | Retract a predicate, or every user predicate |
-| [pin](#^pin) | Tag and push a value's commit; assert the value is rerunnable |
-| [copy](#^copy-value) | Copy values from another ledger, with what they depend on |
+<!-- methods: dvc_dat.ledger.Transaction -->
 
 **tx**`: str`
     A placeholder subject, rewritten to `db/tx/<rev>` at commit wherever it appears as a subject or a `str` object, so the body can write rows about its own transaction. ^transaction-tx
@@ -285,21 +230,7 @@ str(f)               # 'mnt.plane.measure.length@2.7.1'
 f.code               # <Code plane@2.7.1>
 ```
 
-| Value                      |                                                   |
-| -------------------------- | ------------------------------------------------- |
-| [preds](#^value-preds)     | The strings the value is found by                 |
-| [subject](#^value-subject) | Its ledger subject once saved                     |
-| [rev](#^value-rev)         | The revision that saved it                        |
-| [sealed](#^sealed)         | The seal's moment, or None while unsealed         |
-| [hash](#^value-hash)       | The sha256 of its encoding                        |
-| [dependencies](#^dependencies) | What producing it read                       |
-| [Dependencies](#^value-dependencies) | The type of `dependencies`             |
-| [encode](#^encode)         | Abstract: write the bytes to store to a stream, every subclass implements it |
-| [decode](#^decode)         | Abstract: the object read from a stream, every subclass implements it |
-| [seal](#^seal)             | Fix its identity, and save it when given a ledger |
-| [same_as](#^same-as)       | Equal bytes                                       |
-| [matches](#^matches)       | Whether its dependencies still hold at a revision |
-| [diff](#^diff)             | The dependency items that differ from another value's |
+<!-- methods: dvc_dat.ledger.Value -->
 
 **preds**`: dict | FrozenPreds`
     A `dict` while unsealed, assignable as a whole; a `FrozenPreds` once sealed, whose every mutator is `TypeError`. Each pred is a `str`, number, bool, list, `Value` or `Ref`, and its name must be declared by the class's `@ledger_class` (`Undeclared` at the seal). ^value-preds
@@ -389,7 +320,7 @@ A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted
 | [spec_kind](#^spec-kind) | The dat.kind a folder's spec names |
 
 **Dat**`(path, *, name: str | None = None)`
-    The dat already in the folder `path`: its spec and results read from `_spec_.yaml` and `_result_.yaml` (each `{}` when absent); a value whose bytes are the folder's manifest. `name` is the name a save gives it. `Dat.create(spec=...)` and `Dat.load(name)` make one through the dat manager ([DAT Class API](../../DAT%20Design/DAT%20API/DAT%20Class%20API.md)). ^dat
+    The dat already in the folder `path`: its spec and results read from `_spec_.yaml` and `_result_.yaml` (each `{}` when absent); a value whose bytes are the folder's manifest. `name` is the name a save gives it. `Dat.create(spec=...)` and `Dat.load(name)` make one through the dat manager ([DAT Class API](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Design/DAT%20API/DAT%20Class%20API.md)). ^dat
 
 **path**`: Path`
     The folder, `get_path()` as a `Path`. After a save it is the stored copy under `art/dats/<16 hex>/`, or `art/dats/<name>/` when named; after a load by an alias, `art/dats/<alias>/`. Those files are hardlinks into the art store where the filesystem allows: write a new folder and seal it, never edit one in place. ^dat-path
@@ -417,17 +348,7 @@ A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted
 ## Fn Interface
 A value function resolved at one revision: a frozen dataclass made by `rev.ns.load`, never by hand. Calling it is `run`. Only the snapshot has identity; a function is a name looked up inside it (DAT 1037): it has `name` and `code` and no `subject` or `sha`, since it is not on the timeline. It prints as `<Fn mnt.plane.measure.length@2.7.1>`, `str` `mnt.plane.measure.length@2.7.1`: the dotted name `@` its code's version; a mounted function's name starts `mnt.`. `code` says where the code comes from: installed in the ledger's own Python environment (imported in this process), or mounted from a checkout (`code.sandboxed`, run in a worker).
 
-| Fn | |
-| --- | --- |
-| [name](#^fn-name) | The dotted name |
-| [module](#^module) | The source file |
-| [code](#^fn-code) | The code it is loaded from, at a version: the snapshot, which alone has identity |
-| [mount](#^mount) | The mounted prefix, when sandboxed |
-| [env](#^env) | The environment it resolved in |
-| [signature](#^signature) | The keys it takes |
-| [kind](#^fn-kind) | `"ledger"` or `"dat"`, read off the function |
-| [reproducible](#^fn-reproducible) | The function's own claim, as written |
-| [__call__](#^--call--) | Evaluate: a memo hit, or run and send the result where `seal=` says |
+<!-- methods: dvc_dat.ledger.Fn -->
 
 **name**`: str`
     The dotted name it was resolved by. ^fn-name

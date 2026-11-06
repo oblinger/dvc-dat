@@ -187,6 +187,7 @@ class Transaction:
         self._lock = lock
         #: A placeholder for ``db/tx/<rev>``, rewritten at commit.
         self.tx = f"db/tx/pending-{uuid.uuid4().hex[:12]}"
+        """A placeholder for this revision's tx subject."""
         self._preds: List[Tuple[str, str]] = []
         for k, v in preds.items():
             if k.startswith("db/"):

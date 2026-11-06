@@ -45,17 +45,22 @@ class FrozenPreds(dict):
 class Value:
     """The object itself, with its provenance on it."""
 
-    #: Item name -> version or hash: what producing a value read.
     Dependencies: ClassVar[Any] = Mapping[str, str]
+    """The type of ``dependencies``: item name to version or hash."""
     #: The pred names a kind declares (``@ledger_class``); none by default.
     _ledger_preds: ClassVar[tuple] = ()
 
     subject: Optional[str] = None
+    """Its ledger subject once saved."""
     rev: Optional["Rev"] = None
+    """The revision that saved it."""
     dependencies: Mapping[str, str] = _EMPTY
-    #: The seal's moment, UTC ``YYYY-MM-DDTHH:MM:SSZ``, once the identity is fixed by ``v.seal()`` or a save;
-    #: ``None`` while unsealed, so it reads as the boolean too.
+    """What producing it read."""
     sealed: Optional[str] = None
+    """The seal's moment, UTC ``YYYY-MM-DDTHH:MM:SSZ``, or ``None`` while unsealed, so it reads as the boolean too.
+
+    The identity is fixed by ``v.seal()`` or a save.
+    """
 
     def __init__(self, *, name: Optional[str] = None) -> None:
         if name is not None:

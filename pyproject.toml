@@ -17,8 +17,11 @@ dynamic = ["version"]
 excel = ["xlsxwriter"]
 pg = ["psycopg[binary]>=3.1"]
 
+[project.entry-points."mkdocs.plugins"]
+dat-vault = "dvc_dat.docs.vault:VaultPlugin"
+
 [tool.setuptools]
-packages = ["dvc_dat", "dvc_dat.ledger"]
+packages = ["dvc_dat", "dvc_dat.docs", "dvc_dat.ledger"]
 
 [tool.setuptools.package-data]
 dvc_dat = ["dvc_dat.just"]
@@ -40,6 +43,8 @@ dev = [
 ]
 # the documentation site (`just docs`): pinned to releases at least two weeks old
 docs = [
+    "griffelib",
+    "mkdocs-jupyter==0.26.3",
     "mkdocs-material==9.7.7",
     "mkdocstrings[python]==1.0.7",
     "mkdocstrings-python==2.0.9",
@@ -60,6 +65,7 @@ mergedeep = "2026-10-17T00:00:00Z"
 mkdocs = "2026-10-17T00:00:00Z"
 mkdocs-autorefs = "2026-10-17T00:00:00Z"
 mkdocs-get-deps = "2026-10-17T00:00:00Z"
+mkdocs-jupyter = "2026-10-17T00:00:00Z"
 mkdocs-material = "2026-10-17T00:00:00Z"
 mkdocs-material-extensions = "2026-10-17T00:00:00Z"
 mkdocstrings = "2026-10-17T00:00:00Z"

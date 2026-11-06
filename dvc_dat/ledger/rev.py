@@ -50,10 +50,15 @@ class Row(NamedTuple):
     """A single row in the ledger: revision, subject, predicate, object, and ``added`` (false on a remove, A48)."""
 
     rev: "Rev"
+    """The revision that wrote it."""
     subject: str
+    """The subject."""
     predicate: str
+    """The predicate."""
     object: Any
+    """The object, decoded."""
     added: bool
+    """True for an add, False for a remove."""
 
     def __repr__(self) -> str:
         """``<Row subject predicate object rev=N +>``: the triple, the revision that wrote it, ``+`` added or ``-`` removed."""
@@ -142,7 +147,9 @@ class Rev:
 
     def __init__(self, ledger: "Ledger", id: int, _rec: Optional[Dict[str, str]] = None) -> None:
         self.ledger = ledger
+        """The ledger this view reads."""
         self.id = id
+        """The revision number."""
         self._rec = _rec
         self._cards: Dict[str, str] = {}
 

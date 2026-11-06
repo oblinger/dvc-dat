@@ -5,6 +5,7 @@ __pycache__
 .idea
 /data/
 /site/
+/.cache/
 /tests/test_sync_folder/test_dats
 # Dats the suite writes with generated names -- 130 of these were swept into a
 # commit once; the examples/ twin was ignored but this one was missed.

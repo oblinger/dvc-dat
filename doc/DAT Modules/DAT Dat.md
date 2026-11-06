@@ -11,37 +11,14 @@ A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for its
 
 *The spec is the record* is the topic that governs the Namespace node (arguments fork a new spec; they never ride beside one); the other topics annotate the nodes they govern.
 
-This page covers the dat half of `dvc_dat`: `Dat`, `DatManager` and `DatContainer` in `dvc_dat/core.py`, `Namespace` in `dvc_dat/do.py`, and the package's exports; the figure above is the heart. The per-file detail page is [dat.md](dat.md); the history half, the ledger, has its own module doc, [DAT Ledger](ledger/DAT%20Ledger.md); the spec file is [Spec Format](../spec-format.md) and the command line [Command Line](../cli.md).
+This page covers the dat half of `dvc_dat`: `Dat`, `DatManager` and `DatContainer` in `dvc_dat/core.py`, `Namespace` in `dvc_dat/do.py`, and the package's exports; the figure above is the heart. The per-file detail page is [dat.md](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Modules/dat.md); the history half, the ledger, has its own module doc, [DAT Ledger](ledger/DAT%20Ledger.md); the spec file is [Spec Format](../spec-format.md) and the command line [Command Line](../cli.md).
 
 
 
 ## Dat Interface
 A folder of data described by its `_spec_.yaml`, held in memory as the spec as written, the mutable results, and the path. A dat is made by `Dat.create` or `DatManager.create` and read by `Dat.load` or `DatManager.load`; `Dat(path, spec, result)` is the constructor those call, and `Dat(path)` alone is the dat already in that folder, its spec and results read from there (`{}` each when absent). A dat is also a ledger value, one class (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Value` and carries the folder codec, so `seal`, `preds`, `subject`, `sealed` and `hash` are on every dat; its bytes are the folder's manifest, its preds default to the spec's scalar `dat.kwargs` and the results' scalar top-level entries, and a dat seals as a value once saved ([DAT Ledger § Dat Interface](ledger/DAT%20Ledger.md#Dat%20Interface)). Subclasses are the dat's kinds: `dat.kind` in the spec names one, and a subclass overrides `validate_spec` to check its own fields. The class-level members act on the default world, `Dat.manager`; an instance acts on the manager that loaded it.
 
-| Dat | |
-| --- | --- |
-| [manager](#^manager) | The default world on the class; the dat's own world on an instance |
-| [ns](#^dat-ns) | The default world's namespace, class-level only; not callable |
-| [load](#^load) | Open a dat on disk in the default world |
-| [create](#^create) | Make a dat on disk in the default world |
-| [get_spec](#^get-spec) | The spec as written |
-| [get_results](#^get-results) | The mutable results, persisted by save |
-| [get_path](#^get-path) | The folder's absolute path |
-| [get_path_name](#^get-path-name) | The name: the path relative to its dat folder |
-| [run](#^run) | The run sub-dat that made this dat |
-| [save](#^save) | Write the results, stamp the hash and standing; seal |
-| [verify](#^verify) | Does the folder still hash to its stored hash? |
-| [standing](#^standing) | How far a stored name can be relied on |
-| [save_artifact](#^save-artifact) | Store a file or folder as an artifact |
-| [load_artifact](#^load-artifact) | An artifact by name or URN |
-| [delete](#^delete) | Remove the folder |
-| [copy](#^copy) | Copy the folder to a new path |
-| [move](#^move) | Move the folder to a new path |
-| [validate_spec](#^validate-spec) | The subclass hook that checks a spec |
-| [get](#^get) | Read a dotted key path in a dict tree |
-| [set](#^set) | Write a dotted key path in a dict tree |
-| [merge_dicts](#^merge-dicts) | The zipper merge `dat.base` uses |
-| [cli_main](#^cli-main) | The command line (`just run`), for a program's main |
+<!-- methods: dvc_dat.core.Dat -->
 
 **manager**`: DatManager`
     On the class, the process's default world: a plain assignable attribute, built on first read by `DatManager.load_dat_config()`, shared by every subclass, and replaced by assigning a `DatManager` (anything else is `TypeError`; assigning `None` clears it, so the next read builds it again). On an instance, read-only: the manager that loaded the dat, else the default. See [The manager is the world](#The%20manager%20is%20the%20world). ^manager
@@ -117,24 +94,7 @@ A folder of data described by its `_spec_.yaml`, held in memory as the spec as w
 ## DatManager Interface
 A world of dats: the dat folders searched by name (the first is where new dats are made), the artifact folder beside them, the index of names and URNs, and an `ns` namespace that names things; `run` runs dats, specs and callables. Every dotted spec, `dat.base`, `{}` expansion, path lookup and run goes through the manager's `ns`, so every load inside a run passes through the manager and is recorded. Any number of managers coexist; `Dat.manager` is the default one. `run` is fixed; a subclass that overrides the private `_execute` and calls `super()` wraps every run in its world.
 
-| DatManager | |
-| --- | --- |
-| [__init__](#^--init--) | A world on a list of dat folders; reads nothing from disk |
-| [load_dat_config](#^load-dat-config) | A world from the nearest `.datconfig.yaml` |
-| [ns](#^datmanager-ns) | The manager's own `Namespace` |
-| [create](#^datmanager-create) | Resolve, validate, place, expand and write a new dat |
-| [load](#^datmanager-load) | A dat or an artifact by name or URN |
-| [load_path](#^load-path) | Where load would find it, with nothing built |
-| [exists](#^exists) | Is anything stored under this name? |
-| [standing](#^datmanager-standing) | How far a stored name can be relied on |
-| [run](#^datmanager-run) | Run a dat, a template spec or a callable; the one run |
-| [recording](#^recording) | Capture every load in a block into a dat's dependencies |
-| [record_dependency](#^record-dependency) | Record an input that no load went through |
-| [roots](#^roots) | A dependency map trimmed to its roots |
-| [code_of](#^code-of) | The git branch, commit and dirty flag of a function |
-| [save_artifact](#^datmanager-save-artifact) | Store a file or folder by hash |
-| [load_artifact](#^datmanager-load-artifact) | An artifact only, by name or URN |
-| [reindex](#^reindex) | Rebuild the index from the folders |
+<!-- methods: dvc_dat.core.DatManager -->
 
 **__init__**`(*, dat_folders: list[str], art_folder: str | None = None, index: str | None = None, ns: Namespace | None = None, verify: bool = False)`
     A world on `dat_folders`, searched in order, the first written to; `art_folder` holds the artifacts, and with none this world holds no artifacts. `index` is the index file, default `_index_.json` in the artifact folder, else in the first dat folder. `ns` adopts an existing namespace with its mounts, and adopting the default world's `ns` makes this manager the default world; with none the manager builds a fresh `Namespace`. Every manager mounts `dvc_dat.dat_tools` at `dt`. `verify` sets the default of every load's `verify`. Reads nothing from disk. A string for `dat_folders` is `TypeError`, an empty list `ValueError`, an artifact folder nested with a dat folder `ValueError`, a non-bool `verify` `TypeError`. ^--init--
@@ -189,10 +149,7 @@ A world of dats: the dat folders searched by name (the first is where new dats a
 ## DatContainer Interface
 A `Dat` whose folder holds other dats: every folder below it carrying a spec file, found lazily and loaded through the container's own world. A child's `run/` sub-dat is not a child. Made and loaded like any dat, with `dat.kind` naming `DatContainer` or a subclass.
 
-| DatContainer | |
-| --- | --- |
-| [get_dat_paths](#^get-dat-paths) | The full paths of the contained dats |
-| [get_dats](#^get-dats) | The contained dats, loaded |
+<!-- methods: dvc_dat.core.DatContainer -->
 
 **get_dat_paths**`() -> List[str]`
     The absolute paths of every dat folder below this one, sorted, the container itself left out; computed on first call and kept. ^get-dat-paths
@@ -205,13 +162,7 @@ A `Dat` whose folder holds other dats: every folder below it carrying a spec fil
 ## Namespace Interface
 A namespace of dotted names, bound to the `DatManager` whose world it names; not callable (running is `manager.run`). Every manager builds its own, reached as `manager.ns`; `Dat.ns` forwards to `Dat.manager.ns`. `Namespace(manager=None)` is the constructor: a bare `Namespace()` mounts, loads and names with no world, and its `manager` is `RuntimeError` until a manager built with `ns=` adopts it. A dotted name is a mounted name first, else exactly what `import` means in this environment, `getattr` below that.
 
-| Namespace | |
-| --- | --- |
-| [manager](#^do-manager) | The world this namespace belongs to |
-| [load](#^do-load) | The object a dotted name names |
-| [name_of](#^name-of) | The dotted name that loads back to an object |
-| [mounts](#^mounts) | The mount table, `{prefix: location}` |
-| [mount](#^mount) | Add a folder, file, module or value to the namespace |
+<!-- methods: dvc_dat.do.Namespace -->
 
 **manager**`: DatManager` (property)
     The manager this namespace belongs to; `RuntimeError` when it has none. ^do-manager
@@ -369,5 +320,5 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 
 # BRIEF
 - Hand-written against `dvc_dat/core.py` and `dvc_dat/do.py` at 2.18.0; the code is the authority, and every name and signature here was read from it. The figure is hand-written SVG; edit it beside this page.
-- [dat.md](dat.md) is the terse per-file list of the same surface and stays as it is; keep the two in step when the surface changes. `dvc_dat.ledger.Dat` is this class since 2.28.0 (DAT 1038); its value side is documented under [DAT Ledger](ledger/DAT%20Ledger.md).
+- [dat.md](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Modules/dat.md) is the terse per-file list of the same surface and stays as it is; keep the two in step when the surface changes. `dvc_dat.ledger.Dat` is this class since 2.28.0 (DAT 1038); its value side is documented under [DAT Ledger](ledger/DAT%20Ledger.md).
 - Block IDs: `Dat.ns` is `^dat-ns` and `DatManager.ns` `^datmanager-ns`, one page holding both; a prefix with the package name would carry an underscore, which breaks an Obsidian block link.
