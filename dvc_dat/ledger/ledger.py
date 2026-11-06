@@ -23,12 +23,13 @@ object, are ``named``.
 
 from __future__ import annotations
 
+import datetime as _dt
 import keyword
 import os
 import re
 import weakref
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import yaml
 
@@ -46,6 +47,8 @@ OVERRIDE = ".datconfig.override.yaml"
 DEFAULT = ".dat/ledger"
 NAME = re.compile(r"^[a-z][a-z0-9_]*$")    # a ledger's name in ``ledgers:``: a Python identifier, its database name
 _VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+_MONTH = re.compile(r"\d{4}-\d{2}")       # a ``revs`` bound written as a month, as its labels read
+PERIODS = ("day", "week", "month")         # ``revs``'s calendar selectors
 
 Target = Union[str, Path]                  # a DSN, or a folder
 
@@ -62,6 +65,39 @@ def opened(name: str) -> Optional["Ledger"]:
         if led is not None and led._store.name == name:
             return led
     return None
+
+
+def opened_at(key: str) -> "Ledger":
+    """A handle on the ledger ``key`` names (``fn.ledger_key``): one open in this process, else a new one."""
+    from .fn import ledger_key
+
+    _OPEN[:] = [r for r in _OPEN if r() is not None]
+    for r in reversed(_OPEN):
+        led = r()
+        if led is not None and ledger_key(led) == key:
+            return led
+    return Ledger(key)
+
+
+def period_starts(kind: str, first: _dt.date, last: _dt.date) -> Iterator[Tuple[str, _dt.date]]:
+    """``(label, its first day)`` of each ``day``, ``week`` (Monday, labelled ``2026-W45``) or ``month`` from the
+    one holding ``first`` through the one holding ``last``."""
+    day = first
+    if kind == "week":
+        day -= _dt.timedelta(days=day.weekday())
+    elif kind == "month":
+        day = day.replace(day=1)
+    while day <= last:
+        if kind == "day":
+            yield day.isoformat(), day
+            day += _dt.timedelta(days=1)
+        elif kind == "week":
+            iso = day.isocalendar()
+            yield f"{iso[0]}-W{iso[1]:02d}", day
+            day += _dt.timedelta(days=7)
+        else:
+            yield f"{day.year}-{day.month:02d}", day
+            day = (day.replace(day=28) + _dt.timedelta(days=4)).replace(day=1)
 
 
 def _read_config(cfg: Path) -> Dict[str, Any]:
@@ -324,14 +360,86 @@ class Ledger:
     def _at_moment(self, text: str, top: int) -> Rev:
         """The latest revision whose ``db/time`` is at or before the moment ``text`` names (SVP 1507)."""
         when = moment(text, Rev(self, top).timezone)
-        stamped = [(rev, stored_moment(show(obj))) for rev, _o, subject, _p, obj, added
-                   in self._store.rows(top, predicate="db/time") if added and subject == f"db/tx/{rev}"]
+        stamped = self._stamped(top)
         found = [rev for rev, t in stamped if t <= when]
         if not found:
             first = min(stamped, key=lambda x: x[1])[1].isoformat() if stamped else None
             raise KeyError(f"no revision at or before {text} ({when.isoformat()}): the first is stamped {first}"
                            if first else f"no revision at or before {text}: the ledger has no stamped revision")
         return Rev(self, max(found))
+
+    def _stamped(self, top: int) -> List[Tuple[int, Any]]:
+        """``(revision, its db/time as a UTC datetime)`` of every stamped revision up to ``top``."""
+        return [(rev, stored_moment(show(obj))) for rev, _o, subject, _p, obj, added
+                in self._store.rows(top, predicate="db/time") if added and subject == f"db/tx/{rev}"]
+
+    def revs(self, which: Union[str, Iterable[Any]], *, since: Any = None, until: Any = None) -> Dict[str, Rev]:
+        """Past revisions by label, oldest first; reads the ledger, runs nothing (SVP 245). ``which`` is
+        ``"release"`` (each ``db db/version`` add, labelled by the version), ``"tag"`` (each ``db db/tag`` add, by
+        the tag), ``"day"`` / ``"week"`` / ``"month"`` (each period whose start lies in the span, labelled
+        ``2026-11-02``, ``2026-W45``, ``2026-11``, the latest revision stamped at or before that start in the
+        display zone, as ``at`` reads it; a period before the first stamped revision is omitted), or an iterable of
+        ``at`` arguments, in the order given, labelled by ``str(each)``. ``since`` and ``until`` are ``at``
+        arguments, or a month ``2026-11``, inclusive: absent, the first stamped revision and the top. A moment
+        bounds by time and names no revision, so one before the first stamp is no ``KeyError``. Two labels may
+        share a revision. ``{label: rev.run(...) for label, rev in L.revs(...).items()}`` is a sweep."""
+        top = self._store.top()
+        head = Rev(self, top)
+        zone = head.timezone
+        stamped = self._stamped(top)
+        low, high = self._bound(since, zone), self._bound(until, zone)
+        if isinstance(which, str) and which in PERIODS:
+            return self._periods(which, stamped, low, high, zone)
+        if which == "release" or which == "tag":
+            found = [(str(r.object), r.rev) for r in head.history("db", f"db/{'version' if which == 'release' else 'tag'}")
+                     if r.added]
+        elif isinstance(which, (str, bytes)) or not isinstance(which, Iterable):
+            raise TypeError(f"revs takes 'release', 'tag', 'day', 'week', 'month' or an iterable of at arguments, "
+                            f"not {which!r}")
+        else:
+            found = [(str(each), self.at(each)) for each in which]
+        stamps = dict(stamped)
+
+        def inside(rev: int) -> bool:
+            when = stamps.get(rev)
+            if isinstance(low, int) and rev < low or isinstance(high, int) and rev > high:
+                return False
+            return not (isinstance(low, _dt.datetime) and (when is None or when < low)
+                        or isinstance(high, _dt.datetime) and (when is None or when > high))
+        out: Dict[str, Rev] = {}
+        for label, rev in found:
+            if inside(rev.id):
+                out.pop(label, None)
+                out[label] = rev
+        return out
+
+    def _bound(self, which: Any, zone: Any) -> Any:
+        """A ``revs`` bound: ``None``, the UTC moment it names, or the revision ``at`` reads it as."""
+        if isinstance(which, str) and _MONTH.fullmatch(which):
+            which += "-01"
+        return None if which is None else moment(which, zone) if is_moment(which) else self.at(which).id
+
+    def _periods(self, kind: str, stamped: List[Tuple[int, Any]], low: Any, high: Any, zone: Any) -> Dict[str, Rev]:
+        """``revs`` by calendar: ``low`` and ``high`` as ``_bound`` left them, a revision read as its stamp."""
+        after = [t for rev, t in stamped if not isinstance(low, int) or rev >= low]
+        before = [t for rev, t in stamped if not isinstance(high, int) or rev <= high]
+        start = low if isinstance(low, _dt.datetime) else min(after, default=None)
+        end = high if isinstance(high, _dt.datetime) else max(before, default=None)
+        if start is None or end is None:
+            return {}
+        ordered = sorted((t, rev) for rev, t in stamped)
+        out: Dict[str, Rev] = {}
+        i, latest = 0, None
+        for label, day in period_starts(kind, start.astimezone(zone).date(), end.astimezone(zone).date()):
+            begins = moment(day.isoformat(), zone)
+            if not start <= begins <= end:
+                continue
+            while i < len(ordered) and ordered[i][0] <= begins:
+                latest = ordered[i][1] if latest is None else max(latest, ordered[i][1])
+                i += 1
+            if latest is not None:
+                out[label] = Rev(self, latest)
+        return out
 
     def transaction(self, *, by: Union[str, Dict[str, Any]], lock: Optional[float] = None,
                     **preds: Any) -> Transaction:

@@ -198,6 +198,7 @@ def test_a_copy_has_the_same_hash_subject_and_provenance(w):
     assert dict(got.dependencies) == dict(v.dependencies)
     r = rows(w.results, v.subject)
     assert r[COPIED_FROM] == f"do26@{source}" and r["db/fn"] == FN + "base" and r["db/keys"] == {"n": 1}
+    assert "db/at" not in r and got.at is None and v.at.ledger is w.do26    # a revision of another ledger: left there
     assert r["db/commit"] == w.commit and r["db/provenance"] == "eval:unsandboxed"
     assert w.results.at().get(v.dependencies["code"], "db/modules") is not None
     assert w.results.at()._store.art.exists(v.hash)

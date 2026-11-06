@@ -343,6 +343,22 @@ class Value:
             self.__dict__["_hash"] = h
         return h
 
+    @property
+    def at(self) -> Optional["Rev"]:
+        """The revision the value's run read (SVP 245), its ``db/at`` row; ``rev`` is the revision that saved it.
+        A draft's comes from its trace; ``None`` for a hand seal, and for a copy, whose row stays on its origin."""
+        if self.rev is not None and self.subject is not None:
+            from .fn import AT
+
+            held = self.rev.get(self.subject, AT)
+            return None if held is None else self.rev.ledger.at(int(held))
+        run = self.__dict__.get("_run")
+        if run is None or run.at is None:
+            return None
+        from .ledger import opened_at
+
+        return opened_at(run.ledger).at(run.at)
+
     def matches(self, rev: "Rev") -> bool:
         """Every dependency item at its value at ``rev``: the hit test; consults the memo only, never runs."""
         from .trace import trace_matches
