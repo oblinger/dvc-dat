@@ -57,13 +57,14 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
   keeps `ledger.db` (or a Postgres schema) and its own `art/`. Both key
   bytes by sha256; they are separate folders.
 - **One configuration file.** `.datconfig.yaml` configures the dat
-  manager and, under `ledger:`, names the ledger, or under `ledgers:`
-  several by name (`ledgers.record`); `Ledger()` and `L` find the active
-  one by walking up from the working directory (`DAT_LEDGER`, else the
-  section's `default:` from `.datconfig.override.yaml`) and assert its
-  `mounts:` as ledger rows. A `ledger:` key makes the project's names
-  the ledger's `db/mount` rows; a `ledgers:` section does so only with
-  `namespace: ledger`.
+  manager and, under `root:`, names the root ledger, whose registry
+  lists every other ledger (`ledgers.games`, SVP 239); without it the
+  root is a SQLite folder under the first dat folder, made on first
+  use. `Ledger()` and `L` find the active one by walking up from the
+  working directory (`DAT_LEDGER`, else the file's `default:`) and
+  assert its `mounts:` as ledger rows. `namespace: ledger` makes the
+  project's names the ledger's `db/mount` rows. There is no override
+  file.
 
 ## Designed, not yet built
 

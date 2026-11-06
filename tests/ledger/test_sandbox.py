@@ -8,7 +8,7 @@ import textwrap
 import backends
 import pytest
 
-from dvc_dat.ledger import (ConfinedNetwork, ConfinedProcess, ConfinedWrite, LedgerError, NotClean, NotEvaluated, UnmountedImport,
+from dvc_dat.ledger import (ConfinedNetwork, Ledger, ConfinedProcess, ConfinedWrite, LedgerError, NotClean, NotEvaluated, UnmountedImport,
                              UntracedRead, set_env_provider)
 from dvc_dat.ledger import sandbox
 from dvc_dat.ledger.codec import sha256
@@ -1129,7 +1129,9 @@ def other(sbx, tmp_path, monkeypatch, backend):
     first = games.at().id
     with games.transaction(by="t") as t:
         Value.Blob({"game": 2}).seal(t, name="G1")
-    (repo / ".datconfig.yaml").write_text(f"ledgers:\n  games: {games.path}\n  far: {far.path}\n")
+    root = backends.make(backend, tmp_path / "root")
+    register(root, games=games.path, far=far.path)
+    (repo / ".datconfig.yaml").write_text(f"root: '{root.path}'\n")
     with caller_in(repo, monkeypatch):
         yield L, games, first, games.at().id
 
@@ -1172,6 +1174,20 @@ def test_a_body_reads_a_registered_ledger_by_name_and_it_is_recorded(other):
     want = games.at(second).load("G1")
     assert foreign_items(v) == [(f"{games._store.name}@{second}", "G1", text_of(want))]
     assert foreign_items(L.at().load(v.subject)) == foreign_items(v)            # as rows on the run's ledger
+
+
+def test_a_name_the_caller_dropped_does_not_cross_to_the_body(other):
+    """SVP 239: the caller's view crosses, ``del`` included; a caller that never read root ships root's location,
+    and the body reads the registry there (the test above)."""
+    from dvc_dat import ledgers
+
+    L, _games, _first, second = other
+    assert "far" in ledgers                                      # the caller reads root: its view is filled
+    del ledgers["far"]
+    with pytest.raises(KeyError, match="dropped"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="far", at=None, name="G1")
+    v = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=second, name="G1")
+    assert v.obj == {"seen": {"game": 2}}
 
 
 def test_a_body_reads_a_pinned_older_revision(other):
@@ -1247,9 +1263,18 @@ def test_a_read_of_a_ledger_not_there_says_so(other):
         L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G404")
 
 
+def register(root, **where):
+    """Rows of root's registry (SVP 239): ``ledger/<name> ledger/location <where>``."""
+    with root.transaction(by="t") as t:
+        for name, loc in where.items():
+            t.add(f"ledger/{name}", "ledger/location", str(loc))
+
+
 def test_a_registered_ledger_not_on_disk_and_a_caller_with_no_section_say_so(sbx, tmp_path, monkeypatch):
     L, repo = sbx
-    (repo / ".datconfig.yaml").write_text(f"ledgers:\n  gone: {tmp_path / 'gone'}\n")
+    root = Ledger(tmp_path / "root", create=True)
+    register(root, gone=tmp_path / "gone")
+    (repo / ".datconfig.yaml").write_text(f"root: {root.path}\n")
     with caller_in(repo, monkeypatch):
         with pytest.raises(LedgerError, match="no ledger at gone"):
             L.at().run("mnt.sbx.stage.fns.by_name", ledger="gone", at=None, name="G1")

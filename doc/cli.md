@@ -106,8 +106,8 @@ x my_letters --json rules='[[2, "my_letters.triple_it"]]'
 
 ## With a ledger: `run` evaluates
 
-When the project's names are its ledger's (a `ledger:` line, or `namespace: ledger`; a `ledgers:`
-section alone is not enough), `x TARGET KEY=VALUE ...` runs
+When the project's names are its ledger's (`namespace: ledger` in its `.datconfig.yaml`),
+`x TARGET KEY=VALUE ...` runs
 through the ledger (F447 Q40): `rev.run` of the ledger function TARGET
 names, found if computed before from the same inputs by the same code,
 else run and sealed. It prints `hit` or `ran`, the value (its name, else
@@ -130,7 +130,7 @@ x model-G1.yaml alias=model/prod             # names the result
 folder is built there. `--set` / `--json` update a spec's keys. A target
 that is not a ledger function, and a positional argument, are refused.
 It runs in the active ledger, as `Ledger()` opens it: `DAT_LEDGER` (a
-`ledgers:` name or a location), else the section's `default:`.
+name registered on root, or a location), else the file's `default:`.
 
 ## Commands: `@dat.command` and `.dat/targets.just`
 
@@ -224,7 +224,7 @@ is one call of [`dvc_dat.ledger`](DAT%20Modules/ledger/DAT%20Ledger.md),
 run from the working directory as `python -m dvc_dat.ledger.recipes VERB
 ARGS`, which supplies what a Python caller spells out: the ledger
 (`Ledger()`: `DAT_LEDGER`, else the nearest `.datconfig.yaml`'s
-`ledger:` or its `ledgers:` section's `default:`), `by=human:$USER`, a typed `yes` for a minor or major bump,
+`default:`), `by=human:$USER`, a typed `yes` for a minor or major bump,
 short kind names and hash prefixes.
 
 | Recipe | Does | The call |
