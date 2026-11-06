@@ -63,12 +63,13 @@ def test_a_sha_no_value_has_is_a_key_error(tmp_path):
 def test_no_ledger_is_the_managers_load(tmp_path, monkeypatch):
     monkeypatch.delenv("DAT_LEDGER", raising=False)
     monkeypatch.chdir(tmp_path)
+    before = Dat.manager
     Dat.manager = DatManager(dat_folders=[str(tmp_path / "dats")])
     try:
         made = Dat.manager.create({"dat": {"do": "builtins.print"}}, path="one/two")
         assert dat.load("one/two").get_path() == made.get_path()
     finally:
-        Dat.manager = None
+        Dat.manager = before        # `None` here left the next reader to build one from its own cwd (SVP 1546)
 
 
 def test_a_project_with_a_ledger_never_falls_through(tmp_path, monkeypatch):

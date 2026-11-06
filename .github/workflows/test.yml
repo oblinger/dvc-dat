@@ -30,3 +30,45 @@ jobs:
       - uses: extractions/setup-just@v2     # `just run`, `x` and the ledger-just notebook
       - run: uv sync --locked
       - run: uv run python -m pytest -q -n auto --dist loadgroup
+
+  # One process, in collection order: a test that leaves process-wide state behind (the default
+  # `Dat.manager`, the working directory, an environment variable) breaks a later one only here; the
+  # parallel run above spreads them across workers and hides it (SVP 1546).
+  sequential:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - uses: extractions/setup-just@v2
+      - run: uv sync --locked
+      - run: uv run python -m pytest -q -p no:xdist
+
+  # The `pg` cases skip without a server; here the whole suite runs with them against Postgres 16
+  # (tests/ledger/backends.py reads DVC_DAT_TEST_PG).
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: dvcdat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DVC_DAT_TEST_PG: postgresql://postgres:dvcdat@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - uses: extractions/setup-just@v2
+      - run: uv sync --locked
+      - run: uv run python -m pytest -q -n auto --dist loadgroup

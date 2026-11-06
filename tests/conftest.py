@@ -29,6 +29,20 @@ import mounts  # noqa: E402,F401  -- the test namespace; a program imports its o
 _OWN_WORLD = {"test_capture_and_artifacts.py"}
 
 
+@pytest.fixture(autouse=True)
+def _the_default_world_is_restored():
+    """A test that replaces `Dat.manager` puts it back.  One that does not fails here, at itself, and the
+    world is restored: left changed, every later test in the process reads the wrong one, which only a
+    sequential run shows (SVP 1546)."""
+    from dvc_dat import core
+    before = core._default_manager
+    yield
+    after = core._default_manager
+    if after is not before:
+        core._default_manager = before
+        pytest.fail(f"the test left Dat.manager changed ({after!r}); restore it", pytrace=False)
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config, items):
     for item in items:

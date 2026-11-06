@@ -228,7 +228,8 @@ def test_rerun_reproduces_from_a_fresh_clone_after_the_branch_is_squashed_and_co
     assert isinstance(out, Rerun) and out.outcome == REPRODUCED and out.reproduced
     assert out.hash == out.expected == v.hash and out.reproducible is None and out.tag == tag_of(w.commit)
     assert out.worktree.is_dir() and git(out.worktree, "rev-parse", "HEAD") == w.commit
-    assert str(out.worktree).startswith(str(w.L.path)), "the worktree lives under the ledger"
+    assert out.worktree.resolve().is_relative_to((w.tmp / "ledger").resolve()), \
+        "the worktree lives with the ledger's art store"          # `L.path` is a DSN on Postgres (SVP 1546)
     again = w.L.at().rerun(v)
     assert again.worktree == out.worktree and again.reproduced     # reused, not fetched again
 
