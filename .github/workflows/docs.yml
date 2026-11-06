@@ -15,18 +15,25 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false   # a push waits: a busy main must not cancel every build before it deploys
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.11"
           enable-cache: true
-      - run: sudo apt-get update && sudo apt-get install -y pandoc     # nbconvert's, for the notebooks
+      # nbconvert's, for the notebooks; the release the site is built with locally, since the runner's apt
+      # pandoc hung on them
+      - run: |
+          curl -fsSL -o pandoc.deb https://github.com/jgm/pandoc/releases/download/3.6.4/pandoc-3.6.4-1-amd64.deb
+          sudo dpkg -i pandoc.deb
+          rm pandoc.deb
+          pandoc --version | head -1
       - run: uv sync --locked --group docs
       - run: uv run --group docs mkdocs build --strict
       - run: uv run --group docs python -m pytest -q tests/test_docs_site.py
