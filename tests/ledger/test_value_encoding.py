@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -102,6 +103,19 @@ def shuffled(items):
 
 
 PLAYERS = {f"player-{i}": i for i in range(20)}
+
+
+class Box:
+    """An object other than plain data, equal by its contents."""
+
+    def __init__(self, held):
+        self.held = held
+
+    def __eq__(self, other):
+        return type(other) is Box and self.held == other.held
+
+
+BOX = Box(dict(PLAYERS))
 
 
 def churned():
@@ -206,9 +220,8 @@ def breaks(reason, raises=AssertionError):
     return pytest.mark.xfail(strict=True, raises=raises, reason=reason)
 
 
-PICKLE_ORDER = "Blob: pickle writes a dict in insertion order and a set in iteration order"
-PICKLE_MEMO = "Blob: pickle's memo records object identity, so a repeated object and an equal copy differ"
-SET_REBUILT = "Blob: a decoded set is rebuilt by inserts, so its iteration order, and its pickle, can move"
+OBJECT_ORDER = "Blob: an object other than plain data is pickled as pickle writes it, its state in insertion order"
+OBJECT_MEMO = "Blob: an object other than plain data repeated is written as a back-reference, an equal copy in full"
 PARQUET_CHUNKS = "Table: parquet's pages follow the table's chunks, and a long table decodes in 131072-row chunks"
 PARQUET_META = "Table: the schema metadata (pandas adds its own) is in the bytes and outside Table.equals"
 PARQUET_VERSION = "Table: the footer names the pyarrow version, so a pyarrow upgrade moves every hash"
@@ -252,7 +265,8 @@ ROUND_TRIPS = [
     pytest.param(lambda: Blob(shuffled(PLAYERS)), id="blob-dict"),
     pytest.param(lambda: Blob([TEXT, TEXT]), id="blob-shared"),
     pytest.param(lambda: Blob([TEXT, split(TEXT)]), id="blob-copies"),
-    pytest.param(lambda: Blob(churned()), id="blob-set", marks=breaks(SET_REBUILT)),
+    pytest.param(lambda: Blob(churned()), id="blob-set"),
+    pytest.param(lambda: Blob({frozenset({1, 2}): {3.5, float("nan")}, (1, "a"): {b"x": [TEXT, TEXT]}}), id="blob-mixed"),
     pytest.param(lambda: Table(pa.table(rows())), id="table-arrow"),
     pytest.param(lambda: Table(frame()), id="table-pandas"),
     pytest.param(lambda: Table(pa.table(rows()).slice(0, 0)), id="table-empty"),
@@ -277,6 +291,13 @@ def test_encode_decode_encode_gives_the_same_bytes(make):
 def test_decode_gives_back_an_equal_value(make):
     value = make()
     assert same(value, decoded(value))
+
+
+def test_a_blob_of_plain_data_that_contains_itself_is_pickled_as_given():
+    loop = {"a": [1, 2]}
+    loop["self"] = loop
+    back = decoded(Blob(loop)).obj
+    assert back["self"] is back and back["a"] == [1, 2]
 
 
 def stored_and_back(L, dat, name):
@@ -335,12 +356,20 @@ PAIRS = [
     pytest.param(lambda f: Blob(dict(PLAYERS)), lambda f: Blob(dict(PLAYERS)), id="blob-dict-same-order"),
     pytest.param(lambda f: Blob([split(TEXT), split(TEXT)]), lambda f: Blob([split(TEXT), split(TEXT)]),
                  id="blob-copies-both"),
-    pytest.param(lambda f: Blob(dict(PLAYERS)), lambda f: Blob(shuffled(PLAYERS)), id="blob-dict-other-order",
-                 marks=breaks(PICKLE_ORDER)),
+    pytest.param(lambda f: Blob(dict(PLAYERS)), lambda f: Blob(shuffled(PLAYERS)), id="blob-dict-other-order"),
     pytest.param(lambda f: Blob({"outer": dict(PLAYERS)}), lambda f: Blob({"outer": shuffled(PLAYERS)}),
-                 id="blob-nested-dict-other-order", marks=breaks(PICKLE_ORDER)),
-    pytest.param(lambda f: Blob([TEXT, TEXT]), lambda f: Blob([TEXT, split(TEXT)]), id="blob-identity-versus-copy",
-                 marks=breaks(PICKLE_MEMO)),
+                 id="blob-nested-dict-other-order"),
+    pytest.param(lambda f: Blob([TEXT, TEXT]), lambda f: Blob([TEXT, split(TEXT)]), id="blob-identity-versus-copy"),
+    pytest.param(lambda f: Blob({"s": set(PLAYERS)}), lambda f: Blob({"s": set(reversed(list(PLAYERS)))}),
+                 id="blob-set-other-order"),
+    pytest.param(lambda f: Blob({(1, "a"): 1, ("b",): 2, 3: 3}), lambda f: Blob({3: 3, ("b",): 2, (1, "a"): 1}),
+                 id="blob-mixed-keys-other-order"),
+    pytest.param(lambda f: Blob(Box(dict(PLAYERS))), lambda f: Blob(Box(shuffled(PLAYERS))),
+                 id="blob-object-other-order", marks=breaks(OBJECT_ORDER)),
+    pytest.param(lambda f: Blob(defaultdict(int, PLAYERS)), lambda f: Blob(defaultdict(int, shuffled(PLAYERS))),
+                 id="blob-dict-subclass-other-order", marks=breaks(OBJECT_ORDER)),
+    pytest.param(lambda f: Blob([BOX, BOX]), lambda f: Blob([BOX, Box(dict(PLAYERS))]),
+                 id="blob-object-identity-versus-copy", marks=breaks(OBJECT_MEMO)),
     pytest.param(lambda f: Table(pa.table(rows())), lambda f: Table(pa.table(rows())), id="table-arrow"),
     pytest.param(lambda f: Table(frame()), lambda f: Table(frame().copy()), id="table-pandas"),
     pytest.param(lambda f: Table(long_table()), lambda f: Table(chunked(1000)), id="table-short-chunk"),
@@ -387,7 +416,7 @@ def test_table_bytes_do_not_name_the_pyarrow_version():
 
 @pytest.mark.parametrize("name", [
     "blob-scalars", "blob-nested", "blob-dict", "blob-array", "blob-shared", "blob-copies",
-    pytest.param("blob-set", marks=breaks(PICKLE_ORDER)),
+    "blob-set",
     "table-arrow", "table-pandas", "table-long", "dat-plain", "dat-created", "code",
 ])
 def test_every_process_gives_the_same_bytes(name, elsewhere, tmp_path):

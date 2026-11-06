@@ -174,8 +174,7 @@ class Value:
         everything stored under it, so it is a migration, never a fix.
 
         Where the shipped classes fall short today, each ``xfail(strict=True)`` in
-        ``tests/ledger/test_value_encoding.py``: ``Value.Blob``, on a dict's insertion order, a set's order (across
-        ``PYTHONHASHSEED``, and after a decode) and a repeated object versus an equal copy; ``Value.Table``, on
+        ``tests/ledger/test_value_encoding.py``: ``Value.Blob``, outside plain data (see its class); ``Value.Table``, on
         chunking (a table over 131072 rows does not re-encode the same), schema metadata and the pyarrow version;
         ``Dat``, on the key order of its spec; ``Code`` has no ``decode``.
 
@@ -660,7 +659,20 @@ def ledger_class(*, preds: Iterable[str] = ()):
 
 
 class Blob(Value):
-    """Any pickleable object; ``obj`` is the object. Declares no preds (A16)."""
+    """Any pickleable object; ``obj`` is the object. Declares no preds (A16).
+
+    Plain data is encoded canonically (SVP 1543): within ``dict``, ``list``, ``tuple``, ``set`` and ``frozenset``
+    (exactly those types), every dict's items and every set's members are written in one order, chosen from
+    their values and never from insertion or a hash seed, and no ``str``, ``bytes`` or plain container is written
+    as a back-reference to an earlier copy of itself, so a repeated object and an equal copy encode alike. So
+    equal plain data gives the same bytes in any process, and a decoded set re-encodes the same.
+
+    Where the rule does not hold, pickle's own bytes are written, which follow identity and order:
+    any other object (a class instance, a ``numpy`` array, a ``dict`` subclass such as ``OrderedDict``,
+    ``defaultdict`` or ``Counter``) encodes as pickle writes it, its own state's order and a repeat of it
+    as a back-reference included; and plain data that contains itself is pickled whole, as given. Each limit is
+    an ``xfail(strict=True)`` in ``tests/ledger/test_value_encoding.py``.
+    """
 
     def __init__(self, obj: Any, *, name: Optional[str] = None) -> None:
         """A value whose bytes are ``obj`` pickled.
@@ -672,13 +684,69 @@ class Blob(Value):
         super().__init__(name=name)
 
     def encode(self, out: IO[bytes]) -> None:
-        """Pickle ``obj`` to the sink, protocol 4."""
-        pickle.dump(self.obj, out, protocol=4)
+        """Pickle ``obj`` to the sink, protocol 4, its plain data in canonical form (see the class)."""
+        try:
+            plain = _canonical(self.obj, set())
+        except _Cyclic:
+            plain = self.obj
+        pickle.dump(plain, out, protocol=4)
 
     @classmethod
     def decode(cls, src: IO[bytes], store: "ArtStore") -> "Blob":
         """Build the value from its pickled bytes."""
         return cls(pickle.load(src))
+
+
+class _Cyclic(Exception):
+    """Plain data that contains itself: it has no canonical form, and is pickled as given."""
+
+
+class _Members:
+    """A set's members in canonical order, pickled as a call of the set's type on them."""
+
+    def __init__(self, kind: type, members: list) -> None:
+        self.kind, self.members = kind, members
+
+    def __reduce__(self) -> Tuple[type, Tuple[list]]:
+        return self.kind, (self.members,)
+
+
+def _in_order(items: list) -> list:
+    """``items`` (each ``(key, canonical key, rest)``) sorted by key when every key is of one totally ordered
+    type (``str``, ``bytes``, ``int``, a float that is not NaN), else by the pickle of its canonical form."""
+    kinds = {type(k) for k, _c, _r in items}
+    if len(kinds) == 1 and (kinds <= {str, bytes, int} or (kinds == {float} and all(k == k for k, _c, _r in items))):
+        return sorted(items, key=lambda i: i[0])
+    return sorted(items, key=lambda i: pickle.dumps(i[1], protocol=4))
+
+
+def _canonical(obj: Any, open_: set) -> Any:
+    """``obj`` with its plain data rebuilt in canonical form: each dict in key order and each set in member
+    order (``_in_order``), each ``str``, ``bytes`` and container a new object at each place it appears, so
+    pickle's memo never writes a back-reference for one. Anything else is returned as it is.
+    ``_Cyclic`` when plain data contains itself."""
+    kind = type(obj)
+    if kind is str:
+        return (obj + ".")[:-1]                 # a new object, equal: pickle memoises by identity
+    if kind is bytes:
+        return bytes(bytearray(obj))
+    if kind not in (dict, list, tuple, set, frozenset):
+        return obj
+    if id(obj) in open_:
+        raise _Cyclic()
+    open_.add(id(obj))
+    try:
+        if kind is dict:
+            items = _in_order([(k, _canonical(k, open_), v) for k, v in obj.items()])
+            return {c: _canonical(v, open_) for _k, c, v in items}
+        if kind is list:
+            return [_canonical(x, open_) for x in obj]
+        if kind is tuple:
+            return tuple(_canonical(x, open_) for x in obj)
+        members = _in_order([(x, _canonical(x, open_), None) for x in obj])
+        return _Members(kind, [c for _x, c, _r in members])
+    finally:
+        open_.discard(id(obj))
 
 
 class Table(Value):
