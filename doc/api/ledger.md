@@ -26,13 +26,24 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 ## The active ledger
 
-`from dvc_dat import L, ledgers`: `L` is the active ledger, `ledgers` the project's ledgers by name.
+::: dvc_dat.ledger.named
+    options:
+      show_root_heading: false
+      members: false
 
 ::: dvc_dat.ledger.named.Ledgers
 
 ## Values and ledger functions
 
 ::: dvc_dat.ledger.Value
+
+::: dvc_dat.ledger.value.Blob
+    options:
+      heading: Value.Blob
+
+::: dvc_dat.ledger.value.Table
+    options:
+      heading: Value.Table
 
 ::: dvc_dat.ledger.ledger_class
 
@@ -63,7 +74,7 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 ::: dvc_dat.just.command
 
-## Rerunnability
+## Pin and rerun
 
 ::: dvc_dat.ledger.pin
     options:

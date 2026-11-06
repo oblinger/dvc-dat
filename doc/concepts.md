@@ -118,7 +118,7 @@ finished and no `dat.sha256` of its own (its scratch may be large).
 written before 3.0 is not read as one (its 2.x hash does not verify, and a run
 record in its own results is not its run).
 
-## Standing
+## Standing: how far a dat can be relied on
 
 Every save stamps **`dat.standing`**, how far the dat can be relied on:
 

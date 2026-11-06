@@ -4,6 +4,9 @@ The plugin needs mkdocs (`uv sync --group docs`), so these skip under the plain 
 `site/` skip until `mkdocs build` has run; `.github/workflows/docs.yml` runs them after its build.
 """
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import unquote
@@ -130,6 +133,15 @@ def test_every_member_in_a_module_pages_table_has_a_first_line(page):
         obj = obj.final_target if obj.is_alias else obj
         empty = [name for name, member in public_members(obj) if not _first_line(member)]
         assert not empty, f"{dotted}: no docstring on {empty}"
+        wrapped = [name for name, member in public_members(obj) if not re.search(r"[.?)`:]$", _first_line(member))]
+        assert not wrapped, f"{dotted}: a first line that is no sentence, so a broken table row: {wrapped}"
+
+
+@pytest.mark.parametrize("page", MODULE_PAGES)
+def test_a_module_page_holds_no_third_level(page):
+    text = (REPO / "doc" / f"{page}.md").read_text()
+    assert not re.findall(r"^\*\*\w+\*\*.*\n    \S", text, re.MULTILINE), "a member paragraph: it belongs in the docstring"
+    assert "#^" not in text, "a link to a block id: member links reach the API reference"
 
 
 @pytest.mark.parametrize("page", sorted((REPO / "doc" / "api").glob("*.md")), ids=lambda p: p.stem)
@@ -140,6 +152,12 @@ def test_every_api_page_opens_with_its_modules_figure_and_a_link_back(page):
     assert figure and back, f"{page.name}: no figure and link back in its first lines"
     for target in (re.search(r"\]\(([^)#]+)", line).group(1) for line in (figure, back)):
         assert (page.parent / unquote(target)).exists(), target
+
+
+@pytest.mark.skipif(shutil.which("just") is None, reason="no just")
+def test_the_cli_pages_usage_block_is_the_justfiles():
+    done = subprocess.run([sys.executable, str(REPO / "doc" / "sync_cli_usage.py"), "--check"], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
 
 
 @needs_site
@@ -170,7 +188,7 @@ def test_every_method_row_resolves_to_an_id_in_the_api_reference(page):
 @needs_site
 def test_only_the_published_paths_are_on_the_site():
     names = {p.relative_to(SITE).as_posix() for p in SITE.rglob("*")}
-    for excluded in ("DAT Track", "DAT Design", "DAT Hooks", "Docs", "DAT User Docs", "overview",
-                     "DAT Modules/dat", "DAT Demos/demo_game", "DAT Demos/demo_kinds", "DAT Demos/comfort-repo"):
+    for excluded in ("DAT Track", "DAT Design", "DAT Hooks", "Docs", "DAT User Docs",
+                     "DAT Demos/demo_game", "DAT Demos/demo_kinds", "DAT Demos/comfort-repo"):
         assert excluded not in names, excluded
     assert not [n for n in names if n.endswith(".py")]

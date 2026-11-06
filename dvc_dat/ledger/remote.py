@@ -60,8 +60,18 @@ _NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 
 @runtime_checkable
 class Remote(Protocol):
-    """Bytes by sha256 hex on a remote place, for one ledger. Every method may raise; a failed upload fails the
-    commit (nothing written), a failed download fails the read."""
+    """Bytes by sha256 hex on a remote place, for one ledger.
+
+    Three methods: ``exists(h) -> bool``; ``put_path(path: Path, h)``, upload the file at ``path`` (its bytes hash to
+    ``h``), write-once; ``get_to(h, dest: Path)``, download to the new file ``dest``.
+
+    Every method may raise: a failed upload fails the commit (nothing written), a failed download fails the read
+    (``LedgerError``).
+
+    The conventional layout is ``<bucket>/ledgers/<ledger>/sha256/<2>/<hash>``
+    (``dvc_dat.ledger.remote.blob_name(ledger, h)``). A fetched file is checked against its hash by the ledger, not
+    the remote.
+    """
 
     def exists(self, h: str) -> bool:
         """The remote holds the bytes of ``h``."""
@@ -88,9 +98,17 @@ def check_name(name: Any, what: str = "a store name") -> str:
 
 
 def register_store(name: str, factory: Factory) -> None:
-    """Make ``factory`` (ledger name -> ``Remote``) the store named ``name``, for a ``(db, db/store, name)`` row
-    or ``local`` to select. ``local`` and ``folder`` are refused (built in); registering a name again replaces it.
-    Process-local, like ``register_policy``: every process that writes or reads values on the store registers it."""
+    """Make ``factory`` (ledger name -> ``Remote``) the store named ``name`` ([Value stores][value-stores]).
+
+    For a ``(db, db/store, name)`` row or ``local`` to select. ``name`` is ``[a-z][a-z0-9_]*``; ``local`` and
+    ``folder`` are refused (built in, ``ValueError``), a non-callable ``factory`` is ``TypeError``; registering a name
+    again replaces it.
+
+    Process-local, like ``register_policy``: every process that writes or reads values on the store registers it
+    first, else ``LedgerError`` naming the store.
+
+    dvc-dat ships no cloud code; the consumer brings it (sv-pipe registers ``gcp`` and ``azure``).
+    """
     check_name(name)
     if name in (LOCAL, FOLDER):
         raise ValueError(f"{name!r} is a built-in store name; register yours under another name")
