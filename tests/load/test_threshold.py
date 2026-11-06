@@ -2,8 +2,8 @@
 when tx/s falls below half the value measured for that store on the recording machine.
 
 A floor, not a target. Runs only with ``DAT_LOAD=1`` (about a minute per store). The Postgres case
-needs ``DAT_LOAD_PG``, a server URL (``postgresql://user:pw@host:port/db``); it makes and drops its
-own schema. The throughput check applies on a host with a recorded floor (``FLOORS``); elsewhere
+needs ``DVC_DAT_TEST_PG`` (``tests/pg_server.py``: skips when unset, port 5433 refused); it makes and
+drops its own schema there. The throughput check applies on a host with a recorded floor (``FLOORS``); elsewhere
 only the invariants are checked. Source numbers: ``tests/load/README.md``.
 """
 
@@ -16,6 +16,7 @@ import uuid
 import warnings
 from pathlib import Path
 
+import pg_server
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,9 +31,7 @@ pytestmark = pytest.mark.skipif(os.environ.get("DAT_LOAD") != "1", reason="load 
 def _target(store, tmp_path):
     if store == "sqlite":
         return str(tmp_path / "ledger"), None
-    server = os.environ.get("DAT_LOAD_PG")
-    if not server:
-        pytest.skip("Postgres load floor: set DAT_LOAD_PG to a server URL")
+    server = pg_server.server()
     schema = f"load_{uuid.uuid4().hex[:10]}"
     return f"{server}?options=-csearch_path%3D{schema}&art={tmp_path / 'art'}", (server, schema)
 

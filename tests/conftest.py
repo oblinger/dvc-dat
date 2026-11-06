@@ -12,6 +12,7 @@ import pytest
 tests_dir = Path(__file__).parent
 sys.path.insert(0, str(tests_dir.parent))
 
+import pg_server  # noqa: E402
 from dvc_dat import Dat, DatManager  # noqa: E402
 
 ns = Dat.ns
@@ -41,6 +42,10 @@ def _the_default_world_is_restored():
     if after is not before:
         core._default_manager = before
         pytest.fail(f"the test left Dat.manager changed ({after!r}); restore it", pytrace=False)
+
+
+def pytest_configure(config):
+    pg_server.check_environment()       # DVC_DAT_TEST_PG on port 5433 stops the run before it starts (SVP 1548)
 
 
 @pytest.hookimpl(tryfirst=True)

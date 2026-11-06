@@ -47,8 +47,8 @@ jobs:
       - run: uv sync --locked
       - run: uv run python -m pytest -q -p no:xdist
 
-  # The `pg` cases skip without a server; here the whole suite runs with them against Postgres 16
-  # (tests/ledger/backends.py reads DVC_DAT_TEST_PG).
+  # The `pg` cases skip without DVC_DAT_TEST_PG (no default address); here the whole suite runs with
+  # them against Postgres 16 (tests/pg_server.py reads it; port 5433 is refused there, SVP 1548).
   postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 45
