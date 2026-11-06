@@ -153,35 +153,10 @@ A `Dat` whose folder holds other dats: every folder below it carrying a spec fil
 
 <!-- methods: dvc_dat.core.DatContainer -->
 
-**get_dat_paths**`() -> List[str]`
-    The absolute paths of every dat folder below this one, sorted, the container itself left out; computed on first call and kept. ^get-dat-paths
-
-**get_dats**`() -> List[Dat]`
-    The contained dats, each loaded through the container's manager, so each load is recorded inside a run. Computed on first call and held in memory until the container is released. ^get-dats
-
-
-
 ## Namespace Interface
 A namespace of dotted names, bound to the `DatManager` whose world it names; not callable (running is `manager.run`). Every manager builds its own, reached as `manager.ns`; `Dat.ns` forwards to `Dat.manager.ns`. `Namespace(manager=None)` is the constructor: a bare `Namespace()` mounts, loads and names with no world, and its `manager` is `RuntimeError` until a manager built with `ns=` adopts it. A dotted name is a mounted name first, else exactly what `import` means in this environment, `getattr` below that.
 
 <!-- methods: dvc_dat.do.Namespace -->
-
-**manager**`: DatManager` (property)
-    The manager this namespace belongs to; `RuntimeError` when it has none. ^do-manager
-
-**load**`(dotted_name: str, *, default: Any = <required>, kind: Type | None = None) -> Any`
-    The object `dotted_name` names: the longest mounted prefix first (values, modules, files, folders; a `.py`, `.yaml` or `.json` mount's contents as loaded, a string starting `yaml` parsed as YAML), else the longest importable prefix, imported, with `getattr` for the rest. Dict results are deep copies. With nothing found the `ImportError`, `AttributeError` or `KeyError` propagates unless `default` is given, which is also returned for a `None` result. `kind` makes a result of another type `TypeError`. ^do-load
-
-**name_of**`(obj: Any) -> str` (static)
-    The dotted `module.qualname` that `load` takes back to `obj`, a module, class or function; `ValueError` for an object with no importable name, such as a lambda or a function defined inside another. ^name-of
-
-**mounts**`() -> Dict[str, str]`
-    The mount table: each mounted prefix and where it loads from (a file, a folder entry, a module's import name); a `value` mount has no location and is not listed. ^mounts
-
-**mount**`(*, folder: str | None = None, file: str | None = None, module: ModuleType | str | None = None, value: Any = None, at: str = "", relative_to: str = ".")`
-    Mount exactly one of a `folder` of loadables (indexed by path under `at`, so `catalog/models/baseline` answers to `catalog.models.baseline`), a single `file`, a `module` (object, import name or path) or a literal `value`, at the dotted name `at`; folder and file paths join to `relative_to`. Mounts live in this namespace only. A mounted top-level name that Python can import from elsewhere is `ValueError`: a mount never shadows an import. See [Mounts](../mount-commands.md). ^mount
-
-
 
 ## dvc_dat Interface
 `from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers` is the package's `__all__`; importing it reads no file. `dvc_dat.do` is the submodule, not the namespace: the default world's namespace is `Dat.ns`, or `dvc_dat.do.ns`. The module function `merge_dicts` is importable from `dvc_dat.core`; the `{}` grammar is a namespace's, `ns.expand`, `ns.expand_spec`, `ns.quote_spec` ([Expansion](../expand.md)). The ledger is its own subpackage, `dvc_dat.ledger`.

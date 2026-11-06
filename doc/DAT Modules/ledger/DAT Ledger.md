@@ -9,7 +9,7 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 
 api:: [`dvc_dat.ledger`](../../api/ledger.md) — the classes and functions, rendered from the docstrings
 
-**Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [Code](#^fn-code) · [module functions](#dvc_dat.ledger%20Interface) 
+**Classes:** [Ledger](#Ledger%20Interface) · [Rev](#Rev%20Interface) · [Ref](#Ref%20Interface) · [Row](#Row%20Interface) · [Transaction](#Transaction%20Interface) · [Value](#Value%20Interface) · [Value.Blob](#Value.Blob%20Interface) · [Value.Table](#Value.Table%20Interface) · [Dat](#Dat%20Interface) · [Fn](#Fn%20Interface) · [Code](../../api/ledger.md#dvc_dat.ledger.Fn.code) · [module functions](#dvc_dat.ledger%20Interface) 
 **Topics:** [Ledger Semantics](#Ledger%20Semantics) · [Many ledgers](#Many%20ledgers) · [Execution Semantics](#Execution%20Semantics) · [Rerunnability](#Rerunnability) · [Value Provenance](#Value%20Provenance) · [dvc_dat.dat](#dvc_dat.dat%20Interface) 
 
 | Methods     |                                                                                                                                                                                                                                                                                                            |
@@ -19,11 +19,11 @@ api:: [`dvc_dat.ledger`](../../api/ledger.md) — the classes and functions, ren
 | Ref         | [rev](../../api/ledger.md#dvc_dat.ledger.Ref.rev), [subject](../../api/ledger.md#dvc_dat.ledger.Ref.subject), [name](../../api/ledger.md#dvc_dat.ledger.Ref.name), [aliases](../../api/ledger.md#dvc_dat.ledger.Ref.aliases), [hash](../../api/ledger.md#dvc_dat.ledger.Ref.hash), [type](../../api/ledger.md#dvc_dat.ledger.Ref.type), [preds](../../api/ledger.md#dvc_dat.ledger.Ref.preds), [sealed_at](../../api/ledger.md#dvc_dat.ledger.Ref.sealed_at), [load](../../api/ledger.md#dvc_dat.ledger.Ref.load)                                                                                                                                   |
 | Row         | [rev](../../api/ledger.md#dvc_dat.ledger.Row.rev), [subject](../../api/ledger.md#dvc_dat.ledger.Row.subject), [predicate](../../api/ledger.md#dvc_dat.ledger.Row.predicate), [object](../../api/ledger.md#dvc_dat.ledger.Row.object), [added](../../api/ledger.md#dvc_dat.ledger.Row.added)                                                                                                                                                                                                 |
 | Transaction | [tx](../../api/ledger.md#dvc_dat.ledger.Transaction.tx), [previous_rev](../../api/ledger.md#dvc_dat.ledger.Transaction.previous_rev), [ns](../../api/ledger.md#dvc_dat.ledger.Transaction.ns), [rev](../../api/ledger.md#dvc_dat.ledger.Transaction.rev), [add](../../api/ledger.md#dvc_dat.ledger.Transaction.add), [update](../../api/ledger.md#dvc_dat.ledger.Transaction.update), [`[]=`](../../api/ledger.md#dvc_dat.ledger.Transaction.__setitem__), [remove](../../api/ledger.md#dvc_dat.ledger.Transaction.remove), [`del []`](../../api/ledger.md#dvc_dat.ledger.Transaction.__delitem__), [pin](../../api/ledger.md#dvc_dat.ledger.Transaction.pin)                                                                                                       |
-| Value       | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [at](#^value-at), [sealed](#^sealed), [hash](#^value-hash), [dependencies](#^dependencies), [Dependencies](#^value-dependencies), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
-| Value.Blob  | [obj](#^obj)                                                                                                                                                                                                                                                                                               |
-| Value.Table | [table](#^table-table)                                                                                                                                                                                                                                                                                     |
+| Value       | [preds](../../api/ledger.md#dvc_dat.ledger.Value.preds), [subject](../../api/ledger.md#dvc_dat.ledger.Value.subject), [rev](../../api/ledger.md#dvc_dat.ledger.Value.rev), [at](../../api/ledger.md#dvc_dat.ledger.Value.at), [sealed](../../api/ledger.md#dvc_dat.ledger.Value.sealed), [hash](../../api/ledger.md#dvc_dat.ledger.Value.hash), [dependencies](../../api/ledger.md#dvc_dat.ledger.Value.dependencies), [Dependencies](../../api/ledger.md#dvc_dat.ledger.Value.Dependencies), [encode](../../api/ledger.md#dvc_dat.ledger.Value.encode), [decode](../../api/ledger.md#dvc_dat.ledger.Value.decode), [seal](../../api/ledger.md#dvc_dat.ledger.Value.seal), [same_as](../../api/ledger.md#dvc_dat.ledger.Value.same_as), [matches](../../api/ledger.md#dvc_dat.ledger.Value.matches), [diff](../../api/ledger.md#dvc_dat.ledger.Value.diff) |
+| Value.Blob  | [obj](../../api/ledger.md#dvc_dat.ledger.value.Blob.obj)                                                                                                                                                                                                                                                                                               |
+| Value.Table | [table](../../api/ledger.md#dvc_dat.ledger.value.Table.table)                                                                                                                                                                                                                                                                                     |
 | Dat         | [path](#^dat-path), [preds](#^dat-preds), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind)                                                                                                                                                       |
-| Fn          | [name](#^fn-name), [module](#^module), [code](#^fn-code), [mount](#^mount), [env](#^env), [signature](#^signature), [kind](#^fn-kind), [reproducible](#^fn-reproducible), [()](#^--call--) |
+| Fn          | [name](../../api/ledger.md#dvc_dat.ledger.Fn.name), [module](../../api/ledger.md#dvc_dat.ledger.Fn.module), [code](../../api/ledger.md#dvc_dat.ledger.Fn.code), [mount](../../api/ledger.md#dvc_dat.ledger.Fn.mount), [env](../../api/ledger.md#dvc_dat.ledger.Fn.env), [signature](../../api/ledger.md#dvc_dat.ledger.Fn.signature), [kind](../../api/ledger.md#dvc_dat.ledger.Fn.kind), [reproducible](../../api/ledger.md#dvc_dat.ledger.Fn.reproducible), [()](../../api/ledger.md#dvc_dat.ledger.Fn.__call__) |
 
 
 This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md). The four notebooks run it end to end: [ledger-triples](../../DAT%20Demos/ledger-triples.ipynb), [ledger-values](../../DAT%20Demos/ledger-values.ipynb), [ledger-dats](../../DAT%20Demos/ledger-dats.ipynb), [ledger-just](../../DAT%20Demos/ledger-just.ipynb); [api-walkthrough](../../DAT%20Demos/api-walkthrough.ipynb) is the one API sheet covering all four parts. From a shell, `just values`, `value`, `history`, `why`, `set`, `index`, `bump`, `pin` and `rerun` are one call each of this interface, shipped in `dvc_dat.just` beside `run` ([Command Line](../../cli.md) § The ledger verbs).
@@ -56,7 +56,7 @@ The write set of one `with L.transaction(...) as t:` block; it becomes exactly o
 <!-- methods: dvc_dat.ledger.Transaction -->
 
 ## Value Interface
-The object itself with its provenance on it: what `run` returns, what `seal` stores and what `Ref.load` restores. A subclass says how it becomes bytes (`encode`) and back (`decode`); `@ledger_class(preds=...)` names the preds its values may carry. Every subclass's encoding is deterministic and lossless: see [`encode`](#^encode). Until sealed, `preds` is a plain dict filled by whoever builds the value; the seal freezes it and fixes the identity. A subclass's `__init__` need not call `super().__init__`.
+The object itself with its provenance on it: what `run` returns, what `seal` stores and what `Ref.load` restores. A subclass says how it becomes bytes (`encode`) and back (`decode`); `@ledger_class(preds=...)` names the preds its values may carry. Every subclass's encoding is deterministic and lossless: see [`encode`](../../api/ledger.md#dvc_dat.ledger.Value.encode). Until sealed, `preds` is a plain dict filled by whoever builds the value; the seal freezes it and fixes the identity. A subclass's `__init__` need not call `super().__init__`.
 
 **What a value prints as** (DAT 1036). Python's unreadable-object form: `repr` (a bare notebook cell) is `<Type label>`, `str` (`print`, f-strings) the bare label. The label is the value's name at the head, else `#` + the hash's first 8 hex, like a short git sha; a draft has no label. A `Ref` prints the same label as `<Ref …>`; a `Fn` prints its dotted name `@` its code's version (`<Fn mnt.plane.measure.length@2.7.1>`, `str` `mnt.plane.measure.length@2.7.1`), and its `Code` the unit `@` the same version (`<Code plane@2.7.1>`) (DAT 1037).
 
@@ -74,81 +74,15 @@ f.code               # <Code plane@2.7.1>
 
 <!-- methods: dvc_dat.ledger.Value -->
 
-**preds**`: dict | FrozenPreds`
-    A `dict` while unsealed, assignable as a whole; a `FrozenPreds` once sealed, whose every mutator is `TypeError`. Each pred is a `str`, number, bool, list, `Value` or `Ref`, and its name must be declared by the class's `@ledger_class` (`Undeclared` at the seal). ^value-preds
-
-**subject**`: str | None`
-    The 64-hex subject the value was saved under; `None` until saved, including when sealed by `seal()` alone. ^value-subject
-
-**rev**`: Rev | None`
-    The revision that saved the value; set at commit or by `load`. ^value-rev
-
-**at**`: Rev | None`
-    The revision the value's run read: its `db/at` row, or a draft's trace (SVP 245). `rev` is where it was saved, `at` what it was computed from, so a run at `L.at(412)` saved at 902 has `v.at.id == 412`, `v.rev.id == 902`. A memo hit hands back the entry it found, whose `at` is the revision that entry ran at. `None` for a hand seal and for a [copy](#Copying), whose row stays on its origin. A `Dat` reads the same revision off its run sub-dat, `ValueError` when it ran on no ledger. ^value-at
-
-**sealed**`: str | None`
-    The moment the identity was fixed, UTC `YYYY-MM-DDTHH:MM:SSZ`, by `seal()` (saved nowhere yet, `subject` `None`) or by a save (printed in a zone by [`rev.show_time`](../../api/ledger.md#dvc_dat.ledger.Rev.show_time)); `None` while unsealed, so `if v.sealed:` reads as before. A time rather than a revision because a seal can precede any ledger; the revision is `rev`, set at the save. ^sealed
-
-**hash**`: str`
-    The hex sha256 of what `encode` writes (into a sink that keeps nothing), cached once sealed; after a save, the stored bytes' hash whatever the live object holds. ^value-hash
-
-**dependencies**`: Mapping[str, str]`
-    Item name to version or hash: what producing the value read. Empty for a hand-built value until saved; a run's result carries its trace here at every `seal=` level. See [Value Provenance](#Value%20Provenance). ^dependencies
-
-**Dependencies**`: Mapping[str, str]` (class attribute)
-    The type of `dependencies`, for annotations. ^value-dependencies
-
-**encode**`(out: BinaryIO) -> None`
-    Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). Writes the bytes to store to `out`, once, forward, and returns nothing (DAT 240): `out` is a sink the store opens, a write-only binary stream that hashes and counts what passes and refuses `seek` (`io.UnsupportedOperation`), so no value is held whole in memory to be sealed. `pickle.dump`, `pq.write_table` and `np.save` write to it as to a file. A save encodes once: into a staged file in the art folder, whose hash is the value's, which the upload sends and the commit links into place. **Deterministic:** equal values write the same bytes, in any process on any machine; two calls on one value differing makes a value sealed by `v.seal()` `SealBroken` at its save, and `hash` decides whether a value rebuilt on each call hits a memo and whether two machines agree on its identity. A new subclass has a test that encode, decode, encode gives the same bytes. Changing a class's encoding moves the hash of everything stored under it, so it is a migration, never a fix. Where the shipped classes fall short today, each `xfail(strict=True)` in `tests/ledger/test_value_encoding.py`: `Value.Blob`, on a dict's insertion order, a set's order (across `PYTHONHASHSEED`, and after a decode), and a repeated object versus an equal copy; `Value.Table`, on chunking, schema metadata and the pyarrow version; `Dat`, on the key order of its spec; `Code` has no `decode`. A test that wants the bytes passes `io.BytesIO()`. ^encode
-
-**decode**`(src: BinaryIO, store: ArtStore) -> Value` (classmethod)
-    Abstract: every `Value` subclass must implement it (`NotImplementedError` otherwise). The object read from `src`, the stored bytes as a binary read stream (a real, seekable file, `ArtStore.open`). A `decode` that also accepts `name=` is passed the alias the value is loaded by, `None` when loaded by its subject. **Lossless:** it gives back a value equal to the one encoded, so encoding that value again writes the same bytes; a worker shares no memory with its caller, so a value crosses by being encoded and decoded, and a loss here would change behavior when an execution moves. A value held only in memory is five lines: `encode(self, out): torch.save(self.t, out)`, `decode(cls, src, store): return cls(torch.load(src))`. ^decode
-
-**seal**`(to=True, *, keep=False, deps=(), name=None, provenance=None, by=None, skip=None) -> str`
-    `to` takes what a run's `seal=` takes, so `f(seal=x)` and a later `v.seal(x)` end in one place. `v.seal()`, the same as `v.seal(True)`, fixes the identity and writes no ledger: preds freeze, and the hash, `deps`, `provenance`, the environment and the time go into a seal record in the kept folder; it returns the hash. `keep=True` also copies the bytes into the kept cache, so the source may change. `v.seal(t)` saves into an open transaction and returns the subject; `v.seal(L)` commits a one-value transaction of its own, written `by`, a `str` or a JSON `dict` as on [`transaction`](../../api/ledger.md#dvc_dat.ledger.Ledger.transaction) (default the provenance, else `seal`). `name=` writes `(alias, db/alias, subject)` beside it. A run's result (`seal=False` or `True`) carries its trace: `v.seal(t)` or `v.seal(L)` writes the memo entry the run would have written, so the next identical call hits, after the code check of [Running](#Running) (`NotEvaluated`); `deps=` and `provenance=` on it are `TypeError`. `v.seal(False)` and `v.seal("get")` are `TypeError`: nothing to do to an object. A provenance beginning `eval:` is `ValueError`; a second seal is `ValueError`. A save seals a dat's subdats with it ([Subdats](#Subdats)); `skip` lists relative-path suffixes to decline, on top of the class's `skip_subdats`, and `skip=()` declines nothing; `skip` on `v.seal()` is `TypeError`, and so is a bare `str`. See [Versioning](#Versioning). ^seal
-
-**same_as**`(other: Value | None) -> bool`
-    `self.hash == other.hash`; `False` for `None`. ^same-as
-
-**matches**`(rev: Rev) -> bool`
-    Whether every dependency item holds at `rev`: the memo's hit test. Consults the ledger only; never runs anything. ^matches
-
-**diff**`(other: Value) -> dict[str, tuple]`
-    The dependency items whose values differ, item to `(mine, theirs)`, `None` where one lacks the item. ^diff
-
-
-
 ## Value.Blob Interface
 A `Value` holding any Python object, stored with pickle (protocol 4). Declares no preds.
 
-| Value.Blob           |                               |
-| -------------------- | ----------------------------- |
-| [Value.Blob](#^blob) | Constructor to wrap an object |
-| [obj](#^obj)         | The object                    |
-
-**Value.Blob**`(obj, *, name=None)`
-    A value whose bytes are `obj` pickled. A value function whose return annotation is not a `Value` subclass has its result wrapped in one. ^blob
-
-**obj**`: Any`
-    The wrapped object. ^obj
-
-
+<!-- methods: dvc_dat.ledger.value.Blob -->
 
 ## Value.Table Interface
-A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted on encode; a decoded `Value.Table` holds a `pyarrow.Table`. It exists beside `Value.Blob` because the encoding is the identity: pickle bytes change with the Python, pandas and pyarrow versions and nothing outside Python reads them, while parquet stores it columnar and compact, and any tool that reads parquet can read it from the art store. Its bytes still follow the table's chunks and schema metadata and name the pyarrow version ([`encode`](#^encode)).
+A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted on encode; a decoded `Value.Table` holds a `pyarrow.Table`. It exists beside `Value.Blob` because the encoding is the identity: pickle bytes change with the Python, pandas and pyarrow versions and nothing outside Python reads them, while parquet stores it columnar and compact, and any tool that reads parquet can read it from the art store. Its bytes still follow the table's chunks and schema metadata and name the pyarrow version ([`encode`](../../api/ledger.md#dvc_dat.ledger.Value.encode)).
 
-| Value.Table            |                             |
-| ---------------------- | --------------------------- |
-| [Value.Table](#^table) | Constructor to wrap a table |
-| [table](#^table-table) | The table                   |
-
-**Value.Table**`(table, *, name=None)`
-    A value whose bytes are `table` as parquet; `table` is a `pyarrow.Table` or a pandas `DataFrame`. ^table
-
-**table**`: pyarrow.Table | pandas.DataFrame`
-    The wrapped table; a `pyarrow.Table` after a load. ^table-table
-
-
+<!-- methods: dvc_dat.ledger.value.Table -->
 
 ## Dat Interface
 `dvc_dat.ledger.Dat` is `dvc_dat.Dat`, one class (DAT 1038): a dat, the folder that is its own recipe ([DAT Dat](../DAT%20Dat.md)), is a `Value` whose bytes are the folder. It encodes as its content manifest, `{"files": {relpath: sha256}}`, written to the sink, and its files are its parts, streamed into the art store one at a time, so memory is bounded by the manifest, not the folder. Every file in the folder is hashed (`__pycache__` and the [subdats](#Subdats) skipped), `_spec_.yaml` and `_result_.yaml` included; each in 1 MiB blocks, the per-file hashes cached on the object, keyed by size, mtime and inode, so only a changed file is hashed again. The `db/value` row's kind and the folder's `dat.kind` are the same dotted name, `dvc_dat.core.Dat` or the subclass. A dat made by `Dat.create` or `Dat.manager.run` seals with no subclass once saved: `dat.seal(t, name="table/12")` stores its files and writes its row, and `rev.load("table/12")` returns a `Dat` whose `get_spec()`, `get_results()` and `get_path()` read the rebuilt folder. A folder whose `_spec_` names a `dat.kind` and was never saved (standing `open`) is `ValueError` naming `dat.save()`; a folder with no spec is a plain folder value.
@@ -194,35 +128,6 @@ A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted
 A value function resolved at one revision: a frozen dataclass made by `rev.ns.load`, never by hand. Calling it is `run`. Only the snapshot has identity; a function is a name looked up inside it (DAT 1037): it has `name` and `code` and no `subject` or `sha`, since it is not on the timeline. It prints as `<Fn mnt.plane.measure.length@2.7.1>`, `str` `mnt.plane.measure.length@2.7.1`: the dotted name `@` its code's version; a mounted function's name starts `mnt.`. `code` says where the code comes from: installed in the ledger's own Python environment (imported in this process), or mounted from a checkout (`code.sandboxed`, run in a worker).
 
 <!-- methods: dvc_dat.ledger.Fn -->
-
-**name**`: str`
-    The dotted name it was resolved by. ^fn-name
-
-**module**`: Path`
-    The function's source file. ^module
-
-**code**`: Code`
-    The code the function is loaded from, at a version (DAT 1037): a `Code(Value)`, computed at `rev.ns.load`; a run writes its identity as the `db/code/<16 hex>` item, and the rest of it is not written to the ledger. Its name is `<unit>@<version>`: the unit is the mount prefix for mounted code (`plane`, `algs.ocr`) and the function's top-level package for installed code (`geometry`). Its identity is the bytes: `encode()` is the canonical `{"modules": relpath -> sha256, "mounts": <hash of the db/mount rows, or null>}`, `hash` its sha256, and `subject` `db/code/<16 hex>`, the first 16 of the hash (the 16 hex the memo key carried as `db/fn/<name>/<16 hex>` before); two functions in one snapshot share it, and any changed byte in a module makes a new one. Read-only properties describe it, fixed at load and not hashed: `sandboxed` (True for mounted code), `version` (the name after `@`), `modules` (the relpaths the loader walked: under the repo root when mounted, under the top-level package's parent when installed), `mounts` (`prefix -> {repo, root}`, empty when installed), `commit` (the checkout's at load, or `None`), `lock` (the git blob id of that checkout's `uv.lock`, or `None`) and `package` (the dotted root whose declared version `version` is, the unit, or `None` when the version came from a commit or the hash: the `<package>` of the `db/repo/<repo>/<package>` clock a clean run moves, DAT 1044). The version is read as a module attribute after import, never parsed from source, and a declared version counts only from a clean checkout (DAT 1043): when the checkout holding the code has modified tracked files, the version is `<commit 8>+dirty` whatever `__version__` says (mounted: the last commit touching the loaded files, else HEAD; installed: HEAD). Clean, mounted: the root package's `__version__` (imported in the worker); else the last commit touching the loaded files, 8 hex, `+dirty` when one differs from HEAD; else `#` + the first 8 hex of `hash`. Clean or outside any checkout (a wheel), installed: `__version__` on the top-level package; else the version of the distribution providing it; else the short commit (8 hex) of the checkout holding it; else `#` + 8 hex of `hash`. The version is a name for people over the hash, and the commit is a result's `code/<repo>` dependency item, so neither moves `subject`, the identity and the memo key. ^fn-code
-
-**mount**`: str | None`
-    The mounted prefix the name resolved under; `None` for installed code. ^mount
-
-**env**`: Env`
-    The environment the function resolved in: repos and commits, platform. ^env
-
-**signature**`: inspect.Signature`
-    The keys the function takes, without the leading `Rev` and without `path`. ^signature
-
-**kind**`: str`
-    `"ledger"` for a `@dat.fn`: its keys are its memo key and it receives them. `"dat"` for an undecorated function, a dat's run function (DAT 1046): its memo key is the expanded spec, and it receives the dat made from that spec in its work folder; it runs only through a spec (`rev.run(spec)`, `rev.run(name, **kwargs)`), and a direct call is `TypeError`. A plain `Dat.manager.run` in a ledger project runs a mounted one in the calling process, nothing memoised. ^fn-kind
-
-**reproducible**`: str | bool | None | tuple | list`
-    The claim `@dat.fn(reproducible=...)` made about the function, as written, read off the function object (installed) or its source, a literal (mounted). A run writes it as the `db/reproducible` row, which is what `rerun` and `safe` read ([Reproducibility](#Reproducibility)). ^fn-reproducible
-
-**__call__**`(*, seal=<the fn's ledger>, clean=False, path=None, kwargs=None, **keys) -> Value | None`
-    `seal` is where the result goes ([Running](#Running)). A `Ledger` (by default the one the function was loaded from) hands back a memo hit, else runs the body and saves the result as the memo entry in a transaction of its own; an open `Transaction` on that ledger does the same into it, the value's subject fixed at once and its revision at commit; `False` runs and keeps nothing, the trace on the result; `True` runs and seals locally (`v.seal()`); `"get"` returns a hit or `None` and never runs. Another ledger, or anything else, is `ValueError`. With `seal=t`, `path=` must be relative: it is the name the entry is saved under. The control options are exactly `seal`, `clean`, `path` and `kwargs`, never keys and never hashed; a function claiming `exact` ([`reproducible`](#^fn-reproducible)) adds the card and driver to the lookup's platform match ([Memoization and the platform](#Memoization%20and%20the%20platform)). Keys bind to the signature with defaults applied; `kwargs={...}` passes the whole key set instead, for a key named like a control option, and inline keys beside it are `TypeError`. `path=` names the result (relative to the data folder; a `Dat`'s folder is rebuilt there as a view; a hit under a new name takes it) or, absolute, makes the folder there and names nothing. An unsandboxed run needs the function's code in a clean git checkout, else `NotEvaluated`; a sandboxed run goes ahead at HEAD, clean or dirty. `clean=True` first requires the checkout clean and at the rev's `db/repo/<repo>` `db/commit`, else `NotClean`. A result that is not an instance of a `Value`-subclass return annotation is `TypeError`. ^--call--
-
-
 
 ## dvc_dat.ledger Interface
 The package's other exports: the two ledger handles (also exported from `dvc_dat`), one decorator (the function decorators are `dvc_dat.dat`'s, [below](#dvc_dat.dat%20Interface)), four helpers, and the exceptions. Every exception is a `LedgerError` and also the builtin it most resembles, so a caller catches either. `Env`, `Checkout` and `set_env_provider` are importable as the test suite's seam for the environment and are not part of the interface.
