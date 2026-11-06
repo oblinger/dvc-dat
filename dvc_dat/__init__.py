@@ -14,7 +14,7 @@ the decorators (`@dat.fn`, `@dat.warm`, `@dat.command`); the
 ledger, the dat's record in time, is its own subpackage: `from dvc_dat.ledger import Ledger`.
 """
 
-__version__ = "2.65.1"
+__version__ = "2.65.2"
 
 from . import ledger  # noqa: F401  (first: core's Dat is a ledger Value, and the ledger names Dat)
 from . import dat

@@ -277,6 +277,59 @@ def test_a_thread_started_outside_any_run_reads_for_no_run(coded, games):
     assert foreign(out["v"]) == []
 
 
+def test_a_pool_made_outside_the_run_reads_for_the_run_that_hands_it_work(coded, games):
+    """SVP 1551: a read on a pool thread started before the run, made for work the body submitted, is the run's.
+
+    The pool's thread exists before the run opens (its first task runs outside every run), so the run did not
+    start it. Its read through a plain ``Rev`` is a ``foreign:`` item of the run; its read through the run's own
+    ``Rev`` is recorded as always, so changing that row makes the next call run the body again."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from dvc_dat.ledger.trace import trace_matches
+
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        ledger_kinds.POOL["ex"] = ex
+        ex.submit(int).result()                                    # the pool's thread, started outside any run
+        rev = homed(coded).at()
+        v = rev.run("ledger_kinds.reads_on_a_pool", where=str(games.path), name="G1")
+        assert v.obj == {"seen": {"game": 1}, "home": "NYC"}
+        assert [n for _a, n, _r in foreign(v)] == ["G1"]               # the pool's read is named
+        assert v.dependencies["game/G1 home"] == "NYC"
+        n = ledger_kinds.CALLS["reads_on_a_pool"]
+        with coded.transaction(by="test") as t:
+            t["game/G1", "home"] = "LA"
+        assert trace_matches(coded.at(), dict(v.dependencies)) is False
+        again = coded.at().run("ledger_kinds.reads_on_a_pool", where=str(games.path), name="G1")
+        assert ledger_kinds.CALLS["reads_on_a_pool"] == n + 1 and again.obj["home"] == "LA"
+        assert again.subject != v.subject
+
+
+def test_a_pool_thread_a_run_started_reads_for_whoever_hands_it_work(coded, games):
+    """SVP 1551: the run travels with the work, not the thread. A pool's thread started inside one run (its first
+    task) and handed work by a thread outside every run, while that run is still open, reads for no run; under
+    2.65.1 it carried the run's mark and the read joined the open run (the SVP 1549 bug by another road)."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    ledger_kinds.GATE.update(opened=threading.Event(), go=threading.Event())
+    out = {}
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        ledger_kinds.POOL["ex"] = ex
+
+        def held():
+            out["v"] = coded.at().run("ledger_kinds.held_open_on_a_pool", where=str(games.path), name="G1")
+        holder = threading.Thread(target=held)
+        holder.start()
+        try:
+            assert ledger_kinds.GATE["opened"].wait(30)
+            out["seen"] = ex.submit(lambda: games.at().load("G1").obj).result(30)
+        finally:
+            ledger_kinds.GATE["go"].set()
+            holder.join()
+    assert out["seen"] == {"game": 1}
+    assert foreign(out["v"]) == []
+
+
 def test_outside_a_run_nothing_is_recorded(games):
     assert current_run() is None
     assert games.at().load("G1").obj == {"game": 1}

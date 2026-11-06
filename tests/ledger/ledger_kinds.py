@@ -289,6 +289,34 @@ def held_open(rev, *, where: str, name: str) -> dict:
     return {"where": where, "name": name}
 
 
+#: The thread pool the SVP 1551 tests hand work to, made by the test outside any run: ``ex``.
+POOL = {}
+
+
+@dat.fn
+def reads_on_a_pool(rev, *, where: str, name: str) -> dict:
+    """Reads ``name`` off the ledger at ``where`` and a row through its own ``Rev``, each on a pool thread the run
+    did not start (SVP 1551)."""
+    _count("reads_on_a_pool")
+    ex = POOL["ex"]
+    return {"seen": ex.submit(lambda: Ledger(where).at().load(name).obj).result(),
+            "home": ex.submit(lambda: rev["game/G1", "home"]).result()}
+
+
+@dat.fn
+def held_open_on_a_pool(rev, *, where: str, name: str) -> dict:
+    """Starts the pool's thread inside the run (its first task), then holds the run open like ``held_open``."""
+    POOL["ex"].submit(int).result()
+    return _hold(where, name)
+
+
+def _hold(where: str, name: str) -> dict:
+    GATE["opened"].set()
+    if not GATE["go"].wait(30):
+        raise TimeoutError("held_open_on_a_pool: the test never let the run go")
+    return {"where": where, "name": name}
+
+
 @dat.fn
 def runs_foreign(rev, *, where: str, n: int) -> dict:
     """A run on another ledger, called from a body."""

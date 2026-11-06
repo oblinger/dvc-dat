@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.65.2 — 2026-11-06
+
+- **Fix: a read on a pool thread is recorded on the run that handed it the work (SVP 1551).** 2.65.1 marked a thread started inside a run and let only marked threads read for an open run, so work a body submitted to a `ThreadPoolExecutor` whose thread was started before the run was recorded on no run (its `foreign:` items were missing), and a pool thread first started inside one run kept reading for it when a thread outside every run handed it work while that run was open. The run now travels with the work: `ThreadPoolExecutor.submit` runs each item with the submitter's run, or none, and a thread started inside a run runs with that run; a thread that outlives its run reads for none. The process-wide list of open runs is gone. Reads through the recording `Rev` were never affected, so no memo hit was stale: `foreign:` items are provenance and are in no hit test.
+
 ## 2.65.1 — 2026-11-06
 
 - **Fix: a thread started outside every run no longer reads for another thread's run (SVP 1549).** The `foreign:` hook (SVP 1521) gave a read in a thread with no run of its own to the latest open run, any thread's. Two threads racing for one memo entry each recorded the other's `eval:` as a `foreign:` item, so the two entries' traces, and subjects, differed. `Thread.start` now marks a thread started inside a run; only such a thread reads for an open run that is not its own. A thread a body starts is unchanged.
