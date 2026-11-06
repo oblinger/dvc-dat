@@ -769,9 +769,11 @@ class Table(Value):
         super().__init__(name=name)
 
     def encode(self, out: IO[bytes]) -> None:
-        """Write the table to the sink as parquet: a ``DataFrame`` converted first, schema metadata dropped,
-        chunks combined, the writer's options named rather than defaulted, and the footer's ``created_by``,
-        which names the pyarrow version, written as ``_TABLE_WRITER``.
+        """Write the table to the sink as parquet, canonically.
+
+        A ``DataFrame`` is converted first, schema metadata dropped, chunks combined, the writer's options named
+        rather than defaulted, and the footer's ``created_by``, which names the pyarrow version, written as
+        ``_TABLE_WRITER``.
 
         Written to a temporary file first, so the footer can be rewritten without holding the table's bytes."""
         import tempfile
