@@ -175,10 +175,9 @@ class Value:
 
         Where the shipped classes fall short today, each ``xfail(strict=True)`` in
         ``tests/ledger/test_value_encoding.py``: ``Value.Blob``, on a dict's insertion order, a set's order (across
-        ``PYTHONHASHSEED``, and after a decode) and a repeated object versus an equal copy; ``Value.Table``, on
-        chunking (a table over 131072 rows does not re-encode the same), schema metadata and the pyarrow version.
-        ``Dat`` and ``Code`` keep both: ``create`` writes a dat's spec with its keys sorted, and a ``Code``'s
-        bytes are its identity, which ``decode`` restores.
+        ``PYTHONHASHSEED``, and after a decode) and a repeated object versus an equal copy. ``Dat``, ``Code`` and
+        ``Value.Table`` keep both: ``create`` writes a dat's spec with its keys sorted, a ``Code``'s bytes are its
+        identity, which ``decode`` restores, and a table encodes its columns (see its class).
 
         A test that wants the bytes passes ``io.BytesIO()``.
         """
@@ -683,7 +682,14 @@ class Blob(Value):
 
 
 class Table(Value):
-    """A table stored as parquet: a ``pyarrow.Table`` or a pandas ``DataFrame`` (decodes to pyarrow)."""
+    """A table stored as parquet: a ``pyarrow.Table`` or a pandas ``DataFrame`` (decodes to pyarrow).
+
+    Its value is its columns: names, types and data. Schema metadata, the table's and each top-level field's
+    (pandas writes its own there), is not part of it: ``pyarrow.Table.equals`` ignores it, and ``encode`` drops
+    it, so a ``DataFrame`` and the ``pyarrow.Table`` it converts to give the same bytes, and a decoded table
+    carries none (a ``DataFrame``'s index comes back as a column when pandas stored one, else not at all).
+    Equal tables give the same bytes whatever their chunking and whichever pyarrow wrote them (SVP 1543).
+    """
 
     def __init__(self, table: Any, *, name: Optional[str] = None) -> None:
         """A value whose bytes are ``table`` as parquet.
@@ -695,12 +701,37 @@ class Table(Value):
         super().__init__(name=name)
 
     def encode(self, out: IO[bytes]) -> None:
-        """Write the table to the sink as parquet, a ``DataFrame`` converted first."""
+        """Write the table to the sink as parquet: a ``DataFrame`` converted first, schema metadata dropped,
+        chunks combined, the writer's options named rather than defaulted, and the footer's ``created_by``,
+        which names the pyarrow version, written as ``_TABLE_WRITER``.
+
+        Written to a temporary file first, so the footer can be rewritten without holding the table's bytes."""
+        import tempfile
+
         import pyarrow as pa
         import pyarrow.parquet as pq
 
+        from .sandbox import unguarded
+        from .store import BLOCK
+
         t = self.table if isinstance(self.table, pa.Table) else pa.Table.from_pandas(self.table)
-        pq.write_table(t, out)
+        bare = pa.schema([f.remove_metadata() for f in t.schema])
+        t = pa.Table.from_arrays(t.columns, schema=bare).combine_chunks()
+        with unguarded(), tempfile.TemporaryFile() as f:      # the ledger's own scratch, also inside a body
+            pq.write_table(t, f, **_PARQUET)
+            size = f.tell()
+            f.seek(size - 8)
+            n = int.from_bytes(f.read(4), "little")
+            start = size - 8 - n
+            f.seek(start)
+            footer = _named_writer(f.read(n), pa.__version__)
+            f.seek(0)
+            left = start
+            while left:
+                block = f.read(min(BLOCK, left))
+                out.write(block)
+                left -= len(block)
+        out.write(footer + len(footer).to_bytes(4, "little") + b"PAR1")
 
     @classmethod
     def decode(cls, src: IO[bytes], store: "ArtStore") -> "Table":
@@ -708,6 +739,30 @@ class Table(Value):
         import pyarrow.parquet as pq
 
         return cls(pq.read_table(src))
+
+
+#: Every option of ``pq.write_table`` that shapes the bytes, at the value pyarrow 26 defaults it to: named, so a
+#: pyarrow whose defaults move does not move every ``Value.Table``'s hash.
+_PARQUET: Dict[str, Any] = dict(
+    row_group_size=1024 * 1024, version="2.6", use_dictionary=True, compression="snappy", write_statistics=True,
+    data_page_size=1024 * 1024, data_page_version="1.0", use_compliant_nested_type=True, write_batch_size=1024,
+    dictionary_pagesize_limit=1024 * 1024, store_schema=True, write_page_index=False, write_page_checksum=False,
+    store_decimal_as_integer=False, use_byte_stream_split=False)
+
+#: The footer's ``created_by`` in every ``Value.Table``: a writer no reader applies a version workaround to.
+_TABLE_WRITER = b"dvc-dat Value.Table"
+
+
+def _named_writer(footer: bytes, version: str) -> bytes:
+    """The parquet footer ``footer`` (thrift compact ``FileMetaData``) with its ``created_by``, field 6, which
+    pyarrow writes as ``parquet-cpp-arrow version <version>``, replaced by ``_TABLE_WRITER``. ``ValueError`` when
+    the field is not where pyarrow puts it: the footer is never left naming the version."""
+    name = f"parquet-cpp-arrow version {version}".encode()
+    at = footer.rfind(name)
+    if at < 2 or len(name) > 127 or footer[at - 1] != len(name) or (footer[at - 2] & 0x0F) != 8:
+        raise ValueError(f"Value.Table: pyarrow {version} wrote a parquet footer whose created_by is not where "
+                         "it is expected; the encoding cannot be made independent of the pyarrow version")
+    return footer[:at - 1] + bytes([len(_TABLE_WRITER)]) + _TABLE_WRITER + footer[at + len(name):]
 
 
 Blob.__qualname__ = "Value.Blob"
