@@ -1,0 +1,12 @@
+name: ffmpeg
+description: Install ffmpeg from apt; a stalled Ubuntu mirror fails in ten minutes instead of hanging the job.
+runs:
+  using: composite
+  steps:
+    # azure.archive.ubuntu.com stalled for 6 h on one run and 40 min on another (2026-11-06); apt's own
+    # defaults wait about two minutes per try on each of a hundred files.
+    - shell: bash
+      run: |
+        opts="-o Acquire::http::Timeout=20 -o Acquire::Retries=5"
+        sudo timeout 240 apt-get $opts update -q
+        sudo timeout 360 apt-get $opts install -y -q --no-install-recommends ffmpeg
