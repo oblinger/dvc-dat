@@ -384,10 +384,9 @@ class Video(Value):
         return dest
 
     def path(self) -> Path:
-        """The whole video, audio included, as one local file, for a reader that needs a file: an MP4, or a Matroska
-        file when the segments are.
+        """The whole video, audio included, as one local file: an MP4, or a Matroska file when the segments are.
 
-        Its segments joined without re-encoding, once: under the art store's ``video/`` (a saved video) or beside
+        For a reader that needs a file. Its segments joined without re-encoding, once: under the art store's ``video/`` (a saved video) or beside
         the staged segments (an unsealed one)."""
         store = self.__dict__.get("_store")
         suffix = self._suffix()
