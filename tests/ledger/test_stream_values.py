@@ -1,5 +1,6 @@
 """Values stream to and from the store, never whole in RAM (DAT 240): ``encode(out)`` writes to a sink the
-store opens, ``decode(src, store)`` reads a stream; the hashes of 2.52.0 do not move; a save encodes once."""
+store opens, ``decode(src, store)`` reads a stream; the hashes of 2.52.0 do not move (a Table's moved once, by
+SVP 1543); a save encodes once."""
 
 import io
 import tracemalloc
@@ -14,9 +15,9 @@ from ledger_kinds import ENCODES, MIB, Streamed
 #: Measured on dvc-dat 2.52.0 (before streaming) and pinned: every existing ledger names these.
 BLOB = "6d1832bcc06409395ea3fa6544b93cec31e35382784b998fefe8f35b21f5a2b3"
 DAT = "70da370b78f1d35bbf71d78b92f2d0596ddf5134dec0bc7ce1c12ce53e82bf6c"
-#: A parquet footer names its writer's version, so a Table's hash is per pyarrow release.
-TABLE = {"26.0.0": "1e4be82f5e9652442aa72890f8431959b07245c597e1f957e6c924d82c3c8f1c",
-         "26.0.1": "df82cc3ae590961a7bd544cea8410a36c87c0131867f9b299225c2be549a0e32"}
+#: Moved by SVP 1543 (a Table encodes its columns, its footer naming no pyarrow version) and pinned: the same
+#: under pyarrow 25.0.1 and 26.0.0.
+TABLE = "e922dfa5d01d3b50a8ce1bf767073ee06876933d7db7242943302ebeb99b6481"
 
 
 def encoded(v: Value) -> bytes:
@@ -38,9 +39,7 @@ def test_the_hashes_of_2_52_0_do_not_move(tmp_path):
     dat = golden_dat(tmp_path / "d")
     assert blob.hash == BLOB == sha256(encoded(blob))
     assert dat.hash == DAT == sha256(encoded(dat))
-    assert table.hash == sha256(encoded(table))
-    if pa.__version__ in TABLE:
-        assert table.hash == TABLE[pa.__version__]
+    assert table.hash == TABLE == sha256(encoded(table))
 
 
 def test_a_sealed_value_keeps_its_hash_and_loads_back_from_a_stream(L, tmp_path):
