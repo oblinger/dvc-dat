@@ -205,7 +205,11 @@ class Transaction:
         self._lock = lock
         #: A placeholder for ``db/tx/<rev>``, rewritten at commit.
         self.tx = f"db/tx/pending-{uuid.uuid4().hex[:12]}"
-        """A placeholder for this revision's tx subject."""
+        """A placeholder for this revision's tx subject.
+
+        Rewritten to ``db/tx/<rev>`` at commit wherever it appears as a subject or a ``str`` object, so the body can
+        write rows about its own transaction.
+        """
         self._preds: List[Tuple[str, str]] = []
         for k, v in preds.items():
             if k.startswith("db/"):
@@ -246,9 +250,13 @@ class Transaction:
 
     @property
     def previous_rev(self) -> "Rev":
-        """The previous revision: the top as it stands while ``lock=`` holds, with every read operator a
-        revision has. Without ``lock=`` it raises ``Unlocked``: another writer may commit between open
-        and exit, so an unlocked transaction has no well-defined previous revision."""
+        """The previous revision: the top as it stands while ``lock=`` holds, with every read operator a revision has.
+
+        While ``lock=`` holds, a write built on what it reads is built on current data and no other writer commits in
+        between; the revision written is ``previous_rev.id + 1``. Without ``lock=`` it raises ``Unlocked``: another
+        writer may commit between open and exit, so there is no well-defined previous revision. ``RuntimeError``
+        before entry.
+        """
         if self._opened is None:
             raise RuntimeError("a transaction has no previous_rev until its with block is entered")
         if self._lock is None:
@@ -257,9 +265,23 @@ class Transaction:
 
     @property
     def ns(self) -> "LedgerNamespace":
-        """The ledger's namespace at ``previous_rev`` (DAT 1051): ``t.ns.load(name)`` as ``rev.ns.load``
-        (it reads, so it needs ``lock=``), and ``t.ns.mount(at, root=..., repo=...)`` writes the
-        ``db/mount/<at>`` rows ``db/root`` and ``db/repo`` through ``t.update`` (no lock needed)."""
+        """The ledger's namespace at ``previous_rev`` (DAT 1051).
+
+        ``t.ns.load(name)`` as [`rev.ns`][dvc_dat.ledger.Rev.ns] (it reads, so it needs ``lock=``);
+        ``t.ns.expand(template, **vars)`` counts ``{unique}`` against the snapshot at open and skips the names this
+        transaction minted or aliased already, so a loop minting in one transaction gets distinct names
+        ([Expansion][expansion-nsexpand]); ``t.ns.mount(at, *, root, repo=None)`` takes ``at`` as ``mnt.<prefix>``,
+        the name its names load under, and writes the two ``db/mount/<prefix>`` rows ``db/root`` and ``db/repo``
+        through ``t.update``, reads nothing and needs no lock.
+
+        ``repo`` defaults to the project's own repository: the git checkout holding the ``.datconfig.yaml``
+        ``Dat.manager`` was loaded from, named as discovery names it (its ``pyproject.toml`` name, normalised, else
+        its folder), so the ``db/repo/<name>`` rows agree; with no such file, or one in no checkout, it is
+        ``ValueError`` naming ``repo=``. A mount from another repo names it.
+
+        A missing or non-``str`` ``root``, an empty ``repo``, or a ``folder=``-style keyword is ``TypeError``; an
+        ``at`` outside ``mnt.`` (``mnt`` alone included) is ``ValueError``; nothing is prefixed for you (1505 Q1).
+        """
         from .namespace import LedgerNamespace
 
         return LedgerNamespace(txn=self, unguarded=True)
@@ -267,7 +289,11 @@ class Transaction:
     # -- reads: the previous revision's (DAT 1051) ---------------------------
 
     def get(self, *pattern: Any, **kwargs: Any) -> Any:
-        """``Rev.get`` at ``previous_rev``; this transaction's pending writes are not seen."""
+        """``Rev.get`` at ``previous_rev`` (DAT 1051): the [Rev][rev-interface] reads of the same names.
+
+        So they need ``lock=`` and are ``Unlocked`` without it. This transaction's own ``add``, ``update``, bracket
+        writes and seals are pending and not seen: ``t[s, p] = o; t[s, p]`` reads the old value.
+        """
         return self.previous_rev.get(*pattern, **kwargs)
 
     def all(self, *pattern: Any, **kwargs: Any) -> list:
@@ -318,7 +344,11 @@ class Transaction:
 
     @property
     def rev(self) -> "Rev":
-        """The revision the exit wrote."""
+        """The revision the exit wrote.
+
+        The state after this transaction, so it exists only once committed; ``RuntimeError`` before. Under ``lock=``
+        the number it will be is ``previous_rev.id + 1``.
+        """
         if self._rev is None:
             raise RuntimeError(f"transaction is {self._state}: it has no rev")
         return self._rev
@@ -684,7 +714,13 @@ class Transaction:
         return plain
 
     def add(self, subject: str, predicate: str, object: Any) -> None:
-        """Append one row; the predicate's cardinality, at read time, decides what it means."""
+        """Append one add row.
+
+        The predicate's cardinality, at read time, decides what it means. ``object`` is a ``str``, a JSON ``dict`` or
+        ``list``, or a ``Ref`` to a sealed value; a ``Value`` is ``TypeError`` naming ``seal``; a bare number, bool or
+        ``None`` is ``TypeError`` (a number is its string). ``predicate == "db/value"`` is ``TypeError``: only a seal
+        writes it.
+        """
         self._open("add")
         _name(subject, "subject")
         _name(predicate, "predicate")
@@ -713,11 +749,18 @@ class Transaction:
         self._ops.append(_Op(subject, predicate, o, True))
 
     def update(self, subject: str, record: Dict[str, Any]) -> None:
-        """``t.update(s, {p: o, ...})``: an ``add`` per key of ``record``, nothing else (DAT 1050). A list
-        under a many predicate adds each element; any other value is one row. No read of the previous
-        revision, no retraction, so no ``lock=``; ``db/`` keys are taken as ``add`` takes them. Contrast
-        ``t[s] = {...}``, which makes the rows equal (retracts what the dict omits, needs ``lock=``) and
-        refuses ``db/`` keys. ``t.update("db/mount/pkg", {"db/root": "pkg", "db/repo": "r"})`` is a mount."""
+        """An ``add`` per key of ``record``, nothing else (DAT 1050).
+
+        A ``list`` under a ``many`` predicate adds each element; any other value is one row. It reads nothing and
+        retracts nothing, so it needs no ``lock=`` (``t.update(s, {p: o, ...})``); ``db/`` keys are taken as ``add``
+        takes them (``db/value`` is ``TypeError``), so ``t.update("db/mount/pkg", {"db/root": "pkg", "db/repo":
+        "r"})`` writes a mount, as ``t.ns.mount("mnt.pkg", root="pkg", repo="r")`` does (``repo`` defaulting to the
+        project's).
+
+        A non-``dict`` record or a key that is not a non-empty ``str`` is ``TypeError``, and a refused record writes
+        no row. Contrast ``t[s] = {...}``, which makes the rows equal (retracts what the dict omits, needs ``lock=``)
+        and refuses ``db/`` keys.
+        """
         self._open("update")
         _name(subject, "subject")
         if not isinstance(record, dict):
@@ -736,40 +779,49 @@ class Transaction:
             raise
 
     def remove(self, subject: str, predicate: str, object: Any) -> None:
-        """Append one remove row: out of the set on a many predicate, the tombstone on a one predicate."""
+        """Append one remove row: out of the set on a ``many`` predicate, the tombstone on a ``one`` predicate."""
         self._open("remove")
         _name(subject, "subject")
         _name(predicate, "predicate")
         self._ops.append(_Op(subject, predicate, self._encode(object), False))
 
     def pin(self, value: Any, *, recursive: bool = False, rerun: bool = False) -> str:
-        """Pin ``value`` (SVP 250): tag the commit its run names, ``dat/<commit12>``, push the tag to the repo's
-        remote and wait, then add ``(db/repo/<repo>/<commit12>, db/pinned, dat/<commit12>)`` (once per commit
-        per ledger) and ``(<value>, db/rerunnable, true|recursive)``, the value's claim that its run can be
-        rerun: its commit pinned, its function importable by its dotted name from that commit, every input on
-        this ledger; ``recursive=True`` asserts the claim of every input that is a run's result too, down to
-        values with no run. ``value`` is a sealed ``Value``, a ``Ref`` or a name. Refused with ``NotPinned``
-        (nothing written, no tag pushed): a value that is no run's result, a revision naming no commit for its
-        repo, a commit unknown to the checkout here or not holding the bytes the run loaded, a function not
-        importable by its name at the commit, an input on no ledger, a push the remote refuses. A pinned commit
-        pays no push; a pinned value adds no row. ``rerun=True`` reruns now (``rev.rerun``) and adds
-        ``(<value>, db/rerun, <outcome>)``; ``differed-deterministic`` (a claim of ``exact``) is ``Differed`` and
-        writes nothing.
-        Returns the tag. ``L.at().pin(value)`` is the one-shot form."""
+        """Make ``value`` rerunnable ([Rerunnability][rerunnability]; SVP 250).
+
+        Tag the commit its run names, ``dat/<commit12>``, in the repo's checkout here, push the tag to its remote and
+        wait, then add ``(db/repo/<repo>/<commit12>, db/pinned, dat/<commit12>)`` (once per commit per ledger) and
+        ``(<value>, db/rerunnable, true|recursive)``, the value's claim that its run can be rerun: its commit pinned,
+        its function importable by its dotted name from that commit (a top-level ``@dat.fn`` of its module at that
+        commit: no closure, no lambda, no function made at import), every input on this ledger; ``recursive=True``
+        asserts the claim of every input that is a run's result too, down to values with no run.
+
+        ``value`` is a sealed ``Value``, a ``Ref`` or a name. Refused with ``NotPinned`` (nothing written, no tag
+        pushed): a value that is no run's result; a revision naming no ``db/repo/<repo> db/commit`` for its repo (code
+        with no ``__version__``, or outside a checkout); a commit unknown to the checkout here or not holding the
+        bytes the run loaded (a sandboxed run from a dirty checkout); a function not importable by its name at the
+        commit; an input on no ledger; a push the remote refuses (the local tag is removed, so a later pin pushes
+        again). A pinned commit pays no push, a pinned value adds no row, and ``recursive`` is never downgraded.
+
+        ``rerun=True`` runs [`rerun`][dvc_dat.ledger.Rev.rerun] (``rev.rerun``) now and adds ``(<value>, db/rerun,
+        <outcome>)``; ``differed-deterministic`` (a claim of ``exact``) is ``Differed`` and writes nothing. Returns
+        the tag. Needs no ``lock=``. ``L.at().pin(value)`` is the one-shot form.
+        """
         from .pin import pin
 
         return pin(self, value, recursive=recursive, rerun=rerun)
 
     def copy(self, *values: Any, deep: bool = False, safe: bool = True, rerunnable: bool = False) -> List[str]:
-        """Copy each sealed ``Value`` or ``Ref`` onto this transaction's ledger (SVP 251): its bytes if absent (same
-        hash), its subject and provenance rows, its name, and ``(<value>, db/copied-from, <ledger>@<rev>)``, landing
-        with this revision. ``deep``: its inputs too, recursively, whatever their ledgers. ``safe``: an input on a
-        ledger whose lifetime ranks below this one's is copied by the same rule, one at or above is referenced; a
-        value its claim lets be rerun keeps only its spec (``db/spec-only``), and a source's ``db/rerunnable`` is
-        asserted again here. ``safe`` reads every lifetime (``(ledger/<name>, ledger/lifetime, ...)``) and refuses
-        when one is undeclared or an input cannot be found; ``safe=False`` never looks and promises nothing.
-        ``rerunnable``: assert the claim here, as ``pin``. Refused with ``NotCopied``, nothing written. Returns the
-        subjects. ``L.at().copy(v)`` is the head form. See ``dvc_dat.ledger.copying``."""
+        """Copy each sealed ``Value`` or ``Ref`` onto this transaction's ledger ([Copying][copying]; SVP 251).
+
+        Its bytes if absent (same hash), its subject and provenance rows, its name, and ``(<value>, db/copied-from,
+        <ledger>@<rev>)``, landing with this revision. ``deep``: its inputs too, recursively, whatever their ledgers.
+        ``safe``: an input on a ledger whose lifetime ranks below this one's is copied by the same rule, one at or
+        above is referenced; a value its claim lets be rerun keeps only its spec (``db/spec-only``), and a source's
+        ``db/rerunnable`` is asserted again here. ``safe`` reads every lifetime (``(ledger/<name>, ledger/lifetime,
+        ...)``) and refuses when one is undeclared or an input cannot be found; ``safe=False`` never looks and
+        promises nothing. ``rerunnable``: assert the claim here, as ``pin``. Refused with ``NotCopied``, nothing
+        written. Returns the subjects. ``L.at().copy(v)`` is the head form. See ``dvc_dat.ledger.copying``.
+        """
         from .copying import copy
 
         return copy(self, values, deep=deep, safe=safe, rerunnable=rerunnable)
@@ -1153,8 +1205,14 @@ class Transaction:
         return s
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        """``t[s, p] = o``: an ``add`` on a one predicate, no lock needed. ``t[s] = {...}``: make the user rows
-        equal (A34, A43), read through ``previous_rev``, so it needs ``lock=``."""
+        """``t[s, p] = o``: an ``add`` on a ``one`` predicate, no lock needed.
+
+        A ``many`` or ``db/`` predicate is ``TypeError``. ``t[s] = {...}`` makes the subject's user rows equal to the
+        dict at the next revision (A34, A43), reading what the subject holds through ``previous_rev``, so it needs
+        ``lock=`` (``Unlocked`` without); ``t[s] = t.previous_rev[s]`` writes nothing.
+
+        Brackets take exact subjects; a glob is ``TypeError``.
+        """
         self._open("a bracket write")
         if isinstance(key, tuple):
             if len(key) != 2:
@@ -1205,8 +1263,11 @@ class Transaction:
             raise
 
     def __delitem__(self, key: Any) -> None:
-        """``del t[s, p]``: retract what ``p`` holds on ``s``. ``del t[s]``: every user row; ``db/`` rows survive.
-        Both read through ``previous_rev``, so they need ``lock=``."""
+        """``del t[s, p]`` retracts what ``p`` holds on ``s``; ``del t[s]`` retracts every user row.
+
+        ``db/`` rows survive, and a ``db/`` predicate is ``TypeError``. Both read through ``previous_rev``, so they
+        need ``lock=`` (``Unlocked`` without).
+        """
         self._open("a bracket delete")
         if isinstance(key, tuple):
             if len(key) != 2:
