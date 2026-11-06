@@ -50,15 +50,15 @@ class Row(NamedTuple):
     """A single row in the ledger: revision, subject, predicate, object, and ``added`` (false on a remove, A48)."""
 
     rev: "Rev"
-    """The revision that wrote it."""
+    """The revision that wrote the row."""
     subject: str
-    """The subject."""
+    """The row's subject."""
     predicate: str
-    """The predicate."""
+    """The row's predicate."""
     object: Any
-    """The object, decoded."""
+    """The row's object, decoded from its tagged text ([Storage][storage])."""
     added: bool
-    """True for an add, False for a remove."""
+    """``True`` for an add, ``False`` for a remove."""
 
     def __repr__(self) -> str:
         """``<Row subject predicate object rev=N +>``: the triple, the revision that wrote it, ``+`` added or ``-`` removed."""
