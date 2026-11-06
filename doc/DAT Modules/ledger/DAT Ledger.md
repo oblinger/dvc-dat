@@ -501,5 +501,5 @@ A sealed value never changes: an `add` or `remove` on one of its own rows is `Ex
 # BRIEF
 
 - Written from `dvc_dat/ledger/*.py` at v2.18.0. Every name here must exist in the code; re-read the code, not this page, before changing a signature.
-- The per-file pages beside this one are the internals and the full refusal lists; this page is the caller's interface. When a public signature changes, change both.
+- Each member's contract and refusals are its docstring; this page is the overview, tables generated from those docstrings, and the topics that span classes (246).
 - The figure is hand-written SVG; edit it directly.

@@ -13,7 +13,7 @@ api:: [`dvc_dat.core`](../api/core.md) and [`dvc_dat.do`](../api/do.md) — the 
 
 *The spec is the record* is the topic that governs the Namespace node (arguments fork a new spec; they never ride beside one); the other topics annotate the nodes they govern.
 
-This page covers the dat half of `dvc_dat`: `Dat`, `DatManager` and `DatContainer` in `dvc_dat/core.py`, `Namespace` in `dvc_dat/do.py`, and the package's exports; the figure above is the heart. The per-file detail page is [dat.md](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Modules/dat.md); the history half, the ledger, has its own module doc, [DAT Ledger](ledger/DAT%20Ledger.md); the spec file is [Spec Format](../spec-format.md) and the command line [Command Line](../cli.md).
+This page covers the dat half of `dvc_dat`: `Dat`, `DatManager` and `DatContainer` in `dvc_dat/core.py`, `Namespace` in `dvc_dat/do.py`, and the package's exports; the figure above is the heart. The history half, the ledger, has its own module doc, [DAT Ledger](ledger/DAT%20Ledger.md); the spec file is [Spec Format](../spec-format.md) and the command line [Command Line](../cli.md).
 
 
 
@@ -42,37 +42,13 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
 
 | dvc_dat | |
 | --- | --- |
-| [Dat](#^dat) | The folder that is its own recipe |
-| [DatContainer](#^datcontainer) | A dat holding dats |
-| [DatManager](#^datmanager) | A world of dats |
-| [Namespace](#^namespace) | A namespace bound to a world |
-| [L](#^l) | The active ledger |
-| [ledgers](#^ledgers) | The project's ledgers by name |
-| [__version__](#^--version--) | The package version |
-
-**Dat**`(class)`
-    From `dvc_dat.core`; see [Dat Interface](#Dat%20Interface). ^dat
-
-**DatContainer**`(class)`
-    From `dvc_dat.core`; see [DatContainer Interface](#DatContainer%20Interface). ^datcontainer
-
-**DatManager**`(class)`
-    From `dvc_dat.core`; see [DatManager Interface](#DatManager%20Interface). ^datmanager
-
-**Namespace**`(class)`
-    From `dvc_dat.do`; see [Namespace Interface](#Namespace%20Interface). ^namespace
-
-**L**`: Ledger`
-    From `dvc_dat.ledger.named`: the active ledger, `DAT_LEDGER`, else the `ledgers:` section's `default:` or `ledger:`, resolved at each use ([DAT Ledger § Many ledgers](ledger/DAT%20Ledger.md#Many%20ledgers)). ^l
-
-**ledgers**
-    From `dvc_dat.ledger.named`: `ledgers.<name>` or `ledgers["<name>"]`, a name being a Python identifier, that entry of the `ledgers:` section. ^ledgers
-
-**__version__**`: str`
-    The package version, `"2.41.0"` at this checkout. ^--version--
-
-
-
+| [Dat](../api/core.md#dvc_dat.core.Dat) | The folder that is its own recipe |
+| [DatContainer](../api/core.md#dvc_dat.core.DatContainer) | A dat holding dats |
+| [DatManager](../api/core.md#dvc_dat.core.DatManager) | A world of dats |
+| [Namespace](../api/do.md#dvc_dat.do.Namespace) | A namespace bound to a world |
+| [L](../api/ledger.md#dvc_dat.ledger.named) | The active ledger |
+| [ledgers](../api/ledger.md#dvc_dat.ledger.named.Ledgers) | The project's ledgers by name |
+| `__version__` | The package version |
 
 # Dat Semantics
 
@@ -174,7 +150,13 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 
 
 
+## Invariants
+- The spec on disk is a record: every `{}` is expanded once at create, except `dat.name`, which keeps the path template (never the path it expanded to), and call-site arguments go into a new spec.
+- A sealed (or referenceable) dat is never rewritten: `save` and `run` refuse it.
+- `dat.sha256` hashes the folder without `run/`; a run is not content.
+- Standing is the least of the inputs', capped at `sealed` by dirty code or code outside a checkout.
+- Dats and artifacts share one namespace and one index.
+
 # BRIEF
 - Hand-written against `dvc_dat/core.py` and `dvc_dat/do.py` at 2.18.0; the code is the authority, and every name and signature here was read from it. The figure is hand-written SVG; edit it beside this page.
-- [dat.md](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Modules/dat.md) is the terse per-file list of the same surface and stays as it is; keep the two in step when the surface changes. `dvc_dat.ledger.Dat` is this class since 2.28.0 (DAT 1038); its value side is documented under [DAT Ledger](ledger/DAT%20Ledger.md).
-- Block IDs: `Dat.ns` is `^dat-ns` and `DatManager.ns` `^datmanager-ns`, one page holding both; a prefix with the package name would carry an underscore, which breaks an Obsidian block link.
+- Each member's contract is its docstring; the tables here are generated from them (246). `dvc_dat.ledger.Dat` is this class since 2.28.0 (DAT 1038); its value side is documented under [DAT Ledger](ledger/DAT%20Ledger.md).

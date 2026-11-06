@@ -2249,8 +2249,11 @@ class Dat(Value, metaclass=_DatMeta):
         return moved
 
     def __repr__(self) -> str:
-        """`<Dat: tables/table12>` (its name in its dat folder); once a value is sealed from it, its label
-        as every value prints (`<Dat table/12>`, `<Dat sealed #2db69ce1>`, DAT 1036)."""
+        """`<Dat: tables/table12>`, its name in its dat folder.
+
+        Once a value is sealed from it, its label as every value prints (`<Dat table/12>`,
+        `<Dat sealed #2db69ce1>`, DAT 1036).
+        """
         if self.sealed:
             return Value.__repr__(self)
         return f"<{type(self).__name__}: {self.get_path_name()}>"
@@ -2398,8 +2401,10 @@ class Dat(Value, metaclass=_DatMeta):
         return stat.S_ISDIR(st.st_mode) and self.__dict__.get("_dir_id") in (None, (st.st_dev, st.st_ino))
 
     def encode(self, out: Any) -> None:
-        """Write the folder's content manifest, `{"files": {relpath: sha256}}`, canonical JSON, to `out`; the
-        files themselves are `_parts`, stored one by one, never read whole."""
+        """Write the folder's content manifest, `{"files": {relpath: sha256}}`, canonical JSON, to `out`.
+
+        The files themselves are `_parts`, stored one by one, never read whole.
+        """
         from .ledger.codec import canonical
 
         out.write(canonical({"files": self._manifest()}).encode())

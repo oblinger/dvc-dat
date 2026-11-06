@@ -10,7 +10,7 @@ These pages are built from the code, so they always say what the installed versi
 ## What the package exports
 
 ```python
-from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers
+from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers, dat
 
 ns = Dat.ns     # the namespace shortcut; follows Dat.manager
 ```
@@ -23,6 +23,8 @@ ns = Dat.ns     # the namespace shortcut; follows Dat.manager
 | `Namespace` | A namespace; every manager has one |
 | `L` | The active ledger: `DAT_LEDGER`, else the config's `ledgers:` default or `ledger:` |
 | `ledgers` | The project's ledgers by name: `ledgers.<name>`, `ledgers["do26"]` |
+| `dat` | The decorators: `@dat.fn`, `@dat.warm`, `@dat.command` |
+| `__version__` | The package version |
 
 Everything else hangs off those four classes:
 
