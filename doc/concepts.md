@@ -432,9 +432,9 @@ root: `load_dat_config` puts it first on `sys.path`, so the project's own
 modules resolve from any working directory, installed or not.
 
 The file is found by walking up from the working directory, or from the path
-given to `DatManager.load_dat_config(start)`. A `.datconfig.override.yaml`
-wins over it, and `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment win
-over both; `DAT_FOLDERS` names one folder (its value is not split). `run` is
+given to `DatManager.load_dat_config(start)`; it is the one config file, with
+no override file beside it. `DAT_FOLDERS` / `DAT_ART_FOLDER` in the
+environment win over it; `DAT_FOLDERS` names one folder (its value is not split). `run` is
 read by the `run` recipe of `dvc_dat.just` only (`DAT_RUN` overrides it
 there). The recipe hands its child the config it found as `DAT_CLI_CONFIG`,
 which `cli_main()` alone reads.

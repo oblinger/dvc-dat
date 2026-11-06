@@ -140,7 +140,7 @@ def test_a_ledger_takes_no_zone_and_an_entry_is_a_location(tmp_path, monkeypatch
         Ledger(tmp_path / "x", create=True, tz="UTC")
     assert not hasattr(Ledger(tmp_path / "y", create=True), "tz")
     (tmp_path / ".datconfig.yaml").write_text(
-        "ledgers:\n  default: games\n  games: {location: .dat/games, tz: America/Los_Angeles}\n")
+        "root: {location: .dat/games, tz: America/Los_Angeles}\ndefault: root\n")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("DAT_LEDGER", raising=False)
     with pytest.raises(LedgerError, match="a folder or a DSN"):

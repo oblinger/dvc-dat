@@ -15,8 +15,8 @@ from dvc_dat.ledger import Ledger
 
 @pytest.fixture
 def project(tmp_path):
-    """A ledger project's manager: `ledger:` in its `.datconfig.yaml`."""
-    (tmp_path / ".datconfig.yaml").write_text("ledger: .dat/ledger\n")
+    """A ledger project's manager: `root:`, `default: root`, `namespace: ledger` in its `.datconfig.yaml`."""
+    (tmp_path / ".datconfig.yaml").write_text("root: .dat/ledger\ndefault: root\nnamespace: ledger\n")
     Ledger(tmp_path / ".dat" / "ledger", create=True)
     return DatManager.load_dat_config(tmp_path)
 

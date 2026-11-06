@@ -28,8 +28,7 @@ before. A process that reads a value stored on a name it never registered fails 
 **``local``** is resolved once per process, first to last: ``DAT_STORE_LOCAL`` (a store name, or
 ``folder``); else the cloud the machine runs in, by a 0.3 s probe of the instance metadata endpoint
 (``gcp`` on Google Compute Engine, ``azure`` on Azure), when this process registered that name; else
-``stores: {local: <name>}`` in the nearest ``.datconfig.yaml`` (its ``.datconfig.override.yaml``
-winning); else ``folder``. ``folder`` is the built-in store meaning the ledger's own art folder alone:
+``stores: {local: <name>}`` in the nearest ``.datconfig.yaml``; else ``folder``. ``folder`` is the built-in store meaning the ledger's own art folder alone:
 nothing uploaded, no per-value row, exactly the behaviour before 1511. With no store registered,
 ``local`` is ``folder`` and nothing is probed.
 """
@@ -180,7 +179,7 @@ def probe() -> Optional[str]:
 
 
 def _configured() -> Optional[str]:
-    """``stores: {local: <name>}`` of the nearest ``.datconfig.yaml`` (its override file merged), else ``None``."""
+    """``stores: {local: <name>}`` of the nearest ``.datconfig.yaml``, else ``None``."""
     from .ledger import CONFIG, _values
 
     for folder in (Path.cwd(), *Path.cwd().parents):

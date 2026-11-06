@@ -32,7 +32,7 @@ scratch_project_path = Path("scratch/dats-demo").resolve()
 shutil.copytree("demo_game", scratch_project_path,
                 ignore=shutil.ignore_patterns("__pycache__"))
 os.chdir(scratch_project_path)
-L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
+L = Ledger(create=True)              # .datconfig.yaml + the root ledger under data/
 
 # demo repo
 
@@ -635,18 +635,20 @@ print("diff:", list(scores_table.diff(rescored_table)))
 # ### The config file is sugar for rows
 
 # %%
-print("config:", Path(".datconfig.yaml").read_text())   # → config: ledger: .dat/ledger
+print("config:", Path(".datconfig.yaml").read_text())   # → config: default: root, namespace: ledger
 
 # %% [markdown]
 # `Ledger(create=True)` wrote it. `Ledger()`, with no path, walks up
-# from the cwd to the nearest `.datconfig.yaml` with a `ledger:` key
-# and opens the ledger it names; `DAT_LEDGER`, when set, overrides
+# from the cwd to the nearest `.datconfig.yaml` and opens the ledger
+# its `default:` names (`root`: the root ledger, a SQLite folder under
+# `data/` when no `root:` key says where); `DAT_LEDGER`, when set, overrides
 # the walk, which is how a sandbox worker in a scratch cwd finds its
 # parent's ledger (A44). A `mounts:` key is sugar for the mount
 # rows this notebook wrote by hand:
 #
 # ```yaml
-# ledger: .dat/ledger
+# default: root
+# namespace: ledger
 # mounts:
 #   mnt.demo_game.etl: demo_game/etl
 # ```

@@ -270,7 +270,8 @@ class LedgerNamespace(Namespace):
 
             self._ledger = _ledger_of(self._config)
             if self._ledger is None:
-                raise RuntimeError(f"{self._config}: names no ledger")
+                raise RuntimeError(f"{self._config}: names no active ledger (set DAT_LEDGER=<name>, or default: in the "
+                                   "config)")
         return self._ledger.at()
 
     def _ledger_of(self) -> Any:

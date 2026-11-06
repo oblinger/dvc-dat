@@ -92,27 +92,41 @@ def _merge_by_name(base: List[Dict], over: List[Dict]) -> List[Dict]:
 # =============================================================================
 
 DAT_CONFIG_FILE = ".datconfig.yaml"
-DAT_CONFIG_OVERRIDE_FILE = ".datconfig.override.yaml"
 ENV_PREFIX = "DAT_"
 _CONFIG_KEYS = ("dat_folders", "art_folder", "index", "manager", "verify",
                 "run",                 # `just run` only
-                "ledger", "ledgers", "mounts",    # the ledger's (`Ledger()`, `ledgers`), read there
+                "root", "default", "mounts", "stores",    # the ledger's (`ledgers`, `L`, `register_store`), read there
                 "namespace")           # `ledger`: the project's names are its ledger's
 _DEFAULT_DAT_FOLDER = "data"
 _DEFAULT_ART_FOLDER = "art"           # beside the dat folder, never inside it
+_RETIRED_OVERRIDE = ".datconfig.override.yaml"  # read until 2.63 (SVP 239: one config file); now refused
+
+
+def _refuse_removed(path: Optional[Path], values: Dict[str, Any]) -> None:
+    """`ValueError` for a config key removed in 2.63, naming what replaces it, and for an override file beside the
+    config (SVP 239: one `.datconfig.yaml`, committed; the per-checkout fact is `DAT_LEDGER`)."""
+    if path is not None and (Path(path).parent / _RETIRED_OVERRIDE).is_file():
+        raise ValueError(f"{Path(path).parent / _RETIRED_OVERRIDE}: the override file is no longer read (dvc-dat "
+                         "2.63, SVP 239: one config file); the active ledger is DAT_LEDGER=<name>, the local store "
+                         "DAT_STORE_LOCAL; move what it says there and remove the file")
+    if "ledger" in values:
+        raise ValueError(f"{path}: 'ledger:' was removed in dvc-dat 2.63 (SVP 239): write 'root: "
+                         f"{values['ledger']}' and 'default: root', and 'namespace: ledger' when its names were "
+                         "the ledger's")
+    if "ledgers" in values:
+        raise ValueError(f"{path}: 'ledgers:' was removed in dvc-dat 2.63 (SVP 239): the list of ledgers is the "
+                         "registry on the root ledger; write 'root: <location of the ledger holding the registry>' "
+                         "and register each ledger there (subject ledger/<name>, predicate ledger/location)")
 
 
 def _ledger_namespace(config_path: Optional[Path], values: Dict[str, Any]) -> bool:
-    """Whether the project's names are its active ledger's `db/mount` rows (DAT 1046): `namespace: ledger`,
-    or the one-ledger `ledger:` key alone.  A `ledgers:` section never switches it (SVP 239 A2)."""
+    """Whether the project's names are its active ledger's `db/mount` rows (DAT 1046): `namespace: ledger`, the
+    one switch (SVP 239)."""
     mode = values.get("namespace")
     if mode is None:
-        return bool(values.get("ledger"))
+        return False
     if mode != "ledger":
         raise ValueError(f"{config_path}: namespace is 'ledger' or absent, got {mode!r}")
-    if not (values.get("ledger") or "ledgers" in values):
-        raise ValueError(f"{config_path}: namespace: ledger, but no 'ledger:' key or 'ledgers:' section "
-                         "names a ledger")
     return True
 
 
@@ -763,16 +777,16 @@ class DatManager:
         """A new manager from the `.datconfig.yaml` found walking up from `start`.
 
         Default the working directory; a file path names the config file itself. Precedence, lowest to highest: the
-        file, `.datconfig.override.yaml`, then `DAT_FOLDERS` (one folder, not split) / `DAT_ART_FOLDER` in the
-        environment. Relative folders resolve against the file's folder, which goes first on `sys.path`; with no file
+        file, then `DAT_FOLDERS` (one folder, not split) / `DAT_ART_FOLDER` in the environment; there is no override
+        file (SVP 239), and one beside the config is `ValueError`, as is a removed key (`ledger:`, `ledgers:`) naming
+        what replaces it. Relative folders resolve against the file's folder, which goes first on `sys.path`; with no file
         they resolve against `start`. `art_folder` defaults to `art/` beside the file, a sibling of `data/`; `index:`
         moves the store's index file. An unknown key, or a malformed value, is `ValueError`. `ns` as in the
         constructor.
 
-        A `ledger:` key, or `namespace: ledger` beside a `ledger:` key or a `ledgers:` section, makes the namespace
-        the active ledger's (DAT 1046): `ns` is a `LedgerNamespace`, its names the ledger's `db/mount` rows at the
-        head, and `mount` refused; an adopted `ns` that is not one is not kept. A `ledgers:` section alone keeps the
-        plain namespace (SVP 239 A2).
+        `namespace: ledger`, the one switch (SVP 239), makes the namespace the active ledger's (DAT 1046): `ns` is a
+        `LedgerNamespace`, its names the ledger's `db/mount` rows at the head, and `mount` refused; an adopted `ns`
+        that is not one is not kept. `root:` and `default:` alone keep the plain namespace.
 
         A `manager:` key names the class to build, dotted (`mylab.store.Store`): a subclass of the class this is
         called on, imported once the config folder is on `sys.path`; a `manager:` that is not a subclass is
@@ -784,9 +798,9 @@ class DatManager:
         if start.is_file():
             start, name = start.parent, start.name
         config_path = _find_file_up(start, name)
-        override_path = _find_file_up(start, DAT_CONFIG_OVERRIDE_FILE)
-        file_values, override_values = _read_config(config_path), _read_config(override_path)
-        values = merge_dicts(file_values, override_values)
+        file_values = _read_config(config_path)
+        _refuse_removed(config_path, file_values)
+        values = dict(file_values)
         if (env := os.environ.get(ENV_PREFIX + "FOLDERS")):
             values["dat_folders"] = env
         if (env := os.environ.get(ENV_PREFIX + "ART_FOLDER")):
@@ -805,7 +819,6 @@ class DatManager:
                                 f"not a subclass of {cls.__name__}")
         extra = tuple(getattr(klass, "CONFIG_KEYS", ()))
         _check_keys(config_path, file_values, _CONFIG_KEYS + extra)
-        _check_keys(override_path, override_values, _CONFIG_KEYS + extra)
         folders = values.get("dat_folders", _DEFAULT_DAT_FOLDER)
         folders = [folders] if isinstance(folders, str) else folders
         if not isinstance(folders, list) or not all(isinstance(f, str) and f for f in folders):
@@ -1951,7 +1964,7 @@ class Dat(Value, metaclass=_DatMeta):
 
         The ledger is named rather than fixed, since a run may be on any ledger (SVP 1521). During the run it is the
         recording ``Rev``, so a read through it enters the entry's provenance and a memo hit stays sound; afterwards a
-        plain one, its ledger the value's, else the one open under that name, else the ``ledgers:`` entry. A run
+        plain one, its ledger the value's, else the one open under that name, else ``ledgers[name]`` (root's registry). A run
         function reads through it, and a result must not vary with the string ``dat.run_rev`` itself. A runtime
         attribute, never in ``_spec_.yaml`` or the hash. ``ValueError`` for a dat not run on a ledger.
         """

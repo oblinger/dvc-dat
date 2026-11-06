@@ -39,7 +39,7 @@ def test_pg_datconfig_names_the_dsn_and_art_is_relative_to_it(dsn, tmp_path, mon
     proj = tmp_path / "proj"
     (proj / "sub").mkdir(parents=True)
     rel = dsn.split("&art=")[0] + "&art=.dat/art"
-    (proj / ".datconfig.yaml").write_text(f"ledger: {rel}\n")
+    (proj / ".datconfig.yaml").write_text(f"root: '{rel}'\ndefault: root\n")
     monkeypatch.delenv("DAT_LEDGER", raising=False)
     monkeypatch.chdir(proj / "sub")
     with pytest.raises(LedgerError, match="no ledger"):

@@ -42,7 +42,7 @@ function. An in-process nested eval's code includes a module its
 caller loaded first: the worker's ``__import__`` credits every import a body makes, loaded
 already or not, with what that module's first import pulled in.
 
-Another ledger from a body (SVP 1521 Q3 (A)): the caller's ``ledgers:`` section crosses on the request, and
+Another ledger from a body (SVP 1521 Q3 (A)): the caller's ``ledgers`` view crosses on the request (``shipped_section``), and
 ``ledgers.<name>``, ``dat.at("<name>@<rev>")`` and ``dat.load("<name>@<rev>:<value>")`` open that ledger read-only
 (``read_only_ledger``), once per child, SQLite or Postgres; a ``Ref`` or sealed ``Value`` key on another ledger crosses
 with its location and opens the same way. Opening one adds its art store to ``STATE.reads``, its database to

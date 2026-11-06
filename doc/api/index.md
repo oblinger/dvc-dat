@@ -21,8 +21,8 @@ ns = Dat.ns     # the namespace shortcut; follows Dat.manager
 | `DatContainer` | A dat whose folder holds other dats |
 | `DatManager` | Creates, finds, loads and runs dats; `Dat.manager` is the default, assign to replace |
 | `Namespace` | A namespace; every manager has one |
-| `L` | The active ledger: `DAT_LEDGER`, else the config's `ledgers:` default or `ledger:` |
-| `ledgers` | The project's ledgers by name: `ledgers.<name>`, `ledgers["do26"]` |
+| `L` | The active ledger: `DAT_LEDGER`, else the config's `default:` |
+| `ledgers` | The project's ledgers by name, from the registry on the root ledger: `ledgers.<name>`, `ledgers["do26"]`, `del`, set, iterate |
 | `dat` | The decorators: `@dat.fn`, `@dat.warm`, `@dat.command` |
 | `__version__` | The package version |
 

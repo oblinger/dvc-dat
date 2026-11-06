@@ -193,7 +193,7 @@ def test_a_ledger_project_gets_the_ledgers_do_and_a_plain_one_the_plain_do(tmp_p
     led, plain = tmp_path / "led", tmp_path / "plain"
     led.mkdir()
     plain.mkdir()
-    (led / ".datconfig.yaml").write_text("ledger: .dat/ledger\n")
+    (led / ".datconfig.yaml").write_text("root: .dat/ledger\ndefault: root\nnamespace: ledger\n")
     Ledger(led / ".dat" / "ledger", create=True)
     (plain / ".datconfig.yaml").write_text("dat_folders: data\n")
     m = DatManager.load_dat_config(led)

@@ -53,7 +53,7 @@ baseline = {
 from dvc_dat import Dat, L, ledgers
 
 m = Dat.manager              # the default world
-L                            # the active ledger: DAT_LEDGER, else the config's
+L                            # the active ledger: DAT_LEDGER, else default:
 ledgers.do26                 # a named one, ledgers["do26"] too (DAT Ledger)
 Dat.save_artifact("clips/G1.mp4", name="games/G1/video")
 
