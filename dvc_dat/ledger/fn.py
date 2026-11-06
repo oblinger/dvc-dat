@@ -529,17 +529,50 @@ class Fn:
     own claim as written (``@dat.fn(reproducible=...)``, SVP 251 Q2)."""
 
     name: str
-    """The dotted name."""
+    """The dotted name it was resolved by."""
     module: Path
-    """The source file."""
+    """The function's source file."""
     mount: Optional[str]
-    """The mounted prefix, when sandboxed."""
+    """The mounted prefix the name resolved under; ``None`` for installed code."""
     signature: inspect.Signature
-    """The keys it takes."""
+    """The keys the function takes, without the leading ``Rev`` and without ``path``."""
     env: Env
-    """The environment it resolved in."""
+    """The environment the function resolved in: repos and commits, platform."""
     code: Code
-    """The code it is loaded from, at a version: the snapshot, which alone has identity."""
+    """The code it is loaded from, at a version: the snapshot, which alone has identity.
+
+    A ``Code(Value)`` (DAT 1037), computed at ``rev.ns.load``; a run writes its identity as the ``db/code/<16 hex>``
+    item, and the rest of it is not written to the ledger. Its name is ``<unit>@<version>``: the unit is the mount
+    prefix for mounted code (``plane``, ``algs.ocr``) and the function's top-level package for installed code
+    (``geometry``).
+
+    Its identity is the bytes: ``encode()`` is the canonical ``{"modules": relpath -> sha256, "mounts": <hash of the
+    db/mount rows, or null>}``, ``hash`` its sha256, and ``subject`` ``db/code/<16 hex>``, the first 16 of the hash
+    (the 16 hex the memo key carried as ``db/fn/<name>/<16 hex>`` before); two functions in one snapshot share it, and
+    any changed byte in a module makes a new one.
+
+    Read-only properties describe it, fixed at load and not hashed: ``sandboxed`` (True for mounted code), ``version``
+    (the name after ``@``), ``modules`` (the relpaths the loader walked: under the repo root when mounted, under the
+    top-level package's parent when installed), ``mounts`` (``prefix -> {repo, root}``, empty when installed),
+    ``commit`` (the checkout's at load, or ``None``), ``lock`` (the git blob id of that checkout's ``uv.lock``, or
+    ``None``) and ``package`` (the dotted root whose declared version ``version`` is, the unit, or ``None`` when the
+    version came from a commit or the hash: the ``<package>`` of the ``db/repo/<repo>/<package>`` clock a clean run
+    moves, DAT 1044).
+
+    The version is read as a module attribute after import, never parsed from source, and a declared version counts
+    only from a clean checkout (DAT 1043): when the checkout holding the code has modified tracked files, the version
+    is ``<commit 8>+dirty`` whatever ``__version__`` says (mounted: the last commit touching the loaded files, else
+    HEAD; installed: HEAD).
+
+    Clean, mounted: the root package's ``__version__`` (imported in the worker); else the last commit touching the
+    loaded files, 8 hex, ``+dirty`` when one differs from HEAD; else ``#`` + the first 8 hex of ``hash``. Clean or
+    outside any checkout (a wheel), installed: ``__version__`` on the top-level package; else the version of the
+    distribution providing it; else the short commit (8 hex) of the checkout holding it; else ``#`` + 8 hex of
+    ``hash``.
+
+    The version is a name for people over the hash, and the commit is a result's ``code/<repo>`` dependency item, so
+    neither moves ``subject``, the identity and the memo key.
+    """
     _rev: Any = field(repr=False, compare=False)
     _obj: Any = field(repr=False, compare=False, default=None)
     _takes_path: bool = field(repr=False, compare=False, default=False)
@@ -547,9 +580,20 @@ class Fn:
     _returns: str = field(repr=False, compare=False, default="")
     _info: Dict[str, Any] = field(repr=False, compare=False, default_factory=dict)
     kind: str = "ledger"
-    """``"ledger"`` or ``"dat"``, read off the function."""
+    """``"ledger"`` or ``"dat"``, read off the function.
+
+    ``"ledger"`` for a ``@dat.fn``: its keys are its memo key and it receives them. ``"dat"`` for an undecorated
+    function, a dat's run function (DAT 1046): its memo key is the expanded spec, and it receives the dat made from
+    that spec in its work folder; it runs only through a spec (``rev.run(spec)``, ``rev.run(name, **kwargs)``), and a
+    direct call is ``TypeError``. A plain ``Dat.manager.run`` in a ledger project runs a mounted one in the calling
+    process, nothing memoised.
+    """
     reproducible: Any = None
-    """The function's own claim, as written."""
+    """The claim ``@dat.fn(reproducible=...)`` made about the function, as written.
+
+    Read off the function object (installed) or its source, a literal (mounted). A run writes it as the
+    ``db/reproducible`` row, which is what ``rerun`` and ``safe`` read ([Reproducibility][reproducibility]).
+    """
 
     def __repr__(self) -> str:
         """``<Fn plane.measure.length@2.7.1>``: the name, ``@`` its code's version (DAT 1036, 1037)."""
@@ -580,24 +624,37 @@ class Fn:
 
     def __call__(self, *, seal: Any = OWN, clean: bool = False, path: Any = None,
                  kwargs: Optional[Dict[str, Any]] = None, **keys: Any) -> Optional[Value]:
-        """``f(k=v, ...)`` or ``f(kwargs={...})``: eval. The control options (Q41), never keys:
+        """``f(k=v, ...)`` or ``f(kwargs={...})``: eval.
 
-        ``seal``: where the result goes (DAT 1028). ``"get"``: the saved result if one holds, else
-        ``None``; never runs. ``False``: run, keep nothing; the trace is on the result. ``True``: run,
-        seal it locally (``v.seal()``), off the ledger. A ``Ledger`` (default: the one the fn was loaded
-        from): the saved result if one holds, else run and save it as the memo entry in a transaction of
-        its own. An open ``Transaction`` on that ledger: the same, saved into it. A later ``v.seal(L)``
-        or ``v.seal(t)`` of a ``False``/``True`` result writes the same memo entry.
-        ``clean=True``: the code must be a clean representation of a version,
-        the checkout clean and at the commit the rev's ``db/repo/<repo> db/commit`` row names, else ``NotClean``
-        (Q39), before any lookup; ``False`` (default): a sandboxed call runs at HEAD, clean or dirty.
-        ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder
-        there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
-        (Q36). A hit asked for under a new name takes that name. ``kwargs``: the function's whole key
-        set, for a key that is also a control option's name; inline keys beside it are ``TypeError``.
-        A function claiming ``exact`` in any clause (``@dat.fn(reproducible="exact")``, SVP 251 Q2): the lookup
-        also asks that the entry ran on the same ``card`` and ``driver``, on top of the ledger's memo policy
-        (SVP 1474); the entry written is the same either way."""
+        The control options are exactly ``seal``, ``clean``, ``path`` and ``kwargs``, never keys and never hashed
+        (Q41).
+
+        ``seal``: where the result goes (DAT 1028, [Running][running]). ``"get"``: the saved result if one holds, else
+        ``None``; never runs. ``False``: run, keep nothing; the trace is on the result. ``True``: run, seal it locally
+        (``v.seal()``), off the ledger. A ``Ledger`` (default: the one the fn was loaded from): the saved result if
+        one holds, else run and save it as the memo entry in a transaction of its own, the value's subject fixed at
+        once and its revision at commit. An open ``Transaction`` on that ledger: the same, saved into it. Another
+        ledger, or anything else, is ``ValueError``. A later ``v.seal(L)`` or ``v.seal(t)`` of a ``False``/``True``
+        result writes the same memo entry. With ``seal=t``, ``path=`` must be relative: it is the name the entry is
+        saved under.
+
+        ``clean=True``: the code must be a clean representation of a version, the checkout clean and at the commit the
+        rev's ``db/repo/<repo> db/commit`` row names, else ``NotClean`` (Q39), before any lookup; ``False`` (default):
+        a sandboxed call runs at HEAD, clean or dirty. An unsandboxed call needs the function's code in a clean git
+        checkout regardless, else ``NotEvaluated``.
+
+        ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder there a view when
+        it is a ``Dat``; an absolute path makes the folder there and names nothing (Q36). A hit asked for under a new
+        name takes that name. Keys bind to the signature with defaults applied; ``kwargs={...}`` passes the whole key
+        set instead, for a key that is also a control option's name; inline keys beside it are ``TypeError``.
+
+        A function claiming ``exact`` in any clause (``@dat.fn(reproducible="exact")``, SVP 251 Q2): the lookup also
+        asks that the entry ran on the same ``card`` and ``driver``
+        ([``reproducible``][dvc_dat.ledger.Fn.reproducible]), on top of the ledger's memo policy ([Memoization and the
+        platform][memoization-and-the-platform], SVP 1474); the entry written is the same either way.
+
+        A result that is not an instance of a ``Value``-subclass return annotation is ``TypeError``.
+        """
         from .txn import Transaction
 
         if not self.code.sandboxed:
