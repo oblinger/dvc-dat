@@ -212,7 +212,6 @@ SET_REBUILT = "Blob: a decoded set is rebuilt by inserts, so its iteration order
 PARQUET_CHUNKS = "Table: parquet's pages follow the table's chunks, and a long table decodes in 131072-row chunks"
 PARQUET_META = "Table: the schema metadata (pandas adds its own) is in the bytes and outside Table.equals"
 PARQUET_VERSION = "Table: the footer names the pyarrow version, so a pyarrow upgrade moves every hash"
-CODE_NO_DECODE = "Code: decode is not implemented, and encode omits the description decode would have to restore"
 
 
 # --- the harness can fail -------------------------------------------------------------------------------------
@@ -316,9 +315,21 @@ def test_a_dat_with_a_run_comes_back_with_the_same_bytes(L, tmp_path):
             Dat.manager = before
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=CODE_NO_DECODE)
 def test_a_code_decodes():
     assert_round_trips(code())
+    assert same(code(), decoded(code()))
+
+
+def test_a_code_decoded_by_its_name_keeps_its_unit_and_version():
+    """The description is not the identity, so it is not in the bytes: the name restores the unit and version,
+    and nothing restores the commit, lock or mounts (SVP 1543)."""
+    mounted = code(mounts_hash="4" * 16, sandboxed=True, commit="abc1234", mounts={"pkg": {"repo": "r", "root": "."}})
+    back = Code.decode(io.BytesIO(encoded(mounted)), None, name="pkg@1.0.0")
+    assert (back.name, back.hash, back.sandboxed) == ("pkg@1.0.0", mounted.hash, True)
+    assert (back.commit, back.lock, back.mounts) == (None, None, {})
+    installed = code(mounts_hash=None)
+    bare = Code.decode(io.BytesIO(encoded(installed)), None)
+    assert (bare.name, bare.hash, bare.sandboxed) == ("code@#" + installed.hash[:8], installed.hash, False)
 
 
 # --- deterministic: equal values built separately, here --------------------------------------------------------
