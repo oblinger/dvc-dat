@@ -270,3 +270,19 @@ def test_a_foreign_item_never_reads_as_a_row(coded):
     with coded.transaction(by="test") as t:
         t.add("foreign:x", "y", "z")
     assert trace_matches(coded.at(), {"foreign:x y": "w"}) is False         # a row read, judged as one
+
+
+def test_last_rev_in_a_body_is_traced_so_a_moved_answer_is_a_miss(coded):
+    with coded.transaction(by="t") as t:
+        t.add("game/G1", "home", "A")
+    a = coded.at().run("ledger_kinds.asks_last_rev", s="game/G1")
+    n = ledger_kinds.CALLS["asks_last_rev"]
+    assert coded.at().run("ledger_kinds.asks_last_rev", s="game/G1").subject == a.subject
+    assert ledger_kinds.CALLS["asks_last_rev"] == n
+    with coded.transaction(by="t") as t:
+        t.add("other", "x", "y")                                   # another subject: the answer holds
+    assert coded.at().run("ledger_kinds.asks_last_rev", s="game/G1").subject == a.subject
+    with coded.transaction(by="t") as t:
+        t.add("game/G1", "home", "B")
+    b = coded.at().run("ledger_kinds.asks_last_rev", s="game/G1")
+    assert ledger_kinds.CALLS["asks_last_rev"] == n + 1 and b.obj != a.obj
