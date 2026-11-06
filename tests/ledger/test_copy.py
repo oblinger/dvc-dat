@@ -2,7 +2,8 @@
 ledgers' lifetimes require, or only the spec of a value its claim lets be rerun.
 
 Three SQLite ledgers, ``results`` (permanent), ``cold`` (archival) and ``do26`` (transient), and ``games`` (permanent)
-for a read through another ``Rev``; a tiny repo with a bare remote, so a claim can be pinned and a value rerun.
+for a read through another ``Rev``, each declaring its lifetime on the project's root ledger (``root: root``); a tiny
+repo with a bare remote, so a claim can be pinned and a value rerun.
 """
 
 import subprocess
@@ -12,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from dvc_dat import dat
+from dvc_dat import dat, ledgers
 from dvc_dat.ledger import Differed, Ledger, NotCopied, NotPinned, Ref, SpecOnly, Value, set_env_provider
 from dvc_dat.ledger.claim import claim_of, claim_text, clauses, judged, unconditional, widens
 from dvc_dat.ledger.copying import COPIED_FROM, LIFETIME, SPEC_ONLY, lifetime_of
@@ -126,16 +127,25 @@ def git(cwd, *args):
                            *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
 
+def declare(name, lifetime):
+    """Root's registry row declaring the ledger ``name``'s lifetime, as ``just create ledger`` writes it."""
+    with ledgers.root.transaction(by="t") as t:
+        t.add(f"ledger/{name}", LIFETIME, lifetime)
+
+
 def ledger(tmp, name, lifetime=None):
     L = Ledger(tmp / name, create=True)
     if lifetime is not None:
-        with L.transaction(by="t") as t:
-            t.add(f"ledger/{name}", LIFETIME, lifetime)
+        declare(name, lifetime)
     return L
 
 
 @pytest.fixture
 def w(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DAT_LEDGER", raising=False)
+    (tmp_path / ".datconfig.yaml").write_text("root: root\n")
+    Ledger(tmp_path / "root", create=True)
     remote = tmp_path / "remote.git"
     git(tmp_path, "init", "-q", "--bare", "remote.git")
     repo = tmp_path / "copyrepo"
@@ -282,10 +292,48 @@ def test_a_lifetime_is_a_row_of_three_words(w):
     bare = ledger(w.tmp, "bare")
     with pytest.raises(NotCopied, match="no lifetime"):
         lifetime_of(bare)
-    with bare.transaction(by="t") as t:
-        t.add("ledger/bare", LIFETIME, "forever")
+    declare("bare", "forever")
     with pytest.raises(NotCopied, match="'forever'"):
         lifetime_of(bare)
+
+
+def test_a_lifetime_is_read_on_root_never_on_the_ledger_itself(w):
+    """SVP 251 Q3 (B): the row lives on root, so a row the ledger writes about itself declares nothing."""
+    own = ledger(w.tmp, "own26")
+    with own.transaction(by="t") as t:
+        t.add("ledger/own26", LIFETIME, "permanent")
+    with pytest.raises(NotCopied, match=r"no lifetime.*root ledger \(root\)"):
+        lifetime_of(own)
+    declare("own26", "transient")
+    assert lifetime_of(own) == "transient"
+
+
+def test_a_ledger_gone_from_disk_is_still_judged_by_root(w):
+    gone = ledger(w.tmp, "gone26", "archival")
+    gone.close()
+    (w.tmp / "gone26" / "ledger.db").unlink()
+    assert lifetime_of(gone) == "archival"
+
+
+def test_more_than_one_lifetime_on_root_is_an_error(w):
+    with ledgers.root.transaction(by="t") as t:
+        t.add(f"db/pred/{LIFETIME}", "db/cardinality", "many")
+    declare("results", "transient")
+    with pytest.raises(NotCopied, match="more than one lifetime for ledger results"):
+        lifetime_of(w.results)
+    v = run(w.do26, "base", n=1)
+    with pytest.raises(NotCopied, match="more than one lifetime"):
+        w.results.at().copy(v)
+    assert not holds(w.results, v)
+
+
+def test_safe_refuses_when_root_does_not_open(w, tmp_path_factory, monkeypatch):
+    v = run(w.do26, "base", n=1)
+    monkeypatch.chdir(tmp_path_factory.mktemp("noproject"))
+    with pytest.raises(NotCopied, match="root ledger, which does not open"):
+        w.results.at().copy(v)
+    w.results.at().copy(v, safe=False)                                      # a plain copy never looks
+    assert holds(w.results, v)
 
 
 def test_safe_is_the_default_and_refuses_an_undeclared_ledger(w):
