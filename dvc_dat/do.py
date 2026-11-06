@@ -130,10 +130,12 @@ class Namespace:
         return expand(text, vars, resolver=self.load, tz=self._tz())
 
     def expand_spec(self, spec: Any, /, **vars: Any) -> Any:
-        """A copy of `spec` merged over its `dat.base` chain, then with every string value expanded as
-        `expand` does (keys left alone, the built-ins one moment).  A string value that is exactly one
-        reference is replaced by the object it names: `cfg: "{svp.defaults}"` inlines the dict.  A
-        spec that is not a dict has no bases and is only filled."""
+        """A copy of `spec` merged over its `dat.base` chain, every string value expanded.
+
+        Expanded as `expand` does, keys left alone, the built-ins one moment. A string value that is exactly
+        one reference is replaced by the object it names: `cfg: "{svp.defaults}"` inlines the dict. A spec
+        that is not a dict has no bases and is only filled.
+        """
         if isinstance(spec, dict):
             spec = self._merge_bases(copy.deepcopy(spec))
         return expand_spec(spec, vars, resolver=self.load, tz=self._tz())
