@@ -35,7 +35,7 @@ import warnings
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, show, strip_hint, tag
-from .errors import Exists, LockTimeout, SealBroken, Undeclared, Unlocked
+from .errors import ConfinedWrite, Exists, LockTimeout, SealBroken, Undeclared, Unlocked
 from .value import TIMEZONE, Value, check_loadable, dotted, is_moment, stamp, zone_named
 
 if TYPE_CHECKING:
@@ -199,6 +199,8 @@ class Transaction:
 
     def __init__(self, ledger: "Ledger", by: "str | Dict[str, Any]", lock: Optional[float],
                  preds: Dict[str, Any]) -> None:
+        if ledger.read_only:
+            raise ConfinedWrite(f"{ledger._store.name}: a ledger a sandboxed function opened by name is read-only")
         self._ledger = ledger
         self._by = by_text(by)
         if lock is not None and (isinstance(lock, bool) or not isinstance(lock, (int, float)) or lock <= 0):

@@ -279,19 +279,21 @@ class Ledger:
             self._assert_mounts(cfg)
 
     @classmethod
-    def _opened(cls, target: Target, given: Any, base: Path, cfg: Optional[Path]) -> "Ledger":
-        """A handle on a resolved target (``named``, ``do``); ``cfg`` names the config whose mounts to assert."""
+    def _opened(cls, target: Target, given: Any, base: Path, cfg: Optional[Path],
+                overlay: Optional[Path] = None) -> "Ledger":
+        """A handle on a resolved target (``named``, ``do``); ``cfg`` names the config whose mounts to assert.
+        ``overlay``: read-only (``read_only``), what its reads place going there (``ReadOnlyArt``)."""
         led = cls.__new__(cls)
-        led._open(target, given, base, False)
+        led._open(target, given, base, False, overlay)
         if cfg is not None:
             led._assert_mounts(cfg)
         return led
 
-    def _open(self, target: Target, given: Any, base: Path, create: bool) -> None:
+    def _open(self, target: Target, given: Any, base: Path, create: bool, overlay: Optional[Path] = None) -> None:
         self._values: Dict[Any, Any] = {}
         self._store: Store
         if isinstance(target, str):
-            store = PostgresStore(target, base=base, create=create)
+            store = PostgresStore(target, base=base, create=create, overlay=overlay)
             self._store = store
             self.path: Union[str, Path] = store.dsn
             self._shown = store.redacted
@@ -303,8 +305,13 @@ class Ledger:
                 raise LedgerError(f"no ledger at {given}")
             self.path = folder
             self._shown = str(folder)
-            self._store = SqliteStore(folder)
+            self._store = SqliteStore(folder, overlay)
         _OPEN.append(weakref.ref(self))
+
+    @property
+    def read_only(self) -> bool:
+        """Is this a read-only handle: a ledger a sandboxed body opened by name (SVP 1521 Q3 (A))."""
+        return self._store.read_only
 
     def __repr__(self) -> str:
         return f"Ledger({self._shown!r})"

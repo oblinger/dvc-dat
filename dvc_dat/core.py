@@ -2461,9 +2461,9 @@ class Dat(Value, metaclass=_DatMeta):
         if name is not None and os.path.isabs(name):
             dest = Path(name)
         elif name is not None:
-            dest = store.root / "dats" / Path(*Path(check_name(name)).parts)
+            dest = store.dats / Path(*Path(check_name(name)).parts)
         else:
-            dest = store.root / "dats" / h[:16]
+            dest = store.dats / h[:16]
         with unguarded():
             if name is not None and dest.exists() and not _holds(dest, files, store):
                 old = dest.with_name(f"{dest.name}.old-{os.getpid()}-{id(files):x}")
