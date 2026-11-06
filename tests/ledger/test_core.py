@@ -393,8 +393,17 @@ def test_bare_version_is_opaque_user_data(L):
     assert L.at()["model/m", "db/version"] == "0.0.1"
 
 
+def test_a_dev_version_is_a_clock_version_but_not_a_ledger_release(L):
+    """SVP 1482: ``.devN`` is legal on a clock subject; the release on ``db`` is what ``L.at("M.m.p")`` reads, plain."""
+    write(L, ("model/m", "db/version", "1.3.6.dev2"))
+    assert L.at()["model/m", "db/version"] == "1.3.6.dev2"
+    with pytest.raises(ValueError, match="a ledger's release"):
+        with L.transaction(by="t") as t:
+            t.add("db", "db/version", "1.3.6.dev2")
+
+
 def test_db_version_is_semver_checked_at_add(L):
-    """``db/version`` objects are ``MAJOR.MINOR.PATCH`` strings; anything else is refused at ``add``."""
+    """``db/version`` objects are ``MAJOR.MINOR.PATCH[.devN]`` strings; anything else is refused at ``add``."""
     for bad in ("1.2", "v1.2.3", "1.2.3-rc1", 3, None):
         with pytest.raises(ValueError, match="db/version"):
             with L.transaction(by="t") as t:

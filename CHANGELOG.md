@@ -8,10 +8,14 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
-## 2.59.0 — 2026-11-05
+## 2.60.0 — 2026-11-05
 
 - **Present code over past revisions: `L.revs` and `v.at` (SVP 245; minor).** `L.at(rev).run(target, **keys)` already ran the checkout's code over a revision's rows; two things were missing. `L.revs(which, *, since=None, until=None) -> Dict[str, Rev]` names a set of past revisions by label and reads the ledger only: `"release"` (each `db db/version` add, labelled by the version), `"tag"` (each `db db/tag` add), `"day"` / `"week"` / `"month"` (each period start in the span, labelled `2026-11-02`, `2026-W45`, `2026-11`, the latest revision stamped at or before it in the display zone; a period before the first stamp is omitted), or an iterable of `at` arguments, labelled by `str(each)`; `since` and `until` are `at` arguments or a month `2026-11`. The sweep is `{label: rev.run(...) for label, rev in L.revs(...).items()}`. Every run's result carries the row `(<value>, db/at, "<rev.id>")`, the revision it read, written beside `db/fn` and read back as `v.at` beside `v.rev`, the revision that saved it (`None` for a hand seal). `RunTrace.at` carries it, so a draft or a locally sealed result saved later writes it, and it crosses the sandbox worker's pipe. Provenance only: outside the subject's hash and the hit test, so no key moves, and an ask at 413 may hand back the entry computed at 412, its `db/at` still 412. A value sealed before this has no row. `t.copy` leaves `db/at` behind (it names a revision of the origin); a copy's `v.at` is `None`.
 - **Fix: `rev.rerun` reads the revision the run read (SVP 245).** It read the revision that saved the value, so a value run at a past revision was compared against rows it never saw. It now reads `db/at`, the saving revision when a value has no row. Docs: `DAT Ledger` (`revs`, `Value.at`, § Running over past revisions, the `db/` rows, § Rerunnability, § Copying).
+
+## 2.59.0 — 2026-11-05
+
+- **A `.devN` version is a version (SVP 1482; minor).** `db/version` takes `MAJOR.MINOR.PATCH[.devN]` on every subject but `db`, whose release stays `MAJOR.MINOR.PATCH`. A clean run of code at `1.3.6.dev2` moves `db/repo/<repo>/<package>` and `db/repo/<repo> db/commit`, which it skipped before, so its commit can be pinned; the clock orders by PEP 440, `1.3.5 < 1.3.6.dev1 < 1.3.6.dev2 < 1.3.6`. `bump` and `bump_source` still step plain versions only. Docs: `DAT Ledger`.
 
 ## 2.58.0 — 2026-11-05
 

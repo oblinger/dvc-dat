@@ -110,7 +110,7 @@ class Run:
 
     subject: str
     rev: Any                                    # the revision it was sealed at
-    at: int                                     # the revision it read: db/at, else the seal's (a copy; before 2.59)
+    at: int                                     # the revision it read: db/at, else the seal's (a copy; before 2.60)
     name: str                                   # db/fn
     keys: Dict[str, Any]                        # db/keys, as stored
     trace: Dict[str, str]                       # db/deps/*
