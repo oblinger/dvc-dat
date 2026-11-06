@@ -844,8 +844,9 @@ class DatManager:
                **kwargs: Any) -> "Dat":
         """Create a dat, as the class its `dat.kind` names, and run nothing.
 
-        Merge `dat.base`, merge `kwargs` into `dat.kwargs`, run `validate_spec`, place it, write `_spec_.yaml` (no
-        `_result_.yaml` is written). `spec` may be a dict or a dotted name loaded through `ns`. `kwargs` are data
+        Merge `dat.base`, merge `kwargs` into `dat.kwargs`, run `validate_spec`, place it, write `_spec_.yaml` with
+        its keys sorted, so equal specs give the same bytes (no `_result_.yaml` is written). `spec` may be a dict or a
+        dotted name loaded through `ns`. `kwargs` are data
         (1467 Q2 (A)): they reach `dat.kwargs` as given, braces and all (`spec` and `path` are this call's own names,
         never keywords). The folder is `path` if given, else the spec's `dat.name` template, else
         `anonymous/Dat{unique}`, under the first dat folder; `dat.target_exists` says what happens when the folder is
@@ -904,7 +905,7 @@ class DatManager:
                 raise FileExistsError(f"Dat.create: {self._get_path_name(path)!r} is an "
                                       "artifact's name; dats and artifacts share one namespace")
         try:
-            text = yaml.dump(spec, Dumper=_SpecDumper, sort_keys=False)
+            text = yaml.dump(spec, Dumper=_SpecDumper, sort_keys=True)
         except yaml.representer.RepresenterError as e:
             raise TypeError(
                 f"Dat.create: the spec is not data once expanded ({e.args[0]}); a "
@@ -1638,7 +1639,7 @@ class DatManager:
             shutil.rmtree(path)
         os.makedirs(os.path.join(path, WORK_FOLDER))
         spec = {"dat": {"kind": _kind_name(Dat)}}
-        Path(path, SPEC_YAML).write_text(yaml.dump(spec, Dumper=_SpecDumper, sort_keys=False))
+        Path(path, SPEC_YAML).write_text(yaml.dump(spec, Dumper=_SpecDumper, sort_keys=True))
         run = Dat(path=path, spec=spec)
         run._manager = self
         Dat.set(run.get_results(), DAT_RUN_AT, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
