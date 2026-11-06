@@ -1,35 +1,37 @@
 """A small run of the in-process leg (``inproc.py``) in a subprocess: N handles x M threads on one
-ledger and a flipper; every invariant must hold. The Postgres case needs ``DVC_DAT_TEST_PG``'s server."""
+ledger and a flipper; every invariant must hold. The Postgres case needs ``DVC_DAT_TEST_PG``
+(``tests/pg_server.py``): skips when unset, fails when set and unreachable."""
 
 import json
-import os
 import subprocess
 import sys
 import uuid
 from pathlib import Path
 
+import pg_server
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PG = os.environ.get("DVC_DAT_TEST_PG", "postgresql://postgres:dvcdat@localhost:5433/postgres")
 
 
 def _pg_target(tmp_path):
+    pg = pg_server.server()         # skips when unset, fails when refused: before any connection
     try:
         import psycopg
 
-        with psycopg.connect(PG, autocommit=True, connect_timeout=2):
+        with psycopg.connect(pg, autocommit=True, connect_timeout=2):
             pass
-    except Exception as e:      # no psycopg, no server: skip, saying why
-        pytest.skip(f"no Postgres at {PG}: {e}")
+    except Exception as e:      # named and not there fails: CI's pg job never skips green
+        pytest.fail(f"no Postgres at {pg_server.redact(pg)}: {pg_server.redact(str(e))}", pytrace=False)
     schema = f"inproc_{uuid.uuid4().hex[:10]}"
-    return f"{PG}?options=-csearch_path%3D{schema}&art={tmp_path / 'art'}", schema
+    return f"{pg}?options=-csearch_path%3D{schema}&art={tmp_path / 'art'}", (pg, schema)
 
 
-def _drop(schema):
+def _drop(target):
     import psycopg
 
-    with psycopg.connect(PG, autocommit=True) as c:
+    pg, schema = target
+    with psycopg.connect(pg, autocommit=True) as c:
         c.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
 
 
@@ -38,7 +40,7 @@ def test_inproc_invariants(tmp_path, store, lock):
     schema = None
     target = str(tmp_path / "ledger")
     if store == "pg":
-        target, schema = _pg_target(tmp_path)
+        target, schema = _pg_target(tmp_path)   # schema: (server, name), dropped on that server only
     try:
         out = subprocess.run(
             [sys.executable, "-m", "tests.load.inproc", "--handles", "3", "--threads", "6", "--transactions",

@@ -91,7 +91,8 @@ salts, fresh schema per row.
   us-central1 (a GPU box) was not measured.
 
 **The floor.** `tests/load/test_threshold.py`, run with `DAT_LOAD=1`
-(Postgres also needs `DAT_LOAD_PG`, a server URL; it makes and drops
+(Postgres also needs `DVC_DAT_TEST_PG`, the suite's one server variable,
+port 5433 refused: see the README's Testing section; it makes and drops
 its own schema): 4 processes x 2000 operations, 200 keys. It fails on
 any invariant failure, worker error or timeout, and when tx/s falls
 below half the 4-process value recorded on the machine running it:
@@ -107,7 +108,7 @@ floor, not a target: it catches a regression of 2x, not drift.
 **In one process** (SVP 1468, R0001): `tests/load/inproc.py`, `uv run python -m
 tests.load.inproc --handles N --threads M --transactions T --ledger <fresh folder or
 DSN>`; `tests/load/test_inproc.py` runs a small one (SQLite, and Postgres when
-`DVC_DAT_TEST_PG` answers) in the normal suite, and `tests/ledger/test_handles.py`
+`DVC_DAT_TEST_PG` is set) in the normal suite, and `tests/ledger/test_handles.py`
 pins the two-handle cases on both stores. N `Ledger` handles on one ledger, M
 threads over them (thread j on handle j % N), each doing T operations: half writes
 (one transaction of 4 `(ip/<tag>, part, k)` rows; every other one under `lock=`),

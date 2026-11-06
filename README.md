@@ -72,6 +72,25 @@ with no environment activated. See [the CLI reference](doc/cli.md).
 uv run python -m pytest
 ```
 
+The Postgres cases (the `pg` half of the ledger suite, `tests/load/test_inproc.py`,
+the load floor) run only when `DVC_DAT_TEST_PG` names a server; unset, they skip
+and say how to enable them. There is no default address. They create and drop
+databases and schemas on that server, so give them a disposable one:
+
+```bash
+docker run -d -p 5432:5432 \
+  -e POSTGRES_HOST_AUTH_METHOD=trust postgres:16
+export DVC_DAT_TEST_PG=postgresql://postgres@localhost:5432/postgres
+uv run python -m pytest
+```
+
+Set and unreachable, they fail rather than skip. An address on port 5433 (in the
+URL, a `port=` parameter, or `PGPORT` for a host that names none) stops the run
+before collection: on the development laptop 5433 is the Cloud SQL proxy to the
+production ledger. `DVC_DAT_TEST_PG_ALLOW_5433=1` lifts that for a disposable
+server that really is on 5433. CI's `postgres` job sets the variable to its
+Postgres 16 service. The rule lives in `tests/pg_server.py`.
+
 ## Demos
 
 Runnable notebooks in [`doc/DAT Demos/`](https://github.com/oblinger/dvc-dat/tree/main/doc/DAT%20Demos), each paired

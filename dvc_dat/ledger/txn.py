@@ -822,8 +822,8 @@ class Transaction:
         <ledger>@<rev>)``, landing with this revision. ``deep``: its inputs too, recursively, whatever their ledgers.
         ``safe``: an input on a ledger whose lifetime ranks below this one's is copied by the same rule, one at or
         above is referenced; a value its claim lets be rerun keeps only its spec (``db/spec-only``), and a source's
-        ``db/rerunnable`` is asserted again here. ``safe`` reads every lifetime (``(ledger/<name>, ledger/lifetime,
-        ...)``) and refuses when one is undeclared or an input cannot be found; ``safe=False`` never looks and
+        ``db/rerunnable`` is asserted again here. ``safe`` reads every lifetime on the root ledger (``(ledger/<name>,
+        ledger/lifetime, ...)`` on ``ledgers.root``) and refuses when one is undeclared or an input cannot be found; ``safe=False`` never looks and
         promises nothing. ``rerunnable``: assert the claim here, as ``pin``. Refused with ``NotCopied``, nothing
         written. Returns the subjects. ``L.at().copy(v)`` is the head form. See ``dvc_dat.ledger.copying``.
         """
