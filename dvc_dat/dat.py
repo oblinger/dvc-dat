@@ -15,12 +15,17 @@
     @dat.fn
     def train(rev, *, game: str, path: Path) -> StageDat: ...
 
+    dat.at("do26@512")                   # a revision on any registered ledger
+    dat.load("do26@512:sha256:<hex>")    # a value by the global reference; a bare name reads the active ledger
+
+``at`` and ``load`` are ``dvc_dat.ledger.named``'s; ``ledger.at(rev)`` stays that ledger's alone (SVP 248).
 ``fn`` is ``dvc_dat.ledger.fn.fn``, ``warm`` is ``dvc_dat.ledger.warm.warm`` and ``command`` is
 ``dvc_dat.just.command``; each is documented there.
 """
 
 from .just import command
 from .ledger.fn import FnMark, fn, fn_mark
+from .ledger.named import at, load
 from .ledger.warm import warm
 
-__all__ = ["fn", "warm", "command", "FnMark", "fn_mark"]
+__all__ = ["fn", "warm", "command", "at", "load", "FnMark", "fn_mark"]
