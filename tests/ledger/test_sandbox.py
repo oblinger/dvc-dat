@@ -1138,14 +1138,14 @@ def other(sbx, tmp_path, monkeypatch, backend):
 def caller_in(folder, monkeypatch):
     """The caller's working directory, whose ``.datconfig.yaml`` names the ledgers; the default dat world, which a
     run there makes from that config, is the one before it again afterwards."""
-    from dvc_dat import core
+    from dvc_dat import Dat
 
-    before = core._default_manager
+    before = Dat.manager
     monkeypatch.chdir(folder)
     try:
         yield
     finally:
-        core._default_manager = before
+        Dat.manager = before                    # its namespace answers to it again, as the setter does
 
 
 def text_of(v):
