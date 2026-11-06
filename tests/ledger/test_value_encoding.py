@@ -327,8 +327,9 @@ def test_a_code_decoded_by_its_name_keeps_its_unit_and_version():
     back = Code.decode(io.BytesIO(encoded(mounted)), None, name="pkg@1.0.0")
     assert (back.name, back.hash, back.sandboxed) == ("pkg@1.0.0", mounted.hash, True)
     assert (back.commit, back.lock, back.mounts) == (None, None, {})
-    bare = Code.decode(io.BytesIO(encoded(code())), None)
-    assert (bare.name, bare.sandboxed) == ("code@#" + code().hash[:8], False)
+    installed = code(mounts_hash=None)
+    bare = Code.decode(io.BytesIO(encoded(installed)), None)
+    assert (bare.name, bare.hash, bare.sandboxed) == ("code@#" + installed.hash[:8], installed.hash, False)
 
 
 # --- deterministic: equal values built separately, here --------------------------------------------------------
