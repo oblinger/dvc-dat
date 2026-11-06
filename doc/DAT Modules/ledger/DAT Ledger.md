@@ -22,7 +22,7 @@ api:: [`dvc_dat.ledger`](../../api/ledger.md) — the classes and functions, ren
 | Value       | [preds](../../api/ledger.md#dvc_dat.ledger.Value.preds), [subject](../../api/ledger.md#dvc_dat.ledger.Value.subject), [rev](../../api/ledger.md#dvc_dat.ledger.Value.rev), [at](../../api/ledger.md#dvc_dat.ledger.Value.at), [sealed](../../api/ledger.md#dvc_dat.ledger.Value.sealed), [hash](../../api/ledger.md#dvc_dat.ledger.Value.hash), [dependencies](../../api/ledger.md#dvc_dat.ledger.Value.dependencies), [Dependencies](../../api/ledger.md#dvc_dat.ledger.Value.Dependencies), [encode](../../api/ledger.md#dvc_dat.ledger.Value.encode), [decode](../../api/ledger.md#dvc_dat.ledger.Value.decode), [seal](../../api/ledger.md#dvc_dat.ledger.Value.seal), [same_as](../../api/ledger.md#dvc_dat.ledger.Value.same_as), [matches](../../api/ledger.md#dvc_dat.ledger.Value.matches), [diff](../../api/ledger.md#dvc_dat.ledger.Value.diff) |
 | Value.Blob  | [obj](../../api/ledger.md#dvc_dat.ledger.value.Blob.obj)                                                                                                                                                                                                                                                                                               |
 | Value.Table | [table](../../api/ledger.md#dvc_dat.ledger.value.Table.table)                                                                                                                                                                                                                                                                                     |
-| Dat         | [path](#^dat-path), [preds](#^dat-preds), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind)                                                                                                                                                       |
+| Dat         | [path](../../api/core.md#dvc_dat.core.Dat.path), [preds](../../api/core.md#dvc_dat.core.Dat.preds), [sealed_at_path](../../api/core.md#dvc_dat.core.Dat.sealed_at_path), [decode](../../api/core.md#dvc_dat.core.Dat.decode), [kind_ok](../../api/core.md#dvc_dat.core.Dat.kind_ok), [spec_kind](../../api/core.md#dvc_dat.core.Dat.spec_kind)                                                                                                                                                       |
 | Fn          | [name](../../api/ledger.md#dvc_dat.ledger.Fn.name), [module](../../api/ledger.md#dvc_dat.ledger.Fn.module), [code](../../api/ledger.md#dvc_dat.ledger.Fn.code), [mount](../../api/ledger.md#dvc_dat.ledger.Fn.mount), [env](../../api/ledger.md#dvc_dat.ledger.Fn.env), [signature](../../api/ledger.md#dvc_dat.ledger.Fn.signature), [kind](../../api/ledger.md#dvc_dat.ledger.Fn.kind), [reproducible](../../api/ledger.md#dvc_dat.ledger.Fn.reproducible), [()](../../api/ledger.md#dvc_dat.ledger.Fn.__call__) |
 
 
@@ -87,42 +87,7 @@ A `Value` holding a table, encoded as parquet. A pandas `DataFrame` is converted
 ## Dat Interface
 `dvc_dat.ledger.Dat` is `dvc_dat.Dat`, one class (DAT 1038): a dat, the folder that is its own recipe ([DAT Dat](../DAT%20Dat.md)), is a `Value` whose bytes are the folder. It encodes as its content manifest, `{"files": {relpath: sha256}}`, written to the sink, and its files are its parts, streamed into the art store one at a time, so memory is bounded by the manifest, not the folder. Every file in the folder is hashed (`__pycache__` and the [subdats](#Subdats) skipped), `_spec_.yaml` and `_result_.yaml` included; each in 1 MiB blocks, the per-file hashes cached on the object, keyed by size, mtime and inode, so only a changed file is hashed again. The `db/value` row's kind and the folder's `dat.kind` are the same dotted name, `dvc_dat.core.Dat` or the subclass. A dat made by `Dat.create` or `Dat.manager.run` seals with no subclass once saved: `dat.seal(t, name="table/12")` stores its files and writes its row, and `rev.load("table/12")` returns a `Dat` whose `get_spec()`, `get_results()` and `get_path()` read the rebuilt folder. A folder whose `_spec_` names a `dat.kind` and was never saved (standing `open`) is `ValueError` naming `dat.save()`; a folder with no spec is a plain folder value.
 
-| Dat | |
-| --- | --- |
-| [Dat](#^dat) | The dat in a folder |
-| [path](#^dat-path) | The folder |
-| [at](#^dat-at) | The revision its run was against |
-| [preds](#^dat-preds) | The folder's facts, under the hand-written ones |
-| [sealed_at_path](#^sealed-at-path) | Reopen a folder sealed in another process |
-| [decode](#^dat-decode) | Materialise the folder from its manifest |
-| [kind_ok](#^kind-ok) | Whether a folder's dat.kind loads as this class |
-| [spec_kind](#^spec-kind) | The dat.kind a folder's spec names |
-
-**Dat**`(path, *, name: str | None = None)`
-    The dat already in the folder `path`: its spec and results read from `_spec_.yaml` and `_result_.yaml` (each `{}` when absent); a value whose bytes are the folder's manifest. `name` is the name a save gives it. `Dat.create(spec=...)` and `Dat.load(name)` make one through the dat manager ([DAT Class API](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Design/DAT%20API/DAT%20Class%20API.md)). ^dat
-
-**path**`: Path`
-    The folder, `get_path()` as a `Path`. After a save it is the stored copy under `art/dats/<16 hex>/`, or `art/dats/<name>/` when named; after a load by an alias, `art/dats/<alias>/`. Those files are hardlinks into the art store where the filesystem allows: write a new folder and seal it, never edit one in place. ^dat-path
-
-**at**`: Rev`
-    The revision the dat's run was against, named by `dat.run_rev` in the run sub-dat's results, `<ledger>@<rev>`, the ledger by name since a run may be on any ledger (SVP 1521). During the run it is the recording `Rev`, so a read through it enters the entry's provenance and a memo hit stays sound; afterwards a plain one, its ledger the value's, else the one open under that name, else the `ledgers:` entry. A runtime attribute, never in `_spec_.yaml` or the hash. A run function reads through it; a result must not vary with the string `dat.run_rev` itself. `ValueError` for a dat not run on a ledger. ^dat-at
-
-**preds**`: dict`
-    Unsealed: the scalar entries of the spec's `dat.kwargs`, then the scalar top-level entries of `_result_.yaml` other than `dat:`, then the spec's `dat.preds` (SVP 1508; a later source wins a clash), read from the folder on every access, under every pred written by hand, which wins. Sealed: the read-only mapping the seal fixed. The names are the class's `@ledger_class(preds=...)` plus the folder's own; the `dat:` record of the results (dependencies, standing, sha256) is never a pred. ^dat-preds
-
-**sealed_at_path**`(path, *, name: str | None = None) -> Dat | None` (classmethod)
-    The last seal record of the folder `path` not saved since, reopened in this process as the sealing process left it; `None` with no record. `v.seal(t)` on it saves exactly what the sealing process would have saved: the same subject, `SealBroken` on a changed byte unless kept. The record's class must be a subclass of the class called on, else `TypeError`. ^sealed-at-path
-
-**decode**`(src: BinaryIO, store: ArtStore, *, name: str | None = None) -> Dat` (classmethod)
-    The folder of the manifest read from `src` (paths and hashes, read whole), placed under `<art>/dats/<name>/` when loaded by a name, else `<art>/dats/<first 16 hex of the manifest hash>/`; each file is placed by `ArtStore.get_to`. A named folder holding other content (the alias was re-pointed) is replaced. The dat's spec and results are read from the placed folder. ^dat-decode
-
-**kind_ok**`(kind: str) -> bool` (classmethod)
-    Whether a folder whose `_spec_` names `dat.kind` `kind` loads as this class, the class its `db/value` row names. The default accepts this class or a subclass, by dotted name (or a bare name written before 2.3); a subclass widens it. ^kind-ok
-
-**spec_kind**`(path: Path) -> str | None` (static)
-    The `dat.kind` the folder's `_spec_.yaml` (or `_spec_.json`) names, if any. ^spec-kind
-
-
+The members a value uses: [path](../../api/core.md#dvc_dat.core.Dat.path) · [at](../../api/core.md#dvc_dat.core.Dat.at) · [preds](../../api/core.md#dvc_dat.core.Dat.preds) · [sealed_at_path](../../api/core.md#dvc_dat.core.Dat.sealed_at_path) · [decode](../../api/core.md#dvc_dat.core.Dat.decode) · [kind_ok](../../api/core.md#dvc_dat.core.Dat.kind_ok) · [spec_kind](../../api/core.md#dvc_dat.core.Dat.spec_kind); the rest are on [DAT Dat](../DAT%20Dat.md#dat-interface).
 
 ## Fn Interface
 A value function resolved at one revision: a frozen dataclass made by `rev.ns.load`, never by hand. Calling it is `run`. Only the snapshot has identity; a function is a name looked up inside it (DAT 1037): it has `name` and `code` and no `subject` or `sha`, since it is not on the timeline. It prints as `<Fn mnt.plane.measure.length@2.7.1>`, `str` `mnt.plane.measure.length@2.7.1`: the dotted name `@` its code's version; a mounted function's name starts `mnt.`. `code` says where the code comes from: installed in the ledger's own Python environment (imported in this process), or mounted from a checkout (`code.sandboxed`, run in a worker).

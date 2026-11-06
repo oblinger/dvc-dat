@@ -1834,10 +1834,23 @@ class Dat(Value, metaclass=_DatMeta):
     (a schema library inside it is the subclass's choice and dependency).
     """
 
+    ns: Any
+    """The forwarder ``dvc_dat.do.ns``: every attribute goes to ``Dat.manager.ns``.
+
+    Whichever manager that is at the moment of use. Not callable -- running is ``Dat.manager.run`` (2.35) -- so ``ns =
+    Dat.ns`` binds a shortcut that follows a later reassignment. It is defined on the metaclass, so ``Dat.ns`` works
+    and ``some_dat.ns`` is ``AttributeError``.
+    """
+
     @property
     def manager(self) -> DatManager:
-        """The world this dat belongs to: the manager that loaded it, else the default.
-        (`Dat.manager` on the class is the default world; see `_DatMeta`.)"""
+        """``Dat.manager``: the manager that loaded this dat, else the default; on the class, the default world itself.
+
+        A plain assignable attribute, built on first read by ``DatManager.load_dat_config()``, shared by every
+        subclass (see ``_DatMeta``), and replaced by assigning a ``DatManager`` -- anything else is ``TypeError``;
+        assigning ``None`` clears it, so the next read builds it again. See [The manager is the
+        world][the-manager-is-the-world].
+        """
         return self._world()
 
     _path: str
@@ -1853,6 +1866,12 @@ class Dat(Value, metaclass=_DatMeta):
         *,
         name: Optional[str] = None,
     ) -> None:
+        """The dat already in the folder ``path``, its spec and results read from ``_spec_.yaml`` and ``_result_.yaml``.
+
+        A value whose bytes are the folder's content manifest; each file reads as ``{}`` when absent. ``name`` is the
+        name a save gives it. ``Dat.create(spec=...)`` and ``Dat.load(name)`` make one through the dat manager ([DAT
+        Class API](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Design/DAT%20API/DAT%20Class%20API.md)).
+        """
         if not isinstance(path, (str, Path)):
             raise TypeError(
                 f"{type(self).__name__}(path): a dat is the folder at a path, not {path!r}; "
@@ -1879,8 +1898,12 @@ class Dat(Value, metaclass=_DatMeta):
 
     @property
     def path(self) -> Path:
-        """The dat's folder, `get_path()` as a `Path`; after a ledger seal or load, its view in the
-        ledger's data folder."""
+        """The dat's folder, ``get_path()`` as a ``Path``.
+
+        After a save it is the stored copy under ``art/dats/<16 hex>/``, or ``art/dats/<name>/`` when named; after a
+        load by an alias, ``art/dats/<alias>/`` -- its view in the ledger's data folder. Those files are hardlinks
+        into the art store where the filesystem allows: write a new folder and seal it, never edit one in place.
+        """
         return Path(self._path)
 
     @path.setter
@@ -1904,16 +1927,17 @@ class Dat(Value, metaclass=_DatMeta):
 
     @property
     def run(self) -> Optional["Dat"]:
-        """The run that made this dat: the sub-dat `run/`, whose results hold
-        `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code`,
-        `dat.run_rev` (on a ledger) and `dat.content`, and whose `work/` is the
-        run's scratch.  None for a dat never run (one filled by hand), and for
-        one loaded off a ledger with no `run/` in its folder: its run is a subdat,
-        a value of its own under the alias `<name>/run`, placed by a load of that
-        name and by nothing else (SVP 241).
-        A run is not content: it is outside the dat's hash, and nothing may depend on it.
-        So a run function reads the ledger through `dat.at`, and a result must
-        not vary with the revision string `dat.run_rev` itself."""
+        """The sub-dat ``run/`` that the last run (``Dat.manager.run``) made, or ``None`` for a dat never run.
+
+        Its results hold ``dat.run_at``, ``dat.run_time``, ``dat.host``, ``dat.pid``, ``dat.code``, ``dat.run_rev``
+        (on a ledger) and ``dat.content``, and its ``work/`` is the run's scratch. ``None`` is also returned for a dat
+        filled by hand, and for one loaded off a ledger with no ``run/`` in its folder: its run is a subdat, a value
+        of its own under the alias ``<name>/run``, placed by a load of that name and by nothing else (SVP 241). Loaded
+        as a plain ``Dat``, outside the load cache.
+
+        A run is not content: it is outside the dat's hash, and nothing may depend on it. So a run function reads the
+        ledger through ``dat.at``, and a result must not vary with the revision string ``dat.run_rev`` itself.
+        """
         if self._run_dat is None:
             path = os.path.join(self._path, RUN_FOLDER)
             if os.path.exists(os.path.join(path, SPEC_YAML)):
@@ -1922,10 +1946,14 @@ class Dat(Value, metaclass=_DatMeta):
 
     @property
     def at(self) -> Any:
-        """The `Rev` the run was against, named by `dat.run_rev` (`<ledger>@<rev>`; SVP 1521): during the run
-        the recording `Rev`, so every read through it is in the entry's provenance and a memo hit stays sound;
-        afterwards a plain one.  A runtime attribute, never in `_spec_.yaml` or the hash.  `ValueError` for a
-        dat not run on a ledger."""
+        """The ``Rev`` the dat's run was against, named by ``dat.run_rev`` (``<ledger>@<rev>``).
+
+        The ledger is named rather than fixed, since a run may be on any ledger (SVP 1521). During the run it is the
+        recording ``Rev``, so a read through it enters the entry's provenance and a memo hit stays sound; afterwards a
+        plain one, its ledger the value's, else the one open under that name, else the ``ledgers:`` entry. A run
+        function reads through it, and a result must not vary with the string ``dat.run_rev`` itself. A runtime
+        attribute, never in ``_spec_.yaml`` or the hash. ``ValueError`` for a dat not run on a ledger.
+        """
         held = self.__dict__.get("_at")
         if held is not None:
             return held
@@ -1945,11 +1973,13 @@ class Dat(Value, metaclass=_DatMeta):
 
     @classmethod
     def validate_spec(cls, spec: SpecDict) -> SpecDict:
-        """Check a spec before it is written or loaded; return it (possibly coerced).
+        """Check a spec on create and on load, on the class ``dat.kind`` names; return it, possibly coerced.
 
-        The default checks the shape every dat relies on: a mapping with a `dat`
-        mapping whose string fields are strings (a `{reference}` written unquoted in
-        YAML arrives as a dict — that is the error this catches).
+        The default fills ``dat.kind`` with the class, and requires ``spec`` and ``spec['dat']`` to be mappings
+        (``TypeError``); ``dat.standing`` to be ``rolling`` or ``referenceable`` (``ValueError``); and ``dat.kind``,
+        ``dat.name``, ``dat.do``, ``dat.target_exists`` to be strings, which catches a ``{reference}`` left unquoted
+        in YAML -- a mapping with a ``dat`` key whose string fields are strings, else it would arrive as a dict. A
+        subclass calls ``super()`` and adds its own checks.
         """
         if not isinstance(spec, dict):
             raise TypeError(f"{cls.__name__}: a spec is a mapping, got {type(spec).__name__}")
@@ -1969,21 +1999,36 @@ class Dat(Value, metaclass=_DatMeta):
         return spec
 
     merge_dicts = staticmethod(merge_dicts)
-    """The zipper merge `dat.base` uses."""
+    """Merge dicts left to right, each overriding the ones before -- the zipper merge ``dat.base`` uses.
+
+    Mappings merge key by key; lists of mappings that all carry a ``name`` merge by name (``{name: X, remove: true}``
+    deletes X); anything else is replaced whole. The first dict is copied unless ``inplace``. The way to vary an
+    existing spec.
+    """
 
     @staticmethod
     def cli_main(argv: Optional[List[str]] = None, *,
                  config: Union[None, str, Path] = None) -> int:
-        """The command line (`just run`, `x`), for a program's own main; see `dvc_dat.do.cli_main`."""
+        """The command line (``just run``, ``x``), ``dvc_dat.do.cli_main``, for a program's own main.
+
+        The program imports and mounts what it needs, then hands over its arguments; returns the exit code.
+        """
         from .do import cli_main
         return cli_main(argv, config=config)
 
     def get_spec(self) -> SpecDict:
-        """The spec as written -- every `{}` was expanded once, when the dat was created."""
+        """The spec as written to ``_spec_.yaml`` -- every ``{}`` was expanded once, when the dat was created.
+
+        ``dat.name`` is the exception, keeping the path template as given (the folder the dat landed in is
+        ``get_path_name()``); ``dat.base`` is already merged in. Nothing rewrites it.
+        """
         return self._spec
 
     def get_results(self) -> SpecDict:
-        """The mutable results of this Dat (persisted by `save()`)."""
+        """The mutable results dict of this dat, persisted by ``save()`` as ``_result_.yaml``.
+
+        The run's function writes into it; it holds ``dat.dependencies`` during a run before anything is saved.
+        """
         return self._result
 
     def get_path(self) -> str:
@@ -1991,7 +2036,10 @@ class Dat(Value, metaclass=_DatMeta):
         return self._path
 
     def get_path_name(self) -> str:
-        """The name (path relative to its dat folder) of this Dat."""
+        """The path relative to the dat folder that holds it: this dat's name in every lookup and dependency map.
+
+        The absolute path, for a dat outside every dat folder.
+        """
         return self._world()._get_path_name(self._path)
 
     @classmethod
@@ -2001,8 +2049,12 @@ class Dat(Value, metaclass=_DatMeta):
         *,
         cache_after_load: bool = True,
     ) -> DatType:
-        """Load the dat at `name_or_path` in the default world, as the class its
-        `dat.kind` names; `TypeError` unless that is `cls` or a subclass of it."""
+        """Load the dat at ``name_or_path`` in the default world, as the class its ``dat.kind`` names.
+
+        ``Dat.manager.load(name_or_path)``, checked to be an instance of ``cls``; ``TypeError`` when that class is not
+        ``cls`` or a subclass -- an artifact's name is ``TypeError`` too. Takes no ``verify``; the default world's own
+        setting applies. Recorded as a dependency inside a run, as every load is.
+        """
         dat = cls.manager.load(name_or_path, cache_after_load=cache_after_load)
         return cls._require(dat, f"{cls.__name__}.load({str(name_or_path)!r})")
 
@@ -2014,11 +2066,13 @@ class Dat(Value, metaclass=_DatMeta):
         path: Optional[Union[str, Path]] = None,
         **kwargs: Any,
     ) -> DatType:
-        """Create a dat from `spec` at `path` (or the spec's `dat.name` template), in the default world,
-        and run nothing: `Dat.manager.create(spec, path=path, **kwargs)`, the keywords merged into
-        `dat.kwargs` and expanding `dat.name` and `dat.preds` over `dat.defaults`.  A spec with no
-        `dat.kind` gets `cls`; one naming a class outside `cls` is `TypeError` before anything is
-        written."""
+        """Create a dat from ``spec`` at ``path`` (or the spec's ``dat.name`` template); run nothing.
+
+        ``Dat.manager.create(spec, path=path, **kwargs)`` in the default world, the keywords merged into
+        ``dat.kwargs`` and expanding ``dat.name`` and ``dat.preds`` over ``dat.defaults``; ``path`` comes first,
+        positionally. A spec with no ``dat.kind`` gets ``cls``; one naming a class outside ``cls`` is ``TypeError``
+        before anything is written.
+        """
         manager = cls.manager
         spec = manager._spec_of(spec)
         kind = spec["dat"].get("kind")
@@ -2037,8 +2091,10 @@ class Dat(Value, metaclass=_DatMeta):
 
     @staticmethod
     def standing(name: Union[str, Path, "Dat"]) -> Optional[str]:
-        """`Dat.manager.standing(name)`: `rolling`, `open`, `sealed`,
-        `referenceable`, or None when nothing is stored under `name`."""
+        """``Dat.manager.standing(name)``: the stored standing of ``name``, or ``None`` when nothing is stored.
+
+        One of ``rolling``, ``open``, ``sealed``, or ``referenceable``.
+        """
         return Dat.manager.standing(name)
 
     def _standing(self) -> str:
@@ -2047,34 +2103,38 @@ class Dat(Value, metaclass=_DatMeta):
     @staticmethod
     def save_artifact(source: Union[str, Path], *, type: Union[None, str, Callable] = None,
                       name: Optional[str] = None, link: bool = False) -> str:
-        """`Dat.manager.save_artifact(...)`: store a file or folder as an
-        artifact of `type` under `name`; returns its `sha256:` URN."""
+        """``Dat.manager.save_artifact(...)``: store a file or folder as an artifact, returning its ``sha256:<hex>`` URN.
+
+        The artifact is recorded under ``type``, with ``name`` as its chosen name. Bytes already stored are not stored
+        again: a new ``name`` becomes a second key to them, nothing copied.
+        """
         return Dat.manager.save_artifact(source, type=type, name=name, link=link)
 
     @staticmethod
     def load_artifact(name: Union[str, Path], *, verify: Optional[bool] = None) -> Any:
-        """`Dat.manager.load_artifact(name)`: an artifact by name or URN, built
-        by its recorded type (a `Path` with none)."""
+        """``Dat.manager.load_artifact(name, verify=verify)``: an artifact by name or URN, built by its recorded type.
+
+        Its payload's ``Path`` with none.
+        """
         return Dat.manager.load_artifact(name, verify=verify)
 
     def _demands_referenceable(self) -> bool:
         return Dat.get(self._spec, DAT_STANDING, None) == REFERENCEABLE
 
     def save(self) -> None:
-        """Write `_result_.yaml`, stamping `dat.sha256`, the hash of the folder
-        as it now stands (its `run/` left out), and `dat.standing`, what the
-        save earned; the first save that counts seals the dat.
+        """Write ``_result_.yaml``, stamping ``dat.sha256`` and ``dat.standing``; the first save that counts seals the dat.
 
-        Inside the dat's own run a save writes a checkpoint (`open`) and asks
-        for the seal, which comes when the run returns.  Anywhere else it seals
-        now and adds the dependency `$MANUAL`: made or finished by hand, its
-        dependencies incomplete.  A sealed dat refuses a second save.  The
-        seal trims the dependency map to its roots and stamps the least
-        standing of its inputs (a rolling one counts as sealed), capped at
-        `sealed` by a run's code that is dirty or outside a checkout; an input
-        recorded `unsealed` keeps it `open` for good.  A spec saying
-        `dat.standing: rolling` saves at will and never freezes; one saying
-        `referenceable` makes a seal that earns less an error.
+        The hash is stamped ``dat.hash: functional``, covers the folder as it now stands, with its subdats (``run/``
+        among them) and ``dat.name`` left out, and is keyed in the index. Inside the dat's own run a save writes a
+        checkpoint (``open``, or ``rolling``) and asks for the seal, which comes when the run returns; anywhere else
+        it seals now and adds the dependency ``$MANUAL``: made or finished by hand, its dependencies incomplete. A dat
+        already ``sealed`` or ``referenceable`` is ``RuntimeError``, and so is a seal that earns less than a spec's
+        ``dat.standing: referenceable`` demand.
+
+        The seal trims the dependency map to its roots and stamps the least standing of its inputs (a rolling one
+        counts as sealed), capped at ``sealed`` by a run's code that is dirty or outside a checkout; an input recorded
+        ``unsealed`` keeps it ``open`` for good. A spec saying ``dat.standing: rolling`` saves at will and never
+        freezes.
         """
         standing = self._standing()
         if standing in _FROZEN:
@@ -2120,9 +2180,12 @@ class Dat(Value, metaclass=_DatMeta):
             _write_run(run)
 
     def verify(self) -> bool:
-        """True when the folder on disk (its subdats left out) still hashes to
-        the `dat.sha256` its `_result_.yaml` carries -- the dat is exactly as
-        it was last saved."""
+        """``True`` when the folder on disk, ``run/`` left out, still hashes to its ``dat.sha256``.
+
+        The hash it hashes to is the one its ``_result_.yaml`` carries -- the dat is exactly as it was last saved.
+        ``False`` when it does not, when there is no ``_result_.yaml``, or when it carries no hash. Reads the file,
+        not the in-memory results.
+        """
         result_path = Path(self._path, RESULT_YAML)
         if not result_path.exists():
             return False
@@ -2135,7 +2198,11 @@ class Dat(Value, metaclass=_DatMeta):
         return Dat.get(self._result, DAT_SHA256, None)
 
     def delete(self, *, must_exist=True) -> bool:
-        """Delete the folder and its contents; `TypeError` on a ledger project, which never deletes."""
+        """Delete the folder and its contents; ``TypeError`` on a ledger project, which never deletes.
+
+        Drops the dat from the load cache and its keys from the index, then removes the folder. ``True`` when removed;
+        a missing folder raises ``Exception`` with ``must_exist``, else returns ``False``.
+        """
         self._world()._refuse_delete_on_a_ledger(
             f"Dat.delete: {self.get_path_name()!r} is in a ledger project")
         self._world()._dat_cache.pop(self._path, None)
@@ -2149,8 +2216,11 @@ class Dat(Value, metaclass=_DatMeta):
         return True
 
     def copy(self: DatType, new_path: Union[str, Path], *, run: bool = True) -> DatType:
-        """A copy of the folder at `new_path`; `run=False` leaves `run/` behind,
-        which changes nothing about the copy's hash."""
+        """A copy of the folder at ``new_path`` (a name resolves under the first dat folder), loaded as the same class.
+
+        ``run=False`` leaves ``run/`` behind, which changes nothing about the copy's hash. An existing target raises
+        ``Exception``. The copy is not indexed until it is saved.
+        """
         manager = self._world()
         new_path_ = manager._resolve_path(new_path)
         if os.path.exists(new_path_):
@@ -2161,7 +2231,11 @@ class Dat(Value, metaclass=_DatMeta):
         return manager._load(new_path_, dat_class=type(self))
 
     def move(self: DatType, new_path: Union[str, Path]) -> DatType:
-        """Move this dat's folder to `new_path`; the dat at its new path."""
+        """Move this dat's folder to ``new_path``; returns the dat loaded from its new place.
+
+        Drops the old name's index keys and keys the moved dat's hash to its new name. An existing target raises
+        ``Exception``. Dependency maps that recorded the old name keep it.
+        """
         manager = self._world()
         manager._dat_cache.pop(self._path, None)
         new_path_ = manager._resolve_path(new_path)
@@ -2185,8 +2259,14 @@ class Dat(Value, metaclass=_DatMeta):
 
     @property
     def preds(self) -> Dict[str, Any]:  # type: ignore[override]
-        """Unsealed, the folder's facts (`_default_preds`, read afresh on each access) under every pred
-        written by hand, which wins; sealed, the read-only mapping the seal fixed."""
+        """Unsealed, the folder's facts (``_default_preds``); sealed, the read-only mapping the seal fixed.
+
+        Unsealed, read afresh on each access and built from the scalar entries of the spec's ``dat.kwargs``, then the
+        scalar top-level entries of ``_result_.yaml`` other than ``dat:``, then the spec's ``dat.preds`` (SVP 1508; a
+        later source wins a clash), under every pred written by hand, which wins. The names are the class's
+        ``@ledger_class(preds=...)`` plus the folder's own; the ``dat:`` record of the results (dependencies,
+        standing, sha256) is never a pred.
+        """
         d = self.__dict__.get("_preds")
         if isinstance(d, FrozenPreds):
             return d
@@ -2282,15 +2362,15 @@ class Dat(Value, metaclass=_DatMeta):
 
     @classmethod
     def sealed_at_path(cls, path: Any, *, name: Optional[str] = None) -> Optional["Dat"]:
-        """The `Dat` sealed last at the folder `path` by `v.seal()` in any process and not saved
-        since, reopened from its seal record (`kept`); `None` when no record names the folder.
+        """The last seal record of the folder ``path``, reopened as the sealing process left it (``kept``).
 
-        `v.seal(t)` on it saves it exactly as the sealing process would have: the same subject (its
-        deps, provenance, environment and time are the record's), `SealBroken` when a byte of the
-        folder changed since unless kept, the kept bytes when kept. The object is the class the
-        record names (a subclass of this one), made from its folder. `name` is the alias it will be
-        saved under: a value sealed with it as a dep before it is saved binds the dep through that
-        name at its own save, which refuses until the name holds these bytes.
+        The ``Dat`` sealed last at ``path`` by ``v.seal()`` in any process and not saved since; ``None`` when no
+        record names the folder. ``v.seal(t)`` on it saves it exactly as the sealing process would have: the same
+        subject (its deps, provenance, environment and time are the record's), ``SealBroken`` when a byte of the
+        folder changed since unless kept, the kept bytes when kept. The object is the class the record names, a
+        subclass of the class called on (else ``TypeError``), made from its folder. ``name`` is the alias it will be
+        saved under: a value sealed with it as a dep before it is saved binds the dep through that name at its own
+        save, which refuses until the name holds these bytes.
         """
         from .ledger.kept import Kept
 
@@ -2338,9 +2418,11 @@ class Dat(Value, metaclass=_DatMeta):
 
     @classmethod
     def kind_ok(cls, kind: str) -> bool:
-        """Does a folder whose `_spec_` names `dat.kind` `kind` load as this class, the class its
-        `db/value` row names?  Default: `kind` names this class or a subclass (dotted, or a bare name
-        written before 2.3)."""
+        """Whether a folder whose ``_spec_`` names ``dat.kind`` ``kind`` loads as this class.
+
+        The class is its ``db/value`` row's. Default: ``kind`` names this class or a subclass, by dotted name (or a
+        bare name written before 2.3); a subclass widens it.
+        """
         if kind in (_kind_name(cls), cls.__name__):
             return True
         try:
@@ -2351,7 +2433,7 @@ class Dat(Value, metaclass=_DatMeta):
 
     @staticmethod
     def spec_kind(path: Union[str, Path]) -> Optional[str]:
-        """The `dat.kind` a folder's `_spec_.yaml` (or `_spec_.json`) names, if any."""
+        """The ``dat.kind`` a folder's ``_spec_.yaml`` (or ``_spec_.json``) names, if any."""
         spec, _result = _read_folder(str(path))
         dat = spec.get("dat")
         kind = dat.get("kind") if isinstance(dat, dict) else None
@@ -2395,9 +2477,13 @@ class Dat(Value, metaclass=_DatMeta):
 
     @classmethod
     def decode(cls, src: Any, store: Any, *, name: Optional[str] = None) -> "Dat":
-        """The dat the manifest read from `src` names: its folder rebuilt in the data folder (at `name`
-        when loaded by one), its spec and results read from there. The manifest is read whole (paths and
-        hashes); the files arrive one by one through `store.get_to`."""
+        """The dat the manifest read from ``src`` names: its folder rebuilt in the data folder.
+
+        Placed under ``<art>/dats/<name>/`` when loaded by a ``name``, else ``<art>/dats/<first 16 hex of the manifest
+        hash>/``; each file is placed by ``store.get_to`` (``ArtStore.get_to``). A named folder holding other content
+        (the alias was re-pointed) is replaced. Its spec and results are read from there, the manifest itself read
+        whole (paths and hashes).
+        """
         from .ledger.codec import sha256
 
         data = src.read()
@@ -2416,12 +2502,19 @@ class Dat(Value, metaclass=_DatMeta):
     @staticmethod
     def get(source: Union["Dat", dict], keys: Union[str, List[str]],
             default_value: Any = _NO_ARG) -> Any:
-        """Get a value from a dotted key path in a dict tree (or a Dat's spec)."""
+        """The value at a dotted key path (``"dat.do"``, or a list of keys) in a dict tree, or a dat's spec.
+
+        ``source`` may be a dict tree or a ``Dat``. A missing key, or a value that is ``None``, returns
+        ``default_value``, and is ``KeyError`` when none is given; a non-dict on the path is ``ValueError``.
+        """
         return _dotted_get(source=source, keys=keys, default_value=default_value)
 
     @staticmethod
     def set(source: SpecDict, keys, value) -> None:
-        """Set a value at a dotted key path in a dict tree, creating levels as needed."""
+        """Set ``value`` at a dotted key path in a dict tree, creating missing levels as dicts.
+
+        A non-dict on the path raises ``Exception``.
+        """
         _dotted_set(source=source, keys=keys, value=value)
 
 
