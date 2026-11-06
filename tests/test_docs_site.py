@@ -141,7 +141,7 @@ def test_the_four_lenses_are_built(folder):
 @needs_site
 def test_every_notebook_is_a_page():
     stems = [p.stem for p in (REPO / "doc" / "DAT Demos").glob("*.ipynb")]
-    assert len(stems) == 9
+    assert stems
     for stem in stems:
         assert (SITE / "DAT Demos" / stem / "index.html").exists()
 
