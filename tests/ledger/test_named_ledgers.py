@@ -318,3 +318,36 @@ def test_x_without_namespace_ledger_is_the_bare_run(here, monkeypatch):
     assert _cmd_do(["fn_x", "k=1"], config=here) == 0
     assert _RAN[-1] == {"k": 1}
     assert ledgers.games.at().get("db", "db/version") is None       # nothing sealed in the active ledger
+
+
+# -- two registered ledgers on one Postgres server, each its own database (SVP 239 § How it will be verified) ----------
+
+def test_two_registered_postgres_ledgers_are_separate_databases(here):
+    import uuid
+    from urllib.parse import urlsplit, urlunsplit
+
+    import backends
+
+    backends.database()                                         # skips with no server (DVC_DAT_TEST_PG)
+    parts = urlsplit(backends.SERVER)
+    names = [f"dvcdat_reg_{uuid.uuid4().hex[:8]}_{n}" for n in ("games", "do26")]
+    with backends._admin() as c:
+        for n in names:
+            c.execute(f'CREATE DATABASE "{n}"')
+    try:
+        dsns = {n: urlunsplit((parts.scheme, parts.netloc, "/" + n, f"art={here / n / 'art'}", "")) for n in names}
+        for dsn in dsns.values():
+            Ledger(dsn, create=True)
+        root = project(here, make=())
+        register(root, games=dsns[names[0]], do26=dsns[names[1]])
+        with ledgers.games.transaction(by="t") as t:
+            t.add("game/G1", "home", "G4")
+        assert ledgers.games.at()["game/G1", "home"] == "G4"
+        assert ledgers.do26.at().get("game/G1", "home") is None
+        assert (ledgers.games._store.name, ledgers.do26._store.name) == tuple(names)
+    finally:
+        for led in list(named._handles.values()):
+            led.close()
+        with backends._admin() as c:
+            for n in names:
+                c.execute(f'DROP DATABASE IF EXISTS "{n}" WITH (FORCE)')

@@ -108,10 +108,10 @@ class _View:
         for s, loc in top.all(REGISTRY + "*", LOCATION):
             if s not in dropped and isinstance(loc, str) and loc.strip():
                 found[s[len(REGISTRY):]] = _target(self.cfg, loc)
-        for name, value in found.items():
-            if name not in self.removed:
-                self.entries.setdefault(name, value)
-        self.filled = True
+        merged = {n: self.entries.get(n, v) for n, v in found.items() if n not in self.removed}
+        for name, value in self.entries.items():           # set by hand, not registered: after the registry's
+            merged.setdefault(name, value)
+        self.entries, self.filled = merged, True
 
     def names(self) -> List[str]:
         self.fill()
