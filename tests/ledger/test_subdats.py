@@ -8,10 +8,12 @@ from pathlib import Path
 
 import pytest
 
+import dvc_dat.ledger.copying as copying
 import dvc_dat.ledger.remote as remote_mod
-from dvc_dat import Dat, DatManager, core
+from dvc_dat import Dat, DatManager, core, dat
 from dvc_dat.ledger import Exists, Ledger, Ref, register_store
 from dvc_dat.ledger.txn import declined_by
+import backends
 from ledger_kinds import NumberedDat
 from test_value_store import FolderRemote, store
 
@@ -311,17 +313,109 @@ def test_naming_an_unnamed_parent_names_its_tree_and_unnaming_unnames_it(L, tmp_
     assert Ref(L.at(), "run/G1/viz").hash is None
 
 
-def test_a_deep_copy_brings_the_subdats_and_a_shallow_one_refers_to_them(tmp_path):
-    src, shallow, deep = (Ledger(tmp_path / n, create=True) for n in ("src", "shallow", "deep"))
-    run = parent(tmp_path / "a", gallery="GALLERY")
-    subject = run.seal(src, name="run/G1")
-    viz = row(src, subject, "viz")
-    with shallow.transaction(by="t") as t:
-        t.copy(run, safe=False)
-    assert not shallow._store.art.exists(viz.hash) and row(shallow, subject, "viz").hash == viz.hash
-    with deep.transaction(by="t") as t:
-        t.copy(run, deep=True, safe=False)
-    assert deep.at().load("run/G1/viz").hash == viz.hash
+# -- copy follows the subdats (SVP 252) ---------------------------------------------------------------------------
+
+def published(path: Path) -> Dat:
+    """A saved dat at ``path`` holding ``result.json``, a ``run/`` subdat and the ``viz/`` subdat."""
+    made = parent(path, gallery="GALLERY")
+    child(made.path / "run", "LOG", "log.txt")
+    return made
+
+
+def dest_of(backend, tmp_path):
+    return backends.make(backend, tmp_path / "dest")
+
+
+def held(L, subject):
+    return bool(L.at()._held(subject, "db/value"))
+
+
+def test_a_copy_brings_the_dependent_and_refers_to_the_run_on_its_ledger(L, backend, tmp_path):
+    """252 § Success Criteria: the default skip gives one revision holding the value and the dependent, and a
+    cross-ledger reference for the run; the parent's hash is unchanged by what happens to its subdats."""
+    made = published(tmp_path / "a")
+    subject = made.seal(L, name="res/G1")
+    run_ref, viz = row(L, subject, "run"), row(L, subject, "viz")
+    source = L.at().id
+    dest = dest_of(backend, tmp_path)
+    before = dest.at().id
+    with dest.transaction(by="t") as t:
+        assert t.copy(made, safe=False) == [subject]
+    top = dest.at()
+    assert top.id == before + 1
+    assert top._held(subject, "db/value")[0].rev == top._held(viz.subject, "db/value")[0].rev == top.id
+    assert dest._store.art.exists(viz.hash) and top.load("res/G1/viz").hash == viz.hash
+    assert not held(dest, run_ref.subject) and not dest._store.art.exists(run_ref.hash)
+    assert row(dest, subject, "run") == f"{L._store.name}@{source}:{run_ref.subject}"
+    assert dat.load(row(dest, subject, "run")).hash == run_ref.hash         # the run, read on its own ledger
+    assert top.load("res/G1").hash == made.hash == L.at().load("res/G1").hash
+
+
+def test_a_copy_that_fails_midway_leaves_the_destination_at_its_prior_revision(L, backend, tmp_path, monkeypatch):
+    made = published(tmp_path / "a")
+    subject = made.seal(L, name="res/G1")
+    viz = row(L, subject, "viz")
+    dest = dest_of(backend, tmp_path)
+    before = dest.at().id
+    real, calls = copying._write, []
+
+    def second_fails(t, item):
+        calls.append(item.subject)
+        if len(calls) == 2:
+            raise OSError("the store went away")
+        real(t, item)
+
+    monkeypatch.setattr(copying, "_write", second_fails)
+    with pytest.raises(OSError, match="went away"):
+        with dest.transaction(by="t") as t:
+            t.copy(made, safe=False)
+    with pytest.raises(OSError, match="went away"):
+        calls.clear()
+        dest.at().copy(made, safe=False)
+    assert dest.at().id == before
+    assert not held(dest, subject) and not held(dest, viz.subject)
+    assert not dest._store.art.exists(made.hash) and not dest._store.art.exists(viz.hash)
+
+
+def test_a_subdat_of_a_subdat_is_followed_and_skip_reaches_it(L, backend, tmp_path):
+    made = published(tmp_path / "a")
+    child(made.path / "viz" / "thumbs", "THUMBS")
+    subject = made.seal(L, name="res/G1")
+    viz = row(L, subject, "viz")
+    thumbs = L.at()[viz.subject, "db/subdat/thumbs"]
+    dest = dest_of(backend, tmp_path)
+    dest.at().copy(made, safe=False)
+    assert dest.at().load("res/G1/viz/thumbs").hash == thumbs.hash
+    again = dest_of(backend, tmp_path / "again")
+    again.at().copy(made, safe=False, skip=("viz/thumbs",))
+    assert held(again, viz.subject) and not held(again, thumbs.subject)
+    assert again.at()[viz.subject, "db/subdat/thumbs"] == f"{L._store.name}@{L.at().id}:{thumbs.subject}"
+
+
+def test_skip_empty_copies_everything_and_skip_adds_to_the_run(L, backend, tmp_path):
+    made = published(tmp_path / "a")
+    subject = made.seal(L, name="res/G1")
+    run_ref, viz = row(L, subject, "run"), row(L, subject, "viz")
+    every = dest_of(backend, tmp_path / "every")
+    every.at().copy(made, safe=False, skip=())
+    assert every.at().load("res/G1/run").hash == run_ref.hash and every.at().load("res/G1/viz").hash == viz.hash
+    assert isinstance(row(every, subject, "run"), Ref)
+    neither = dest_of(backend, tmp_path / "neither")
+    neither.at().copy(made, safe=False, skip=("viz",))
+    assert held(neither, subject) and not held(neither, run_ref.subject) and not held(neither, viz.subject)
+    assert row(neither, subject, "viz") == f"{L._store.name}@{L.at().id}:{viz.subject}"
+    with pytest.raises(TypeError, match="a tuple or list"):
+        neither.at().copy(made, safe=False, skip="viz")
+
+
+def test_deep_does_not_override_skip_and_a_declined_row_travels_as_it_is(L, backend, tmp_path):
+    made = published(tmp_path / "a")
+    child(made.path / "extra", "EXTRA")
+    subject = made.seal(L, name="res/G1", skip=("extra",))
+    run_ref = row(L, subject, "run")
+    dest = dest_of(backend, tmp_path)
+    dest.at().copy(made, deep=True, safe=False)
+    assert not held(dest, run_ref.subject) and row(dest, subject, "extra") == "declined"
 
 
 CLIP_WORDS = 64 * 1024

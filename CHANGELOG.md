@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.66.0 — 2026-11-06
+
+- **`copy` follows the subdats, with `skip` (SVP 252; minor).** `t.copy(*values, ..., skip=None)` copies each value's subdats (its `db/subdat/` rows) with it, and theirs in turn, in the same revision, whatever `deep` says. `skip` takes relative-path suffixes as `seal(skip=)` does: `None` is `("run",)`, `()` follows every subdat, any other list adds to `("run",)`; a bare `str` is `TypeError`. A skipped subdat is not copied, and the copied parent's row for it is the global reference `str:<ledger>@<rev>:<child subject>` to the original, which `dat.load` reads. `safe` judges each child as any value the copy brings; the parent's hash and subject do not move. **Changed:** a copy without `deep` used to write the parent's `ref:` row with the child absent from the destination, and `deep=True` brought `run/` too; now the child comes without `deep`, and `run/` stays behind unless `skip=()`. Docs: DAT Ledger § Copying, § Subdats.
+
 ## 2.65.1 — 2026-11-06
 
 - **Fix: a thread started outside every run no longer reads for another thread's run (SVP 1549).** The `foreign:` hook (SVP 1521) gave a read in a thread with no run of its own to the latest open run, any thread's. Two threads racing for one memo entry each recorded the other's `eval:` as a `foreign:` item, so the two entries' traces, and subjects, differed. `Thread.start` now marks a thread started inside a run; only such a thread reads for an open run that is not its own. A thread a body starts is unchanged.

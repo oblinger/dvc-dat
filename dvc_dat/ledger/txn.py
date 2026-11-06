@@ -815,11 +815,16 @@ class Transaction:
 
         return pin(self, value, recursive=recursive, rerun=rerun)
 
-    def copy(self, *values: Any, deep: bool = False, safe: bool = True, rerunnable: bool = False) -> List[str]:
+    def copy(self, *values: Any, deep: bool = False, safe: bool = True, rerunnable: bool = False,
+             skip: Optional[Sequence[str]] = None) -> List[str]:
         """Copy each sealed ``Value`` or ``Ref`` onto this transaction's ledger ([Copying][copying]; SVP 251).
 
         Its bytes if absent (same hash), its subject and provenance rows, its name, and ``(<value>, db/copied-from,
-        <ledger>@<rev>)``, landing with this revision. ``deep``: its inputs too, recursively, whatever their ledgers.
+        <ledger>@<rev>)``, landing with this revision; its subdats (the ``db/subdat/`` rows) with it, recursively,
+        all or none (SVP 252). ``skip``: relative-path suffixes of the subdats left on their ledger, as ``seal(skip=)``
+        takes them; ``None`` is ``("run",)``, ``()`` follows every subdat, any other adds to ``("run",)``. A skipped
+        subdat's row here is the global reference ``<ledger>@<rev>:<subject>`` to the original, a ``str``.
+        ``deep``: its inputs too, recursively, whatever their ledgers; it does not override ``skip``.
         ``safe``: an input on a ledger whose lifetime ranks below this one's is copied by the same rule, one at or
         above is referenced; a value its claim lets be rerun keeps only its spec (``db/spec-only``), and a source's
         ``db/rerunnable`` is asserted again here. ``safe`` reads every lifetime on the root ledger (``(ledger/<name>,
@@ -829,7 +834,7 @@ class Transaction:
         """
         from .copying import copy
 
-        return copy(self, values, deep=deep, safe=safe, rerunnable=rerunnable)
+        return copy(self, values, deep=deep, safe=safe, rerunnable=rerunnable, skip=skip)
 
     # -- declarations as the body sees them: the snapshot at open plus this transaction's own rows ---------------
 
