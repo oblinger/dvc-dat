@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.58.0 — 2026-11-05
+
+- **A `.devN` version is a version (SVP 1482; minor).** `db/version` takes `MAJOR.MINOR.PATCH[.devN]` on every subject but `db`, whose release stays `MAJOR.MINOR.PATCH`. A clean run of code at `1.3.6.dev2` moves `db/repo/<repo>/<package>` and `db/repo/<repo> db/commit`, which it skipped before, so its commit can be pinned; the clock orders by PEP 440, `1.3.5 < 1.3.6.dev1 < 1.3.6.dev2 < 1.3.6`. `bump` and `bump_source` still step plain versions only. Docs: `DAT Ledger`.
+
 ## 2.57.0 — 2026-11-05
 
 - **`dat.at` and `dat.load`: the global reference resolves (SVP 248; minor).** `ledger.at(rev)` stays that ledger's alone; across ledgers the verbs are module-level. `dat.at("<ledger>@<rev>")` is the plain `Rev` on any registered ledger (or one open in this process). `dat.load("<ledger>@<rev>:<name-or-sha>")` is the value: `sha256:<hex>` finds it by the hash of its bytes in that ledger's `db/value` rows, `KeyError` when none. Both take an optional default ledger (a `Ledger` or a name; else the active one) for a bare reference: a bare revision for `at`, a bare `<name-or-sha>`, read at the head, for `load`. In a project with no ledger, `dat.load(name)` is `Dat.manager.load(name)`. Docs: `DAT Ledger` § Many ledgers.

@@ -139,13 +139,16 @@ def check_provenance(provenance: Optional[str]) -> str:
     return provenance
 
 
-_SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+_SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:\.dev(\d+))?$")
 
 
-def _semver(text: Any) -> Optional[Tuple[int, int, int]]:
-    """``MAJOR.MINOR.PATCH`` as a tuple of ints, else ``None``."""
+def _semver(text: Any) -> Optional[Tuple[int, ...]]:
+    """``MAJOR.MINOR.PATCH`` or ``MAJOR.MINOR.PATCH.devN`` as a tuple of ints in version order, else ``None``:
+    ``1.3.5 < 1.3.6.dev1 < 1.3.6.dev2 < 1.3.6`` (PEP 440, SVP 1482)."""
     m = _SEMVER.match(text) if isinstance(text, str) else None
-    return (int(m[1]), int(m[2]), int(m[3])) if m else None
+    if m is None:
+        return None
+    return (int(m[1]), int(m[2]), int(m[3])) + ((0, int(m[4])) if m[4] is not None else (1, 0))
 
 
 def _tag_name(subject: str, name: Any) -> None:
@@ -203,7 +206,7 @@ class Transaction:
         self._codes: set = set()
         self._namings: List[_Op] = []         # the name adds of _name_value: one name, re-checked at commit
         self._minted: set = set()             # the names t.ns.expand counted {unique} to (distinct per mint)
-        self._clocks: Dict[Tuple[str, str], Tuple[int, int, int]] = {}   # the highest version seen
+        self._clocks: Dict[Tuple[str, str], Tuple[int, ...]] = {}   # the highest version seen
         self._commits: Dict[str, str] = {}
         #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
         self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
@@ -668,8 +671,12 @@ class Transaction:
         _name(predicate, "predicate")
         if predicate == "db/value":
             raise TypeError("db/value rows are written by v.seal alone")
-        if predicate == "db/version" and _semver(object) is None:
-            raise ValueError(f"{subject} db/version: the object is a MAJOR.MINOR.PATCH str, not {object!r}")
+        if predicate == "db/version":
+            seen = _semver(object)
+            if seen is None:
+                raise ValueError(f"{subject} db/version: the object is a MAJOR.MINOR.PATCH[.devN] str, not {object!r}")
+            if subject == "db" and seen[3] == 0:
+                raise ValueError(f"db db/version: a ledger's release is MAJOR.MINOR.PATCH, not {object!r}")
         if predicate == "db/tag":
             _tag_name(subject, object)
         if predicate == TIMEZONE:
@@ -1034,8 +1041,8 @@ class Transaction:
         ``preds()``, kept by ``t[s] = {...}``. Written by the ledger alone, never by a person (``bump_source`` edits
         the source).
 
-        Only a plain ``MAJOR.MINOR.PATCH`` counts: a dirty checkout's ``<commit 8>+dirty``, a bare commit
-        or a ``#hash`` moves neither. Read through the snapshot at open, and re-checked at commit in the write
+        Only a ``MAJOR.MINOR.PATCH[.devN]`` counts (``.devN`` below its patch, SVP 1482): a dirty checkout's
+        ``<commit 8>+dirty``, a bare commit or a ``#hash`` moves neither. Read through the snapshot at open, and re-checked at commit in the write
         lock (``_write``). The version, per package (the highest this body ran): absent or lower, this transaction
         adds it; equal, nothing; higher on the row, a warning and nothing (the clock never moves back). The commit:
         added whenever it differs from the row."""
