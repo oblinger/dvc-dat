@@ -8,6 +8,8 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **A `Dat`'s spec is written with its keys sorted (SVP 1543).** `create` dumped `_spec_.yaml` in the spec's key order, so equal specs in another order gave other bytes. **Stored hashes of a `Dat` whose spec was not in sorted order move**: an old lookup misses and recomputes; nothing wrong is returned.
+
 ## 2.62.0 — 2026-11-05
 
 - **A value's encoding is deterministic and lossless (SVP 1542).** The rule is on `Value` and in [DAT Ledger](doc/DAT%20Modules/ledger/DAT%20Ledger.md) § Value Interface, and `tests/ledger/test_value_encoding.py` measures `Value.Blob`, `Value.Table`, `Dat` and `Code` against it; what each breaks today is `xfail(strict=True)`. Docs and tests: no encoding changed.
