@@ -15,7 +15,7 @@ sealed *ARGS:
 # with cell ids a re-run leaves alone, then executed in place with its outputs kept. Edit the .py, never the
 # .ipynb. tests/test_demo_notebooks.py runs them and checks the pairing on every `just test`.
 demo:
-    for stem in cli-walkthrough demo-dats demo-etl demo-walkthrough ledger-triples ledger-values ledger-dats ledger-just; do uv run python "doc/DAT Demos/build_notebook.py" $stem && JUPYTER_PATH={{justfile_directory()}}/.venv/share/jupyter uv run jupyter nbconvert --execute --to notebook --inplace "doc/DAT Demos/$stem.ipynb" || exit 1; done
+    for stem in cli-walkthrough demo-dats demo-etl demo-rerunning demo-walkthrough ledger-triples ledger-values ledger-dats ledger-just; do uv run python "doc/DAT Demos/build_notebook.py" $stem && JUPYTER_PATH={{justfile_directory()}}/.venv/share/jupyter uv run jupyter nbconvert --execute --to notebook --inplace "doc/DAT Demos/$stem.ipynb" || exit 1; done
 
 # the API walkthrough: its notebook generated from api-walkthrough.py, with cell ids that a re-run leaves
 # alone, then executed in place with its outputs kept. Edit the .py, never the .ipynb.

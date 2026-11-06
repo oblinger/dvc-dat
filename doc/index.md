@@ -35,7 +35,7 @@ result = Dat.manager.run("catalog.experiment", epochs=200)
 
 | | |
 | --- | --- |
-| **[Tutorials](tutorials.md)** | Learn the library by running it: nine notebooks with their outputs kept |
+| **[Tutorials](tutorials.md)** | Learn the library by running it: ten notebooks with their outputs kept |
 | **[How-to](how-to.md)** | One task per row, for a reader who knows the library |
 | **[Architecture](DAT%20Architecture.md)** | The dat and the ledger, how they meet, a module page for each |
 | **[API Reference](api/index.md)** | Every public class and function, generated from the source |

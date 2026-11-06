@@ -21,6 +21,7 @@ nav:
       - A project end to end: DAT Demos/demo-walkthrough.ipynb
       - Dats and dependencies: DAT Demos/demo-dats.ipynb
       - An ETL chain: DAT Demos/demo-etl.ipynb
+      - Rerunning: DAT Demos/demo-rerunning.ipynb
       - "Ledger: triples": DAT Demos/ledger-triples.ipynb
       - "Ledger: values": DAT Demos/ledger-values.ipynb
       - "Ledger: dats": DAT Demos/ledger-dats.ipynb

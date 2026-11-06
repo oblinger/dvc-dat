@@ -8,6 +8,8 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **The Rerunning tutorial (SVP 245).** `demo-rerunning`: a past revision read, today's code over it, a sweep through `L.revs`, what a sweep recomputes, and a value rerun from its pinned commit. Docs only.
+
 ## 2.60.0 — 2026-11-05
 
 - **Present code over past revisions: `L.revs` and `v.at` (SVP 245; minor).** `L.at(rev).run(target, **keys)` already ran the checkout's code over a revision's rows; two things were missing. `L.revs(which, *, since=None, until=None) -> Dict[str, Rev]` names a set of past revisions by label and reads the ledger only: `"release"` (each `db db/version` add, labelled by the version), `"tag"` (each `db db/tag` add), `"day"` / `"week"` / `"month"` (each period start in the span, labelled `2026-11-02`, `2026-W45`, `2026-11`, the latest revision stamped at or before it in the display zone; a period before the first stamp is omitted), or an iterable of `at` arguments, labelled by `str(each)`; `since` and `until` are `at` arguments or a month `2026-11`. The sweep is `{label: rev.run(...) for label, rev in L.revs(...).items()}`. Every run's result carries the row `(<value>, db/at, "<rev.id>")`, the revision it read, written beside `db/fn` and read back as `v.at` beside `v.rev`, the revision that saved it (`None` for a hand seal). `RunTrace.at` carries it, so a draft or a locally sealed result saved later writes it, and it crosses the sandbox worker's pipe. Provenance only: outside the subject's hash and the hit test, so no key moves, and an ask at 413 may hand back the entry computed at 412, its `db/at` still 412. A value sealed before this has no row. `t.copy` leaves `db/at` behind (it names a revision of the origin); a copy's `v.at` is `None`.
