@@ -4,7 +4,7 @@
 database made for this test session (dropped at its end), the art store in
 ``folder/art``. The server is ``DVC_DAT_TEST_PG`` (default the docker one,
 ``postgresql://postgres:dvcdat@localhost:5433/postgres``); unreachable, the ``pg``
-cases skip.
+cases skip, or fail when ``DVC_DAT_TEST_PG`` is set.
 """
 
 import os
@@ -41,6 +41,8 @@ def database() -> str:
         except Exception as e:          # no psycopg, no server: the pg cases skip, saying why
             _db["why"] = f"no Postgres at {SERVER}: {e}"
     if _db["url"] is None:
+        if "DVC_DAT_TEST_PG" in os.environ:         # a server named and not there fails: CI's pg job never skips green
+            pytest.fail(_db["why"], pytrace=False)
         pytest.skip(_db["why"])
     return _db["url"]
 
