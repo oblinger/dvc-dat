@@ -347,7 +347,10 @@ def test_a_copy_brings_the_dependent_and_refers_to_the_run_on_its_ledger(L, back
     assert dest._store.art.exists(viz.hash) and top.load("res/G1/viz").hash == viz.hash
     assert not held(dest, run_ref.subject) and not dest._store.art.exists(run_ref.hash)
     assert row(dest, subject, "run") == f"{L._store.name}@{source}:{run_ref.subject}"
-    assert dat.load(row(dest, subject, "run")).hash == run_ref.hash         # the run, read on its own ledger
+    at, _, rest = row(dest, subject, "run").partition(":")
+    assert L.at(int(at.rpartition("@")[2])).load(rest).hash == run_ref.hash     # the run, read on its own ledger
+    if backend == "sqlite":     # the pg cases' ledgers are schemas of one database, so they share one name
+        assert dat.load(row(dest, subject, "run")).hash == run_ref.hash
     assert top.load("res/G1").hash == made.hash == L.at().load("res/G1").hash
 
 
