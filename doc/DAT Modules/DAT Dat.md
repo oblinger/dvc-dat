@@ -153,14 +153,6 @@ A `Dat` whose folder holds other dats: every folder below it carrying a spec fil
 
 <!-- methods: dvc_dat.core.DatContainer -->
 
-**get_dat_paths**`() -> List[str]`
-    The absolute paths of every dat folder below this one, sorted, the container itself left out; computed on first call and kept. ^get-dat-paths
-
-**get_dats**`() -> List[Dat]`
-    The contained dats, each loaded through the container's manager, so each load is recorded inside a run. Computed on first call and held in memory until the container is released. ^get-dats
-
-
-
 ## Namespace Interface
 A namespace of dotted names, bound to the `DatManager` whose world it names; not callable (running is `manager.run`). Every manager builds its own, reached as `manager.ns`; `Dat.ns` forwards to `Dat.manager.ns`. `Namespace(manager=None)` is the constructor: a bare `Namespace()` mounts, loads and names with no world, and its `manager` is `RuntimeError` until a manager built with `ns=` adopts it. A dotted name is a mounted name first, else exactly what `import` means in this environment, `getattr` below that.
 
