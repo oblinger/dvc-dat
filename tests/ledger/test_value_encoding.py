@@ -225,7 +225,6 @@ OBJECT_MEMO = "Blob: an object other than plain data repeated is written as a ba
 PARQUET_CHUNKS = "Table: parquet's pages follow the table's chunks, and a long table decodes in 131072-row chunks"
 PARQUET_META = "Table: the schema metadata (pandas adds its own) is in the bytes and outside Table.equals"
 PARQUET_VERSION = "Table: the footer names the pyarrow version, so a pyarrow upgrade moves every hash"
-SPEC_ORDER = "Dat: core writes _spec_.yaml in the spec's key order; sv-pipe's LedgerDat sorts what it stores"
 CODE_NO_DECODE = "Code: decode is not implemented, and encode omits the description decode would have to restore"
 
 
@@ -384,7 +383,7 @@ PAIRS = [
                  id="dat-files-other-order"),
     pytest.param(lambda f: created(f / "a"), lambda f: created(f / "b"), id="dat-spec-other-path"),
     pytest.param(lambda f: created(f / "a", {"n": 1, "m": 2}), lambda f: created(f / "b", {"m": 2, "n": 1}),
-                 id="dat-spec-other-key-order", marks=breaks(SPEC_ORDER)),
+                 id="dat-spec-other-key-order"),
     pytest.param(lambda f: code(), lambda f: code(modules=shuffled(code()._manifest["modules"])),
                  id="code-modules-other-order"),
     pytest.param(lambda f: code(), lambda f: code(version="2.0.0", commit="abc1234", sandboxed=True),
