@@ -29,7 +29,7 @@ from typing import Any, Iterator, List, Optional, Sequence, Tuple
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from .errors import LedgerError, LockTimeout
-from .store import ArtStore, Row, Store, Writer, index_name
+from .store import ArtStore, ReadOnlyArt, Row, Store, Writer, index_name
 
 SCHEMES = ("postgresql://", "postgres://")
 
@@ -93,11 +93,13 @@ def _has_nul(*vals: Optional[str]) -> bool:
 
 
 class PostgresStore(Store):
-    """One Postgres schema. Reads on a per-thread autocommit connection; each write on a connection of its own."""
+    """One Postgres schema. Reads on a per-thread autocommit connection; each write on a connection of its own.
+    Given ``overlay``, read-only: every connection's session refuses writes, the art a ``ReadOnlyArt``."""
 
-    def __init__(self, dsn: str, *, base: Path, create: bool) -> None:
+    def __init__(self, dsn: str, *, base: Path, create: bool, overlay: Optional[Path] = None) -> None:
         self.dsn, self._conninfo, art, self.redacted = split_dsn(dsn, base)
-        self.art = ArtStore(art)
+        self.read_only = overlay is not None
+        self.art = ReadOnlyArt(art, overlay) if overlay is not None else ArtStore(art)
         parts = urlsplit(self.dsn)
         self.name = parts.path.lstrip("/") or (parts.username or "")      # libpq's default database: the user
         self._pg = _psycopg()
@@ -125,8 +127,13 @@ class PostgresStore(Store):
             conn.close()
 
     def _connect(self, timeout: float, *, autocommit: bool) -> Any:
-        return self._pg.connect(self._conninfo, autocommit=autocommit, prepare_threshold=None,
+        conn = self._pg.connect(self._conninfo, autocommit=autocommit, prepare_threshold=None,
                                 connect_timeout=max(1, int(timeout)))
+        if self.read_only:
+            conn.execute("SET default_transaction_read_only = on")
+            if not autocommit:
+                conn.commit()                       # the setting binds the transactions after this one
+        return conn
 
     @contextmanager
     def reading_through(self, w: Writer) -> Iterator[None]:

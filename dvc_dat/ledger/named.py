@@ -16,6 +16,11 @@ working directory and ``DAT_LEDGER`` at each use and never at import. A checkout
 default imports it fine and raises the one-line ``LedgerError`` at the first use. ``L.at()`` is the ``Head`` of the
 real handle (a ``Rev`` that is also a transaction), the same handle ``ledgers.<name>`` gives for that ledger;
 ``repr(L)`` names it, or says why it is unresolved. See [Many ledgers][many-ledgers].
+
+In a sandbox worker (SVP 1521 Q3 (A)) ``ledgers`` is the section of the caller's
+config, shipped on the request (``shipped_section``, ``adopt_section``), and every
+handle it gives is read-only; a body's ``ledgers.<name>``, ``dat.at`` and ``dat.load``
+all come through it.
 """
 
 from __future__ import annotations
@@ -26,9 +31,14 @@ from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from .errors import LedgerError
 from .ledger import CONFIG, ENV, Ledger, _find, _section, _target, _values, _walk_up, opened
+from .pgstore import is_dsn
 
 _handles: Dict[str, Ledger] = {}
 _asserted: Set[Tuple[str, str]] = set()
+#: ``(config path, {name: location})`` of the caller's ``ledgers:`` section, as a request ships it; ``None``: it has none.
+Section = Optional[Tuple[str, Dict[str, str]]]
+#: In a sandbox worker: the section adopted, and how a location is opened there.
+_worker: Optional[Tuple[Section, Any]] = None
 
 
 def _handle(target: Any, given: Any, base: Path, cfg: Optional[Path]) -> Ledger:
@@ -37,7 +47,8 @@ def _handle(target: Any, given: Any, base: Path, cfg: Optional[Path]) -> Ledger:
     key = str(target)
     led = _handles.get(key)
     if led is None:
-        led = _handles[key] = Ledger._opened(target, given, base, None)
+        led = _handles[key] = Ledger._opened(target, given, base, None) if _worker is None \
+            else _worker[1](target, given, base)
     if cfg is not None and (key, str(cfg)) not in _asserted:
         led._assert_mounts(cfg)
         _asserted.add((key, str(cfg)))
@@ -55,10 +66,16 @@ class Ledgers:
     (``AttributeError`` as an attribute) listing the section.
 
     A named handle asserts no ``mounts:``; only the active ledger does. A project with the one-ledger ``ledger:`` key
-    has no section: ``ledgers.<name>`` is ``LedgerError`` and its ledger is ``L``.
+    has no section: ``ledgers.<name>`` is ``LedgerError`` and its ledger is ``L``. In a sandboxed body it is the
+    caller's section, and every handle is read-only (DAT Ledger § Another ledger from a sandboxed body, SVP 1521).
     """
 
     def _section(self) -> Tuple[Path, Dict[str, str]]:
+        if _worker is not None:
+            if _worker[0] is None:
+                raise LedgerError("no ledgers: the caller of this sandboxed function has no 'ledgers:' section in a "
+                                  f"{CONFIG}")
+            return Path(_worker[0][0]), _worker[0][1]
         cfg, searched = _walk_up(Path.cwd().resolve())
         if cfg is None:
             raise LedgerError(f"no ledgers: no {CONFIG} with a 'ledgers:' section in "
@@ -104,6 +121,28 @@ class Ledgers:
         except LedgerError as e:
             return f"ledgers (none: {e})"
         return f"ledgers({cfg}: {', '.join(entries)})"
+
+
+def shipped_section() -> Section:
+    """The ``ledgers:`` section a sandboxed run sees: the caller's, by its working directory, in a worker the one it
+    was given. A ``Section``, so that it crosses the pipe to the worker."""
+    if _worker is not None:
+        return _worker[0]
+    cfg, _ = _walk_up(Path.cwd().resolve())
+    if cfg is None or "ledgers" not in _values(cfg):
+        return None
+    return str(cfg), _section(cfg, _values(cfg))[0]
+
+
+def adopt_section(section: Section, read_only: Any) -> None:
+    """In a sandbox worker: ``ledgers`` is ``section``, its handles opened by ``read_only(target, given, base)``."""
+    global _worker
+    _worker = (section, read_only)
+
+
+def handle_at(location: str) -> Ledger:
+    """In a sandbox worker: the handle on a ledger named by location, for a ``Ref`` key on it."""
+    return _handle(location if is_dsn(location) else Path(location), location, Path.cwd(), None)
 
 
 def ledger_named(name: str) -> Ledger:

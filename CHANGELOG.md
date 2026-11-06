@@ -9,7 +9,13 @@ Every user-visible change to `dvc_dat`, newest first.
 ## Unreleased
 
 - **A `Dat`'s spec is written with its keys sorted (SVP 1543).** `create` dumped `_spec_.yaml` in the spec's key order, so equal specs in another order gave other bytes. **Stored hashes of a `Dat` whose spec was not in sorted order move**: an old lookup misses and recomputes; nothing wrong is returned.
+
+## 2.62.0 — 2026-11-05
+
 - **A value's encoding is deterministic and lossless (SVP 1542).** The rule is on `Value` and in [DAT Ledger](doc/DAT%20Modules/ledger/DAT%20Ledger.md) § Value Interface, and `tests/ledger/test_value_encoding.py` measures `Value.Blob`, `Value.Table`, `Dat` and `Code` against it; what each breaks today is `xfail(strict=True)`. Docs and tests: no encoding changed.
+- **A sandboxed body reads other registered ledgers (SVP 1521 Q3 (A); minor).** `ledgers.<name>`, `dat.at("<name>@<rev>")` and `dat.load("<name>@<rev>:<value>")` work in a sandboxed function, SQLite and Postgres, over the caller's `ledgers:` section, which crosses to the worker with the call. The handle is read-only (`Ledger.read_only`): `Transaction` refuses it, its connections are read-only, and `rev.run` on it is a lookup, a miss `ConfinedWrite`. Each value or run read is a `foreign:` item with its `<ledger>@<rev>`; a raw row is untracked; a memo hit is unchanged (Q2 (A)). A `Dat` read so is rebuilt in the child, nothing placed on that ledger (`ReadOnlyArt`, `ArtStore.dats`). A `Ref` or sealed `Value` key on another ledger now works in the worker: it crosses with its location and revision. An unsaved `Value` stays refused as a key (Q4). `Ledger(<location>)` in a body stays `ConfinedWrite`.
+- **`rev.last_rev(*pattern, default=None, since=None)` (SVP 1521 A2).** The `Rev` of the last row matching a pattern at or before `rev`, removes included: `history(*pattern)[-1].rev` without decoding. `L.at(412).last_rev("game/G1").id`.
+- **Fix: fetching a value's bytes from its store inside a sandboxed body.** The fetch's own folder and temp file went through the write hook; the whole fetch is now the ledger's machinery.
 - **The Rerunning tutorial (SVP 245).** `demo-rerunning`: a past revision read, today's code over it, a sweep through `L.revs`, what a sweep recomputes, and a value rerun from its pinned commit. Docs only.
 
 ## 2.61.0 — 2026-11-05

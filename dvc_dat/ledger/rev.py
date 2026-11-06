@@ -485,6 +485,32 @@ class Rev:
         No pattern is the ledger as stored; ``history(s, p, o)`` with ``added`` true says when a triple was set. The
         trace records it under its call name ``rows``.
         """
+        found = self._rows_of(pattern, since)
+        revs: Dict[int, Rev] = {}
+        out = []
+        for r in found:
+            rv = revs.get(r[0])
+            if rv is None:
+                rv = revs[r[0]] = Rev(self.ledger, r[0])
+            out.append(Row(rv, r[2], r[3], rv._decode(r[4]), r[5]))
+        self._record_call("rows", pattern, since, len(out))
+        return out
+
+    def last_rev(self, *pattern: Any, default: Any = None, since: Optional["Rev"] = None) -> Any:
+        """The ``Rev`` of the last row matching the pattern at or before this revision, removes included, or ``default``
+        with none: what ``history(*pattern)[-1].rev`` gives, without decoding a row; the pattern and ``since`` as
+        ``history`` takes them (SVP 1521 A2).
+
+        ``L.at(412).last_rev("game/G1").id`` is the revision that last touched those rows, 137, so ``G1@137`` names what
+        ``G1`` was at 412. A read through a body's recording ``Rev`` is traced as the revision found, so a memo entry
+        that asked holds only while the answer does; on another ledger it is a raw read, untracked.
+        """
+        found = self._rows_of(pattern, since)
+        self._record_call("last_rev", pattern, since, found[-1][0] if found else None)
+        return Rev(self.ledger, found[-1][0]) if found else default
+
+    def _rows_of(self, pattern: Sequence[Any], since: Optional["Rev"]) -> List[Any]:
+        """The stored rows of a pattern, unfolded (``history``, ``last_rev``)."""
         n = len(pattern)
         if n > 3:
             raise TypeError(f"a pattern fixes at most 3 positions, not {n}")
@@ -500,15 +526,7 @@ class Rev:
         if n == 3:
             want = strip_hint(self._objtext(pattern[2]))
             found = [r for r in found if strip_hint(r[4]) == want]
-        revs: Dict[int, Rev] = {}
-        out = []
-        for r in found:
-            rv = revs.get(r[0])
-            if rv is None:
-                rv = revs[r[0]] = Rev(self.ledger, r[0])
-            out.append(Row(rv, r[2], r[3], rv._decode(r[4]), r[5]))
-        self._record_call("rows", pattern, since, len(out))
-        return out
+        return found
 
     # -- subject reads --------------------------------------------------------
 

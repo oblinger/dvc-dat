@@ -42,11 +42,17 @@ function. An in-process nested eval's code includes a module its
 caller loaded first: the worker's ``__import__`` credits every import a body makes, loaded
 already or not, with what that module's first import pulled in.
 
-Another ledger from a body (SVP 1521): the worker opens the run's ledger alone. A SQLite ledger elsewhere is
-``ConfinedWrite`` at its open (its store makes its folder and connects), a ``Ref`` key on another ledger holds
-nothing in the worker (``TypeError``), and ``ledgers.<name>`` needs a config the body may not read. A Postgres
-ledger on the run's own server passes the network hook and its rows read, unrecorded as any raw row; its bytes are
-outside ``STATE.reads`` (``UntracedRead``). So a body reads another ledger by being given its value.
+Another ledger from a body (SVP 1521 Q3 (A)): the caller's ``ledgers:`` section crosses on the request, and
+``ledgers.<name>``, ``dat.at("<name>@<rev>")`` and ``dat.load("<name>@<rev>:<value>")`` open that ledger read-only
+(``read_only_ledger``), once per child, SQLite or Postgres; a ``Ref`` or sealed ``Value`` key on another ledger crosses
+with its location and opens the same way. Opening one adds its art store to ``STATE.reads``, its database to
+``STATE.foreign`` (a ``sqlite3.connect`` there passes only as ``mode=ro``) and its endpoint to the network hook's.
+What a read must place (a ``Dat``'s folder, bytes fetched from the value's store) goes to a folder of the child's, gone
+with it (``ReadOnlyArt``). A value or a run read is a ``foreign:`` item (``trace.note_read``); a raw row is untracked. The
+handle writes nothing: ``Transaction`` refuses it (``ConfinedWrite``), its database connections are read-only, and
+``rev.run`` on it is a lookup, a miss ``ConfinedWrite``, since a run there would write there. ``Ledger(<location>)`` in a
+body is still ``ConfinedWrite`` at its open: a store it opens may write. Not closed: a body holding psycopg can connect to
+a Postgres endpoint the network hook passes and, with write rights on that login, write through its own connection.
 
 A dat's run function under a mount (an ``Fn`` of kind ``"dat"``, DAT 1045, 1046)
 runs through the same call: its keys are the spec, expanded in the parent, and the
@@ -85,6 +91,7 @@ import inspect
 import os
 import pickle
 import re
+import shutil
 import socket
 import struct
 import subprocess
@@ -97,12 +104,14 @@ import warnings
 from pathlib import Path
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple
+from urllib.parse import unquote
 
 from .codec import sha256
 from .env import Env, current_env, platform_items
 from .errors import ConfinedNetwork, ConfinedProcess, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
 from ..core import Dat, DatManager
+from .named import shipped_section
 from .fn import (Fn, alias_reads, attach_run, dat_spec, drop_work, fn_mark, fn_mark_in_source, mounted_name, mounts_at,
                  mounts_hash, path_template, run_trace, save_run, seal_entry, wrap_result)
 
@@ -504,7 +513,10 @@ def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str,
 
 def root_version(plain: "Rev", env: Env, prefix: str) -> Optional[str]:
     """The mounted root package's ``__version__``, read after importing it the way a run does: in a
-    forked child of the warm server, confined (in the worker itself, here), leaving nothing imported."""
+    forked child of the warm server, confined (in the worker itself, here), leaving nothing imported.
+    On a ledger read by name: ``None``, since nothing runs there and its mount may be none of this run's."""
+    if plain.ledger.read_only:
+        return None
     if IN_WORKER:
         return import_version(prefix)
     return _server().version(plain, prefix, env)
@@ -670,6 +682,8 @@ class _State:
     interpreter: List[str] = []                     # where an unmounted module's own import may read
     works: List[Optional[str]] = []                 # the path folder of each running body, innermost last
     store: str = ""                                 # the ledger's own database file (a folder ledger)
+    foreign: Set[str] = set()                       # the database files of ledgers opened read-only
+    overlays: List[Path] = []                       # where those ledgers' reads placed what they had to
     hosts: Set[str] = set()                         # the ledger's own endpoint, by name and by address
     addrs: Set[Tuple[str, int]] = set()
 
@@ -890,9 +904,13 @@ def _audit(event: str, args: Any) -> None:
         return
     if event == "sqlite3.connect":
         db = os.fsdecode(os.fspath(args[0])) if isinstance(args[0], (str, bytes, os.PathLike)) else ""
-        db = db[5:].partition("?")[0] if db.startswith("file:") else db
-        if db and db != ":memory:" and os.path.realpath(db) != STATE.store:
-            _check_write(os.path.realpath(db))
+        query = ""
+        if db.startswith("file:"):
+            db, _, query = db[5:].partition("?")
+            db = unquote(db)
+        real = os.path.realpath(db)
+        if db and db != ":memory:" and real != STATE.store and not (real in STATE.foreign and query == "mode=ro"):
+            _check_write(real)
         return
     if event in _OS_READS:
         _check_read(_resolve(args[0] if args and args[0] is not None else "."), sys._getframe(1))
@@ -1065,6 +1083,24 @@ def install_worker(ledger: Any, mounts: List[Mount]) -> None:
     STATE.hosts, STATE.addrs = _ledger_endpoints(ledger.path)
 
 
+def read_only_ledger(target: Any, given: Any, base: Path) -> Any:
+    """In the worker: a read-only handle on a ledger a body names (SVP 1521 Q3 (A)), and what the hooks let it reach."""
+    from .ledger import Ledger
+
+    with unguarded():
+        overlay = Path(tempfile.mkdtemp(prefix="foreign-", dir=os.environ.get("DAT_SCRATCH") or None))
+        STATE.overlays.append(overlay)
+        led = Ledger._opened(target, given, base, None, overlay)
+        led.at()                                    # a ledger that does not open says so here, in the body's call
+        hosts, addrs = _ledger_endpoints(led.path)
+    STATE.hosts, STATE.addrs = STATE.hosts | hosts, STATE.addrs | addrs
+    STATE.reads = STATE.reads + [os.path.realpath(led._store.art.root), os.path.realpath(overlay)]
+    db = getattr(led._store, "path", None)
+    if isinstance(db, Path):
+        STATE.foreign = STATE.foreign | {os.path.realpath(db)}
+    return led
+
+
 def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name: Optional[str] = None) -> Any:
     """In the worker: import the function from the mounts and run it, confined, then seal (``_close_run``).
     A ledger function gets the recording ``Rev``, its keys and, when it takes one, its ``path`` folder; a
@@ -1226,15 +1262,20 @@ def recv(stream: Any) -> Any:
     return pickle.loads(stream.read(n))
 
 
-def encode_key(v: Any) -> Any:
+def encode_key(v: Any, plain: "Rev") -> Any:
+    """A key across the pipe: a ``Ref`` or a sealed ``Value`` by its subject; on another ledger by the name it was
+    given, with that ledger's location and the revision, so that a read through it is recorded under that name
+    (SVP 1521)."""
+    from .fn import ledger_key
     from .rev import Ref
     from .value import Value
 
-    if isinstance(v, Ref):
+    if not isinstance(v, (Ref, Value)):
+        return v
+    rev = v.rev
+    if rev is None or ledger_key(rev.ledger) == ledger_key(plain.ledger):
         return ("__ref__", v.subject)
-    if isinstance(v, Value):
-        return ("__ref__", v.subject)
-    return v
+    return ("__ref__", v._given if isinstance(v, Ref) else v.subject, str(rev.ledger.path), rev.id)
 
 
 #: Seconds a warm server may sit idle before it is retired (stopped; the next call starts a fresh one).
@@ -1324,7 +1365,8 @@ class Server:
         """One call in a forked child. A dat's run function (DAT 1045, 1046) also ships its template, its
         class and the caller's dat world (its folders, built afresh there as a ``DatManager``)."""
         req = {"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
-               "keys": {k: encode_key(v) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env)}
+               "keys": {k: encode_key(v, plain) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env),
+               "ledgers": shipped_section()}
         if fn.kind == "dat":
             world = Dat.manager
             req.update({"template": fn._template, "returns": fn._returns,
@@ -1505,6 +1547,7 @@ def serve(req: Dict[str, Any], out: Any) -> None:
     """In the forked child: confine this process, run the call, reply on ``out``."""
     from .env import Checkout, platform_record, platform_tag, set_env_provider
     from .ledger import Ledger
+    from .named import adopt_section, handle_at
     from .rev import Ref
 
     try:
@@ -1526,8 +1569,13 @@ def serve(req: Dict[str, Any], out: Any) -> None:
                                        index=w["index"], verify=w["verify"], ns=LedgerNamespace(rev=plain))
             STATE.reads = STATE.reads + [os.path.realpath(f) for f in w["dat_folders"]] + (
                 [os.path.realpath(w["art_folder"])] if w["art_folder"] else [])
-        keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__"
-                    else v) for k, v in req["keys"].items()}
+        adopt_section(req["ledgers"], read_only_ledger)
+
+        def key(v: Any) -> Any:
+            if not (isinstance(v, tuple) and v and v[0] == "__ref__"):
+                return v
+            return Ref(ledger.at() if len(v) == 2 else handle_at(v[2]).at(v[3]), v[1])
+        keys = {k: key(v) for k, v in req["keys"].items()}
         fn = plain.ns.load(req["name"])
         if not isinstance(fn, Fn):
             raise TypeError(f"{req['name']!r} resolves to {fn!r} in the worker, not a function")
@@ -1549,6 +1597,9 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             blob = None
         send(out, {"ok": False, "exc": blob, "type": type(e).__name__, "message": str(e),
                    "traceback": traceback.format_exc()})
+    finally:
+        for overlay in STATE.overlays:
+            shutil.rmtree(overlay, ignore_errors=True)
 
 
 def _warning_class(category: Any) -> Any:
