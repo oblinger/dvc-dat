@@ -240,10 +240,31 @@ def _find(create: bool) -> Tuple[Target, Any, Path, Optional[Path]]:
 class Ledger:
     """One logical store of quads ``(rev, subject, predicate, object)``."""
 
+    path: Union[Path, str]
+    """The resolved ledger folder; for a Postgres ledger, the DSN with its ``art`` parameter made absolute.
+
+    ``repr`` hides a DSN's password.
+    """
+
     def __init__(self, location: Union[str, Path, None] = None, *, create: bool = False) -> None:
-        """Open the ledger at ``location``: a folder or a DSN (a ``Path``, or a ``str`` that is not a DSN, is a
-        folder); ``None`` opens the active ledger (``DAT_LEDGER``, else ``.datconfig.yaml``'s ``ledgers:``
-        default or ``ledger:``)."""
+        """``Ledger(location)`` opens the ledger at ``location``: a folder or a DSN.
+
+        ``location``, a ``Path``, or a ``str`` that is not a DSN, is a folder; a folder without ``ledger.db`` is
+        ``LedgerError``, and so is a file.
+
+        ``Ledger()`` — ``location`` defaulting to ``None`` — opens the active ledger ([Many ledgers][many-ledgers]):
+        ``DAT_LEDGER`` when set (a name from the config's ``ledgers:`` section, else a location), else the nearest
+        ``.datconfig.yaml`` at or above the working directory carrying a ``ledgers:`` section (its ``default:``) or a
+        ``ledger:`` key (relative to that file). It asserts the config's ``mounts:`` (each key the mount's name,
+        ``mnt.<prefix>: <root>``, as [``t.ns.mount``][dvc_dat.ledger.Transaction.ns] takes it; a key outside ``mnt.``
+        is ``ValueError``) as ``db/mount/<prefix>`` rows in one transaction ``by="config:<path>"`` when they differ
+        from the ledger's; none found is ``LedgerError`` naming every folder searched, and a ``ledgers:`` section
+        naming no default is ``LedgerError`` saying how to name one.
+
+        ``Ledger(location, create=True)`` makes an empty ledger there if absent. ``Ledger(create=True)`` makes a
+        project in the working directory, writing ``ledger: .dat/ledger`` into its ``.datconfig.yaml``, or, when that
+        file has a ``ledgers:`` section, making its active entry; with ``DAT_LEDGER`` set it is ``ValueError``.
+        """
         cfg: Optional[Path] = None
         target: Target
         if location is None:
@@ -289,7 +310,7 @@ class Ledger:
         return f"Ledger({self._shown!r})"
 
     def close(self) -> None:
-        """Close the handle's database connections (every thread's); a later read or write reopens."""
+        """Close the handle's database connections in every thread; a later read or write reopens one."""
         self._store.close()
 
     def __enter__(self) -> "Ledger":
@@ -323,15 +344,29 @@ class Ledger:
                     t.add(s, p, o)
 
     def at(self, which: Union[int, str, None] = None) -> Rev:
-        """A frozen view, ``which`` read in this order: ``None`` the top; an ``int`` (or digit string) a revision;
-        ``"M.m.p"`` the latest revision whose ``db db/version`` row (the release, ``bump(t, "db")``) added that
-        version; a timestamp, an ISO 8601 prefix at any precision (``2026-11-02``, ``2026-11-02T14``,
-        ``2026-11-02T14:30``, ``2026-11-02T14:30:15``, a space for ``T``), the latest revision whose ``db/time``
-        is at or before the START of its span, read in the display zone (``db db/timezone`` at the top, UTC
-        with none) unless it ends ``Z`` or ``+hh:mm``; a DST-ambiguous or skipped local time is read with
-        ``fold=0`` (``KeyError`` before the first stamped revision); any other str the revision whose
-        ``db db/tag`` row added that name. With no argument the view is the ``Head``: a ``Rev`` that is also a
-        transaction, each transaction method the one-shot form (``L.at().pin(v)``, SVP 250 A13)."""
+        """A frozen view of the ledger, chosen by ``which``, tried in the order below.
+
+        ``None`` (no argument) is the top, as a ``Head``: a ``Rev`` that is also a transaction, each transaction
+        method listed on it the one-shot form that opens a transaction, calls the method and commits
+        (``L.at().pin(v)``, ``by=`` the writer, ``human:<user>`` by default; SVP 250 A13).
+
+        An ``int`` or a digit string is that revision (``KeyError`` outside ``0..top``).
+
+        ``"M.m.p"`` is the latest revision that set ``(db, db/version, M.m.p)``, the release row (``bump(t, "db")``;
+        ``KeyError`` when none did).
+
+        A timestamp, an ISO 8601 prefix at any precision (``2026-11-02``, ``2026-11-02T14``, ``2026-11-02T14:30``,
+        ``2026-11-02T14:30:15``; a space may replace ``T``), is the latest revision whose ``db/time`` is at or before
+        the START of its span (``2026-11-02`` is 00:00, ``2026-11-02T01`` exactly 01:00, as Delta Lake, Iceberg,
+        SQL:2011 and Snowflake read one; to include Nov 2, name ``2026-11-03``), read in the display zone,
+        [``timezone``][dvc_dat.ledger.Rev.timezone] at the top (UTC with no row), unless it ends ``Z`` or
+        ``+hh:mm``/``-hh:mm``; a local time a DST change makes ambiguous or skips is read with ``fold=0`` (the first
+        of two; a skipped one at the offset before the change); before the first stamped revision it is ``KeyError``,
+        and a field out of range (``2026-13-02``) is ``ValueError`` (SVP 1507).
+
+        Any other str is the revision whose ``(db, db/tag, name)`` row added that name, ``L.at("2026-Q4-official")``;
+        the forms are tried in that order. A ``bool``, or a str that is none of them, is ``TypeError``.
+        """
         top = self._store.top()
         if which is None:
             return Head(self, top)
@@ -374,15 +409,24 @@ class Ledger:
                 in self._store.rows(top, predicate="db/time") if added and subject == f"db/tx/{rev}"]
 
     def revs(self, which: Union[str, Iterable[Any]], *, since: Any = None, until: Any = None) -> Dict[str, Rev]:
-        """Past revisions by label, oldest first; reads the ledger, runs nothing (SVP 245). ``which`` is
-        ``"release"`` (each ``db db/version`` add, labelled by the version), ``"tag"`` (each ``db db/tag`` add, by
-        the tag), ``"day"`` / ``"week"`` / ``"month"`` (each period whose start lies in the span, labelled
-        ``2026-11-02``, ``2026-W45``, ``2026-11``, the latest revision stamped at or before that start in the
-        display zone, as ``at`` reads it; a period before the first stamped revision is omitted), or an iterable of
-        ``at`` arguments, in the order given, labelled by ``str(each)``. ``since`` and ``until`` are ``at``
-        arguments, or a month ``2026-11``, inclusive: absent, the first stamped revision and the top. A moment
-        bounds by time and names no revision, so one before the first stamp is no ``KeyError``. Two labels may
-        share a revision. ``{label: rev.run(...) for label, rev in L.revs(...).items()}`` is a sweep."""
+        """Past revisions by label, oldest first, for running present code over a span.
+
+        It reads the ledger, runs nothing, and the loop is the caller's (``{label: rev.run("metrics.rate", game="G1")
+        for label, rev in L.revs("month", since="2025-11").items()}``, [Running over past
+        revisions][running-over-past-revisions]; SVP 245).
+
+        ``which`` is ``"release"``, each ``(db, db/version, v)`` add, labelled by the version; ``"tag"``, each ``(db,
+        db/tag, name)`` add, labelled by the tag; ``"day"``, ``"week"`` (a Monday) or ``"month"``, each period whose
+        start lies in the span, labelled ``2026-11-02``, ``2026-W45`` or ``2026-11``, the latest revision stamped at
+        or before that start in the display zone, exactly what [``at``][dvc_dat.ledger.Ledger.at] reads for it; or an
+        iterable of ``at`` arguments, in the order given, labelled by ``str(each)``. Any other value, a str included,
+        is ``TypeError``.
+
+        ``since`` and ``until`` are ``at`` arguments or a month ``2026-11``, inclusive; absent, the first stamped
+        revision and the top. A timestamp bounds by time and names no revision, so one before the first stamp is no
+        ``KeyError``, and a period before the first stamped revision is omitted. Two labels may share a revision: its
+        second run hits.
+        """
         top = self._store.top()
         head = Rev(self, top)
         zone = head.timezone
@@ -443,9 +487,19 @@ class Ledger:
 
     def transaction(self, *, by: Union[str, Dict[str, Any]], lock: Optional[float] = None,
                     **preds: Any) -> Transaction:
-        """A write set that becomes one revision on exit; use it only as ``with ... as t:``. Its
-        ``db/tx/<rev>`` carries ``db/by``, ``db/time`` (UTC, every transaction) and the keywords.
-        ``by`` is a non-empty ``str`` or a JSON ``dict`` (DAT 1024), read back as written."""
+        """A write set that becomes one revision on exit; use it only as ``with L.transaction(by=...) as t:``.
+
+        ``by`` names the writer and is required: a non-empty ``str`` (``"human:dan"``), or a non-empty JSON ``dict``
+        for a structured identity (``{"host": ..., "user": ..., "admins": [...]}``), stored under the ``json:`` tag
+        and read back as written, so no identity is parsed out of a string (DAT 1024); anything else is ``TypeError``.
+
+        The ``eval:`` prefix convention is a string's alone; ``lock=`` holds the write lock for the whole body, at
+        most that many seconds.
+
+        Each extra keyword is a ``str`` or a JSON document and lands as a row on the transaction's ``db/tx/<rev>``
+        subject beside ``db/by`` and ``db/time`` (UTC, every transaction). See [Revisions and
+        transactions][revisions-and-transactions].
+        """
         return Transaction(self, by, lock, preds)
 
 
