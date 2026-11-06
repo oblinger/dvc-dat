@@ -195,7 +195,7 @@ def elsewhere(tmp_path_factory):
     for seed in SEEDS:
         folder = tmp_path_factory.mktemp(f"seed{seed}")
         done = subprocess.run([sys.executable, "-c", code_text, str(folder)], capture_output=True, text=True,
-                              env={**os.environ, "PYTHONHASHSEED": str(seed)})
+                              env={**os.environ, "PYTHONHASHSEED": str(seed)}, timeout=120)
         assert done.returncode == 0, done.stderr
         out[seed] = json.loads(done.stdout)
     return out
