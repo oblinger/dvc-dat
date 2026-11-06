@@ -1,14 +1,41 @@
 site_name: ML-DAT
-theme: material
+site_url: https://oblinger.github.io/dvc-dat/
+repo_url: https://github.com/oblinger/dvc-dat
 docs_dir: doc
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
 
 nav:
   - Home: index.md
-  - About: about.md
-  - Overview: overview.md
-  - Command Line: cli.md
-  - Expansion: expand.md
-  - Ledger: DAT Modules/ledger/DAT Ledger.md
+  - Tutorials:
+      - tutorials.md
+      - API walkthrough: DAT Demos/api-walkthrough.ipynb
+      - CLI walkthrough: DAT Demos/cli-walkthrough.ipynb
+      - A project end to end: DAT Demos/demo-walkthrough.ipynb
+      - Dats and dependencies: DAT Demos/demo-dats.ipynb
+      - An ETL chain: DAT Demos/demo-etl.ipynb
+      - "Ledger: triples": DAT Demos/ledger-triples.ipynb
+      - "Ledger: values": DAT Demos/ledger-values.ipynb
+      - "Ledger: dats": DAT Demos/ledger-dats.ipynb
+      - "Ledger: just": DAT Demos/ledger-just.ipynb
+  - How-to:
+      - how-to.md
+      - Command line: cli.md
+      - Mounts: mount-commands.md
+      - "The {} grammar": expand.md
+      - Spec format: spec-format.md
+  - Architecture:
+      - DAT Architecture.md
+      - Dat: DAT Modules/DAT Dat.md
+      - Ledger: DAT Modules/ledger/DAT Ledger.md
+      - Concepts: concepts.md
   - API Reference:
       - api/index.md
       - Dat, DatManager, DatContainer: api/core.md
@@ -16,9 +43,16 @@ nav:
       - Ledger: api/ledger.md
       - Commands: api/just.md
       - Dat tools: api/dat_tools.md
+  - About: about.md
 
 plugins:
   - search
+  - dat-vault:
+      repo_blob: https://github.com/oblinger/dvc-dat/blob/main/
+  - mkdocs-jupyter:
+      include: ["*.ipynb"]
+      execute: false
+      include_source: true
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -35,10 +69,18 @@ plugins:
             show_signature_annotations: true
             filters: ["!^_[^_]"]
 
-
-# The anchor pages that share doc/ with the site source (2026-10-19): never built into the site
+# The anchor pages that share doc/ with the site source (2026-10-19), the spines the nav replaces (246 A4),
+# the notebooks' scripts and the demos' working folders: never built into the site. Only the notebooks and
+# their figures publish from DAT Demos/.
 exclude_docs: |
   DAT Track/
   DAT Design/
   DAT Hooks.md
+  Docs.md
+  DAT User Docs.md
+  overview.md
+  DAT Modules/dat.md
+  *.py
+  DAT Demos/*/
+  DAT Demos/jupytext.toml
   .obsidian/

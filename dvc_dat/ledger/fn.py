@@ -519,11 +519,17 @@ class Fn:
     own claim as written (``@dat.fn(reproducible=...)``, SVP 251 Q2)."""
 
     name: str
+    """The dotted name."""
     module: Path
+    """The source file."""
     mount: Optional[str]
+    """The mounted prefix, when sandboxed."""
     signature: inspect.Signature
+    """The keys it takes."""
     env: Env
+    """The environment it resolved in."""
     code: Code
+    """The code it is loaded from, at a version: the snapshot, which alone has identity."""
     _rev: Any = field(repr=False, compare=False)
     _obj: Any = field(repr=False, compare=False, default=None)
     _takes_path: bool = field(repr=False, compare=False, default=False)
@@ -531,7 +537,9 @@ class Fn:
     _returns: str = field(repr=False, compare=False, default="")
     _info: Dict[str, Any] = field(repr=False, compare=False, default_factory=dict)
     kind: str = "ledger"
+    """``"ledger"`` or ``"dat"``, read off the function."""
     reproducible: Any = None
+    """The function's own claim, as written."""
 
     def __repr__(self) -> str:
         """``<Fn plane.measure.length@2.7.1>``: the name, ``@`` its code's version (DAT 1036, 1037)."""

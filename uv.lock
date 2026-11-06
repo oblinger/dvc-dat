@@ -9,6 +9,7 @@ resolution-markers = [
 [options]
 
 [options.exclude-newer-package]
+mkdocs-jupyter = "2026-10-17T00:00:00Z"
 urllib3 = "2026-10-17T00:00:00Z"
 griffelib = "2026-10-17T00:00:00Z"
 mkdocs = "2026-10-17T00:00:00Z"
@@ -439,6 +440,8 @@ dev = [
     { name = "xlsxwriter" },
 ]
 docs = [
+    { name = "griffelib" },
+    { name = "mkdocs-jupyter" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "mkdocstrings-python" },
@@ -466,6 +469,8 @@ dev = [
     { name = "xlsxwriter", specifier = ">=3.2.9" },
 ]
 docs = [
+    { name = "griffelib" },
+    { name = "mkdocs-jupyter", specifier = "==0.26.3" },
     { name = "mkdocs-material", specifier = "==9.7.7" },
     { name = "mkdocstrings", extras = ["python"], specifier = "==1.0.7" },
     { name = "mkdocstrings-python", specifier = "==2.0.9" },
@@ -984,6 +989,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ce/25/b3cccb187655b9393572bde9b09261d267c3bf2f2cdabe347673be5976a6/mkdocs_get_deps-0.2.2.tar.gz", hash = "sha256:8ee8d5f316cdbbb2834bc1df6e69c08fe769a83e040060de26d3c19fad3599a1", size = 11047, upload-time = "2026-03-10T02:46:33.632Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/88/29/744136411e785c4b0b744d5413e56555265939ab3a104c6a4b719dad33fd/mkdocs_get_deps-0.2.2-py3-none-any.whl", hash = "sha256:e7878cbeac04860b8b5e0ca31d3abad3df9411a75a32cde82f8e44b6c16ff650", size = 9555, upload-time = "2026-03-10T02:46:32.256Z" },
+]
+
+[[package]]
+name = "mkdocs-jupyter"
+version = "0.26.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ipykernel" },
+    { name = "jupytext" },
+    { name = "mkdocs" },
+    { name = "mkdocs-material" },
+    { name = "nbconvert" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/aa/f8d15409a9a3112486994a80d5a975694c7d145c4f8b5b484aeb383420ef/mkdocs_jupyter-0.26.3.tar.gz", hash = "sha256:e1e8bd48a1b96542e84e3028e3066112bac7b94d95ab69f8b91305c84003ca26", size = 1628353, upload-time = "2026-04-17T18:56:31.517Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/95/cf3f7fe4910cf0365fa8ea0c731f4b8a624d97cd76ea777913ac8d0868e2/mkdocs_jupyter-0.26.3-py3-none-any.whl", hash = "sha256:cd6644fb578131157194d750fd4d10fc2fd8f1e84e00036ee62df3b5b4b84c82", size = 1459740, upload-time = "2026-04-17T18:56:30.031Z" },
 ]
 
 [[package]]

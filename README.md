@@ -75,7 +75,7 @@ uv run python -m pytest
 ## Demos
 
 Runnable notebooks in [`doc/DAT Demos/`](https://github.com/oblinger/dvc-dat/tree/main/doc/DAT%20Demos), each paired
-with a `py:percent` script (jupytext) and executed with its outputs kept; `just demo` re-syncs and re-runs them:
+with a `py:percent` script (jupytext) and executed with its outputs kept; `just demo` regenerates and re-runs them:
 
 - [`demo-walkthrough`](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Demos/demo-walkthrough.ipynb) — a small project end to end: a mounted
   folder of YAML templates, a `dat.base` chain, `Dat.manager.run()` and a keyword fork, loading a dat, the
