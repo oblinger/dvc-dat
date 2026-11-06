@@ -63,7 +63,7 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 ::: dvc_dat.just.command
 
-## Rerunnability
+## Pin and rerun
 
 ::: dvc_dat.ledger.pin
     options:

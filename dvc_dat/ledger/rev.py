@@ -149,7 +149,7 @@ class Rev:
         self.ledger = ledger
         """The ledger this view reads."""
         self.id = id
-        """The revision number."""
+        """The revision number this view reads as of; revision 0 is the empty ledger."""
         self._rec = _rec
         self._cards: Dict[str, str] = {}
 
@@ -157,7 +157,7 @@ class Rev:
 
     @property
     def tx(self) -> str:
-        """``db/tx/<id>``: the subject carrying this revision's transaction provenance."""
+        """``db/tx/<id>``: the subject holding this revision's ``db/by``, ``db/time`` and transaction keywords."""
         return f"db/tx/{self.id}"
 
     def __repr__(self) -> str:
@@ -167,16 +167,25 @@ class Rev:
 
     @property
     def timezone(self) -> Any:
-        """The zone this revision shows times in: the ``ZoneInfo`` its ``db db/timezone`` row names, UTC with
-        none. Stamps are stored UTC; this decides only how they print, and any revision may change it."""
+        """The zone this revision prints times in, as a ``ZoneInfo``, UTC when none is set.
+
+        The ``(db, db/timezone, <IANA name>)`` row as of this revision names it (SVP 1505 Q2). Stamps are stored UTC
+        and never move; the setting decides only how they print, so any revision may add, change or remove it
+        (``t.add("db", "db/timezone", "America/Los_Angeles")``). The clock built-ins of ``rev.ns.expand`` are in it
+        too ([Expansion][expansion-nsexpand]).
+        """
         from zoneinfo import ZoneInfo
 
         held = self._held("db", TIMEZONE) if self.id else []
         return zone_named("db", show(held[0].obj)) if held else ZoneInfo("UTC")
 
     def show_time(self, stamp: str) -> str:
-        """A stored UTC stamp (``db/time``, ``db/sealed-at``, ``v.sealed``) as this revision prints it, in its
-        ``timezone``: ``2026-11-01T14:03:22-07:00``; with no ``db/timezone`` row the stamp unchanged."""
+        """A stored UTC stamp as this revision prints it, in its ``timezone``: ISO 8601 with the zone's offset.
+
+        Applies to ``db/time``, ``db/sealed-at`` and ``v.sealed``: ``2026-11-01T14:03:22-07:00``; with no
+        ``db/timezone`` row the stamp is unchanged. A ``Row`` of ``db/time`` or ``db/sealed-at`` prints this way in
+        its own revision's zone, and ``just history`` in the head's.
+        """
         return shown_in(stamp, self.timezone)
 
     def __eq__(self, other: object) -> bool:
@@ -411,7 +420,14 @@ class Rev:
         return (bool(found), found[0] if found else None)
 
     def __getitem__(self, key: Any) -> Any:
-        """One match of a pattern: ``rev[s]`` the record (a dict), ``rev[s, p]`` one object, ``rev[s, p, o]`` a Rev."""
+        """One match of a pattern: ``rev[s]`` the record, ``rev[s, p]`` one object, ``rev[s, p, o]`` a ``Rev``.
+
+        ``rev[s]`` is the subject's record: a dict of predicate to object (a list for a ``many`` predicate); no rows
+        is ``KeyError``. ``rev[s, p]`` is the one held object; nothing held is ``KeyError``, a ``many`` predicate
+        ``TypeError`` naming ``all``, an object whose tag mismatches the predicate's ``db/type`` ``TypeError``.
+        ``rev[s, p, o]`` is the revision of the held triple's earliest add not since removed; not held is
+        ``KeyError``.
+        """
         k = (key,) if isinstance(key, str) else key
         if not isinstance(k, tuple):
             raise TypeError(f"a bracket read is a str or a 2- or 3-tuple, not {key!r}")
@@ -427,7 +443,10 @@ class Rev:
         return value
 
     def get(self, *pattern: Any, default: Any = None, since: Optional["Rev"] = None) -> Any:
-        """``[]`` with ``default`` instead of ``KeyError`` on none; ``since`` keeps rows in ``(since, id]``."""
+        """The ``[]`` read with ``default`` instead of ``KeyError`` on none.
+
+        ``since`` keeps rows in ``(since, id]``: what one transaction wrote, or what moved between two releases.
+        """
         after = self._after(since)
         found, value = self._one(tuple(pattern), after, False)
         if len(pattern) == 2 and since is None:
@@ -438,13 +457,17 @@ class Rev:
         return value if found else default
 
     def all(self, *pattern: Any, since: Optional["Rev"] = None) -> list:
-        """Every match of the fold, binding the open positions, ordered by revision; loose (no type check)."""
+        """Every currently held match of the pattern (the fold), binding the open positions, in revision order.
+
+        A prefix glob ``"game/*"`` binds the subject. Not checked against ``db/type`` (loose). More than three
+        positions is ``TypeError``; a ``*`` anywhere but the end is ``ValueError``.
+        """
         out = self._pattern(pattern, self._after(since))
         self._record_call("all", pattern, since, out)
         return out
 
     def __contains__(self, triple: Any) -> bool:
-        """Whether the triple is held at this revision, by the same fold."""
+        """``(s, p, o) in rev``: whether the triple is held at this revision, by the same fold."""
         if not (isinstance(triple, tuple) and len(triple) == 3):
             raise TypeError("`in` takes a (subject, predicate, object) triple")
         s, p, o = triple
@@ -454,9 +477,14 @@ class Rev:
         return out
 
     def history(self, *pattern: Any, since: Optional["Rev"] = None) -> List[Row]:
-        """The history of a pattern, unfolded: every row at or before this revision (or in
-        ``(since, id]``), removes included, in ``(rev, ord)`` order (A48); ``all`` is the same
-        pattern folded. The trace records it under its call name ``rows``."""
+        """The history of a pattern, unfolded: every row that holds at or before this revision.
+
+        Rows are in ``(rev, ord)`` order (A48); removes are included, and when ``since`` is given, only rows in
+        ``(since, id]`` show. ``all`` is the same pattern folded.
+
+        No pattern is the ledger as stored; ``history(s, p, o)`` with ``added`` true says when a triple was set. The
+        trace records it under its call name ``rows``.
+        """
         n = len(pattern)
         if n > 3:
             raise TypeError(f"a pattern fixes at most 3 positions, not {n}")
@@ -575,7 +603,16 @@ class Rev:
 
     def refs(self, *, s: Any = None, kind: Any = None, fn: Any = None, where: Optional[Dict[str, Any]] = None,
              one: bool = False, since: Optional["Rev"] = None, **preds: Any) -> Any:
-        """The subjects satisfying every constraint, each a ``Ref`` at this rev; ``one=True``: exactly one."""
+        """Returns a ``Ref`` to every subject matching the query, sealed value or not.
+
+        ``refs``, ``values`` and ``value`` take the same query and pick the same subjects: a bare keyword names a pred
+        (any member of a ``many`` pred); ``kind=`` a ``Value`` class or dotted name, following ``db/moved`` renames;
+        ``fn=`` the producing function's dotted name; ``where={p: o}`` any predicate, ``None`` meaning any object;
+        ``s`` an exact subject or a prefix glob; ``since`` keeps rows in ``(since, id]``.
+
+        ``one=True`` returns the single match: none is ``KeyError``, several ``Multiple``. A dotted predicate neither
+        declared nor on any row is ``Unindexed``.
+        """
         plain = self._plain()
         subs = plain._subjects(s, kind, fn, where, since, preds)
         self._query_record(s, kind, fn, where, one, since, preds, subs)
@@ -590,7 +627,7 @@ class Rev:
 
     def values(self, *, s: Any = None, kind: Any = None, fn: Any = None, where: Optional[Dict[str, Any]] = None,
                since: Optional["Rev"] = None, **preds: Any) -> List[Value]:
-        """Every sealed value matching the where clause of ``refs``, loaded at this rev."""
+        """The values of ``refs``'s matching subjects, loaded, keeping only subjects that hold a sealed value."""
         plain = self._plain()
         subs = [x for x in plain._subjects(s, kind, fn, where, since, preds) if plain._held(x, "db/value")]
         self._query_record(s, kind, fn, where, False, since, preds, subs)
@@ -601,7 +638,10 @@ class Rev:
 
     def value(self, *, s: Any = None, kind: Any = None, fn: Any = None, where: Optional[Dict[str, Any]] = None,
               since: Optional["Rev"] = None, **preds: Any) -> Value:
-        """The one sealed value matching the where clause of ``refs``: ``KeyError`` on none, ``Multiple`` on several."""
+        """Same as ``values``, but exactly one match: none is ``KeyError``, several ``Multiple``.
+
+        The query is the same as ``refs``'s.
+        """
         plain = self._plain()
         subs = [x for x in plain._subjects(s, kind, fn, where, since, preds) if plain._held(x, "db/value")]
         self._query_record(s, kind, fn, where, False, since, preds, subs)
@@ -617,7 +657,14 @@ class Rev:
     def select(self, keys: Tuple[str, ...], *, s: Any = None, kind: Any = None, fn: Any = None,
                where: Optional[Dict[str, Any]] = None, one: bool = False, since: Optional["Rev"] = None,
                **preds: Any) -> Any:
-        """Each match as a tuple of its objects for ``keys`` (``None`` where absent, a list for ``many``)."""
+        """Returns the chosen preds of every matching subject, without loading the value (the same query as ``refs``).
+
+        Each match is a tuple of its objects for ``keys``, ``None`` where absent, a list for a ``many`` predicate.
+        ``rev.select(("home", "away"), s="game/*")`` reads two preds of every game from the ledger alone, where
+        ``values`` would fetch each value's bytes.
+
+        ``keys`` not a non-empty tuple is ``TypeError``; ``one=True`` as in ``refs``.
+        """
         if isinstance(keys, str) or not isinstance(keys, tuple) or not keys:
             raise TypeError(f"select takes a non-empty tuple of predicate names first, not {keys!r}")
         plain = self._plain()
@@ -653,35 +700,90 @@ class Rev:
             self._rec[f"{name} db/alias"] = text
 
     def load(self, subject: str) -> Value:
-        """``Ref(rev, subject).load()``: an alias resolves; reading through one records the binding (A35)."""
+        """``Ref(rev, subject).load()``: the value under a subject or an alias, decoded, its provenance restored.
+
+        An alias resolves; reading through one records the binding (A35).
+        """
         return Ref(self, subject).load()
 
     @property
     def ns(self) -> "LedgerNamespace":
-        """The ledger's namespace at this revision (DAT 1051): ``rev.ns.load(name)`` is what the dotted
-        ``name`` denotes here: the ``db/mount`` rows longest prefix first, a mounted ``.yaml``/``.json``
-        read from the checkout as a dict, a mounted function its ``Fn`` (read off the file, never
-        imported here; ``kind`` ``"ledger"`` for a ``@dat.fn``, ``"dat"`` for an undecorated run
-        function), a mounted module-level literal its value; a name under no mount imported, a
-        ``@dat.fn`` its ``Fn``. ``ImportError`` / ``KeyError`` when nothing answers.
-        ``rev.ns.mounts()`` is the mount table, ``{prefix: {"root", "repo"}}``."""
+        """The ledger's namespace at this revision (DAT 1046, DAT 1051).
+
+        It is the ``Namespace`` interface of [DAT Namespace
+        API](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Design/DAT%20API/DAT%20Namespace%20API.md):
+        ``rev.ns.load(name)`` is what the dotted ``name`` denotes here, ``rev.ns.mounts()`` the ``db/mount`` rows as
+        ``{prefix: {"root": ..., "repo": ...}}``, ``rev.ns.expand(template, **vars)`` a template filled through these
+        names in this revision's [display zone][dvc_dat.ledger.Rev.timezone] with ``{unique}`` counted against this
+        revision ([Expansion][expansion-nsexpand]), and ``mount`` is ``TypeError`` (a transaction's
+        [``t.ns``][dvc_dat.ledger.Transaction.ns] mounts).
+
+        A mounted name is ``mnt.<prefix>...``: the ``db/mount/<prefix>`` rows as of the revision are walked longest
+        prefix first for the name after ``mnt.``; under a mount the name is a path in the mount's tree, in the
+        checkout discovery reports for its ``db/repo`` (none is ``NotEvaluated``): a ``.yaml``/``.yml``/``.json`` file
+        is read and comes back a dict (a dotted tail below the file walks into it), a function in a ``.py`` file comes
+        back its [``Fn``][fn-interface], read off the file and never imported in this process, and a module-level
+        literal (``TABLE = {...}``) its value. A mounted prefix owns its names: one nothing answers to is
+        ``ImportError``, a file and a module answering to one name ``KeyError``.
+
+        A name not starting ``mnt.`` is never a mount and is imported (unsandboxed); ``mnt`` alone, or a ``mnt.`` name
+        under no mount, is ``ImportError``. Imported, a ``@dat.fn`` comes back its ``Fn`` and anything else as itself.
+        An ``Fn``'s ``kind`` is read off the function: ``"ledger"`` for a ``@dat.fn``, ``"dat"`` for an undecorated
+        one, a dat's ``run`` function, which runs only through a spec ([``run``][dvc_dat.ledger.Rev.run]).
+
+        In a project whose ``.datconfig.yaml`` names a ledger, ``Dat.manager.ns`` is this namespace at the head,
+        ``mount`` refused; inside a sandboxed dat body it is this namespace at the run's revision (DAT 1047). See
+        [Execution Semantics][execution-semantics].
+        """
         from .namespace import LedgerNamespace
 
         return LedgerNamespace(rev=self, unguarded=True)
 
     def run(self, target: Any, /, *, seal: Any = OWN, clean: bool = False, path: Any = None,
             **kwargs: Any) -> Optional[Value]:
-        """The API form of ``just run TARGET KEY=VALUE``: the result found if computed before by this code,
-        else run and sealed as the memo entry (DAT 1046).
+        """The result of ``target``, already sealed if one from the same code and memo key still holds.
 
-        ``target`` is a dotted name (through ``rev.ns.load``) or a spec dict. A ledger function's name: its
-        ``Fn`` called with ``kwargs`` as its keys. A spec, a spec's name or a dat's run function's name
-        (the spec ``{dat: {do: <name>}}``): a dat, ``kwargs`` merged into its ``dat.kwargs``; the memo key
-        is the spec with ``dat.base`` merged, ``dat.kind`` set, every ``{}`` expanded and ``dat.name``
-        removed; a miss creates the dat in a work folder and runs it there, in the sandbox worker when its
-        run function is mounted (provenance ``eval:sandbox``), here when installed (``eval:unsandboxed``,
-        a clean checkout to save). ``seal``, ``clean`` and ``path`` as ``Fn.__call__``'s; a dat's name is
-        ``path=``, else its ``dat.name`` template, else ``anonymous/Dat{unique}``."""
+        This is the API form of ``just run TARGET KEY=VALUE`` (DAT 1046); a miss runs the target and seals the result
+        as the memo entry.
+
+        ``target`` is a dotted name, resolved as by [``ns.load``][dvc_dat.ledger.Rev.ns], or a spec dict. A ledger
+        function's name: its ``Fn`` runs with ``kwargs`` as its keys, which are its memo key. Anything else is a dat:
+        a spec, a spec's name, or a dat's run function's name (the spec ``{dat: {do: <name>}}``), ``kwargs`` updating
+        the spec's ``dat.kwargs``.
+
+        A dat's memo key, ``db/keys``, is the spec with its ``dat.base`` merged, the kwargs merged, ``dat.kind`` set
+        and every ``{}`` expanded once (dotted names through the ledger's namespace; undotted ones the expansion
+        variables, ``dat.defaults`` overridden by ``dat.kwargs``, SVP 1508), ``dat.preds`` kept as its template
+        (expanded when the dat is made and sealed as its preds), ``dat.name`` removed; ``db/fn`` is the run function's
+        dotted name and ``db/returns`` the dat's class.
+
+        A miss creates the dat in a work folder and runs it there (the machinery of ``Dat.manager.run``), then seals
+        the folder the run function saved; a run that leaves its dat open is ``ValueError``. Where a miss runs is the
+        function's: under a ``db/mount``, in the sandbox worker, imported there from the mounted tree and never in the
+        calling process, confined, its code the modules it loaded, provenance ``eval:sandbox``, no ``code/<repo>``
+        item (a dat's run function gets the caller's dat folders and art folder, its ``Dat.manager.ns`` a
+        ``LedgerNamespace`` at this revision); installed, in this process, its code the static closure and the
+        ``code/<repo>`` commit, which needs a clean checkout (``NotEvaluated``), provenance ``eval:unsandboxed``.
+
+        ``seal``, ``clean`` and ``path`` behave as on [``Fn.__call__``][dvc_dat.ledger.Fn.__call__]; ``seal`` says
+        where the result goes: by default, the hit, else run and save it as the memo entry; ``seal=False`` runs and
+        keeps nothing; ``seal=True`` runs and seals locally; ``seal=t`` saves into an open transaction; ``seal="get"``
+        returns the saved result or ``None`` and never runs ([Running][running]).
+
+        ``clean=True`` requires the function's checkout to be clean (no uncommitted changes, and the HEAD at the
+        commit of the latest clean run this revision records, its ``db/repo/<repo>`` row), else it raises
+        ``NotClean``; by default a sandboxed function runs at HEAD, clean or dirty. A function claiming ``exact``
+        (``@dat.fn(reproducible="exact")``) has its lookup match the card and driver too, on top of the ledger's memo
+        policy ([Memoization and the platform][memoization-and-the-platform]).
+
+        ``path`` names the result; a dat's name is ``path=``, else its spec's ``dat.name`` template (``{unique}``
+        counting up in the data folder), else ``anonymous/Dat{unique}``, and a hit is handed back at its name, its
+        folder a view there.
+
+        A spec naming a ``@dat.fn`` in ``dat.do`` is ``TypeError``; a target that is neither a ``str`` nor a dict is
+        ``TypeError``. The dat's recorded dependencies that are names on the ledger enter its trace as alias reads.
+        See [Execution Semantics][execution-semantics] and [Value Provenance][value-provenance].
+        """
         from .sandbox import unguarded
 
         with unguarded():                          # in a sandboxed body: the lookup and seal are the ledger's
@@ -690,14 +792,22 @@ class Rev:
             return run(self, target, seal=seal, clean=clean, path=path, kwargs=kwargs)
 
     def rerun(self, value: Any) -> "Rerun":
-        """Run the pinned function behind ``value`` again, at its tag, over its recorded keys, and compare the
-        hash (SVP 250): a ``Rerun`` whose ``outcome`` is ``reproduced``, ``differed-as-allowed``,
-        ``differed-nondeterministic`` or ``differed-deterministic``, read off the value's claim (SVP 251 Q2).
-        ``value`` is a sealed ``Value``, a ``Ref`` or a name. The commit must be pinned on this ledger (``t.pin``),
+        """Run the pinned function behind ``value`` again, at its tag, over its recorded keys, and compare the hash.
+
+        This is a ``Rerun`` ([Rerunnability][rerunnability]) whose ``outcome`` is ``reproduced``,
+        ``differed-as-allowed``, ``differed-nondeterministic`` or ``differed-deterministic``, read off the value's
+        claim (SVP 250, SVP 251 Q2); it also carries ``hash``, ``expected``, ``reproducible`` (the level the value's
+        claim gave it, [Reproducibility][reproducibility]), ``commit``, ``tag`` and ``worktree``.
+
+        ``value`` is a sealed ``Value``, a ``Ref`` or a name. Its commit must be pinned on this ledger (``t.pin``),
         else ``NotPinned``; every input must still resolve here. A copied value runs at its origin
-        (``db/copied-from``) while that ledger can be found, else here. The run is a
-        fresh interpreter over a worktree at the tag (fetched at depth 1 when the checkout here lacks the
-        commit), sandboxed functions in that interpreter's worker; nothing is written. See ``dvc_dat.ledger.pin``."""
+        (``db/copied-from``) while that ledger can be found, else here.
+
+        The run is a fresh interpreter over a worktree at the tag under ``<ledger>/rerun/<commit12>/<repo>`` (a
+        worktree of the checkout here when it holds the commit, else ``git clone --depth 1 --branch dat/<commit12>``
+        from its remote; reused across reruns), synced from its ``uv.lock`` when it has one; a sandboxed function runs
+        in that interpreter's worker. Nothing is written. See ``dvc_dat.ledger.pin``.
+        """
         from .pin import rerun
 
         return rerun(self, value)
