@@ -4,6 +4,9 @@ The plugin needs mkdocs (`uv sync --group docs`), so these skip under the plain 
 `site/` skip until `mkdocs build` has run; `.github/workflows/docs.yml` runs them after its build.
 """
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import unquote
@@ -149,6 +152,12 @@ def test_every_api_page_opens_with_its_modules_figure_and_a_link_back(page):
     assert figure and back, f"{page.name}: no figure and link back in its first lines"
     for target in (re.search(r"\]\(([^)#]+)", line).group(1) for line in (figure, back)):
         assert (page.parent / unquote(target)).exists(), target
+
+
+@pytest.mark.skipif(shutil.which("just") is None, reason="no just")
+def test_the_cli_pages_usage_block_is_the_justfiles():
+    done = subprocess.run([sys.executable, str(REPO / "doc" / "sync_cli_usage.py"), "--check"], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
 
 
 @needs_site
