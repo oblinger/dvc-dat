@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import threading
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Sequence
 
@@ -97,12 +98,26 @@ _RUN: "contextvars.ContextVar[Optional[RunFrame]]" = contextvars.ContextVar("dvc
 #: Every run open in this process, innermost last: a thread a body started inherits no context, and reads for
 #: the latest. A child process is out of scope, as for the sandbox's audit hook.
 _OPEN: List[RunFrame] = []
+#: The attribute ``Thread.start`` leaves on a thread started inside a run (a body, or a thread one started).
+_IN_RUN = "_dvc_dat_in_run"
+_thread_start = threading.Thread.start
+
+
+def _start(self: threading.Thread) -> None:
+    """``Thread.start``, marking a thread started inside a run: only such a thread reads for an open run that is
+    not its own (SVP 1549). A thread started outside every run, such as a second caller racing the first for
+    one memo entry, reads for none: its reads joined the other's run, and the two entries' subjects differed."""
+    setattr(self, _IN_RUN, current_run() is not None)
+    _thread_start(self)
+
+
+threading.Thread.start = _start  # type: ignore[method-assign]
 
 
 def current_run() -> Optional[RunFrame]:
-    """The run this code is inside: this context's, else (a thread its body started) the latest open."""
+    """The run this code is inside: this context's, else, in a thread started inside a run, the latest open."""
     frame = _RUN.get()
-    if frame is None and _OPEN:
+    if frame is None and _OPEN and getattr(threading.current_thread(), _IN_RUN, False):
         frame = _OPEN[-1]
     return frame
 

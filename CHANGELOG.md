@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.64.1 — 2026-11-06
+
+- **Fix: a thread started outside every run no longer reads for another thread's run (SVP 1549).** The `foreign:` hook (SVP 1521) gave a read in a thread with no run of its own to the latest open run, any thread's. Two threads racing for one memo entry each recorded the other's `eval:` as a `foreign:` item, so the two entries' traces, and subjects, differed. `Thread.start` now marks a thread started inside a run; only such a thread reads for an open run that is not its own. A thread a body starts is unchanged.
+
 ## 2.64.0 — 2026-11-06
 
 - **`Value.Table` encodes its columns, not how they were held (SVP 1543; minor).** `encode` drops schema metadata (the table's and each top-level field's, pandas' included), combines chunks, names every parquet writer option, and writes the footer's `created_by` as `dvc-dat Value.Table` in place of `parquet-cpp-arrow version <x>`. Equal tables now give the same bytes whatever their chunking, pandas or arrow origin, metadata, or pyarrow version (25.0.1 and 26.0.0 measured identical), and a table over 131072 rows re-encodes the same after a read. A decoded table carries no metadata: a `DataFrame`'s pandas metadata is not restored. **Stored hashes of every `Value.Table` move**: an old lookup misses and recomputes; nothing wrong is returned.
