@@ -209,9 +209,6 @@ def breaks(reason, raises=AssertionError):
 PICKLE_ORDER = "Blob: pickle writes a dict in insertion order and a set in iteration order"
 PICKLE_MEMO = "Blob: pickle's memo records object identity, so a repeated object and an equal copy differ"
 SET_REBUILT = "Blob: a decoded set is rebuilt by inserts, so its iteration order, and its pickle, can move"
-PARQUET_CHUNKS = "Table: parquet's pages follow the table's chunks, and a long table decodes in 131072-row chunks"
-PARQUET_META = "Table: the schema metadata (pandas adds its own) is in the bytes and outside Table.equals"
-PARQUET_VERSION = "Table: the footer names the pyarrow version, so a pyarrow upgrade moves every hash"
 SPEC_ORDER = "Dat: core writes _spec_.yaml in the spec's key order; sv-pipe's LedgerDat sorts what it stores"
 CODE_NO_DECODE = "Code: decode is not implemented, and encode omits the description decode would have to restore"
 
@@ -259,7 +256,7 @@ ROUND_TRIPS = [
     pytest.param(lambda: Table(pa.table({"s": pa.array(["a", "b", "a"]).dictionary_encode()})), id="table-dictionary"),
     pytest.param(lambda: Table(pa.table(rows()).replace_schema_metadata({"k": "v"})), id="table-metadata"),
     pytest.param(lambda: Table(pa.table({"x": np.arange(READ_BATCH)})), id="table-one-batch"),
-    pytest.param(lambda: Table(long_table()), id="table-long", marks=breaks(PARQUET_CHUNKS)),
+    pytest.param(lambda: Table(long_table()), id="table-long"),
 ]
 
 
@@ -344,13 +341,12 @@ PAIRS = [
     pytest.param(lambda f: Table(pa.table(rows())), lambda f: Table(pa.table(rows())), id="table-arrow"),
     pytest.param(lambda f: Table(frame()), lambda f: Table(frame().copy()), id="table-pandas"),
     pytest.param(lambda f: Table(long_table()), lambda f: Table(chunked(1000)), id="table-short-chunk"),
-    pytest.param(lambda f: Table(long_table()), lambda f: Table(chunked(READ_BATCH)), id="table-other-chunks",
-                 marks=breaks(PARQUET_CHUNKS)),
+    pytest.param(lambda f: Table(long_table()), lambda f: Table(chunked(READ_BATCH)), id="table-other-chunks"),
     pytest.param(lambda f: Table(frame()), lambda f: Table(pa.table({"x": [1, 2, 3], "s": ["a", "b", "c"]})),
-                 id="table-pandas-versus-arrow", marks=breaks(PARQUET_META)),
+                 id="table-pandas-versus-arrow"),
     pytest.param(lambda f: Table(pa.table(rows())),
                  lambda f: Table(pa.table(rows()).replace_schema_metadata({"k": "v"})),
-                 id="table-other-metadata", marks=breaks(PARQUET_META)),
+                 id="table-other-metadata"),
     pytest.param(lambda f: plain_folder(f / "a"), lambda f: plain_folder(f / "b", ("é.txt", "sub/b.txt", "a.txt")),
                  id="dat-files-other-order"),
     pytest.param(lambda f: created(f / "a"), lambda f: created(f / "b"), id="dat-spec-other-path"),
@@ -378,9 +374,22 @@ def test_a_code_hash_is_the_hash_of_its_encoding():
     assert code().hash == hashlib.sha256(encoded(code())).hexdigest()
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=PARQUET_VERSION)
 def test_table_bytes_do_not_name_the_pyarrow_version():
     assert pa.__version__.encode() not in encoded(Table(pa.table(rows())))
+
+
+def test_table_bytes_are_parquet_that_names_dvc_dat_as_its_writer():
+    import pyarrow.parquet as pq
+
+    data = encoded(Table(frame()))
+    assert pq.ParquetFile(io.BytesIO(data)).metadata.created_by == "dvc-dat Value.Table"
+    assert pd.read_parquet(io.BytesIO(data)).equals(frame())
+
+
+def test_table_field_metadata_is_not_in_the_bytes():
+    plain = pa.table(rows())
+    tagged = plain.cast(pa.schema([f.with_metadata({"unit": "m"}) for f in plain.schema]))
+    assert_same_bytes(Table(plain), Table(tagged))
 
 
 # --- deterministic: the same value in processes of their own, under other hash seeds -----------------------------

@@ -8,6 +8,7 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **`Value.Table` encodes its columns, not how they were held (SVP 1543).** `encode` drops schema metadata (the table's and each top-level field's, pandas' included), combines chunks, names every parquet writer option, and writes the footer's `created_by` as `dvc-dat Value.Table` in place of `parquet-cpp-arrow version <x>`. Equal tables now give the same bytes whatever their chunking, pandas or arrow origin, metadata, or pyarrow version (25.0.1 and 26.0.0 measured identical), and a table over 131072 rows re-encodes the same after a read. A decoded table carries no metadata: a `DataFrame`'s pandas metadata is not restored. **Stored hashes of every `Value.Table` move**: an old lookup misses and recomputes; nothing wrong is returned.
 - **A value's encoding is deterministic and lossless (SVP 1542).** The rule is on `Value` and in [DAT Ledger](doc/DAT%20Modules/ledger/DAT%20Ledger.md) § Value Interface, and `tests/ledger/test_value_encoding.py` measures `Value.Blob`, `Value.Table`, `Dat` and `Code` against it; what each breaks today is `xfail(strict=True)`. Docs and tests: no encoding changed.
 - **The Rerunning tutorial (SVP 245).** `demo-rerunning`: a past revision read, today's code over it, a sweep through `L.revs`, what a sweep recomputes, and a value rerun from its pinned commit. Docs only.
 
