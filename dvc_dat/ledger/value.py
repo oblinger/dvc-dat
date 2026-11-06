@@ -46,7 +46,7 @@ class Value:
     """The object itself, with its provenance on it."""
 
     Dependencies: ClassVar[Any] = Mapping[str, str]
-    """The type of ``dependencies``: item name to version or hash."""
+    """The type of ``dependencies``, for annotations: item name to version or hash."""
     #: The pred names a kind declares (``@ledger_class``); none by default.
     _ledger_preds: ClassVar[tuple] = ()
     #: Relative-path suffixes of the subdats a seal declines by default (SVP 241); ``seal(skip=)`` adds to them.
@@ -54,15 +54,24 @@ class Value:
     """Relative-path suffixes of the subdats a seal declines by default; ``seal(skip=)`` adds to them, ``skip=()`` clears them."""
 
     subject: Optional[str] = None
-    """Its ledger subject once saved."""
-    rev: Optional["Rev"] = None
-    """The revision that saved it."""
-    dependencies: Mapping[str, str] = _EMPTY
-    """What producing it read."""
-    sealed: Optional[str] = None
-    """The seal's moment, UTC ``YYYY-MM-DDTHH:MM:SSZ``, or ``None`` while unsealed, so it reads as the boolean too.
+    """The 64-hex subject the value was saved under.
 
-    The identity is fixed by ``v.seal()`` or a save.
+    ``None`` until saved, including when sealed by ``seal()`` alone.
+    """
+    rev: Optional["Rev"] = None
+    """The revision that saved the value; set at commit or by ``load``."""
+    dependencies: Mapping[str, str] = _EMPTY
+    """What producing it read: item name to version or hash.
+
+    Empty for a hand-built value until saved; a run's result carries its trace here at every ``seal=`` level. See
+    [Value Provenance][value-provenance].
+    """
+    sealed: Optional[str] = None
+    """The seal's moment, UTC ``YYYY-MM-DDTHH:MM:SSZ``, or ``None`` while unsealed.
+
+    So ``if v.sealed:`` reads as the boolean too. The identity is fixed by ``v.seal()`` (saved nowhere yet,
+    ``subject`` ``None``) or by a save (printed in a zone by [`rev.show_time`][dvc_dat.ledger.Rev.show_time]). A time
+    rather than a revision because a seal can precede any ledger; the revision is ``rev``, set at the save.
     """
 
     def __init__(self, *, name: Optional[str] = None) -> None:
@@ -120,7 +129,12 @@ class Value:
 
     @property
     def preds(self) -> Dict[str, Any]:
-        """A plain dict until sealed; a read-only mapping after."""
+        """A plain ``dict`` while unsealed, a read-only ``FrozenPreds`` once sealed.
+
+        Assignable as a whole while unsealed; every mutator of the sealed ``FrozenPreds`` is ``TypeError``. Each pred
+        is a ``str``, number, bool, list, ``Value`` or ``Ref``, and its name must be declared by the class's
+        ``@ledger_class`` (``Undeclared`` at the seal).
+        """
         d = self.__dict__.get("_preds")
         if d is None:
             d = self.__dict__["_preds"] = {}
@@ -133,15 +147,30 @@ class Value:
         self.__dict__["_preds"] = dict(value)
 
     def encode(self, out: IO[bytes]) -> None:
-        """Write the bytes to store to ``out``, once, forward: a write-only binary stream that hashes what
-        passes (it refuses ``seek``). Returns nothing; a test that wants the bytes passes ``io.BytesIO()``."""
+        """Write the bytes to store to ``out``, once, forward, returning nothing (DAT 240).
+
+        Abstract: every ``Value`` subclass must implement it (``NotImplementedError`` otherwise). ``out`` is a sink
+        the store opens, a write-only binary stream that hashes and counts what passes and refuses ``seek``
+        (``io.UnsupportedOperation``), so no value is held whole in memory to be sealed. ``pickle.dump``,
+        ``pq.write_table`` and ``np.save`` write to it as to a file.
+
+        A save encodes once: into a staged file in the art folder, whose hash is the value's, which the upload sends
+        and the commit links into place. Two calls must write the same bytes, or a value sealed by ``v.seal()`` is
+        ``SealBroken`` at its save. A test that wants the bytes passes ``io.BytesIO()``.
+        """
         raise NotImplementedError(f"{type(self).__name__} does not say how it encodes")
 
     @classmethod
     def decode(cls, src: IO[bytes], store: "ArtStore") -> "Value":
-        """The object from its bytes, read from ``src`` (a binary read stream, seekable). A subclass whose
-        ``decode`` also accepts ``name=`` is passed the name it is loaded by (an alias), or ``None`` when
-        loaded by its subject."""
+        """The object from its bytes, read from ``src`` (a binary read stream, seekable).
+
+        Abstract: every ``Value`` subclass must implement it (``NotImplementedError`` otherwise). ``src`` is the
+        stored bytes as a binary read stream: a real, seekable file (``ArtStore.open``). A subclass whose ``decode``
+        also accepts ``name=`` is passed the name it is loaded by (an alias), or ``None`` when loaded by its subject.
+
+        A value held only in memory is five lines: ``encode(self, out): torch.save(self.t, out)``, ``decode(cls, src,
+        store): return cls(torch.load(src))``.
+        """
         raise NotImplementedError(f"{cls.__name__} does not say how it decodes")
 
     def _encoded_hash(self) -> str:
@@ -182,30 +211,34 @@ class Value:
     def seal(self, to: Any = True, *, keep: bool = False, deps: Iterable[Any] = (), name: Optional[str] = None,
              provenance: Optional[str] = None, by: Optional[Union[str, Dict[str, Any]]] = None,
              skip: Optional[Iterable[str]] = None) -> str:
-        """Fix the value's identity; with a transaction or a ledger, save it too. ``to`` takes what
-        ``seal=`` on a run takes (DAT 1028), so ``f(seal=x)`` and a later ``v.seal(x)`` end in one place.
+        """Fix the value's identity; with a transaction or a ledger, save it too.
 
-        ``v.seal()`` (``v.seal(True)``) writes to no ledger: it freezes ``preds``, fixes the bytes' hash,
-        ``deps``, ``provenance``, the environment and the time, writes them as a seal record in this
-        machine's kept folder (``kept``; a later process reopens a sealed ``Dat`` from it with
-        ``Dat.sealed_at_path``), and returns the hash. With ``keep=True`` it also copies the bytes
-        into the kept cache, so the source may change.
-        ``to`` a ``Transaction`` saves into it: the subject is ``<hash of (dependencies, preds, bytes)>``
-        and lands with that revision or not at all. ``to`` a ``Ledger`` opens and commits a
-        one-value transaction of its own, written ``by`` (a ``str`` or a JSON ``dict``; default: the
-        provenance, else ``seal``).
-        Saving a value sealed earlier saves the state it was sealed in (its deps, provenance and
-        environment), and refuses with ``SealBroken`` when its bytes changed since, unless kept.
-        A run's result (``seal=False`` or ``True``) carries its trace: saving it writes the memo entry
-        the run would have, so the next identical call hits, after the code check (``NotEvaluated``).
-        ``v.seal(False)`` and ``v.seal("get")`` are ``TypeError``: nothing to do to an object.
+        ``to`` takes what ``seal=`` on a run takes (DAT 1028), so ``f(seal=x)`` and a later ``v.seal(x)`` end in one
+        place.
 
-        A save of a ``Dat`` seals the subdats in its folder tree in the same transaction (SVP 241): each its
-        own value, named ``<name>/<relpath>``, depending on this one, with its provenance, and a row
-        ``(<subject>, db/subdat/<relpath>, <ref to it>)``. ``skip`` names relative-path suffixes to decline, on
-        top of the class's ``skip_subdats`` (``viz`` declines ``viz/`` and ``run/viz/``; a plain folder named
-        declines every subdat under it): a declined subdat stays on disk, stores no byte, and its row says
-        ``str:declined``. ``skip=()`` declines nothing, the class's ``skip_subdats`` included.
+        ``v.seal()`` (``v.seal(True)``) writes to no ledger: it freezes ``preds``, fixes the bytes' hash, ``deps``,
+        ``provenance``, the environment and the time, writes them as a seal record in this machine's kept folder
+        (``kept``; a later process reopens a sealed ``Dat`` from it with ``Dat.sealed_at_path``), and returns the
+        hash. With ``keep=True`` it also copies the bytes into the kept cache, so the source may change. ``to`` a
+        ``Transaction`` (``v.seal(t)``) saves into it: the subject is ``<hash of (dependencies, preds, bytes)>`` and
+        lands with that revision or not at all. ``to`` a ``Ledger`` (``v.seal(L)``) opens and commits a one-value
+        transaction of its own, written ``by`` (a ``str`` or a JSON ``dict``, as on
+        [`transaction`][dvc_dat.ledger.Ledger.transaction]; default: the provenance, else ``seal``). ``name=`` writes
+        ``(alias, db/alias, subject)`` beside it. Saving a value sealed earlier saves the state it was sealed in (its
+        deps, provenance and environment), and refuses with ``SealBroken`` when its bytes changed since, unless kept.
+        A run's result (``seal=False`` or ``True``) carries its trace: saving it writes the memo entry the run would
+        have, so the next identical call hits, after the code check of [Running][running] (``NotEvaluated``);
+        ``deps=`` and ``provenance=`` on it are ``TypeError``. ``v.seal(False)`` and ``v.seal("get")`` are
+        ``TypeError``: nothing to do to an object. A provenance beginning ``eval:`` is ``ValueError``; a second seal
+        is ``ValueError``.
+
+        A save of a ``Dat`` seals the subdats in its folder tree in the same transaction (SVP 241), as
+        [Subdats][subdats]: each its own value, named ``<name>/<relpath>``, depending on this one, with its
+        provenance, and a row ``(<subject>, db/subdat/<relpath>, <ref to it>)``. ``skip`` names relative-path suffixes
+        to decline, on top of the class's ``skip_subdats`` (``viz`` declines ``viz/`` and ``run/viz/``; a plain folder
+        named declines every subdat under it): a declined subdat stays on disk, stores no byte, and its row says
+        ``str:declined``. ``skip=()`` declines nothing, the class's ``skip_subdats`` included; ``skip`` on
+        ``v.seal()`` is ``TypeError``, and so is a bare ``str``. See [Versioning][versioning].
         """
         from .ledger import Ledger
         from .txn import Transaction
@@ -359,7 +392,10 @@ class Value:
 
     @property
     def hash(self) -> str:
-        """The hex sha256 of what ``encode`` writes; fixed once sealed."""
+        """The hex sha256 of what ``encode`` writes; cached once sealed.
+
+        Computed into a sink that keeps nothing. After a save, the stored bytes' hash, whatever the live object holds.
+        """
         cached = self.__dict__.get("_hash")
         if cached is not None:
             return cached
@@ -370,8 +406,14 @@ class Value:
 
     @property
     def at(self) -> Optional["Rev"]:
-        """The revision the value's run read (SVP 245), its ``db/at`` row; ``rev`` is the revision that saved it.
-        A draft's comes from its trace; ``None`` for a hand seal, and for a copy, whose row stays on its origin."""
+        """The revision the value's run read (SVP 245): its ``db/at`` row.
+
+        ``rev`` is where it was saved, ``at`` what it was computed from, so a run at ``L.at(412)`` saved at 902 has
+        ``v.at.id == 412``, ``v.rev.id == 902``. A draft's comes from its trace. A memo hit hands back the entry it
+        found, whose ``at`` is the revision that entry ran at. ``None`` for a hand seal and for a [copy][copying],
+        whose row stays on its origin. A ``Dat`` reads the same revision off its run sub-dat, ``ValueError`` when it
+        ran on no ledger.
+        """
         if self.rev is not None and self.subject is not None:
             from .fn import AT
 
@@ -385,13 +427,16 @@ class Value:
         return opened_at(run.ledger).at(run.at)
 
     def matches(self, rev: "Rev") -> bool:
-        """Every dependency item at its value at ``rev``: the hit test; consults the memo only, never runs."""
+        """Every dependency item at its value at ``rev``: the hit test.
+
+        Consults the memo only, never runs.
+        """
         from .trace import trace_matches
 
         return trace_matches(rev, dict(self.dependencies))
 
     def diff(self, other: "Value") -> Dict[str, tuple]:
-        """The dependency items whose values differ: item -> (mine, theirs), ``None`` where one lacks it."""
+        """The dependency items whose values differ: item -> ``(mine, theirs)``, ``None`` where one lacks it."""
         out = {}
         for k in sorted(set(self.dependencies) | set(other.dependencies)):
             a, b = self.dependencies.get(k), other.dependencies.get(k)
@@ -400,7 +445,7 @@ class Value:
         return out
 
     def same_as(self, other: Optional["Value"]) -> bool:
-        """``hash == other.hash``; ``False`` for ``None``."""
+        """``self.hash == other.hash``; ``False`` for ``None``."""
         return other is not None and self.hash == other.hash
 
     def _provenance(self, *, subject: str, rev: "Rev", dependencies: Mapping[str, str], preds: Mapping[str, Any],
@@ -587,14 +632,21 @@ class Blob(Value):
     """Any pickleable object; ``obj`` is the object. Declares no preds (A16)."""
 
     def __init__(self, obj: Any, *, name: Optional[str] = None) -> None:
+        """A value whose bytes are ``obj`` pickled.
+
+        A value function whose return annotation is not a ``Value`` subclass has its result wrapped in one.
+        """
         self.obj = obj
+        """The wrapped object."""
         super().__init__(name=name)
 
     def encode(self, out: IO[bytes]) -> None:
+        """Pickle ``obj`` to the sink, protocol 4."""
         pickle.dump(self.obj, out, protocol=4)
 
     @classmethod
     def decode(cls, src: IO[bytes], store: "ArtStore") -> "Blob":
+        """Build the value from its pickled bytes."""
         return cls(pickle.load(src))
 
 
@@ -602,10 +654,16 @@ class Table(Value):
     """A table stored as parquet: a ``pyarrow.Table`` or a pandas ``DataFrame`` (decodes to pyarrow)."""
 
     def __init__(self, table: Any, *, name: Optional[str] = None) -> None:
+        """A value whose bytes are ``table`` as parquet.
+
+        ``table`` is a ``pyarrow.Table`` or a pandas ``DataFrame``.
+        """
         self.table = table
+        """The wrapped table; a ``pyarrow.Table`` after a load."""
         super().__init__(name=name)
 
     def encode(self, out: IO[bytes]) -> None:
+        """Write the table to the sink as parquet, a ``DataFrame`` converted first."""
         import pyarrow as pa
         import pyarrow.parquet as pq
 
@@ -614,6 +672,7 @@ class Table(Value):
 
     @classmethod
     def decode(cls, src: IO[bytes], store: "ArtStore") -> "Table":
+        """Build the value from its parquet bytes; the table is a ``pyarrow.Table``."""
         import pyarrow.parquet as pq
 
         return cls(pq.read_table(src))

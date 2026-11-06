@@ -8,7 +8,7 @@ data and code.
 Developed by Dan Oblinger <dan@sportsvisio.com>
 CTO SportsVisio Inc.
 
-## Versioning
+## Version numbers
 
 Releases follow [semver](https://semver.org), as `CHANGELOG.md` states it:
 a major marks a different DAT and is cut only by the owner (1.x the
