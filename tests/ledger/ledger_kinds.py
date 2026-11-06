@@ -276,6 +276,19 @@ def reads_foreign_in_threads(rev, *, where: str, name: str) -> dict:
     return out
 
 
+#: ``held_open``'s two events, set by the test: ``opened`` when its body is running, ``go`` to let it return.
+GATE = {}
+
+
+@dat.fn
+def held_open(rev, *, where: str, name: str) -> dict:
+    """A body that holds its run open until the test lets it go (SVP 1549): it reads nothing."""
+    GATE["opened"].set()
+    if not GATE["go"].wait(30):
+        raise TimeoutError("held_open: the test never let the run go")
+    return {"where": where, "name": name}
+
+
 @dat.fn
 def runs_foreign(rev, *, where: str, n: int) -> dict:
     """A run on another ledger, called from a body."""

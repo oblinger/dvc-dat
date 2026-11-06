@@ -249,6 +249,34 @@ def test_a_thread_the_body_started_reads_for_the_run(coded, games):
     assert v.obj == {"seen": {"game": 1}} and [n for _a, n, _r in foreign(v)] == ["G1"]
 
 
+def test_a_thread_started_outside_any_run_reads_for_no_run(coded, games):
+    """SVP 1549: a read in a thread no body started joins no run, even while another thread's run is open.
+
+    The interleaving is forced: one thread holds its run open inside the body; a second thread, started by the
+    test, reads a value on another ledger meanwhile. That read is the second thread's own; the held run records
+    nothing of it. (Two racing callers of one memo entry each recorded the other's ``eval:`` as a ``foreign:``
+    item, so their traces, and their subjects, differed.)"""
+    import threading
+
+    ledger_kinds.GATE.update(opened=threading.Event(), go=threading.Event())
+    out = {}
+
+    def held():
+        out["v"] = coded.at().run("ledger_kinds.held_open", where=str(games.path), name="G1")
+    holder = threading.Thread(target=held)
+    holder.start()
+    try:
+        assert ledger_kinds.GATE["opened"].wait(30)
+        reader = threading.Thread(target=lambda: out.update(seen=games.at().load("G1").obj))
+        reader.start()
+        reader.join()
+    finally:
+        ledger_kinds.GATE["go"].set()
+        holder.join()
+    assert out["seen"] == {"game": 1}
+    assert foreign(out["v"]) == []
+
+
 def test_outside_a_run_nothing_is_recorded(games):
     assert current_run() is None
     assert games.at().load("G1").obj == {"game": 1}
