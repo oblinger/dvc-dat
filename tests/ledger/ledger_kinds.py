@@ -251,6 +251,13 @@ def reads_foreign(rev, *, where: str, name: str) -> dict:
 
 
 @dat.fn
+def asks_last_rev(rev, *, s: str) -> dict:
+    """The revision that last touched ``s``."""
+    _count("asks_last_rev")
+    return {"last": rev.last_rev(s).id}
+
+
+@dat.fn
 def reads_foreign_nested(rev, *, where: str, name: str) -> dict:
     """Reads one foreign value itself and calls ``reads_foreign``, which reads another."""
     return {"mine": Ledger(where).at().load("mine").obj,
