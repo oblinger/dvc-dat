@@ -11,6 +11,7 @@ Every user-visible change to `dvc_dat`, newest first.
 ## 2.65.1 — 2026-11-06
 
 - **Fix: a thread started outside every run no longer reads for another thread's run (SVP 1549).** The `foreign:` hook (SVP 1521) gave a read in a thread with no run of its own to the latest open run, any thread's. Two threads racing for one memo entry each recorded the other's `eval:` as a `foreign:` item, so the two entries' traces, and subjects, differed. `Thread.start` now marks a thread started inside a run; only such a thread reads for an open run that is not its own. A thread a body starts is unchanged.
+
 ## 2.65.0 — 2026-11-06
 
 - **`safe` reads a ledger's lifetime on the root ledger (SVP 251 Q3 (B); minor).** `lifetime_of` reads `(ledger/<name>, ledger/lifetime, permanent|archival|transient)` on `ledgers.root` at its head, the registry's row, instead of on the ledger itself, so a ledger that is gone or offline is still judged. A row a ledger writes about itself is no longer read. `t.copy(..., safe=True)` is `NotCopied`, nothing written, when root does not open, or declares no lifetime, more than one, or another word for a ledger it must read. `safe=False` reads nothing, as before. Docs: DAT Ledger § Copying, § Many ledgers, the row table.
