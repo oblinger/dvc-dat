@@ -686,3 +686,28 @@ def test_a_spec_only_source_copies_as_a_spec(w):
     w.cold.at().copy(v)
     w.results.at().copy(Ref(w.cold.at(), v.subject), safe=False)
     assert spec_only(w.results, v)
+
+
+def test_safe_applies_to_the_subdats_a_copy_follows(w):
+    """SVP 252: a safe copy follows the subdats under the same lifetime rules, one revision, the run referred to."""
+    from dvc_dat import Dat
+
+    def made(path, text, name="f.txt"):
+        d = Dat.create({"dat": {"kwargs": {}}}, path=str(path))
+        (d.path / name).write_text(text)
+        return d
+
+    top = made(w.tmp / "pub", "RESULT")
+    made(top.path / "viz", "GALLERY").save()
+    made(top.path / "run", "LOG").save()
+    top.save()
+    subject = top.seal(w.do26, name="res/G1")
+    viz, run_ref = (w.do26.at()[subject, f"db/subdat/{r}"] for r in ("viz", "run"))
+    source, before = w.do26.at().id, w.results.at().id
+    assert w.results.at().copy(top) == [subject]
+    assert w.results.at().id == before + 1 and holds(w.results, subject) and holds(w.results, viz.subject)
+    assert not w.results.at()._held(run_ref.subject, "db/value")
+    assert w.results.at()[subject, "db/subdat/run"] == f"do26@{source}:{run_ref.subject}"
+    assert dat.load(w.results.at()[subject, "db/subdat/run"]).hash == run_ref.hash
+    with pytest.raises(NotCopied, match="no lifetime"):
+        ledger(w.tmp, "undeclared").at().copy(top)

@@ -1,6 +1,6 @@
 """``copy`` (SVP 251): a value, or a reference to one, moved onto another ledger with the same hash.
 
-``t.copy(*values, deep=False, safe=True, rerunnable=False)`` is on the destination's transaction, since every write
+``t.copy(*values, deep=False, safe=True, rerunnable=False, skip=None)`` is on the destination's transaction, since every write
 goes through the transaction on the ledger written; ``L.at().copy(v)`` is the head form (``Head``). A value is a
 sealed ``Value`` or a ``Ref``: each knows its ledger, which a name does not.
 
@@ -10,10 +10,17 @@ run as ``(<value>, db/commit, <sha>)``, since one revision's clock cannot carry 
 ``(<value>, db/copied-from, <ledger>@<rev>)``. The per-ledger rows ``db/store``, ``db/at``, ``db/rerunnable``, ``db/rerun``
 and an earlier ``db/copied-from`` stay behind. The subject is the source's, so a second copy adds nothing.
 
+A copy follows the value's subdats (SVP 241, 252): each ``db/subdat/<relpath>`` row's child is copied with it, and
+the child's subdats in turn, all in this revision. ``skip`` declines some, by relative-path suffix from the copied
+value (``Transaction.copy``): a declined child is not copied, and the parent's row for it here becomes the global
+reference ``str:<ledger>@<rev>:<child subject>`` to the original (SVP 239's ``load`` grammar), which ``dat.load``
+reads on that ledger. A ``str:declined`` row, or such a reference, travels as it is. The rows are outside the
+parent's hash, so what happens to its subdats never moves it.
+
 ``deep``
-    copies the value's inputs recursively until values with no inputs, whatever their ledgers, and its subdats (the
-    ``db/subdat/`` rows). Without it they stay where they are, referenced by hash through the origin row, the
-    ``foreign:`` items and those rows.
+    copies the value's inputs recursively until values with no inputs, whatever their ledgers. Without it they stay
+    where they are, referenced by hash through the origin row and the ``foreign:`` items. It does not override
+    ``skip``: a subdat is no input.
 ``safe``
     reads each ledger's lifetime on the root ledger (``lifetime_of``), so a ledger gone or offline is still judged:
     an input on a ledger below the destination's is copied, by the same
@@ -25,14 +32,17 @@ and an earlier ``db/copied-from`` stay behind. The subject is the source's, so a
 ``rerunnable``
     asserts the claim here after the copy, as ``t.pin`` would (SVP 250 A9): the commit pinned, the function importable,
     every input found.
+``skip``
+    relative-path suffixes of the subdats to leave on their ledger, as ``seal(skip=)`` takes them (``declined_by``):
+    ``None`` is ``SKIP``, ``("run",)``; ``()`` follows every subdat; any other adds to ``SKIP``.
 
 Inputs are the run's value keys, every value its trace read, and its ``foreign:`` items (SVP 1521).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
 
 from .claim import EXACT, claim_of, unconditional
 from .codec import show
@@ -42,6 +52,7 @@ from .named import rev_named
 from .pin import (PINNED, RERUN, RERUNNABLE, assert_claim, check_input, foreign_inputs, holder_of, inputs_in, run_of,
                   value_inputs)
 from .trace import rev_text
+from .txn import SUBDAT, declined_by
 from .value import Value
 
 if TYPE_CHECKING:
@@ -59,6 +70,8 @@ SPEC_ONLY = "db/spec-only"
 COMMIT = "db/commit"
 #: The rows of a value that are about the ledger holding it, not about the value.
 LEFT_BEHIND = frozenset({"db/store", AT, RERUNNABLE, RERUN, COPIED_FROM, SPEC_ONLY, COMMIT})
+#: The subdats a copy leaves on their ledger by default (SVP 252): a run is provenance, recomputable.
+SKIP = ("run",)
 
 
 def lifetime_of(ledger: Any) -> str:
@@ -141,28 +154,34 @@ class Item:
     rev: "Rev"
     subject: str
     spec: bool
+    #: ``db/subdat/<relpath>`` -> the global reference written here instead, for each subdat ``skip`` declines.
+    away: Dict[str, str] = field(default_factory=dict)
 
 
 class _Plan:
     """Everything a copy writes, found before anything is: a refusal writes nothing."""
 
-    def __init__(self, t: "Transaction", deep: bool, safe: bool) -> None:
-        self.t, self.deep, self.safe = t, deep, safe
+    def __init__(self, t: "Transaction", deep: bool, safe: bool, skip: Tuple[str, ...]) -> None:
+        self.t, self.deep, self.safe, self.skip = t, deep, safe, skip
         self.dest = ledger_key(t._ledger)
         self.floor = rank(t._ledger) if safe else 0
         self.items: Dict[str, Item] = {}
         self.fits: Dict[Tuple[str, str], bool] = {}
 
-    def add(self, rev: "Rev", subject: str) -> None:
+    def add(self, rev: "Rev", subject: str, base: str = "") -> None:
+        """``subject`` read at ``rev``, its subdats, and the inputs ``deep`` or ``safe`` bring; ``base`` is its
+        relpath from the copied value when it is a subdat, what ``skip`` is matched against."""
         if subject in self.items:
             return
         spec = rev._spec_only_at(subject) or (self.safe and not self.deep and self.rederivable(rev, subject))
-        self.items[subject] = Item(rev, subject, spec)
+        item = self.items[subject] = Item(rev, subject, spec)
+        for rel, child in rev._subdat_children(subject):
+            if declined_by(base + rel, self.skip):
+                item.away[SUBDAT + rel] = f"str:{rev_text(rev)}:{child}"
+            else:
+                self.add(rev, child, f"{base}{rel}/")
         if not (self.deep or self.safe):
             return
-        if self.deep:                           # a subdat is no input, and deep asks for every byte (SVP 241)
-            for _rel, child in rev._subdat_children(subject):
-                self.add(rev, child)
         for irev, isub in inputs(rev, subject):
             if ledger_key(irev.ledger) != self.dest and (self.deep or rank(irev.ledger) < self.floor):
                 self.add(irev, isub)
@@ -246,7 +265,7 @@ def _write(t: "Transaction", item: Item) -> None:
     if fn.startswith(MNT + "."):
         _mounts(t, rev, fn)
     _declare(t, rev, sorted({p for p, _o in rows if not p.startswith("db/")}))
-    add = [(p, o, not p.startswith("db/")) for p, o in rows if p not in LEFT_BEHIND]
+    add = [(p, item.away.get(p, o), not p.startswith("db/")) for p, o in rows if p not in LEFT_BEHIND]
     add.append((COPIED_FROM, "str:" + rev_text(rev), False))
     try:
         add.append((COMMIT, "str:" + run_of(rev, subject).commit, False))
@@ -277,7 +296,21 @@ def _claims(t: "Transaction", plan: _Plan, new: Dict[str, Any], safe: bool) -> N
             assert_claim(t, t._snapshot(), new[item.subject], held or "true", push=True)
 
 
-def copy(t: "Transaction", values: Tuple[Any, ...], *, deep: bool, safe: bool, rerunnable: bool) -> List[str]:
+def skipped(skip: Optional[Iterable[str]]) -> Tuple[str, ...]:
+    """The suffixes a copy declines: ``None`` is ``SKIP``, ``()`` none, any other adds to ``SKIP`` (SVP 241's rule)."""
+    if isinstance(skip, str):
+        raise TypeError(f"skip takes relative-path suffixes, a tuple or list, not the str {skip!r}")
+    if skip is None:
+        return SKIP
+    entries = tuple(skip)
+    for e in entries:
+        if not isinstance(e, str) or not e.strip("/"):
+            raise TypeError(f"a skip entry is a non-empty relative path, not {e!r}")
+    return () if not entries else (*SKIP, *entries)
+
+
+def copy(t: "Transaction", values: Tuple[Any, ...], *, deep: bool, safe: bool, rerunnable: bool,
+         skip: Optional[Iterable[str]] = None) -> List[str]:
     """``Transaction.copy``: see the module doc. The subjects of ``values``, in order."""
     t._open("copy")
     for name, flag in (("deep", deep), ("safe", safe), ("rerunnable", rerunnable)):
@@ -285,7 +318,7 @@ def copy(t: "Transaction", values: Tuple[Any, ...], *, deep: bool, safe: bool, r
             raise TypeError(f"{name} is True or False, not {flag!r}")
     if not values:
         raise TypeError("copy takes at least one value")
-    plan = _Plan(t, deep, safe)
+    plan = _Plan(t, deep, safe, skipped(skip))
     named: List[str] = []
     for v in values:
         rev, subject = source_of(v, t._ledger)
