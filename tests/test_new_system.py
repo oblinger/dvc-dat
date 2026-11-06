@@ -2,6 +2,7 @@
 constructor, and the default world `Dat.manager`."""
 import importlib
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -14,7 +15,8 @@ import dvc_dat  # noqa: E402
 from dvc_dat import Dat, DatManager  # noqa: E402
 
 ns, cli_main = Dat.ns, Dat.cli_main
-from dvc_dat.core import DAT_CONFIG_FILE, DAT_CONFIG_OVERRIDE_FILE  # noqa: E402
+from dvc_dat.core import DAT_CONFIG_FILE  # noqa: E402
+OVERRIDE = ".datconfig.override.yaml"   # read until 2.63; refused since (SVP 239)
 from dvc_dat.do import Namespace  # noqa: E402
 
 
@@ -51,15 +53,23 @@ class TestLoadDatConfig:
         root = os.path.realpath(tmp_path)
         assert manager._dat_folders == [os.path.join(root, "x"), os.path.join(root, "y")]
 
-    def test_override_file_wins_over_the_file(self, tmp_path):
+    def test_an_override_file_is_refused(self, tmp_path):
+        """SVP 239: one config file; an override file beside it says what replaced it."""
         Path(tmp_path, DAT_CONFIG_FILE).write_text("dat_folders: base/\n")
-        Path(tmp_path, DAT_CONFIG_OVERRIDE_FILE).write_text("dat_folders: over/\n")
-        manager = DatManager.load_dat_config(tmp_path)
-        assert manager._dat_folders[0].endswith("/over")
+        Path(tmp_path, OVERRIDE).write_text("dat_folders: over/\n")
+        with pytest.raises(ValueError, match="override file is no longer read.*DAT_LEDGER"):
+            DatManager.load_dat_config(tmp_path)
+
+    @pytest.mark.parametrize("text, says", [("ledger: .dat/ledger\n", "write 'root: .dat/ledger' and 'default: root'"),
+                                            ("ledgers:\n  games: g\n", "registry on the root ledger")])
+    def test_a_removed_ledger_key_names_its_replacement(self, tmp_path, text, says):
+        Path(tmp_path, DAT_CONFIG_FILE).write_text(text)
+        with pytest.raises(ValueError, match=re.escape(says)):
+            DatManager.load_dat_config(tmp_path)
 
     def test_only_dat_prefixed_environment_keys_override(self, tmp_path, monkeypatch):
         """`DAT_FOLDERS` overrides `dat_folders`; a bare `dat_folders` does not."""
-        Path(tmp_path, DAT_CONFIG_OVERRIDE_FILE).write_text("dat_folders: over/\n")
+        Path(tmp_path, DAT_CONFIG_FILE).write_text("dat_folders: over/\n")
         monkeypatch.setenv("dat_folders", "bare/")
         monkeypatch.setenv("DAT_UNKNOWN", "ignored")
         assert DatManager.load_dat_config(tmp_path)._dat_folders[0].endswith("/over")

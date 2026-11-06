@@ -53,8 +53,9 @@ L = Ledger(scratch_ledger_path)                # reopened by path
 #
 # In real code a project names its ledger once and every script in
 # it says `Ledger()` with no argument. `Ledger(create=True)` with no
-# path makes a project here: it writes `.datconfig.yaml` with a
-# `ledger:` line and creates the ledger it names.
+# path makes a project here: it writes `.datconfig.yaml` with
+# `default: root` and creates the root ledger, a SQLite folder under
+# `data/` (a `root:` key would say where instead).
 
 # %%
 project_path = Path("scratch/triples-demo/project").resolve()
@@ -63,15 +64,17 @@ os.chdir(project_path)
 L = Ledger(create=True)                   # .datconfig.yaml + ledger
 
 print((project_path / ".datconfig.yaml").read_text())
-# ledger: .dat/ledger
+# default: root
+# namespace: ledger
 
 # %% [markdown]
-# The one line is the whole config this notebook needs: `ledger:`,
-# a path relative to the file's own folder. The same file carries a
+# Those lines are the whole config this notebook needs: the active
+# ledger is the root, and the project's names are its ledger's. The same file carries a
 # project's `mounts:` (the values and dats notebooks), and dvc-dat's
 # own keys; it is the file the dat manager already reads. `Ledger()`
 # walks up from the working directory to the nearest `.datconfig.yaml`
-# carrying `ledger:` and never creates anything.
+# and opens what its `default:` names; besides the root, made on
+# first use when no `root:` names it, it never creates anything.
 
 # %%
 L = Ledger()                              # the project's ledger

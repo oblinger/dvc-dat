@@ -83,7 +83,7 @@ from dvc_dat import Dat
 if __name__ == "__main__":
     sys.exit(Dat.cli_main())
 ''')
-L = Ledger(create=True)                           # .datconfig.yaml + .dat/ledger
+L = Ledger(create=True)                           # .datconfig.yaml + the root ledger under data/
 with open(".datconfig.yaml", "a") as config_file:
     config_file.write("run: python3 -m q_cli_main\n")
 Path("justfile").write_text(

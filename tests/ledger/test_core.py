@@ -42,7 +42,7 @@ def test_walk_up_finds_the_config_and_none_is_ledger_error(tmp_path, monkeypatch
         Ledger()
     monkeypatch.chdir(tmp_path)
     L = Ledger(create=True)
-    assert (tmp_path / ".datconfig.yaml").read_text() == "ledger: .dat/ledger\n"
+    assert (tmp_path / ".datconfig.yaml").read_text() == "default: root\nnamespace: ledger\n"
     monkeypatch.chdir(deep)
     assert Ledger().path == L.path
 
@@ -50,10 +50,10 @@ def test_walk_up_finds_the_config_and_none_is_ledger_error(tmp_path, monkeypatch
 def test_create_in_cwd_opens_an_existing_config_and_refuses_with_dat_ledger(tmp_path, monkeypatch):
     monkeypatch.delenv("DAT_LEDGER", raising=False)
     monkeypatch.chdir(tmp_path)
-    (tmp_path / ".datconfig.yaml").write_text("ledger: elsewhere\n")
+    (tmp_path / ".datconfig.yaml").write_text("root: elsewhere\ndefault: root\n")
     L = Ledger(create=True)
     assert L.path == (tmp_path / "elsewhere").resolve()
-    assert (tmp_path / ".datconfig.yaml").read_text() == "ledger: elsewhere\n"
+    assert (tmp_path / ".datconfig.yaml").read_text() == "root: elsewhere\ndefault: root\n"
     monkeypatch.setenv("DAT_LEDGER", str(tmp_path / "elsewhere"))
     with pytest.raises(ValueError):
         Ledger(create=True)
@@ -64,7 +64,7 @@ def test_mounts_sugar_asserted_once_on_walk_up(tmp_path, monkeypatch):
     monkeypatch.delenv("DAT_LEDGER", raising=False)
     monkeypatch.chdir(tmp_path)
     Ledger(create=True)
-    (tmp_path / ".datconfig.yaml").write_text("ledger: .dat/ledger\nmounts:\n  mnt.pkg.etl: pkg/etl\n")
+    (tmp_path / ".datconfig.yaml").write_text("default: root\nmounts:\n  mnt.pkg.etl: pkg/etl\n")
     L = Ledger()
     rev = L.at()
     assert rev["db/mount/pkg.etl"] == {"db/root": "pkg/etl", "db/repo": tmp_path.name}
@@ -77,10 +77,10 @@ def test_mounts_sugar_refuses_a_key_outside_mnt(tmp_path, monkeypatch, key):
     monkeypatch.delenv("DAT_LEDGER", raising=False)
     monkeypatch.chdir(tmp_path)
     Ledger(create=True)
-    (tmp_path / ".datconfig.yaml").write_text(f"ledger: .dat/ledger\nmounts:\n  {key}: pkg/etl\n")
+    (tmp_path / ".datconfig.yaml").write_text(f"default: root\nmounts:\n  {key}: pkg/etl\n")
     with pytest.raises(ValueError, match=r"mounts:: a mount is named mnt\.<prefix>"):
         Ledger()
-    assert Ledger(tmp_path / ".dat" / "ledger").at().ns.mounts() == {}
+    assert Ledger(tmp_path / "data" / ".ledgers" / "root").at().ns.mounts() == {}
 
 
 # -- transactions ---------------------------------------------------------------------------------

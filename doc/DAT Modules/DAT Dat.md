@@ -130,7 +130,7 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 
 
 ## Configuration
-`.datconfig.yaml` is found walking up from the working directory or `start`; an empty file is a complete config, and its folder is the project's import root, put first on `sys.path`. `.datconfig.override.yaml`, found the same way, wins over it, and the environment wins over both. An unknown key is `ValueError` naming the file and the known keys.
+`.datconfig.yaml` is found walking up from the working directory or `start`; an empty file is a complete config, and its folder is the project's import root, put first on `sys.path`. It is the one config file: an override file beside it is `ValueError`, and the environment wins over it. An unknown key is `ValueError` naming the file and the known keys; a removed one (`ledger:`, `ledgers:`, 2.63) names its replacement.
 
 | Key | Means | Default |
 | --- | --- | --- |
@@ -140,12 +140,13 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 | `verify` | Re-hash every load | `false` |
 | `manager` | The `DatManager` subclass to build, dotted | `DatManager` |
 | `run` | The command `just run` hands its arguments to | none |
-| `ledger` | The one ledger of a one-ledger project: a folder, or a Postgres DSN; read by `Ledger()` | none |
-| `ledgers` | Named ledgers, `name: location`, and `default: name`, the active one; read by `ledgers` and `L` ([DAT Ledger § Many ledgers](ledger/DAT%20Ledger.md#Many%20ledgers)). Not with `ledger` | none |
+| `root` | The root ledger, a folder or a Postgres DSN, whose registry names every other ledger; read by `ledgers` and `L` ([DAT Ledger § Many ledgers](ledger/DAT%20Ledger.md#Many%20ledgers)) | a SQLite root at `.ledgers/root` under the first dat folder, made on first use |
+| `default` | The active ledger when `DAT_LEDGER` is unset: a name (`root`, or one registered on root) or a location | none |
+| `stores` | `{local: <name>}`: the store a value's bytes go to when nothing else says ([DAT Ledger](ledger/DAT%20Ledger.md)) | none |
 | `mounts` | Prefix-to-folder mounts the ledger asserts as rows; read by `Ledger()` | none |
-| `namespace` | `ledger`: the project's names are its active ledger's `db/mount` rows (`LedgerNamespace`, `Dat.ns.mount` refused). Implied by `ledger:`; a `ledgers:` section alone keeps the plain namespace ([DAT Ledger § Many ledgers](ledger/DAT%20Ledger.md#Many%20ledgers)) | `ledger` with `ledger:`, else plain |
+| `namespace` | `ledger`: the project's names are its active ledger's `db/mount` rows (`LedgerNamespace`, `Dat.ns.mount` refused); the one switch ([DAT Ledger § Many ledgers](ledger/DAT%20Ledger.md#Many%20ledgers)) | plain |
 
-`DAT_FOLDERS` replaces `dat_folders` with one folder (the value is not split) and `DAT_ART_FOLDER` replaces `art_folder`. `DAT_LEDGER` picks the active ledger: an entry of `ledgers:` by name, or a location. `ledgers: {default: <name>}` belongs in `.datconfig.override.yaml`, which a project keeps out of git, since whose ledger is active differs per checkout. `run` is read by the `run` recipe of `dvc_dat.just` only; see [Command Line](../cli.md). A `manager:` subclass may accept more keys by listing them in its `CONFIG_KEYS`.
+`DAT_FOLDERS` replaces `dat_folders` with one folder (the value is not split) and `DAT_ART_FOLDER` replaces `art_folder`. `DAT_LEDGER` picks the active ledger: a name registered on root, or a location; it wins over `default:`, so a team's file leaves `default:` out, since whose ledger is active differs per checkout. `run` is read by the `run` recipe of `dvc_dat.just` only; see [Command Line](../cli.md). A `manager:` subclass may accept more keys by listing them in its `CONFIG_KEYS`.
 
 
 

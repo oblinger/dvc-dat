@@ -883,8 +883,8 @@ print("files:", sorted(os.listdir(again_dat.get_path())))
 # rerun; a dat is a value, sealed under a name and loaded back; dats
 # are found by their preds.
 #
-# `Ledger(create=True)` makes the ledger in this folder and adds
-# `ledger:` to `.datconfig.yaml`; the reloaded dat world names
+# `Ledger(create=True)` makes the root ledger under `data/` and adds
+# `default: root` and `namespace: ledger` to `.datconfig.yaml`; the reloaded dat world names
 # through it. In a ledger project names come from the ledger's
 # mounts alone and `Dat.ns.mount` is refused, so `timestables` is
 # mounted with `t.ns.mount`, which writes two `db/mount` rows; the
@@ -894,10 +894,10 @@ print("files:", sorted(os.listdir(again_dat.get_path())))
 # #### Setup
 
 # %%
-L = Ledger(create=True)              # .dat/ledger, and ledger: in .datconfig.yaml
+L = Ledger(create=True)              # the root ledger under data/, and default: root in .datconfig.yaml
 Dat.manager = None                   # the dat world reloads, its namespace the ledger's
 print(".datconfig.yaml:", Path(".datconfig.yaml").read_text().splitlines())
-# → .datconfig.yaml: ['dat_folders: data', 'ledger: .dat/ledger']
+# → .datconfig.yaml: ['dat_folders: data', 'default: root', 'namespace: ledger']
 import timestables                      # discovery finds the checkout, the repo dats-demo
 with L.transaction(by="human:dan", why="mount timestables") as t:
     t.ns.mount("mnt.timestables", root="timestables")   # the two db/mount rows: the folder, and the repo, by default this project's, dats-demo
