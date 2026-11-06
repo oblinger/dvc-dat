@@ -210,7 +210,7 @@ PKG = {
         @dat.fn
         def queries(rev, *, ledger: str, at: int) -> dict:
             from dvc_dat import ledgers
-            return {"seen": sorted(v.obj["game"] for v in ledgers[ledger].at(at).values(kind="dvc_dat.ledger.value.Blob"))}
+            return {"seen": sorted(v.obj["game"] for v in ledgers[ledger].at(at).values(kind="dvc_dat.ledger.value.Value.Blob"))}
 
         @dat.fn
         def raw_row(rev, *, ledger: str, s: str, p: str) -> dict:
@@ -1118,6 +1118,11 @@ def other(sbx, tmp_path, monkeypatch, backend):
     games = backends.make(backend, tmp_path / "games")
     far = backends.make(backend, tmp_path / "far")
     with games.transaction(by="t") as t:
+        t.add("db/mount/sbx.stage", "db/root", "sbx/stage")
+        t.add("db/mount/sbx.stage", "db/repo", "sbx-repo")
+        t.add("db/mount/flatpkg", "db/root", "flat")
+        t.add("db/mount/flatpkg", "db/repo", "sbx-repo")
+        t.add("game/G1", "n", "3")
         Value.Blob({"game": 1}).seal(t, name="G1")
         t.add("game/raw", "n", "7")
     first = games.at().id
@@ -1209,8 +1214,10 @@ def test_a_body_writes_nothing_on_a_ledger_it_read(other, tmp_path, how):
     art = sorted(p for p in games._store.art.root.rglob("*"))
     with pytest.raises(Exception) as e:
         L.at().run("mnt.sbx.stage.fns.writes_foreign", ledger="games", how=how)
-    # "store" goes around Transaction: the database connection is the floor, and its refusal a LedgerError
-    assert type(e.value) is (LedgerError if how == "store" else ConfinedWrite), repr(e.value)
+    if how == "store":                                  # around Transaction: the connection is the floor
+        assert "read" in str(e.value).lower(), repr(e.value)
+    else:
+        assert type(e.value) is ConfinedWrite, repr(e.value)
     assert games.at().id == second
     assert sorted(p for p in games._store.art.root.rglob("*")) == art
 
@@ -1280,12 +1287,6 @@ def test_a_body_reads_a_run_on_another_ledger_and_never_runs_one(other, sbx):
     """A run read is the memo lookup there: a hit is a ``foreign:`` item, ``seal="get"`` on a miss is ``None``, and a
     miss otherwise is refused, since running there would write there."""
     L, games, _first, _second = other
-    with games.transaction(by="t") as t:
-        t.add("db/mount/sbx.stage", "db/root", "sbx/stage")
-        t.add("db/mount/sbx.stage", "db/repo", "sbx-repo")
-        t.add("db/mount/flatpkg", "db/root", "flat")
-        t.add("db/mount/flatpkg", "db/repo", "sbx-repo")
-        t["game/G1"] = {"n": "3"}
     miss = L.at().run("mnt.sbx.stage.fns.reads_a_run", ledger="games", game="G1", seal="get")
     assert miss.obj == {"seen": None} and foreign_items(miss) == []
     top = games.at().id

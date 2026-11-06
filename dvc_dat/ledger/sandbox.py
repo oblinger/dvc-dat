@@ -1263,8 +1263,9 @@ def recv(stream: Any) -> Any:
 
 
 def encode_key(v: Any, plain: "Rev") -> Any:
-    """A key across the pipe: a ``Ref`` or a sealed ``Value`` by its subject, on another ledger with that ledger's
-    location and the revision (SVP 1521); a ``Value`` no ledger holds stays as it is, for ``encode_keys`` to refuse."""
+    """A key across the pipe: a ``Ref`` or a sealed ``Value`` by its subject; on another ledger by the name it was
+    given, with that ledger's location and the revision, so that a read through it is recorded under that name
+    (SVP 1521)."""
     from .fn import ledger_key
     from .rev import Ref
     from .value import Value
@@ -1274,7 +1275,7 @@ def encode_key(v: Any, plain: "Rev") -> Any:
     rev = v.rev
     if rev is None or ledger_key(rev.ledger) == ledger_key(plain.ledger):
         return ("__ref__", v.subject)
-    return ("__ref__", v.subject, str(rev.ledger.path), rev.id)
+    return ("__ref__", v._given if isinstance(v, Ref) else v.subject, str(rev.ledger.path), rev.id)
 
 
 #: Seconds a warm server may sit idle before it is retired (stopped; the next call starts a fresh one).

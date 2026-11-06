@@ -131,6 +131,8 @@ class PostgresStore(Store):
                                 connect_timeout=max(1, int(timeout)))
         if self.read_only:
             conn.execute("SET default_transaction_read_only = on")
+            if not autocommit:
+                conn.commit()                       # the setting binds the transactions after this one
         return conn
 
     @contextmanager
