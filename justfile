@@ -23,9 +23,12 @@ walkthrough:
     uv run python "doc/DAT Demos/build_notebook.py" api-walkthrough
     JUPYTER_PATH={{justfile_directory()}}/.venv/share/jupyter uv run jupyter nbconvert --execute --to notebook --inplace "doc/DAT Demos/api-walkthrough.ipynb"
 
-# the documentation site (doc/ -> site/), with the generated API reference (doc/api/)
-docs:
+# the documentation site (doc/ -> site/), with the generated API reference (doc/api/) and cli.md's usage block;
+# `just docs check` leaves the tracked files alone and fails on a stale block, a strict-build warning or a site test
+docs *mode:
+    uv run --group docs python doc/sync_cli_usage.py {{ if mode == "check" { "--check" } else { "" } }}
     uv run --group docs mkdocs build --strict
+    {{ if mode == "check" { "uv run --group docs python -m pytest -q tests/test_docs_site.py" } else { "" } }}
 
 # the documentation site, served with live reload
 docs-serve:

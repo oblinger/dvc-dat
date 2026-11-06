@@ -2,14 +2,23 @@
 # Command Line
 The command line, `just run` and `x`: where it finds its config, and every subcommand.
 
+<!-- usage -->
 ```
-x TARGET [ARG ...] [KEY=VALUE ...]      run TARGET (just run)
-just mounts [PREFIX]                    the mounted names (x --list)
-just values|value|history|why|set|index|bump|pin|rerun ...   the ledger verbs
-x --info                                version, folders, config
-x --version                             the version
-x --help                                the usage message
+run *args              # run TARGET [ARG ...] [KEY=VALUE ...]: a mounted name, a dotted function, a spec
+mounts *args           # mounts [PREFIX]: the mounted names, with what each loads to
+values *args           # the values matching k=v preds (kind=<short class name> narrows)
+value *args            # exactly one value matching the preds
+history subject        # every row a subject has held, with each revision's db/by
+why name *args         # a value's dependencies, whether they hold at the head, and what moved since the alias's last target
+set subject *args      # rows on a subject: k=v a fact, alias=TARGET the name's value (a hash prefix is expanded)
+index pred             # declare a pred indexed
+bump name part="patch" # bump a version: <module> edits its __version__ in the source; db is the ledger's release (a/b: a ledger clock); minor and major ask for yes
+pin name *args         # pin VALUE [recursive=true] [rerun=true]: tag and push the commit behind a value, so its run can be rerun
+rerun name             # rerun VALUE: run a pinned value's function again at its tag and compare the hash
 ```
+<!-- /usage -->
+
+`x TARGET` is `just run TARGET`; the flags `x --info`, `x --version` and `x --help` are in [Commands](#commands).
 
 `just run TARGET` is the one way to run (F447 Q40): the `run` recipe of
 `dvc_dat.just`, which every project's justfile imports. `x TARGET` is the
