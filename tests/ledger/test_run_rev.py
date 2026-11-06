@@ -161,7 +161,7 @@ def test_an_unsandboxed_dat_reads_names_at_the_pinned_revision_not_the_head(code
 def test_a_config_namespace_is_bound_to_the_run_whatever_ledger_it_opens(coded, tmp_path):
     from dvc_dat import core
 
-    (tmp_path / ".datconfig.yaml").write_text(f"ledger: {tmp_path / 'other'}\n")
+    (tmp_path / ".datconfig.yaml").write_text(f"root: {tmp_path / 'other'}\ndefault: root\nnamespace: ledger\n")
     Ledger(tmp_path / "other", create=True)
     before = core._default_manager
     Dat.manager = DatManager(dat_folders=[str(tmp_path / "data")], ns=LedgerNamespace(config=tmp_path / ".datconfig.yaml"))

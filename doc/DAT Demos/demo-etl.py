@@ -77,7 +77,7 @@ def commit(message: str, *rels: str) -> None:
 git("init", "-q")
 commit("comfort: the stages", "comfort")
 (repo_path / ".datconfig.yaml").write_text(     # for `just`: the ledger, and a main importing comfort
-    "ledger: ../ledger\n"
+    "root: ../ledger\ndefault: root\nnamespace: ledger\n"
     'run: python3 -c "import sys, comfort; from dvc_dat import Dat; sys.exit(Dat.cli_main())"\n')
 (repo_path / "justfile").write_text(
     f"import '{files('dvc_dat') / 'dvc_dat.just'}'  # run, the ledger verbs\n")

@@ -164,8 +164,7 @@ def test_local_is_the_env_store(L, clouds, monkeypatch):
 
 def test_local_order_env_probe_config_folder(clouds, monkeypatch, tmp_path):
     assert resolve_local() == "folder"
-    (tmp_path / ".datconfig.yaml").write_text("dat_folders: [data]\n")
-    (tmp_path / ".datconfig.override.yaml").write_text("stores: {local: azure}\n")
+    (tmp_path / ".datconfig.yaml").write_text("dat_folders: [data]\nstores: {local: azure}\n")
     assert resolve_local() == "azure"
     monkeypatch.setattr(remote_mod, "probe", lambda: "gcp")
     assert resolve_local() == "gcp"

@@ -1,43 +1,65 @@
 """``ledgers`` and ``L``: the project's ledgers by name, and the active one (SVP 239).
 
     from dvc_dat import L, dat, ledgers
-    ledgers.record.at()          # the entry `record` of .datconfig.yaml's `ledgers:` section
-    ledgers.prod_run26           # a name is a Python identifier; ledgers["prod_run26"] is the same handle
-    L.at()                       # the active ledger: DAT_LEDGER, else `ledgers: {default: ...}`
+    ledgers.games.at()           # a ledger registered on root, by name
+    ledgers.root                 # the root ledger itself: root: in .datconfig.yaml
+    del ledgers["prod_kit"]      # this process no longer reaches it by name
+    ledgers["tmp"] = Ledger(p)   # a ledger by hand, for this process
+    L.at()                       # the active ledger: DAT_LEDGER, else the config's default:
     dat.at("do26@512")           # a revision on any registered ledger
     dat.load("do26@512:run/G1")  # a value by the global reference <ledger>@<rev>:<name-or-sha> (SVP 248)
 
-Both resolve from the working directory at each use, never at import, so a checkout without a default imports fine and
-refuses only when ``L`` is used. A handle is opened once per ledger and kept for the process.
+**Root, the one list.** ``.datconfig.yaml`` names one ledger, ``root:`` (a folder relative to the file, or a DSN);
+without it the root is a SQLite folder under the first dat folder, made on first use, so a project that never asks a
+name never meets a ledger. Root's *registry* names every other ledger: a subject ``ledger/<name>`` holding
+``ledger/location`` (a DSN, or a folder relative to the config), and ``ledger/dropped`` once it is gone, whose name
+then resolves no more. ``ledgers`` is filled from it lazily, at the first name asked that this process has not
+set, one read of root per project and process; nothing reads root before that.
 
-``L`` is this active ledger as one object (``from dvc_dat import L``): a ``Ledger`` (``isinstance`` holds, so
-``v.seal(L)`` and ``seal=L`` take it) whose every attribute is the ledger ``Ledger()`` would open, resolved from the
-working directory and ``DAT_LEDGER`` at each use and never at import. A checkout with a ``ledgers:`` section and no
-default imports it fine and raises the one-line ``LedgerError`` at the first use. ``L.at()`` is the ``Head`` of the
-real handle (a ``Rev`` that is also a transaction), the same handle ``ledgers.<name>`` gives for that ledger;
-``repr(L)`` names it, or says why it is unresolved. See [Many ledgers][many-ledgers].
+``ledgers`` is a mutable mapping over that view. ``ledgers[name]`` and ``ledgers.<name>`` are the ledger's handle,
+opened on first use and kept for the process; a name the registry does not hold is ``KeyError`` (``AttributeError``
+as an attribute) naming the root. ``del ledgers[name]`` drops a name from this process, so nothing here reaches it
+by name (a handle already in hand keeps working: a weak permission, not a guard); ``ledgers[name] = Ledger(...)``
+puts one in by hand, for this process. Setting ``ledgers["root"]`` before the first read replaces the root itself,
+which is how a test runs on a temp root. Iteration is ``root`` and the registry's names in revision order; ``len``
+counts them.
 
-In a sandbox worker (SVP 1521 Q3 (A)) ``ledgers`` is the section of the caller's
-config, shipped on the request (``shipped_section``, ``adopt_section``), and every
-handle it gives is read-only; a body's ``ledgers.<name>``, ``dat.at`` and ``dat.load``
-all come through it.
+``L`` is the active ledger as one object (``from dvc_dat import L``): a ``Ledger`` (``isinstance`` holds, so
+``v.seal(L)`` and ``seal=L`` take it) whose every attribute is the ledger ``Ledger()`` would open: ``DAT_LEDGER``,
+else the config's ``default:``, each a name resolved through ``ledgers`` or a location, at each use and never at
+import. A checkout with neither imports it fine and raises the one-line ``LedgerError`` at the first use. ``L.at()``
+is the ``Head`` of the real handle, the same handle ``ledgers.<name>`` gives for that ledger; ``repr(L)`` names it, or
+says why it is unresolved. See [Many ledgers][many-ledgers].
+
+In a sandbox worker (SVP 1521 Q3 (A)) ``ledgers`` is the caller's view, shipped on the request
+(``shipped_section``, ``adopt_section``): its names as the caller has them, or, when the caller never read root, the
+root's location, read there on the first name asked. Every handle it gives is read-only; a body's
+``ledgers.<name>``, ``dat.at`` and ``dat.load`` all come through it.
 """
 
 from __future__ import annotations
 
 import os
+from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from .errors import LedgerError
-from .ledger import CONFIG, ENV, Ledger, _find, _section, _target, _values, _walk_up, opened
+from .ledger import CONFIG, ENV, ROOT, Ledger, Target, _find, _is_name, _target, _values, _walk_up, opened, \
+    root_target
 from .pgstore import is_dsn
+
+#: The registry's subject prefix and predicates on root (SVP 1516): ``ledger/<name> ledger/location <where>``.
+REGISTRY = "ledger/"
+LOCATION = "ledger/location"
+DROPPED = "ledger/dropped"
 
 _handles: Dict[str, Ledger] = {}
 _asserted: Set[Tuple[str, str]] = set()
-#: ``(config path, {name: location})`` of the caller's ``ledgers:`` section, as a request ships it; ``None``: it has none.
-Section = Optional[Tuple[str, Dict[str, str]]]
-#: In a sandbox worker: the section adopted, and how a location is opened there.
+#: The view a request ships to a sandbox worker: ``{"cfg", "root", "entries", "filled", "removed"}``; ``None``: the
+#: caller has no config.
+Section = Optional[Dict[str, Any]]
+#: In a sandbox worker: the view adopted, and how a location is opened there.
 _worker: Optional[Tuple[Section, Any]] = None
 
 
@@ -55,83 +77,190 @@ def _handle(target: Any, given: Any, base: Path, cfg: Optional[Path]) -> Ledger:
     return led
 
 
-class Ledgers:
-    """The ``ledgers:`` section of the nearest ``.datconfig.yaml``, by name (the override file's entries merged in).
+class _View:
+    """One project's names in this process: what was set by hand, what was dropped, and what root's registry said
+    (read once, at the first name asked that is neither)."""
 
-    ``ledgers.<name>`` or ``ledgers["<name>"]`` is that entry's ``Ledger`` -- ``ledgers.record`` or
-    ``ledgers["record"]`` -- opened on first use and kept for the process; every name is a Python identifier, so every
-    entry has the attribute form, ``ledgers.do26`` (``ledger.NAME``).
+    def __init__(self, cfg: Path, root: Target, made: bool) -> None:
+        self.cfg, self.root, self.made = cfg, root, made
+        self.entries: Dict[str, Any] = {}       # name -> a Target, or a Ledger set by hand
+        self.removed: Set[str] = set()
+        self.filled = False
 
-    ``list(ledgers)`` is the names in file order, ``"games" in ledgers`` a test; an unknown name is ``KeyError``
-    (``AttributeError`` as an attribute) listing the section.
+    def location(self, value: Any) -> str:
+        return str(value.path) if isinstance(value, Ledger) else str(value)
 
-    A named handle asserts no ``mounts:``; only the active ledger does. A project with the one-ledger ``ledger:`` key
-    has no section: ``ledgers.<name>`` is ``LedgerError`` and its ledger is ``L``. In a sandboxed body it is the
-    caller's section, and every handle is read-only (DAT Ledger § Another ledger from a sandboxed body, SVP 1521).
+    def _root(self) -> Ledger:
+        held = self.entries.get(ROOT)
+        if isinstance(held, Ledger):
+            return held
+        target = held if held is not None else self.root
+        if _worker is None and self.made and isinstance(target, Path) and not (target / "ledger.db").is_file():
+            _handles[str(target)] = Ledger(target, create=True)     # the default SQLite root, on first use
+        return _handle(target, f"root ({self.cfg})", self.cfg.parent, None)
+
+    def fill(self) -> None:
+        if self.filled:
+            return
+        top = self._root().at()
+        dropped = {s for s, _o in top.all(REGISTRY + "*", DROPPED)}
+        found: Dict[str, Any] = {ROOT: self.root}
+        for s, loc in top.all(REGISTRY + "*", LOCATION):
+            if s not in dropped and isinstance(loc, str) and loc.strip():
+                found[s[len(REGISTRY):]] = _target(self.cfg, loc)
+        for name, value in found.items():
+            if name not in self.removed:
+                self.entries.setdefault(name, value)
+        self.filled = True
+
+    def names(self) -> List[str]:
+        self.fill()
+        return [n for n in self.entries if n not in self.removed]
+
+    def get(self, name: str) -> Any:
+        if name in self.removed:
+            raise KeyError(f"{name!r}: dropped from this process's ledgers (del ledgers[{name!r}])")
+        if name not in self.entries:
+            self.fill()
+        if name not in self.entries:
+            raise KeyError(f"{name!r}: no such ledger on the root ledger's registry ({self.location(self.root)}, "
+                           f"{REGISTRY}<name> {LOCATION}) or set in this process: "
+                           f"{', '.join(self.names()) or 'none'}")
+        return self.entries[name]
+
+    def ship(self) -> Dict[str, Any]:
+        live = {n: self.location(v) for n, v in self.entries.items() if n not in self.removed}
+        root = live.get(ROOT, self.location(self.root))
+        return {"cfg": str(self.cfg), "root": root, "entries": live, "filled": self.filled,
+                "removed": sorted(self.removed), "made": self.made}
+
+
+_views: Dict[Tuple[str, str], _View] = {}
+
+
+def _view() -> _View:
+    """This project's view: the worker's adopted one in a sandbox, else the nearest config's."""
+    if _worker is not None:
+        section = _worker[0]
+        if section is None:
+            raise LedgerError(f"no ledgers: the caller of this sandboxed function has no {CONFIG}")
+        key = (section["cfg"], section["root"])
+        view = _views.get(key)
+        if view is None:
+            cfg = Path(section["cfg"])
+            view = _views[key] = _View(cfg, _target(cfg, section["root"]), False)
+            view.entries = {n: _target(cfg, loc) for n, loc in section["entries"].items()}
+            view.removed, view.filled = set(section["removed"]), section["filled"]
+        return view
+    cfg, searched = _walk_up(Path.cwd().resolve())
+    if cfg is None:
+        raise LedgerError(f"no ledgers: no {CONFIG} in " + ", ".join(str(s) for s in searched))
+    return view_of(cfg)
+
+
+def view_of(cfg: Path) -> _View:
+    root, made = root_target(cfg, _values(cfg))
+    key = (str(cfg), str(root))
+    view = _views.get(key)
+    if view is None:
+        view = _views[key] = _View(cfg, root, made)
+    return view
+
+
+def target_of(cfg: Path, name: str, why: str) -> Target:
+    """Where the ledger ``name`` is, through the project's view (``ledgers``); ``LedgerError`` saying ``why`` the name
+    was asked when the view does not hold it."""
+    try:
+        value = view_of(cfg).get(name)
+    except KeyError as e:
+        raise LedgerError(f"{why}: {e.args[0]}") from None
+    return value.path if isinstance(value, Ledger) else value
+
+
+def _open(view: _View, name: str) -> Ledger:
+    value = view.get(name)
+    if isinstance(value, Ledger):
+        return value
+    if name == ROOT:
+        return view._root()
+    return _handle(value, f"{name} ({view.cfg})", view.cfg.parent, None)
+
+
+class Ledgers(MutableMapping):
+    """The project's ledgers by name: ``root`` and every ledger root's registry names, filled lazily (the module
+    docstring). ``ledgers.<name>`` or ``ledgers["<name>"]`` is that ledger's handle, opened on first use and kept for
+    the process; an unknown name is ``KeyError`` (``AttributeError`` as an attribute) naming the root.
+
+    ``del ledgers[name]`` and ``ledgers[name] = Ledger(...)`` change this process's view only, never the registry
+    (``just create ledger`` writes that). A named handle asserts no ``mounts:``; only the active ledger does. In a
+    sandboxed body it is the caller's view, and every handle is read-only (DAT Ledger § Another ledger from a
+    sandboxed body, SVP 1521).
     """
 
-    def _section(self) -> Tuple[Path, Dict[str, str]]:
-        if _worker is not None:
-            if _worker[0] is None:
-                raise LedgerError("no ledgers: the caller of this sandboxed function has no 'ledgers:' section in a "
-                                  f"{CONFIG}")
-            return Path(_worker[0][0]), _worker[0][1]
-        cfg, searched = _walk_up(Path.cwd().resolve())
-        if cfg is None:
-            raise LedgerError(f"no ledgers: no {CONFIG} with a 'ledgers:' section in "
-                              + ", ".join(str(s) for s in searched))
-        values = _values(cfg)
-        if "ledgers" not in values:
-            raise LedgerError(f"{cfg}: a one-ledger project ('ledger:', no 'ledgers:' section); its ledger is L")
-        return cfg, _section(cfg, values)[0]
-
     def __getitem__(self, name: str) -> Ledger:
-        cfg, entries = self._section()
-        if name not in entries:
-            raise KeyError(f"{name!r}: no such ledger in {cfg} ledgers: ({', '.join(entries) or 'none'})")
-        target = _target(cfg, entries[name])
-        return _handle(target, f"{name} ({cfg})", cfg.parent, None)
+        return _open(_view(), name)
+
+    def __setitem__(self, name: str, ledger: Ledger) -> None:
+        if not _is_name(name):
+            raise ValueError(f"ledgers[{name!r}]: a ledger name is a Python identifier (lowercase letters, digits "
+                             "and underscores, a letter first, not a keyword)")
+        if not isinstance(ledger, Ledger):
+            raise TypeError(f"ledgers[{name!r}] = ...: a Ledger (Ledger(location)), got {type(ledger).__name__}")
+        view = _view()
+        view.entries[name] = ledger
+        view.removed.discard(name)
+
+    def __delitem__(self, name: str) -> None:
+        view = _view()
+        view.get(name)                              # KeyError when there is nothing to drop
+        view.removed.add(name)
 
     def __getattr__(self, name: str) -> Ledger:
         if name.startswith("_"):
             raise AttributeError(name)
-        cfg, entries = self._section()
-        if name in entries:
+        try:
             return self[name]
-        raise AttributeError(f"ledgers.{name}: no such ledger in {cfg} ledgers: ({', '.join(entries) or 'none'})")
+        except KeyError as e:
+            raise AttributeError(f"ledgers.{name}: {e.args[0]}") from None
 
     def __iter__(self) -> Iterator[str]:
-        return iter(list(self._section()[1]))
+        return iter(_view().names())
 
     def __contains__(self, name: object) -> bool:
-        return name in self._section()[1]
+        if not isinstance(name, str):
+            return False
+        try:
+            _view().get(name)
+        except KeyError:
+            return False
+        return True
 
     def __len__(self) -> int:
-        return len(self._section()[1])
+        return len(_view().names())
 
     def __dir__(self) -> List[str]:
         try:
-            return list(self._section()[1])
+            return _view().names()
         except LedgerError:
             return []
 
     def __repr__(self) -> str:
         try:
-            cfg, entries = self._section()
+            view = _view()
+            names = view.names()
         except LedgerError as e:
             return f"ledgers (none: {e})"
-        return f"ledgers({cfg}: {', '.join(entries)})"
+        return f"ledgers({view.cfg}: {', '.join(names)})"
 
 
 def shipped_section() -> Section:
-    """The ``ledgers:`` section a sandboxed run sees: the caller's, by its working directory, in a worker the one it
-    was given. A ``Section``, so that it crosses the pipe to the worker."""
+    """The view a sandboxed run sees: the caller's (``_View.ship``), in a worker the one it was given; ``None`` with no
+    config. Root is not read for it: a caller that never asked a name ships root's location, read in the worker on
+    the body's first name."""
     if _worker is not None:
-        return _worker[0]
+        return _view().ship() if _worker[0] is not None else None
     cfg, _ = _walk_up(Path.cwd().resolve())
-    if cfg is None or "ledgers" not in _values(cfg):
-        return None
-    return str(cfg), _section(cfg, _values(cfg))[0]
+    return None if cfg is None else view_of(cfg).ship()
 
 
 def adopt_section(section: Section, read_only: Any) -> None:
@@ -146,8 +275,8 @@ def handle_at(location: str) -> Ledger:
 
 
 def ledger_named(name: str) -> Ledger:
-    """The ledger a ``<ledger>@<rev>`` names: one open in this process under that name, else the entry of
-    ``ledgers:``; ``KeyError`` or ``LedgerError`` when neither knows it."""
+    """The ledger a ``<ledger>@<rev>`` names: one open in this process under that name, else ``ledgers[name]``;
+    ``KeyError`` or ``LedgerError`` when neither knows it."""
     led = opened(name)
     return led if led is not None else ledgers[name]
 
@@ -219,9 +348,11 @@ def load(ref: str, default: Any = None) -> Any:
 
 
 def _no_ledger() -> bool:
-    """Does this project name no ledger at all (no ``DAT_LEDGER``, no ``.datconfig.yaml`` ``ledger:``/``ledgers:``)?"""
+    """Does this project name no active ledger (no ``DAT_LEDGER``, no ``default:`` in its ``.datconfig.yaml``)?"""
+    if os.environ.get(ENV):
+        return False
     cfg, _ = _walk_up(Path.cwd().resolve())
-    return cfg is None and not os.environ.get(ENV)
+    return cfg is None or _values(cfg).get("default") is None
 
 
 def _active() -> Ledger:
@@ -234,7 +365,7 @@ _OWN = frozenset({"__class__", "__dict__"})
 
 class _Active(Ledger):
     """``L``: a ``Ledger`` that is whichever ledger is active at each use (``DAT_LEDGER``, else the config's
-    ``ledgers:`` default or ``ledger:``); every attribute is the active ledger's."""
+    ``default:``); every attribute is the active ledger's."""
 
     def __init__(self) -> None:                     # opens nothing: resolved at use
         pass

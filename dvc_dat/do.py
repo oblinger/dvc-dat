@@ -16,7 +16,7 @@ with an `ns` of its own.  A dotted name is a mounted name, else exactly what
 never reads the filesystem; the first use builds `Dat.manager` from the
 nearest `.datconfig.yaml`.
 
-In a project whose `.datconfig.yaml` names a ledger, `Dat.manager.ns` is a
+In a project whose `.datconfig.yaml` says `namespace: ledger`, `Dat.manager.ns` is a
 `LedgerNamespace` (`dvc_dat.ledger.namespace`, DAT 1046, 1051): the same interface, its
 names the ledger's `db/mount` rows, and `mount` refused.
 """
@@ -554,7 +554,7 @@ DESCRIPTION
     a dat, and that dat runs.  A TARGET that is a callable is simply called.
     The return value prints on stdout when it is not None.
 
-    With a `ledger:` line or a `ledgers:` section, `x TARGET KEY=VALUE ...` is
+    With `namespace: ledger` in the config, `x TARGET KEY=VALUE ...` is
     rev.run(TARGET, KEY=VALUE, ...): found if computed before from the same
     inputs by the same code, else run and sealed; it prints `hit` or `ran`
     and the value, and alias=NAME names it.  TARGET is a dotted name
@@ -727,15 +727,17 @@ def _config_file(config: Union[None, str, Path]) -> Optional[Path]:
 
 
 def _ledger_of(config: Union[None, str, Path], *, namespace: bool = False) -> Any:
-    """The config's active ledger (`DAT_LEDGER`, else its `ledgers:` default or `ledger:` line), else None;
-    with `namespace`, None too unless the project's names are the ledger's (`_ledger_namespace`)."""
+    """The config's active ledger (`DAT_LEDGER`, else its `default:`), else None when it names none; with
+    `namespace`, None too unless the project's names are the ledger's (`namespace: ledger`, the one switch)."""
     path = _config_file(config)
     if path is None:
         return None
     from .core import _ledger_namespace
-    from .ledger.ledger import ENV, Ledger, _names_ledger, _resolve, _values
+    from .ledger.ledger import DEFAULT_KEY, ENV, Ledger, _resolve, _values
     values = _values(path)
-    if not _names_ledger(values) or (namespace and not _ledger_namespace(path, values)):
+    if namespace and not _ledger_namespace(path, values):
+        return None
+    if not os.environ.get(ENV) and values.get(DEFAULT_KEY) is None:
         return None
     return Ledger._opened(*_resolve(path, values, os.environ.get(ENV)))
 

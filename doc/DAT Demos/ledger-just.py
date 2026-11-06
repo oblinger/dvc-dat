@@ -64,7 +64,7 @@ scratch_project_path = Path("scratch/just-demo").resolve()
 shutil.copytree("demo_game", scratch_project_path,
                 ignore=shutil.ignore_patterns("__pycache__"))
 os.chdir(scratch_project_path)
-L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
+L = Ledger(create=True)              # .datconfig.yaml + the root ledger under data/
 with open(".datconfig.yaml", "a") as config_file:
     config_file.write("mounts:\n"                       # db/mount rows:
                       "  mnt.demo_game.etl: demo_game/etl\n"  # the ETL stages
@@ -472,7 +472,8 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 
 # %%
 # !cat .datconfig.yaml
-# → ledger: .dat/ledger
+# → default: root
+# → namespace: ledger
 # → mounts:
 # →   mnt.demo_game.etl: demo_game/etl
 # → run: python3 -m demo_main
@@ -480,7 +481,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # %% [markdown]
 # Every recipe opens the ledger with `Ledger()`, which walks up from
 # the cwd to the nearest `.datconfig.yaml` and opens the ledger its
-# `ledger:` line names. Notice `DAT_LEDGER` wins over the walk, here
+# `default:` names (here `root`). Notice `DAT_LEDGER` wins over the walk, here
 # naming a ledger that does not exist.
 
 # %%

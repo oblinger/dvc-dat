@@ -3,14 +3,15 @@
 A ledger is a folder holding the database and the art store (A54.2), or a
 Postgres DSN ``postgresql://…?art=<folder>`` (``pgstore``); its location is
 either. ``Ledger(location)`` opens it; ``Ledger()`` opens the project's *active*
-ledger (A37, A44): ``DAT_LEDGER`` (a name from the config's ``ledgers:`` section,
-or a location), else the nearest ``.datconfig.yaml`` at or above the working
-directory with a ``ledgers:`` section (its ``default:``, the override file
-``.datconfig.override.yaml`` beside it winning) or a single ``ledger:`` key.
-``create=True`` is the one act that makes a ledger (``Ledger(location,
-create=True)``), or a project in the working directory (``Ledger(create=True)``:
-``.datconfig.yaml`` with ``ledger: .dat/ledger``, or the active entry of its
-``ledgers:``). Without it nothing is ever created.
+ledger (A37, A44): ``DAT_LEDGER``, else the ``default:`` of the nearest
+``.datconfig.yaml`` at or above the working directory, each a name (``root``,
+or one registered on root) or a location. ``root:`` in that file is the root
+ledger, whose registry is the list of every other ledger (``named``, SVP 239);
+without it the root is a SQLite folder under the first dat folder, made on first
+use. ``create=True`` is the one act that makes any other ledger
+(``Ledger(location, create=True)``), or a project in the working directory
+(``Ledger(create=True)``: ``default: root`` and ``namespace: ledger`` in its
+``.datconfig.yaml``, and the ledger the default names).
 
 Every stamp the ledger writes (``db/time``, ``sealed``) is UTC. The zone a time
 is shown in is a setting, the row ``db db/timezone <IANA name>``, read as of a
@@ -43,9 +44,10 @@ from .value import is_moment, moment, stored_moment
 
 ENV = "DAT_LEDGER"
 CONFIG = ".datconfig.yaml"
-OVERRIDE = ".datconfig.override.yaml"
-DEFAULT = ".dat/ledger"
-NAME = re.compile(r"^[a-z][a-z0-9_]*$")    # a ledger's name in ``ledgers:``: a Python identifier, its database name
+ROOT = "root"                              # the root ledger's name, and its config key: ``root: <location>``
+DEFAULT_KEY = "default"                    # the config key naming the active ledger when ``DAT_LEDGER`` is unset
+ROOT_FOLDER = Path(".ledgers") / ROOT      # the SQLite root under the first dat folder when ``root:`` is absent
+NAME = re.compile(r"^[a-z][a-z0-9_]*$")    # a ledger's name on root's registry: a Python identifier, its database name
 _VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 _MONTH = re.compile(r"\d{4}-\d{2}")       # a ``revs`` bound written as a month, as its labels read
 PERIODS = ("day", "week", "month")         # ``revs``'s calendar selectors
@@ -106,29 +108,26 @@ def _read_config(cfg: Path) -> Dict[str, Any]:
 
 
 def _values(cfg: Path) -> Dict[str, Any]:
-    """The config's keys with the override file beside it over them; ``ledgers:`` merges by name."""
+    """The config's keys. A removed key (``ledger:``, ``ledgers:``) or a ``.datconfig.override.yaml`` beside it is
+    ``LedgerError`` naming what replaces it (SVP 239: one config file)."""
+    from ..core import _refuse_removed
+
     data = _read_config(cfg)
-    over = cfg.parent / OVERRIDE
-    if not over.is_file():
-        return data
-    extra = _read_config(over)
-    merged = {**data, **extra}
-    if isinstance(data.get("ledgers"), dict) and isinstance(extra.get("ledgers"), dict):
-        merged["ledgers"] = {**data["ledgers"], **extra["ledgers"]}
-    return merged
-
-
-def _names_ledger(values: Dict[str, Any]) -> bool:
-    led = values.get("ledger")
-    return (isinstance(led, str) and bool(led)) or "ledgers" in values
+    try:
+        _refuse_removed(cfg, data)
+    except ValueError as e:
+        raise LedgerError(str(e)) from None
+    return data
 
 
 def _walk_up(start: Path) -> Tuple[Optional[Path], List[Path]]:
+    """The nearest ``.datconfig.yaml`` at or above ``start`` (every config has a root, named or the default), and
+    the folders searched."""
     searched = []
     for folder in (start, *start.parents):
         searched.append(folder)
         cfg = folder / CONFIG
-        if cfg.is_file() and _names_ledger(_values(cfg)):
+        if cfg.is_file():
             return cfg, searched
     return None, searched
 
@@ -148,66 +147,54 @@ def _is_name(name: Any) -> bool:
     return isinstance(name, str) and bool(NAME.match(name)) and not keyword.iskeyword(name)
 
 
-def _section(cfg: Path, values: Dict[str, Any]) -> Tuple[Dict[str, str], Optional[str]]:
-    """The ``ledgers:`` section, checked: ``({name: location}, default name or None)``."""
-    if values.get("ledger"):
-        raise LedgerError(f"{cfg}: both 'ledger:' and 'ledgers:'; 'ledger: X' is the one-ledger project, "
-                          "keep one of the two")
-    section = values.get("ledgers")
-    if not isinstance(section, dict):
-        raise LedgerError(f"{cfg}: 'ledgers:' is a mapping of name to location, got {section!r}")
-    entries: Dict[str, str] = {}
-    for name, loc in section.items():
-        if name == "default":
-            continue
-        if not _is_name(name):
-            raise LedgerError(f"{cfg}: ledgers: {name!r} is not a ledger name (a Python identifier: lowercase "
-                              "letters, digits and underscores, a letter first, not a keyword)")
+def root_target(cfg: Path, values: Dict[str, Any]) -> Tuple[Target, bool]:
+    """Where the root ledger is: ``(target, made on first use)``. ``root:`` (a folder relative to the config, or a
+    DSN), else the SQLite folder ``.ledgers/root`` under the first dat folder (``DAT_FOLDERS``, else
+    ``dat_folders:``, else ``data``), which is the one ledger made without ``create=True``."""
+    loc = values.get(ROOT)
+    if loc is not None:
         if not (isinstance(loc, str) and loc.strip()):
-            raise LedgerError(f"{cfg}: ledgers: {name} is a folder or a DSN, got {loc!r}")
-        entries[name] = loc
-    default = section.get("default")
-    if default is not None and not (isinstance(default, str) and default in entries):
-        raise LedgerError(f"{cfg}: ledgers: default: {default!r} names no entry of the section "
-                          f"({', '.join(entries) or 'none'})")
-    return entries, default
+            raise LedgerError(f"{cfg}: root: is a folder or a DSN, got {loc!r}")
+        return _target(cfg, loc), False
+    folders = os.environ.get("DAT_FOLDERS") or values.get("dat_folders") or "data"
+    first = folders if isinstance(folders, str) else folders[0]
+    return _relative(cfg, str(first)) / ROOT_FOLDER, True
 
 
-
-
-def _entries(cfg: Path) -> Dict[str, str]:
-    """``{name: location}`` of the config's ``ledgers:`` section, the override file's merged in."""
-    return _section(cfg, _values(cfg))[0]
+def _location(text: str) -> Target:
+    """``DAT_LEDGER`` or a ``default:`` read as a location: a DSN, else a folder."""
+    return text if is_dsn(text) else Path(text).expanduser()
 
 
 def _resolve(cfg: Optional[Path], values: Dict[str, Any],
              env: Optional[str]) -> Tuple[Target, Any, Path, Optional[Path]]:
     """The active ledger: ``(target, as named in errors, base for a DSN's relative art=, config whose mounts
-    to assert or None)``. ``DAT_LEDGER`` first (an entry's name, else a location), then the section's
-    ``default:``, then the one-ledger ``ledger:`` key."""
+    to assert or None)``. ``DAT_LEDGER`` first, then the config's ``default:``; each a name (``root``, or one
+    registered on root, ``ledgers``) when the project has a config, else a location."""
+    from .named import target_of
+
     if env:
-        given: Any = env
-        if cfg is not None and "ledgers" in values and _is_name(env):
-            entries, _ = _section(cfg, values)
-            if env in entries:
-                return _target(cfg, entries[env]), f"{env} ({ENV}, {cfg})", cfg.parent, cfg
-            given = f"{env} ({ENV}: a location; not a name in {cfg} ledgers: {', '.join(entries) or 'none'})"
-        return (env if is_dsn(env) else Path(env).expanduser()), given, Path.cwd(), None
-    assert cfg is not None
-    if "ledgers" in values:
-        entries, default = _section(cfg, values)
-        if default is None:
-            raise LedgerError(f"no active ledger: {cfg} lists ledgers ({', '.join(entries) or 'none'}) and names "
-                              f"no default; set {ENV}=<name>, or 'ledgers: {{default: <name>}}' in "
-                              f"{cfg.parent / OVERRIDE}")
-        target = _target(cfg, entries[default])
-        return target, f"{default} ({cfg})", cfg.parent, cfg
-    target = _target(cfg, values["ledger"])
+        if cfg is not None and _is_name(env):
+            return target_of(cfg, env, f"{ENV}={env}"), f"{env} ({ENV}, {cfg})", cfg.parent, cfg
+        return _location(env), env, Path.cwd(), None
+    if cfg is None:
+        raise LedgerError(f"no ledger: {ENV} unset and no {CONFIG}")
+    default = values.get(DEFAULT_KEY)
+    if default is None:
+        raise LedgerError(f"no active ledger: {ENV} unset and {cfg} names no 'default:'; set {ENV}=<name> (root, "
+                          "or a ledger registered on root) or a location")
+    if not (isinstance(default, str) and default.strip()):
+        raise LedgerError(f"{cfg}: default: is a ledger name or a location, got {default!r}")
+    if _is_name(default):
+        return target_of(cfg, default, f"{cfg} default: {default}"), f"{default} ({cfg})", cfg.parent, cfg
+    target = _target(cfg, default)
     return target, target, cfg.parent, cfg
 
 
 def _find(create: bool) -> Tuple[Target, Any, Path, Optional[Path]]:
-    """``Ledger(None)``'s resolution, from the working directory (``_resolve``)."""
+    """``Ledger(None)``'s resolution, from the working directory (``_resolve``). With ``create``: the project in
+    the working directory, its ``.datconfig.yaml`` given ``default: root`` and ``namespace: ledger`` when it names no
+    default (what the one ``ledger:`` key meant before 2.63)."""
     env = os.environ.get(ENV)
     if create:
         if env:
@@ -215,25 +202,31 @@ def _find(create: bool) -> Tuple[Target, Any, Path, Optional[Path]]:
                              "set: ambiguous; unset it, or pass the location")
         here = Path.cwd() / CONFIG
         if here.is_file() and not isinstance(yaml.safe_load(here.read_text()) or {}, dict):
-            raise LedgerError(f"{here}: not a mapping; Ledger(create=True) adds a 'ledger:' key to it")
+            raise LedgerError(f"{here}: not a mapping; Ledger(create=True) adds a 'default:' key to it")
         values = _values(here) if here.is_file() else {}
-        if "ledgers" in values:
-            return _resolve(here, values, None)
-        led = values.get("ledger")
-        if not (isinstance(led, str) and led):
+        default = values.get(DEFAULT_KEY)
+        if default is None:
             text = here.read_text() if here.is_file() else ""
             if text and not text.endswith("\n"):
                 text += "\n"
-            here.write_text(text + f"ledger: {DEFAULT}\n")
-            led = DEFAULT
-        target = _target(here, led)
+            text += f"{DEFAULT_KEY}: {ROOT}\n" + ("" if "namespace" in values else "namespace: ledger\n")
+            here.write_text(text)
+            default = ROOT
+        if default == ROOT:
+            target: Target = root_target(here, values)[0]
+        elif _is_name(default):
+            from .named import target_of
+
+            target = target_of(here, default, f"{here} default: {default}")
+        else:
+            target = _target(here, default)
         return target, target, here.parent, here
-    if env and not NAME.match(env):              # a location: no config read
+    if env and not _is_name(env):                # a location: no config read
         return _resolve(None, {}, env)
     cfg, searched = _walk_up(Path.cwd().resolve())
     if cfg is None and not env:
-        raise LedgerError(f"no ledger: {ENV} unset and no {CONFIG} with a 'ledger:' key or a 'ledgers:' section "
-                          "in " + ", ".join(str(s) for s in searched) + " (Ledger(create=True) makes one)")
+        raise LedgerError(f"no ledger: {ENV} unset and no {CONFIG} in "
+                          + ", ".join(str(s) for s in searched) + " (Ledger(create=True) makes one)")
     return _resolve(cfg, _values(cfg) if cfg is not None else {}, env)
 
 
@@ -253,17 +246,18 @@ class Ledger:
         ``LedgerError``, and so is a file.
 
         ``Ledger()`` — ``location`` defaulting to ``None`` — opens the active ledger ([Many ledgers][many-ledgers]):
-        ``DAT_LEDGER`` when set (a name from the config's ``ledgers:`` section, else a location), else the nearest
-        ``.datconfig.yaml`` at or above the working directory carrying a ``ledgers:`` section (its ``default:``) or a
-        ``ledger:`` key (relative to that file). It asserts the config's ``mounts:`` (each key the mount's name,
-        ``mnt.<prefix>: <root>``, as [``t.ns.mount``][dvc_dat.ledger.Transaction.ns] takes it; a key outside ``mnt.``
-        is ``ValueError``) as ``db/mount/<prefix>`` rows in one transaction ``by="config:<path>"`` when they differ
-        from the ledger's; none found is ``LedgerError`` naming every folder searched, and a ``ledgers:`` section
-        naming no default is ``LedgerError`` saying how to name one.
+        ``DAT_LEDGER`` when set, else the ``default:`` of the nearest ``.datconfig.yaml`` at or above the working
+        directory; each is a name (``root``, or a ledger registered on root: ``ledgers``) when a config is found, else
+        a location (a folder relative to that file, or a DSN). It asserts the config's ``mounts:`` (each key the
+        mount's name, ``mnt.<prefix>: <root>``, as [``t.ns.mount``][dvc_dat.ledger.Transaction.ns] takes it; a key
+        outside ``mnt.`` is ``ValueError``) as ``db/mount/<prefix>`` rows in one transaction ``by="config:<path>"``
+        when they differ from the ledger's. No config found, or neither ``DAT_LEDGER`` nor ``default:``, is
+        ``LedgerError`` saying what to set; a name the registry does not hold is ``LedgerError`` naming it.
 
         ``Ledger(location, create=True)`` makes an empty ledger there if absent. ``Ledger(create=True)`` makes a
-        project in the working directory, writing ``ledger: .dat/ledger`` into its ``.datconfig.yaml``, or, when that
-        file has a ``ledgers:`` section, making its active entry; with ``DAT_LEDGER`` set it is ``ValueError``.
+        project in the working directory: ``default: root`` and ``namespace: ledger`` written into its
+        ``.datconfig.yaml`` when it names no default, and the ledger the default names made (the root: ``root:``, else the SQLite root under the first
+        dat folder); with ``DAT_LEDGER`` set it is ``ValueError``.
         """
         cfg: Optional[Path] = None
         target: Target
@@ -510,4 +504,4 @@ class Ledger:
         return Transaction(self, by, lock, preds)
 
 
-__all__ = ["Ledger", "ENV", "CONFIG", "OVERRIDE"]
+__all__ = ["Ledger", "ENV", "CONFIG", "ROOT"]

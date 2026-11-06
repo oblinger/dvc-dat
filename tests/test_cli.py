@@ -401,12 +401,12 @@ class TestImportRoot:
 
 
 def make_ledger_project(root: Path, hand: str = "", targets: bool = True) -> None:
-    """A project with a ledger: `ledger:` in the config and the package `proj` mounted on it
+    """A project with a ledger: `root:`, `default: root` and `namespace: ledger` in the config and the package `proj` mounted on it
     (`mounts:`, its db/mount rows: its names are the ledger's, DAT 1046), a main handing the line to
     `cli_main`, and a justfile importing the generated commands."""
     from dvc_dat.ledger import Ledger
     (root / ".datconfig.yaml").write_text(
-        f"ledger: .dat/ledger\nmounts:\n  mnt.proj: proj\nrun: {sys.executable} -m ledger_main\n")
+        f"root: .dat/ledger\ndefault: root\nnamespace: ledger\nmounts:\n  mnt.proj: proj\nrun: {sys.executable} -m ledger_main\n")
     Ledger(root / ".dat" / "ledger", create=True)
     targets_line = "import? '.dat/targets.just'\n" if targets else ""
     (root / "justfile").write_text(f"import '{RECIPES}'\n{targets_line}{hand}")
