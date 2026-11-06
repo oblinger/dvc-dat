@@ -9,6 +9,7 @@ Every user-visible change to `dvc_dat`, newest first.
 ## Unreleased
 
 - **A `Dat`'s spec is written with its keys sorted (SVP 1543).** `create` dumped `_spec_.yaml` in the spec's key order, so equal specs in another order gave other bytes. **Stored hashes of a `Dat` whose spec was not in sorted order move**: an old lookup misses and recomputes; nothing wrong is returned.
+- **`Code.decode` (SVP 1543).** A `Code` decodes to one with the same identity (`modules` and the mounts hash), so encode, decode, encode gives the same bytes. The description (version, commit, lock, mounts) is not in the bytes and not the identity: loaded by its name `<unit>@<version>`, the unit and version come back; the rest is `None` or empty. `Code`'s encoding is unchanged: no stored hash moves.
 - **`Value.Table` encodes its columns, not how they were held (SVP 1543).** `encode` drops schema metadata (the table's and each top-level field's, pandas' included), combines chunks, names every parquet writer option, and writes the footer's `created_by` as `dvc-dat Value.Table` in place of `parquet-cpp-arrow version <x>`. Equal tables now give the same bytes whatever their chunking, pandas or arrow origin, metadata, or pyarrow version (25.0.1 and 26.0.0 measured identical), and a table over 131072 rows re-encodes the same after a read. A decoded table carries no metadata: a `DataFrame`'s pandas metadata is not restored. **Stored hashes of every `Value.Table` move**: an old lookup misses and recomputes; nothing wrong is returned.
 
 ## 2.62.0 — 2026-11-05
