@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.65.0 — 2026-11-06
+
+- **`safe` reads a ledger's lifetime on the root ledger (SVP 251 Q3 (B); minor).** `lifetime_of` reads `(ledger/<name>, ledger/lifetime, permanent|archival|transient)` on `ledgers.root` at its head, the registry's row, instead of on the ledger itself, so a ledger that is gone or offline is still judged. A row a ledger writes about itself is no longer read. `t.copy(..., safe=True)` is `NotCopied`, nothing written, when root does not open, or declares no lifetime, more than one, or another word for a ledger it must read. `safe=False` reads nothing, as before. Docs: DAT Ledger § Copying, § Many ledgers, the row table.
+
 ## 2.64.0 — 2026-11-06
 
 - **`Value.Table` encodes its columns, not how they were held (SVP 1543; minor).** `encode` drops schema metadata (the table's and each top-level field's, pandas' included), combines chunks, names every parquet writer option, and writes the footer's `created_by` as `dvc-dat Value.Table` in place of `parquet-cpp-arrow version <x>`. Equal tables now give the same bytes whatever their chunking, pandas or arrow origin, metadata, or pyarrow version (25.0.1 and 26.0.0 measured identical), and a table over 131072 rows re-encodes the same after a read. A decoded table carries no metadata: a `DataFrame`'s pandas metadata is not restored. **Stored hashes of every `Value.Table` move**: an old lookup misses and recomputes; nothing wrong is returned.

@@ -38,8 +38,9 @@ class NotPinned(LedgerError, RuntimeError):
 class NotCopied(LedgerError, RuntimeError):
     """A [``copy``][dvc_dat.ledger.Transaction.copy] refused, nothing written (SVP 251).
 
-    A value on no ledger or on this one already, an input that cannot be found, a ledger declaring no lifetime for
-    ``safe`` to read, or a pred declared otherwise here.
+    A value on no ledger or on this one already, an input that cannot be found, a ledger whose lifetime root does
+    not declare (or declares twice, or a root that does not open) for ``safe`` to read, or a pred declared otherwise
+    here.
     """
 
 

@@ -15,7 +15,8 @@ and an earlier ``db/copied-from`` stay behind. The subject is the source's, so a
     ``db/subdat/`` rows). Without it they stay where they are, referenced by hash through the origin row, the
     ``foreign:`` items and those rows.
 ``safe``
-    reads each ledger's lifetime (``lifetime_of``): an input on a ledger below the destination's is copied, by the same
+    reads each ledger's lifetime on the root ledger (``lifetime_of``), so a ledger gone or offline is still judged:
+    an input on a ledger below the destination's is copied, by the same
     rule; one at or above is referenced. A plain copy never looks. It keeps only the spec of a value that can be
     rerun instead (``_Plan.rederivable``): no bytes, ``(<value>, db/spec-only, true)``, its commit's ``db/pinned`` row
     beside it, and no memo hit there until a run brings the bytes. ``deep`` asks for every byte, so it overrides that.
@@ -47,7 +48,8 @@ if TYPE_CHECKING:
     from .rev import Rev
     from .txn import Transaction
 
-#: The row a ledger declares its lifetime in (SVP 1516 A1, SVP 251 Q1): ``(ledger/<name>, ledger/lifetime, <word>)``.
+#: The row of root's registry that declares a ledger's lifetime (SVP 1516 A1, SVP 251 Q1, Q3 (B)):
+#: ``(ledger/<name>, ledger/lifetime, <word>)`` on the root ledger, written once by whatever creates the ledger.
 LIFETIME = "ledger/lifetime"
 #: Lifetimes, lowest first: ``permanent`` always reachable, ``archival`` kept in principle and nothing may depend on
 #: it, ``transient`` known to be trashed. A timeless assertion about the ledger, never its state today.
@@ -60,13 +62,28 @@ LEFT_BEHIND = frozenset({"db/store", AT, RERUNNABLE, RERUN, COPIED_FROM, SPEC_ON
 
 
 def lifetime_of(ledger: Any) -> str:
-    """The lifetime the ledger declares: its row ``(ledger/<name>, ledger/lifetime, <word>)``; ``NotCopied`` when it
-    declares none, or a word outside ``LIFETIMES``: ``safe`` compares what is declared, and guesses nothing."""
+    """The lifetime root's registry declares for ``ledger``: the row ``(ledger/<name>, ledger/lifetime, <word>)`` on
+    the root ledger (``ledgers.root``), ``<name>`` the ledger's folder or database, read at root's head. Read there,
+    not on the ledger, so a ledger that is gone or offline is still judged (SVP 251 Q3 (B)). ``NotCopied`` when root
+    does not open, or declares none, more than one, or a word outside ``LIFETIMES``: ``safe`` compares what is
+    declared, and guesses nothing."""
+    from .ledger import ROOT
+    from .named import ledgers
+
     name = ledger._store.name
-    word = ledger.at().get(f"ledger/{name}", LIFETIME)
+    try:
+        root = ledgers[ROOT]
+    except (LedgerError, KeyError) as e:
+        raise NotCopied(f"safe reads ledger {name}'s lifetime on the root ledger, which does not open: {e}") from None
+    words = root.at().all(f"ledger/{name}", LIFETIME)
+    if len(words) > 1:
+        raise NotCopied(f"root ({root._store.name}) declares more than one lifetime for ledger {name} "
+                        f"({', '.join(repr(w) for w in words)}): a lifetime is written once and never changes")
+    word = words[0] if words else None
     if word not in LIFETIMES:
         raise NotCopied(f"ledger {name} declares {'no lifetime' if word is None else repr(word)}: safe reads the row "
-                        f"(ledger/{name}, {LIFETIME}, permanent|archival|transient) on that ledger")
+                        f"(ledger/{name}, {LIFETIME}, permanent|archival|transient) on the root ledger "
+                        f"({root._store.name})")
     return str(word)
 
 
