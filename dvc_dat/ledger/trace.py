@@ -55,9 +55,11 @@ from __future__ import annotations
 
 import contextvars
 import json
+import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Optional, Sequence
 
 from .codec import canonical, ref_text, strip_hint
 from .errors import AliasLoop, LedgerError
@@ -87,6 +89,8 @@ class RunFrame:
         self.key = ledger_key(plain.ledger)
         keys = json.loads(enc)
         self.keys = {v for v in keys.values() if isinstance(v, str) and v.startswith("ref:")}
+        #: Set while ``running`` holds it: a thread that outlives the run reads for no run after.
+        self.open = False
 
     @property
     def at(self) -> str:
@@ -94,43 +98,64 @@ class RunFrame:
         return rev_text(self.plain)
 
 
+#: The current run. A read during a run is recorded on the run whose work made it, never on another (SVP 1549) and
+#: never dropped (SVP 1551): Python gives neither a new thread nor a pool's work item its starter's context, so
+#: ``Thread.start`` and ``ThreadPoolExecutor.submit`` are patched below to carry this one variable. Work handed over
+#: by any other road reads for no run unless wrapped in ``contextvars.copy_context().run``.
 _RUN: "contextvars.ContextVar[Optional[RunFrame]]" = contextvars.ContextVar("dvc_dat_run", default=None)
-#: Every run open in this process, innermost last: a thread a body started inherits no context, and reads for
-#: the latest. A child process is out of scope, as for the sandbox's audit hook.
-_OPEN: List[RunFrame] = []
-#: The attribute ``Thread.start`` leaves on a thread started inside a run (a body, or a thread one started).
-_IN_RUN = "_dvc_dat_in_run"
 _thread_start = threading.Thread.start
+_pool_submit = ThreadPoolExecutor.submit
+
+
+def _carried(frame: Optional[RunFrame], work: Callable[..., Any]) -> Callable[..., Any]:
+    """``work``, run with ``frame`` as the current run whatever thread runs it (SVP 1551)."""
+    def carried(*args: Any, **kwargs: Any) -> Any:
+        token = _RUN.set(frame)
+        try:
+            return work(*args, **kwargs)
+        finally:
+            _RUN.reset(token)
+    return carried
 
 
 def _start(self: threading.Thread) -> None:
-    """``Thread.start``, marking a thread started inside a run: only such a thread reads for an open run that is
-    not its own (SVP 1549). A thread started outside every run, such as a second caller racing the first for
-    one memo entry, reads for none: its reads joined the other's run, and the two entries' subjects differed."""
-    setattr(self, _IN_RUN, current_run() is not None)
+    """``Thread.start``: a thread started inside a run reads for that run. A new thread starts with an empty
+    context, so without this a thread a body starts would read for no run."""
+    frame = _RUN.get()
+    if frame is not None:
+        self.run = _carried(frame, self.run)  # type: ignore[method-assign]
     _thread_start(self)
 
 
+def _submit(self: ThreadPoolExecutor, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+    """``ThreadPoolExecutor.submit``: the work reads for the submitter's run, or for none, whichever thread of the
+    pool runs it and whenever that thread was started (SVP 1551). An ``InterpreterPoolExecutor`` is out of scope, as
+    a child process is."""
+    interp = sys.modules.get("concurrent.futures.interpreter")
+    if interp is not None and isinstance(self, interp.InterpreterPoolExecutor):
+        return _pool_submit(self, fn, *args, **kwargs)
+    return _pool_submit(self, _carried(_RUN.get(), fn), *args, **kwargs)
+
+
 threading.Thread.start = _start  # type: ignore[method-assign]
+ThreadPoolExecutor.submit = _submit  # type: ignore[method-assign, assignment]
 
 
 def current_run() -> Optional[RunFrame]:
-    """The run this code is inside: this context's, else, in a thread started inside a run, the latest open."""
+    """The run this code is inside: the one the work was started or submitted in, while that run is open."""
     frame = _RUN.get()
-    if frame is None and _OPEN and getattr(threading.current_thread(), _IN_RUN, False):
-        frame = _OPEN[-1]
-    return frame
+    return frame if frame is not None and frame.open else None
 
 
 @contextmanager
 def running(frame: RunFrame) -> Iterator[RunFrame]:
     """``frame`` is the current run inside the block; blocks nest, so a nested run sees its own reads."""
     token = _RUN.set(frame)
-    _OPEN.append(frame)
+    frame.open = True
     try:
         yield frame
     finally:
-        _OPEN.remove(frame)
+        frame.open = False
         _RUN.reset(token)
 
 

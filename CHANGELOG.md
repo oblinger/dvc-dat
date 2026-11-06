@@ -8,6 +8,9 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.66.1 — 2026-11-06
+
+- **Fix: a read on a pool thread is recorded on the run that handed it the work (SVP 1551).** 2.65.1 marked a thread started inside a run and let only marked threads read for an open run, so work a body submitted to a `ThreadPoolExecutor` whose thread was started before the run was recorded on no run (its `foreign:` items were missing), and a pool thread first started inside one run kept reading for it when a thread outside every run handed it work while that run was open. The run now travels with the work: `ThreadPoolExecutor.submit` runs each item with the submitter's run, or none, and a thread started inside a run runs with that run; a thread that outlives its run reads for none. The process-wide list of open runs is gone. Reads through the recording `Rev` were never affected, so no memo hit was stale: `foreign:` items are provenance and are in no hit test.
 ## 2.66.0 — 2026-11-06
 
 - **`copy` follows the subdats, with `skip` (SVP 252; minor).** `t.copy(*values, ..., skip=None)` copies each value's subdats (its `db/subdat/` rows) with it, and theirs in turn, in the same revision, whatever `deep` says. `skip` takes relative-path suffixes as `seal(skip=)` does: `None` is `("run",)`, `()` follows every subdat, any other list adds to `("run",)`; a bare `str` is `TypeError`. A skipped subdat is not copied, and the copied parent's row for it is the global reference `str:<ledger>@<rev>:<child subject>` to the original, which `dat.load` reads. `safe` judges each child as any value the copy brings; the parent's hash and subject do not move. **Changed:** a copy without `deep` used to write the parent's `ref:` row with the child absent from the destination, and `deep=True` brought `run/` too; now the child comes without `deep`, and `run/` stays behind unless `skip=()`. Docs: DAT Ledger § Copying, § Subdats.
