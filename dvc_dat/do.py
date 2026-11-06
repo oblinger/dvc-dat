@@ -72,7 +72,7 @@ class Namespace:
 
     @property
     def manager(self) -> DatManager:
-        """The world this namespace belongs to."""
+        """The world this namespace belongs to; `RuntimeError` when it has none."""
         if self._manager is None:
             raise RuntimeError("this Namespace is a namespace with no manager, and running a "
                                "dat needs one: Namespace(manager=m), or "
@@ -170,11 +170,12 @@ class Namespace:
              kind: Optional[Type] = None) -> Any:
         """The object `dotted_name` names.
 
-        Mounted names are checked first (values, modules, files, folders); otherwise
-        the longest importable prefix is imported and the rest is `getattr`.  With
-        nothing found the import's own `ImportError` / `AttributeError` propagates
-        unless `default` is given.  A `.py`/`.yaml`/`.json` mount's contents are
-        returned as loaded; a string whose first line is `yaml` alone is parsed as YAML.
+        Mounted names are checked first (values, modules, files, folders; a `.py`, `.yaml` or `.json` mount's contents
+        as loaded, a string whose first line is `yaml` alone parsed as YAML); otherwise the longest importable prefix
+        is imported and the rest is `getattr`. Dict results are deep copies.
+
+        With nothing found the `ImportError`, `AttributeError` or `KeyError` propagates unless `default` is given,
+        which is also returned for a `None` result. `kind` makes a result of another type `TypeError`.
         """
         try:
             result = self._load_mounted(dotted_name)
@@ -268,7 +269,10 @@ class Namespace:
 
     @staticmethod
     def name_of(obj: Any) -> str:
-        """The dotted name `load` takes back to `obj` (a module, class or function)."""
+        """The dotted `module.qualname` that `load` takes back to `obj` (a module, class or function).
+
+        `ValueError` for an object with no importable name, such as a lambda or a function defined inside another.
+        """
         if isinstance(obj, ModuleType):
             return obj.__name__
         module = getattr(obj, "__module__", None)
@@ -278,9 +282,11 @@ class Namespace:
         return f"{module}.{qualname}"
 
     def mounts(self) -> Dict[str, str]:
-        """The mount table: `{prefix: location}`, a mounted file, folder entry or
-        module (its import name when mounted as an object); values mounted with
-        `mount(value=...)` have no location and are not listed."""
+        """The mount table: `{prefix: location}`, a mounted file, folder entry or module.
+
+        Its import name when mounted as an object; a `value` mount (`mount(value=...)`) has no location and is not
+        listed.
+        """
         return {at: (self._base_objects[at].__name__ if loc == "--directly-assigned--" else loc)
                 for at, loc in self._base_locations.items()}
 
@@ -306,14 +312,16 @@ class Namespace:
               value: Any = None,
               at: str = "",
               relative_to: str = "."):
-        """Mount data in the namespace at `at`: a `folder` of loadables, a single
-        `file`, a `module` (object, import name or path), or a literal `value`.
+        """Mount exactly one of a `folder`, a single `file`, a `module`, or a literal `value`, at `at`.
 
-        A mounted name never shadows an importable one: `mount` raises `ValueError`
-        when a top-level name it would add -- `at`'s first part, or with no `at`
-        each top-level file or folder of a mounted folder -- is a module or
-        package Python can import from somewhere else.  Mounting a module at its
-        own name, or a folder that is itself the importable source, is not a clash.
+        A `module` is an object, import name or path. A `folder` is indexed by path under `at`, so
+        `catalog/models/baseline` answers to `catalog.models.baseline`; folder and file paths join to `relative_to`.
+        Mounts live in this namespace only; your program calls `mount` to add one name at a time.
+
+        A mounted name never shadows an importable one: `mount` raises `ValueError` when a top-level name it would add
+        -- `at`'s first part, or with no `at` each top-level file or folder of a mounted folder -- is a module or
+        package Python can import from somewhere else. Mounting a module at its own name, or a folder that is itself
+        the importable source, is not a clash. See [Mounts][mounts].
         """
         if 1 != sum(x is not None for x in (folder, file, module, value)):
             raise ValueError("mount: exactly one of 'folder', 'file', 'module' or 'value'")
