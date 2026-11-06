@@ -61,7 +61,10 @@ def is_seal_predicate(p: str, frozen: Sequence[str]) -> bool:
 
 
 def attr(obj: Any, path: str) -> Any:
-    """Walk a dotted path over dicts, dataclasses and records; ``KeyError`` at the first missing step."""
+    """Walk a dotted path over mappings, sequences (integer steps) and attributes.
+
+    ``KeyError`` at the first missing step, ``TypeError`` for an empty path.
+    """
     if not isinstance(path, str) or not path:
         raise TypeError(f"a path is a non-empty dotted str, not {path!r}")
     cur = obj

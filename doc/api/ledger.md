@@ -26,7 +26,10 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 ## The active ledger
 
-`from dvc_dat import L, ledgers`: `L` is the active ledger, `ledgers` the project's ledgers by name.
+::: dvc_dat.ledger.named
+    options:
+      show_root_heading: false
+      members: false
 
 ::: dvc_dat.ledger.named.Ledgers
 

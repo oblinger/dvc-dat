@@ -62,7 +62,11 @@ def _check(args: Any, help: Any, where: str) -> Tuple[str, str]:
 
 
 def command(*, args: str, help: str) -> Callable[[Callable], Callable]:
-    """Mark a function a command: `just <name>` runs it.  Returns the function unchanged."""
+    """Mark a function a command: ``just <name>`` runs it.
+
+    ``@dat.command(args="game=…", help="…")`` ([Command Line][command-line] § Commands). Returns the function
+    unchanged.
+    """
     _check(args, help, "@command")
 
     def mark(fn: Callable) -> Callable:

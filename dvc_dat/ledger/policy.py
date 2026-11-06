@@ -62,8 +62,14 @@ BUILT_IN = frozenset(POLICIES)
 
 
 def register_policy(name: str, fn: Policy) -> None:
-    """Make ``fn`` (record -> ``str``) the memo policy named ``name``, for a ``(db, db/memo-policy, name)`` row
-    to select; a built-in name is refused. Registering a name again replaces it (the index rebuilds)."""
+    """Make ``fn`` (record -> ``str``) the memo policy named ``name``.
+
+    For a ``(db, db/memo-policy, name)`` row to select ([Memoization and the platform][memoization-and-the-platform]);
+    a built-in name (``platform``, ``card``) is ``ValueError``. Registering a name again replaces it (the index
+    rebuilds).
+
+    Process-local: every process that looks up under the name registers it first, else the lookup is ``LedgerError``.
+    """
     if not isinstance(name, str) or not name:
         raise TypeError(f"a policy name is a non-empty str, not {name!r}")
     if name in BUILT_IN:
