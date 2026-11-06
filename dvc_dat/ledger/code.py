@@ -9,7 +9,8 @@ Beside it, fixed at load and not hashed, the description: ``mounts`` (``prefix -
 installed code), ``commit`` (the checkout's at load), ``lock`` (the blob id of that checkout's
 ``uv.lock``), ``sandboxed``, ``version`` and ``package`` (the dotted root whose declared version it is, or
 ``None``). The version is a name over the hash, never the identity, and the commit is a result's
-``code/<repo>`` dependency item, so neither moves the hash. Its name is
+``code/<repo>`` dependency item, so neither moves the hash. ``decode`` gives back that identity, and the
+description only as far as the name it is loaded by says (SVP 1543). Its name is
 ``<unit>@<version>``: the unit is the mount prefix for mounted code (``plane``, ``algs.ocr``) and the
 function's top-level package for installed code (``geometry``). Immutable: accessors only.
 
@@ -30,6 +31,7 @@ from __future__ import annotations
 import functools
 import importlib
 import importlib.metadata as md
+import json
 import sys
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -130,8 +132,21 @@ class Code(Value):
 
     @classmethod
     def decode(cls, src: IO[bytes], store: "ArtStore", name: Optional[str] = None) -> "Code":
-        raise NotImplementedError("a Code is not stored as a value yet: its description arrives with the "
-                                  "history tier (DAT 1037)")
+        """The ``Code`` whose identity ``src`` holds: equal to the one encoded, so it encodes to the same bytes.
+
+        Equal means the same identity (``modules`` and the mounts hash), as for ``hash``: the description is not
+        in the bytes, so it does not survive a decode beyond what its name says (SVP 1543). Loaded by its name
+        ``<unit>@<version>``, the unit and version are restored; else the unit is ``code`` and the version
+        ``#`` + 8 hex of the hash, the ladder's last rung. ``sandboxed`` is whether a mounts hash is held;
+        ``mounts`` is empty and ``commit``, ``lock`` and ``package`` are ``None``.
+        """
+        data = json.load(src)
+        modules, mh = data["modules"], data["mounts"]
+        unit, _, version = (name or "").partition("@")
+        if not (unit and version):
+            unit, version = "code", "#" + identity_hash(modules, mh)[:SHORT]
+        return cls({"modules": modules, "mounts_hash": mh, "mounts": {}, "commit": None, "lock": None,
+                    "sandboxed": mh is not None, "version": version, "package": None}, unit=unit)
 
     def _label(self) -> Optional[str]:
         return self.name

@@ -177,7 +177,8 @@ class Value:
         ``tests/ledger/test_value_encoding.py``: ``Value.Blob``, on a dict's insertion order, a set's order (across
         ``PYTHONHASHSEED``, and after a decode) and a repeated object versus an equal copy; ``Value.Table``, on
         chunking (a table over 131072 rows does not re-encode the same), schema metadata and the pyarrow version;
-        ``Dat``, on the key order of its spec; ``Code`` has no ``decode``.
+        ``Dat``, on the key order of its spec. ``Code`` keeps both: its bytes are its identity, which ``decode``
+        restores.
 
         A test that wants the bytes passes ``io.BytesIO()``.
         """

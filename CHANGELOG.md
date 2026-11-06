@@ -8,6 +8,7 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **`Code.decode` (SVP 1543).** A `Code` decodes to one with the same identity (`modules` and the mounts hash), so encode, decode, encode gives the same bytes. The description (version, commit, lock, mounts) is not in the bytes and not the identity: loaded by its name `<unit>@<version>`, the unit and version come back; the rest is `None` or empty. `Code`'s encoding is unchanged: no stored hash moves.
 - **A value's encoding is deterministic and lossless (SVP 1542).** The rule is on `Value` and in [DAT Ledger](doc/DAT%20Modules/ledger/DAT%20Ledger.md) § Value Interface, and `tests/ledger/test_value_encoding.py` measures `Value.Blob`, `Value.Table`, `Dat` and `Code` against it; what each breaks today is `xfail(strict=True)`. Docs and tests: no encoding changed.
 - **The Rerunning tutorial (SVP 245).** `demo-rerunning`: a past revision read, today's code over it, a sweep through `L.revs`, what a sweep recomputes, and a value rerun from its pinned commit. Docs only.
 
