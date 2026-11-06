@@ -17,7 +17,7 @@ api:: [`dvc_dat.ledger`](../../api/ledger.md) — the classes and functions, ren
 | Ledger      | [path](#^path), [at](#^at), [revs](#^revs), [transaction](#^transaction), [close](#^close)                                                                                                                                                                                                                                 |
 | Rev         | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [history](#^history), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [ns](#^ns), [run](#^run), [rerun](#^rerun), [timezone](#^timezone), [show_time](#^show-time)                                                |
 | Ref         | [rev](#^rev), [subject](#^subject), [name](#^name), [aliases](#^aliases), [hash](#^hash), [type](#^type), [preds](#^preds), [sealed_at](#^sealed-at), [load](#^ref-load)                                                                                                                                   |
-| Row         | [rev](#^row-rev), [subject](#^row-subject), [predicate](#^predicate), [object](#^object), [added](#^added)                                                                                                                                                                                                 |
+| Row         | [rev](../../api/ledger.md#dvc_dat.ledger.Row.rev), [subject](../../api/ledger.md#dvc_dat.ledger.Row.subject), [predicate](../../api/ledger.md#dvc_dat.ledger.Row.predicate), [object](../../api/ledger.md#dvc_dat.ledger.Row.object), [added](../../api/ledger.md#dvc_dat.ledger.Row.added)                                                                                                                                                                                                 |
 | Transaction | [tx](#^transaction-tx), [previous_rev](#^previous-rev), [ns](#^transaction-ns), [rev](#^transaction-rev), [add](#^add), [update](#^update), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--), [pin](#^pin)                                                                                                       |
 | Value       | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [at](#^value-at), [sealed](#^sealed), [hash](#^value-hash), [dependencies](#^dependencies), [Dependencies](#^value-dependencies), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
 | Value.Blob  | [obj](#^obj)                                                                                                                                                                                                                                                                                               |
@@ -157,23 +157,6 @@ A reference to one value at one moment, named without fetching a byte: the subje
 A named tuple encoding a single row in the ledger: revision, subject, predicate, object, and an added/removed bit. `history()` returns them; `str(row)` is one aligned line: revision, `+` or `-`, subject, predicate, object.
 
 <!-- methods: dvc_dat.ledger.Row -->
-
-**rev**`: Rev`
-    The revision that wrote the row. ^row-rev
-
-**subject**`: str`
-    The row's subject. ^row-subject
-
-**predicate**`: str`
-    The row's predicate. ^predicate
-
-**object**`: str | dict | list | Ref`
-    The row's object, decoded from its tagged text ([Storage](#Storage)). ^object
-
-**added**`: bool`
-    `True` for an add, `False` for a remove. ^added
-
-
 
 ## Transaction Interface
 The write set of one `with L.transaction(...) as t:` block; it becomes exactly one revision on exit, or nothing. `add`, `update` and `remove` append rows and read nothing; `v.seal(t)` seals a value into it; the bracket forms are helpers over `add` and `remove`. **A transaction reads the previous revision and writes the next; its own pending writes are not seen until it closes.** Its read verbs are `previous_rev`'s: `get`, `all`, `history`, `refs`, `values`, `value`, `select`, `load`, `in`, and `t[s, p]` / `t[s]` as a read (`t[s, p] = o` / `t[s] = {...}` write). `previous_rev` is bound to the previous revision and exists only under `lock=`, because an unlocked transaction has no well-defined previous revision (another writer may commit between open and exit). The helpers that read and then write (`t[s] = {...}`, `del`, `bump`) read through it, so they need `lock=`; unlocked they raise `Unlocked` and write nothing. Whatever must see the transaction's own rows is checked at commit, inside the write lock. Entered once; a verb used outside the block is `RuntimeError`.

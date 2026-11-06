@@ -54,6 +54,8 @@ plugins:
       include: ["*.ipynb"]
       execute: false
       include_source: true
+  # named so it scans the pages' headings: a docstring links a topic as [Storage][storage]
+  - autorefs
   - mkdocstrings:
       default_handler: python
       handlers:
