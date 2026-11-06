@@ -2,8 +2,7 @@
 read lazily: ``frame(n)`` fetches one segment, ``clip(a, b)`` the segments it covers, ``path()`` joins them once.
 
 Every video here is a few seconds of synthetic frames made in the test (64x48 at 10 fps unless a test needs more);
-the URL is a ``file://`` one read through ``fsspec``. The ledger's standard is a row on a root ledger of the test's
-own, with ``seg=1s`` so a few seconds make several segments.
+the URL is a ``file://`` one read through ``fsspec``. ``SEGMENT_SECONDS`` is 1 so a few seconds make several segments.
 """
 
 import io
@@ -18,17 +17,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dvc_dat.ledger import Ledger, Video, ledgers, register_store
+from dvc_dat.ledger import Ledger, Video, register_store
 from dvc_dat.ledger import remote as remote_mod
 from dvc_dat.ledger import video as video_mod
 from dvc_dat.ledger.codec import sha256
-from dvc_dat.ledger.video import DEFAULT_STANDARD, STANDARD, Standard
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None and not os.environ.get("CI"),
                                 reason="ffmpeg is not on PATH (CI installs it)")
 
 W, H, FPS = 64, 48, 10
-ONE_SECOND = "h264 yuv420p cfr seg=1s"
 
 
 def pictures(n, seed=0, w=W, h=H):
@@ -62,27 +59,42 @@ def close(a, b, tol=12):
     return a.shape == b.shape and float(np.abs(a.astype(int) - b.astype(int)).mean()) < tol
 
 
+def with_audio(path, seconds=3.5, *args, audio=("-c:a", "aac", "-b:a", "64k")):
+    """``seconds`` of test picture and a 440 Hz tone muxed to ``path``, keyframes every 10 frames."""
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={W}x{H}:rate={FPS}",
+                    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100", "-t", str(seconds),
+                    *(args or ("-c:v", "libx264", "-g", "10", "-pix_fmt", "yuv420p")), *audio, str(path)], check=True)
+    return path
+
+
+def streams(path, kind):
+    """The codec of each stream of ``kind`` (``v`` or ``a``) in ``path``, and its packets."""
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", kind, "-count_packets", "-show_entries",
+                          "stream=codec_name,nb_read_packets", "-of", "csv=p=0", str(path)], capture_output=True,
+                         text=True, check=True).stdout
+    return [(line.split(",")[0], int(line.split(",")[1])) for line in out.split()]
+
+
+def duration(path, kind):
+    """The seconds covered by the stream ``kind`` of ``path``, from its packets."""
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", kind, "-show_entries",
+                          "packet=pts_time,duration_time", "-of", "csv=p=0", str(path)], capture_output=True,
+                         text=True, check=True).stdout
+    rows = [line.split(",") for line in out.split()]
+    return float(rows[-1][0]) + float(rows[-1][1]) - float(rows[0][0])
+
+
 @pytest.fixture
 def world(tmp_path, monkeypatch):
-    """A root ledger (``.datconfig.yaml``: ``root: root``) and the ledger ``games`` beside it, no standard yet."""
+    """The ledger ``games``, splitting at every second."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("DAT_LEDGER", raising=False)
-    monkeypatch.setattr(video_mod, "_WARNED", set())
-    (tmp_path / ".datconfig.yaml").write_text("root: root\n")
-    Ledger(tmp_path / "root", create=True)
+    monkeypatch.setattr(video_mod, "SEGMENT_SECONDS", 1)
     return Ledger(tmp_path / "games", create=True)
 
 
-def declare(standard, name="games"):
-    """Root's row naming ledger ``name``'s video standard."""
-    with ledgers.root.transaction(by="t") as t:
-        t.add(f"ledger/{name}", STANDARD, standard)
-
-
 def saved(L, v, name="video/G1", **kw):
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        v.seal(L, name=name, **kw)
+    v.seal(L, name=name, **kw)
     L._values.clear()
     return L.at().load(name)
 
@@ -90,7 +102,6 @@ def saved(L, v, name="video/G1", **kw):
 # --- seal and load, by url, by path and by frames -------------------------------------------------------------
 
 def test_a_video_from_frames_seals_and_loads_back(world):
-    declare(ONE_SECOND)
     frames = pictures(25)
     back = saved(world, Video.from_frames(iter(frames), FPS))
     assert isinstance(back, Video) and back._info()["frames"] == 25
@@ -99,21 +110,17 @@ def test_a_video_from_frames_seals_and_loads_back(world):
 
 
 def test_a_video_from_a_path_seals_and_loads_back(world, tmp_path):
-    declare(ONE_SECOND)
     src = mpeg4(tmp_path / "src.mp4")
     back = saved(world, Video.from_path(src))
     assert back._info()["frames"] == 35 and close(back.frame(20), pictures(35)[20])
 
 
 def test_a_video_from_a_url_seals_and_loads_back_with_the_hash_of_the_same_file(world, tmp_path):
-    declare(ONE_SECOND)
     src = mpeg4(tmp_path / "src.mp4")
     by_url = Video.from_url(src.as_uri())
     back = saved(world, by_url)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        by_path = Video.from_path(src)
-        by_path.seal(world, name="video/G2")
+    by_path = Video.from_path(src)
+    by_path.seal(world, name="video/G2")
     assert by_url.hash == by_path.hash == back.hash
     assert close(back.frame(3), pictures(35)[3])
 
@@ -136,15 +143,14 @@ def test_a_frame_is_an_rgb_uint8_array_and_every_frame_one_size(world):
 # --- segments plus manifest -----------------------------------------------------------------------------------
 
 def test_the_stored_form_is_segments_of_the_standard_length_and_a_manifest(world):
-    declare(ONE_SECOND)
     back = saved(world, Video.from_frames(iter(pictures(35)), FPS))
     info = back._info()
     assert [(s["file"], s["start"], s["frames"]) for s in info["segments"]] == [
         ("seg/00000.mp4", 0, 10), ("seg/00001.mp4", 10, 10), ("seg/00002.mp4", 20, 10), ("seg/00003.mp4", 30, 5)]
     assert {k: info[k] for k in ("codec", "pix_fmt", "width", "height", "fps", "frames", "segment_seconds",
-                                 "standard")} == {
+                                 "audio")} == {
         "codec": "h264", "pix_fmt": "yuv420p", "width": W, "height": H, "fps": "10/1", "frames": 35,
-        "segment_seconds": 1, "standard": ONE_SECOND}
+        "segment_seconds": 1, "audio": []}
     assert info["duration"] == 3.5
     files = json.loads(io.BytesIO(_encoded(back)).read())["files"]
     assert sorted(files) == ["manifest.json", *(s["file"] for s in info["segments"])]
@@ -166,7 +172,6 @@ def _encoded(v):
 
 
 def test_the_same_video_under_two_names_stores_each_segment_once(world, tmp_path):
-    declare(ONE_SECOND)
     src = mpeg4(tmp_path / "src.mp4")
     a = saved(world, Video.from_path(src), "video/a")
     files = sorted((world._store.art.root / "sha256").rglob("*"))
@@ -174,57 +179,110 @@ def test_the_same_video_under_two_names_stores_each_segment_once(world, tmp_path
     assert a.hash == b.hash and sorted((world._store.art.root / "sha256").rglob("*")) == files
 
 
-# --- the ledger/video standard row, read at seal ----------------------------------------------------------------
+# --- a seal keeps what it is given; convert is the one change ---------------------------------------------------
 
-def test_the_standard_row_on_root_transcodes_the_source_to_it(world, tmp_path):
-    declare(ONE_SECOND)
-    back = saved(world, Video.from_path(mpeg4(tmp_path / "src.mp4")))
-    assert (back._info()["codec"], back._info()["standard"], len(back._info()["segments"])) == ("h264", ONE_SECOND, 4)
-
-
-def test_canonical_false_keeps_the_source_codec_and_splits_at_its_keyframes(world, tmp_path):
-    declare(ONE_SECOND)
-    back = saved(world, Video.from_path(mpeg4(tmp_path / "src.mp4")), canonical=False)
-    info = back._info()
-    assert (info["codec"], info["standard"], info["frames"]) == ("mpeg4", None, 35)
-    assert close(back.frame(34), pictures(35)[34], tol=4)
-
-
-def test_a_ledger_with_no_row_seals_as_canonical_false_and_says_so_once(world, tmp_path):
+def test_a_seal_keeps_the_source_codec_and_splits_at_its_keyframes(world, tmp_path):
     src = mpeg4(tmp_path / "src.mp4")
-    with warnings.catch_warnings(record=True) as said:
-        warnings.simplefilter("always")
-        Video.from_path(src).seal(world, name="video/a")
-        Video.from_path(src).seal(world, name="video/b")
-    texts = [str(w.message) for w in said if "ledger/video" in str(w.message)]
-    assert len(texts) == 1 and "ledger/games" in texts[0] and "canonical=False" in texts[0]
-    assert world.at().load("video/b")._info()["codec"] == "mpeg4"
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")                   # nothing to say: there is no standard to miss
+        back = saved(world, Video.from_path(src))
+    info = back._info()
+    assert (info["codec"], info["frames"]) == ("mpeg4", 35) and len(info["segments"]) > 1
+    whole = np.frombuffer(subprocess.run(["ffmpeg", "-v", "error", "-i", str(src), "-f", "rawvideo", "-pix_fmt",
+                                          "rgb24", "pipe:1"], capture_output=True, check=True).stdout, np.uint8)
+    got = np.stack(list(back.iter()))
+    assert (got.ravel() == whole).all()                  # not re-encoded: the same pixels
 
 
-def test_a_source_already_in_the_standard_is_split_without_re_encoding(world):
-    """A video's own ``path()`` is in its standard, keyframes at every boundary: sealed again, its packets are
-    copied, so every frame decodes to exactly the same pixels (a transcode would move them) in the same segments."""
-    declare(ONE_SECOND)
+def test_a_seal_takes_no_canonical(world, tmp_path):
+    with pytest.raises(TypeError):
+        Video.from_path(mpeg4(tmp_path / "src.mp4")).seal(world, name="video/a", canonical=False)
+
+
+def test_a_video_read_from_its_path_seals_to_the_same_segments(world):
+    """Packets are copied, so a video's own ``path()`` sealed again decodes to exactly the same pixels."""
     first = saved(world, Video.from_frames(iter(pictures(35)), FPS), "video/a")
     again = saved(world, Video.from_path(first.path()), "video/b")
     assert [s["frames"] for s in again._info()["segments"]] == [10, 10, 10, 5]
-    assert again._info()["standard"] == ONE_SECOND
     assert all((x == y).all() for x, y in zip(first.iter(), again.iter()))
 
 
-def test_a_standard_row_that_does_not_parse_is_refused(world, tmp_path):
-    declare("h265 yuv420p cfr seg=10s")
-    with pytest.raises(ValueError, match="video standard"):
-        Video.from_path(mpeg4(tmp_path / "src.mp4")).seal(world, name="video/a")
-    assert Standard(DEFAULT_STANDARD).seconds == 10
+def test_a_stream_mp4_cannot_hold_goes_in_matroska_segments(world, tmp_path):
+    """Any representation goes on a ledger: FFV1 and mu-law, the second refused by MP4, are kept in Matroska."""
+    src = with_audio(tmp_path / "src.mkv", 2.5, "-c:v", "ffv1", "-pix_fmt", "yuv420p", audio=("-c:a", "pcm_mulaw"))
+    back = saved(world, Video.from_path(src))
+    info = back._info()
+    assert (info["codec"], info["frames"], info["audio"][0]["codec"]) == ("ffv1", 25, "pcm_mulaw")
+    assert {Path(s["file"]).suffix for s in info["segments"]} == {".mkv"} and len(info["segments"]) == 3
+    p = back.path()
+    assert p.suffix == ".mkv" and streams(p, "v") == [("ffv1", 25)] and streams(p, "a")[0][0] == "pcm_mulaw"
+    assert back.frame(24).shape == (H, W, 3)
 
 
-def test_v_seal_reads_no_ledger_and_its_save_keeps_its_bytes(world, tmp_path):
-    declare(ONE_SECOND)
-    v = Video.from_path(mpeg4(tmp_path / "src.mp4"))
-    h = v.seal()
-    v.seal(world, name="video/a")
-    assert world.at().load("video/a").hash == h and world.at().load("video/a")._info()["codec"] == "mpeg4"
+def test_the_audio_is_kept_by_the_seal_and_the_path(world, tmp_path):
+    src = with_audio(tmp_path / "src.mp4")
+    back = saved(world, Video.from_path(src))
+    assert back._info()["audio"] == [{"codec": "aac", "channels": 1, "sample_rate": "44100"}]
+    assert back._info()["frames"] == 35 and len(back._info()["segments"]) == 4
+    assert streams(back.path(), "a") == streams(src, "a") and streams(back.path(), "v") == streams(src, "v")
+    assert duration(back.path(), "a") == pytest.approx(duration(src, "a"), abs=0.05)
+    assert duration(back.path(), "v") == pytest.approx(duration(src, "v"), abs=0.05)     # B-frames: no gap at a join
+
+
+def test_every_audio_stream_is_kept(world, tmp_path):
+    two = tmp_path / "two.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(with_audio(tmp_path / "src.mp4")), "-f", "lavfi", "-i",
+                    "sine=frequency=880:sample_rate=22050:duration=3", "-map", "0", "-map", "1", "-c:v", "copy",
+                    "-c:a", "aac", str(two)], check=True)
+    back = saved(world, Video.from_path(two))
+    assert len(back._info()["audio"]) == 2 and len(streams(back.path(), "a")) == 2
+
+
+def test_a_clip_keeps_its_audio_and_its_frames_are_exact(world, tmp_path):
+    back = saved(world, Video.from_path(with_audio(tmp_path / "src.mp4")))
+    clip = back.clip(12, 27)                             # 1.5 s, across two segment boundaries
+    p = clip.path()
+    assert clip._info()["frames"] == 15 and clip._info()["codec"] == "h264"
+    assert clip._info()["audio"][0]["codec"] == "aac" and duration(p, "a") == pytest.approx(1.5, abs=0.05)
+    assert close(clip.frame(0), back.frame(12), tol=16) and close(clip.frame(14), back.frame(26), tol=16)
+    again = saved(world, clip, "video/clip")
+    assert again._info()["audio"] == clip._info()["audio"]
+
+
+def test_a_clip_of_a_silent_video_is_silent(world):
+    back = saved(world, Video.from_frames(iter(pictures(25)), FPS))
+    assert back.clip(3, 13)._info()["audio"] == []
+
+
+def test_convert_gives_a_new_unsealed_video_in_the_target_format(world, tmp_path):
+    src = saved(world, Video.from_path(with_audio(tmp_path / "src.mp4")))
+    before = src.hash
+    out = src.convert("mpeg4", options=("-q:v", "2"))
+    assert isinstance(out, Video) and out is not src and not out.sealed
+    assert (out._info()["codec"], out._info()["audio"][0]["codec"]) == ("mpeg4", "aac")
+    assert out._info()["frames"] == 35 and close(out.frame(30), src.frame(30), tol=16)
+    back = saved(world, out, "video/mpeg4")
+    assert back.hash != before and src.hash == before and src._info()["codec"] == "h264"
+
+
+def test_convert_changes_the_pixel_format_the_rate_and_the_audio_codec(world, tmp_path):
+    src = saved(world, Video.from_path(with_audio(tmp_path / "src.mp4")))
+    out = src.convert("libx264", pix_fmt="yuv444p", fps=5, audio="pcm_mulaw")
+    info = out._info()
+    assert (info["codec"], info["pix_fmt"], info["fps"], info["audio"][0]["codec"]) == ("h264", "yuv444p", "5/1",
+                                                                                      "pcm_mulaw")
+    assert info["frames"] == pytest.approx(18, abs=1)
+    assert {Path(s["file"]).suffix for s in info["segments"]} == {".mkv"}     # MP4 does not hold mu-law
+    assert saved(world, out, "video/x")._info()["fps"] == "5/1"
+
+
+def test_convert_takes_a_format_no_list_knows_and_says_when_ffmpeg_does_not(world, tmp_path):
+    src = saved(world, Video.from_frames(iter(pictures(15)), FPS))
+    assert src.convert("ffv1")._info()["codec"] == "ffv1"
+    with pytest.raises(RuntimeError, match="Unknown encoder|nosuchencoder"):
+        src.convert("nosuchencoder")._info()
+    with pytest.raises(ValueError, match="codec"):
+        src.convert("")
 
 
 # --- lazy reads: frame(n), clip, path() ------------------------------------------------------------------------
@@ -260,7 +318,6 @@ def remote(world, tmp_path, monkeypatch):
     register_store("bucket", lambda ledger: store)
     with world.transaction(by="t") as t:
         t.add("db", "db/store", "bucket")
-    declare(ONE_SECOND)
     return world, store
 
 
@@ -272,10 +329,8 @@ def cold(L, name="video/G1"):
 
 
 def seal_on(L, frames):
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        v = Video.from_frames(iter(frames), FPS)
-        v.seal(L, name="video/G1")
+    v = Video.from_frames(iter(frames), FPS)
+    v.seal(L, name="video/G1")
     return v
 
 
@@ -332,7 +387,6 @@ def test_path_joins_the_segments_into_one_file_once(remote):
 
 
 def test_frames_outside_the_video_are_index_error(world):
-    declare(ONE_SECOND)
     back = saved(world, Video.from_frames(iter(pictures(12)), FPS))
     with pytest.raises(IndexError):
         back.frame(12)
@@ -341,11 +395,8 @@ def test_frames_outside_the_video_are_index_error(world):
 
 
 def test_a_copy_to_another_ledger_carries_every_segment(world, tmp_path):
-    declare(ONE_SECOND)
     v = Video.from_frames(iter(pictures(25)), FPS)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        v.seal(world, name="video/G1")
+    v.seal(world, name="video/G1")
     hashes = set(Video._stored_hashes(world._store.art, v.hash))
     assert hashes == {s["sha256"] for s in v._info()["segments"]} | {json.loads(_encoded(v))["files"]["manifest.json"]}
 
@@ -364,9 +415,7 @@ def test_a_seal_from_a_url_holds_no_more_than_a_block(world, tmp_path):
     v = Video.from_url(src.as_uri())
     tracemalloc.start()
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            v.seal(world, name="video/noise")
+        v.seal(world, name="video/noise")
         _now, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
@@ -376,7 +425,6 @@ def test_a_seal_from_a_url_holds_no_more_than_a_block(world, tmp_path):
 
 def test_frames_are_encoded_as_they_are_iterated_never_accumulated(world):
     """300 frames of 320x240 RGB, 69 MB in all, made one at a time: peak allocation stays a few frames."""
-    declare(ONE_SECOND)
     made = []
 
     def stream():
@@ -388,9 +436,7 @@ def test_frames_are_encoded_as_they_are_iterated_never_accumulated(world):
     v = Video.from_frames(stream(), 30)
     tracemalloc.start()
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            v.seal(world, name="video/stream")
+        v.seal(world, name="video/stream")
         _now, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()

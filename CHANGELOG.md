@@ -8,6 +8,11 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.68.0 — 2026-11-06
+
+- **`Video` stores what it is given and converts only on request (SVP 1557; minor).** A seal copies any codec in any container, video and every audio stream, split at keyframes near every 10 s, on every ledger; only frames in memory are encoded. New `Video.convert(codec, pix_fmt=None, fps=None, audio="copy", options=())`: any format `ffmpeg` can encode, no list, returning a new unsealed `Video`. `clip` keeps the audio. A stream MP4 cannot hold is stored in Matroska segments (`seg/00000.mkv`), and `path()` then gives a `.mkv`. Removed: the `ledger/video` row, `seal(canonical=)`, `Standard`, `STANDARD`, `DEFAULT_STANDARD`, the warning, and `standard` in the manifest; `audio` joins it. A video sealed before this has no audio and keeps its hash; sealed again, it gets a new one.
+- **Fix: joined segments of a source with B-frames ran long (SVP 1557).** Every fragmented segment's video started late by the B-frame delay, so `path()` was longer than its source and a re-encode of it gained frames. Segments are written with `delay_moov`, so `path()` matches its source's timing.
+
 ## 2.67.0 — 2026-11-06
 
 - **`Video`, a video as a ledger value (SVP 249; minor).** `dvc_dat.ledger.Video` holds a source, a URL (`Video.from_url`, through `fsspec`: the new `video` extra), a local file (`Video.from_path`) or frames in memory (`Video.from_frames(frames, fps)`), and stores it as a folder of fragmented-MP4 segments plus `manifest.json`, encoded as a `Dat`'s content manifest, so a shared segment is stored once. Sealing converts through one `ffmpeg` process, never holding the video whole: to the standard the root ledger declares for the ledger, `(ledger/<name>, ledger/video, "h264 yuv420p cfr seg=10s")`, transcoding unless the source already is in it; `seal(canonical=False)` or a ledger with no row (warned once) keeps the source codec and splits at keyframes. A load reads the manifest alone; `frame(n)` fetches one segment, `frames(a, b)`, `iter()` and `clip(a, b)` the segments they cover, `path()` joins them into one MP4 once. `ffmpeg` and `ffprobe` are required to seal or read one. The encoding rule holds on the stored form; a source's conversion is its stated limit (an `xfail(strict=True)`). Docs: DAT Ledger § Video Interface.

@@ -2,15 +2,11 @@
 (SVP 249).
 
 A ``Video`` holds a source, a URL (``gs://…``, ``https://…``, anything ``fsspec`` opens), a local file or frames in
-memory, and its stored form is a folder of segments plus a manifest. Sealing converts the source through one
-``ffmpeg`` process into segments of fixed length and stores each one as a part, never holding the video whole in
-memory; a loaded ``Video`` reads its manifest alone, and ``frame``, ``frames``, ``clip``, ``path`` and ``iter``
-fetch the segments they cover, once, into the local art store.
-
-The stored form a ledger wants is declared on the root ledger, one row per ledger, the shape of
-``ledger/lifetime``: ``(ledger/<name>, ledger/video, "h264 yuv420p cfr seg=10s")``. A ``Video`` sealed onto that
-ledger is transcoded to it, unless the source already is in it (then it is split without re-encoding), or unless
-sealed with ``canonical=False``, which keeps the source's codec and only splits at its keyframes.
+memory, and its stored form is a folder of segments plus a manifest. Sealing never re-encodes a source: it splits
+the file at its keyframes through one ``ffmpeg`` process, keeping the codec and the audio, and stores each segment
+as a part, never holding the video whole in memory; a loaded ``Video`` reads its manifest alone, and ``frame``,
+``frames``, ``clip``, ``path`` and ``iter`` fetch the segments they cover, once, into the local art store. Any
+representation goes on any ledger, and changing one is an explicit ``convert``, which gives a new value (SVP 1557).
 
 ``ffmpeg`` and ``ffprobe`` must be on ``PATH`` to seal or read one; a URL source needs ``fsspec`` (the ``video``
 extra) and the filesystem package its scheme names (``gcsfs`` for ``gs://``).
@@ -24,11 +20,10 @@ import shutil
 import subprocess
 import tempfile
 import uuid
-import warnings
 import weakref
 from fractions import Fraction
 from pathlib import Path
-from typing import IO, TYPE_CHECKING, Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import IO, TYPE_CHECKING, Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 from .codec import canonical as canonical_json
 from .value import Value
@@ -38,42 +33,24 @@ if TYPE_CHECKING:
 
     from .store import ArtStore, Part
 
-#: The root ledger's row naming a ledger's video standard: ``(ledger/<name>, ledger/video, "<standard>")``.
-STANDARD = "ledger/video"
-#: The standard a video is encoded to when there is no source codec to keep (frames in memory) and no ledger row.
-DEFAULT_STANDARD = "h264 yuv420p cfr seg=10s"
+#: The length a video is split at, in seconds: a split lands on the first keyframe at or after each multiple.
+SEGMENT_SECONDS = 10
 #: The file inside the stored folder that describes the video.
 MANIFEST = "manifest.json"
-#: The encoder settings of a transcode, fixed so a source gives the same bytes on every machine with the same
-#: ``ffmpeg`` build: ``x264``'s output depends on its thread count, never on the cores it runs on.
+#: The encoder settings where a video has no codec to keep (frames in memory, a clip), and of ``convert`` to H.264
+#: with no options of its own, fixed so a source gives the same bytes on every machine with the same ``ffmpeg``
+#: build: ``x264``'s output depends on its thread count, never on the cores it runs on.
 _X264 = ("-preset", "medium", "-crf", "23", "-x264-params", "threads=8")
-#: Segment container: fragmented MP4, each segment playable alone, no muxer version or time written into it.
-_SEGMENT_OUT = ("-fflags", "+bitexact", "-flags:v", "+bitexact", "-f", "segment", "-reset_timestamps", "1",
-                "-segment_format", "mp4", "-segment_format_options",
-                "movflags=+frag_keyframe+empty_moov+default_base_moof:fflags=+bitexact")
+_ENCODE = ("-c:v", "libx264", *_X264, "-pix_fmt", "yuv420p")
+#: Segment container options: each segment plays alone, no muxer version or time written into it. MP4 is fragmented,
+#: ``delay_moov`` so a segment's edit list carries its B-frame delay: with ``empty_moov`` every segment's video runs
+#: late of its audio by that delay and joined segments run long. A stream MP4 cannot hold goes in Matroska instead.
+_SEGMENT_OUT = ("-fflags", "+bitexact", "-flags:v", "+bitexact", "-f", "segment", "-reset_timestamps", "1")
+_FRAGMENTED = ("-segment_format", "mp4", "-segment_format_options",
+               "movflags=+frag_keyframe+delay_moov+default_base_moof:fflags=+bitexact")
+_MATROSKA = ("-segment_format", "matroska")
 #: The block a URL source is read and spooled in.
 _BLOCK = 1 << 20
-
-_WARNED: set = set()
-
-
-class Standard:
-    """A parsed video standard, the text of a ``ledger/video`` row: ``"<codec> <pix_fmt> cfr seg=<n>s"``.
-
-    The codec is ``h264`` (encoded by ``libx264``); ``pix_fmt`` any pixel format ``ffmpeg`` names; ``cfr`` a constant
-    frame rate (the source's average); ``seg=<n>s`` the segment length in whole seconds. Any other word is
-    ``ValueError``."""
-
-    CODECS = {"h264": "libx264"}
-
-    def __init__(self, text: str) -> None:
-        words = text.split() if isinstance(text, str) else []
-        if len(words) != 4 or words[0] not in self.CODECS or words[2] != "cfr" or not words[3].startswith("seg=") \
-                or not words[3].endswith("s") or not words[3][4:-1].isdigit() or int(words[3][4:-1]) < 1:
-            raise ValueError(f"a video standard is '<codec> <pix_fmt> cfr seg=<seconds>s' with codec "
-                             f"{'|'.join(self.CODECS)}, such as {DEFAULT_STANDARD!r}; not {text!r}")
-        self.text = " ".join(words)
-        self.codec, self.pix_fmt, self.seconds = words[0], words[1], int(words[3][4:-1])
 
 
 def _tool(name: str) -> str:
@@ -108,27 +85,27 @@ def _count(path: Path) -> int:
     return int(out.strip().split(",")[0])
 
 
-def _keyframes_at_boundaries(path: Path, seconds: int) -> bool:
-    """Does every segment boundary of a ``seconds`` split land on a keyframe: is the first frame at or after each
-    multiple of ``seconds`` a keyframe? (What a transcode to the standard forces.)"""
-    out = _run([_tool("ffprobe"), "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time,flags",
-                "-of", "csv=p=0", str(path)], f"reading the keyframes of {path}")
-    frames: List[Tuple[float, bool]] = []
-    for line in out.splitlines():
-        parts = line.split(",")
-        if len(parts) >= 2 and parts[0] not in ("", "N/A"):
-            frames.append((float(parts[0]), "K" in parts[1]))
-    frames.sort()
-    if not frames or not frames[0][1]:
-        return False
-    k = 1
-    for t, key in frames:
-        if t >= k * seconds:
-            if not key:
-                return False
-            while t >= k * seconds:
-                k += 1
-    return True
+def _audio(path: Path) -> List[Dict[str, Any]]:
+    """The audio streams of ``path``: codec, channels and sample rate of each."""
+    out = _run([_tool("ffprobe"), "-v", "error", "-select_streams", "a", "-show_entries",
+                "stream=codec_name,channels,sample_rate", "-of", "json", str(path)], f"probing the audio of {path}")
+    return [{"codec": a["codec_name"], "channels": a.get("channels"), "sample_rate": a.get("sample_rate")}
+            for a in json.loads(out).get("streams") or []]
+
+
+def _container(args: List[str]) -> str:
+    """The segment file suffix for the ``ffmpeg`` input and stream arguments ``args``: ``.mp4`` when MP4 holds those
+    streams, else ``.mkv``. Asked of ``ffmpeg`` by muxing one frame, so no list of codecs is kept here."""
+    with tempfile.TemporaryDirectory(prefix="dvc-dat-video-") as d:
+        done = subprocess.run([_tool("ffmpeg"), "-nostdin", "-v", "error", "-y", *args, "-frames:v", "1",
+                               "-f", "mp4", str(Path(d) / "try.mp4")], capture_output=True)
+    return ".mp4" if done.returncode == 0 else ".mkv"
+
+
+def _listing(paths: List[Path], dest: Path) -> None:
+    """An ``ffmpeg`` concat listing of ``paths``."""
+    quote = chr(39) + chr(92) + chr(39) + chr(39)
+    dest.write_text("".join(f"file '{str(p).replace(chr(39), quote)}'\n" for p in paths))
 
 
 def _rate(text: str) -> Fraction:
@@ -176,28 +153,27 @@ class Video(Value):
     is a ``numpy`` array, ``(height, width, 3)`` ``uint8``, RGB.
 
     **Stored form.** A folder: ``manifest.json`` (codec, pixel format, size, frame rate, frame count, duration,
-    segment length, the standard, and each segment's first frame, frame count and sha256) and ``seg/00000.mp4`` …,
-    each a fragmented MP4 that starts on a keyframe and plays alone, so a frame's address is a segment and an
-    offset. The encoding is the folder's content manifest, ``{"files": {relpath: sha256}}`` in canonical JSON, a
-    ``Dat``'s shape, so two videos with the same segments have one hash and a segment two videos share is stored
-    once.
+    segment length, the audio streams, and each segment's first frame, frame count and sha256) and
+    ``seg/00000.mp4`` …, each starting on a keyframe and playing alone, so a frame's address is a segment and an
+    offset. Segments are fragmented MP4, or Matroska (``.mkv``) for a stream MP4 cannot hold. The encoding is the
+    folder's content manifest, ``{"files": {relpath: sha256}}`` in canonical JSON, a ``Dat``'s shape, so two videos
+    with the same segments have one hash and a segment two videos share is stored once.
 
-    **Sealing.** ``seal`` takes ``canonical`` besides what every value's takes. Sealed onto a ledger whose root
-    declares a standard (``(ledger/<name>, ledger/video, "h264 yuv420p cfr seg=10s")``), the source is transcoded
-    to it, or split without re-encoding when it is already in it; ``canonical=False``, or a ledger with no row
-    (said once per ledger), keeps the source's codec and splits it at its keyframes near every 10 s. Frames in
-    memory have no codec to keep and are always encoded, to the ledger's standard or ``DEFAULT_STANDARD``.
-    ``v.seal()`` and a ``v.hash`` before a save read no ledger, so they convert with ``canonical=False``.
+    **Sealing keeps what it is given** (SVP 1557). A source's packets are copied, video and every audio stream, and
+    split at the keyframe at or after each ``SEGMENT_SECONDS``; nothing is decoded, on any ledger. Only frames in
+    memory, which have no codec to keep, are encoded (H.264, yuv420p, constant rate). ``convert`` is the one way to
+    change a video's representation.
 
     **The encoding rule** (deterministic and lossless, ``Value``). A ``Video``'s value is its stored segments and
     manifest, not the frames they decode to, and on that value both clauses hold: equal stored forms encode to the
-    same bytes, and ``decode`` gives back a video whose encoding is those bytes. Converting a source is not
-    canonical: ``canonical=False`` keeps the source's bytes, so two files holding the same frames in different
-    codecs or containers are different values; a transcode is lossy and gives the same bytes for the same frames
-    only under the same ``ffmpeg`` and ``x264`` builds (the encoder settings are fixed, ``_X264``, and no muxer
-    version or time is written). Each limit is an ``xfail(strict=True)`` in ``tests/ledger/test_value_encoding.py``.
+    same bytes, and ``decode`` gives back a video whose encoding is those bytes. Sealing is not canonical: it keeps
+    the source's bytes, so two files holding the same frames in different codecs or containers are different values;
+    encoding frames gives the same bytes for the same frames only under the same ``ffmpeg`` and ``x264`` builds
+    (the encoder settings are fixed, ``_X264``, and no muxer version or time is written). Each limit is an
+    ``xfail(strict=True)`` in ``tests/ledger/test_value_encoding.py``.
 
-    Audio is not kept. Inside a sandboxed function a ``Video`` that has to run ``ffmpeg`` is ``ConfinedProcess``.
+    Subtitle and data streams are not kept. Inside a sandboxed function a ``Video`` that has to run ``ffmpeg`` is
+    ``ConfinedProcess``.
     """
 
     def __init__(self, source: Tuple[Any, ...], *, name: Optional[str] = None) -> None:
@@ -233,65 +209,19 @@ class Video(Value):
 
     # --- sealing -------------------------------------------------------------------------------------------
 
-    def seal(self, to: Any = True, *, canonical: bool = True, **kwargs: Any) -> str:  # type: ignore[override]
-        """``Value.seal``, converting the source to the ledger's standard first (see the class).
-
-        ``canonical=False`` keeps the source's codec and only splits it at its keyframes; a ledger whose root
-        declares no ``ledger/video`` standard seals that way too, said once per ledger. ``to=True`` (``v.seal()``)
-        reads no ledger and converts as ``canonical=False``."""
-        if not self.sealed and self.__dict__.get("_files") is None:
-            self.__dict__["_mode"] = self._standard_for(to) if canonical else None
-        return super().seal(to, **kwargs)
-
-    @staticmethod
-    def _standard_for(to: Any) -> Optional[str]:
-        """The standard the root ledger declares for the ledger ``to`` seals onto; ``None`` with no ledger, or no
-        row (warned once per ledger)."""
-        from .errors import LedgerError
-        from .ledger import ROOT, Ledger
-        from .txn import Transaction
-
-        ledger = to._ledger if isinstance(to, Transaction) else to if isinstance(to, Ledger) else None
-        if ledger is None:
-            return None
-        name = ledger._store.name
-        why = None
-        try:
-            from .named import ledgers
-
-            words = ledgers[ROOT].at().all(f"ledger/{name}", STANDARD)
-        except (LedgerError, KeyError) as e:             # root does not open: no row can be read
-            words, why = [], f"the root ledger does not open ({e})"
-        if len(words) > 1:
-            raise ValueError(f"root declares more than one video standard for ledger {name}: "
-                             f"{', '.join(repr(w) for w in words)}")
-        if words:
-            return Standard(str(words[0])).text
-        if name not in _WARNED:
-            _WARNED.add(name)
-            why = why or f"root declares no (ledger/{name}, {STANDARD}, ...) row"
-            warnings.warn(f"ledger {name}: {why}; a Video sealed onto it keeps its source codec (canonical=False)",
-                          stacklevel=4)
-        return None
-
     def _stage(self) -> Tuple[Path, Dict[str, str], Dict[str, Any]]:
-        """The source converted to the stored form in a local folder: ``(folder, files, manifest)``. Done once per
-        mode and kept while the object lives (the save hardlinks the files into the art store)."""
-        mode = self.__dict__.get("_mode")
+        """The source converted to the stored form in a local folder: ``(folder, files, manifest)``. Done once and
+        kept while the object lives (the save hardlinks the files into the art store)."""
         staged = self.__dict__.get("_staged")
-        if staged is not None and staged[0] == mode:
-            return staged[1]
+        if staged is not None:
+            return staged
         source = self.__dict__.get("_source")
         if source is None:
             raise ValueError(f"{self!r} has no source to convert")
-        if source[0] == "frames" and staged is not None:
-            raise ValueError("a Video's frames are read once: it was converted without a ledger's standard (a hash "
-                             "or v.seal() before the save), and cannot be converted again to another")
         folder = Path(tempfile.mkdtemp(prefix="dvc-dat-video-"))
         weakref.finalize(self, shutil.rmtree, str(folder), True)
-        result = _convert(source, Standard(mode) if mode is not None else None, folder)
-        self.__dict__["_staged"] = (mode, result)
-        return result
+        self.__dict__["_staged"] = _convert(source, folder)
+        return self.__dict__["_staged"]
 
     def _files_now(self) -> Dict[str, str]:
         stored = self.__dict__.get("_files")
@@ -400,99 +330,146 @@ class Video(Value):
         return self.frames(0, int(self._info()["frames"]))
 
     def clip(self, a: int, b: int) -> "Video":
-        """Frames ``[a, b)`` as a new, unsealed ``Video``.
+        """Frames ``[a, b)`` and their audio as a new, unsealed ``Video``.
 
-        Reading or sealing it fetches only the segments that cover them; it is encoded anew, to this video's
-        standard (else ``DEFAULT_STANDARD``)."""
+        Reading or sealing it fetches only the segments that cover them. The frames are encoded anew (H.264, yuv420p,
+        frame-exact); the audio is copied, cut at the packets nearest the frames' times."""
         a, b = self._span(a, b)
+        return Video(("clip", self, a, b))
+
+    def convert(self, codec: str, *, pix_fmt: Optional[str] = None, fps: Any = None, audio: str = "copy",
+                options: Iterable[str] = ()) -> "Video":
+        """This video in another format, as a new, unsealed ``Video``; this one is untouched.
+
+        ``codec`` is any video encoder ``ffmpeg`` has or a codec it can encode (``"h264"``, ``"libx265"``,
+        ``"libvpx-vp9"``, ``"ffv1"``, ``"rawvideo"``); there is no list here, and one this ``ffmpeg`` lacks fails
+        with its own message. ``pix_fmt`` keeps the source's when ``None``. ``fps`` gives a constant frame rate,
+        dropping and repeating frames to reach it, and ``None`` keeps the source's timing. ``audio`` is ``"copy"`` or
+        an audio encoder. ``options`` are more ``ffmpeg`` output arguments (``("-crf", "18")``), and H.264 given none
+        takes ``_X264``. The conversion reads the whole video, when it is read or sealed, and a keyframe is forced
+        every ``SEGMENT_SECONDS`` so its segments come out even."""
+        if not isinstance(codec, str) or not codec:
+            raise ValueError(f"convert takes the name of a video codec or encoder, not {codec!r}")
+        return Video(("convert", self, codec, pix_fmt, _fps(fps) if fps is not None else None, audio,
+                      tuple(options)))
+
+    def _suffix(self) -> str:
+        """The stored segments' file suffix."""
+        return Path(self._info()["segments"][0]["file"]).suffix
+
+    def _join(self, segments: List[int], dest: Path, maps: List[str], extra: Iterable[str] = ()) -> None:
+        """The streams ``maps`` of ``segments``, joined without re-encoding into ``dest``."""
+        listing = dest.with_name(f"{dest.name}.list-{uuid.uuid4().hex[:8]}")
+        try:
+            _listing([self._segment(i) for i in segments], listing)
+            _run([_tool("ffmpeg"), "-nostdin", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
+                  *extra, *maps, "-c", "copy", "-fflags", "+bitexact", "-flags:v", "+bitexact",
+                  *(["-movflags", "+faststart", "-f", "mp4"] if dest.suffix == ".mp4" else ["-f", "matroska"]),
+                  str(dest)], f"joining the segments of {self!r}")
+        finally:
+            listing.unlink(missing_ok=True)
+
+    def _audio_of(self, a: int, b: int, folder: Path) -> Optional[Path]:
+        """The audio of frames ``[a, b)`` as a file in ``folder``, cut at packets; ``None`` for a silent video."""
         info = self._info()
-        v = Video(("frames", self.frames(a, b), _rate(info["fps"])))
-        v.__dict__["_mode"] = info.get("standard") or DEFAULT_STANDARD
-        return v
+        if not info.get("audio"):
+            return None
+        fps = _rate(info["fps"])
+        covering = [(i, s) for i, s in enumerate(info["segments"])
+                    if int(s["start"]) < b and int(s["start"]) + int(s["frames"]) > a]
+        offset = Fraction(a - int(covering[0][1]["start"])) / fps
+        dest = folder / f"audio{self._suffix()}"
+        self._join([i for i, _s in covering], dest, ["-map", "0:a"],
+                   ("-ss", f"{float(offset):.6f}", "-t", f"{float(Fraction(b - a) / fps):.6f}"))
+        return dest
 
     def path(self) -> Path:
-        """The whole video as one local MP4 file, for a reader that needs a file.
+        """The whole video, audio included, as one local file, for a reader that needs a file: an MP4, or a Matroska
+        file when the segments are.
 
         Its segments joined without re-encoding, once: under the art store's ``video/`` (a saved video) or beside
         the staged segments (an unsealed one)."""
         store = self.__dict__.get("_store")
-        n = len(self._info()["segments"])
+        suffix = self._suffix()
         if store is None:
-            folder = self._stage()[0]
-            dest = folder / "video.mp4"
+            dest = self._stage()[0] / f"video{suffix}"
         else:
-            dest = store.dats.parent / "video" / f"{self.hash}.mp4"
+            dest = store.dats.parent / "video" / f"{self.hash}{suffix}"
         if dest.exists():
             return dest
         dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_name(f"{dest.name}.tmp-{uuid.uuid4().hex[:8]}")
-        listing = dest.with_name(f"{dest.name}.list-{uuid.uuid4().hex[:8]}")
+        tmp = dest.with_name(f"tmp-{uuid.uuid4().hex[:8]}-{dest.name}")
         try:
-            listing.write_text("".join(f"file '{str(self._segment(i)).replace(chr(39), chr(39) + chr(92) + chr(39) + chr(39))}'\n"
-                                       for i in range(n)))
-            _run([_tool("ffmpeg"), "-nostdin", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
-                  "-map", "0:v:0", "-c", "copy", "-fflags", "+bitexact", "-flags:v", "+bitexact",
-                  "-movflags", "+faststart", "-f", "mp4", str(tmp)], f"joining the segments of {self!r}")
+            self._join(list(range(len(self._info()["segments"]))), tmp, ["-map", "0:v:0", "-map", "0:a?"])
             os.replace(tmp, dest)
         finally:
             tmp.unlink(missing_ok=True)
-            listing.unlink(missing_ok=True)
         return dest
 
 
-def _convert(source: Tuple[Any, ...], standard: Optional[Standard], folder: Path) -> Tuple[Path, Dict[str, str],
-                                                                                         Dict[str, Any]]:
-    """Convert ``source`` into ``folder`` (``seg/*.mp4`` and ``manifest.json``) through one ``ffmpeg`` process:
-    transcoded to ``standard``, split without re-encoding when the source is in it already, or with no
-    ``standard`` split at the source's keyframes. ``(folder, files, manifest)``."""
+def _rawvideo(first: Any, fps: Fraction) -> List[str]:
+    """The ``ffmpeg`` input arguments of RGB frames on stdin, sized from ``first``, after checking it is a frame."""
+    shape = getattr(first, "shape", None)
+    if getattr(first, "dtype", None) is None or str(first.dtype) != "uint8" or shape is None or len(shape) != 3 \
+            or shape[2] != 3:
+        raise ValueError(f"a frame is a (height, width, 3) uint8 RGB array, not {type(first).__name__} {shape}")
+    return ["-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{shape[1]}x{shape[0]}", "-r", _rational(fps), "-i", "pipe:0"]
+
+
+def _convert(source: Tuple[Any, ...], folder: Path) -> Tuple[Path, Dict[str, str], Dict[str, Any]]:
+    """Make the stored form of ``source`` in ``folder`` (``seg/*`` and ``manifest.json``) through one ``ffmpeg``
+    process: a file's packets copied and split at its keyframes, frames encoded as they are iterated, a ``convert``
+    encoded to its target. ``(folder, files, manifest)``."""
     from .store import file_sha
 
     (folder / "seg").mkdir(parents=True)
     kind = source[0]
+    seconds = SEGMENT_SECONDS
+    keys = ["-force_key_frames", f"expr:gte(t,n_forced*{seconds})"]
     feed: Optional[Iterator[Any]] = None
     first: Any = None
-    if kind == "frames":
-        _kind, frames, fps = source
+    if kind in ("frames", "clip"):
+        if kind == "frames":
+            frames, fps = source[1], source[2]
+            audio, suffix = None, ".mp4"
+        else:
+            parent, a, b = source[1:]
+            frames, fps = parent.frames(a, b), _rate(parent._info()["fps"])
+            audio, suffix = parent._audio_of(a, b, folder), parent._suffix()
         feed = iter(frames)
         first = next(feed, None)
         if first is None:
             raise ValueError("a Video from frames needs at least one frame")
-        shape = getattr(first, "shape", None)
-        if getattr(first, "dtype", None) is None or str(first.dtype) != "uint8" or shape is None or len(shape) != 3 \
-                or shape[2] != 3:
-            raise ValueError(f"a frame is a (height, width, 3) uint8 RGB array, not {type(first).__name__} "
-                             f"{shape}")
-        height, width = int(shape[0]), int(shape[1])
-        standard = standard or Standard(DEFAULT_STANDARD)
-        inputs = ["-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", _rational(fps),
-                  "-i", "pipe:0"]
-        copy = False
+        streams = [*_rawvideo(first, fps), *(["-i", str(audio)] if audio is not None else []), "-map", "0:v:0",
+                   *(["-map", "1:a", "-c:a", "copy"] if audio is not None else []), *_ENCODE,
+                   "-fps_mode", "cfr", "-r", _rational(fps), *keys]
     else:
         if kind == "url":
             local = folder / "source"
             _spool(source[1], local)
-        else:
+        elif kind == "path":
             local = Path(source[1])
+        else:
+            local = source[1].path()
         probe = _probe(local)
         fps = _rate(probe.get("avg_frame_rate") or probe["r_frame_rate"])
         if fps <= 0:
             fps = _rate(probe["r_frame_rate"])
-        inputs = ["-i", str(local)]
-        copy = standard is None or (
-            probe["codec_name"] == standard.codec and probe.get("pix_fmt") == standard.pix_fmt
-            and _rate(probe["r_frame_rate"]) == _rate(probe["avg_frame_rate"])
-            and _keyframes_at_boundaries(local, standard.seconds))
-    seconds = standard.seconds if standard is not None else Standard(DEFAULT_STANDARD).seconds
-    if copy:
-        codec_args = ["-c", "copy"]
-    else:
-        assert standard is not None
-        codec_args = ["-c:v", Standard.CODECS[standard.codec], *_X264, "-pix_fmt", standard.pix_fmt,
-                      "-fps_mode", "cfr", "-r", _rational(fps),
-                      "-force_key_frames", f"expr:gte(t,n_forced*{seconds})"]
-    args = [_tool("ffmpeg"), *(["-nostdin"] if feed is None else []), "-v", "error", *inputs,
-            "-map", "0:v:0", "-an", "-sn", "-dn", "-map_metadata", "-1", "-map_chapters", "-1", *codec_args,
-            *_SEGMENT_OUT, "-segment_time", str(seconds), str(folder / "seg" / "%05d.mp4")]
+        streams = ["-i", str(local), "-map", "0:v:0", "-map", "0:a?"]
+        if kind == "convert":
+            _kind, _parent, codec, pix_fmt, target, sound, options = source
+            fps = target if target is not None else fps
+            streams += ["-c:v", codec, *(options or (_X264 if codec in ("h264", "libx264") else ())),
+                        *(["-pix_fmt", pix_fmt] if pix_fmt else []),
+                        *(["-fps_mode", "cfr", "-r", _rational(target)] if target is not None else []), *keys,
+                        "-c:a", sound]
+        else:
+            streams += ["-c", "copy"]
+        suffix = _container(streams)
+    args = [_tool("ffmpeg"), *(["-nostdin"] if feed is None else []), "-v", "error", *streams, "-sn", "-dn",
+            "-map_metadata", "-1", "-map_chapters", "-1", *_SEGMENT_OUT,
+            *(_FRAGMENTED if suffix == ".mp4" else _MATROSKA), "-segment_time", str(seconds),
+            str(folder / "seg" / f"%05d{suffix}")]
     with tempfile.TemporaryFile() as err:
         proc = subprocess.Popen(args, stdin=subprocess.PIPE if feed is not None else subprocess.DEVNULL,
                                 stdout=subprocess.DEVNULL, stderr=err)
@@ -513,8 +490,8 @@ def _convert(source: Tuple[Any, ...], standard: Optional[Standard], folder: Path
         if code != 0:
             err.seek(0)
             raise RuntimeError(f"ffmpeg exited {code} converting the video: {err.read().decode(errors='replace')[-2000:]}")
-    if kind == "url":
-        (folder / "source").unlink()
+    for used in (folder / "source", folder / f"audio{suffix}"):
+        used.unlink(missing_ok=True)
     segs = sorted((folder / "seg").iterdir())
     if not segs:
         raise ValueError("the source holds no video frames")
@@ -530,8 +507,8 @@ def _convert(source: Tuple[Any, ...], standard: Optional[Standard], folder: Path
     manifest = {
         "codec": head["codec_name"], "pix_fmt": head.get("pix_fmt"), "width": int(head["width"]),
         "height": int(head["height"]), "fps": _rational(fps), "frames": start,
-        "duration": float(Fraction(start) / fps), "segment_seconds": seconds,
-        "standard": standard.text if standard is not None else None, "segments": segments,
+        "duration": float(Fraction(start) / fps), "segment_seconds": seconds, "audio": _audio(segs[0]),
+        "segments": segments,
     }
     (folder / MANIFEST).write_text(canonical_json(manifest, strict=True))
     files[MANIFEST] = file_sha(folder / MANIFEST)
