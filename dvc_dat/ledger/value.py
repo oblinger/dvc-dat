@@ -43,7 +43,17 @@ class FrozenPreds(dict):
 
 
 class Value:
-    """The object itself, with its provenance on it."""
+    """The object itself, with its provenance on it.
+
+    Every subclass's encoding is deterministic and lossless. Deterministic: equal values encode to the same
+    bytes, in any process on any machine. Lossless: ``decode`` of those bytes gives back an equal value, so
+    encoding it again gives the same bytes. A worker shares no memory with its caller, so a value crosses by
+    being encoded and decoded; and ``hash`` is the sha256 of ``encode``, so these decide whether a value rebuilt
+    on each call hits a memo and whether two machines agree on its identity. A new subclass has a test that
+    encode, decode, encode gives the same bytes. Changing a class's encoding moves the hash of everything stored
+    under it, so it is a migration, never a fix: the shipped classes' known failures are ``xfail(strict=True)`` in
+    ``tests/ledger/test_value_encoding.py``.
+    """
 
     Dependencies: ClassVar[Any] = Mapping[str, str]
     """The type of ``dependencies``, for annotations: item name to version or hash."""
@@ -155,8 +165,21 @@ class Value:
         ``pq.write_table`` and ``np.save`` write to it as to a file.
 
         A save encodes once: into a staged file in the art folder, whose hash is the value's, which the upload sends
-        and the commit links into place. Two calls must write the same bytes, or a value sealed by ``v.seal()`` is
-        ``SealBroken`` at its save. A test that wants the bytes passes ``io.BytesIO()``.
+        and the commit links into place.
+
+        **Deterministic:** equal values write the same bytes, in any process on any machine. Two calls on one value
+        that differ make a value sealed by ``v.seal()`` ``SealBroken`` at its save, and ``hash`` decides whether a
+        value rebuilt on each call hits a memo and whether two machines agree on its identity. A new subclass has a
+        test that encode, decode, encode gives the same bytes. Changing a class's encoding moves the hash of
+        everything stored under it, so it is a migration, never a fix.
+
+        Where the shipped classes fall short today, each ``xfail(strict=True)`` in
+        ``tests/ledger/test_value_encoding.py``: ``Value.Blob``, on a dict's insertion order, a set's order (across
+        ``PYTHONHASHSEED``, and after a decode) and a repeated object versus an equal copy; ``Value.Table``, on
+        chunking (a table over 131072 rows does not re-encode the same), schema metadata and the pyarrow version;
+        ``Dat``, on the key order of its spec; ``Code`` has no ``decode``.
+
+        A test that wants the bytes passes ``io.BytesIO()``.
         """
         raise NotImplementedError(f"{type(self).__name__} does not say how it encodes")
 
@@ -167,6 +190,10 @@ class Value:
         Abstract: every ``Value`` subclass must implement it (``NotImplementedError`` otherwise). ``src`` is the
         stored bytes as a binary read stream: a real, seekable file (``ArtStore.open``). A subclass whose ``decode``
         also accepts ``name=`` is passed the name it is loaded by (an alias), or ``None`` when loaded by its subject.
+
+        **Lossless:** it gives back a value equal to the one encoded, so encoding that value again writes the same
+        bytes. A worker shares no memory with its caller, so a value crosses by being encoded and decoded, and a loss
+        here changes behavior when an execution moves.
 
         A value held only in memory is five lines: ``encode(self, out): torch.save(self.t, out)``, ``decode(cls, src,
         store): return cls(torch.load(src))``.
