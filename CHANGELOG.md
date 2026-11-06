@@ -8,6 +8,7 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **A `Dat`'s spec is written with its keys sorted (SVP 1543).** `create` dumped `_spec_.yaml` in the spec's key order, so equal specs in another order gave other bytes. **Stored hashes of a `Dat` whose spec was not in sorted order move**: an old lookup misses and recomputes; nothing wrong is returned.
 - **`Code.decode` (SVP 1543).** A `Code` decodes to one with the same identity (`modules` and the mounts hash), so encode, decode, encode gives the same bytes. The description (version, commit, lock, mounts) is not in the bytes and not the identity: loaded by its name `<unit>@<version>`, the unit and version come back; the rest is `None` or empty. `Code`'s encoding is unchanged: no stored hash moves.
 
 ## 2.62.0 — 2026-11-05

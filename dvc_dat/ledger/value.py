@@ -176,9 +176,9 @@ class Value:
         Where the shipped classes fall short today, each ``xfail(strict=True)`` in
         ``tests/ledger/test_value_encoding.py``: ``Value.Blob``, on a dict's insertion order, a set's order (across
         ``PYTHONHASHSEED``, and after a decode) and a repeated object versus an equal copy; ``Value.Table``, on
-        chunking (a table over 131072 rows does not re-encode the same), schema metadata and the pyarrow version;
-        ``Dat``, on the key order of its spec. ``Code`` keeps both: its bytes are its identity, which ``decode``
-        restores.
+        chunking (a table over 131072 rows does not re-encode the same), schema metadata and the pyarrow version.
+        ``Dat`` and ``Code`` keep both: ``create`` writes a dat's spec with its keys sorted, and a ``Code``'s
+        bytes are its identity, which ``decode`` restores.
 
         A test that wants the bytes passes ``io.BytesIO()``.
         """
