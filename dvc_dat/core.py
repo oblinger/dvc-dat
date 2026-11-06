@@ -2398,13 +2398,20 @@ class DatContainer(Dat, Generic[DatType]):
     """A Dat whose folder holds other Dats, exposed through `get_dats()` / `get_dat_paths()`."""
 
     def get_dat_paths(self) -> List[str]:
-        """Lazy loaded list of full paths for the contained Dats."""
+        """The absolute paths of every dat folder below this one, sorted, the container itself left out.
+
+        A child's `run/` folder is skipped. Computed on first call and kept.
+        """
         if "_dat_paths" not in self.__dict__:
             self.__dict__["_dat_paths"] = DatContainer._find_dats_under(self._path)
         return self.__dict__["_dat_paths"]
 
     def get_dats(self) -> List[DatType]:
-        """The contained Dats (all stay in memory until this container is released)."""
+        """The contained Dats, loaded lazily through the container's manager.
+
+        Each load is recorded inside a run. Computed on first call, then held in memory until this container is
+        released.
+        """
         if "_dats" not in self.__dict__:
             manager = self._world()
             self.__dict__["_dats"] = [manager.load(p) for p in self.get_dat_paths()]
