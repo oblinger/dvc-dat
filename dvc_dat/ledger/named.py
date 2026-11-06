@@ -7,9 +7,15 @@
     dat.at("do26@512")           # a revision on any registered ledger
     dat.load("do26@512:run/G1")  # a value by the global reference <ledger>@<rev>:<name-or-sha> (SVP 248)
 
-Both resolve from the working directory at each use, never at import, so a
-checkout without a default imports fine and refuses only when ``L`` is used. A
-handle is opened once per ledger and kept for the process.
+Both resolve from the working directory at each use, never at import, so a checkout without a default imports fine and
+refuses only when ``L`` is used. A handle is opened once per ledger and kept for the process.
+
+``L`` is this active ledger as one object (``from dvc_dat import L``): a ``Ledger`` (``isinstance`` holds, so
+``v.seal(L)`` and ``seal=L`` take it) whose every attribute is the ledger ``Ledger()`` would open, resolved from the
+working directory and ``DAT_LEDGER`` at each use and never at import. A checkout with a ``ledgers:`` section and no
+default imports it fine and raises the one-line ``LedgerError`` at the first use. ``L.at()`` is the ``Head`` of the
+real handle (a ``Rev`` that is also a transaction), the same handle ``ledgers.<name>`` gives for that ledger;
+``repr(L)`` names it, or says why it is unresolved. See [Many ledgers][many-ledgers].
 """
 
 from __future__ import annotations
@@ -39,9 +45,18 @@ def _handle(target: Any, given: Any, base: Path, cfg: Optional[Path]) -> Ledger:
 
 
 class Ledgers:
-    """The ``ledgers:`` section of the nearest ``.datconfig.yaml`` (the override file's entries merged in):
-    ``ledgers.<name>`` or ``ledgers["<name>"]`` is that ledger's ``Ledger``; every name is a Python identifier
-    (``ledger.NAME``), so every entry has the attribute form."""
+    """The ``ledgers:`` section of the nearest ``.datconfig.yaml``, by name (the override file's entries merged in).
+
+    ``ledgers.<name>`` or ``ledgers["<name>"]`` is that entry's ``Ledger`` -- ``ledgers.record`` or
+    ``ledgers["record"]`` -- opened on first use and kept for the process; every name is a Python identifier, so every
+    entry has the attribute form, ``ledgers.do26`` (``ledger.NAME``).
+
+    ``list(ledgers)`` is the names in file order, ``"games" in ledgers`` a test; an unknown name is ``KeyError``
+    (``AttributeError`` as an attribute) listing the section.
+
+    A named handle asserts no ``mounts:``; only the active ledger does. A project with the one-ledger ``ledger:`` key
+    has no section: ``ledgers.<name>`` is ``LedgerError`` and its ledger is ``L``.
+    """
 
     def _section(self) -> Tuple[Path, Dict[str, str]]:
         cfg, searched = _walk_up(Path.cwd().resolve())

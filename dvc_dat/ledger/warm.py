@@ -102,8 +102,25 @@ def size_of(obj: Any) -> int:
 
 
 class Warm:
-    """The process's warm store and its decorator: ``@dat.warm`` on a function; ``warm.clear()``;
-    ``warm.stats()`` (``entries``, ``bytes``, ``max_bytes``, ``hits``, ``misses``)."""
+    """``@dat.warm``: a process-level memo for boot computations the author promises not to mutate (SVP 250 A7).
+
+    The process's warm store and its decorator: ``warm.clear()`` drops everything; ``warm.stats()`` reports
+    ``entries``, ``bytes``, ``max_bytes``, ``hits`` and ``misses``.
+
+    A warm call's result is keyed by the canonical hash of the arguments, bound to the signature with defaults: a
+    sealed ``Value`` by its hash (an unsealed one is ``TypeError``), a ``Ref`` by its subject, a ``Rev`` by its ledger
+    and revision, a ``Ledger`` by its location, plain data (a spec dict, a str, a number, a list) by ``canonical()``;
+    anything else is ``TypeError`` at the call. The result stays in the process and comes back to any later call with
+    the same key; the process is at one commit, so the commit is in the key by construction.
+
+    One bounded LRU per process, by bytes (``dat.warm.max_bytes``, ``DAT_WARM_BYTES``, 2 GiB by default; sizes
+    estimated: numpy by ``nbytes``, torch by ``numel * element_size``, pandas by ``memory_usage(deep=True)``, bytes
+    and str by length, containers and objects summed); a result over the whole budget is returned and not kept.
+
+    Invisible to the ledger: a value function calling a warm function traces the same reads, so rerunnability is
+    untouched, and a fresh-process rerun catches a broken promise as a hash that differs. In SVP, ``kit_at(ledger,
+    rev)`` and ``load_model(asset)``.
+    """
 
     def __init__(self, max_bytes: Optional[int] = None) -> None:
         env = os.environ.get(ENV_BYTES)
