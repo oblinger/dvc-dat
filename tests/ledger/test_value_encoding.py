@@ -71,12 +71,13 @@ def same(a, b):
 
 
 def assert_same_bytes(a, b):
-    assert encoded(a) == encoded(b)
+    """Compared by sha256: pytest's diff of two megabytes of bytes runs for many minutes."""
+    assert sha256(encoded(a)) == sha256(encoded(b))
 
 
 def assert_round_trips(value):
-    """Encode, decode, encode gives the same bytes."""
-    assert encoded(decoded(value)) == encoded(value)
+    """Encode, decode, encode gives the same bytes (by sha256, as above)."""
+    assert sha256(encoded(decoded(value))) == sha256(encoded(value))
 
 
 def assert_one_hash(hashes):
@@ -289,7 +290,7 @@ def test_a_dat_comes_back_equal_with_the_same_bytes(L, tmp_path):
     dat = plain_folder(tmp_path / "f")
     bytes_before = encoded(dat)
     back = stored_and_back(L, dat, "f/1")
-    assert encoded(back) == bytes_before and back.path != tmp_path / "f"
+    assert sha256(encoded(back)) == sha256(bytes_before) and back.path != tmp_path / "f"
     assert same(plain_folder(tmp_path / "again"), back)
 
 
@@ -297,7 +298,7 @@ def test_a_dat_with_a_spec_comes_back_equal_with_the_same_bytes(L, tmp_path):
     dat = created(tmp_path / "f")
     bytes_before, content = encoded(dat), files(dat)
     back = stored_and_back(L, dat, "f/1")
-    assert encoded(back) == bytes_before and files(back) == content
+    assert sha256(encoded(back)) == sha256(bytes_before) and files(back) == content
 
 
 def test_a_dat_with_a_run_comes_back_with_the_same_bytes(L, tmp_path):
@@ -309,7 +310,7 @@ def test_a_dat_with_a_run_comes_back_with_the_same_bytes(L, tmp_path):
         assert (dat.path / "run").is_dir() and "run/_spec_.yaml" not in json.loads(encoded(dat))["files"]
         bytes_before = encoded(dat)
         back = stored_and_back(L, dat, "t/1")
-        assert encoded(back) == bytes_before
+        assert sha256(encoded(back)) == sha256(bytes_before)
     finally:
         core._default_manager = before
         if before is not None:
