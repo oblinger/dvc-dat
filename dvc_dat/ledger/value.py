@@ -7,8 +7,9 @@ with ``@ledger_class(preds=...)``, which pred names its values may carry.
 it; the seal (``v.seal(t)`` or an ``run``) freezes it into a
 read-only mapping and fixes ``subject``, ``rev`` and ``dependencies`` (Q25 (D)). A
 subclass's own ``__init__`` need not call ``super().__init__``. Shipped
-subclasses: ``Value.Blob`` (any Python object, pickled), ``Value.Table`` (parquet), and
-``dvc_dat.core.Dat`` (a dat: its folder, encoded as its content manifest, DAT 1038).
+subclasses: ``Value.Blob`` (any Python object, pickled), ``Value.Table`` (parquet),
+``dvc_dat.core.Dat`` (a dat: its folder, encoded as its content manifest, DAT 1038), and ``Video`` (segments plus
+a manifest, read lazily, SVP 249; ``dvc_dat.ledger.video``).
 """
 
 from __future__ import annotations
@@ -176,7 +177,8 @@ class Value:
         Where the shipped classes fall short today, each ``xfail(strict=True)`` in
         ``tests/ledger/test_value_encoding.py``: ``Value.Blob``, outside plain data (see its class). ``Dat``,
         ``Code`` and ``Value.Table`` keep both: ``create`` writes a dat's spec with its keys sorted, a ``Code``'s
-        bytes are its identity, which ``decode`` restores, and a table encodes its columns (see its class).
+        bytes are its identity, which ``decode`` restores, and a table encodes its columns (see its class). ``Video``
+        keeps both on its stored form, and converting a source is its limit (see its class).
 
         A test that wants the bytes passes ``io.BytesIO()``.
         """

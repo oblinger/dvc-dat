@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.67.0 — 2026-11-06
+
+- **`Video`, a video as a ledger value (SVP 249; minor).** `dvc_dat.ledger.Video` holds a source, a URL (`Video.from_url`, through `fsspec`: the new `video` extra), a local file (`Video.from_path`) or frames in memory (`Video.from_frames(frames, fps)`), and stores it as a folder of fragmented-MP4 segments plus `manifest.json`, encoded as a `Dat`'s content manifest, so a shared segment is stored once. Sealing converts through one `ffmpeg` process, never holding the video whole: to the standard the root ledger declares for the ledger, `(ledger/<name>, ledger/video, "h264 yuv420p cfr seg=10s")`, transcoding unless the source already is in it; `seal(canonical=False)` or a ledger with no row (warned once) keeps the source codec and splits at keyframes. A load reads the manifest alone; `frame(n)` fetches one segment, `frames(a, b)`, `iter()` and `clip(a, b)` the segments they cover, `path()` joins them into one MP4 once. `ffmpeg` and `ffprobe` are required to seal or read one. The encoding rule holds on the stored form; a source's conversion is its stated limit (an `xfail(strict=True)`). Docs: DAT Ledger § Video Interface.
+
 ## 2.66.1 — 2026-11-06
 
 - **Fix: a read on a pool thread is recorded on the run that handed it the work (SVP 1551).** 2.65.1 marked a thread started inside a run and let only marked threads read for an open run, so work a body submitted to a `ThreadPoolExecutor` whose thread was started before the run was recorded on no run (its `foreign:` items were missing), and a pool thread first started inside one run kept reading for it when a thread outside every run handed it work while that run was open. The run now travels with the work: `ThreadPoolExecutor.submit` runs each item with the submitter's run, or none, and a thread started inside a run runs with that run; a thread that outlives its run reads for none. The process-wide list of open runs is gone. Reads through the recording `Rev` were never affected, so no memo hit was stale: `foreign:` items are provenance and are in no hit test.

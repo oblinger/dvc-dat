@@ -45,6 +45,8 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
     options:
       heading: Value.Table
 
+::: dvc_dat.ledger.Video
+
 ::: dvc_dat.ledger.ledger_class
 
 ::: dvc_dat.ledger.Fn
