@@ -132,6 +132,16 @@ def test_every_member_in_a_module_pages_table_has_a_first_line(page):
         assert not empty, f"{dotted}: no docstring on {empty}"
 
 
+@pytest.mark.parametrize("page", sorted((REPO / "doc" / "api").glob("*.md")), ids=lambda p: p.stem)
+def test_every_api_page_opens_with_its_modules_figure_and_a_link_back(page):
+    head = page.read_text().split("\n")[:7]
+    figure = next((line for line in head if line.startswith("![")), None)
+    back = next((line for line in head if line.startswith("Module page: [")), None)
+    assert figure and back, f"{page.name}: no figure and link back in its first lines"
+    for target in (re.search(r"\]\(([^)#]+)", line).group(1) for line in (figure, back)):
+        assert (page.parent / unquote(target)).exists(), target
+
+
 @needs_site
 @pytest.mark.parametrize("folder", ["tutorials", "how-to", "DAT Architecture", "api"])
 def test_the_four_lenses_are_built(folder):

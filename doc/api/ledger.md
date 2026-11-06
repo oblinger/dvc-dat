@@ -1,6 +1,10 @@
 # Ledger
 `dvc_dat.ledger`: the dat's record in time. Every fact is a quad `(rev, subject, predicate, object)`, every read a function of a `Rev`, every write a `Transaction`.
 
+![DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.svg)
+
+Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
+
 ::: dvc_dat.ledger
     options:
       show_root_heading: false
@@ -59,7 +63,7 @@
 
 ::: dvc_dat.just.command
 
-## Rerunnability
+## Pin and rerun
 
 ::: dvc_dat.ledger.pin
     options:

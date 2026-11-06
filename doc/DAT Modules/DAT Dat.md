@@ -7,6 +7,8 @@ A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for its
 
 ![DAT Dat](DAT%20Dat.svg) 
 
+api:: [`dvc_dat.core`](../api/core.md) and [`dvc_dat.do`](../api/do.md) — the classes and functions, rendered from the docstrings
+
 **Classes:** [Dat](#Dat%20Interface) · [DatManager](#DatManager%20Interface) · [DatContainer](#DatContainer%20Interface) · [Namespace](#Namespace%20Interface) · [module functions](#dvc_dat%20Interface) 
 
 *The spec is the record* is the topic that governs the Namespace node (arguments fork a new spec; they never ride beside one); the other topics annotate the nodes they govern.

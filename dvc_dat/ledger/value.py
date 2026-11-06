@@ -61,6 +61,7 @@ class Value:
     _ledger_preds: ClassVar[tuple] = ()
     #: Relative-path suffixes of the subdats a seal declines by default (SVP 241); ``seal(skip=)`` adds to them.
     skip_subdats: ClassVar[Tuple[str, ...]] = ()
+    """Relative-path suffixes of the subdats a seal declines by default; ``seal(skip=)`` adds to them, ``skip=()`` clears them."""
 
     subject: Optional[str] = None
     """Its ledger subject once saved."""
