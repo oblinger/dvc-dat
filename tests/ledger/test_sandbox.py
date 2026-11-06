@@ -27,6 +27,13 @@ PKG = {
             return {"area": util.square(side)}
     '''),
     "flat/util.py": "def square(x):\n    return x * x\n",
+    "flat/foreign.py": textwrap.dedent('''
+        from dvc_dat import dat, ledgers
+
+        @dat.fn
+        def seen(rev, *, ledger: str, name: str) -> dict:
+            return {"seen": ledgers[ledger].at().load(name).obj}
+    '''),
     "flat/where.py": textwrap.dedent('''
         import os
         from dvc_dat import dat
@@ -184,6 +191,97 @@ PKG = {
         def foreign_config(rev, *, name: str) -> dict:
             from dvc_dat import ledgers
             return {"seen": ledgers[name].at().load("G1").obj}
+
+        @dat.fn
+        def by_name(rev, *, ledger: str, at, name: str) -> dict:
+            from dvc_dat import ledgers
+            return {"seen": ledgers[ledger].at(at).load(name).obj}
+
+        @dat.fn
+        def by_reference(rev, *, ref: str) -> dict:
+            from dvc_dat import dat
+            return {"seen": dat.load(ref).obj}
+
+        @dat.fn
+        def by_revision(rev, *, at: str, name: str) -> dict:
+            from dvc_dat import dat
+            return {"seen": dat.at(at).load(name).obj}
+
+        @dat.fn
+        def queries(rev, *, ledger: str, at: int) -> dict:
+            from dvc_dat import ledgers
+            return {"seen": sorted(v.obj["game"] for v in ledgers[ledger].at(at).values(kind="dvc_dat.ledger.value.Blob"))}
+
+        @dat.fn
+        def raw_row(rev, *, ledger: str, s: str, p: str) -> dict:
+            from dvc_dat import ledgers
+            return {"seen": ledgers[ledger].at()[s, p]}
+
+        @dat.fn
+        def reads_a_run(rev, *, ledger: str, game: str, seal: str = "") -> dict:
+            from dvc_dat import ledgers
+            kw = {"seal": seal} if seal else {}
+            v = ledgers[ledger].at().run("mnt.sbx.stage.fns.count", game=game, **kw)
+            return {"seen": None if v is None else v.obj}
+
+        @dat.fn
+        def reads_a_dat(rev, *, ledger: str, name: str) -> dict:
+            from dvc_dat import ledgers
+            d = ledgers[ledger].at().load(name)
+            return {"seen": (d.path / "f.txt").read_text()}
+
+        @dat.fn
+        def opens_art(rev, *, ledger: str, name: str) -> dict:
+            from dvc_dat import ledgers
+            led = ledgers[ledger]
+            v = led.at().load(name)
+            return {"size": len(open(led._store.art.path(v.hash), "rb").read())}
+
+        @dat.fn
+        def opens_file(rev, *, ledger: str, file: str) -> dict:
+            from dvc_dat import ledgers
+            ledgers[ledger].at()
+            return {"size": len(open(file, "rb").read())}
+
+        @dat.fn
+        def nested_foreign(rev, *, ledger: str, name: str) -> dict:
+            return {"inner": rev.run("mnt.flatpkg.foreign.seen", ledger=ledger, name=name).obj}
+
+        @dat.fn
+        def writes_foreign(rev, *, ledger: str, how: str) -> dict:
+            import sqlite3
+            from dvc_dat import ledgers
+            from dvc_dat.ledger import Value
+            from dvc_dat.ledger.txn import Transaction
+            led = ledgers[ledger]
+            db = str(getattr(led._store, "path", "") or "")
+            if how == "transaction":
+                with led.transaction(by="body") as t:
+                    t.add("game/G9", "n", "9")
+            elif how == "direct":
+                with Transaction(led, "body", None, {}) as t:
+                    t.add("game/G9", "n", "9")
+            elif how == "head":
+                led.at().pin(led.at().load("G1"))
+            elif how == "seal":
+                Value.Blob({"game": 9}).seal(led, name="G9")
+            elif how == "store":
+                with led._store.writer(1.0, locked=False) as w:
+                    w.insert(w.next_rev(), [("game/G9", "n", "str:9", True)])
+            elif how == "connect":
+                sqlite3.connect(db).execute("INSERT INTO quads VALUES (999, 0, 's', 'p', 'str:o', 1)")
+            elif how == "connect-rw":
+                sqlite3.connect(f"file:{db}?mode=rw", uri=True).execute("INSERT INTO quads VALUES (999, 0, 's', 'p', 'str:o', 1)")
+            elif how == "connect-ro-then-rw":
+                sqlite3.connect(f"file:{db}?mode=ro&mode=rw", uri=True).execute(
+                    "INSERT INTO quads VALUES (999, 0, 's', 'p', 'str:o', 1)")
+            elif how == "art":
+                (led._store.art.root / "planted").write_text("x")
+            elif how == "draft":
+                led.at().run("mnt.sbx.stage.fns.count", game="G1", seal=False)
+            elif how == "named-result":
+                led.at().run("mnt.sbx.stage.fns.count", game="G1", path="planted")
+            return {"done": how}
 
         @dat.fn
         def die(rev, *, game: str) -> dict:
@@ -1003,23 +1101,246 @@ def test_a_ledger_projects_do_names_through_the_mounts(sbx, tmp_path):
         m.ns.mount(value={"dat": {}}, at="x")
 
 
-def test_a_sandboxed_function_cannot_reach_a_sqlite_ledger_of_another_name(sbx, tmp_path):
-    """SVP 1521: the worker opens the run's ledger alone. Another SQLite ledger is ``ConfinedWrite`` at its open (a
-    store makes its folder and connects); a ``Ref`` key on another ledger crosses by subject and holds nothing on
-    the run's ledger, ``TypeError`` in the worker; ``ledgers.<name>`` needs a repo file the body may not read."""
-    from dvc_dat.ledger import Ledger, Ref, Value
+def foreign_items(v):
+    """``(at, name, ref)`` of each ``foreign:`` item of a value's trace."""
+    from dvc_dat.ledger.trace import foreign_of
+
+    return sorted((b["at"], b["name"], r) for k, r in v.dependencies.items() if (b := foreign_of(k)) is not None)
+
+
+@pytest.fixture
+def other(sbx, tmp_path, monkeypatch, backend):
+    """A second ledger, registered as ``games`` in the caller's config: ``G1`` at two revisions, a raw row, and a
+    third ledger, ``far``, registered and never opened. -> ``(L, ledger, rev of the first G1, rev of the second)``."""
+    from dvc_dat.ledger import Value
 
     L, repo = sbx
-    other = Ledger(tmp_path / "games", create=True)
-    with other.transaction(by="t") as t:
+    games = backends.make(backend, tmp_path / "games")
+    far = backends.make(backend, tmp_path / "far")
+    with games.transaction(by="t") as t:
         Value.Blob({"game": 1}).seal(t, name="G1")
+        t.add("game/raw", "n", "7")
+    first = games.at().id
+    with games.transaction(by="t") as t:
+        Value.Blob({"game": 2}).seal(t, name="G1")
+    (repo / ".datconfig.yaml").write_text(f"ledgers:\n  games: {games.path}\n  far: {far.path}\n")
+    monkeypatch.chdir(repo)
+    return L, games, first, games.at().id
+
+
+def text_of(v):
+    from dvc_dat.ledger.codec import ref_text
+    from dvc_dat.ledger.value import dotted
+
+    return ref_text(dotted(type(v)), v.hash)
+
+
+def test_ledger_at_a_location_stays_refused_in_a_body(other):
+    """SVP 1521: only a name opens read-only; ``Ledger(location)`` opens a store that may write."""
+    L, games, _first, _second = other
+    if isinstance(games.path, str):
+        pytest.skip("SQLite's refusal: a Postgres location opens on the run's server, as the network hook allows")
     with pytest.raises(ConfinedWrite):
-        L.at().run("mnt.sbx.stage.fns.foreign", where=str(other.path), name="G1")
-    with pytest.raises(TypeError, match="holds no value"):
-        L.at().run("mnt.sbx.stage.fns.foreign_key", clip=Ref(other.at(), "G1"))
-    (repo / ".datconfig.yaml").write_text(f"ledgers:\n  games: {other.path}\n")
-    with pytest.raises((UntracedRead, LedgerError)):
-        L.at().run("mnt.sbx.stage.fns.foreign_config", name="games")
+        L.at().run("mnt.sbx.stage.fns.foreign", where=str(games.path), name="G1")
+
+
+def test_a_body_reads_a_registered_ledger_by_name_and_it_is_recorded(other):
+    """Q3 (A): the read works, and is one ``foreign:`` item with the revision and the name."""
+    L, games, first, second = other
+    v = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=second, name="G1")
+    assert v.obj == {"seen": {"game": 2}}
+    want = games.at(second).load("G1")
+    assert foreign_items(v) == [(f"{games._store.name}@{second}", "G1", text_of(want))]
+    assert foreign_items(L.at().load(v.subject)) == foreign_items(v)            # as rows on the run's ledger
+
+
+def test_a_body_reads_a_pinned_older_revision(other):
+    """A stated revision reads that revision: the older value, recorded at the older revision."""
+    L, games, first, second = other
+    a = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=first, name="G1")
+    b = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=second, name="G1")
+    assert (a.obj, b.obj) == ({"seen": {"game": 1}}, {"seen": {"game": 2}})
+    assert foreign_items(a) == [(f"{games._store.name}@{first}", "G1", text_of(games.at(first).load("G1")))]
+    assert foreign_items(b)[0][0] == f"{games._store.name}@{second}"
+
+
+@pytest.mark.parametrize("fn,keys", [("by_reference", {"ref": "{name}@{rev}:G1"}),
+                                     ("by_revision", {"at": "{name}@{rev}", "name": "G1"})])
+def test_the_global_reference_reaches_a_registered_ledger(other, tmp_path, fn, keys):
+    """``dat.load`` and ``dat.at`` by ``<ledger>@<rev>``, where the name is the config's (the fixture's is both)."""
+    L, games, first, _second = other
+    if isinstance(games.path, str):
+        pytest.skip("each Postgres test ledger is a schema of one database: its name is the database's, no entry's")
+    keys = {k: v.format(name="games", rev=first) for k, v in keys.items()}
+    v = L.at().run(f"mnt.sbx.stage.fns.{fn}", **keys)
+    assert v.obj == {"seen": {"game": 1}}
+    assert [a for a, _n, _r in foreign_items(v)] == [f"games@{first}"]
+
+
+def test_a_foreign_read_in_a_body_is_provenance_only(other):
+    """Q2 (A) unchanged in the sandbox: a name moving on another ledger is no miss."""
+    from dvc_dat.ledger import Value
+
+    L, games, _first, second = other
+    a = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G1")
+    with games.transaction(by="t") as t:
+        Value.Blob({"game": 3}).seal(t, name="G1")
+    again = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G1")
+    assert again.subject == a.subject and again.obj == {"seen": {"game": 2}}
+    assert foreign_items(again)[0][0].endswith(f"@{second}")
+
+
+def test_a_query_in_a_body_records_each_value_and_a_raw_row_records_nothing(other):
+    L, games, first, second = other
+    v = L.at().run("mnt.sbx.stage.fns.queries", ledger="games", at=second)
+    assert v.obj["seen"] == [1, 2] and len(foreign_items(v)) == 2
+    w = L.at().run("mnt.sbx.stage.fns.raw_row", ledger="games", s="game/raw", p="n")
+    assert w.obj == {"seen": "7"} and foreign_items(w) == []
+
+
+@pytest.mark.parametrize("how", ["transaction", "direct", "head", "seal", "store", "connect", "connect-rw",
+                                 "connect-ro-then-rw", "art", "draft", "named-result"])
+def test_a_body_writes_nothing_on_a_ledger_it_read(other, tmp_path, how):
+    """Each way of writing refused, and the ledger as it was: the rows, the art folder."""
+    L, games, _first, second = other
+    pg = isinstance(games.path, str)
+    if pg and how.startswith("connect"):
+        pytest.skip("a raw sqlite3 connection: SQLite's")
+    art = sorted(p for p in games._store.art.root.rglob("*"))
+    with pytest.raises(Exception) as e:
+        L.at().run("mnt.sbx.stage.fns.writes_foreign", ledger="games", how=how)
+    # "store" goes around Transaction: the database connection is the floor, and its refusal a LedgerError
+    assert type(e.value) is (LedgerError if how == "store" else ConfinedWrite), repr(e.value)
+    assert games.at().id == second
+    assert sorted(p for p in games._store.art.root.rglob("*")) == art
+
+
+def test_a_read_of_a_ledger_not_there_says_so(other):
+    L, games, _first, _second = other
+    with pytest.raises(KeyError, match="'nope': no such ledger .*games, far"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="nope", at=None, name="G1")
+    with pytest.raises(KeyError, match="no revision 999"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=999, name="G1")
+    with pytest.raises(KeyError, match="has no value"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G404")
+
+
+def test_a_registered_ledger_not_on_disk_and_a_caller_with_no_section_say_so(sbx, tmp_path, monkeypatch):
+    L, repo = sbx
+    (repo / ".datconfig.yaml").write_text(f"ledgers:\n  gone: {tmp_path / 'gone'}\n")
+    monkeypatch.chdir(repo)
+    with pytest.raises(LedgerError, match="no ledger at gone"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="gone", at=None, name="G1")
+    assert not (tmp_path / "gone").exists()
+    (repo / ".datconfig.yaml").unlink()
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(LedgerError, match="no ledgers: the caller"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G1")
+
+
+def test_a_ref_key_on_another_ledger_loads_in_the_worker(other):
+    """SVP 1521: ``encode_key`` carries the ledger and the revision beside the subject, so the key holds its value,
+    at the Ref's revision, and the load is a ``foreign:`` item."""
+    from dvc_dat.ledger import Ref
+
+    L, games, first, _second = other
+    v = L.at().run("mnt.sbx.stage.fns.foreign_key", clip=Ref(games.at(first), "G1"))
+    assert v.obj == {"seen": {"game": 1}}
+    assert foreign_items(v) == [(f"{games._store.name}@{first}", "G1", text_of(games.at(first).load("G1")))]
+    again = L.at().run("mnt.sbx.stage.fns.foreign_key", clip=Ref(games.at(first), "G1"))
+    assert again.subject == v.subject                                           # the same keys: a hit
+
+
+def test_a_sealed_value_key_on_another_ledger_loads_in_the_worker(other):
+    L, games, first, _second = other
+    v = L.at().run("mnt.sbx.stage.fns.foreign_key", clip=games.at(first).load("G1"))
+    assert v.obj == {"seen": {"game": 1}} and len(foreign_items(v)) == 1
+
+
+def test_a_ref_key_on_the_runs_own_ledger_adds_nothing(sbx):
+    from dvc_dat.ledger import Ref, Value
+
+    L, _repo = sbx
+    with L.transaction(by="t") as t:
+        Value.Blob({"game": 5}).seal(t, name="mine")
+    v = L.at().run("mnt.sbx.stage.fns.foreign_key", clip=Ref(L.at(), "mine"))
+    assert v.obj == {"seen": {"game": 5}} and foreign_items(v) == []
+
+
+def test_an_unsaved_value_is_still_no_key(sbx):
+    """Q4 (A): not part of the standard for now."""
+    from dvc_dat.ledger import Value
+
+    L, _repo = sbx
+    with pytest.raises(ValueError, match="an unsaved Blob; seal it first"):
+        L.at().run("mnt.sbx.stage.fns.foreign_key", clip=Value.Blob({"game": 1}))
+
+
+def test_a_body_reads_a_run_on_another_ledger_and_never_runs_one(other, sbx):
+    """A run read is the memo lookup there: a hit is a ``foreign:`` item, ``seal="get"`` on a miss is ``None``, and a
+    miss otherwise is refused, since running there would write there."""
+    L, games, _first, _second = other
+    with games.transaction(by="t") as t:
+        t.add("db/mount/sbx.stage", "db/root", "sbx/stage")
+        t.add("db/mount/sbx.stage", "db/repo", "sbx-repo")
+        t.add("db/mount/flatpkg", "db/root", "flat")
+        t.add("db/mount/flatpkg", "db/repo", "sbx-repo")
+        t["game/G1"] = {"n": "3"}
+    miss = L.at().run("mnt.sbx.stage.fns.reads_a_run", ledger="games", game="G1", seal="get")
+    assert miss.obj == {"seen": None} and foreign_items(miss) == []
+    top = games.at().id
+    with pytest.raises(ConfinedWrite, match="runs nothing"):
+        L.at().run("mnt.sbx.stage.fns.reads_a_run", ledger="games", game="G1")
+    assert games.at().id == top
+    entry = games.at().run("mnt.sbx.stage.fns.count", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.reads_a_run", ledger="games", game="G1")
+    assert v.obj == {"seen": entry.obj}
+    [(at, name, ref)] = foreign_items(v)
+    assert at == f"{games._store.name}@{games.at().id}" and ref == text_of(entry)
+    assert name == 'eval:mnt.sbx.stage.fns.count{"game":"G1"}'
+
+
+def test_a_dat_on_another_ledger_is_read_with_nothing_placed_there(other, tmp_path):
+    """Its folder is rebuilt in the child's overlay, not under that ledger's ``art/dats``."""
+    from dvc_dat.ledger import Dat
+
+    L, games, _first, _second = other
+    src = tmp_path / "dat-src"
+    src.mkdir()
+    (src / "f.txt").write_text("hello")
+    d = Dat(src)
+    with games.transaction(by="t") as t:
+        d.seal(t)
+    dats = games._store.art.root / "dats"
+    before = sorted(p.name for p in dats.iterdir()) if dats.exists() else []
+    v = L.at().run("mnt.sbx.stage.fns.reads_a_dat", ledger="games", name=d.subject)
+    assert v.obj == {"seen": "hello"} and len(foreign_items(v)) == 1
+    assert (sorted(p.name for p in dats.iterdir()) if dats.exists() else []) == before
+
+
+def test_the_read_allowance_is_the_ledger_opened_and_no_other(other, tmp_path):
+    """The hook allows the art store of a ledger the body opened; a registered ledger it did not open, and the
+    opened ledger's database file, stay ``UntracedRead``."""
+    L, games, _first, _second = other
+    v = L.at().run("mnt.sbx.stage.fns.opens_art", ledger="games", name="G1")
+    assert v.obj["size"] > 0
+    secret = tmp_path / "far" / "art" / "planted"
+    secret.parent.mkdir(parents=True, exist_ok=True)
+    secret.write_text("x")
+    with pytest.raises(UntracedRead):
+        L.at().run("mnt.sbx.stage.fns.opens_file", ledger="games", file=str(secret))
+    if not isinstance(games.path, str):
+        with pytest.raises(UntracedRead):
+            L.at().run("mnt.sbx.stage.fns.opens_file", ledger="games", file=str(games.path / "ledger.db"))
+
+
+def test_a_nested_run_under_another_mount_sees_the_same_ledgers(other):
+    """A fresh child of the server gets the section the first child was given, and records in its own entry."""
+    L, games, _first, second = other
+    v = L.at().run("mnt.sbx.stage.fns.nested_foreign", ledger="games", name="G1")
+    assert v.obj == {"inner": {"seen": {"game": 2}}}
+    inner = L.at().run("mnt.flatpkg.foreign.seen", ledger="games", name="G1", seal="get")
+    assert foreign_items(inner)[0][0].endswith(f"@{second}") and foreign_items(v) == []
 
 
 def test_rev_has_one_run_and_ns():

@@ -301,7 +301,7 @@ class LedgerNamespace(Namespace):
         ledger = self._ledger_of()
         txn = self._txn
         probe = txn._snapshot() if txn is not None else self.rev()
-        data = ledger._store.art.root / "dats"
+        data = ledger._store.art.dats
         zone = probe.timezone
         now = datetime.now(zone)
         names = {k: v for k, v in _builtins(now).items() if k != "unique"}      # one moment for every try

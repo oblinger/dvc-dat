@@ -222,10 +222,10 @@ def fetcher(name: str, ledger: str) -> Callable[[str, Path], None]:
 
     def fetch(h: str, dest: Path) -> None:
         r = remote(name, ledger)
-        dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_name(f"{dest.name}.fetch-{os.getpid()}-{threading.get_ident()}")
-        try:
-            with unguarded():               # the ledger's own machinery, as a dat's materialisation is
+        with unguarded():                   # the ledger's own machinery, as a dat's materialisation is
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
                 try:
                     r.get_to(h, tmp)
                 except Exception as e:
@@ -235,8 +235,8 @@ def fetcher(name: str, ledger: str) -> Callable[[str, Path], None]:
                     raise LedgerError(f"store {name!r} (ledger {ledger!r}): {h[:12]}… arrived hashing to "
                                       f"{got[:12]}…")
                 os.replace(tmp, dest)
-        finally:
-            tmp.unlink(missing_ok=True)
+            finally:
+                tmp.unlink(missing_ok=True)
     return fetch
 
 

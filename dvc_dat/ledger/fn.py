@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence,
 from .claim import PREDICATE as REPRODUCIBLE, claim_text, clauses, widens
 from .codec import canonical, hash_text, ref_text, sha256
 from .env import Env, current_env, platform_items, repo_of
-from .errors import NotClean, NotEvaluated
+from .errors import ConfinedWrite, NotClean, NotEvaluated
 from .policy import EXACT_FIELDS
 from .code import Code
 from .value import Blob, Value, check_loadable, dotted
@@ -600,15 +600,19 @@ class Fn:
         (SVP 1474); the entry written is the same either way."""
         from .txn import Transaction
 
-        if not self.code.sandboxed:
+        rev = self._rev
+        plain = rev._plain()
+        read_only = plain.ledger.read_only          # read by name in a sandboxed body: a lookup, never a run
+        if not self.code.sandboxed and not read_only:
             from . import sandbox
 
             if sandbox.IN_WORKER and sandbox.STATE.frames:
                 raise NotEvaluated(f"{self.name} is unsandboxed (under no mount): it does not run nested inside "
                                    f"the sandboxed body of mount {sandbox.STATE.frames[-1].mount!r}; mount it")
-        rev = self._rev
-        plain = rev._plain()
         level = seal_level(self.name, plain, seal, clean, path)
+        if read_only and (level is True or level is False or path is not None):
+            raise ConfinedWrite(f"{self.name}: {plain.ledger._store.name} is read-only here: seal='get' or the "
+                                "default reads an entry; seal=True, seal=False and path= do not apply")
         if kwargs is not None:
             if keys:
                 raise TypeError(f"{self.name}: the keys go inline or in kwargs=, never both "
@@ -627,7 +631,12 @@ class Fn:
             if hit is not None or level == "get":
                 rev._record_run(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
                 at = target if target is not None or hit is None or self.kind != "dat" else hit.name
+                if read_only:
+                    return hit
                 return place(plain.ledger, hit, at) if hit is not None and at is not None else hit
+            if read_only:
+                raise ConfinedWrite(f"{self.name}: no entry for these keys at {plain.ledger._store.name}@{plain.id}, "
+                                    "a read-only ledger here; it runs nothing (seal='get' asks without refusing)")
         into = level if isinstance(level, Transaction) else None
         # False: a draft; True: the memo entry in a transaction of its own; a Transaction: into it
         save: Any = True if isinstance(level, str) and level == "save" else (into if into is not None else False)
