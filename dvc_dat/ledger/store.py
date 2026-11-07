@@ -35,6 +35,11 @@ from pathlib import Path
 from typing import IO, Any, Callable, ContextManager, Iterator, List, Optional, Sequence, Tuple, Union
 
 from .codec import HashSink, hash_text
+
+try:
+    import fcntl
+except ImportError:             # not a POSIX platform: fsync alone
+    fcntl = None  # type: ignore[assignment]
 from .errors import LedgerError, LockTimeout
 
 #: ``(rev, ord, subject, predicate, object, added)``
@@ -64,6 +69,29 @@ def file_sha(path: Path) -> str:
         for block in iter(lambda: f.read(BLOCK), b""):
             d.update(block)
     return d.hexdigest()
+
+
+def flush(fd: int) -> None:
+    """Make the bytes behind ``fd`` durable: ``F_FULLFSYNC`` on macOS, where ``fsync`` leaves them in the
+    drive's cache (a removable drive pulled after an ``fsync`` can lose them), else ``fsync``. A filesystem
+    that refuses ``F_FULLFSYNC`` (``ENOTSUP``, some network mounts) gets the ``fsync`` it does support."""
+    full = getattr(fcntl, "F_FULLFSYNC", None) if fcntl is not None else None
+    if full is not None:
+        try:
+            fcntl.fcntl(fd, full)
+            return
+        except OSError:
+            pass
+    os.fsync(fd)
+
+
+def flush_path(path: Path) -> None:
+    """:func:`flush` a file or a folder by path; a folder's flush makes a rename inside it durable."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        flush(fd)
+    finally:
+        os.close(fd)
 
 
 def _copy(src: IO[bytes], dest: Path, h: str) -> None:
@@ -119,13 +147,15 @@ def clone(src: Any, dest: Path) -> bool:
 CLONES = [0]
 
 
-def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bool = False) -> bool:
+def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bool = False,
+          durable: bool = False) -> bool:
     """Put the bytes of ``source`` (sha256 ``h``) at ``dest``, write-once; ``True`` when written here.
 
     A ``Path`` is hardlinked when ``link`` and the filesystem allows it, else, with ``clone_ok``,
     cloned copy-on-write where the filesystem can (``clone``; the clone is checked against ``h``),
     else copied in blocks (and checked against ``h``); an opener is always copied. The bytes land at
-    a temp name and are renamed into place, so a reader never sees a partial file.
+    a temp name and are renamed into place, so a reader never sees a partial file. With ``durable``
+    the temp file is flushed (:func:`flush`) before the rename and the folder after it.
     """
     if dest.exists():
         return False
@@ -154,7 +184,11 @@ def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bo
         else:
             with source() as f:
                 _copy(f, tmp, h)
+        if durable:
+            flush_path(tmp)
         os.replace(tmp, dest)
+        if durable:
+            flush_path(dest.parent)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
@@ -166,16 +200,18 @@ class FileSink(HashSink):
     never held whole. At close, with ``dest`` (hash -> path), the file is renamed to ``dest(hash)``, write-once
     (``created`` says whether it landed here; with ``expect``, a hash other than ``expect`` lands nowhere);
     without ``dest`` it stays at ``path``, staged, until the owner places or ``discard``s it. Used as a
-    context manager, an exception in the block discards the file."""
+    context manager, an exception in the block discards the file. With ``durable`` the file is flushed
+    (:func:`flush`) before it is closed, and its folder after the rename."""
 
     def __init__(self, folder: Path, dest: Optional[Callable[[str], Path]] = None, *,
-                 expect: Optional[str] = None) -> None:
+                 expect: Optional[str] = None, durable: bool = False) -> None:
         super().__init__()
         folder.mkdir(parents=True, exist_ok=True)
         self.path: Optional[Path] = folder / f".sink-{uuid.uuid4().hex}"
         self._f: Optional[IO[bytes]] = open(self.path, "wb")
         self._dest = dest
         self._expect = expect
+        self._durable = durable
         self.created = False
 
     def _out(self, view: memoryview) -> None:
@@ -188,6 +224,9 @@ class FileSink(HashSink):
         f, self._f = self._f, None
         try:
             if f is not None:
+                if self._durable:
+                    f.flush()
+                    flush(f.fileno())
                 f.close()
         finally:
             super().close()
@@ -200,6 +239,8 @@ class FileSink(HashSink):
             return
         dest.parent.mkdir(parents=True, exist_ok=True)
         os.replace(tmp, dest)
+        if self._durable:
+            flush_path(dest.parent)
         self.path, self.created = dest, True
 
     def discard(self) -> None:

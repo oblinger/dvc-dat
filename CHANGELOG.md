@@ -8,6 +8,10 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 2.68.1 — 2026-11-07
+
+- **A seal's writes are durable: flushed before the rename (SVP 1561; patch).** Every seal record, kept blob and kept part is written at a temp name, flushed (`F_FULLFSYNC` on macOS, where `fsync` leaves the bytes in the drive's cache; `fsync` elsewhere, and on a filesystem that refuses `F_FULLFSYNC`), renamed into place, and its folder flushed. A kept folder (`$DAT_KEPT`) on a removable drive pulled right after a seal holds the record whole or not at all. `place(..., durable=True)` and `FileSink(..., durable=True)` carry it; both default to `False`, so the ledger's art store is unchanged. Migration: none.
+
 ## 2.68.0 — 2026-11-06
 
 - **`Video` stores what it is given and converts only on request (SVP 1557; minor).** A seal copies any codec in any container, video and every audio stream, split at keyframes near every 10 s, on every ledger; only frames in memory are encoded. New `Video.convert(codec, pix_fmt=None, fps=None, audio="copy", options=())`: any format `ffmpeg` can encode, no list, returning a new unsealed `Video`. `clip` keeps the audio. A stream MP4 cannot hold is stored in Matroska segments (`seg/00000.mkv`), and `path()` then gives a `.mkv`. Removed: the `ledger/video` row, `seal(canonical=)`, `Standard`, `STANDARD`, `DEFAULT_STANDARD`, the warning, and `standard` in the manifest; `audio` joins it. A video sealed before this has no audio and keeps its hash; sealed again, it gets a new one.
