@@ -173,3 +173,51 @@ def test_a_kept_part_is_a_clone_where_the_filesystem_can(tmp_path, kept_folder):
         f.write(b"\0" * 16)
     with open(kept, "rb") as f:
         assert f.read(16) == head != b"\0" * 16
+
+
+
+def test_every_seal_write_is_flushed_before_its_rename(tmp_path, monkeypatch):
+    """SVP 1561: a kept folder on a removable drive. The record and the kept blob are flushed at their temp
+    name (F_FULLFSYNC on macOS), renamed, then their folder is flushed: a drive pulled holds all of one or none."""
+    from dvc_dat.ledger import kept as kept_mod, store
+
+    events = []
+    real_flush, real_flush_path, real_replace = store.flush, store.flush_path, os.replace
+
+    def flush(fd):
+        events.append("flush")
+        real_flush(fd)
+
+    def flush_path(p):
+        events.append("flush dir" if Path(p).is_dir() else "flush")
+        real_flush_path(p)
+
+    def replace(a, b):
+        events.append(f"rename into {Path(b).parent.name}")
+        real_replace(a, b)
+
+    for mod in (store, kept_mod):
+        monkeypatch.setattr(mod, "flush", flush)
+        monkeypatch.setattr(mod, "flush_path", flush_path)
+    monkeypatch.setattr(os, "replace", replace)
+    GameDat(folder(tmp_path, "src", "one")).seal(keep=True)
+    for where in ("blobs", "sealed"):
+        i = events.index(f"rename into {where}")
+        assert events[i - 1] == "flush" and events[i + 1] == "flush dir", events
+    assert events.index("rename into blobs") < events.index("rename into sealed")
+
+
+def test_flush_uses_full_fsync_where_the_platform_has_it(tmp_path, monkeypatch):
+    from dvc_dat.ledger import store
+
+    calls = []
+    full = getattr(store.fcntl, "F_FULLFSYNC", None) if store.fcntl is not None else None
+    if full is not None:
+        real = store.fcntl.fcntl
+        monkeypatch.setattr(store.fcntl, "fcntl", lambda fd, op, *a: calls.append(op) or real(fd, op, *a))
+    else:
+        monkeypatch.setattr(store.os, "fsync", lambda fd: calls.append("fsync"))
+    p = tmp_path / "f"
+    p.write_bytes(b"x")
+    store.flush_path(p)
+    assert calls == [full if full is not None else "fsync"]
