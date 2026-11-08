@@ -151,7 +151,7 @@ PKG = {
     "sbx/stage/fns.py": textwrap.dedent('''
         import importlib
         from pathlib import Path
-        from dvc_dat.ledger import Dat
+        from dvc_dat import Dat
         from dvc_dat import dat
 
         @dat.fn
@@ -1074,7 +1074,7 @@ def test_a_sandboxed_dat_body_names_through_the_ledger_mounts(sbx, world):
     """DAT 1047: inside a sandboxed dat body ``Dat.manager.ns`` is a ``LedgerNamespace`` at the run's rev, so a
     mounted spec, literal or function resolves through the mounts the caller used; ``mount`` is refused.
     The caller's own world (here a plain ``Namespace``) is not what the body sees."""
-    from dvc_dat.do import Namespace
+    from dvc_dat.namespace import Namespace
 
     L, _repo = sbx
     assert type(world.ns) is Namespace
@@ -1343,7 +1343,7 @@ def test_a_body_reads_a_run_on_another_ledger_and_never_runs_one(other, sbx):
 
 def test_a_dat_on_another_ledger_is_read_with_nothing_placed_there(other, tmp_path):
     """Its folder is rebuilt in the child's overlay, not under that ledger's ``art/dats``."""
-    from dvc_dat.ledger import Dat
+    from dvc_dat import Dat
 
     L, games, _first, _second = other
     src = tmp_path / "dat-src"

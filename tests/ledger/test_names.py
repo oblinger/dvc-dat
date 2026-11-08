@@ -4,7 +4,8 @@ import os
 
 import pytest
 
-from dvc_dat.ledger import Dat, Ref, Value
+from dvc_dat import Dat
+from dvc_dat.ledger import Ref, Value
 from ledger_kinds import CALLS
 from test_memo import world  # noqa: F401  (the fixture)
 

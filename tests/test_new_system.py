@@ -17,7 +17,7 @@ from dvc_dat import Dat, DatManager  # noqa: E402
 ns, cli_main = Dat.ns, Dat.cli_main
 from dvc_dat.core import DAT_CONFIG_FILE  # noqa: E402
 OVERRIDE = ".datconfig.override.yaml"   # read until 2.63; refused since (SVP 239)
-from dvc_dat.do import Namespace  # noqa: E402
+from dvc_dat.namespace import Namespace  # noqa: E402
 
 
 @pytest.fixture
@@ -162,8 +162,9 @@ class TestDefaultWorld:
     def test_the_package_exports_the_four_classes_the_ledger_handles_and_dat(self):
         assert sorted(dvc_dat.__all__) == ["Dat", "DatContainer", "DatManager", "L", "Namespace", "dat", "ledgers"]
         assert dvc_dat.dat.fn is dvc_dat.ledger.fn.fn and dvc_dat.dat.command is dvc_dat.just.command  # SVP 250 Q4
-        for gone in ("cli_main", "expand", "expand_spec", "merge_dicts"):
+        for gone in ("cli_main", "expand_spec", "merge_dicts"):
             assert not hasattr(dvc_dat, gone)
+        assert not callable(getattr(dvc_dat, "expand", None))     # the expander's module, not a function
 
     def test_subclasses_share_it(self, default_world):
         class Run(Dat):

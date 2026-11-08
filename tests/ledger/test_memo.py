@@ -5,7 +5,8 @@ import re
 import pytest
 
 import ledger_kinds
-from dvc_dat.ledger import Dat, NotClean, NotEvaluated, Ref, Value
+from dvc_dat import Dat
+from dvc_dat.ledger import NotClean, NotEvaluated, Ref, Value
 from dvc_dat import dat
 from ledger_kinds import CALLS, Cut, Video
 

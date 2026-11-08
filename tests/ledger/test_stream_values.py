@@ -8,7 +8,8 @@ import tracemalloc
 import pyarrow as pa
 import pytest
 
-from dvc_dat.ledger import Dat, Value
+from dvc_dat import Dat
+from dvc_dat.ledger import Value
 from dvc_dat.ledger.codec import hash_sink, sha256
 from ledger_kinds import ENCODES, MIB, Streamed
 

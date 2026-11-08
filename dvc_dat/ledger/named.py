@@ -341,9 +341,9 @@ def load(ref: str, default: Any = None) -> Any:
     if sep and "@" in head:
         return _value_at(rev_named(head), rest)
     if default is None and _no_ledger():
-        from ..core import Dat
+        from . import hooks
 
-        return Dat.manager.load(ref)
+        return hooks.manager().load(ref)
     return _value_at(_ledger_of(default).at(), ref)
 
 

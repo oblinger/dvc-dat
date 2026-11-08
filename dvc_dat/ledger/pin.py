@@ -579,8 +579,8 @@ def child_main() -> int:
     from .ledger import Ledger
     from .namespace import LedgerNamespace
     from .rev import Ref
+    from . import hooks
     from .rundat import run_fn
-    from ..core import Dat
 
     req = json.load(sys.stdin)
     where = Path(os.path.realpath(req["worktree"]))
@@ -596,7 +596,7 @@ def child_main() -> int:
     value = fn(kwargs=keys, seal=False)
     new = value.preds
     reply = {"hash": value.hash, "preds": {p: str(new[p]) for p in req["preds"] if p in new}}
-    if isinstance(value, Dat):
+    if hooks.is_dat(value):
         p = os.path.realpath(value.path)
         if p.startswith(os.path.realpath(work_root()) + os.sep):
             shutil.rmtree(Path(p).parent if Path(p).name == "dat" else p, ignore_errors=True)

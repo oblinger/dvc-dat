@@ -55,7 +55,8 @@ def memo_key(rev: "Rev", ns: "LedgerNamespace", target: Any, obj: Any,
              kwargs: Dict[str, Any]) -> Tuple[Fn, Dict[str, Any]]:
     """``(fn, keys)`` of a dat run: the run function's ``Fn`` (its template and class set) and the memo key,
     the spec expanded with ``dat.name`` removed."""
-    from ..core import DAT_PREDS, Dat, _kind_name, quote_spec, spec_variables
+    from ..core import DAT_PREDS, Dat, _kind_name
+    from ..expand import quote_spec, spec_variables
 
     if isinstance(obj, Dat):
         raise TypeError(f"run takes a spec, a spec's name or a function's name, not the dat {obj!r}")

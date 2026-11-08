@@ -415,16 +415,19 @@ wheels = [
 name = "dvc-dat"
 source = { editable = "." }
 dependencies = [
-    { name = "pandas" },
     { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
 excel = [
+    { name = "pandas" },
     { name = "xlsxwriter" },
 ]
 pg = [
     { name = "psycopg", extra = ["binary"] },
+]
+tools = [
+    { name = "pandas" },
 ]
 video = [
     { name = "fsspec" },
@@ -437,6 +440,7 @@ dev = [
     { name = "ipykernel" },
     { name = "jupytext" },
     { name = "nbconvert" },
+    { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pyarrow" },
     { name = "pytest" },
@@ -453,13 +457,14 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dvc-dat", extras = ["tools"], marker = "extra == 'excel'" },
     { name = "fsspec", marker = "extra == 'video'" },
-    { name = "pandas" },
+    { name = "pandas", marker = "extra == 'tools'" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'pg'", specifier = ">=3.1" },
     { name = "pyyaml" },
     { name = "xlsxwriter", marker = "extra == 'excel'" },
 ]
-provides-extras = ["excel", "pg", "video"]
+provides-extras = ["tools", "excel", "pg", "video"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -468,6 +473,7 @@ dev = [
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "jupytext", specifier = ">=1.17.1" },
     { name = "nbconvert", specifier = ">=7.16.6" },
+    { name = "pandas" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
     { name = "pyarrow", specifier = ">=15" },
     { name = "pytest", specifier = ">=8.3.5" },

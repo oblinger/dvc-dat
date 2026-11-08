@@ -32,7 +32,7 @@ def made(spec=SPEC, **kwargs):
 
 
 def test_the_ledger_dat_is_the_core_dat():
-    assert ledger_pkg.Dat is Dat and issubclass(Dat, ledger_pkg.Value)
+    assert "Dat" not in ledger_pkg.__all__ and issubclass(Dat, ledger_pkg.Value)
     assert not hasattr(ledger_pkg.value, "Dat")
 
 

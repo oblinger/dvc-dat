@@ -102,6 +102,26 @@ def period_starts(kind: str, first: _dt.date, last: _dt.date) -> Iterator[Tuple[
             day = (day.replace(day=28) + _dt.timedelta(days=4)).replace(day=1)
 
 
+_RETIRED_OVERRIDE = ".datconfig.override.yaml"  # read until 2.63 (SVP 239: one config file); now refused
+
+
+def refuse_removed(path: Optional[Path], values: Dict[str, Any]) -> None:
+    """`ValueError` for a config key removed in 2.63, naming what replaces it, and for an override file beside the
+    config (SVP 239: one `.datconfig.yaml`, committed; the per-checkout fact is `DAT_LEDGER`)."""
+    if path is not None and (Path(path).parent / _RETIRED_OVERRIDE).is_file():
+        raise ValueError(f"{Path(path).parent / _RETIRED_OVERRIDE}: the override file is no longer read (dvc-dat "
+                         "2.63, SVP 239: one config file); the active ledger is DAT_LEDGER=<name>, the local store "
+                         "DAT_STORE_LOCAL; move what it says there and remove the file")
+    if "ledger" in values:
+        raise ValueError(f"{path}: 'ledger:' was removed in dvc-dat 2.63 (SVP 239): write 'root: "
+                         f"{values['ledger']}' and 'default: root', and 'namespace: ledger' when its names were "
+                         "the ledger's")
+    if "ledgers" in values:
+        raise ValueError(f"{path}: 'ledgers:' was removed in dvc-dat 2.63 (SVP 239): the list of ledgers is the "
+                         "registry on the root ledger; write 'root: <location of the ledger holding the registry>' "
+                         "and register each ledger there (subject ledger/<name>, predicate ledger/location)")
+
+
 def _read_config(cfg: Path) -> Dict[str, Any]:
     data = yaml.safe_load(cfg.read_text()) or {}
     return data if isinstance(data, dict) else {}
@@ -110,11 +130,9 @@ def _read_config(cfg: Path) -> Dict[str, Any]:
 def _values(cfg: Path) -> Dict[str, Any]:
     """The config's keys. A removed key (``ledger:``, ``ledgers:``) or a ``.datconfig.override.yaml`` beside it is
     ``LedgerError`` naming what replaces it (SVP 239: one config file)."""
-    from ..core import _refuse_removed
-
     data = _read_config(cfg)
     try:
-        _refuse_removed(cfg, data)
+        refuse_removed(cfg, data)
     except ValueError as e:
         raise LedgerError(str(e)) from None
     return data

@@ -4,7 +4,8 @@ resolves a class by its dotted name, ``rev.ns.load`` a function by its)."""
 from pathlib import Path
 
 import ledger_helper
-from dvc_dat.ledger import Dat, Ledger, Ref, Value, ledger_class
+from dvc_dat import Dat
+from dvc_dat.ledger import Ledger, Ref, Value, ledger_class
 from dvc_dat import dat
 
 CALLS = {}

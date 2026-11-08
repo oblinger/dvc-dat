@@ -416,7 +416,7 @@ class TestExplicitConfig:
     def test_importing_dvc_dat_reads_no_config(self, tmp_path):
         result = subprocess.run(
             [sys.executable, "-c",
-             "import dvc_dat; print(dvc_dat.core._default_manager, dvc_dat.Dat.ns._current())"],
+             "import dvc_dat.core; print(dvc_dat.core._default_manager, dvc_dat.Dat.ns._current())"],
             cwd=tmp_path, capture_output=True, text=True,
             env={**os.environ, "PYTHONPATH": str(REPO_ROOT)})
         assert result.returncode == 0, result.stderr

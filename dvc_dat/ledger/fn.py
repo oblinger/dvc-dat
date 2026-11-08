@@ -35,13 +35,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .claim import PREDICATE as REPRODUCIBLE, claim_text, clauses, widens
-from .codec import canonical, hash_text, ref_text, sha256
+from .codec import canonical, dotted_get, hash_text, ref_text, sha256
 from .env import Env, current_env, platform_items, repo_of
 from .errors import ConfinedWrite, NotClean, NotEvaluated
 from .policy import EXACT_FIELDS
 from .code import Code
 from .value import Blob, Value, check_loadable, dotted
-from ..core import Dat
+from . import hooks
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -722,7 +722,7 @@ class Fn:
         rev._record_run(item, ref_text(dotted(type(value)), value.hash))
         if into is not None:
             return value
-        if target is None and self._takes_path and isinstance(value, Dat):
+        if target is None and self._takes_path and hooks.is_dat(value):
             target = fresh_name(plain.ns, self._template or ANONYMOUS, self._name_keys(kw))
         return place(plain.ledger, value, target) if target is not None else value
 
@@ -730,7 +730,7 @@ class Fn:
         """What a path template expands with: the keys; for a dat, its spec's expansion variables,
         ``dat.defaults`` overridden by ``dat.kwargs`` (SVP 1508)."""
         if self.kind == "dat":
-            return {**(Dat.get(kw, "dat.defaults", None) or {}), **(Dat.get(kw, "dat.kwargs", None) or {})}
+            return {**(dotted_get(kw, "dat.defaults", None) or {}), **(dotted_get(kw, "dat.kwargs", None) or {})}
         return kw
 
     def _function(self) -> Callable:
@@ -802,7 +802,7 @@ class Fn:
         rec: Dict[str, str] = {}
         work = work_folder()
         value: Any = None
-        manager = Dat.manager
+        manager = hooks.manager()
         try:
             with base_confined(_checkout(env, repo), _dats(plain, work)), running(RunFrame(plain, rec, enc)):
                 dat = manager.create(dat_spec(spec, self._template), path=str(work / "dat"))
@@ -838,7 +838,7 @@ def _dats(plain: "Rev", work: Optional[Path]) -> List[Any]:
     and art folder, the ledger's art store), the ledger's own folder, and the body's path folder."""
     from .pgstore import is_dsn
 
-    manager = Dat.manager
+    manager = hooks.manager()
     out: List[Any] = [*manager._dat_folders, manager._art_folder, plain.ledger._store.art.root, work]
     if not is_dsn(str(plain.ledger.path)):
         out.append(plain.ledger.path)
@@ -849,7 +849,7 @@ def dat_spec(keys: Dict[str, Any], template: Optional[str]) -> Dict[str, Any]:
     """The spec a dat is created from: its memo key (the expanded spec) quoted, so ``create``'s expansion hands
     its values back as they are, with its ``dat.preds`` template (SVP 1508) and its ``dat.name`` template
     back, which that expansion fills."""
-    from ..core import quote_spec
+    from ..expand import quote_spec
 
     spec = quote_spec(keys)
     preds = keys["dat"].get("preds")
@@ -860,12 +860,12 @@ def dat_spec(keys: Dict[str, Any], template: Optional[str]) -> Dict[str, Any]:
     return spec
 
 
-def alias_reads(plain: "Rev", dat: Dat, rec: Dict[str, str]) -> None:
+def alias_reads(plain: "Rev", dat: Any, rec: Dict[str, str]) -> None:
     """The dat's recorded dependencies that are names on the ledger, recorded as the bindings they read."""
     from .rev import Ref, Rev
 
     recording = Rev(plain.ledger, plain.id, _rec=rec)
-    for dep in sorted(Dat.get(dat.get_results(), "dat.dependencies", None) or {}):
+    for dep in sorted(dotted_get(dat.get_results(), "dat.dependencies", None) or {}):
         if plain._held(dep, "db/alias"):
             Ref(recording, dep)                     # records `<dep> db/alias`, the binding it read
 
@@ -934,11 +934,11 @@ def place(ledger: Any, value: Value, target: str) -> Value:
     ``<data folder>/<name>`` as a view; absolute, the folder made there, no name. Unsaved
     (``seal=False`` or ``True``): the name is set on the object, saved with it."""
     if os.path.isabs(target):
-        if isinstance(value, Dat) and value.subject is not None:
+        if hooks.is_dat(value) and value.subject is not None:
             art = ledger._store.art
             value._forget()
-            value.path = Dat._materialise(value.hash, Dat._stored_manifest(art, value.hash), art, target)
-        elif isinstance(value, Dat):
+            value.path = value._materialise(value.hash, value._stored_manifest(art, value.hash), art, target)
+        elif hooks.is_dat(value):
             raise ValueError(f"path={target!r}: an unsaved Dat stays where it was built (seal=False or True)")
         return value
     if value.subject is None:
@@ -968,7 +968,7 @@ def drop_work(work: Optional[Path], value: Any) -> None:
 
     if work is None or not work.exists():
         return
-    if isinstance(value, Dat) and value.rev is None:        # unsaved, or saved by a transaction still open
+    if hooks.is_dat(value) and value.rev is None:        # unsaved, or saved by a transaction still open
         p = os.path.realpath(value.path)
         if p == os.path.realpath(work) or p.startswith(os.path.realpath(work) + os.sep):
             return

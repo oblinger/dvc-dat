@@ -11,7 +11,8 @@ import textwrap
 
 import pytest
 
-from dvc_dat.ledger import Dat, Ref, Value
+from dvc_dat import Dat
+from dvc_dat.ledger import Ref, Value
 from dvc_dat.ledger.codec import sha256
 from dvc_dat.ledger.kept import Kept
 from dvc_dat.ledger.store import file_sha
@@ -132,7 +133,8 @@ def test_dat_work_names_the_work_parent(coded, tmp_path, monkeypatch):
 SCRIPT = textwrap.dedent("""
     import json, os, resource, sys
     from pathlib import Path
-    from dvc_dat.ledger import Dat, Ledger
+    from dvc_dat import Dat
+    from dvc_dat.ledger import Ledger
     from dvc_dat.ledger.kept import Kept
 
     root = Path(sys.argv[1])

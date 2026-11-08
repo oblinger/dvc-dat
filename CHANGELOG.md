@@ -8,6 +8,9 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **The ledger loads without the Dat layer (1519 R1).** `import dvc_dat.ledger` (and `import dvc_dat`) imports no `dvc_dat.core` and no `dvc_dat.do`; `Dat`, `DatContainer`, `DatManager` and `Namespace` load on first use of the name (PEP 562). `dvc_dat.core` registers `Dat` with the new `dvc_dat.ledger.hooks` (`register_dat_layer`, `dat_class`, `is_dat`, `manager`) when it is imported, and a stored dat read back by its class name imports it. `Namespace` moved from `dvc_dat.do` to `dvc_dat.namespace`; the `{}` expander from `dvc_dat.core` to `dvc_dat.expand`; the dat branch of a sandboxed run to `dvc_dat.datrun`; `CODE_PATHSPEC` to `dvc_dat.ledger.env`; the dotted `get`/`set` walk to `dvc_dat.ledger.codec`. **Removed:** `dvc_dat.ledger.Dat` (write `from dvc_dat import Dat`). Migration: that import.
+- **pandas is out of the base install (1519 R2).** `pip install dvc-dat` pulls pyyaml alone; the tables (`dt.from_dat`, `dt.to_excel`, `Cube`) need the new `tools` extra (`dvc-dat[tools]`), and without pandas they are `ImportError` naming it; `excel` now brings `tools`. `dt.list` and `x --list` need no pandas. Migration: a project using the tables installs `dvc-dat[tools]`.
+
 ## 2.68.1 — 2026-11-07
 
 - **A seal's writes are durable: flushed before the rename (SVP 1561; patch).** Every seal record, kept blob and kept part is written at a temp name, flushed (`F_FULLFSYNC` on macOS, where `fsync` leaves the bytes in the drive's cache; `fsync` elsewhere, and on a filesystem that refuses `F_FULLFSYNC`), renamed into place, and its folder flushed. A kept folder (`$DAT_KEPT`) on a removable drive pulled right after a seal holds the record whole or not at all. `place(..., durable=True)` and `FileSink(..., durable=True)` carry it; both default to `False`, so the ledger's art store is unchanged. Migration: none.

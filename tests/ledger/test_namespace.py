@@ -80,9 +80,9 @@ def test_the_clock_is_in_the_revisions_display_zone(L, monkeypatch):
         def now(cls, tz=None):
             return moment.astimezone(tz) if tz is not None else moment.astimezone().replace(tzinfo=None)
 
-    import dvc_dat.core as core
+    import dvc_dat.expand as expander
     import dvc_dat.ledger.namespace as lns
-    monkeypatch.setattr(core, "datetime", Fixed)
+    monkeypatch.setattr(expander, "datetime", Fixed)
     monkeypatch.setattr(lns, "datetime", Fixed)
     utc = L.at()
     tokyo = _tokyo(L)

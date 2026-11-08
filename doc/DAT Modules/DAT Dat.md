@@ -35,7 +35,7 @@ A `Dat` whose folder holds other dats: every folder below it carrying a spec fil
 ## Namespace Interface
 A namespace of dotted names, bound to the `DatManager` whose world it names; not callable (running is `manager.run`). Every manager builds its own, reached as `manager.ns`; `Dat.ns` forwards to `Dat.manager.ns`. `Namespace(manager=None)` is the constructor: a bare `Namespace()` mounts, loads and names with no world, and its `manager` is `RuntimeError` until a manager built with `ns=` adopts it. A dotted name is a mounted name first, else exactly what `import` means in this environment, `getattr` below that.
 
-<!-- methods: dvc_dat.do.Namespace -->
+<!-- methods: dvc_dat.namespace.Namespace -->
 
 ## dvc_dat Interface
 `from dvc_dat import Dat, DatContainer, DatManager, Namespace, L, ledgers` is the package's `__all__`; importing it reads no file. `dvc_dat.do` is the submodule, not the namespace: the default world's namespace is `Dat.ns`, or `dvc_dat.do.ns`. The module function `merge_dicts` is importable from `dvc_dat.core`; the `{}` grammar is a namespace's, `ns.expand`, `ns.expand_spec`, `ns.quote_spec` ([Expansion](../expand.md)). The ledger is its own subpackage, `dvc_dat.ledger`.
@@ -45,7 +45,7 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
 | [Dat](../api/core.md#dvc_dat.core.Dat) | The folder that is its own recipe |
 | [DatContainer](../api/core.md#dvc_dat.core.DatContainer) | A dat holding dats |
 | [DatManager](../api/core.md#dvc_dat.core.DatManager) | A world of dats |
-| [Namespace](../api/do.md#dvc_dat.do.Namespace) | A namespace bound to a world |
+| [Namespace](../api/do.md#dvc_dat.namespace.Namespace) | A namespace bound to a world |
 | [L](../api/ledger.md#dvc_dat.ledger.named) | The active ledger |
 | [ledgers](../api/ledger.md#dvc_dat.ledger.named.Ledgers) | The project's ledgers by name |
 | `__version__` | The package version |
@@ -160,4 +160,4 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 
 # BRIEF
 - Hand-written against `dvc_dat/core.py` and `dvc_dat/do.py` at 2.18.0; the code is the authority, and every name and signature here was read from it. The figure is hand-written SVG; edit it beside this page.
-- Each member's contract is its docstring; the tables here are generated from them (246). `dvc_dat.ledger.Dat` is this class since 2.28.0 (DAT 1038); its value side is documented under [DAT Ledger](ledger/DAT%20Ledger.md).
+- Each member's contract is its docstring; the tables here are generated from them (246). `Dat` is a ledger value since 2.28.0 (DAT 1038), imported as `dvc_dat.Dat` (the ledger does not export it since 1519 R1); its value side is documented under [DAT Ledger](ledger/DAT%20Ledger.md).
