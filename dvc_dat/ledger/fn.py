@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 #: key and is then called through ``kwargs=``; a declared ``path`` is the folder it builds (Q36).
 RESERVED_KEYS = ("seal", "clean", "path", "kwargs")
 #: The name a folder-producing miss gets with neither ``path=`` nor a template (as ``Dat.create``).
-ANONYMOUS = "anonymous/Dat{unique}"
+ANONYMOUS = "anonymous/Dat${unique:}"
 
 
 class _Own:
@@ -703,7 +703,7 @@ class Fn:
         # False: a draft; True: the memo entry in a transaction of its own; a Transaction: into it
         save: Any = True if isinstance(level, str) and level == "save" else (into if into is not None else False)
         if into is not None and target is None and self._takes_path:
-            target = fresh_name(into.ns, self._template or ANONYMOUS, self._name_keys(kw))
+            target = fresh_name(into.ns, self._template or ANONYMOUS, kw)
         name = target if into is not None and target is not None and not os.path.isabs(target) else None
         if into is not None and target is not None and name is None:
             raise ValueError(f"{self.name}: path={target!r} is absolute; with seal=t the result is saved at "
@@ -723,15 +723,8 @@ class Fn:
         if into is not None:
             return value
         if target is None and self._takes_path and hooks.is_dat(value):
-            target = fresh_name(plain.ns, self._template or ANONYMOUS, self._name_keys(kw))
+            target = fresh_name(plain.ns, self._template or ANONYMOUS, kw)
         return place(plain.ledger, value, target) if target is not None else value
-
-    def _name_keys(self, kw: Dict[str, Any]) -> Dict[str, Any]:
-        """What a path template expands with: the keys; for a dat, its spec's expansion variables,
-        ``dat.defaults`` overridden by ``dat.kwargs`` (SVP 1508)."""
-        if self.kind == "dat":
-            return {**(dotted_get(kw, "dat.defaults", None) or {}), **(dotted_get(kw, "dat.kwargs", None) or {})}
-        return kw
 
     def _function(self) -> Callable:
         """The function itself, for a plain ``Dat.ns`` run (nothing memoised): installed, the object;
@@ -921,8 +914,8 @@ def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
 
 def fresh_name(ns: Any, template: str, keys: Dict[str, Any]) -> str:
     """The path template expanded with the call's keys through the ledger namespace ``ns`` (Q36):
-    ``ns.expand`` counts ``{unique}`` until no name holds a value there and no folder is at it; without
-    ``{unique}`` the name moves to the new value (A70)."""
+    ``ns.expand`` counts ``${unique:}`` until no name holds a value there and no folder is at it; without
+    ``${unique:}`` the name moves to the new value (A70)."""
     text = ns.expand(template, **keys)
     if not text:
         raise TypeError(f"path template {template!r} expanded to {text!r}, not a path")

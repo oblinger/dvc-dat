@@ -6,12 +6,11 @@ Anything else is a dat: a spec (a dict, or a name resolving to one, from a
 mounted ``.yaml``/``.json`` or a literal in a mounted module) or a dat's run
 function by its dotted name, which is the spec ``{dat: {do: <name>}}``. Its memo
 key is the spec ``Dat.ns`` would create from: ``dat.base`` merged, the kwargs
-merged into ``dat.kwargs``, ``dat.kind`` the class it makes, every ``{}``
-expanded once here with names through the ledger's namespace and the expansion
-variables (``dat.defaults`` overridden by ``dat.kwargs``, SVP 1508), ``dat.preds``
-kept as its template (expanded when the dat is made, carried onto the sealed
+merged into ``dat.kwargs``, ``dat.kind`` the class it makes, every ``${…}``
+resolved once here with ``${ns:…}`` through the ledger's namespace, ``dat.preds``
+kept as its template (resolved when the dat is made, carried onto the sealed
 value), and ``dat.name`` removed (the folder template is not part of the key, it
-names the result, filled with the same variables). The
+names the result, resolved against the key). The
 run function named by ``dat.do`` resolves to an ``Fn`` of kind ``"dat"``, called
 with the memo key as its keys; ``Fn.__call__`` does the rest, as for any ledger
 function: the lookup, and on a miss the run (in the sandbox worker when the run
@@ -56,7 +55,7 @@ def memo_key(rev: "Rev", ns: "LedgerNamespace", target: Any, obj: Any,
     """``(fn, keys)`` of a dat run: the run function's ``Fn`` (its template and class set) and the memo key,
     the spec expanded with ``dat.name`` removed."""
     from ..core import DAT_PREDS, Dat, _kind_name
-    from ..expand import quote_spec, spec_variables
+    from ..expand import quote_spec, resolve_spec
 
     if isinstance(obj, Dat):
         raise TypeError(f"run takes a spec, a spec's name or a function's name, not the dat {obj!r}")
@@ -70,11 +69,10 @@ def memo_key(rev: "Rev", ns: "LedgerNamespace", target: Any, obj: Any,
         raise TypeError(f"run: spec['dat'] is a mapping, got {spec['dat']!r}")
     spec["dat"]["kind"] = _kind_name(Dat.manager._class_of(spec["dat"].get("kind")))
     template: Optional[str] = spec["dat"].pop("name", None)
-    spec, variables = spec_variables(spec, resolver=ns.load, tz=ns._tz())
     preds = Dat.get(spec, DAT_PREDS, None)
-    if preds is not None:                              # a template in the key, expanded at the dat's create
+    if preds is not None:                              # a template in the key, resolved at the dat's create
         Dat.set(spec, DAT_PREDS, quote_spec(preds))
-    keys = ns.expand_spec(spec, **variables)
+    keys = resolve_spec(spec, load=ns.load, tz=ns._tz())
     fn = run_fn(rev, ns, keys)
     return dataclasses.replace(fn, _template=template, _returns=keys["dat"]["kind"]), keys
 

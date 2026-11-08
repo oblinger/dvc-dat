@@ -732,7 +732,7 @@ class Rev:
         API](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Design/DAT%20API/DAT%20Namespace%20API.md):
         ``rev.ns.load(name)`` is what the dotted ``name`` denotes here, ``rev.ns.mounts()`` the ``db/mount`` rows as
         ``{prefix: {"root": ..., "repo": ...}}``, ``rev.ns.expand(template, **vars)`` a template filled through these
-        names in this revision's [display zone][dvc_dat.ledger.Rev.timezone] with ``{unique}`` counted against this
+        names in this revision's [display zone][dvc_dat.ledger.Rev.timezone] with ``${unique:}`` counted against this
         revision ([Expansion][expansion-nsexpand]), and ``mount`` is ``TypeError`` (a transaction's
         [``t.ns``][dvc_dat.ledger.Transaction.ns] mounts).
 
@@ -770,9 +770,8 @@ class Rev:
         the spec's ``dat.kwargs``.
 
         A dat's memo key, ``db/keys``, is the spec with its ``dat.base`` merged, the kwargs merged, ``dat.kind`` set
-        and every ``{}`` expanded once (dotted names through the ledger's namespace; undotted ones the expansion
-        variables, ``dat.defaults`` overridden by ``dat.kwargs``, SVP 1508), ``dat.preds`` kept as its template
-        (expanded when the dat is made and sealed as its preds), ``dat.name`` removed; ``db/fn`` is the run function's
+        and every ``${…}`` resolved once (``${ns:…}`` through the ledger's namespace), ``dat.preds`` kept as its
+        template (resolved when the dat is made and sealed as its preds), ``dat.name`` removed; ``db/fn`` is the run function's
         dotted name and ``db/returns`` the dat's class.
 
         A miss creates the dat in a work folder and runs it there (the machinery of ``Dat.manager.run``), then seals
@@ -794,8 +793,8 @@ class Rev:
         (``@dat.fn(reproducible="exact")``) has its lookup match the card and driver too, on top of the ledger's memo
         policy ([Memoization and the platform][memoization-and-the-platform]).
 
-        ``path`` names the result; a dat's name is ``path=``, else its spec's ``dat.name`` template (``{unique}``
-        counting up in the data folder), else ``anonymous/Dat{unique}``, and a hit is handed back at its name, its
+        ``path`` names the result; a dat's name is ``path=``, else its spec's ``dat.name`` template (``${unique:}``
+        counting up in the data folder), else ``anonymous/Dat${unique:}``, and a hit is handed back at its name, its
         folder a view there.
 
         A spec naming a ``@dat.fn`` in ``dat.do`` is ``TypeError``; a target that is neither a ``str`` nor a dict is

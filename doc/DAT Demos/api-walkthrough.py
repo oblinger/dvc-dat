@@ -771,7 +771,7 @@ notes: shared defaults
 (module_path / "specs/times12.yaml").write_text('''\
 dat:
   base: timestables.specs.times_base
-  name: tables/{YYYY}/times{n}{unique}
+  name: tables/${now:%Y}/times${dat.kwargs.n}${unique:}
   do: timestables.mult.build_table
   kwargs: {n: 12}
 ''')
@@ -793,7 +793,7 @@ Dat.ns.mount(folder="timestables", at="timestables")   # timestables's files joi
 #
 # 1. **Load the spec**: `Dat.ns.load(name)` is the spec file's dict as written.
 # 2. **Apply the keywords**: each keyword sets its entry in `dat.kwargs`.
-# 3. **Expand**: `Dat.ns.expand_spec(spec, **kwargs)` merges the spec over its `dat.base`, which it drops, and fills every `{}`; a `{name}` is the keyword, `{YYYY}` the year, `{unique}` empty.
+# 3. **Resolve**: `Dat.ns.expand_spec(spec)` merges the spec over its `dat.base`, which it drops, and resolves every `${…}`: `${dat.kwargs.n}` is the keyword's node, `${now:%Y}` the year, `${unique:}` the first count, empty.
 # 4. **Memo key**: on a ledger, the expanded spec without `dat.name`, looked up before anything runs.
 # 5. **Create**: `Dat.create(spec=expanded_spec)` makes the Dat, its folder and `_spec_.yaml`.
 # 6. **Run**: the function `dat.do` names is called with the dat and `dat.kwargs`.
@@ -805,10 +805,10 @@ Dat.ns.mount(folder="timestables", at="timestables")   # timestables's files joi
 spec = Dat.ns.load("timestables.specs.times12")     # 1. the spec as written
 keyed_spec = copy.deepcopy(spec)
 Dat.set(keyed_spec, "dat.kwargs.n", 5)              # 2. the keyword n=5 replaces n: 12
-expanded_spec = Dat.ns.expand_spec(keyed_spec, **Dat.get(keyed_spec, "dat.kwargs"))   # 3. dat.base merged in, every {…} filled
+expanded_spec = Dat.ns.expand_spec(keyed_spec)    # 3. dat.base merged in, every ${…} resolved
 print("SPEC:    ", spec)
 print("KEYWORDS:", keyed_spec)
-print("EXPANDED:", expanded_spec)   # base: gone, kwargs gains start, notes appears, name: filled, {n} from the keyword
+print("EXPANDED:", expanded_spec)   # base: gone, kwargs gains start, notes appears, name: filled, ${dat.kwargs.n} from the keyword
 
 # %%
 times5_dat = Dat.create(spec=expanded_spec)         # 5. the Dat and its folder; nothing runs
@@ -833,10 +833,10 @@ shorthand_path = Path(shorthand_dat.get_path())
 print("DAT:", repr(shorthand_dat))
 print("BY HAND _SPEC_.YAML:\n" + textwrap.indent((times5_path / "_spec_.yaml").read_text(), "    "))
 print("ONE CALL _SPEC_.YAML:\n" + textwrap.indent((shorthand_path / "_spec_.yaml").read_text(), "    "))
-# the same kwargs, do, kind and notes; name: tables/2026/times5 by hand, tables/{YYYY}/times{n}{unique} in the one call
+# the same kwargs, do, kind and notes; name: tables/2026/times5 by hand, the template in the one call
 
 # %% [markdown]
-# One difference, in `name:`. The one call expands `{}` after it places the folder, with the placement's own `{YYYY}` and `{unique}`: `times5` is taken, so `{unique}` counts up to `_2`, and `_spec_.yaml` keeps `name:` as the template. By hand, `expand_spec` sees no folder, so `{unique}` is always empty and `name:` is filled once; were `tables/2026/times5` taken, step 5 would raise `FileExistsError` instead of counting up.
+# One difference, in `name:`. The one call resolves the spec as it places the folder, with the placement's own moment and count: `times5` is taken, so `${unique:}` counts up to `_2`, and `_spec_.yaml` keeps `name:` as the template. By hand, `expand_spec` sees no folder, so `${unique:}` is always empty and `name:` is filled once; were `tables/2026/times5` taken, step 5 would raise `FileExistsError` instead of counting up.
 
 # %% [markdown]
 # `Dat.manager.run(name, **keywords)` is steps 1, 2, 3, 5 and 6 in one call, and it records the run in `dat.run`, the `run` folder the hand-run dat above lacks.
@@ -925,7 +925,7 @@ print("ran:", repr(times12_value))   # ran: <Dat tables/2026/times12>: the spec'
 # Steps 1 to 3 ran through the ledger's mounts: `Dat.ns.load` read the spec off the mounted file, never imported. Step 4 is the expanded spec with `dat.name` removed and `dat.kind` set; it is the memo key, stored as the value's `db/keys`.
 
 # %%
-expanded_spec = Dat.ns.expand_spec(Dat.ns.load("mnt.timestables.specs.times12"), n=12)   # 3. with the spec's own n
+expanded_spec = Dat.ns.expand_spec(Dat.ns.load("mnt.timestables.specs.times12"))   # 3. the spec's own n
 memo_key = copy.deepcopy(expanded_spec)                                                  # 4. the memo key
 memo_key["dat"].pop("name")
 memo_key["dat"]["kind"] = "dvc_dat.core.Dat"
@@ -1048,7 +1048,7 @@ def run_game(dat, game, min_score=0.5, max_gap=2):
 ''')
 (pipeline_path / "specs/base.yaml").write_text('''\
 dat:
-  name: runs/{game}/base{unique}
+  name: runs/${dat.kwargs.game}/base${unique:}
   do: mnt.game_pipeline.stages.run_game
   kwargs: {min_score: 0.5, max_gap: 2}
   preds: {pipeline: base}
@@ -1060,7 +1060,7 @@ with L.transaction(by="human:dan", why="mount the pipeline") as t:
 # %% [markdown]
 # ### The base case on G1
 #
-# `game="G1"` is step 2: the keyword joins `dat.kwargs`, fills `{game}` in `name:`, is part of the memo key and is handed to the run function.
+# `game="G1"` is step 2: the keyword joins `dat.kwargs`, fills `${dat.kwargs.game}` in `name:`, is part of the memo key and is handed to the run function.
 
 # %%
 base_g1_value = L.at().run("mnt.game_pipeline.specs.base", game="G1")

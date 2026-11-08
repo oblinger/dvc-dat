@@ -69,7 +69,7 @@ notes: shared defaults
 (module_path / "specs/table12.yaml").write_text('''\
 dat:
   base: mnt.mymodule.specs.table_base
-  name: tables/{YYYY}/table12{unique}
+  name: tables/${now:%Y}/table12${unique:}
   do: mnt.mymodule.mult.build_table
   kwargs: {n: 12}
 command: true

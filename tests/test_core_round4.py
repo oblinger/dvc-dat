@@ -53,13 +53,14 @@ def test_overwrite_create_returns_fresh_dat(world):
 
 # --- F4: a stored spec is expanded already; its recipe runs again quoted, dat.name put back ----
 def test_rerun_of_a_stored_spec_with_a_literal_brace(world):
+    pytest.importorskip("omegaconf")
     world.ns.mount(at="seal_fn", value=_seal)
-    parent = world.run({"dat": {"do": "seal_fn", "name": "exp4{unique}"}, "note": "{{literal}}"})
-    assert parent.get_spec()["note"] == "{literal}"       # expanded once, as documented
+    parent = world.run({"dat": {"do": "seal_fn", "name": "exp4${unique:}"}, "note": "\\${literal} {x}"})
+    assert parent.get_spec()["note"] == "${literal} {x}"       # resolved once, as documented
     spec = world.ns.quote_spec(parent.get_spec())
     spec["dat"]["name"] = parent.get_spec()["dat"]["name"]
     child = world.run(spec, x=2)
-    assert child.get_spec()["note"] == "{literal}"
+    assert child.get_spec()["note"] == "${literal} {x}"
     assert child.get_path_name() == "exp4_2" and Dat.get(child.get_spec(), "dat.kwargs.x") == 2
 
 
@@ -75,14 +76,16 @@ def test_run_kwarg_with_braces_kept_as_typed(world):
 
 def test_run_kwarg_with_escaped_braces_kept_as_typed(world):
     world.ns.mount(at="kw_fn", value=_kw)
-    out = world.run({"dat": {"do": "kw_fn"}}, "{a}", fmt="{{x}}", when="{now}")
-    assert out == [["{a}"], {"fmt": "{{x}}", "when": "{now}"}]
+    out = world.run({"dat": {"do": "kw_fn"}}, "{a}", fmt="{{x}}", when="${now:}")
+    assert out == [["{a}"], {"fmt": "{{x}}", "when": "${now:}"}]
 
 
 def test_a_spec_template_still_expands_beside_a_literal_kwarg(world):
+    pytest.importorskip("omegaconf")
     world.ns.mount(at="kw_fn", value=_kw)
-    out = world.run({"dat": {"do": "kw_fn", "kwargs": {"y": "{{lit}}"}}}, pattern="{x}")
-    assert out == [[], {"y": "{lit}", "pattern": "{x}"}]
+    out = world.run({"dat": {"do": "kw_fn", "kwargs": {"y": "\\${lit}", "z": "${dat.kwargs.pattern}"}}},
+                    pattern="${x}")
+    assert out == [[], {"y": "${lit}", "z": "${x}", "pattern": "${x}"}]
 
 
 def test_cli_kwarg_with_braces_kept_as_typed(world, capsys):
@@ -147,8 +150,9 @@ def test_failed_overwrite_create_keeps_old_dat(world):
     world.create({"dat": {"name": "keep", "target_exists": "overwrite"}, "v": 1})
     old = Path(world._dat_folders[0], "keep")
     (old / "result.csv").write_text("hours of compute")
-    with pytest.raises(KeyError):
-        world.create({"dat": {"name": "keep", "target_exists": "overwrite"}, "v": "{typo}"})
+    pytest.importorskip("omegaconf")
+    with pytest.raises(Exception, match="typo"):
+        world.create({"dat": {"name": "keep", "target_exists": "overwrite"}, "v": "${typo}"})
     # spec-format: a reference that does not resolve is an error at create "and no folder is made"
     assert (old / "result.csv").exists()
 

@@ -10,7 +10,7 @@ from dvc_dat import Dat, DatContainer, DatManager
 
 from ledger_kinds import CALLS, NotedDat
 
-SPEC = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/table{unique}", "kwargs": {"n": 12, "start": 1}}}
+SPEC = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/table${unique:}", "kwargs": {"n": 12, "start": 1}}}
 
 
 @pytest.fixture
@@ -127,16 +127,17 @@ def test_rev_run_kwargs_fork_the_spec_and_path_names_it(coded, world):
 
 
 def test_rev_run_fills_the_name_and_seals_the_preds(coded, world):
-    """SVP 1508: the keywords over ``dat.defaults`` fill ``dat.name`` and ``dat.preds``; the preds are rows on the
+    """SVP 1508: ``dat.kwargs`` and ``dat.defaults`` nodes fill ``dat.name`` and ``dat.preds``; the preds are rows on the
     sealed value; the memo key keeps the preds' template, not their expansion."""
+    pytest.importorskip("omegaconf")
     CALLS.clear()
-    spec = {"dat": {**SPEC["dat"], "name": "tables/{n}{tag}", "defaults": {"tag": ""},
-                    "preds": {"size": "n{n}{tag}"}}}
+    spec = {"dat": {**SPEC["dat"], "name": "tables/${dat.kwargs.n}${dat.defaults.tag}", "defaults": {"tag": ""},
+                    "preds": {"size": "n${dat.kwargs.n}${dat.defaults.tag}"}}}
     v = coded.at().run(spec, n=5)
     assert str(v) == "tables/5" and v.preds["size"] == "n5"
     rows = coded.at()
     assert rows.get(v.subject, "size") == "n5"
-    assert rows.get(v.subject, "db/keys")["dat"]["preds"] == {"size": "n{n}{tag}"}
+    assert rows.get(v.subject, "db/keys")["dat"]["preds"] == {"size": "n${dat.kwargs.n}${dat.defaults.tag}"}
     spec["dat"]["defaults"]["tag"] = "x"                                # a new default: a new key, a new name
     assert str(coded.at().run(spec, n=5)) == "tables/5x" and CALLS == {"build_table": 2}
     spec["dat"]["defaults"]["tag"] = ""
@@ -208,7 +209,7 @@ def test_a_ledger_project_gets_the_ledgers_do_and_a_plain_one_the_plain_do(tmp_p
 
 
 def test_a_path_template_counts_a_whole_segment_through_rev_ns(coded, world):
-    """SVP 1500: ``dat.name``'s ``{unique}`` on a ledger run is ``rev.ns.expand``'s counter."""
-    spec = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/{unique}", "kwargs": {"n": 12, "start": 1}}}
+    """SVP 1500: ``dat.name``'s ``${unique:}`` on a ledger run is ``rev.ns.expand``'s counter."""
+    spec = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/${unique:}", "kwargs": {"n": 12, "start": 1}}}
     assert str(coded.at().run(spec, n=5)) == "tables/1"
     assert str(coded.at().run(spec, n=6)) == "tables/2"

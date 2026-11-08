@@ -4,7 +4,7 @@
     ns.name_of(obj)               # the dotted name that loads back to obj
     ns.mount(folder=..., at=...)  # add names to the namespace, in code
     ns.mounts()                   # the mount table: {prefix: location}
-    ns.expand("runs/{YYYY}/{a.b}", k=v)  # a template filled through these names, a str
+    ns.expand("runs/${now:%Y}/${ns:a.b}/${k}", k=v)   # a template filled through these names, a str
 
 A dotted name is a mounted name, else exactly what `import` means in this environment, `getattr` below that.
 Mounts are `ns.mount(...)` calls in the program; `.datconfig.yaml` holds none. Every `DatManager` builds its own
@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple, Ty
 
 import yaml
 
-from .expand import expand, expand_spec, quote_spec
+from .expand import expand_text, quote_spec, resolve_spec
 from .ledger.codec import dotted_get, dotted_set
 
 if TYPE_CHECKING:
@@ -77,9 +77,10 @@ class Namespace:
                   kwargs: Optional[Dict[str, Any]] = None) -> Spec:
         """A copy of `spec` with `args` as `dat.args` and `kwargs` merged into `dat.kwargs`.
 
-        Call-site arguments are data (1467 Q2 (A)): their braces are escaped before the merge, so
-        the spec's expansion at create hands the run exactly what was passed, while the spec's own
-        template strings still expand."""
+        Call-site arguments are data (1467 Q2 (A)): each `${` in them is escaped (`\\${`) before the merge, so the
+        spec's resolve at create hands the run exactly what was passed, while the spec's own references still
+        resolve. On the base install a value is stored as given and one holding `${` is `ValueError` naming
+        `dvc-dat[expand]` (1519 decision 8)."""
         spec = copy.deepcopy(spec)
         args = quote_spec(list(args))
         if args:
@@ -109,33 +110,29 @@ class Namespace:
         return None
 
     def expand(self, text: str, /, **vars: Any) -> str:
-        """`text` with its `{}` references filled, always a str (doc/expand.md).
+        """`text` with its `${…}` references resolved, always a str (doc/expand.md).
 
-        `{name}` (undotted) is an expansion variable: a keyword of this call, else a built-in
-        (`YYYY YY MM DD HH mm SS now cwd unique`, one moment in this namespace's zone); anything else
-        is `KeyError`.  `{a.b}` (dotted) is `self.load("a.b")`, called when it is a function or
-        method; `{a.b(1, k=2)}` calls it with those literals.  `{{` and `}}` are literal braces.
-        Every reference must come back a str or a number; anything else is `TypeError` (the object
-        a name refers to is `ns.load(name)`).  References do not nest: a lone `{` or `}` is
-        `ValueError`.  `{unique}` is `""` here; a ledger namespace counts it."""
-        return expand(text, vars, resolver=self.load, tz=self._tz())
+        The keywords are the top-level nodes of a one-string tree (`ns.expand("ann/${g}/${unique:}", g="G7")`), each
+        value data, never resolved; `${ns:a.b}` is `self.load("a.b")`, called when it is a function; `${now:%Y}`,
+        `${cwd:}` and `${unique:}` the built-ins, one moment in this namespace's zone; `\\${` a literal `${`; a
+        brace without `$` is text. `${unique:}` is `""` (a whole path segment `1`) here; a ledger namespace counts
+        it. Anything but a str or a number is `TypeError`. A string holding no `${` other than `${unique:}` needs no
+        omegaconf; any other is `ImportError` naming `dvc-dat[expand]` without it."""
+        return expand_text(text, vars, load=self.load, tz=self._tz())
 
-    def expand_spec(self, spec: Any, /, **vars: Any) -> Any:
-        """A copy of `spec` merged over its `dat.base` chain, every string value expanded.
-
-        Expanded as `expand` does, keys left alone, the built-ins one moment. A string value that is exactly
-        one reference is replaced by the object it names: `cfg: "{svp.defaults}"` inlines the dict. A spec
-        that is not a dict has no bases and is only filled.
-        """
+    def expand_spec(self, spec: Any, /) -> Any:
+        """A copy of `spec` merged over its `dat.base` chain, every string value resolved once, keys left alone, the
+        built-ins at one moment (`expand`'s grammar; `${batch}` a node of the merged spec). A value that is exactly
+        one reference is the object it names: `cfg: ${ns:svp.defaults}` inlines the dict. A spec that is not a dict
+        has no bases and is only resolved."""
         if isinstance(spec, dict):
             spec = self._merge_bases(copy.deepcopy(spec))
-        return expand_spec(spec, vars, resolver=self.load, tz=self._tz())
+        return resolve_spec(spec, load=self.load, tz=self._tz())
 
     @staticmethod
     def quote_spec(spec: Any) -> Any:
-        """A copy of `spec` that `expand_spec` turns back into `spec`: every brace in a string doubled."""
+        """A copy of `spec` that `expand_spec` hands back as it was: each `${` escaped (`dvc_dat.expand.quote_spec`)."""
         return quote_spec(spec)
-
 
     def _merge_bases(self, spec: Union[Spec, str], _chain: Tuple[str, ...] = ()) -> Spec:
         """A spec (or the name of one) merged over its `dat.base` (a name, a spec, or a list of them, later

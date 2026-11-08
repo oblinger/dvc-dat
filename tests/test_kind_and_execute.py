@@ -26,7 +26,7 @@ class Other(Dat):
 
 
 def outer(dat, n):
-    return dat._manager.run({"dat": {"do": "inner", "name": "inner{unique}"}}, n + 1)
+    return dat._manager.run({"dat": {"do": "inner", "name": "inner${unique:}"}}, n + 1)
 
 
 def inner(dat, n):

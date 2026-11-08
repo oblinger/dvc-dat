@@ -28,12 +28,12 @@ that process can import.
 dat:
   kind: dvc_dat.core.Dat
   base: catalog.base_template
-  name: "runs/{YYYY}-{MM}/exp{unique}"
+  name: runs/${now:%Y-%m}/exp${unique:}
   do: scripts.run_experiment
   args: [1, 2, 3]
   kwargs: {verbose: true}
   defaults: {tag: base}
-  preds: {tag: "{tag}"}
+  preds: {tag: "${dat.defaults.tag}"}
   target_exists: error
 ```
 
@@ -45,13 +45,13 @@ dat:
 | `do` | Dotted name of the function to run. |
 | `args` | Positional arguments for it, after the dat itself. |
 | `kwargs` | Keyword arguments for it. |
-| `defaults` | Expansion variables a keyword does not set (SVP 1508): `{tag}` anywhere in the spec is `dat.kwargs.tag` when there is one, else `dat.defaults.tag`. |
-| `preds` | Pred names to templates (SVP 1508), expanded at create like every string; each must come out a string, number or bool. They are the dat's own preds, sealed onto its value on a ledger. |
+| `defaults` | Plain values a template reads by their node, `${dat.defaults.tag}` (SVP 1508); kwargs over defaults is `${oc.select:dat.kwargs.tag,${dat.defaults.tag}}`. |
+| `preds` | Pred names to templates (SVP 1508), resolved at create like every string; each must come out a string, number or bool. They are the dat's own preds, sealed onto its value on a ledger. |
 | `target_exists` | What to do when the folder is already there. |
 
 `kind`, `name`, `do` and `target_exists` are strings. A value that arrives as
-something else is an error — which is how an unquoted `{…}` reference in YAML
-is caught (see **References** below).
+something else is an error — which is how a value YAML read as a flow mapping
+(one starting `{`) is caught.
 
 ### `target_exists`
 
@@ -62,8 +62,8 @@ is caught (see **References** below).
 | `overwrite` | Delete the folder and recreate it |
 | `increment` | Count up (`_2`, `_3`, …) until the path is free |
 
-A template with `{unique}` in its `dat.name` increments whether or not
-`increment` is set. `overwrite` is refused on `{cwd}`, and deletes only inside a dat folder or the art folder: an absolute name (or a `..`) outside them with `overwrite` is `ValueError`, raised before anything is removed.
+A template with `${unique:}` in its `dat.name` increments whether or not
+`increment` is set. `overwrite` is refused on `${cwd:}`, and deletes only inside a dat folder or the art folder: an absolute name (or a `..`) outside them with `overwrite` is `ValueError`, raised before anything is removed.
 
 ## Running a dat
 
@@ -81,15 +81,12 @@ creates the dat and returns it.
 updated spec is written as the new dat's `_spec_.yaml`, and the new dat then
 runs with no call-site arguments. So the arguments of every run are on disk, in
 the spec of the dat that run produced.
-A call-site argument is literal data: its braces are escaped before the merge,
-so the `{…}` expansion at create leaves it exactly as passed.
+A call-site argument is literal data: each `${` in it is escaped before the
+merge, so the resolve at create leaves it exactly as passed (on the base
+install one holding `${` is refused, naming `dvc-dat[expand]`).
 `Dat.create(template, **kwargs)` merges its keywords the same way and runs nothing.
-
-The keywords are also the spec's **expansion variables** (SVP 1508): an
-undotted `{name}` anywhere in the spec -- `dat.name` and `dat.preds` included --
-is `dat.kwargs.name` (the spec's own, updated by the call's), else
-`dat.defaults.name`, else a built-in; each is the value the run receives, so a
-call-site `{x}` passed as data stays `{x}` when it fills a name.
+A template reads a keyword by its node: `${dat.kwargs.game}` anywhere in the
+spec, `dat.name` and `dat.preds` included.
 
 ## Custom fields
 
@@ -109,20 +106,22 @@ dat = Dat.load("runs/my_experiment")
 dat.get_spec()["parameters"]["learning_rate"]   # 0.01
 ```
 
-## References: the `{}` grammar
+## References: the `${…}` grammar
 
-Any string value in a **template** may carry `{…}` references. They are
-expanded **once, when the dat is created** — with the same `now` and `unique`
-the folder got — and the expanded spec is what `_spec_.yaml` holds. A spec on
-disk is a record: `get_spec()` is the file and `{now}` is the moment it was
-made. The one exception is `dat.name`, which keeps the path template as
-given, never the path it expanded to; the folder the dat landed in is its
-name (`get_path_name()`). A reference to a class or an object inside a longer
-string is a `TypeError` at create, and no folder is made.
+Any string value in a **template** may carry `${…}` references, OmegaConf's
+grammar: `${batch}` a node of the spec, `${ns:a.b}` a namespace name,
+`${now:%Y}`, `${unique:}`, `${cwd:}` the built-ins, `\${` a literal `${`.
+They are resolved **once, when the dat is created** — after `dat.base` is
+merged, with the same moment and count the folder got — and the resolved spec
+is what `_spec_.yaml` holds. A spec on disk is a record: `get_spec()` is the
+file and `${now:}` was the moment it was made. The one exception is
+`dat.name`, which keeps the path template as given, never the path it
+resolved to; the folder the dat landed in is its name (`get_path_name()`). A
+`dat.name` in the `{…}` grammar retired in 3.0 is refused, naming the new
+spelling; the base install resolves `${unique:}` alone.
 
-The grammar itself — the built-ins, dotted names and calls through the
-namespace, `{unique}`, YAML quoting, the errors — is one page:
-[Expansion](expand.md).
+The grammar itself — the tiers, the built-ins, names and calls through the
+namespace, `${unique:}`, the errors — is one page: [Expansion](expand.md).
 
 ## Inheritance: `dat.base`
 

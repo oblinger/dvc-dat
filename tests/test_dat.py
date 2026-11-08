@@ -33,7 +33,7 @@ def spec2():
     return {
         "dat": {
             "kind": "Dat",
-            "name": "test_dats/{YY}-{MM} Dats{unique}",
+            "name": "test_dats/Dats${unique:}",
             "my_key1": "my_val111", "my_key2": "my_val222"},
         "other": "key_value"}
 

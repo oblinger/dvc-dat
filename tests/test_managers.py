@@ -32,7 +32,7 @@ def world(root: Path, tag: str) -> DatManager:
     manager.ns.mount(value={"tag": tag, "who": f"world {tag}"}, at="consts")
     manager.ns.mount(value={"dat": {"do": "fn", "kwargs": {"tag": tag}}}, at="base")
     manager.ns.mount(value={"dat": {"base": "base", "name": f"run_{tag}"},
-                            "who": "{consts.who}"}, at="tmpl")
+                            "who": "${ns:consts.who}"}, at="tmpl")
     return manager
 
 
@@ -45,6 +45,7 @@ def worlds(tmp_path):
 
 class TestTwoWorlds:
     def test_each_runs_its_own_template_into_its_own_folder(self, worlds):
+        pytest.importorskip("omegaconf")
         ma, mb = worlds
         global_folder, global_names = Dat.manager._dat_folders, set(ns.mounts())
 
@@ -75,6 +76,7 @@ class TestTwoWorlds:
         assert ns.load("only_a", default=None) is None
 
     def test_a_dotted_spec_and_its_base_resolve_in_the_managers_namespace(self, worlds):
+        pytest.importorskip("omegaconf")
         ma, mb = worlds
         dat = ma.create("tmpl")
         assert dat.get_path_name() == "run_a"
@@ -82,8 +84,8 @@ class TestTwoWorlds:
         assert "base" not in dat.get_spec()["dat"]
         with pytest.raises(Exception):                     # the default world has no `tmpl`
             Dat.create(spec="tmpl")
-        assert mb.ns.expand("{consts.who}") == "world b"
-        assert ma.ns.expand_spec({"x": "{consts.tag}"}) == {"x": "a"}
+        assert mb.ns.expand("${ns:consts.who}") == "world b"
+        assert ma.ns.expand_spec({"x": "${ns:consts.tag}"}) == {"x": "a"}
 
     def test_a_managers_do_is_bound_to_it(self, worlds):
         ma, _ = worlds

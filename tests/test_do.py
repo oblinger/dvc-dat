@@ -179,7 +179,7 @@ class TestTemplatedDatCreationAndDeletion:
         assert dat.delete(), "Couldn't delete Persistable"
 
     def test_creation_and_deletion_with_spec(self):
-        spec1 = {"dat": {"name": "test_dats/{YY}-{MM} Dats{unique}"}}
+        spec1 = {"dat": {"name": "test_dats/Dats${unique:}"}}
         dat, _ = ns._dat_from_template(spec1)
         assert dat, "Couldn't create Persistable"
         assert dat.get_path_name().startswith("test_dats/"), "Wrong path"

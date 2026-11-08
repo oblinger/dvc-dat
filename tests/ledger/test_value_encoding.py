@@ -358,7 +358,7 @@ def test_a_dat_with_a_run_comes_back_with_the_same_bytes(L, tmp_path):
     before = core._default_manager
     Dat.manager = DatManager(dat_folders=[str(tmp_path / "data")])
     try:
-        spec = {"dat": {"do": "ledger_kinds.build_table", "name": "t/{unique}", "kwargs": {"n": 3}}}
+        spec = {"dat": {"do": "ledger_kinds.build_table", "name": "t/${unique:}", "kwargs": {"n": 3}}}
         dat = Dat.manager.run(spec)
         assert (dat.path / "run").is_dir() and "run/_spec_.yaml" not in json.loads(encoded(dat))["files"]
         bytes_before = encoded(dat)

@@ -87,8 +87,8 @@ PKG = {
             r["base"] = ns.load("mnt.sbx.stage.specs.base")                # a mounted yaml
             r["literal"] = ns.load("mnt.sbx.stage.runs.TABLE")["dat"]["kwargs"]
             r["fn"] = ns.load("mnt.sbx.stage.runs.table").kind             # a mounted run function: its Fn
-            r["spec"] = ns.expand_spec(ns.load("mnt.sbx.stage.specs.table"))["dat"]  # base merged, {…} filled
-            r["expanded"] = ns.expand_spec({"n": "{sbx.stage.runs.TABLE}"})["n"]["dat"]["kwargs"]
+            r["spec"] = ns.expand_spec(ns.load("mnt.sbx.stage.specs.table"))["dat"]  # base merged, ${…} filled
+            r["expanded"] = ns.expand_spec({"n": "${ns:sbx.stage.runs.TABLE}"})["n"]["dat"]["kwargs"]
             try:
                 ns.mount(value={}, at="x")
                 r["mount"] = "allowed"
@@ -144,7 +144,7 @@ PKG = {
     "sbx/stage/specs/table.yaml": textwrap.dedent('''
         dat:
           base: mnt.sbx.stage.specs.base
-          name: tables/y{unique}
+          name: tables/y${unique:}
           do: mnt.sbx.stage.runs.table
     '''),
     "sbx/stage/specs/table3.json": '{"dat": {"do": "mnt.sbx.stage.runs.table", "kwargs": {"n": 3}}}',
@@ -973,7 +973,7 @@ def world(tmp_path):
         Dat.manager = before
 
 
-RUN = {"dat": {"do": "mnt.sbx.stage.runs.table", "name": "tables/t{unique}", "kwargs": {"n": 3}}}
+RUN = {"dat": {"do": "mnt.sbx.stage.runs.table", "name": "tables/t${unique:}", "kwargs": {"n": 3}}}
 
 
 def test_a_mounted_dat_run_runs_in_the_worker_and_hits_after_a_commit(sbx, world):
@@ -1023,7 +1023,7 @@ def test_resolve_hands_back_a_dict_an_fn_or_the_object(sbx):
     L, _repo = sbx
     rev = L.at()
     assert rev.ns.load("mnt.sbx.stage.specs.table") == {"dat": {"base": "mnt.sbx.stage.specs.base",
-                                                            "name": "tables/y{unique}",
+                                                            "name": "tables/y${unique:}",
                                                             "do": "mnt.sbx.stage.runs.table"}}
     assert rev.ns.load("mnt.sbx.stage.specs.base.dat.kwargs") == {"n": 3}      # a dotted tail walks into the file
     run_fn, ledger_fn_ = rev.ns.load("mnt.sbx.stage.runs.table"), rev.ns.load("mnt.sbx.stage.fns.count")
@@ -1076,6 +1076,7 @@ def test_a_sandboxed_dat_body_names_through_the_ledger_mounts(sbx, world):
     The caller's own world (here a plain ``Namespace``) is not what the body sees."""
     from dvc_dat.namespace import Namespace
 
+    pytest.importorskip("omegaconf")
     L, _repo = sbx
     assert type(world.ns) is Namespace
     r = L.at().run({"dat": {"do": "mnt.sbx.stage.runs.names"}}).get_results()
