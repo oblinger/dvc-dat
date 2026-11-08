@@ -29,8 +29,14 @@ def test_every_notebook_has_its_script():
     assert sorted(p.name for p in HERE.glob("demo-*.py")) == [Path(n).with_suffix(".py").name for n in DEMOS]
 
 
+#: The notebooks whose specs use the `${…}` grammar beyond `${unique:}`: run on the expand tier only (1519 R4).
+NEEDS_EXPAND = {"api-walkthrough.ipynb", "cli-walkthrough.ipynb", "demo-walkthrough.ipynb"}
+
+
 @pytest.mark.parametrize("name", NOTEBOOKS)
 def test_the_notebook_runs(name, monkeypatch):
+    if name in NEEDS_EXPAND:
+        pytest.importorskip("omegaconf")
     # This venv's kernel ahead of any user-level ``python3`` kernelspec, and its python first on PATH.
     monkeypatch.setenv("JUPYTER_PATH", str(Path(sys.prefix) / "share" / "jupyter"))
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", ""))

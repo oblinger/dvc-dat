@@ -21,7 +21,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # the install tiers (1519 R4): base (pyyaml), expand (omegaconf), all (every extra)
         python-version: ["3.11", "3.14"]
+        tier: [all]
+        include:
+          - python-version: "3.11"
+            tier: base
+          - python-version: "3.11"
+            tier: expand
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -30,8 +37,8 @@ jobs:
           enable-cache: true
       - uses: extractions/setup-just@v2     # `just run`, `x` and the ledger-just notebook
       - uses: ./.github/actions/ffmpeg   # Video (SVP 249)
-      - run: uv sync --locked --all-extras
-      - run: uv run python -m pytest -q -n auto --dist loadgroup
+      - run: uv sync --locked ${{ matrix.tier == 'all' && '--all-extras' || matrix.tier == 'expand' && '--extra expand' || '' }}
+      - run: uv run --no-sync python -m pytest -q -n auto --dist loadgroup
 
   # One process, in collection order: a test that leaves process-wide state behind (the default
   # `Dat.manager`, the working directory, an environment variable) breaks a later one only here; the
