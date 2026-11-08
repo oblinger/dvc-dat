@@ -7,6 +7,17 @@ import 'dvc_dat/dvc_dat.just'
 test *ARGS:
     uv run python -m pytest -q {{ARGS}}
 
+# the suite once per install tier (1519 R4): base (pyyaml alone), expand (omegaconf), every extra
+test-tiers *ARGS:
+    uv run --exact python -m pytest -q {{ARGS}}
+    uv run --exact --extra expand python -m pytest -q {{ARGS}}
+    uv run --exact --all-extras python -m pytest -q {{ARGS}}
+
+# what CI runs: the three tiers, then the demo notebooks
+ci *ARGS:
+    just test-tiers {{ARGS}}
+    just demo
+
 # values sealed with v.seal() and never saved, kept or not: the listing, or `purge [older=14d]`
 sealed *ARGS:
     uv run python -m dvc_dat.ledger.kept {{ARGS}}
