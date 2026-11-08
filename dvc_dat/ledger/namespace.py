@@ -32,8 +32,9 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, Un
 
 import yaml
 
-from ..core import _builtins
-from ..do import Namespace
+from ..expand import _builtins, _has_unique, expand
+from ..namespace import Namespace
+from . import hooks
 from .errors import NotEvaluated
 from .fn import MNT, Fn, fn_mark, installed_fn, mount_prefix, mounted_name, mounts_at
 
@@ -78,12 +79,9 @@ def project_repo() -> str:
     """The project's own repository: the git checkout holding the ``.datconfig.yaml`` the manager loaded
     (``DatManager.load_dat_config``), named as discovery names repos (``env.repo_name``), so the
     ``db/repo/<name>`` rows agree. ``ValueError`` when there is no such file or it is in no checkout."""
-    import os
-
-    from ..core import Dat
     from .env import _git, repo_name
 
-    config = getattr(Dat.manager, "_config_file", None)
+    config = getattr(hooks.manager(), "_config_file", None)
     if config is None:
         raise ValueError("t.ns.mount: no repo= and no .datconfig.yaml; the default repo is the git checkout "
                          "holding the project's .datconfig.yaml, so pass repo=<name> or load a project")
@@ -265,7 +263,7 @@ class LedgerNamespace(Namespace):
         run = current_run()
         if run is not None and (self._config is not None or self._ledger is run.plain.ledger):
             return run.plain
-        if self._ledger is None:
+        if self._ledger is None:          # the namespace of a DatManager (``namespace: ledger``): the Dat layer's
             from ..do import _ledger_of
 
             self._ledger = _ledger_of(self._config)
@@ -295,8 +293,6 @@ class LedgerNamespace(Namespace):
         is this namespace's revision; a transaction's ``t.ns`` probes its snapshot at open and the names it
         has minted or aliased already, so a loop minting in one transaction gets distinct names. An absolute
         result names nothing and is not probed; a keyword ``unique=`` is used as given."""
-        from ..core import _has_unique, expand
-
         if not isinstance(text, str) or "unique" in vars or not _has_unique(text):
             return super().expand(text, **vars)
         ledger = self._ledger_of()

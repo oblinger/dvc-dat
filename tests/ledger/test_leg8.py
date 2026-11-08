@@ -3,7 +3,8 @@
 import pytest
 import yaml
 
-from dvc_dat.ledger import Dat, NotEvaluated
+from dvc_dat import Dat
+from dvc_dat.ledger import NotEvaluated
 from ledger_kinds import CALLS
 
 

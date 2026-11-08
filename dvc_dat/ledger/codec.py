@@ -145,3 +145,50 @@ def show(text: str) -> str:
     """A stored object as one line of text: a str as is, JSON canonical, a ref as its tag text."""
     t, _, rest = text.partition(":")
     return text if t == "ref" else rest
+
+
+#: ``dotted_get``'s marker for "no default given".
+NO_DEFAULT: Any = object()
+
+
+def dotted_get(source: Any, keys: Any, default_value: Any = NO_DEFAULT) -> Any:
+    """The value at a dotted key path (``"dat.do"``, or a list of keys) in a dict tree (``Dat.get``'s walk).
+
+    A missing key, or a value that is ``None``, returns ``default_value``, and is ``KeyError`` when none is
+    given; a non-dict on the path is ``ValueError``."""
+    d = source
+    if isinstance(keys, str):
+        keys = keys.split(".")
+    result = None
+    for k in keys:
+        if d is None:
+            break
+        if not isinstance(d, dict):
+            raise ValueError(f"GET: Expected dict value for {k!r} not {d!r}")
+        d = d.get(k)
+    else:
+        result = d
+    if result is not None:
+        return result
+    if default_value is NO_DEFAULT:
+        raise KeyError(f"GET: Key {keys} not found in {source!r}")
+    return default_value
+
+
+def dotted_set(source: Any, keys: Any, value: Any) -> None:
+    """Set ``value`` at a dotted key path in a dict tree, creating missing levels as dicts (``Dat.set``'s walk);
+    a non-dict on the path is ``ValueError``."""
+    assert source is not None, "set method requires a non None dict"
+    assert len(keys) > 0, "set method requires at least one key"
+    if isinstance(keys, str):
+        keys = keys.split(".")
+    for k in keys[:-1]:
+        if not isinstance(source, dict):
+            raise ValueError(f"Expected dict value for {k!r} not {source!r}")
+        sub = source.get(k)
+        if sub is None:
+            sub = source[k] = {}
+        source = sub
+    if not isinstance(source, dict):
+        raise ValueError(f"Expected dict value for {keys[-1]!r} not {source!r}")
+    source[keys[-1]] = value

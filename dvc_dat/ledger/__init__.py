@@ -13,6 +13,9 @@ process) or sandboxed (under a ``db/mount/<prefix>``, in a worker).
         bump(t, "db", "minor", confirm=lambda old, new: True)   # the release row: db db/version; L.at("0.1.0") reads it
     bump_source("demo_game")             # __version__ in the source; the next clean run moves db/repo/demo-game/demo_game
 
+``Dat`` is ``dvc_dat.Dat``: the ledger loads without the Dat layer (1519 R1), which registers itself with
+``dvc_dat.ledger.hooks`` when it is imported, so a dat is a ``Value`` the moment ``Dat`` exists.
+
 The environment is found by discovery; ``set_env_provider``, ``Env`` and
 ``Checkout`` are the test suite's seam only (A51), importable by name.
 """
@@ -34,9 +37,8 @@ from .rev import Head, Ref, Rev, Row
 from .txn import Transaction, attr
 from .value import Value, ledger_class
 from .video import Video
-from ..core import Dat                  # one class: a dat is a Value (DAT 1038)
 
-__all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Transaction", "Value", "Video", "Dat", "Fn", "FnMark", "Code",
+__all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Transaction", "Value", "Video", "Fn", "FnMark", "Code",
            "LedgerNamespace", "Rerun",
            "ledger_class", "register_policy", "register_store", "Remote", "bump", "bump_source", "SourceBump", "attr",
            "LedgerError", "Multiple", "NotEvaluated", "NotClean", "NotPinned", "NotCopied", "SpecOnly", "Differed",

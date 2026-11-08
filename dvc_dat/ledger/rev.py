@@ -1139,10 +1139,10 @@ class Ref:
                 v = cls.decode(src, store, name=loaded_as) if takes_name(cls) else cls.decode(src, store)
             if not isinstance(v, Value):
                 raise TypeError(f"{cls.__name__}.decode returned {type(v).__name__}, not a Value")
-            from ..core import Dat
+            from . import hooks
 
-            if isinstance(v, Dat):                      # the row wins; the folder is checked against it
-                kind = Dat.spec_kind(v.path)
+            if hooks.is_dat(v):                         # the row wins; the folder is checked against it
+                kind = type(v).spec_kind(v.path)
                 if kind is not None and kind != self._cls and not type(v).kind_ok(kind):
                     raise TypeError(f"{s[:12]}…: the db/value row names {self._cls}; the folder's _spec_ names "
                                     f"dat.kind {kind}")

@@ -13,7 +13,8 @@ from pathlib import Path
 
 import yaml
 
-from dvc_dat.ledger import Dat, attr, ledger_class
+from dvc_dat import Dat
+from dvc_dat.ledger import attr, ledger_class
 from dvc_dat import dat as dvc
 
 SPEC_PREDS = ("game", "stage", "bins")

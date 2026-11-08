@@ -8,7 +8,8 @@
     Dat.manager = DatManager(dat_folders=["/work"])   # replaces the default world
     ns = Dat.ns                              # the namespace: ns.load, ns.mount, ns.mounts()
 
-The package exports four classes, the two ledger handles, `L` (the active
+``import dvc_dat`` loads the ledger, ``L``, ``ledgers`` and ``dat``; the classes load on first use (1519 R1). The
+package exports four classes, the two ledger handles, `L` (the active
 ledger) and `ledgers` (the project's ledgers by name, `ledgers.record`), and `dat`,
 the decorators (`@dat.fn`, `@dat.warm`, `@dat.command`); the
 ledger, the dat's record in time, is its own subpackage: `from dvc_dat.ledger import Ledger`.
@@ -16,10 +17,22 @@ ledger, the dat's record in time, is its own subpackage: `from dvc_dat.ledger im
 
 __version__ = "2.68.1"
 
-from . import ledger  # noqa: F401  (first: core's Dat is a ledger Value, and the ledger names Dat)
+from . import ledger  # noqa: F401  (the ledger first: core's Dat is a ledger Value)
 from . import dat
-from .core import Dat, DatContainer, DatManager
-from .do import Namespace
 from .ledger.named import L, ledgers
+
+#: The names loaded on first use (PEP 562), so ``import dvc_dat`` (and ``dvc_dat.ledger``) loads no Dat layer.
+_LAZY = {"Dat": "core", "DatContainer": "core", "DatManager": "core", "Namespace": "namespace"}
+
+
+def __getattr__(name: str):
+    if name in _LAZY:
+        import importlib
+
+        value = getattr(importlib.import_module(f"{__name__}.{_LAZY[name]}"), name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = ["Dat", "DatContainer", "DatManager", "Namespace", "L", "ledgers", "dat"]

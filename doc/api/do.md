@@ -10,7 +10,7 @@ Module page: [DAT Dat](../DAT%20Modules/DAT%20Dat.md).
       show_root_heading: false
       members: false
 
-::: dvc_dat.do.Namespace
+::: dvc_dat.namespace.Namespace
 
 ::: dvc_dat.do.cli_main
 

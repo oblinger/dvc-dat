@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from dvc_dat.ledger import Dat, Ref, SealBroken
+from dvc_dat import Dat
+from dvc_dat.ledger import Ref, SealBroken
 from dvc_dat.ledger.kept import Kept, age
 from ledger_kinds import GameDat, Plain
 
@@ -18,7 +19,8 @@ CHILD = textwrap.dedent('''
     import sys
     from pathlib import Path
     sys.path.insert(0, {here!r})
-    from dvc_dat.ledger import Checkout, Dat, Env, set_env_provider
+    from dvc_dat import Dat
+    from dvc_dat.ledger import Checkout, Env, set_env_provider
     from ledger_kinds import GameDat
     set_env_provider(lambda: Env({{"testrepo": Checkout(None, "abc1234", False, Path({here!r}))}},
                                  "test-platform"))

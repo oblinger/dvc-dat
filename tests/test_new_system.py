@@ -17,7 +17,7 @@ from dvc_dat import Dat, DatManager  # noqa: E402
 ns, cli_main = Dat.ns, Dat.cli_main
 from dvc_dat.core import DAT_CONFIG_FILE  # noqa: E402
 OVERRIDE = ".datconfig.override.yaml"   # read until 2.63; refused since (SVP 239)
-from dvc_dat.do import Namespace  # noqa: E402
+from dvc_dat.namespace import Namespace  # noqa: E402
 
 
 @pytest.fixture

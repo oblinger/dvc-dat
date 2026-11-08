@@ -110,9 +110,9 @@ from .codec import sha256
 from .env import Env, current_env, platform_items
 from .errors import ConfinedNetwork, ConfinedProcess, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
-from ..core import Dat, DatManager
+from . import hooks
 from .named import shipped_section
-from .fn import (Fn, alias_reads, attach_run, dat_spec, drop_work, fn_mark, fn_mark_in_source, mounted_name, mounts_at,
+from .fn import (Fn, alias_reads, attach_run, drop_work, fn_mark, fn_mark_in_source, mounted_name, mounts_at,
                  mounts_hash, path_template, run_trace, save_run, seal_entry, wrap_result)
 
 if TYPE_CHECKING:
@@ -1139,7 +1139,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
                     STATE.guard = False
                     os.chdir(cwd)
                 if fn.kind == "dat":
-                    out = _run_dat(fn, obj, kw, work)
+                    out = hooks.layer()["run_dat"](fn, obj, kw, work)
             except BaseException:
                 drop_work(work, None)
                 raise
@@ -1147,7 +1147,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
             alias_reads(plain, out, rec)
             value = _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, out, work)
             if work is not None and not work.exists():  # its folder is gone: so is the dat world's index of it
-                Dat.manager._index_forget(str(work / "dat"))
+                hooks.manager()._index_forget(str(work / "dat"))
             return value
         value = wrap_result(fn.name, obj, out)
         return _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, value, work)
@@ -1155,51 +1155,6 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
         STATE.guard = outer_guard
 
 
-class _WorkerWorld(DatManager):
-    """The dat world of a dat run in the worker (DAT 1045): the caller's dat folders and art folder. Its
-    index (a dat's hash to its name) is the dat world's own machinery, so its writes stand outside the
-    guard, as the ledger's own. Its ``ns`` is a ``LedgerNamespace`` bound to the run's rev (DAT 1047): a name the
-    body looks up (``Dat.manager.ns.load``, a spec's ``base``/``do``, ``{}`` expansion) walks the same
-    ``db/mount`` rows the caller resolved the run through, read from the worker's checkout; ``mount`` is
-    refused."""
-
-    @contextmanager
-    def _index_update(self) -> Iterator[Dict[str, Dict[str, str]]]:
-        with unguarded():
-            with super()._index_update() as index:
-                yield index
-
-
-def _run_dat(fn: Fn, run: Any, spec: Dict[str, Any], work: Path) -> Dat:
-    """The dat branch of ``run_here``: ``Dat.manager.create`` from the spec in ``work``, then ``_execute`` with
-    ``run`` (imported from the mounts) as its ``dat.do``, its body confined (writes only in the work
-    folder); the world's own machinery around it unguarded."""
-    manager = Dat.manager
-
-    @functools.wraps(run)
-    def confined(*args: Any, **kwargs: Any) -> Any:
-        old = STATE.guard
-        STATE.guard = True
-        try:
-            return run(*args, **kwargs)
-        finally:
-            STATE.guard = old
-    registered = manager.ns._registered_values or {}
-    before = registered.get(fn.name, _NONE)
-    manager.ns._reg_value(fn.name, confined)       # _execute loads dat.do through the world
-    try:
-        dat = manager.create(dat_spec(spec, fn._template), path=str(work / "dat"))
-        manager._execute(dat)
-    finally:
-        values = manager.ns._registered_values or {}
-        if before is _NONE:
-            values.pop(fn.name, None)
-        else:
-            values[fn.name] = before
-    return dat
-
-
-_NONE = object()
 
 
 @contextmanager
@@ -1368,10 +1323,7 @@ class Server:
                "keys": {k: encode_key(v, plain) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env),
                "ledgers": shipped_section()}
         if fn.kind == "dat":
-            world = Dat.manager
-            req.update({"template": fn._template, "returns": fn._returns,
-                        "world": {"dat_folders": list(world._dat_folders), "art_folder": world._art_folder,
-                                  "index": world._index_file, "verify": world._verify}})
+            req.update({"template": fn._template, "returns": fn._returns, "world": hooks.layer()["world_of"]()})
         return _result(plain, self._ask(req), seal)
 
     def version(self, plain: "Rev", prefix: str, env: Env) -> Optional[str]:
@@ -1563,10 +1515,7 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             return
         if req.get("world") is not None:            # a dat's run function: the caller's dat world
             w = req["world"]
-            from .namespace import LedgerNamespace
-
-            Dat.manager = _WorkerWorld(dat_folders=w["dat_folders"], art_folder=w["art_folder"],
-                                       index=w["index"], verify=w["verify"], ns=LedgerNamespace(rev=plain))
+            hooks.layer()["install_world"](w, plain)
             STATE.reads = STATE.reads + [os.path.realpath(f) for f in w["dat_folders"]] + (
                 [os.path.realpath(w["art_folder"])] if w["art_folder"] else [])
         adopt_section(req["ledgers"], read_only_ledger)

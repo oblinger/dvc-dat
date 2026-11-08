@@ -46,7 +46,7 @@ See the [full documentation](doc/index.md) for details.
 pip install -e .
 ```
 
-Excel reports need the optional extra: `pip install -e ".[excel]"`.
+The base install needs pyyaml alone. The tables (`dt.from_dat`, `Cube`) need `pip install -e ".[tools]"` (pandas), Excel reports `".[excel]"`.
 
 ## Usage
 
