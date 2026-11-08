@@ -120,13 +120,14 @@ def _top_level_comma(text: str) -> bool:
     return False
 
 
-def needs_hydra(word: str) -> bool:
-    """Whether a word is Hydra's override grammar beyond today's `KEY=VALUE` (1519 decision 7): `-m`, a `+`, `++`
-    or `~` before a key, or a value that is a choice (`a,b`) or a sweep function (`range(1,3)`)."""
+def needs_hydra(word: str, multirun: bool = False) -> bool:
+    """Whether a word is Hydra's override grammar beyond today's `KEY=VALUE` (1519 decision 7): `-m`, or a `+`, `++`
+    or `~` before a key; under `-m` also a value that is a choice (`a,b`) or a sweep function (`range(1,3)`). Without
+    `-m` a comma is text, as it always was (`modules=a,b`): Hydra itself runs a sweep only under `-m`."""
     if word in MULTIRUN or _HYDRA_PREFIX.match(word):
         return True
     key, eq, value = word.partition("=")
-    return bool(eq) and _OVERRIDE_KEY.fullmatch(key) is not None and (
+    return multirun and bool(eq) and _OVERRIDE_KEY.fullmatch(key) is not None and (
         _top_level_comma(value) or value.startswith(_SWEEP_FUNCTIONS))
 
 
@@ -153,9 +154,9 @@ def _hydra_points(words: List[str], multirun: bool) -> List[List[Override]]:
             axes.append([Override("delete", key)])
             continue
         op = {OverrideType.CHANGE: "set", OverrideType.ADD: "add", OverrideType.FORCE_ADD: "force"}[o.type]
-        if o.is_sweep_override():
-            if not multirun:
-                raise ValueError(f"{o.input_line!r} is a sweep; run every point with -m")
+        if o.is_sweep_override() and not multirun:          # `a,b` without -m: the text as typed, today's line
+            axes.append([Override(op, key, arg_value(o.input_line.partition("=")[2]))])
+        elif o.is_sweep_override():
             axes.append([Override(op, key, v) for v in o.sweep_iterator()])
         else:
             axes.append([Override(op, key, o.value())])
@@ -164,9 +165,10 @@ def _hydra_points(words: List[str], multirun: bool) -> List[List[Override]]:
 
 def parse_overrides(words: List[str], multirun: bool = False) -> List[List[Override]]:
     """The points of a line's override words: one point of `KEY=VALUE` overrides (`arg_value`, today's grammar) when
-    no word needs Hydra's grammar; else the whole set through Hydra's `OverridesParser`, each choice and sweep a
-    point (needs `-m`), and without dvc-dat[hydra] `ValueError` naming the word and the extra."""
-    hydra_word = next((w for w in words if needs_hydra(w)), None)
+    no word needs Hydra's grammar; else the whole set through Hydra's `OverridesParser`, under `-m` each choice and
+    sweep a point (without it, the text as typed), and without dvc-dat[hydra] `ValueError` naming the word and the
+    extra."""
+    hydra_word = next((w for w in words if needs_hydra(w, multirun)), None)
     if multirun and hydra_word is None:
         hydra_word = "-m"
     if hydra_word is not None:
@@ -254,7 +256,7 @@ HYDRA'S GRAMMAR (dvc-dat[hydra])
     +KEY=VALUE                  add a key that is not there
     ++KEY=VALUE                 add or change it
     ~KEY                        delete it
-    KEY=a,b  KEY=range(1,3)     a sweep: with -m, one dat per point
+    KEY=a,b  KEY=range(1,3)     a sweep under -m, one dat per point (else text)
     -m, --multirun              run every point of the sweeps, in order
                 The first word in this grammar sends the whole line through
                 Hydra's override parser (its value grammar: 'a b' quoted,

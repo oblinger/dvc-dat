@@ -14,10 +14,12 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_which_words_need_hydras_grammar():
-    for word in ("+horizon=3", "++x=1", "~note", "game=G1,G4", "r=range(1,3)", "-m", "--multirun"):
+    for word in ("+horizon=3", "++x=1", "~note", "-m", "--multirun"):
         assert needs_hydra(word), word
+    for word in ("game=G1,G4", "r=range(1,3)"):
+        assert needs_hydra(word, multirun=True) and not needs_hydra(word), word    # a sweep only under -m
     for word in ("game=G1", "tags=[1,2]", 'cfg={"a":1,"b":2}', "pattern=\\d{3}", "m=${ns:asset.ocr}", "q='a,b'"):
-        assert not needs_hydra(word), word
+        assert not needs_hydra(word, multirun=True), word
 
 
 def test_base_overrides_are_todays_key_value():
@@ -41,17 +43,17 @@ def test_without_hydra_its_grammar_is_refused_by_name():
         import sys
         sys.modules["hydra"] = None
         from dvc_dat.do import parse_overrides
-        for words in (["+horizon=3"], ["game=G1,G4"], ["~note"]):
+        for words, m in ((["+horizon=3"], False), (["game=G1,G4"], True), (["~note"], False)):
             try:
-                parse_overrides(words)
+                parse_overrides(words, multirun=m)
             except ValueError as e:
                 print("refused:", e)
-        print("base:", [o.value for o in parse_overrides(["game=G1", "tags=[1,2]"])[0]])
+        print("base:", [o.value for o in parse_overrides(["game=G1", "tags=[1,2]", "modules=a,b"])[0]])
     """)
     out = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, timeout=120)
     assert out.returncode == 0, out.stderr
     assert out.stdout.count("needs Hydra's override grammar; install dvc-dat[hydra]") == 3
-    assert "base: ['G1', [1, 2]]" in out.stdout
+    assert "base: ['G1', [1, 2], 'a,b']" in out.stdout
 
 
 @pytest.fixture
@@ -72,8 +74,8 @@ def test_hydras_grammar_adds_force_adds_and_deletes(hydra):
 
 
 def test_a_sweep_needs_m_and_is_the_product_in_hydras_order(hydra):
-    with pytest.raises(ValueError, match="-m"):
-        parse_overrides(["game=G1,G4"])
+    (point,) = parse_overrides(["+x=1", "modules=a,b"])           # Hydra's parser, no -m: the comma is text
+    assert [o.value for o in point] == [1, "a,b"]
     points = parse_overrides(["game=G1,G4", "dat.base=a,b", "n=range(1,3)"], multirun=True)
     assert [[o.value for o in p] for p in points] == [
         ["G1", "a", 1], ["G1", "a", 2], ["G1", "b", 1], ["G1", "b", 2],

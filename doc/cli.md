@@ -108,16 +108,16 @@ Hydra's own `OverridesParser`:
 | `+KEY=VALUE` | add a key that is not there (there already: an error) |
 | `++KEY=VALUE` | add it or change it |
 | `~KEY` | delete it (not there: an error) |
-| `KEY=a,b` · `KEY=range(1,3)` · `KEY=choice(a,b)` | a sweep: with `-m`, one point per value |
+| `KEY=a,b` · `KEY=range(1,3)` · `KEY=choice(a,b)` | under `-m` a sweep, one point per value; without it the text as typed |
 | `-m` · `--multirun` | run every point, the product of the sweeps, first override slowest |
 
-The first word that needs the grammar — a `+`, `++` or `~` prefix, a value
-with a top-level `,` or a sweep function, or `-m` — sends every override of
-the line through Hydra's parser, whose values are Hydra's (`'a b'` quoted,
+The first word that needs the grammar — a `+`, `++` or `~` prefix, or `-m`
+(under which a value with a top-level `,` or a sweep function is a sweep) —
+sends every override of the line through Hydra's parser, whose values are Hydra's (`'a b'` quoted,
 `[a,b]` a list, `{x:1}` a dict). Without the extra that word is refused by
 name: `'+horizon=3000' needs Hydra's override grammar; install
 dvc-dat[hydra]`. A JSON list or mapping (`[1,2]`, `{"a":1}`) keeps its commas
-inside and stays today's line. Each point is one spec and one dat; on a
+inside, and without `-m` a comma is text (`modules=a,b`), as it always was. Each point is one spec and one dat; on a
 ledger each point is one `rev.run`, so a point computed before is a `hit`.
 
 ```bash
