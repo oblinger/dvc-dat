@@ -22,6 +22,7 @@ names the ledger's `db/mount` rows, and `mount` refused.
 """
 
 import copy
+import itertools
 import json
 import math
 import os
@@ -68,9 +69,148 @@ ns = _DefaultNamespace()
 # Command line
 # =============================================================================
 
+# =============================================================================
+# Overrides: `KEY=VALUE` on base, Hydra's override grammar with dvc-dat[hydra] (1519 R5)
+# =============================================================================
+
+#: An override's key: a name, or a dotted path into the spec (`dat.base`, `model.width`).
+_OVERRIDE_KEY = re.compile(r"[A-Za-z_][\w-]*(?:\.[A-Za-z_][\w-]*)*")
+#: A word Hydra's grammar alone reads: a `+` (add), `++` (add or change) or `~` (delete) before a key.
+_HYDRA_PREFIX = re.compile(r"(\+\+|\+|~)[A-Za-z_]")
+_SWEEP_FUNCTIONS = ("range(", "choice(", "glob(", "interval(")
+MULTIRUN = ("-m", "--multirun")
+
+
+class Override:
+    """One override of a command line: `op` is `set` (`key=v`: add or change), `add` (`+key=v`: the key must be
+    new), `force` (`++key=v`) or `delete` (`~key`); `path` the keys from the spec's root (an undotted key is
+    `dat.kwargs.<key>`); `value` the spec text or value (`delete`: unused)."""
+
+    __slots__ = ("op", "key", "path", "value")
+
+    def __init__(self, op: str, key: str, value: Any = None) -> None:
+        self.op, self.key, self.value = op, key, value
+        self.path = key.split(".") if "." in key else ["dat", "kwargs", key]
+
+    @property
+    def bare(self) -> bool:
+        """An undotted `key=v`: what a callable or a ledger function takes as a keyword."""
+        return self.op == "set" and "." not in self.key
+
+    def __repr__(self) -> str:
+        sign = {"set": "", "add": "+", "force": "++", "delete": "~"}[self.op]
+        return f"{sign}{self.key}" + ("" if self.op == "delete" else f"={self.value!r}")
+
+
+def _top_level_comma(text: str) -> bool:
+    """A `,` outside brackets, braces, parentheses and quotes: Hydra's choice (`a,b`). A JSON list or mapping
+    (`[1,2]`, `{"a":1,"b":2}`), today's line, keeps its commas inside."""
+    depth, quote = 0, None
+    for ch in text:
+        if quote:
+            quote = None if ch == quote else quote
+        elif ch in "'\"":
+            quote = ch
+        elif ch in "[{(":
+            depth += 1
+        elif ch in "]})":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            return True
+    return False
+
+
+def needs_hydra(word: str) -> bool:
+    """Whether a word is Hydra's override grammar beyond today's `KEY=VALUE` (1519 decision 7): `-m`, a `+`, `++`
+    or `~` before a key, or a value that is a choice (`a,b`) or a sweep function (`range(1,3)`)."""
+    if word in MULTIRUN or _HYDRA_PREFIX.match(word):
+        return True
+    key, eq, value = word.partition("=")
+    return bool(eq) and _OVERRIDE_KEY.fullmatch(key) is not None and (
+        _top_level_comma(value) or value.startswith(_SWEEP_FUNCTIONS))
+
+
+def _hydra_parser(word: str) -> Any:
+    try:
+        from hydra.core.override_parser.overrides_parser import OverridesParser
+    except ImportError:
+        raise ValueError(f"{word!r} needs Hydra's override grammar; install dvc-dat[hydra]") from None
+    return OverridesParser.create()
+
+
+def _hydra_points(words: List[str], multirun: bool) -> List[List[Override]]:
+    """The points a line in Hydra's grammar names: the product of its choices and sweeps, in Hydra's order (the
+    first override varies slowest, as `BasicSweeper` does); each point a list of overrides."""
+    from hydra.core.override_parser.types import OverrideType
+
+    parsed = _hydra_parser(words[0]).parse_overrides(words)
+    axes: List[List[Override]] = []
+    for o in parsed:
+        key = o.key_or_group
+        if o.package is not None:
+            raise ValueError(f"{o.input_line!r}: a package (`@`) is Hydra's config groups; a DAT override names a key")
+        if o.type == OverrideType.DEL:
+            axes.append([Override("delete", key)])
+            continue
+        op = {OverrideType.CHANGE: "set", OverrideType.ADD: "add", OverrideType.FORCE_ADD: "force"}[o.type]
+        if o.is_sweep_override():
+            if not multirun:
+                raise ValueError(f"{o.input_line!r} is a sweep; run every point with -m")
+            axes.append([Override(op, key, v) for v in o.sweep_iterator()])
+        else:
+            axes.append([Override(op, key, o.value())])
+    return [list(point) for point in itertools.product(*axes)] if axes else [[]]
+
+
+def parse_overrides(words: List[str], multirun: bool = False) -> List[List[Override]]:
+    """The points of a line's override words: one point of `KEY=VALUE` overrides (`arg_value`, today's grammar) when
+    no word needs Hydra's grammar; else the whole set through Hydra's `OverridesParser`, each choice and sweep a
+    point (needs `-m`), and without dvc-dat[hydra] `ValueError` naming the word and the extra."""
+    hydra_word = next((w for w in words if needs_hydra(w)), None)
+    if multirun and hydra_word is None:
+        hydra_word = "-m"
+    if hydra_word is not None:
+        _hydra_parser(hydra_word)
+        return _hydra_points(words, multirun) if words else [[]]
+    point = []
+    for word in words:
+        key, _, value = word.partition("=")
+        point.append(Override("set", key, arg_value(value)))
+    return [point]
+
+
+def apply_overrides(spec: Spec, point: List[Override]) -> Spec:
+    """A copy of `spec` with one point's overrides applied in order: `set` writes the value (missing levels made),
+    `add` refuses a key already there, `force` writes it either way, `delete` removes a key that is there. A value
+    is spec text: `${…}` in it resolves at create."""
+    out = copy.deepcopy(spec)
+    for o in point:
+        *parents, last = o.path
+        node: Any = out
+        for i, k in enumerate(parents):
+            if not isinstance(node, dict):
+                raise ValueError(f"{o!r}: {'.'.join(o.path[:i])} is not a mapping")
+            if node.get(k) is None:
+                if o.op == "delete":
+                    raise ValueError(f"{o!r}: no key {o.key!r} to delete")
+                node[k] = {}
+            node = node[k]
+        if not isinstance(node, dict):
+            raise ValueError(f"{o!r}: {'.'.join(parents)} is not a mapping")
+        if o.op == "delete":
+            if last not in node:
+                raise ValueError(f"{o!r}: no key {o.key!r} to delete")
+            del node[last]
+        elif o.op == "add" and last in node:
+            raise ValueError(f"{o!r}: {o.key!r} is already set; ++{o.key}=... changes it")
+        else:
+            node[last] = copy.deepcopy(o.value)
+    return out
+
+
 USAGE = """
 SYNOPSIS
-    x TARGET [ARG ...] [KEY=VALUE ...]          run TARGET
+    x TARGET [ARG ...] [OVERRIDE ...] [-m]      run TARGET
     x --list [PREFIX]                           the mounted names
     x --info                                    version, folders, config
     x --version                                 the version
@@ -83,20 +223,22 @@ DESCRIPTION
     position is always a TARGET; the commands that ask about the command
     line itself are flags.
 
-    `x TARGET ...` calls Dat.manager.run(TARGET, *ARGS, **KWARGS).  A TARGET that is a
-    template spec is forked: the fixed ARGs become its dat.args and the
-    KEY=VALUE pairs update its dat.kwargs, key by key; the forked spec creates
-    a dat, and that dat runs.  A TARGET that is a callable is simply called.
-    The return value prints on stdout when it is not None.
+    `x TARGET ...` calls Dat.manager.run.  A TARGET that is a template spec
+    gets the OVERRIDEs applied to it: KEY=VALUE sets a key, an undotted KEY
+    being dat.kwargs.KEY and a dotted one a path from the spec's root
+    (dat.title=T); the fixed ARGs become its dat.args; the spec creates a
+    dat, and that dat runs.  A TARGET that is a callable is called with the
+    ARGs and the undotted KEY=VALUE pairs.  The return value prints on
+    stdout when it is not None.
 
     With `namespace: ledger` in the config, `x TARGET KEY=VALUE ...` is
-    rev.run(TARGET, KEY=VALUE, ...): found if computed before from the same
-    inputs by the same code, else run and sealed; it prints `hit` or `ran`
-    and the value, and alias=NAME names it.  TARGET is a dotted name
-    through the ledger's mounts or a spec file: a ledger function (its
-    keys the KEY=VALUE pairs), a dat spec or a dat's run function (the
-    pairs update its dat.kwargs), or a spec whose `main` names a ledger
-    function (the line's keys over the file's).
+    rev.run(TARGET, ...): found if computed before from the same inputs by
+    the same code, else run and sealed; it prints `hit` or `ran` and the
+    value, and alias=NAME names it.  TARGET is a dotted name through the
+    ledger's mounts or a spec file: a ledger function (its keys the
+    KEY=VALUE pairs), a dat spec or a dat's run function (the overrides
+    applied to the spec), or a spec whose `main` names a ledger function
+    (the line's keys over the file's).
 
     A function marked @command (dvc_dat.just), or a spec with `command:`,
     also runs as `just NAME` once the justfile has
@@ -104,16 +246,23 @@ DESCRIPTION
 
     Every ARG and every KEY=VALUE value is JSON, else the text as typed: 7 is
     an int, true is a bool, null is None, [1,2] is a list, '"7"' is the string
-    7, and 2026-01-01 or a bare word is that string.  A KEY=VALUE pair is recognised by a leading NAME= ; use -- to end
-    the options and pass anything after it as a fixed argument.
+    7, and 2026-01-01 or a bare word is that string.  An override's value is
+    spec text: ${ns:asset.ocr} resolves when the dat is created.  Use -- to
+    end the options and pass anything after it as a fixed argument.
+
+HYDRA'S GRAMMAR (dvc-dat[hydra])
+    +KEY=VALUE                  add a key that is not there
+    ++KEY=VALUE                 add or change it
+    ~KEY                        delete it
+    KEY=a,b  KEY=range(1,3)     a sweep: with -m, one dat per point
+    -m, --multirun              run every point of the sweeps, in order
+                The first word in this grammar sends the whole line through
+                Hydra's override parser (its value grammar: 'a b' quoted,
+                [a,b] a list, {x:1} a dict); without the extra it is refused
+                by name
 
 OPTIONS
-    --set DOTTED.KEY=VALUE      VALUE JSON, else the text as typed
-    --json DOTTED.KEY=JSON      JSON a JSON value
-                Update one spec key of a template before it forks; each
-                repeats, one KEY=VALUE per flag
-
-    --dry-run   Print the python Dat.manager.run() call instead of making it
+    --dry-run   Print the call (each point's) instead of making it
     --usage     Print TARGET's own usage (a <base>.usage value, or the spec's
                 usage key), else this message
 
@@ -128,12 +277,10 @@ EXIT STATUS
 EXAMPLES
     x hello_world
     x hello_again.salutation Maxim emphasis=true lucky_number=7
-    x my_letters --set dat.title=Quickie --set start=100 --set end=110
+    x my_letters dat.title=Quickie
+    x cfg.run.graded -m game=G1,G4 +horizon=3000
     just mounts hello
 """
-
-_KWARG = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=")
-
 
 ENV_CLI_CONFIG = "DAT_CLI_CONFIG"     # set by `just run`, read here and nowhere else
 ENV_JUSTFILE = "DAT_JUSTFILE"         # set by `just run`: the justfile, for `.dat/targets.just`
@@ -193,7 +340,8 @@ def _do_argv(argv: List[str], config: Union[None, str, Path] = None) -> int:
 def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
     """`x TARGET ...` -- every line whose first word is not a flag."""
     try:
-        overrides, args, kwargs, flags = _parse_argv(argv)
+        words, args, flags = _parse_argv(argv)
+        points = parse_overrides(words, multirun="multirun" in flags)
     except ValueError as e:
         return _fail(str(e))
     if not args:
@@ -207,7 +355,7 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
         except Exception as e:
             return _fail(_message(e))
         if ledger is not None:
-            return _cmd_eval(ledger, args, kwargs, overrides, flags)
+            return _cmd_eval(ledger, args, points, flags)
     target, fixed = args[0], [arg_value(a) for a in args[1:]]
     try:
         cmd = ns.load(target)
@@ -221,31 +369,32 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
             usage = cmd.get("usage")
         print(usage or USAGE)
         return 0
-    elif "dry-run" in flags:
-        shown = ([repr(target)] + [repr(a) for a in fixed]
-                 + [f"{k}={v!r}" for k, v in kwargs.items()])
-        print(f"Dat.manager.run({', '.join(shown)})")
-        if overrides:
-            print(f"  with the spec updated by --set/--json: {dict(overrides)!r}")
-        return 0
-    try:
-        if isinstance(cmd, dict):
-            spec = _apply_sets(ns._merge_bases(cmd), overrides)
-            result = Dat.manager.run(spec, *fixed, **kwargs)
-        elif overrides:
-            return _fail(f"--set/--json need a template spec; "
-                         f"{target!r} is {type(cmd).__name__}")
-        elif not callable(cmd):
+    if not isinstance(cmd, dict):
+        if any(not o.bare for point in points for o in point):
+            return _fail(f"a dotted key, +, ++ or ~ edits a template spec; {target!r} is {type(cmd).__name__}")
+        if not callable(cmd):
             print(cmd)
             return 0
-        else:
-            result = Dat.manager.run(target, *fixed, **kwargs)
-    except Exception as e:
-        if os.environ.get("DAT_DEBUG"):
-            raise
-        return _fail(_message(e))
-    if result is not None:
-        print(result)
+    for point in points:
+        if "dry-run" in flags:
+            if isinstance(cmd, dict):
+                print(f"Dat.manager.run({target!r}{''.join(f', {a!r}' for a in fixed)})"
+                      + (f"  with the spec updated by {point!r}" if point else ""))
+            else:
+                shown = [repr(target)] + [repr(a) for a in fixed] + [f"{o.key}={o.value!r}" for o in point]
+                print(f"Dat.manager.run({', '.join(shown)})")
+            continue
+        try:
+            if isinstance(cmd, dict):
+                result = Dat.manager.run(apply_overrides(ns._merge_bases(cmd), point), *fixed)
+            else:
+                result = Dat.manager.run(target, *fixed, **{o.key: o.value for o in point})
+        except Exception as e:
+            if os.environ.get("DAT_DEBUG"):
+                raise
+            return _fail(_message(e))
+        if result is not None:
+            print(result)
     return 0
 
 
@@ -280,16 +429,14 @@ def _ledger_of(config: Union[None, str, Path], *, namespace: bool = False) -> An
 RESERVED_RUN_KEYS = ("alias",)                # control options on a ledger run, never a key
 
 
-def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: List[Tuple[str, Any]],
-              flags: set) -> int:
-    """`x TARGET k=v ...` with a ledger: `rev.run(TARGET, **kwargs)`, found if computed before, else run
-    and sealed (DAT 1046).
+def _cmd_eval(ledger: Any, args: List[str], points: List[List[Override]], flags: set) -> int:
+    """`x TARGET k=v ...` with a ledger: `rev.run(TARGET, **keys)`, found if computed before, else run and sealed
+    (DAT 1046); each sweep point (`-m`) is one `rev.run`.
 
-    TARGET is what `rev.run` takes: a dotted name through the ledger's mounts (a ledger function, a
-    spec, or a dat's run function, its keys updating the spec's `dat.kwargs`), or a spec file
-    (`.yaml`/`.json`).  A spec whose `main` names a ledger function is that function, its other keys
-    the keys, the line's over the file's.  `--set` / `--json` update a spec's keys.  `alias=NAME`
-    names the result (`path=`).
+    TARGET is what `rev.run` takes: a dotted name through the ledger's mounts (a ledger function, its keys the
+    `k=v` pairs; a spec, or a dat's run function, the overrides applied to the spec, an undotted key being
+    `dat.kwargs.<key>`), or a spec file (`.yaml`/`.json`). A spec whose `main` names a ledger function is that
+    function, its other keys the keys, the line's over the file's. `alias=NAME` names the result (`path=`).
     """
     target, fixed = args[0], args[1:]
     if fixed:
@@ -307,40 +454,45 @@ def _cmd_eval(ledger: Any, args: List[str], kwargs: Dict[str, Any], overrides: L
             obj = rev.ns.load(target)
             if isinstance(obj, dict):
                 spec = obj
-            elif overrides:
-                return _fail(f"--set/--json need a spec; {target!r} is {type(obj).__name__}")
     except Exception as e:
         if os.environ.get("DAT_DEBUG"):
             raise
         return _fail(f"cannot load {target!r}: {_message(e)}", code=2)
-    run_target: Any = target
-    keys: Dict[str, Any] = {}
-    if spec is not None:
-        spec = _apply_sets(spec, overrides)
-        if isinstance(spec.get("main"), str):
+    main = spec is not None and isinstance(spec.get("main"), str)
+    if spec is not None and not main and not isinstance(spec.get("dat"), dict):
+        return _fail(f"{target}: a spec run through the ledger is a dat spec (`dat:` naming its run "
+                     "function in `dat.do`) or names a ledger function in `main`")
+    for point in points:
+        alias = next((o.value for o in point if o.bare and o.key == "alias"), None)
+        point = [o for o in point if not (o.bare and o.key == "alias")]
+        run_target: Any = target
+        keys: Dict[str, Any] = {}
+        if main:
             run_target = spec["main"]
             keys = {k: v for k, v in spec.items() if k not in ("main", "command")}
-        elif isinstance(spec.get("dat"), dict):
-            run_target = spec if (is_file or overrides) else target
-        else:
-            return _fail(f"{target}: a spec run through the ledger is a dat spec (`dat:` naming its run "
-                         "function in `dat.do`) or names a ledger function in `main`")
-    keys.update(kwargs)
-    alias = keys.pop("alias", None)
-    if "dry-run" in flags:
-        shown = [repr(run_target)] + [f"{k}={v!r}" for k, v in keys.items()]
-        print(f"rev.run({', '.join(shown)})" + (f", then named {alias!r}" if alias else ""))
-        return 0
-    try:
-        hit = rev.run(run_target, seal="get", path=alias, **keys)
-        value = hit or rev.run(run_target, path=alias, **keys)
-    except Exception as e:
-        if os.environ.get("DAT_DEBUG"):
-            raise
-        return _fail(_message(e))
-    preds = " ".join(f"{p}={json.dumps(o) if isinstance(o, (dict, list)) else o}"
-                     for p, o in value.preds.items())
-    print(f"{'hit' if hit else 'ran'}  {value}" + (f"  {preds}" if preds else ""))
+        if spec is None or main:
+            if any(not o.bare for o in point):
+                return _fail(f"a dotted key, +, ++ or ~ edits a dat spec; {target!r} takes keywords (KEY=VALUE)")
+            keys.update({o.key: o.value for o in point})
+        elif point or is_file:
+            run_target = apply_overrides(spec, point)
+        if "dry-run" in flags:
+            shown = ([repr(run_target) if not isinstance(run_target, dict) else repr(target)]
+                     + [f"{k}={v!r}" for k, v in keys.items()])
+            print(f"rev.run({', '.join(shown)})" + (f"  with the spec updated by {point!r}" if point and not keys
+                                                     and isinstance(run_target, dict) else "")
+                  + (f", then named {alias!r}" if alias else ""))
+            continue
+        try:
+            hit = rev.run(run_target, seal="get", path=alias, **keys)
+            value = hit or rev.run(run_target, path=alias, **keys)
+        except Exception as e:
+            if os.environ.get("DAT_DEBUG"):
+                raise
+            return _fail(_message(e))
+        preds = " ".join(f"{p}={json.dumps(o) if isinstance(o, (dict, list)) else o}"
+                         for p, o in value.preds.items())
+        print(f"{'hit' if hit else 'ran'}  {value}" + (f"  {preds}" if preds else ""))
     return 0
 
 
@@ -376,69 +528,36 @@ def _cmd_info(argv: List[str]) -> int:
     return 0
 
 
-def _parse_argv(argv: List[str]) -> Tuple[List[Tuple[str, Any]], List[str], Dict[str, Any], set]:
-    """Split `x TARGET` arguments into spec overrides, positionals, kwargs and flags.
+def _parse_argv(argv: List[str]) -> Tuple[List[str], List[str], set]:
+    """Split `x TARGET` arguments into override words, positionals and flags.
 
-    The overrides are the `--set` / `--json` `(DOTTED.KEY, value)` pairs in order, each setting
-    one key (`_apply_sets`).  Positionals come back as written (the first is the target name); every
-    KEY=VALUE value is `arg_value` (JSON, else the text).  A malformed line raises `ValueError`.
+    An override word is `KEY=VALUE` (`KEY` a name, or a dotted path into the spec) or one in Hydra's grammar
+    (`+k=v`, `++k=v`, `~k`; `parse_overrides` reads them). Positionals come back as written (the first is the
+    target name); `--` ends the options. A malformed line raises `ValueError`.
     """
-    overrides: List[Tuple[str, Any]] = []
-    shape: Spec = {}                    # the keys the line sets, so a key under a scalar it set is refused
+    words: List[str] = []
     args: List[str] = []
-    kwargs: Dict[str, Any] = {}
     flags: set = set()
-    i = 0
-    while i < len(argv):
-        arg = argv[i]
+    for i, arg in enumerate(argv):
         if arg == "--":
             args += argv[i + 1:]
             break
         elif arg in ("--set", "--json"):
-            (pair,) = _operands(argv, i, 1)
-            key, eq, value = pair.partition("=")
-            if not eq or not key:
-                raise ValueError(f"{arg} needs DOTTED.KEY=VALUE, got {pair!r}")
-            if arg == "--json":
-                try:
-                    value = json.loads(value)
-                except json.JSONDecodeError as e:
-                    raise ValueError(f"--json {key}: illegal JSON: {e}")
-            else:
-                value = arg_value(value)
-            Dat.set(shape, key, copy.deepcopy(value))
-            overrides.append((key, value))
-            i += 1
+            raise ValueError(f"{arg} was removed in dvc-dat 3.0: write KEY=VALUE, a dotted KEY a path into the spec "
+                             "(dat.title=Quickie)")
         elif arg in ("--dry-run", "--usage"):
             flags.add(arg[2:])
-        elif not args and not arg.startswith("-"):
+        elif arg in MULTIRUN:
+            flags.add("multirun")
+        elif not args and not arg.startswith("-") and not _HYDRA_PREFIX.match(arg):
             args.append(arg)                # the first word is the TARGET, never parsed (cli.md)
-        elif (match := _KWARG.match(arg)):
-            kwargs[match.group(1)] = arg_value(arg[match.end():])
+        elif _HYDRA_PREFIX.match(arg) or _OVERRIDE_KEY.fullmatch(arg.partition("=")[0]) and "=" in arg:
+            words.append(arg)
         elif arg.startswith("-") and arg != "-" and isinstance(arg_value(arg), str):
-            raise ValueError(f"unknown option {arg!r}; "
-                             f"keyword arguments are written KEY=VALUE")
+            raise ValueError(f"unknown option {arg!r}; keyword arguments are written KEY=VALUE")
         else:
             args.append(arg)
-        i += 1
-    return overrides, args, kwargs, flags
-
-
-def _apply_sets(spec: Spec, overrides: List[Tuple[str, Any]]) -> Spec:
-    """A copy of `spec` with each `--set` / `--json` pair applied in order: the value replaces what the
-    dotted key held (a dict or a named list too, never merged into it); missing levels are made."""
-    out = copy.deepcopy(spec)
-    for key, value in overrides:
-        Dat.set(out, key, copy.deepcopy(value))
-    return out
-
-
-def _operands(argv: List[str], i: int, count: int) -> List[str]:
-    """The `count` words after the option at `argv[i]`."""
-    operands = argv[i + 1:i + 1 + count]
-    if len(operands) < count:
-        raise ValueError(f"{argv[i]} needs {count} value(s)")
-    return operands
+    return words, args, flags
 
 
 def arg_value(text: str) -> Any:

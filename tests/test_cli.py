@@ -215,10 +215,11 @@ class TestArguments:
         assert {text: arg_value(text) for text in cases} == cases
         assert type(arg_value("12")) is int and type(arg_value('"12"')) is str
 
-    def test_set_value_is_json_else_the_text(self):
-        from dvc_dat.do import _parse_argv
-        overrides, _, _, _ = _parse_argv(["t", "--set", "a.d=2026-01-01", "--set", "a.n=3"])
-        assert overrides == [("a.d", "2026-01-01"), ("a.n", 3)]
+    def test_an_override_value_is_json_else_the_text(self):
+        from dvc_dat.do import parse_overrides
+        (point,) = parse_overrides(["a.d=2026-01-01", "a.n=3", "k=${ns:x.y}"])
+        assert [(o.op, o.path, o.value) for o in point] == [
+            ("set", ["a", "d"], "2026-01-01"), ("set", ["a", "n"], 3), ("set", ["dat", "kwargs", "k"], "${ns:x.y}")]
 
     def test_fixed_and_keyword_args_together(self):
         code, out, _ = dat("echo_args", "one", "2", "k=3")
@@ -242,40 +243,27 @@ class TestArguments:
         code, out, _ = dat("echo_args", "7", "k=1", "--dry-run")
         assert (code, out) == (0, "Dat.manager.run('echo_args', 7, k=1)")
 
-    def test_set(self):
-        line = ["my_letters", "--set", "dat.title=Re-configured letterator",
-                "--json", 'rules=[[2, "my_letters.triple_it"]]']
-        code, out, _ = dat(*line)
-        assert code == 0
-        assert out.endswith("a  bbb  c  ddd  e  fff  g  hhh  i  jjj  k  lll  m"
-                            "  nnn  o  ppp  q  rrr  s  ttt  u  vvv  w  xxx  y")
+    def test_a_dotted_key_sets_a_path_in_the_spec(self):
+        code, out, _ = dat("my_letters", "dat.title=Re-configured letterator")
+        assert code == 0 and "Re-configured letterator" in out
+        assert out.endswith("q  rrr  S  t  uuu  v  jackpot   XXX  y")
 
-    def test_set_repeats(self):
-        code, out, _ = dat("my_letters", "--set", "dat.title=Quickie",
-                           "--set", "start=100", "--set", "end=110")
-        assert code == 0
-        assert out.endswith("D  e  fff  g  h  JACKPOT JACKPOT JACKPOT   j  k  lll  m")
+    def test_overrides_repeat_in_order(self):
+        code, out, _ = dat("my_letters", "dat.title=Quickie", "dat.title=Twice")
+        assert code == 0 and "Twice" in out and "Quickie" not in out
 
-    def test_illegal_json_exits_1(self):
-        code, _, err = dat("my_letters", "--json", "rules=[not json")
-        assert code == 1 and "JSON" in err
+    def test_a_dry_run_shows_the_overrides(self):
+        code, out, _ = dat("my_letters", "dat.title=Quickie", "n=3", "--dry-run")
+        assert code == 0 and "dat.title='Quickie'" in out and "n=3" in out
 
-    def test_json_needs_key_equals_value(self):
-        code, _, err = dat("my_letters", "--json", "rules", "[[2, 3]]")
-        assert code == 1 and "--json needs DOTTED.KEY=VALUE" in err
+    def test_set_and_json_are_gone(self):
+        for flag in ("--set", "--json"):
+            code, _, err = dat("my_letters", flag, "dat.title=Quickie")
+            assert code == 1 and f"{flag} was removed in dvc-dat 3.0" in err
 
-    def test_json_repeats_and_mixes_with_set(self):
-        code, out, _ = dat("my_letters", "--json", "start=100", "--json", "end=110",
-                           "--set", "dat.title=Quickie", "--dry-run")
-        assert code == 0 and "'start': 100" in out and "'end': 110" in out
-
-    def test_set_on_a_function_exits_1(self):
-        code, _, err = dat("hello_world", "--set", "a.b=1")
-        assert code == 1 and "--set" in err
-
-    def test_missing_operand_exits_1(self):
-        code, _, err = dat("my_letters", "--set", "dat.title")   # no '='
-        assert code == 1 and "--set" in err
+    def test_a_dotted_key_on_a_function_exits_1(self):
+        code, _, err = dat("hello_world", "a.b=1")
+        assert code == 1 and "edits a template spec" in err
 
     def test_usage_of_a_target_without_one(self):
         code, out, _ = dat("hello_world", "--usage")
