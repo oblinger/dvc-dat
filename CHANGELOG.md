@@ -4,9 +4,13 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Versioning
 
-[Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger. A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
+[Semver](https://semver.org). A major marks a different DAT and is cut only by the owner, never by an agent: 1.x is the original DAT, 2.x is DAT with the ledger, 3.x is DAT with the `${…}` grammar on OmegaConf and Hydra's command line (1519). A minor is a notable capability, one per run of related changes and cut by a release PR, not per feature PR. Everything else is a patch. `__version__` lives in `dvc_dat/__init__.py`.
 
 ## Unreleased
+
+## 3.0.0 — 2026-11-07
+
+The changeover of 1519 (OmegaConf inside, Hydra in front), cut on Dan's word: the entries below, each with its migration. sv-pipe's migration is its 1519 R7 PR.
 
 - **The docs say the new grammar (1519 R6).** The API pages, `DAT Dat`, `DAT Ledger`, how-to, mount-commands and the README (the install tiers: `expand`, `hydra`, `tools`, `excel`) read `${…}`, the tiers and the command line's overrides; the demo notebooks are re-executed.
 - **The command line speaks Hydra's override grammar (1519 R5; breaking).** `x TARGET [ARG ...] [OVERRIDE ...] [-m]` (`just run`): `KEY=VALUE` with today's `arg_value` on every install, an undotted key `dat.kwargs.KEY`, a dotted key a path from the spec's root; with the new extra `hydra = ["hydra-core>=1.3", "dvc-dat[expand]"]`, Hydra's `OverridesParser` reads `+k=v` (add), `++k=v`, `~k` (delete), choices `a,b` and sweeps `range(…)`, and `-m` runs one dat per point (on a ledger one `rev.run` per point, a point computed before a `hit`). Without the extra a word in that grammar is refused by name. An override's value is spec text: `${ns:asset.ocr}` resolves at create. **Removed:** `--set`, `--json`. Migration: `--set a.b=v` → `a.b=v`; a one-segment top-level key has no spelling yet (1519 Q4).
