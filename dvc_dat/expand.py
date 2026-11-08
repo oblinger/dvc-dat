@@ -199,10 +199,19 @@ def _cwd() -> str:
     return os.getcwd()
 
 
+def _registrar(OmegaConf: Any) -> Callable[..., None]:
+    """`register_resolver` where it takes `replace=` (omegaconf 2.4, which deprecates `register_new_resolver`),
+    else `register_new_resolver` (2.3, whose `register_resolver` is the legacy one)."""
+    new = getattr(OmegaConf, "register_resolver", None)
+    if new is not None and "replace" in inspect.signature(new).parameters:
+        return new
+    return OmegaConf.register_new_resolver
+
+
 def _register(OmegaConf: Any) -> None:
     """DAT's resolvers, registered again at every resolve (`replace=True`): Hydra registers its own `now`, a live
     clock, and DAT's must win whichever was imported last."""
-    register = getattr(OmegaConf, "register_resolver", None) or OmegaConf.register_new_resolver  # 2.4's, else 2.3's
+    register = _registrar(OmegaConf)
     for name, fn in (("ns", _ns), ("now", _now), ("unique", _unique), ("cwd", _cwd),
                      (_SEGMENT, lambda: unique_count(_context().count, True)),
                      (_SUFFIX, lambda: unique_count(_context().count, False))):
