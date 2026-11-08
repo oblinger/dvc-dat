@@ -925,7 +925,7 @@ print("ran:", repr(times12_value))   # ran: <Dat tables/2026/times12>: the spec'
 # Steps 1 to 3 ran through the ledger's mounts: `Dat.ns.load` read the spec off the mounted file, never imported. Step 4 is the expanded spec with `dat.name` removed and `dat.kind` set; it is the memo key, stored as the value's `db/keys`.
 
 # %%
-expanded_spec = Dat.ns.expand_spec(Dat.ns.load("mnt.timestables.specs.times12"), n=12)   # 3. with the spec's own n
+expanded_spec = Dat.ns.expand_spec(Dat.ns.load("mnt.timestables.specs.times12"))   # 3. the spec's own n
 memo_key = copy.deepcopy(expanded_spec)                                                  # 4. the memo key
 memo_key["dat"].pop("name")
 memo_key["dat"]["kind"] = "dvc_dat.core.Dat"
