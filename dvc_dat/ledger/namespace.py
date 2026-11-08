@@ -15,7 +15,7 @@ mount: it is imported, and a
 itself.
 
 ``LedgerNamespace`` is ``rev.ns``, ``t.ns``, and ``Dat.manager.ns`` in a project whose
-``.datconfig.yaml`` names a ledger: the ``Namespace`` interface (``load``, the ``dat.base`` merge and ``{}`` expansion, the
+``.datconfig.yaml`` names a ledger: the ``Namespace`` interface (``load``, the ``dat.base`` merge and ``${…}`` expansion, the
 ``dat.do`` lookup in a run) answered from these mounts, at the head, or at
 the rev it was made for. In a ledger project the mounts are rows: ``t.ns.mount``
 (``at="mnt.<prefix>"``, named in full) writes them, and ``mount`` anywhere else is refused.
@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, Un
 
 import yaml
 
-from ..expand import _builtins, _has_unique, expand
+from ..expand import expand_text, has_unique
 from ..namespace import Namespace
 from . import hooks
 from .errors import NotEvaluated
@@ -286,25 +286,23 @@ class LedgerNamespace(Namespace):
         return (self._txn._snapshot() if self._txn is not None else self.rev()).timezone
 
     def expand(self, text: str, /, **vars: Any) -> str:  # type: ignore[override]
-        """``Namespace.expand``, with dotted names resolved through this ledger namespace, the clock in the
-        revision's display zone, and ``{unique}`` counted: the expansion is tried with the counter at 1, 2, 3, ... until
-        no ``db/alias`` row names a value by it and no folder is at it under the data folder. A path segment
-        that is exactly ``{unique}`` counts ``1``, ``2``, ``3``; a suffix ``""``, ``_2``, ``_3``. The probe
-        is this namespace's revision; a transaction's ``t.ns`` probes its snapshot at open and the names it
-        has minted or aliased already, so a loop minting in one transaction gets distinct names. An absolute
-        result names nothing and is not probed; a keyword ``unique=`` is used as given."""
-        if not isinstance(text, str) or "unique" in vars or not _has_unique(text):
+        """``Namespace.expand``, with ``${ns:…}`` resolved through this ledger namespace, the clock in the revision's
+        display zone, and ``${unique:}`` counted: the template is resolved with the counter at 1, 2, 3, ... until no
+        ``db/alias`` row names a value by it and no folder is at it under the data folder. A path segment that is
+        exactly ``${unique:}`` counts ``1``, ``2``, ``3``; a suffix ``""``, ``_2``, ``_3``. The probe is this
+        namespace's revision; a transaction's ``t.ns`` probes its snapshot at open and the names it has minted or
+        aliased already, so a loop minting in one transaction gets distinct names. An absolute result names nothing
+        and is not probed. A template holding no ``${`` other than ``${unique:}`` needs no omegaconf."""
+        if not isinstance(text, str) or not has_unique(text):
             return super().expand(text, **vars)
         ledger = self._ledger_of()
         txn = self._txn
         probe = txn._snapshot() if txn is not None else self.rev()
         data = ledger._store.art.dats
         zone = probe.timezone
-        now = datetime.now(zone)
-        names = {k: v for k, v in _builtins(now).items() if k != "unique"}      # one moment for every try
-        names.update(vars)
+        now = datetime.now(zone)                          # one moment for every try
         for count in range(1, 100000):
-            name = expand(text, names, resolver=self.load, tz=zone, count=count)
+            name = expand_text(text, vars, load=self.load, tz=zone, now=now, count=count)
             if os.path.isabs(name):
                 return name
             if txn is not None and txn._names_minted(name):
@@ -313,7 +311,7 @@ class LedgerNamespace(Namespace):
                 if txn is not None:
                     txn._minted.add(name)
                 return name
-        raise RuntimeError(f"expand: {text!r}: no free name for {{unique}} in 100,000 tries")
+        raise RuntimeError(f"expand: {text!r}: no free name for ${{unique:}} in 100,000 tries")
 
     def _load_unmounted(self, dotted_name: str) -> Any:
         if not self._unguarded:

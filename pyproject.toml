@@ -16,6 +16,8 @@ dynamic = ["version"]
 # the tables (`dt.from_dat`, `dt.to_excel`, `Cube`): pandas, out of the base install (1519 R2)
 tools = ["pandas"]
 excel = ["xlsxwriter", "dvc-dat[tools]"]
+# the whole `${…}` grammar (doc/expand.md); the base install expands `${unique:}` alone (1519 R3)
+expand = ["omegaconf>=2.3"]
 pg = ["psycopg[binary]>=3.1"]
 # Video from a URL (SVP 249); gs:// also needs gcsfs, https:// aiohttp
 video = ["fsspec"]

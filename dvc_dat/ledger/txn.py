@@ -233,7 +233,7 @@ class Transaction:
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
         self._codes: set = set()
         self._namings: List[_Op] = []         # the name adds of _name_value: one name, re-checked at commit
-        self._minted: set = set()             # the names t.ns.expand counted {unique} to (distinct per mint)
+        self._minted: set = set()             # the names t.ns.expand counted ${unique:} to (distinct per mint)
         self._clocks: Dict[Tuple[str, str], Tuple[int, ...]] = {}   # the highest version seen
         self._commits: Dict[str, str] = {}
         #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
@@ -273,7 +273,7 @@ class Transaction:
         """The ledger's namespace at ``previous_rev`` (DAT 1051).
 
         ``t.ns.load(name)`` as [`rev.ns`][dvc_dat.ledger.Rev.ns] (it reads, so it needs ``lock=``);
-        ``t.ns.expand(template, **vars)`` counts ``{unique}`` against the snapshot at open and skips the names this
+        ``t.ns.expand(template, **vars)`` counts ``${unique:}`` against the snapshot at open and skips the names this
         transaction minted or aliased already, so a loop minting in one transaction gets distinct names
         ([Expansion][expansion-nsexpand]); ``t.ns.mount(at, *, root, repo=None)`` takes ``at`` as ``mnt.<prefix>``,
         the name its names load under, and writes the two ``db/mount/<prefix>`` rows ``db/root`` and ``db/repo``
