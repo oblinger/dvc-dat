@@ -20,7 +20,7 @@ from dvc_dat.ledger.remote import blob_name, resolve_local
 from ledger_kinds import Video
 
 HERE = Path(__file__).parent
-SPEC = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/table{unique}", "kwargs": {"n": 12, "start": 1}}}
+SPEC = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/table${unique:}", "kwargs": {"n": 12, "start": 1}}}
 
 
 class FolderRemote:

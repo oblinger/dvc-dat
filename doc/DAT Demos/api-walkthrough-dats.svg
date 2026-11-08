@@ -43,7 +43,7 @@
 <line x1="326" y1="241" x2="598" y2="241" stroke="#ddd"/>
 <text x="326" y="258" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">dat:</text>
 <text x="326" y="275" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  base: timestables.specs.times_base</text>
-<text x="326" y="292" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  name: tables/{YYYY}/times{n}{unique}</text>
+<text x="326" y="292" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  name: tables/${now:%Y}/times${dat.kwargs.n}${unique:}</text>
 <text x="326" y="309" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  do: timestables.mult.build_table</text>
 <text x="326" y="326" font-size="12" fill="#9a9a9a" font-family="Menlo, monospace" xml:space="preserve">  kwargs: {n: 12}</text>
 <path d="M316,420 H608 V535 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 l-8,5 l-8,-5 H316 Z" fill="#fff" stroke="#222" stroke-width="1.5"/>

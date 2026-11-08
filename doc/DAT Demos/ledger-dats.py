@@ -227,7 +227,7 @@ print("db/version:", L.at()["db/repo/demo-game/demo_game.etl", "db/version"])
 # (Q36): the run bound it to a fresh scratch folder, the function
 # built the dat there, and the seal moved the folder into the art
 # store by its manifest, as `v.seal(t)` did by hand. With no
-# `path=` on the call the result is named `anonymous/Dat{unique}`;
+# `path=` on the call the result is named `anonymous/Dat${unique:}`;
 # `path="games/G1"` would name it and rebuild its folder there.
 # The preds are the same as the hand-built dat's.
 

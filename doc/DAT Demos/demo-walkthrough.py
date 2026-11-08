@@ -43,7 +43,7 @@ FILES = {
     "catalog/base.yaml": """
         dat:
           do: mypkg.train.train
-          name: "runs/{YYYY}-{MM}-{DD}/exp{unique}"
+          name: runs/${now:%Y-%m-%d}/exp${unique:}
           kwargs: {epochs: 10, lr: 0.1}
         model: {layers: 2, width: 64}
     """,

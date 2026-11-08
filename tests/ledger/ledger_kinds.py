@@ -103,7 +103,7 @@ def folder(rev, *, game: str, path: Path) -> Dat:
 
 
 @dat.fn
-def placed(rev, *, game: str, path: Path = "games/{game}") -> Dat:
+def placed(rev, *, game: str, path: Path = "games/${game}") -> Dat:
     _count("placed")
     (path / "g.txt").write_text(game)
     return Dat(path)

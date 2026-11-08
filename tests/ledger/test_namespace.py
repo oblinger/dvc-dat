@@ -1,7 +1,7 @@
-"""SVP 1500: ``expand`` is a ``Namespace`` method; the ledger namespace counts ``{unique}``. SVP 1505 Q2: the display zone.
+"""SVP 1500: ``expand`` is a ``Namespace`` method; the ledger namespace counts ``${unique:}``. SVP 1505 Q2: the display zone.
 
 ``ns.expand``, ``manager.ns.expand`` and ``rev.ns.expand`` each resolve through their own names; on a ledger
-namespace ``{unique}`` counts against the revision (a whole segment ``1, 2, 3``, a suffix ``"", _2, _3``), and
+namespace ``${unique:}`` counts against the revision (a whole segment ``1, 2, 3``, a suffix ``"", _2, _3``), and
 stamps are stored UTC, and the clock built-ins and printed times are in the revision's display zone, the row
 ``db db/timezone`` (UTC with none), which any revision may change.
 """
@@ -25,44 +25,46 @@ def test_rev_ns_expands_through_the_ledgers_mounts_and_the_plain_ns_does_not(L, 
     envbox.set(code={**envbox.env.code, "myrepo": Checkout(None, "abc1234", False, tmp_path / "proj")})
     with L.transaction(by="t") as t:
         t.ns.mount("mnt.cfg", root="cfgs", repo="myrepo")
-    assert L.at().ns.expand("runs/{mnt.cfg.names.word}/x") == "runs/mine/x"
+    pytest.importorskip("omegaconf")
+    assert L.at().ns.expand("runs/${ns:mnt.cfg.names.word}/x") == "runs/mine/x"
     with L.transaction(by="t", lock=10) as t:
-        assert t.ns.expand("{mnt.cfg.names.word}") == "mine"
-    with pytest.raises(ImportError):
-        Namespace().expand("{mnt.cfg.names.word}")
+        assert t.ns.expand("${ns:mnt.cfg.names.word}") == "mine"
+    with pytest.raises(Exception, match="mnt"):
+        Namespace().expand("${ns:mnt.cfg.names.word}")
     with pytest.raises(TypeError, match="string or a number"):
-        L.at().ns.expand("{mnt.cfg.names}")                  # a dict: expand_spec's to inline, never expand's
-    assert L.at().ns.expand_spec({"c": "{mnt.cfg.names}"}) == {"c": {"word": "mine"}}
+        L.at().ns.expand("${ns:mnt.cfg.names}")              # a dict: expand_spec's to inline, never expand's
+    assert L.at().ns.expand_spec({"c": "${ns:mnt.cfg.names}"}) == {"c": {"word": "mine"}}
 
 
 def test_a_whole_segment_counts_from_one_and_a_suffix_from_empty(L):
     ns = L.at().ns
-    assert ns.expand("events/{unique}") == "events/1"
-    assert ns.expand("baseline{unique}") == "baseline"
-    assert ns.expand("{unique}/x") == "1/x"
-    assert ns.expand("a{{unique}}") == "a{unique}"           # the literal: nothing counted
-    assert ns.expand("events/{unique}", unique="_7") == "events/_7"     # a keyword is used as given
+    assert ns.expand("events/${unique:}") == "events/1"
+    assert ns.expand("baseline${unique:}") == "baseline"
+    assert ns.expand("${unique:}/x") == "1/x"
+    assert ns.expand("a{{unique}}") == "a${unique:}"           # the literal: nothing counted
+    assert ns.expand("events/${unique:}", unique="_7") == "events/_7"     # a keyword is used as given
 
 
 def test_a_name_holding_a_value_or_a_folder_blocks_it(L):
     with L.transaction(by="t") as t:
         Video(b"one").seal(t, name="events/1")
         Video(b"two").seal(t, name="baseline")
-    assert L.at().ns.expand("events/{unique}") == "events/2"
-    assert L.at().ns.expand("baseline{unique}") == "baseline_2"
+    assert L.at().ns.expand("events/${unique:}") == "events/2"
+    assert L.at().ns.expand("baseline${unique:}") == "baseline_2"
     (L._store.art.root / "dats" / "events" / "2").mkdir(parents=True)
-    assert L.at().ns.expand("events/{unique}") == "events/3"
-    assert L.at().ns.expand("/abs/{unique}") == "/abs/1"     # absolute: names nothing, not probed
+    assert L.at().ns.expand("events/${unique:}") == "events/3"
+    assert L.at().ns.expand("/abs/${unique:}") == "/abs/1"     # absolute: names nothing, not probed
 
 
 def test_two_mints_in_one_transaction_differ(L):
+    pytest.importorskip("omegaconf")
     with L.transaction(by="t") as t:
-        names = [t.ns.expand("ann/{g}/{kind}/{unique}", g="G7", kind="events") for _ in range(3)]
+        names = [t.ns.expand("ann/${g}/${kind}/${unique:}", g="G7", kind="events") for _ in range(3)]
     assert names == ["ann/G7/events/1", "ann/G7/events/2", "ann/G7/events/3"]
     with L.transaction(by="t") as t:
-        name = t.ns.expand("ann/{unique}")
+        name = t.ns.expand("ann/${unique:}")
         Video(b"v").seal(t, name=name)
-        assert t.ns.expand("ann/{unique}") == "ann/2"          # pending as this transaction's alias
+        assert t.ns.expand("ann/${unique:}") == "ann/2"          # pending as this transaction's alias
     assert L.at()["ann/1", "db/alias"]
 
 
@@ -73,6 +75,7 @@ def _tokyo(L):
 
 
 def test_the_clock_is_in_the_revisions_display_zone(L, monkeypatch):
+    pytest.importorskip("omegaconf")
     moment = datetime(2026, 11, 1, 20, 30, tzinfo=timezone.utc)   # 2026-11-02 05:30 in Tokyo
 
     class Fixed(datetime):
@@ -86,11 +89,11 @@ def test_the_clock_is_in_the_revisions_display_zone(L, monkeypatch):
     monkeypatch.setattr(lns, "datetime", Fixed)
     utc = L.at()
     tokyo = _tokyo(L)
-    assert utc.ns.expand("{YYYY}-{MM}-{DD}") == "2026-11-01"
-    assert tokyo.ns.expand("{YYYY}-{MM}-{DD}") == "2026-11-02"
-    assert tokyo.ns.expand("d/{DD}/{unique}") == "d/02/1"
+    assert utc.ns.expand("${now:%Y}-${now:%m}-${now:%d}") == "2026-11-01"
+    assert tokyo.ns.expand("${now:%Y}-${now:%m}-${now:%d}") == "2026-11-02"
+    assert tokyo.ns.expand("d/${now:%d}/${unique:}") == "d/02/1"
     with L.transaction(by="t", lock=10) as t:
-        assert t.ns.expand("{DD}") == "02"
+        assert t.ns.expand("${now:%d}") == "02"
 
 
 def test_stamps_are_stored_utc_and_print_in_the_display_zone(L):

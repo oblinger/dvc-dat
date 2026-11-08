@@ -76,8 +76,8 @@ def test_run_kwarg_with_braces_kept_as_typed(world):
 
 def test_run_kwarg_with_escaped_braces_kept_as_typed(world):
     world.ns.mount(at="kw_fn", value=_kw)
-    out = world.run({"dat": {"do": "kw_fn"}}, "{a}", fmt="{{x}}", when="{now}")
-    assert out == [["{a}"], {"fmt": "{{x}}", "when": "{now}"}]
+    out = world.run({"dat": {"do": "kw_fn"}}, "{a}", fmt="{{x}}", when="${now:}")
+    assert out == [["{a}"], {"fmt": "{{x}}", "when": "${now:}"}]
 
 
 def test_a_spec_template_still_expands_beside_a_literal_kwarg(world):
