@@ -121,8 +121,10 @@ class Namespace:
         return expand_text(text, vars, load=self.load, tz=self._tz())
 
     def expand_spec(self, spec: Any, /) -> Any:
-        """A copy of `spec` merged over its `dat.base` chain, every string value resolved once, keys left alone, the
-        built-ins at one moment (`expand`'s grammar; `${batch}` a node of the merged spec). A value that is exactly
+        """A copy of `spec` merged over its `dat.base` chain, every string value resolved once.
+
+        Keys are left alone and the built-ins taken at one moment (`expand`'s grammar; `${batch}` a node of the
+        merged spec). A value that is exactly
         one reference is the object it names: `cfg: ${ns:svp.defaults}` inlines the dict. A spec that is not a dict
         has no bases and is only resolved."""
         if isinstance(spec, dict):
