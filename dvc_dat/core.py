@@ -676,12 +676,11 @@ class DatManager:
         target_exists = Dat.get(spec, DAT_TARGET_EXISTS, "error")
         if target_exists == "overwrite" and path.lower() == "${cwd:}":
             target_exists = "error"  # never wipe the working directory
-        if target_exists == "increment" and not has_unique(path):
-            path += UNIQUE_REF       # a plain name counts up as `_2`, `_3`, ...
+        counted = path + UNIQUE_REF if target_exists == "increment" and not has_unique(path) else path
 
         # one resolve of the spec, the folder's name at its root: `${dat.kwargs.game}` in a name reads the spec,
         # and the name is resolved again as the count climbs, with the same moment
-        names = Template({**spec, _NAME_KEY: path}, load=self.ns.load, tz=self.ns._tz())
+        names = Template({**spec, _NAME_KEY: counted}, load=self.ns.load, tz=self.ns._tz())
         expanded_path, skip_execution, count = self._place(path, lambda n: names.name(_NAME_KEY, n),
                                                            target_exists=target_exists, wipe=False)
         if skip_execution:
@@ -1486,12 +1485,14 @@ class DatManager:
 
     def _place(self, path_spec: str, name_at: Callable[[int], str], *, target_exists: str = "error",
                wipe: bool = True) -> Tuple[str, bool, int]:
-        """Settle where a dat goes, under the dat folder: `(path, skip_execution, count)`. `name_at(count)` is the
-        path template resolved at that count. `skip_execution` is True only for `target_exists: use` on an existing
-        folder; `overwrite` deletes the folder (`wipe=False`: leaves it for the caller to remove, `create` once its
-        spec is made); a `${unique:}` in the template counts up (`increment` appended one) until no folder is
-        there, and `count` is where it stopped, so the spec resolves at the very same count."""
-        counts = has_unique(path_spec)
+        """Settle where a dat goes, under the dat folder: `(path, skip_execution, count)`. `path_spec` is the path
+        template as given; `name_at(count)` is it resolved at that count, a `${unique:}` appended under `increment`
+        when it has none. `skip_execution` is True only for `target_exists: use` on an existing folder; `overwrite`
+        deletes the folder (`wipe=False`: leaves it for the caller to remove, `create` once its spec is made); a
+        `${unique:}` in the template, or `increment`, counts up until no folder is there, and `count` is where it
+        stopped, so the spec resolves at the very same count. A manager may override it (a project's own
+        increment) and call it back with a fixed name: `super()._place(name, lambda _: name, ...)`."""
+        counts = target_exists == "increment" or has_unique(path_spec)
         count = 1
         while True:
             expanded = name_at(count)

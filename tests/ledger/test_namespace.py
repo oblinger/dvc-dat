@@ -41,8 +41,8 @@ def test_a_whole_segment_counts_from_one_and_a_suffix_from_empty(L):
     assert ns.expand("events/${unique:}") == "events/1"
     assert ns.expand("baseline${unique:}") == "baseline"
     assert ns.expand("${unique:}/x") == "1/x"
-    assert ns.expand("a{{unique}}") == "a${unique:}"           # the literal: nothing counted
-    assert ns.expand("events/${unique:}", unique="_7") == "events/_7"     # a keyword is used as given
+    assert ns.expand("a{unique}") == "a{unique}"                 # a brace is text: nothing counted
+    assert ns.expand("events/${unique:}", unique="_7") == "events/1"     # a keyword never shadows the counter
 
 
 def test_a_name_holding_a_value_or_a_folder_blocks_it(L):

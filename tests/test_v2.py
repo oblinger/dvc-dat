@@ -187,7 +187,7 @@ class TestExpand:
         assert ns.expand("${now:%y}") == now.strftime("%y")
         assert ns.expand("run-${now:%Y}-${now:%m}") == now.strftime("run-%Y-%m")
         assert ns.expand("${cwd:}") == os.getcwd()
-        assert ns.expand("${unique:}") == "" and ns.expand("events/${unique:}") == "events/1"   # no ledger
+        assert ns.expand("x${unique:}") == "x" and ns.expand("events/${unique:}") == "events/1"   # no ledger
 
     def test_keywords_are_nodes_and_a_brace_is_text(self):
         assert ns.expand("hello ${who}!", who="dat") == "hello dat!"
