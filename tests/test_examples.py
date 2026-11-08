@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 EXAMPLES = Path(__file__).parent.parent / "doc" / "DAT Demos"
 
 
@@ -19,6 +21,7 @@ def run_notebook(name, tmp_path):
 
 
 def test_walkthrough_runs(tmp_path):
+    pytest.importorskip("omegaconf")          # its specs use the ${…} grammar (1519 R4)
     out = run_notebook("demo-walkthrough.ipynb", tmp_path)
     assert "$ x catalog.experiment epochs=5\n<Dat: runs/" in out
 
