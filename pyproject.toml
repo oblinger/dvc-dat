@@ -18,6 +18,8 @@ tools = ["pandas"]
 excel = ["xlsxwriter", "dvc-dat[tools]"]
 # the whole `${…}` grammar (doc/expand.md); the base install expands `${unique:}` alone (1519 R3)
 expand = ["omegaconf>=2.3"]
+# Hydra's override grammar on the command line (`+k=v`, `~k`, `a,b`, `-m`; 1519 R5)
+hydra = ["hydra-core>=1.3", "dvc-dat[expand]"]
 pg = ["psycopg[binary]>=3.1"]
 # Video from a URL (SVP 249); gs:// also needs gcsfs, https:// aiohttp
 video = ["fsspec"]
