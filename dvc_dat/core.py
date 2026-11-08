@@ -28,7 +28,7 @@ from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Tuple
 
 import yaml
 
-from .expand import _builtins, spec_variables
+from .expand import UNIQUE_REF, Template, has_unique, refuse_old_name
 from .ledger import hooks
 from .ledger.codec import NO_DEFAULT, dotted_get, dotted_set
 from .ledger.env import CODE_PATHSPEC
@@ -181,7 +181,7 @@ DAT_TARGET_EXISTS = "dat.target_exists"  # error | use | overwrite | increment
 DAT_DO = "dat.do"                      # the function to run
 DAT_ARGS = "dat.args"                  # its positional arguments
 DAT_KWARGS = "dat.kwargs"              # its keyword arguments
-DAT_DEFAULTS = "dat.defaults"          # expansion variables a keyword does not set
+DAT_DEFAULTS = "dat.defaults"          # plain values, read by a template as ${dat.defaults.x}
 DAT_PREDS = "dat.preds"                # preds the value carries, each an expanded string
 DAT_RUN_AT = "dat.run_at"              # run: when it started
 DAT_RUN_TIME = "dat.run_time"          # run: how long it took
@@ -219,7 +219,8 @@ WORK_FOLDER = "work"                   # its scratch, the working directory whil
 _recording: "contextvars.ContextVar[Tuple[Tuple[DatManager, Dat], ...]]" = \
     contextvars.ContextVar("dvc_dat_recording", default=())
 
-_DEFAULT_PATH_TEMPLATE = "anonymous/Dat{unique}"
+_DEFAULT_PATH_TEMPLATE = "anonymous/Dat${unique:}"
+_NAME_KEY = "_dat_name_"            # where the folder's name template sits while the spec resolves
 
 
 def _kind_name(cls: Type) -> str:
@@ -635,19 +636,20 @@ class DatManager:
         Merge `dat.base`, merge `kwargs` into `dat.kwargs`, run `validate_spec`, place it, write `_spec_.yaml` with
         its keys sorted, so equal specs give the same bytes (no `_result_.yaml` is written). `spec` may be a dict or a
         dotted name loaded through `ns`. `kwargs` are data
-        (1467 Q2 (A)): they reach `dat.kwargs` as given, braces and all (`spec` and `path` are this call's own names,
+        (1467 Q2 (A)): they reach `dat.kwargs` as given, `${` and all (`spec` and `path` are this call's own names,
         never keywords). The folder is `path` if given, else the spec's `dat.name` template, else
-        `anonymous/Dat{unique}`, under the first dat folder; `dat.target_exists` says what happens when the folder is
-        already there -- `FileExistsError` by default, and `use` returns the dat already there. Every `{}` in the spec
-        is expanded here, once, with the same `now` and `unique` the folder got: the built-ins, dotted names, and the
-        expansion variables (SVP 1508), `dat.defaults` overridden by `dat.kwargs` (the spec's own and these keywords),
-        each as the run receives it. `dat.preds` (a mapping) is expanded with the rest, and each value must come out a
-        string, number or bool: they are the dat's own preds, carried onto the value when it is sealed. The expanded
-        spec is what is written, except `dat.name`: the spec stores the path template as given (`path`, else the
-        spec's own), never the path it expanded to (F447 Q36); the folder's path is the dat's name. `dat.kind` is
-        written as the class's dotted `module.qualname`. `run` is `create` and then the run.
+        `anonymous/Dat${unique:}`, under the first dat folder; `dat.target_exists` says what happens when the folder is
+        already there -- `FileExistsError` by default, and `use` returns the dat already there. Every `${…}` in the
+        spec is resolved here, once, with the same moment and count the folder got (doc/expand.md): `${batch}` a node
+        of the merged spec, `${ns:a.b}` a namespace name, `${now:%Y}`, `${unique:}`, `${cwd:}` the built-ins.
+        `dat.preds` (a mapping) is resolved with the rest, and each value must come out a string, number or bool:
+        they are the dat's own preds, carried onto the value when it is sealed. The resolved spec is what is written,
+        except `dat.name`: the spec stores the path template as given (`path`, else the spec's own), never the path it
+        resolved to (F447 Q36); the folder's path is the dat's name. A `dat.name` in the `{…}` grammar retired in 3.0
+        (`{YYYY}`, `{unique}`, `{a.b}`) is `ValueError` naming its new spelling. `dat.kind` is written as the
+        class's dotted `module.qualname`. `run` is `create` and then the run.
 
-        A name an artifact holds is `FileExistsError`; a spec that is not YAML data once expanded is `TypeError`. See
+        A name an artifact holds is `FileExistsError`; a spec that is not YAML data once resolved is `TypeError`. See
         [The spec is the record][the-spec-is-the-record].
         """
         return self._create(spec, path=path, kwargs=kwargs)[0]
@@ -665,30 +667,35 @@ class DatManager:
         spec["dat"]["kind"] = _kind_name(dat_class)
         spec = dat_class.validate_spec(spec)
 
+        own = Dat.get(spec, DAT_NAME, None)
         if path is None:
-            path = Dat.get(spec, DAT_NAME, None) or _DEFAULT_PATH_TEMPLATE
+            path = own or _DEFAULT_PATH_TEMPLATE
         path = str(path)
         template = path
+        refuse_old_name(template)
         target_exists = Dat.get(spec, DAT_TARGET_EXISTS, "error")
-        if target_exists == "overwrite" and path.lower() == "{cwd}":
+        if target_exists == "overwrite" and path.lower() == "${cwd:}":
             target_exists = "error"  # never wipe the working directory
+        if target_exists == "increment" and not has_unique(path):
+            path += UNIQUE_REF       # a plain name counts up as `_2`, `_3`, ...
 
-        now = datetime.now(self.ns._tz())
-        spec, variables = spec_variables(spec, resolver=self.ns.load, tz=self.ns._tz(), now=now)
-        expanded_path, skip_execution, names = self._place(path, variables=variables, target_exists=target_exists,
-                                                           wipe=False, now=now)
+        # one resolve of the spec, the folder's name at its root: `${dat.kwargs.game}` in a name reads the spec,
+        # and the name is resolved again as the count climbs, with the same moment
+        names = Template({**spec, _NAME_KEY: path}, load=self.ns.load, tz=self.ns._tz())
+        expanded_path, skip_execution, count = self._place(path, lambda n: names.name(_NAME_KEY, n),
+                                                           target_exists=target_exists, wipe=False)
         if skip_execution:
             return self.load(expanded_path), True
 
         path = self._resolve_path(expanded_path)
-        own = Dat.get(spec, DAT_NAME, None)
-        spec = self.ns.expand_spec(spec, **names)  # bases merged in _spec_of
+        spec = names.tree(count)
+        spec.pop(_NAME_KEY)
         check_preds(spec)
         if own is not None:
-            Dat.set(spec, DAT_NAME, own)            # the template, never its expansion (Q36)
+            Dat.set(spec, DAT_NAME, own)            # the template, never its resolution (Q36)
         within = _within(os.path.realpath(path), self._dat_folders[0])
         if within:
-            Dat.set(spec, DAT_NAME, template if "{" in template else self._get_path_name(path))
+            Dat.set(spec, DAT_NAME, template if "${" in template else self._get_path_name(path))
             if self._artifact_folder(self._get_path_name(path)) is not None:
                 raise FileExistsError(f"Dat.create: {self._get_path_name(path)!r} is an "
                                       "artifact's name; dats and artifacts share one namespace")
@@ -696,8 +703,8 @@ class DatManager:
             text = yaml.dump(spec, Dumper=_SpecDumper, sort_keys=True)
         except yaml.representer.RepresenterError as e:
             raise TypeError(
-                f"Dat.create: the spec is not data once expanded ({e.args[0]}); a "
-                "`{...}` reference in a spec must resolve to something YAML can hold"
+                f"Dat.create: the spec is not data once resolved ({e.args[0]}); a "
+                "`${...}` reference in a spec must resolve to something YAML can hold"
             ) from None
         if target_exists == "overwrite" and os.path.exists(path):
             self._refuse_delete_on_a_ledger("Dat.create with target_exists: overwrite would delete "
@@ -1303,13 +1310,10 @@ class DatManager:
         """Create a dat and run it, in this world: the one way to run a dat outside a ledger, fixed (2.35, DAT 1049).
 
         `target` is first loaded through `ns` when it is a name. A **spec** (a dict, or a dotted name that loads to
-        one) is a template: `args` replace `dat.args`, `kwargs` merge into `dat.kwargs` and are expansion variables of
-        `dat.name`, `dat.preds` and the rest of the spec, over `dat.defaults` (see `create`, which this is followed by
-        the run); the new dat runs with no call-site arguments, and `dat.target_exists: use` returns the existing one
-        unrun. A **callable** (or a dotted name that loads to one) is called with `args`/`kwargs`. Anything else is
-        `TypeError`. The keywords are also the spec's expansion variables (SVP 1508): an undotted `{name}` anywhere in
-        it, `dat.name` and `dat.preds` included, is `dat.kwargs.name` (the spec's own updated by the call's), else
-        `dat.defaults.name`, else a built-in.
+        one) is a template: `args` replace `dat.args`, `kwargs` merge into `dat.kwargs` (see `create`, which this is
+        followed by the run); the new dat runs with no call-site arguments, and `dat.target_exists: use` returns the
+        existing one unrun. A **callable** (or a dotted name that loads to one) is called with `args`/`kwargs`.
+        Anything else is `TypeError`. A keyword is data: a template reads it by its node, `${dat.kwargs.game}`.
 
         A dat's run calls `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do` names, loaded through this
         world's `ns`, inside `recording(dat)`, with a fresh `run/` sub-dat holding the run's record and `run/work/` as
@@ -1331,7 +1335,7 @@ class DatManager:
             if isinstance(obj, Dat):
                 raise TypeError(f"run: {obj!r} is a dat, made and run once; run its recipe again as a new dat "
                                 "with Dat.manager.run(dat.get_spec(), **kwargs) (a stored spec is expanded "
-                                "already: one holding a literal brace is quoted first, Dat.ns.quote_spec, its "
+                                "already: one holding a literal `${` is quoted first, Dat.ns.quote_spec, its "
                                 "dat.name put back)")
             if callable(obj):
                 return obj(*args, **kwargs)
@@ -1480,44 +1484,30 @@ class DatManager:
             return obj
         raise ImportError(f"dat.kind {kind!r}: no module of it can be imported")
 
-    def _place(
-        self,
-        path_spec: Union[str, Path, None],
-        *,
-        variables: Optional[Dict[str, Any]] = None,
-        target_exists: str = "error",
-        wipe: bool = True,
-        now: Optional[datetime] = None,
-    ) -> Tuple[str, bool, Dict[str, Any]]:
-        """Expand a path template under the dat folder and settle a collision: `(path,
-        skip_execution, names)`.  `skip_execution` is True only for `target_exists: use` on an
-        existing folder; `overwrite` deletes the folder (`wipe=False`: leaves it for the caller to
-        remove, `create` once its spec is made); `increment` (or a `{unique}` in the template)
-        counts up `_2`, `_3`, ...  `names` are what the path expanded with -- the built-ins at
-        `now` (default: this moment), `unique`, and `variables` -- so the spec can be expanded
-        with the very same values."""
-        if path_spec is None:
-            path_spec = _DEFAULT_PATH_TEMPLATE
-        path_spec = str(path_spec)
-        if target_exists == "increment" and "{unique}" not in path_spec:
-            path_spec += "{unique}"      # a plain name counts up as `_2`, `_3`, ...
-        now, count = now or datetime.now(self.ns._tz()), 1
+    def _place(self, path_spec: str, name_at: Callable[[int], str], *, target_exists: str = "error",
+               wipe: bool = True) -> Tuple[str, bool, int]:
+        """Settle where a dat goes, under the dat folder: `(path, skip_execution, count)`. `name_at(count)` is the
+        path template resolved at that count. `skip_execution` is True only for `target_exists: use` on an existing
+        folder; `overwrite` deletes the folder (`wipe=False`: leaves it for the caller to remove, `create` once its
+        spec is made); a `${unique:}` in the template counts up (`increment` appended one) until no folder is
+        there, and `count` is where it stopped, so the spec resolves at the very same count."""
+        counts = has_unique(path_spec)
+        count = 1
         while True:
-            names = {**_builtins(now),
-                     "unique": "" if count == 1 else f"_{count}",
-                     **(variables or {})}
-            expanded = self.ns.expand(path_spec, **names)
+            expanded = name_at(count)
+            if not isinstance(expanded, str) or not expanded:
+                raise TypeError(f"dat.name {path_spec!r} resolved to {expanded!r}, not a path")
             expanded_path = os.path.join(self._dat_folders[0], expanded)
             if not os.path.exists(expanded_path):
-                return expanded_path, False, names
+                return expanded_path, False, count
             elif target_exists == "use":
-                return expanded_path, True, names
+                return expanded_path, True, count
             elif target_exists == "overwrite":
                 self._refuse_wipe(expanded_path, path_spec)
                 if wipe:
                     shutil.rmtree(expanded_path)
-                return expanded_path, False, names
-            elif target_exists == "increment" or "{unique}" in path_spec:
+                return expanded_path, False, count
+            elif counts:
                 count += 1
             else:
                 raise FileExistsError(f"DAT: Create failed, dir {expanded_path!r} exists")
@@ -1858,7 +1848,7 @@ class Dat(Value, metaclass=_DatMeta):
         """Create a dat from ``spec`` at ``path`` (or the spec's ``dat.name`` template); run nothing.
 
         ``Dat.manager.create(spec, path=path, **kwargs)`` in the default world, the keywords merged into
-        ``dat.kwargs`` and expanding ``dat.name`` and ``dat.preds`` over ``dat.defaults``; ``path`` comes first,
+        ``dat.kwargs`` as data (a template reads them as ``${dat.kwargs.x}``); ``path`` comes first,
         positionally. A spec with no ``dat.kind`` gets ``cls``; one naming a class outside ``cls`` is ``TypeError``
         before anything is written.
         """

@@ -4,7 +4,7 @@
     ns.name_of(obj)               # the dotted name that loads back to obj
     ns.mount(folder=..., at=...)  # add names to the namespace, in code
     ns.mounts()                   # the mount table: {prefix: location}
-    ns.expand("runs/{YYYY}/{a.b}", k=v)  # a template filled through these names, a str
+    ns.expand("runs/${now:%Y}/${ns:a.b}/${k}", k=v)   # a template filled through these names, a str
 
 Running is the manager's: `Dat.manager.run(target, *args, **kwargs)` runs a
 dat, a template spec or a plain callable, loading names through this namespace.
