@@ -538,7 +538,7 @@ class TestLedgerDatRun:
     def test_dry_run_shows_the_run(self, tmp_path):
         make_dat_spec_project(tmp_path)
         code, out, _ = run_x("mnt.proj.specs.twice", "n=3", "--dry-run", cwd=tmp_path)
-        assert (code, out) == (0, "rev.run('mnt.proj.specs.twice', n=3)")
+        assert (code, out) == (0, "rev.run('mnt.proj.specs.twice')  with the spec updated by [n=3]")
 
 
 @needs_just
