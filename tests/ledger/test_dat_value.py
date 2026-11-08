@@ -127,21 +127,30 @@ def test_rev_run_kwargs_fork_the_spec_and_path_names_it(coded, world):
 
 
 def test_rev_run_fills_the_name_and_seals_the_preds(coded, world):
-    """SVP 1508: ``dat.kwargs`` and ``dat.defaults`` nodes fill ``dat.name`` and ``dat.preds``; the preds are rows on the
-    sealed value; the memo key keeps the preds' template, not their expansion."""
+    """SVP 1508, 1519 (Dan 2026-11-07): the spec's own ``dat.kwargs`` are its defaults, the call's keywords over them
+    key by key; they fill ``dat.name`` and ``dat.preds``; the preds are rows on the sealed value; the memo key keeps
+    the preds' template, not their expansion, and the merged kwargs."""
     pytest.importorskip("omegaconf")
     CALLS.clear()
-    spec = {"dat": {**SPEC["dat"], "name": "tables/${dat.kwargs.n}${dat.defaults.tag}", "defaults": {"tag": ""},
-                    "preds": {"size": "n${dat.kwargs.n}${dat.defaults.tag}"}}}
-    v = coded.at().run(spec, n=5)
-    assert str(v) == "tables/5" and v.preds["size"] == "n5"
+    spec = {"dat": {**SPEC["dat"], "name": "tables/${dat.kwargs.n}-${dat.kwargs.start}",
+                    "preds": {"size": "n${dat.kwargs.n}s${dat.kwargs.start}"}}}
+    v = coded.at().run(spec, n=5)                                       # start: the spec's own, 1
+    assert str(v) == "tables/5-1" and v.preds["size"] == "n5s1"
     rows = coded.at()
-    assert rows.get(v.subject, "size") == "n5"
-    assert rows.get(v.subject, "db/keys")["dat"]["preds"] == {"size": "n${dat.kwargs.n}${dat.defaults.tag}"}
-    spec["dat"]["defaults"]["tag"] = "x"                                # a new default: a new key, a new name
-    assert str(coded.at().run(spec, n=5)) == "tables/5x" and CALLS == {"build_table": 2}
-    spec["dat"]["defaults"]["tag"] = ""
-    assert coded.at().run(spec, n=5).subject == v.subject and CALLS == {"build_table": 2}
+    assert rows.get(v.subject, "size") == "n5s1"
+    keys = rows.get(v.subject, "db/keys")["dat"]
+    assert keys["preds"] == {"size": "n${dat.kwargs.n}s${dat.kwargs.start}"} and keys["kwargs"] == {"n": 5, "start": 1}
+    over = coded.at().run(spec, n=5, start=3)                           # a keyword over the spec's own
+    assert str(over) == "tables/5-3" and coded.at().get(over.subject, "db/keys")["dat"]["kwargs"] == {"n": 5, "start": 3}
+    spec["dat"]["kwargs"]["start"] = 2                                  # a new default: a new key, a new name
+    assert str(coded.at().run(spec, n=5)) == "tables/5-2" and CALLS == {"build_table": 3}
+    spec["dat"]["kwargs"]["start"] = 1
+    assert coded.at().run(spec, n=5).subject == v.subject and CALLS == {"build_table": 3}
+
+
+def test_a_dat_defaults_node_is_refused(coded, world):
+    with pytest.raises(ValueError, match="dat.defaults is gone"):
+        coded.at().run({"dat": {**SPEC["dat"], "defaults": {"tag": ""}}})
 
 
 def test_rev_run_takes_a_spec_by_name_or_its_run_function_by_name(coded, world):

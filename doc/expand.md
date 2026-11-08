@@ -84,7 +84,7 @@ DAT's wins whichever was imported last.
 | `{unique}` | `${unique:}` |
 | `{cwd}` | `${cwd:}` |
 | `{a.b}`, `{a.b(1, "x")}` | `${ns:a.b}`, `${ns:a.b, 1, x}` |
-| `{game}` (a call variable) | `${dat.kwargs.game}`; kwargs over defaults: `${oc.select:dat.kwargs.game,${dat.defaults.game}}` |
+| `{game}` (a call variable) | `${dat.kwargs.game}` |
 | `{{` | `{` (a brace is text) |
 
 A `dat.name` still in the old grammar is refused at create, naming its new

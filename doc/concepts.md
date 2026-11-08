@@ -62,21 +62,22 @@ dat is run once, by the call that makes it; running its recipe again is
 `Dat.create(spec, **kwargs)` is the same create with no run.
 
 **Keywords are also expansion variables** (SVP 1508). The keywords of `run` and
-`create` -- together with the spec's own `dat.kwargs`, over its `dat.defaults` --
-fill the undotted `{name}` references of the spec, `dat.name` included, each as
-the run receives it. `dat.preds` maps pred names to such templates; expanded at
+`create` merge into the spec's own `dat.kwargs` key by key -- the spec's are its
+defaults, a keyword wins -- and the stored spec holds the merged `dat.kwargs`. A
+template anywhere in the spec, `dat.name` included, reads one as
+`${dat.kwargs.name}`, the value the run receives. `dat.preds` maps pred names to such templates; expanded at
 create, they are preds the dat carries, sealed onto its value on a ledger:
 
 ```yaml
 dat:
-  name: fp/{pipe}/{card}/{game}{posture}
-  defaults: {posture: ""}
-  preds: {card: "{card}", game: "{game}"}
+  name: fp/${dat.kwargs.pipe}/${dat.kwargs.card}/${dat.kwargs.game}${dat.kwargs.posture}
+  kwargs: {posture: ""}
+  preds: {card: "${dat.kwargs.card}", game: "${dat.kwargs.game}"}
 ```
 
 `Dat.create(spec, pipe="1-3-5", card="h100", game="G1")` makes
-`fp/1-3-5/h100/G1`, with `dat.kwargs` those three and the preds `card: h100`,
-`game: G1`.
+`fp/1-3-5/h100/G1`, with `dat.kwargs` those three and `posture: ""`, and the
+preds `card: h100`, `game: G1`; `posture="-hl"` on the call makes `fp/1-3-5/h100/G1-hl`.
 
 ## The seal
 

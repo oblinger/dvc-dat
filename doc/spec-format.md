@@ -31,9 +31,8 @@ dat:
   name: runs/${now:%Y-%m}/exp${unique:}
   do: scripts.run_experiment
   args: [1, 2, 3]
-  kwargs: {verbose: true}
-  defaults: {tag: base}
-  preds: {tag: "${dat.defaults.tag}"}
+  kwargs: {verbose: true, tag: base}
+  preds: {tag: "${dat.kwargs.tag}"}
   target_exists: error
 ```
 
@@ -44,8 +43,7 @@ dat:
 | `name` | The path template for the dat's folder. Used when `Dat.create()` is given no `path`. |
 | `do` | Dotted name of the function to run. |
 | `args` | Positional arguments for it, after the dat itself. |
-| `kwargs` | Keyword arguments for it. |
-| `defaults` | Plain values a template reads by their node, `${dat.defaults.tag}` (SVP 1508); kwargs over defaults is `${oc.select:dat.kwargs.tag,${dat.defaults.tag}}`. |
+| `kwargs` | Keyword arguments for it, and the spec's defaults for them: a keyword on `run` or `create` overrides one key by key, and the stored spec holds the merged `dat.kwargs`. A template reads one as `${dat.kwargs.tag}`. A value a template reads that is not an argument of the function lives under any plain node (`params: {tag: base}`, read `${params.tag}`). A `dat.defaults` node is refused at create (gone in 3.0, SVP 1519). |
 | `preds` | Pred names to templates (SVP 1508), resolved at create like every string; each must come out a string, number or bool. They are the dat's own preds, sealed onto its value on a ledger. |
 | `target_exists` | What to do when the folder is already there. |
 
@@ -130,7 +128,7 @@ namespace, `${unique:}`, the errors — is one page: [Expansion](expand.md).
 ```yaml
 dat:
   kind: dvc_dat.core.Dat
-defaults:
+params:
   optimizer: adam
   epochs: 100
 ```
@@ -141,7 +139,7 @@ defaults:
 dat:
   kind: dvc_dat.core.Dat
   base: catalog.base
-defaults:
+params:
   epochs: 200
 custom_param: true
 ```
@@ -151,7 +149,7 @@ custom_param: true
 ```yaml
 dat:
   kind: dvc_dat.core.Dat
-defaults:
+params:
   optimizer: adam
   epochs: 200
 custom_param: true

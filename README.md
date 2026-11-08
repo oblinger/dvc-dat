@@ -29,9 +29,10 @@ dat = Dat.load("runs/exp1")
 
 `Dat.manager.run(spec, **kw)` creates a dat and runs it; `Dat.create(spec, **kw)`
 creates one and runs nothing; `dat.run` is the record a run leaves. Both take
-keywords: they are merged into `dat.kwargs` and are the variables that fill `{…}`
-in `dat.name`, `dat.preds` and the rest of the spec, over the spec's
-`dat.defaults`. `dat.preds` are preds the dat carries onto the value it seals as.
+keywords: they are merged into `dat.kwargs` over the spec's own, key by key (the
+spec's `dat.kwargs` are its defaults, and the stored spec holds the merged ones),
+and a template reads them as `${dat.kwargs.x}` in `dat.name`, `dat.preds` and the
+rest of the spec. `dat.preds` are preds the dat carries onto the value it seals as.
 A dat is run once, by the call that makes it; its recipe runs again as a new dat
 with `Dat.manager.run(dat.get_spec(), x=1)`. A run saves nothing by itself: `dat.save()` inside it seals the
 dat when the run returns, stamping its `dat.standing`; `dat.standing: rolling`
