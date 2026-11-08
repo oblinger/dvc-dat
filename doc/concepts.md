@@ -347,11 +347,12 @@ never appears in a stored spec: what is on disk is the whole recipe.
 
 ## References: the `{}` grammar
 
-Any string in a spec may carry `{…}` references. `Dat.create` expands them
-once, with the same `now` and `unique` the folder got, and writes the result:
-`get_spec()` returns the stored values, and nothing is expanded on read.
-Expansion is a method of a namespace, `ns.expand(text, **vars)`, so each
-namespace (`Dat.ns`, `manager.ns`, `rev.ns`) expands through its own names.
+Any string in a spec may carry `${…}` references, OmegaConf's grammar.
+`Dat.create` resolves them once, with the same moment and count the folder
+got, and writes the result: `get_spec()` returns the stored values, and
+nothing is resolved on read. Resolving a single string is a method of a
+namespace, `ns.expand(text, **vars)`, so each namespace (`Dat.ns`,
+`manager.ns`, `rev.ns`) resolves `${ns:…}` through its own names.
 
 ```python
 from dvc_dat import Dat
@@ -359,25 +360,23 @@ from dvc_dat import Dat
 ns = Dat.ns
 
 # 'runs/2026-09/exp'
-ns.expand("runs/{YYYY}-{MM}/exp")
+ns.expand("runs/${now:%Y-%m}/exp")
 
-# 'runs/G7/exp': an expansion variable is a keyword
-ns.expand("runs/{game}/exp", game="G7")
+# 'runs/G7/exp': a keyword is a top-level node
+ns.expand("runs/${game}/exp", game="G7")
 ```
 
-- an **undotted** name is an expansion variable: a keyword of the call, else a
-  built-in (`YYYY YY MM DD HH mm SS now cwd unique`); anything else is a `KeyError`
-- a **dotted** name resolves through the namespace's `load`; a function is
-  called (`{meta.commit}`), and `{meta.tag("v", 2)}` calls it with literals
-- `{{` and `}}` are the literal braces; references do not nest
-- `expand` always returns a string; in a spec (`ns.expand_spec`), a value that
-  is *exactly* one reference is replaced by the **object** it names
+- `${a.b}` is a **node** of the spec, an absolute path (`${dat.kwargs.game}`)
+- `${ns:a.b}` resolves through the namespace's `load`; a function is
+  called (`${ns:meta.commit}`), and `${ns:meta.tag, v, 2}` calls it with literals
+- `${now:%Y}`, `${unique:}`, `${cwd:}` are the built-ins; `\${` is a literal `${`
+- a brace without `$` is plain text
+- `expand` always returns a string; in a spec, a value that is *exactly* one
+  reference is replaced by the **object** it names
 
-The whole grammar, `{unique}` and the clock's zone: [Expansion](expand.md).
-
-In YAML, a value that *begins* with `{` must be quoted — `name: "{svp.CONFIG}"`
-— or YAML reads it as a flow mapping and the spec arrives with a dict where a
-string belongs. `validate_spec` names that case.
+The base install expands `${unique:}` alone; the rest needs `dvc-dat[expand]`.
+The whole grammar, the tiers, `${unique:}` and the clock's zone:
+[Expansion](expand.md).
 
 ## Validation
 

@@ -513,7 +513,7 @@ def make_dat_spec_project(root: Path) -> None:
     )
     (root / "proj" / "specs").mkdir()
     (root / "proj" / "specs" / "twice.yaml").write_text(
-        "dat:\n  name: twice/n{unique}\n  do: mnt.proj.runs.twice\n  kwargs: {n: 1}\ncommand: true\n")
+        "dat:\n  name: twice/n${unique:}\n  do: mnt.proj.runs.twice\n  kwargs: {n: 1}\ncommand: true\n")
     git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
     for args in (["add", "."], ["commit", "-q", "-m", "specs"]):
         subprocess.run(git + args, cwd=str(root), check=True, capture_output=True)
