@@ -184,7 +184,7 @@ never by parsing a path.
 A **world** is a `DatManager`: a list of dat folders and the namespace that
 names things in them. A manager owns its `ns` — a `Namespace` bound to it, carrying
 its mounts and its `load` — and everything the manager does (a
-dotted spec, `dat.base`, `{}` expansion, resolving a name to a folder, every
+dotted spec, `dat.base`, `${…}` resolution, resolving a name to a folder, every
 run) goes through that `ns` and no other. Running is the manager's own
 `m.run(...)`; its folders are its own business.
 
@@ -196,7 +196,7 @@ m = DatManager(dat_folders=["/work/dats"])
 m.ns.mount(folder="catalog", at="catalog", relative_to=root)
 m.run("catalog.experiment", lr=0.5)  # created and run inside m
 m.load("runs/experiment1")           # searched in m's folders
-m.ns.expand_spec(spec)               # dat.base merged, {} filled, through m's namespace
+m.ns.expand_spec(spec)               # dat.base merged, ${…} resolved
 ```
 
 The constructor is keyword-only and `dat_folders` is a required list: all are
@@ -345,7 +345,7 @@ so a child names only the entries it changes, adds or removes
 Resolution is recursive and happens before the spec is written, so `dat.base`
 never appears in a stored spec: what is on disk is the whole recipe.
 
-## References: the `{}` grammar
+## References: the `${…}` grammar
 
 Any string in a spec may carry `${…}` references, OmegaConf's grammar.
 `Dat.create` resolves them once, with the same moment and count the folder

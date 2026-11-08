@@ -94,7 +94,7 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
     The default world's namespace: a forwarder to `Dat.manager.ns`, whichever manager that is when it is used. `Dat.ns.mount(...)` and `Dat.ns.load(...)` name things; `ns = Dat.ns` binds a shortcut that follows a later reassignment of `Dat.manager`. It is not callable: `Dat.manager.run("x", lr=0.5)` runs ([Running](#Running); 2.35, DAT 1049). ^ns
 
 **create**`(spec: dict | str | None = None, *, path: str | None = None, **kwargs) -> Dat`
-    Classmethod. `Dat.manager.create(spec, path=path, **kwargs)`, typed, running nothing: the keywords merge into `dat.kwargs` and fill `{…}` in `dat.name`, `dat.preds` and the rest of the spec over `dat.defaults` (SVP 1508); a `dat.kind` naming a class outside `cls` is `TypeError`, checked before any folder is made; with no `dat.kind`, the class it is called on is written. `spec` is a dict or a dotted name; `path` is a template under the first dat folder, default `dat.name`, else `anonymous/Dat{unique}`, with `dat.target_exists` settling a collision. ^create
+    Classmethod. `Dat.manager.create(spec, path=path, **kwargs)`, typed, running nothing: the keywords merge into `dat.kwargs` as data, read by a template as `${dat.kwargs.x}` (SVP 1508; 1519); a `dat.kind` naming a class outside `cls` is `TypeError`, checked before any folder is made; with no `dat.kind`, the class it is called on is written. `spec` is a dict or a dotted name; `path` is a template under the first dat folder, default `dat.name`, else `anonymous/Dat${unique:}`, with `dat.target_exists` settling a collision. ^create
 
 **load**`(name_or_path: str | Path, *, cache_after_load: bool = True) -> Dat`
     Classmethod. `Dat.manager.load(name_or_path)`, as the class its `dat.kind` names; `TypeError` unless the result is an instance of `cls`. Tried absolute, then a mounted dat name, then each dat folder in order. Inside a run, recorded in its `dat.dependencies`. ^load
@@ -103,7 +103,7 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
     Classmethod, called on the class `dat.kind` names, on create and on load. Override it in a subclass; pydantic inside it is your choice and your dependency. Default: a mapping carrying a `dat` mapping, with `dat.kind` / `name` / `do` / `target_exists` strings. ^validate-spec
 
 **get_spec**`() -> dict`
-    The spec — the file as written, every `{}` in it expanded once when the dat was created. ^get-spec
+    The spec — the file as written, every `${…}` in it resolved once when the dat was created. ^get-spec
 
 **get_results**`() -> dict`
     The mutable results dict; `save` writes it. ^get-results
@@ -206,21 +206,21 @@ A template, as a program or a `.yaml` under a mount writes it:
 dat:
   kind: Dat                    # the Dat subclass to load it as
   base: [mymodule.defaults]    # inherit from these; merged, dropped
-  name: runs/{YYYY}-{MM}/base{unique}  # path under the dat folder
+  name: runs/${now:%Y-%m}/base${unique:}  # under the dat folder
   do: mymodule.train.run       # the function that runs it
   args: []                     # its positional arguments
   kwargs: {epochs: 10, lr: 0.1}   # its keyword arguments
   target_exists: error         # error | use | overwrite | increment
-notes: started {now}           # anything outside `dat` is yours
+notes: started ${now:}         # anything outside `dat` is yours
 ```
 
-The file a dat holds is that template expanded once, at create — `name` is the folder it landed in, `{now}` the moment, `base` gone — and it is never rewritten.
+The file a dat holds is that template resolved once, at create — `name` keeps the template (the folder it landed in is the dat's name), `${now:}` is the moment, `base` gone — and it is never rewritten.
 
 | Key | Meaning |
 | --- | --- |
 | `dat.kind` | The `Dat` subclass, by dotted name (written `dvc_dat.core.Dat` by default); on a ledger, also the kind of the dat's `db/value` row |
 | `dat.base` | What to inherit from: a name, a spec, or a list (later wins); removed once merged |
-| `dat.name` | In a template: where to put the dat, under the dat folder, `{}` grammar (`runs/{YYYY}-{MM}/{unique}`). On disk: the folder it landed in |
+| `dat.name` | Where to put the dat, under the dat folder, `${…}` grammar (`runs/${now:%Y-%m}/${unique:}`); stored as the template |
 | `dat.do` | Dotted name of the function to run |
 | `dat.args` / `dat.kwargs` | Its positional and keyword arguments |
 | `dat.target_exists` | `error` (default) · `use` · `overwrite` · `increment` |
@@ -230,20 +230,20 @@ The file a dat holds is that template expanded once, at create — `name` is the
 
 
 
-## Grammar — `{…}` in any template string
+## Grammar — `${…}` in any template string
 
-Expanded once, when the dat is created, with the same `now` and `unique` its folder got; the expanded values are what the file holds ([DAT 1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md) Q7).
+OmegaConf's grammar, resolved once when the dat is created (after `dat.base` is merged), with the same moment and count its folder got; the resolved values are what the file holds ([DAT 1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md) Q7; 1519). The base install resolves `${unique:}` alone; the rest needs `dvc-dat[expand]`.
 
 | Form | Resolves to |
 | --- | --- |
-| `{YYYY} {YY} {MM} {DD} {HH} {mm} {SS} {now} {cwd} {unique}` | The built-ins (undotted names are reserved for them and for the call's keywords) |
-| `{pkg.mod.NAME}` inside a longer string | `Dat.ns.load("pkg.mod.NAME")`, which must be a string or a number — `"{cfg.root}/x"` concatenates |
-| `"{pkg.CONFIG}"` as a whole value | The object itself, inlined as data — quote it in YAML, or the parser reads a mapping; a class or other object here is a `TypeError` at create |
-| `{meta.commit}` naming a function or method | Called with no arguments; its value expands (2.16). A class or callable object is not called |
-| `{meta.tag("v", n=2)}` | Called with those arguments — Python literals only, no `{` inside (2.16) |
-| `{{` `}}` | Literal braces |
-| `{anything_else}` | `KeyError` naming the reference and the built-ins — a stray brace never passes silently |
-| a lone `{` or `}`, `{a.{b}}` | `ValueError` — references do not nest (2.44) |
+| `${batch}`, `${dat.kwargs.game}` | A node of the spec, an absolute path from its root |
+| `${now:%Y}` `${now:}` `${cwd:}` `${unique:}` | The built-ins: the moment (`strftime`; bare: `yy-mm-dd_HH-MM-SS`), the working directory, the counter |
+| `${ns:pkg.mod.NAME}` inside a longer string | `Dat.ns.load("pkg.mod.NAME")` as text — `${ns:cfg.root}/x` concatenates |
+| `${ns:pkg.CONFIG}` as a whole value | The object itself, inlined as data; a class or other object here is a `TypeError` at create |
+| `${ns:meta.commit}` naming a function | Called with no arguments. A class or callable object is not called |
+| `${ns:meta.tag, v, 2}` | Called with those positional literals (a keyword argument is a parse error) |
+| `\${` | A literal `${`; a brace without `$` is text |
+| `${missing}` | OmegaConf's `InterpolationKeyError` at create; a cycle its `InterpolationResolutionError` |
 
 The whole grammar, as `ns.expand`: [Expansion](../../expand.md).
 

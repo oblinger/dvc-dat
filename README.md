@@ -46,7 +46,16 @@ See the [full documentation](doc/index.md) for details.
 pip install -e .
 ```
 
-The base install needs pyyaml alone. The tables (`dt.from_dat`, `Cube`) need `pip install -e ".[tools]"` (pandas), Excel reports `".[excel]"`.
+The base install needs pyyaml alone; it stores a spec as given and expands `${unique:}`, and nothing else.
+
+| Extra | Adds |
+| --- | --- |
+| `expand` | omegaconf: the whole `${…}` grammar in a spec (`${batch}`, `${ns:a.b}`, `${now:%Y}`; doc/expand.md) |
+| `hydra` | hydra-core (brings `expand`): Hydra's override grammar on the command line (`+k=v`, `~k`, `a,b`, `-m`) |
+| `tools` | pandas: the tables (`dt.from_dat`, `Cube`) |
+| `excel` | xlsxwriter (brings `tools`): Excel reports |
+
+`pip install -e ".[hydra]"` is the full DAT.
 
 ## Usage
 

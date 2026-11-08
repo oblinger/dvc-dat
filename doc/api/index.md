@@ -33,13 +33,13 @@ Everything else hangs off those four classes:
 | `Dat.ns` | The default world's namespace, forwarding to `Dat.manager.ns`; not callable |
 | `Dat.cli_main` | The command line (`just run`) for a program's own main |
 | `Dat.merge_dicts` | The zipper merge `dat.base` uses |
-| `ns.expand` / `expand_spec` / `quote_spec` | The `{}` grammar, a method of every namespace |
+| `ns.expand` / `expand_spec` / `quote_spec` | The `${…}` grammar (`dvc_dat.expand`), a method of every namespace |
 
 ## The pages
 
 | Page | What it covers |
 |------|----------------|
-| [Dat, DatManager, DatContainer](core.md) | `dvc_dat.core`: the dat folder, the manager that creates, loads and runs dats, and `merge_dicts`; the `{}` grammar is `Namespace.expand` |
+| [Dat, DatManager, DatContainer](core.md) | `dvc_dat.core`: the dat folder, the manager that creates, loads and runs dats, and `merge_dicts`; the `${…}` grammar is `Namespace.expand` |
 | [Namespace](do.md) | `dvc_dat.do`: `ns`, dotted names to objects, mounts, and `cli_main`, the command line |
 | [Ledger](ledger.md) | `dvc_dat.ledger`: `Ledger`, `Rev`, `Transaction`, `Value`, the decorators `dat.fn`, `dat.warm`, `dat.command`, pin and rerun, the active ledger `L` and `ledgers`, the release helpers, the errors |
 | [Commands](just.md) | `dvc_dat.just`: `@dat.command`, the declared commands that become `just <name>` recipes |

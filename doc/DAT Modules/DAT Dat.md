@@ -53,7 +53,7 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
 # Dat Semantics
 
 ## The spec is the record
-A dat's `_spec_.yaml` is the whole recipe, written once at create and never rewritten. `dat.base` is merged in and dropped, every `{}` reference is expanded with the same `now` and `unique` the folder got, and `dat.name` holds the path template, never the path it expanded to (F447 Q36), so the file on disk is a record of the recipe and the folder is the dat's name. Arguments never ride beside it: `Dat.manager.run(template, *args, **kwargs)` writes them into a new spec (`dat.args` replaced, `dat.kwargs` updated key by key), creates that dat, and runs it with none, so the arguments of every run are in the spec of the dat it produced; `Dat.create(template, **kwargs)` writes them the same way and runs nothing. A dat runs once, when it is made; `Dat.manager.run(d.get_spec(), **kwargs)` runs its recipe again as a new dat. There is no method that edits a spec, and a variation is `merge_dicts(d.get_spec(), {...})` passed to `create`.
+A dat's `_spec_.yaml` is the whole recipe, written once at create and never rewritten. `dat.base` is merged in and dropped, every `${…}` reference is resolved (OmegaConf) with the same moment and count the folder got, and `dat.name` holds the path template, never the path it resolved to (F447 Q36), so the file on disk is a record of the recipe and the folder is the dat's name. Arguments never ride beside it: `Dat.manager.run(template, *args, **kwargs)` writes them into a new spec (`dat.args` replaced, `dat.kwargs` updated key by key), creates that dat, and runs it with none, so the arguments of every run are in the spec of the dat it produced; `Dat.create(template, **kwargs)` writes them the same way and runs nothing. A dat runs once, when it is made; `Dat.manager.run(d.get_spec(), **kwargs)` runs its recipe again as a new dat. There is no method that edits a spec, and a variation is `merge_dicts(d.get_spec(), {...})` passed to `create`.
 
 | `dat` key | Holds |
 | --- | --- |
@@ -69,10 +69,10 @@ A dat's `_spec_.yaml` is the whole recipe, written once at create and never rewr
 | --- | --- |
 | `error` (default) | `FileExistsError` |
 | `use` | Return the existing dat, unrun |
-| `overwrite` | Delete it and create afresh; refused on `{cwd}` |
+| `overwrite` | Delete it and create afresh; refused on `${cwd:}` |
 | `increment` | Count up `_2`, `_3`, … until free |
 
-A `{unique}` in the template increments whatever `target_exists` says. The `{}` grammar: an undotted name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`) or a key of `vars`; a dotted name resolves through `ns.load` and is called when it is a function or method; `{a.b(1, k=2)}` calls it with Python literals; `{{` and `}}` are literal braces. The full file format is [Spec Format](../spec-format.md).
+A `${unique:}` in the template increments whatever `target_exists` says. The `${…}` grammar is OmegaConf's: `${batch}` a node of the spec, `${ns:a.b}` `ns.load` (called when it is a function; `${ns:a.b, 1, x}` with literals), `${now:%Y}`, `${cwd:}`, `${unique:}` the built-ins, `\${` a literal `${`; the base install resolves `${unique:}` alone ([Expansion](../expand.md)). The full file format is [Spec Format](../spec-format.md).
 
 
 
@@ -152,7 +152,7 @@ Dats and artifacts share one namespace and one index, `_index_.json`: every arti
 
 
 ## Invariants
-- The spec on disk is a record: every `{}` is expanded once at create, except `dat.name`, which keeps the path template (never the path it expanded to), and call-site arguments go into a new spec.
+- The spec on disk is a record: every `${…}` is resolved once at create, except `dat.name`, which keeps the path template (never the path it resolved to), and call-site arguments go into a new spec.
 - A sealed (or referenceable) dat is never rewritten: `save` and `run` refuse it.
 - `dat.sha256` hashes the folder without `run/`; a run is not content.
 - Standing is the least of the inputs', capped at `sealed` by dirty code or code outside a checkout.
