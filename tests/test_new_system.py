@@ -162,8 +162,9 @@ class TestDefaultWorld:
     def test_the_package_exports_the_four_classes_the_ledger_handles_and_dat(self):
         assert sorted(dvc_dat.__all__) == ["Dat", "DatContainer", "DatManager", "L", "Namespace", "dat", "ledgers"]
         assert dvc_dat.dat.fn is dvc_dat.ledger.fn.fn and dvc_dat.dat.command is dvc_dat.just.command  # SVP 250 Q4
-        for gone in ("cli_main", "expand", "expand_spec", "merge_dicts"):
+        for gone in ("cli_main", "expand_spec", "merge_dicts"):
             assert not hasattr(dvc_dat, gone)
+        assert not callable(getattr(dvc_dat, "expand", None))     # the expander's module, not a function
 
     def test_subclasses_share_it(self, default_world):
         class Run(Dat):

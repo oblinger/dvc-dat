@@ -1404,13 +1404,14 @@ atexit.register(shutdown)
 
 
 def _warm() -> None:
-    """What every child shares, loaded once before any fork: the ledger's machinery (never a mounted
-    module, never CUDA), the installed distributions' map and the platform record (SVP 1474: probed
+    """What every child shares, loaded once before any fork: the ledger's machinery and the Dat layer (never a
+    mounted module, never CUDA), the installed distributions' map and the platform record (SVP 1474: probed
     once here, so no child runs ``nvidia-smi``)."""
     from . import kept, ledger, namespace, rev, rundat, store, trace, txn, value  # noqa: F401
-    from .. import just  # noqa: F401 - `@command` on a mounted function imports it in the body
+    from .. import do, just  # noqa: F401 - `@command` on a mounted function imports just in the body
     from .env import platform_record
 
+    hooks.layer()                       # the Dat layer: a body's `Dat`, a dat run's world (1519 R1)
     _dist_map()
     platform_record()
 
