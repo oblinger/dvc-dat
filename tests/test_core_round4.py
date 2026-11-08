@@ -1,6 +1,6 @@
 """Core latent bugs (deep scan round 4, 2026-10-27): a fork that wipes or reuses its parent, an overwrite
 that hands back the old object or wipes the old dat before its spec is made, a stored literal brace
-re-expanded, a dat.base cycle, a _spec_.json dat's save, the k=v grammar, a dotted --set under a scalar."""
+re-expanded, a dat.base cycle, a _spec_.json dat's save, the k=v grammar, a dotted override under a scalar."""
 import json
 from pathlib import Path
 
@@ -159,15 +159,15 @@ def test_failed_overwrite_create_keeps_old_dat(world):
 
 
 
-# --- F13: a --set dotted key under a scalar it set itself escapes as a traceback ------------
+# --- F13: a dotted key under a scalar the line set itself is a CLI error, not a traceback ------------
 def test_set_dotted_under_scalar_is_a_cli_error(world):
     from dvc_dat.do import _cmd_do
     world.ns.mount(at="tmpl13", value={"dat": {}})
     # _cmd_do turns a malformed line into exit 1 + "run: ..." -- it catches ValueError only
-    assert _cmd_do(["tmpl13", "--set", "a=1", "--set", "a.b=2"]) == 1
+    assert _cmd_do(["tmpl13", "p.a=1", "p.a.b=2"]) == 1
 
 
-# --- --set / --json set one spec key: a dict or a named list replaces, never merges (cli.md § Options) ---
+# --- an override sets the key it names: a dict or a named list replaces, never merges (cli.md § Overrides) ---
 _SEEN = {}
 
 
@@ -175,15 +175,14 @@ def _see(dat, *a, **k):
     _SEEN["spec"] = dat.get_spec()
 
 
-def test_set_and_json_set_the_key_they_name(world):
+def test_an_override_sets_the_key_it_names(world):
     from dvc_dat.do import _cmd_do
     world.ns.mount(at="see_fn", value=_see)
-    world.ns.mount(at="tmpl5", value={"dat": {"do": "see_fn"}, "cfg": {"a": 1},
-                                      "stages": [{"name": "x", "k": 1}, {"name": "y"}]})
-    assert _cmd_do(["tmpl5", "--json", "cfg={}", "--json", 'stages=[{"name": "z"}]',
-                    "--set", "dat.title=T"]) == 0
+    world.ns.mount(at="tmpl5", value={"dat": {"do": "see_fn"}, "p": {"cfg": {"a": 1},
+                                      "stages": [{"name": "x", "k": 1}, {"name": "y"}]}})
+    assert _cmd_do(["tmpl5", "p.cfg={}", 'p.stages=[{"name": "z"}]', "dat.title=T"]) == 0
     spec = _SEEN["spec"]
-    assert spec["cfg"] == {} and spec["stages"] == [{"name": "z"}]
+    assert spec["p"]["cfg"] == {} and spec["p"]["stages"] == [{"name": "z"}]
     assert spec["dat"]["do"] == "see_fn" and spec["dat"]["title"] == "T"     # a dotted key sets one leaf
 
 

@@ -40,7 +40,7 @@ means the same thing from every directory under the project, whether or not
 
 | Command | Does |
 |---------|------|
-| `x TARGET [ARG ...] [KEY=VALUE ...]` | `Dat.manager.run(TARGET, *ARGS, **KWARGS)`. The return value prints on stdout when it is not `None`. |
+| `x TARGET [ARG ...] [OVERRIDE ...] [-m]` | `Dat.manager.run` of `TARGET` with the overrides applied; with `-m`, once per sweep point. The return value prints on stdout when it is not `None`. |
 | `just mounts [PREFIX]` · `x --list [PREFIX]` | Every mounted name that starts with `PREFIX`, with what it loads to. The library mounts `dt` (`dvc_dat.dat_tools`) itself; `x dt.list` is the same command. |
 | `x --info` | The version, the dat and artifact folders, the config folder and the `.datconfig.yaml` in force. |
 | `x --version` | The version. |
@@ -53,56 +53,89 @@ target named `list` runs like any other.
 ## Arguments
 
 `TARGET` is a dotted name resolved by `ns.load` — the running program's
-`ns.mount(...)` names first, then the longest importable prefix. What happens next is the library's rule, not the
-CLI's: a **callable** is called, a **template spec** is forked — the fixed
-arguments become the new spec's `dat.args`, the `KEY=VALUE` pairs update its
-`dat.kwargs` key by key — and the forked spec creates a dat, which runs.
+`ns.mount(...)` names first, then the longest importable prefix. A
+**template spec** gets the overrides applied: `KEY=VALUE` sets a key, an
+undotted `KEY` meaning `dat.kwargs.KEY` (what `x k=v` has always meant) and a
+dotted one a path from the spec's root (`dat.title=T`, `model.width=64`); the
+fixed arguments become its `dat.args`; the spec creates a dat, which runs. A
+**callable** is called with the fixed arguments and the undotted pairs as
+keywords; a dotted key on one is an error. A one-segment top-level key has no
+spelling (1519 Q4).
 
 Every fixed argument and every `KEY=VALUE` value is read as **JSON, else the text exactly as typed** — the one `k=v` grammar of every dat command line (`dvc_dat.do.arg_value`):
 
 ```bash
-# Dat.manager.run("train", 7, True)
+# dat.args [7, True]
 x train 7 true
 
-# Dat.manager.run("train", epochs=7, lr=0.01)
+# dat.kwargs epochs=7, lr=0.01
 x train epochs=7 lr=0.01
 
-# Dat.manager.run("train", tags=["a", "b"], cfg={"a": 1}, name="7", seed=None)
+# tags ["a", "b"], cfg {"a": 1}, name "7", seed None
 x train 'tags=["a","b"]' 'cfg={"a":1}' name='"7"' seed=null
 
-# not JSON, so the string as typed: a bare word, a date, an empty value
+# not JSON: the string as typed (a word, a date, empty)
 x train note=hello start=2026-01-01 note=
+
+# a path into the spec: one leaf, replaced whole
+x my_letters dat.title=Quickie
 ```
 
-A call-site argument is literal data: its braces are never expanded, so `x train 'pattern=\d{3}'` hands the run `\d{3}` and `fmt={{x}}` arrives as `{{x}}`. The spec's own `{…}` templates and `--set` values expand as before.
+An override's value is **spec text**, as in Hydra: `ocr_model=${ns:asset.ocr}`
+reaches the spec as that string and resolves when the dat is created
+([Expansion](expand.md)); a brace without `$` is text, so `'pattern=\d{3}'`
+arrives as `\d{3}`. A keyword passed from Python (`Dat.manager.run(t, k=v)`)
+is data and is never resolved.
 
-A word is a keyword argument when it starts with `NAME=` (a Python identifier
-followed by `=`); anything else is a fixed argument. `--` ends the options, so
-every word after it is a fixed argument even when it looks like one of them:
+`--` ends the options, so every word after it is a fixed argument even when
+it looks like an override:
 
 ```bash
 x echo -- --not-an-option
 ```
 
-The `TARGET` itself is never parsed.
+The `TARGET` itself is never parsed. `--set` and `--json` were removed in
+3.0: a dotted `KEY=VALUE` is the same edit.
+
+## Hydra's override grammar
+
+With `dvc-dat[hydra]` the line also speaks [Hydra's override
+grammar](https://hydra.cc/docs/advanced/override_grammar/basic/), parsed by
+Hydra's own `OverridesParser`:
+
+| Word | Does |
+| --- | --- |
+| `+KEY=VALUE` | add a key that is not there (there already: an error) |
+| `++KEY=VALUE` | add it or change it |
+| `~KEY` | delete it (not there: an error) |
+| `KEY=a,b` · `KEY=range(1,3)` · `KEY=choice(a,b)` | under `-m` a sweep, one point per value; without it the text as typed |
+| `-m` · `--multirun` | run every point, the product of the sweeps, first override slowest |
+
+The first word that needs the grammar — a `+`, `++` or `~` prefix, or `-m`
+(under which a value with a top-level `,` or a sweep function is a sweep) —
+sends every override of the line through Hydra's parser, whose values are Hydra's (`'a b'` quoted,
+`[a,b]` a list, `{x:1}` a dict). Without the extra that word is refused by
+name: `'+horizon=3000' needs Hydra's override grammar; install
+dvc-dat[hydra]`. A JSON list or mapping (`[1,2]`, `{"a":1}`) keeps its commas
+inside, and without `-m` a comma is text (`modules=a,b`), as it always was. Each point is one spec and one dat; on a
+ledger each point is one `rev.run`, so a point computed before is a `hit`.
+
+```bash
+x cfg.run.graded game=G1 +horizon=3000
+# 4 dats: G1 and G4, each on two bases
+x cfg.run.graded -m game=G1,G4 \
+    dat.base=cfg.run.t455-b1,cfg.run.t455-b8
+```
+
+Launcher and sweeper plugins (Submitit, Joblib, Optuna) are not used: the
+serial loop over the points is the whole sweeper.
 
 ## Options
 
 | Option | Does |
 |--------|------|
-| `--set DOTTED.KEY=VALUE` | Set one spec key of a template before it forks; repeat the flag for more, applied in order. The value is JSON, else the text as typed, and replaces what the key held: a dict or a list is not merged into it, so `--json cfg={}` empties `cfg`. |
-| `--json DOTTED.KEY=JSON` | The same, with the value parsed as JSON; repeatable, and mixes freely with `--set`. |
-| `--dry-run` | Print the `Dat.manager.run(...)` call this line would make, and any `--set` / `--json` updates, without making it. |
+| `--dry-run` | Print the call this line would make (each point's, with its overrides), without making it. |
 | `--usage` | Print `TARGET`'s own usage — a `<base>.usage` value, else the spec's `usage` key — else the general usage. |
-
-`--set` / `--json` update a **template spec**; using them on a target that is
-a plain function is an error.
-
-```bash
-x my_letters --set "dat.title=Re-configured letterator"
-x my_letters --set dat.title=Quickie --set start=100 --set end=110
-x my_letters --json rules='[[2, "my_letters.triple_it"]]'
-```
 
 ## With a ledger: `run` evaluates
 
@@ -127,7 +160,7 @@ x model-G1.yaml alias=model/prod             # names the result
 ```
 
 `alias=NAME` is the run's `path=`: it names the result, and a `Dat`'s
-folder is built there. `--set` / `--json` update a spec's keys. A target
+folder is built there. On a dat spec the overrides edit the spec. A target
 that is not a ledger function, and a positional argument, are refused.
 It runs in the active ledger, as `Ledger()` opens it: `DAT_LEDGER` (a
 name registered on root, or a location), else the file's `default:`.
