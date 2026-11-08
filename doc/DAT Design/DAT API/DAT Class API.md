@@ -184,7 +184,7 @@ A dat whose folder holds dats.
 
 ## Running
 
-`Dat.manager.run(target, *args, **kwargs)` is the one way to run a dat outside a ledger, a fixed `DatManager` method ([DAT Manager API](DAT%20Manager%20API.md) § run). With no arguments a spec runs as written; with arguments it **forks** — `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key and are the expansion variables of `dat.name`, `dat.preds` and the rest of the spec over `dat.defaults` (SVP 1508) — and the forked spec creates the dat that runs. `Dat.create(spec, path=None, **kwargs)` is that create alone.
+`Dat.manager.run(target, *args, **kwargs)` is the one way to run a dat outside a ledger, a fixed `DatManager` method ([DAT Manager API](DAT%20Manager%20API.md) § run). With no arguments a spec runs as written; with arguments it **forks** — `args` replace `dat.args`, `kwargs` update `dat.kwargs` key by key (the spec's own are the defaults; the stored spec holds the merged ones), read by `dat.name`, `dat.preds` and the rest of the spec as `${dat.kwargs.x}` (SVP 1508, 1519) — and the forked spec creates the dat that runs. `Dat.create(spec, path=None, **kwargs)` is that create alone.
 
 | `target` is … | With no `args`/`kwargs` | With `args`/`kwargs` |
 | --- | --- | --- |

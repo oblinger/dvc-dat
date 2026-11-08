@@ -181,7 +181,6 @@ DAT_TARGET_EXISTS = "dat.target_exists"  # error | use | overwrite | increment
 DAT_DO = "dat.do"                      # the function to run
 DAT_ARGS = "dat.args"                  # its positional arguments
 DAT_KWARGS = "dat.kwargs"              # its keyword arguments
-DAT_DEFAULTS = "dat.defaults"          # plain values, read by a template as ${dat.defaults.x}
 DAT_PREDS = "dat.preds"                # preds the value carries, each an expanded string
 DAT_RUN_AT = "dat.run_at"              # run: when it started
 DAT_RUN_TIME = "dat.run_time"          # run: how long it took
@@ -646,8 +645,10 @@ class DatManager:
         they are the dat's own preds, carried onto the value when it is sealed. The resolved spec is what is written,
         except `dat.name`: the spec stores the path template as given (`path`, else the spec's own), never the path it
         resolved to (F447 Q36); the folder's path is the dat's name. A `dat.name` in the `{…}` grammar retired in 3.0
-        (`{YYYY}`, `{unique}`, `{a.b}`) is `ValueError` naming its new spelling. `dat.kind` is written as the
-        class's dotted `module.qualname`. `run` is `create` and then the run.
+        (`{YYYY}`, `{unique}`, `{a.b}`) is `ValueError` naming its new spelling, and so is a `dat.defaults` node
+        (gone in 3.0: the spec's own `dat.kwargs` are its defaults, the call's keywords over them key by key, and the
+        spec written holds the merged `dat.kwargs`). `dat.kind` is written as the class's dotted `module.qualname`.
+        `run` is `create` and then the run.
 
         A name an artifact holds is `FileExistsError`; a spec that is not YAML data once resolved is `TypeError`. See
         [The spec is the record][the-spec-is-the-record].
@@ -673,6 +674,9 @@ class DatManager:
         path = str(path)
         template = path
         refuse_old_name(template)
+        if "defaults" in spec["dat"]:
+            raise ValueError("dat.defaults is gone (3.0, SVP 1519): write the value under dat.kwargs, "
+                             "or under any plain node and read it by its path")
         target_exists = Dat.get(spec, DAT_TARGET_EXISTS, "error")
         if target_exists == "overwrite" and path.lower() == "${cwd:}":
             target_exists = "error"  # never wipe the working directory

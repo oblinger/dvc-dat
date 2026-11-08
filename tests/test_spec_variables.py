@@ -1,6 +1,7 @@
 """SVP 1508, on the `${…}` grammar (1519 R3): the keywords of `run` and `create` merge into `dat.kwargs` as data, a
-template names the node it reads (`${dat.kwargs.game}`), `dat.defaults` is a plain node (`${dat.defaults.x}`;
-kwargs over defaults is `oc.select`); `dat.preds` is a map of pred names to templates, resolved at create and
+template names the node it reads (`${dat.kwargs.game}`); the spec's own `dat.kwargs` are its defaults, the call's
+keywords over them key by key, and the spec written holds the merged kwargs (`dat.defaults` is gone, Dan
+2026-11-07); `dat.preds` is a map of pred names to templates, resolved at create and
 carried as the dat's own preds."""
 import sys
 from pathlib import Path
@@ -15,8 +16,8 @@ pytest.importorskip("omegaconf")
 from dvc_dat import Dat, DatManager  # noqa: E402
 
 FP = {"dat": {"name": "fp/${dat.kwargs.pipe}/${dat.kwargs.card}/${dat.kwargs.game}"
-                      "${oc.select:dat.kwargs.posture,${dat.defaults.posture}}",
-              "defaults": {"posture": ""},
+                      "${dat.kwargs.posture}",
+              "kwargs": {"posture": ""},
               "preds": {"card": "${dat.kwargs.card}", "game": "${dat.kwargs.game}",
                         "made": "${dat.kwargs.pipe}-${dat.kwargs.card}"}}}
 
@@ -37,20 +38,24 @@ def test_create_keywords_fill_the_name_and_the_preds(m):
     assert dat.get_path_name() == "fp/1-3-5/h100/G1"
     spec = on_disk(dat)["dat"]
     assert spec["name"] == FP["dat"]["name"]                                   # the template is stored
-    assert spec["kwargs"] == {"pipe": "1-3-5", "card": "h100", "game": "G1"}
+    assert spec["kwargs"] == {"posture": "", "pipe": "1-3-5", "card": "h100", "game": "G1"}
     assert spec["preds"] == {"card": "h100", "game": "G1", "made": "1-3-5-h100"}
-    assert dict(dat.preds) == {"pipe": "1-3-5", "card": "h100", "game": "G1", "made": "1-3-5-h100"}
+    assert dict(dat.preds) == {"posture": "", "pipe": "1-3-5", "card": "h100", "game": "G1", "made": "1-3-5-h100"}
     assert dat.run is None                                                     # create runs nothing
 
 
-def test_a_keyword_overrides_a_default_through_oc_select(m):
+def test_a_keyword_overrides_the_specs_own_kwarg(m):
     dat = m.create(FP, pipe="1-3-5", card="h100", game="G1", posture="-highlights")
     assert dat.get_path_name() == "fp/1-3-5/h100/G1-highlights"
 
 
 def test_the_specs_own_kwargs_are_nodes_and_a_keyword_wins(m):
     spec = {"dat": {"name": "out/${dat.kwargs.x}-${dat.kwargs.y}", "kwargs": {"x": 1, "y": 2}}}
-    assert m.create(spec, y=3).get_path_name() == "out/1-3"
+    dat = m.create(spec, y=3, z=4)
+    assert dat.get_path_name() == "out/1-3"
+    assert on_disk(dat)["dat"]["kwargs"] == {"x": 1, "y": 3, "z": 4}              # the merged kwargs are stored
+    out = m.run({"dat": {"do": "echo", "kwargs": {"x": 1, "y": 2}}}, y=3)
+    assert out["kwargs"] == {"x": 1, "y": 3}                                    # and are what the run receives
 
 
 def test_a_spec_kwarg_is_the_value_the_run_receives(m):
@@ -72,9 +77,14 @@ def test_run_fills_the_same_way_and_runs(m):
     assert out == {"name": "runs/G4", "kwargs": {"game": "G4"}}
 
 
-def test_the_rest_of_the_spec_reads_the_defaults(m):
-    dat = m.create({"dat": {"defaults": {"game": "G1"}}, "title": "fingerprint of ${dat.defaults.game}"}, path="t")
+def test_a_template_only_value_lives_under_a_plain_node(m):
+    dat = m.create({"params": {"game": "G1"}, "title": "fingerprint of ${params.game}"}, path="t")
     assert on_disk(dat)["title"] == "fingerprint of G1"
+
+
+def test_a_dat_defaults_node_is_refused(m):
+    with pytest.raises(ValueError, match=r"dat\.defaults is gone \(3\.0, SVP 1519\)"):
+        m.create({"dat": {"defaults": {"game": "G1"}}}, path="t")
 
 
 def test_a_missing_node_is_one_clear_error(m):
