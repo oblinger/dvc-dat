@@ -159,8 +159,8 @@ custom_param: true
 
 `dat.base` is gone from the result — the stored spec stands on its own.
 Resolution is recursive, and an override wins even when its value is `0`, `""`
-or `false`. `Dat.ns.expand_spec(spec)` returns the merged spec with every `{}`
-filled, which is what `create` stores (bar `dat.name`).
+or `false`. `Dat.ns.expand_spec(spec)` returns the merged spec with every `${…}`
+resolved, which is what `create` stores (bar `dat.name`).
 
 A list inherits from several specs at once, merged left to right:
 

@@ -230,4 +230,4 @@ version = ns.load("config.version")
 
 - [Core Concepts](concepts.md) — how `run:` and the import root fit in
 - [Spec Format](spec-format.md) — what templates contain
-- [Expansion](expand.md) — `ns.expand`: a `{dotted.name}` in a template resolves through these mounts
+- [Expansion](expand.md) — `ns.expand`: a `${ns:dotted.name}` in a template resolves through these mounts
