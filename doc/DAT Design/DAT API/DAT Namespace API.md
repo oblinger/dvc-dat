@@ -1,7 +1,7 @@
 ---
 description: "the namespace `ns` on `Dat`, a revision and a transaction: your program's main, mounts, the mount table — the advanced half"
 ---
-:>> [DAT](../../DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Namespace API](ha://p/DAT%20Namespace%20API) 
+:>> [DAT](../../DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Namespace API](ha://pop/DAT~Namespace~API) 
 # DAT Namespace API
 The advanced half of `Dat.ns`: what a dotted name resolves to, how to make one mean something other than a Python import, and what that costs — the plain surface is [DAT API](DAT%20API.md). A ledger has the same object at a revision, `rev.ns`, and in a transaction, `t.ns` (§ On a ledger).
 

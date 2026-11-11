@@ -800,6 +800,21 @@ print(L.at()["schema/tape", "db/version"])  # 0.0.9: add went back
 # `add` can set a clock backwards; `bump` is the helper that only
 # goes up.
 
+
+# %% [markdown]
+# ### The spellings of `at`
+#
+# Five spellings, one revision each: the top, a number, a digit string,
+# a release version, a tag. A day is not one; a revision's `db/time`
+# row dates it, and a day lookup walks those stamps.
+
+# %%
+with L.transaction(by="human:dan", lock=10) as t:
+    bump(t, "db")                                 # the release, 0.0.1
+    t.add("db", "db/tag", "2026-Q4-official")     # a name for this revision
+top = L.at().id
+for which in (None, top - 1, str(top - 1), "0.0.1", "2026-Q4-official"):
+    print(f"at({which!r}):", L.at(which).id)
 # %%
 with L.transaction(by="agent:release", lock=5) as t:
     v = t["db/repo/demo-game/demo_game", "db/version"]

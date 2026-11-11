@@ -2,11 +2,11 @@
 description: "2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace"
 ---
 
-| -[DAT API](DAT%20API.md)-         | : 2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace<br>→ [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](ha://p/DAT%20API) |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Class API](DAT%20Class%20API.md) | `from dvc_dat import Dat`: the `Dat` class, `Dat.ns`, the spec file, the config                                                                                                                             |
-| [CLI](DAT%20CLI.md)               | `just run TARGET …` / `x TARGET …` from a shell                                                                                                                                                             |
-| ...                               | [DAT Manager API](DAT%20Manager%20API.md),  [DAT Namespace API](DAT%20Namespace%20API.md),                                                                                                                  |
+| -[DAT API](DAT%20API.md)-         | : 2.16: the contract of dvc-dat — one example, then the class, the manager, the CLI and the namespace<br>→ [DAT](../../DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](ha://pop/DAT~API) |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Class API](DAT%20Class%20API.md) | `from dvc_dat import Dat`: the `Dat` class, `Dat.ns`, the spec file, the config                                                                                                                 |
+| [CLI](DAT%20CLI.md)               | `just run TARGET …` / `x TARGET …` from a shell                                                                                                                                                 |
+| ...                               | [DAT API Hooks](DAT%20API%20Hooks.md),  [DAT Manager API](DAT%20Manager%20API.md),  [DAT Namespace API](DAT%20Namespace%20API.md),                                                              |
 
 | [Namespace API](DAT%20Namespace%20API.md)           | the namespace under `Dat.ns`: your program's main, mounts, spec surgery — the advanced half                                                                                                                 |
 | [Manager API](DAT%20Manager%20API.md) | `DatManager`: the one object — folders, artifacts, `run`, recording, its `ns`                                                                                                                                    |

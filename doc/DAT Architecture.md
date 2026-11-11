@@ -1,7 +1,7 @@
 ---
 description: "three subsystems and where they meet"
 ---
-:>> [DAT](DAT.md) → [DAT Architecture](ha://p/DAT%20Architecture) 
+:>> [DAT](DAT.md) → [DAT Architecture](ha://pop/DAT~Architecture) 
 # DAT Architecture
 `dvc_dat` keeps two kinds of record. A **dat** is a folder that is its
 own recipe: a spec, the files a run wrote, and a result, sealed under a

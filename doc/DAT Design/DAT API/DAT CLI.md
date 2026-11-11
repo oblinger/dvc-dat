@@ -1,7 +1,7 @@
 ---
 description: "`just run TARGET …` (`x TARGET …`) from a shell"
 ---
-:>> [DAT](../../DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT CLI](ha://p/DAT%20CLI) 
+:>> [DAT](../../DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT CLI](ha://pop/DAT~CLI) 
 # DAT CLI
 `just run TARGET …` — `x TARGET …`, by `bin/x` — is `Dat.manager.run(TARGET, …)` from a shell.
 

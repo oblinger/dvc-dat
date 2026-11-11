@@ -1,4 +1,4 @@
-:>> [DAT](DAT.md) → [DAT spec-format](ha://p/DAT%20spec-format) 
+:>> [DAT](DAT.md) → [DAT spec-format](ha://pop/DAT~spec-format) 
 # Spec File Format
 The `_spec_.yaml` and `_result_.yaml` file formats.
 
@@ -104,54 +104,12 @@ the folder got — and the expanded spec is what `_spec_.yaml` holds. A spec on
 disk is a record: `get_spec()` is the file and `{now}` is the moment it was
 made. The one exception is `dat.name`, which keeps the path template as
 given, never the path it expanded to; the folder the dat landed in is its
-name (`get_path_name()`).
-A reference inside a longer string must resolve to a string or a number; a
-reference that is the whole value may be any data YAML can hold, and is
-inlined. A reference to anything else — a class, an object — is a
-`TypeError` at create, and no folder is made. A reference to a **function**
-is a call: its return value is what lands in the spec.
+name (`get_path_name()`). A reference to a class or an object inside a longer
+string is a `TypeError` at create, and no folder is made.
 
-| Reference | Resolves to |
-|-----------|-------------|
-| `{YYYY}` `{YY}` | 4- and 2-digit year |
-| `{MM}` `{DD}` | month, day |
-| `{HH}` `{mm}` `{SS}` | hour, minute, second |
-| `{now}` | timestamp `yy-mm-dd_HH-MM-SS` |
-| `{cwd}` | the working directory, full path |
-| `{unique}` | empty, then `_2`, `_3`, … |
-| `{a.b.c}` | whatever `ns.load("a.b.c")` returns — called, when that is a function or method |
-| `{a.b.c(1, "x", k=2)}` | `ns.load("a.b.c")` called with those arguments |
-| `{{` `}}` | a literal `{` and `}` |
-
-**Calls.** A dotted name that resolves to a function or method — a Python
-function, a builtin, a method, a function mounted with `ns.mount(value=fn)` —
-is called with no arguments: `{meta.commit}` puts the commit in the spec.
-Parentheses call it with arguments, which are Python literals only (numbers,
-strings, `True` `False` `None`, and lists, tuples or dicts of them — no names,
-no expressions, and no `{` `}` inside a reference); they also call a class or
-any other callable. A class or a callable object without parentheses is not
-called: a mounted proxy such as SVP's `asset` keeps answering `{asset.ocr}`
-with its string. A function is called each time its reference is expanded —
-once for the folder name and once for the spec when both carry it.
-
-An undotted name that is neither a built-in nor a key of the `vars` dict passed
-to `expand()` is a `KeyError`, and cannot be called. Called directly,
-`expand()` returns the referenced object itself for a string that is *exactly*
-one reference. At create the rule above holds: data is inlined, and a class
-or other object is refused.
-
-**YAML quoting.** A value that *begins* with `{` must be quoted:
-
-```yaml
-dat:
-  name: "{svp.RUN_DIR}/exp"
-```
-
-Unquoted, YAML reads `{svp.RUN_DIR}` as a flow mapping and the spec arrives
-with a dict where a string belongs; `validate_spec` rejects it and says so.
-
-`expand(text, vars=None)` and `expand_spec(spec, vars=None)` are public — use
-them instead of writing a parser.
+The grammar itself — the built-ins, dotted names and calls through the
+namespace, `{unique}`, YAML quoting, the errors — is one page:
+[Expansion](expand.md).
 
 ## Inheritance: `dat.base`
 

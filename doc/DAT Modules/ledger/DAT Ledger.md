@@ -1,7 +1,7 @@
 ---
 description: "The ledger half of dvc_dat: quads read as of a revision, values stored by content, value functions evaluated with their dependencies traced. Source: `dvc_dat/ledger/`."
 ---
-:>> [DAT](../../DAT%20Track/DAT.md) → [DAT doc Modules Ledger](ha://p/DAT%20doc%20Modules%20Ledger) 
+:>> [DAT](../../DAT.md) → [DAT doc Modules Ledger](ha://pop/DAT~doc~Modules~Ledger) 
 # DAT Ledger
 The ledger is a project's history: every fact a quad `(rev, subject, predicate, object)`, every read a frozen view as of one revision, every value stored by its content and found by its preds.
 
@@ -13,15 +13,15 @@ The ledger is a project's history: every fact a quad `(rev, subject, predicate, 
 | Methods     |                                                                                                                                                                                                                                                                                                            |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ledger      | [path](#^path), [at](#^at), [transaction](#^transaction), [close](#^close)                                                                                                                                                                                                                                 |
-| Rev         | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [history](#^history), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [ns](#^ns), [run](#^run)                                                                |
+| Rev         | [id](#^id), [ledger](#^rev-ledger), [tx](#^tx), [`[]`](#^--getitem--), [get](#^get), [in](#^--contains--), [all](#^all), [history](#^history), [refs](#^refs), [values](#^values), [value](#^value), [select](#^select), [load](#^load), [ns](#^ns), [run](#^run)                                          |
 | Ref         | [rev](#^rev), [subject](#^subject), [name](#^name), [aliases](#^aliases), [hash](#^hash), [type](#^type), [preds](#^preds), [sealed_at](#^sealed-at), [load](#^ref-load)                                                                                                                                   |
 | Row         | [rev](#^row-rev), [subject](#^row-subject), [predicate](#^predicate), [object](#^object), [added](#^added)                                                                                                                                                                                                 |
-| Transaction | [tx](#^transaction-tx), [previous_rev](#^previous-rev), [ns](#^transaction-ns), [rev](#^transaction-rev), [add](#^add), [update](#^update), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--)                                                                                                                   |
+| Transaction | [tx](#^transaction-tx), [previous_rev](#^previous-rev), [ns](#^transaction-ns), [rev](#^transaction-rev), [add](#^add), [update](#^update), [`[]=`](#^--setitem--), [remove](#^remove), [`del []`](#^--delitem--)                                                                                          |
 | Value       | [preds](#^value-preds), [subject](#^value-subject), [rev](#^value-rev), [sealed](#^sealed), [hash](#^value-hash), [dependencies](#^dependencies), [Dependencies](#^value-dependencies), [encode](#^encode), [decode](#^decode), [seal](#^seal), [same_as](#^same-as), [matches](#^matches), [diff](#^diff) |
 | Value.Blob  | [obj](#^obj)                                                                                                                                                                                                                                                                                               |
 | Value.Table | [table](#^table-table)                                                                                                                                                                                                                                                                                     |
 | Dat         | [path](#^dat-path), [preds](#^dat-preds), [sealed_at_path](#^sealed-at-path), [decode](#^dat-decode), [kind_ok](#^kind-ok), [spec_kind](#^spec-kind)                                                                                                                                                       |
-| Fn          | [name](#^fn-name), [module](#^module), [code](#^fn-code), [mount](#^mount), [env](#^env), [signature](#^signature), [kind](#^fn-kind), [()](#^--call--) |
+| Fn          | [name](#^fn-name), [module](#^module), [code](#^fn-code), [mount](#^mount), [env](#^env), [signature](#^signature), [kind](#^fn-kind), [()](#^--call--)                                                                                                                                                    |
 
 
 This page is the package `dvc_dat.ledger` as a caller sees it: the figure above, each public class and its members, then the rules that span them. The dat half, a folder that is its own recipe, is [DAT Dat](../DAT%20Dat.md); how the two halves meet is the [architecture](../../DAT%20Architecture.md). The four notebooks run it end to end: [ledger-triples](../../DAT%20Demos/ledger-triples.ipynb), [ledger-values](../../DAT%20Demos/ledger-values.ipynb), [ledger-dats](../../DAT%20Demos/ledger-dats.ipynb), [ledger-just](../../DAT%20Demos/ledger-just.ipynb); [api-walkthrough](../../DAT%20Demos/api-walkthrough.ipynb) is the one API sheet covering all four parts. From a shell, `just values`, `value`, `history`, `why`, `set`, `index` and `bump` are one call each of this interface, shipped in `dvc_dat.just` beside `run` ([Command Line](../../cli.md) § The ledger verbs).
@@ -555,6 +555,22 @@ with ledger.transaction(by="human:dan") as t:
 ledger.at()["game/G1", "court"]      # "south"
 ledger.at(1)["game/G1", "court"]     # "north", forever
 ```
+
+`at` takes five spellings and each is one revision:
+
+```python
+L.at().id                     # 2, the top
+L.at(1).id                    # 1, a revision number
+L.at("1").id                  # 1, a digit string is a number
+L.at("0.1.0").id              # the release that set db/version 0.1.0
+L.at("2026-Q4-official").id   # the revision a db/tag row named
+```
+
+A day is not a spelling: every revision is dated by its `db/time` row, and
+the last revision written by a day's end is a walk over those stamps,
+sv-pipe's `rev_at(day)` today, `at("2026-10-15")` with
+[1501](../../DAT%20Track/DAT%20Track.md). A set version is a tag,
+`bb/smoke/10m@2.0`: an exact-match key, never ordered as text.
 
 One `with` block is one revision: its rows land together on exit, in body order, followed by the `db/tx/<rev>` rows (`db/by`, `db/time`, and each keyword given `transaction()`), which a body that wrote nothing still writes. `db/by` is the writer as given: a `str` row, or a dict as one `json:` row in canonical JSON (sorted keys, compact), which `rev[rev.tx, "db/by"]` returns as the dict and `just history` prints as that canonical text. A ledger's first transaction also writes `(db, db/format, dvc-dat-ledger/1)`. An exception in the body, a refusal at commit, or `LockTimeout` writes nothing, unseals every value the body sealed and removes the bytes it stored. Revisions are dense and monotonic, so a reader never sees half a transaction.
 
