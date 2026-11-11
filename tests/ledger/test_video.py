@@ -229,6 +229,30 @@ def test_the_audio_is_kept_by_the_seal_and_the_path(world, tmp_path):
     assert duration(back.path(), "v") == pytest.approx(duration(src, "v"), abs=0.05)     # B-frames: no gap at a join
 
 
+def video_timing(path):
+    """The first video stream's frame count, average frame rate and duration, as ffprobe reads them."""
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries",
+                          "stream=nb_read_packets,avg_frame_rate,duration", "-of", "json", str(path)],
+                         capture_output=True, text=True, check=True).stdout
+    s = json.loads(out)["streams"][0]
+    return int(s["nb_read_packets"]), s["avg_frame_rate"], s["duration"]
+
+
+def test_the_joined_path_has_the_sources_frame_rate_and_duration(world, tmp_path):
+    """SVP 249, 2026-11-11: G1's ``path()`` read 29.986 fps and 1.488 s more than its mp4 (30 fps), 328 segments.
+    The concat join advanced each segment by its whole length, audio overhang included, and the first segment's
+    timestamps start one B-frame delay late. A source shaped like a game's (30 fps H.264 with B-frames, 48 kHz AAC,
+    keyframes every 31 frames, off the audio frame grid) joins back to the same frames, frame rate and duration."""
+    src = tmp_path / "src.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=30",
+                    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "6",
+                    "-c:v", "libx264", "-g", "31", "-bf", "2", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "64k",
+                    str(src)], check=True)
+    back = saved(world, Video.from_path(src))
+    assert len(back._info()["segments"]) == 6
+    assert video_timing(back.path()) == video_timing(src) == (180, "30/1", "6.000000")
+
+
 def test_every_audio_stream_is_kept(world, tmp_path):
     two = tmp_path / "two.mp4"
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(with_audio(tmp_path / "src.mp4")), "-f", "lavfi", "-i",

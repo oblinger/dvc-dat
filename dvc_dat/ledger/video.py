@@ -102,10 +102,32 @@ def _container(args: List[str]) -> str:
     return ".mp4" if done.returncode == 0 else ".mkv"
 
 
-def _listing(paths: List[Path], dest: Path) -> None:
-    """An ``ffmpeg`` concat listing of ``paths``."""
+def _start(path: Path) -> Fraction:
+    """The seconds at which the first video stream of ``path`` starts: its first presentation timestamp."""
+    out = _run([_tool("ffprobe"), "-v", "error", "-select_streams", "v:0", "-show_entries",
+                "stream=start_pts,time_base", "-of", "json", str(path)], f"probing the start of {path}")
+    s = json.loads(out)["streams"][0]
+    return int(s["start_pts"]) * _rate(s["time_base"])
+
+
+def _us(seconds: Fraction) -> int:
+    return round(seconds * 1_000_000)
+
+
+def _time(us: int) -> str:
+    """Microseconds as the seconds a concat listing reads."""
+    return f"{'-' if us < 0 else ''}{abs(us) // 1_000_000}.{abs(us) % 1_000_000:06d}"
+
+
+def _listing(parts: List[Tuple[Path, Fraction, Fraction, Fraction]], dest: Path) -> None:
+    """An ``ffmpeg`` concat listing of ``parts``, each ``(path, video start, from, to)``: the file's own timestamps
+    start at its video's start, and it covers ``[from, to)`` seconds of the joined video. Without the two the concat
+    demuxer starts each file at its earliest stream and advances by its longest, so an audio packet running past
+    a segment's last frame, or a first segment's B-frame delay, moves every later frame (SVP 249, 2026-11-11).
+    The ends are rounded to microseconds, the listing's unit, never the lengths, so the rounding never adds up."""
     quote = chr(39) + chr(92) + chr(39) + chr(39)
-    dest.write_text("".join(f"file '{str(p).replace(chr(39), quote)}'\n" for p in paths))
+    dest.write_text("".join(f"file '{str(p).replace(chr(39), quote)}'\ninpoint {_time(_us(start))}\n"
+                            f"duration {_time(_us(b) - _us(a))}\n" for p, start, a, b in parts))
 
 
 def _rate(text: str) -> Fraction:
@@ -358,10 +380,18 @@ class Video(Value):
         return Path(self._info()["segments"][0]["file"]).suffix
 
     def _join(self, segments: List[int], dest: Path, maps: List[str], extra: Iterable[str] = ()) -> None:
-        """The streams ``maps`` of ``segments``, joined without re-encoding into ``dest``."""
+        """The streams ``maps`` of ``segments`` (consecutive), joined without re-encoding into ``dest``, each frame at
+        its place in the manifest's frame rate."""
+        info = self._info()
+        fps, segs = _rate(info["fps"]), info["segments"]
+        base = int(segs[segments[0]]["start"])
+        parts = []
+        for i in segments:
+            p, a = self._segment(i), int(segs[i]["start"]) - base
+            parts.append((p, _start(p), Fraction(a) / fps, Fraction(a + int(segs[i]["frames"])) / fps))
         listing = dest.with_name(f"{dest.name}.list-{uuid.uuid4().hex[:8]}")
         try:
-            _listing([self._segment(i) for i in segments], listing)
+            _listing(parts, listing)
             _run([_tool("ffmpeg"), "-nostdin", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
                   *extra, *maps, "-c", "copy", "-fflags", "+bitexact", "-flags:v", "+bitexact",
                   *(["-movflags", "+faststart", "-f", "mp4"] if dest.suffix == ".mp4" else ["-f", "matroska"]),
