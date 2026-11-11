@@ -55,6 +55,8 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 ::: dvc_dat.ledger.register_policy
 
+::: dvc_dat.ledger.register_read_guard
+
 ::: dvc_dat.ledger.register_store
 
 ::: dvc_dat.ledger.Remote

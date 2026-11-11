@@ -35,14 +35,22 @@ In a sandbox worker (SVP 1521 Q3 (A)) ``ledgers`` is the caller's view, shipped 
 (``shipped_section``, ``adopt_section``): its names as the caller has them, or, when the caller never read root, the
 root's location, read there on the first name asked. Every handle it gives is read-only; a body's
 ``ledgers.<name>``, ``dat.at`` and ``dat.load`` all come through it.
+
+**The read guard** (SVP 1596): ``register_read_guard(guard)`` makes ``guard(name)`` run before ``ledgers[name]``,
+``ledgers.<name>``, ``dat.at("<name>@<rev>")`` and ``dat.load("<name>@<rev>:…")`` open the ledger ``name``; it refuses
+by raising, and its exception is the caller's. One guard per process (registering again replaces it; ``None``
+removes it). It crosses to a sandbox worker by its import path (``module:qualname``) and is imported there at the
+body's first named open, so it is a module-level function. ``L``, a ``Ledger(location)`` and a ``Ref`` key's ledger
+are not opened by name and are not guarded.
 """
 
 from __future__ import annotations
 
+import importlib
 import os
 from collections.abc import MutableMapping
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 from .errors import LedgerError
 from .ledger import CONFIG, ENV, ROOT, Ledger, Target, _find, _is_name, _target, _values, _walk_up, opened, \
@@ -61,6 +69,72 @@ _asserted: Set[Tuple[str, str]] = set()
 Section = Optional[Dict[str, Any]]
 #: In a sandbox worker: the view adopted, and how a location is opened there.
 _worker: Optional[Tuple[Section, Any]] = None
+
+
+#: The read guard (SVP 1596): called with a ledger's name before a named open; ``None``, none. In a sandbox worker it is
+#: imported from ``_guard_ref`` at the first named open.
+_guard: Optional[Callable[[str], Any]] = None
+#: The guard's import path, ``module:qualname``: what crosses to a sandbox worker.
+_guard_ref: Optional[str] = None
+
+
+def _resolve_guard(ref: str) -> Callable[[str], Any]:
+    module, _, qualname = ref.partition(":")
+    obj: Any = importlib.import_module(module)
+    for part in qualname.split("."):
+        obj = getattr(obj, part)
+    return obj
+
+
+def register_read_guard(guard: Optional[Callable[[str], Any]]) -> None:
+    """Make ``guard`` the read guard: ``guard(name)`` runs before ``ledgers[name]``, ``ledgers.<name>``, ``dat.at`` and
+    ``dat.load`` open the ledger ``name``, in this process and in a sandbox worker, and refuses the open by raising.
+    Registering again replaces it; ``None`` removes it.
+
+    The guard crosses to a sandbox worker by its import path, so it is a module-level function its module's import
+    finds; anything else is ``TypeError``.
+    """
+    global _guard, _guard_ref
+    if guard is None:
+        _guard = _guard_ref = None
+        return
+    if not callable(guard):
+        raise TypeError(f"a read guard is a function of a ledger's name, not {guard!r}")
+    ref = f"{getattr(guard, '__module__', None)}:{getattr(guard, '__qualname__', None)}"
+    try:
+        found = None if ref.startswith("__main__:") else _resolve_guard(ref)
+    except (ImportError, AttributeError):
+        found = None
+    if found is not guard:
+        raise TypeError(f"a read guard crosses to a sandbox worker by its import path, and {guard!r} is not found "
+                        f"at {ref!r}: register a module-level function of an importable module")
+    _guard, _guard_ref = guard, ref
+
+
+def check_read(name: str) -> None:
+    """The read guard on ``name`` (nothing when none is registered): before a named open."""
+    global _guard
+    if _guard is None and _guard_ref is not None:   # a sandbox worker: the caller's guard, at its first use
+        from .sandbox import unguarded
+
+        with unguarded():
+            _guard = _resolve_guard(_guard_ref)
+    if _guard is not None:
+        from .sandbox import unguarded
+
+        with unguarded():                           # the caller's policy, not the body: its reads are not the body's
+            _guard(name)
+
+
+def shipped_read_guard() -> Optional[str]:
+    """The read guard's import path, as a request ships it to a sandbox worker."""
+    return _guard_ref
+
+
+def adopt_read_guard(ref: Optional[str]) -> None:
+    """In a sandbox worker: the caller's read guard, by its import path, imported at the first named open."""
+    global _guard, _guard_ref
+    _guard, _guard_ref = None, ref
 
 
 def _handle(target: Any, given: Any, base: Path, cfg: Optional[Path]) -> Ledger:
@@ -198,6 +272,7 @@ class Ledgers(MutableMapping):
     """
 
     def __getitem__(self, name: str) -> Ledger:
+        check_read(name)
         return _open(_view(), name)
 
     def __setitem__(self, name: str, ledger: Ledger) -> None:
@@ -276,9 +351,10 @@ def handle_at(location: str) -> Ledger:
 
 def ledger_named(name: str) -> Ledger:
     """The ledger a ``<ledger>@<rev>`` names: one open in this process under that name, else ``ledgers[name]``;
-    ``KeyError`` or ``LedgerError`` when neither knows it."""
+    ``KeyError`` or ``LedgerError`` when neither knows it. The read guard first."""
+    check_read(name)
     led = opened(name)
-    return led if led is not None else ledgers[name]
+    return led if led is not None else _open(_view(), name)
 
 
 def rev_named(text: str, near: Optional[Ledger] = None) -> Any:
@@ -391,4 +467,4 @@ class _Active(Ledger):
 ledgers = Ledgers()
 L: Ledger = _Active()
 
-__all__ = ["ledgers", "L", "Ledgers"]
+__all__ = ["ledgers", "L", "Ledgers", "register_read_guard"]

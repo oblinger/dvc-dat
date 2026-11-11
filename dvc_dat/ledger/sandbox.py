@@ -44,7 +44,8 @@ already or not, with what that module's first import pulled in.
 
 Another ledger from a body (SVP 1521 Q3 (A)): the caller's ``ledgers`` view crosses on the request (``shipped_section``), and
 ``ledgers.<name>``, ``dat.at("<name>@<rev>")`` and ``dat.load("<name>@<rev>:<value>")`` open that ledger read-only
-(``read_only_ledger``), once per child, SQLite or Postgres; a ``Ref`` or sealed ``Value`` key on another ledger crosses
+(``read_only_ledger``), once per child, SQLite or Postgres, after the caller's read guard (SVP 1596: shipped by its
+import path, ``shipped_read_guard``, imported at the body's first named open); a ``Ref`` or sealed ``Value`` key on another ledger crosses
 with its location and opens the same way. Opening one adds its art store to ``STATE.reads``, its database to
 ``STATE.foreign`` (a ``sqlite3.connect`` there passes only as ``mode=ro``) and its endpoint to the network hook's.
 What a read must place (a ``Dat``'s folder, bytes fetched from the value's store) goes to a folder of the child's, gone
@@ -111,7 +112,7 @@ from .env import Env, current_env, platform_items
 from .errors import ConfinedNetwork, ConfinedProcess, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
 from . import hooks
-from .named import shipped_section
+from .named import shipped_read_guard, shipped_section
 from .fn import (Fn, alias_reads, attach_run, drop_work, fn_mark, fn_mark_in_source, mounted_name, mounts_at,
                  mounts_hash, path_template, run_trace, save_run, seal_entry, wrap_result)
 
@@ -1321,7 +1322,7 @@ class Server:
         class and the caller's dat world (its folders, built afresh there as a ``DatManager``)."""
         req = {"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
                "keys": {k: encode_key(v, plain) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env),
-               "ledgers": shipped_section()}
+               "ledgers": shipped_section(), "read_guard": shipped_read_guard()}
         if fn.kind == "dat":
             req.update({"template": fn._template, "returns": fn._returns, "world": hooks.layer()["world_of"]()})
         return _result(plain, self._ask(req), seal)
@@ -1500,7 +1501,7 @@ def serve(req: Dict[str, Any], out: Any) -> None:
     """In the forked child: confine this process, run the call, reply on ``out``."""
     from .env import Checkout, platform_record, platform_tag, set_env_provider
     from .ledger import Ledger
-    from .named import adopt_section, handle_at
+    from .named import adopt_read_guard, adopt_section, handle_at
     from .rev import Ref
 
     try:
@@ -1520,6 +1521,7 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             STATE.reads = STATE.reads + [os.path.realpath(f) for f in w["dat_folders"]] + (
                 [os.path.realpath(w["art_folder"])] if w["art_folder"] else [])
         adopt_section(req["ledgers"], read_only_ledger)
+        adopt_read_guard(req["read_guard"])
 
         def key(v: Any) -> Any:
             if not (isinstance(v, tuple) and v and v[0] == "__ref__"):

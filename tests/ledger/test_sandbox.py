@@ -65,6 +65,12 @@ PKG = {
             return v
     '''),
     "sbx/stage/helper.py": "def double(x):\n    return 2 * x\n",
+    "sbx/stage/guard.py": textwrap.dedent('''
+        def refuse(name):
+            """The read guard of the tests (SVP 1596): ``far`` is refused."""
+            if name == "far":
+                raise PermissionError(f"{name}: refused by the read guard")
+    '''),
     "sbx/stage/runs.py": textwrap.dedent('''
         import os
         from pathlib import Path
@@ -1383,6 +1389,62 @@ def test_a_nested_run_under_another_mount_sees_the_same_ledgers(other):
     assert v.obj == {"inner": {"seen": {"game": 2}}}
     inner = L.at().run("mnt.flatpkg.foreign.seen", ledger="games", name="G1", seal="get")
     assert foreign_items(inner)[0][0].endswith(f"@{second}") and foreign_items(v) == []
+
+
+
+# --- SVP 1596: the read guard, called with a ledger's name before a named open --------------------------------------
+@pytest.fixture
+def guarded(other):
+    """``other`` with ``sbx.stage.guard.refuse`` registered (``far`` refused), removed after."""
+    from dvc_dat.ledger import register_read_guard
+    from sbx.stage.guard import refuse
+
+    register_read_guard(refuse)
+    try:
+        yield other
+    finally:
+        register_read_guard(None)
+
+
+def test_the_read_guard_refuses_a_named_open_in_the_caller(guarded):
+    from dvc_dat import dat, ledgers
+    from dvc_dat.ledger import register_read_guard
+
+    _L, games, first, _second = guarded
+    for open_far in (lambda: ledgers.far, lambda: ledgers["far"], lambda: dat.at("far@1"),
+                     lambda: dat.load("far@1:G1")):
+        with pytest.raises(PermissionError, match="far: refused by the read guard"):
+            open_far()
+    assert ledgers.games.at(first).load("G1").obj == {"game": 1}               # another name opens
+    register_read_guard(None)
+    assert ledgers.far.at().id >= 0                                             # no guard: it opens
+
+
+@pytest.mark.parametrize("fn,keys", [("by_name", {"ledger": "far", "at": None, "name": "G1"}),
+                                     ("by_reference", {"ref": "far@1:G1"}),
+                                     ("by_revision", {"at": "far@1", "name": "G1"}),
+                                     ("nested_foreign", {"ledger": "far", "name": "G1"})])
+def test_the_read_guard_refuses_a_named_open_in_a_sandboxed_body(guarded, fn, keys):
+    """The guard crosses to the worker by its import path (a nested child under another mount too), and its
+    exception is the caller's."""
+    L, games, _first, second = guarded
+    if isinstance(games.path, str) and fn in ("by_reference", "by_revision"):
+        pytest.skip("each Postgres test ledger is a schema of one database: its name is the database's, no entry's")
+    with pytest.raises(PermissionError, match="far: refused by the read guard"):
+        L.at().run(f"mnt.sbx.stage.fns.{fn}", **keys)
+    v = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=second, name="G1")
+    assert v.obj == {"seen": {"game": 2}}                                       # another name opens
+
+
+def test_a_read_guard_is_a_function_its_import_path_finds(sbx):
+    from dvc_dat.ledger import register_read_guard
+
+    def local(name):
+        pass
+
+    for bad in (local, lambda name: None, "sbx.stage.guard.refuse"):
+        with pytest.raises(TypeError):
+            register_read_guard(bad)
 
 
 def test_rev_has_one_run_and_ns():
