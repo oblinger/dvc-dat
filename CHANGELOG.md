@@ -8,6 +8,7 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **A read guard on named ledgers (SVP 1596; minor).** New `dvc_dat.ledger.register_read_guard(guard)`: `guard(name)` runs before `ledgers[name]`, `ledgers.<name>`, `dat.at` and `dat.load` open the ledger `name`, and refuses by raising; in a sandboxed body too, where it crosses by its import path and is imported at the first named open. One per process; `None` removes it; a guard its import path does not find is `TypeError`.
 - **`dat.defaults` is gone; a spec's own `dat.kwargs` are its defaults (1519, Dan 2026-11-07, superseding decision A2; breaking, no version bump until the owner cuts one).** Two places for a default (`dat.kwargs` and `dat.defaults`, joined by `${oc.select:…}`) was one too many: the spec's `dat.kwargs` are the defaults, the keywords of `run`/`create` override them key by key, the stored spec holds the merged `dat.kwargs`, and a template reads `${dat.kwargs.x}`. A value a template reads that is not an argument of the function lives under any plain node (`params.tag`, read `${params.tag}`). A spec carrying `dat.defaults` is `ValueError` at create naming the change. **Removed:** `core.DAT_DEFAULTS`. Migration: move each `dat.defaults.x` to `dat.kwargs.x` (or a plain node), and `${oc.select:dat.kwargs.x,${dat.defaults.x}}` to `${dat.kwargs.x}`. Docs: README, concepts, expand, spec-format, DAT Class API, DAT Manager API.
 
 ## 3.0.0 — 2026-11-07

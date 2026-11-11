@@ -32,7 +32,7 @@ from .policy import register_policy
 from .remote import Remote, register_store
 from .helpers import SourceBump, bump, bump_source
 from .ledger import Ledger
-from .named import L, ledgers
+from .named import L, ledgers, register_read_guard
 from .rev import Head, Ref, Rev, Row
 from .txn import Transaction, attr
 from .value import Value, ledger_class
@@ -40,7 +40,7 @@ from .video import Video
 
 __all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Transaction", "Value", "Video", "Fn", "FnMark", "Code",
            "LedgerNamespace", "Rerun",
-           "ledger_class", "register_policy", "register_store", "Remote", "bump", "bump_source", "SourceBump", "attr",
+           "ledger_class", "register_policy", "register_read_guard", "register_store", "Remote", "bump", "bump_source", "SourceBump", "attr",
            "LedgerError", "Multiple", "NotEvaluated", "NotClean", "NotPinned", "NotCopied", "SpecOnly", "Differed",
            "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "ConfinedProcess", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
            "AliasLoop", "SealBroken"]
