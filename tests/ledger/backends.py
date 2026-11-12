@@ -7,8 +7,10 @@ default address; unset, the ``pg`` cases skip; set and unreachable, they fail; p
 refused without ``DVC_DAT_TEST_PG_ALLOW_5433=1``.
 """
 
+import os
 import uuid
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest
@@ -66,7 +68,19 @@ def dsn(folder: Path) -> str:
     return f"{url}?options=-csearch_path%3D{schema}"
 
 
-def make(backend: str, folder: Path) -> Ledger:
+def make(backend: str, folder: Path, cache: Optional[Path] = None) -> Ledger:
+    """A fresh ledger. ``cache``: a Postgres ledger's cache root for this handle, as if it were opened on another
+    machine (the session's ledgers are schemas of one database, so they share a name and, by default, a cache)."""
     if backend == "sqlite":
         return Ledger(folder, create=True)
-    return Ledger(dsn(folder), create=True)
+    if cache is None:
+        return Ledger(dsn(folder), create=True)
+    old = os.environ.get("DAT_CACHE")
+    os.environ["DAT_CACHE"] = str(cache)
+    try:
+        return Ledger(dsn(folder), create=True)
+    finally:
+        if old is None:
+            del os.environ["DAT_CACHE"]
+        else:
+            os.environ["DAT_CACHE"] = old

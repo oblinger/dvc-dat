@@ -323,7 +323,7 @@ def published(path: Path) -> Dat:
 
 
 def dest_of(backend, tmp_path):
-    return backends.make(backend, tmp_path / "dest")
+    return backends.make(backend, tmp_path / "dest", cache=tmp_path / "dest-cache")
 
 
 def held(L, subject):

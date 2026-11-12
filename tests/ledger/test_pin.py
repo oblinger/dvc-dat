@@ -9,6 +9,7 @@ commit, a squash or a switch to a clone shows at once.
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -228,7 +229,7 @@ def test_rerun_reproduces_from_a_fresh_clone_after_the_branch_is_squashed_and_co
     assert isinstance(out, Rerun) and out.outcome == REPRODUCED and out.reproduced
     assert out.hash == out.expected == v.hash and out.reproducible is None and out.tag == tag_of(w.commit)
     assert out.worktree.is_dir() and git(out.worktree, "rev-parse", "HEAD") == w.commit
-    assert out.worktree.resolve().is_relative_to((w.tmp / "ledger").resolve()), \
+    assert out.worktree.resolve().is_relative_to(Path(w.L._store.art.root).parent.resolve()), \
         "the worktree lives with the ledger's art store"          # `L.path` is a DSN on Postgres (SVP 1546)
     again = w.L.at().rerun(v)
     assert again.worktree == out.worktree and again.reproduced     # reused, not fetched again
