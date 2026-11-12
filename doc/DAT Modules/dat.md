@@ -11,7 +11,7 @@ The code is `dvc_dat/core.py` (`Dat`, `DatContainer`, `DatManager`) and
 DatContainer, DatManager, Namespace` beside the ledger handles `L`
 and `ledgers`. Part of the
 [architecture](../DAT%20Architecture.md); a `Dat` is also a ledger value,
-`ledger.Dat` the same class ([DAT Ledger](ledger/DAT%20Ledger.md), DAT 1038).
+`ledger.Dat` the same class ([DAT Ledger](ledger/DAT%20Ledger.md), DAT1038).
 
 ## Public surface
 
