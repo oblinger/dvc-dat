@@ -29,11 +29,11 @@ Read `docs/concepts.md`, `docs/spec-format.md`, `docs/mount-commands.md` in the 
 
 - **[[SVP]]** (sv-pipe, SportsVisio) is the consumer driving the 2026-09 semantics change. Older consumers: the SV alg2 metrics work (the 2024 plan on [[DAT]]), Juan's and Martin's metric types.
 - **DAT owns the repo.** A consumer never commits to `dvc-dat`; it files what it needs with `state drop DAT` (or a Backlog row here if it is the user), and DAT makes the change against *every* consumer, not the one asking. The same rule [[OBU]] and [[DKS]] run.
-- **A semantics change is a public API change.** It gets a design note here (a feature doc minted with `state define DAT Backlog F+`, landing in `DAT Track/DAT Backlog/` — the 2.0 one is F007), a compatibility answer for each consumer, a version bump that says what it is (semver: breaking → major — but not twice in a day: a breaking change to a line that has been public only hours ships as a minor, Dan 2026-09-22, which is why 3.0.x became 2.2.0), a `CHANGELOG` line, and the docs pages updated in the same change. Nothing ships with the docs describing the old behaviour.
+- **A semantics change is a public API change.** It gets a design note here (a feature doc minted with `state define DAT Backlog F+`, landing in `Track/Backlog/` — the 2.0 one is F007), a compatibility answer for each consumer, a version bump that says what it is (semver: breaking → major — but not twice in a day: a breaking change to a line that has been public only hours ships as a minor, Dan 2026-09-22, which is why 3.0.x became 2.2.0), a `CHANGELOG` line, and the docs pages updated in the same change. Nothing ships with the docs describing the old behaviour.
 
 ## Docs vs Code — How to Work
 
-- **Design / spec changes** → `DAT Design/` (architecture, interface) and feature docs in `DAT Track/DAT Backlog/`; **planning** → `DAT Track/` (Backlog, Inbox, Pebbles)
+- **Design / spec changes** → `Design/` (architecture, interface) and feature docs in `Track/Backlog/`; **planning** → `Track/` (Backlog, Inbox, Pebbles)
 - **Public docs** → `docs/*.md` in the repo (mkdocs; `site/` is the build output, do not hand-edit)
 - **Source** → `~/ob/grove/dvc-dat/dvc_dat/`
 - Standing vault rules apply: `~/ob/kmr/CLAUDE.md`, `~/ob/kmr/SYS/CLAUDE.md`, and every anchor page's dispatch table is machine-owned below its separator.

@@ -10,7 +10,7 @@ result is always a string. `expand` is a method of a namespace because the
 namespace is the one thing it needs beyond the clock, so each namespace
 expands through its own names.
 
-*Lands with [1500](DAT%20Track/DAT%20Track.md) (2026-11-01). Until then the
+*Lands with [1500](Track/Track.md) (2026-11-01). Until then the
 same grammar runs as `Dat.manager.expand(text, vars=None)` and `{unique}`
 counts only in a dat's `dat.name` and a function result's `path=`.*
 

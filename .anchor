@@ -2,8 +2,8 @@ slug: DAT
 traits:
 - code
 page: doc/DAT.md
-backlog: doc/DAT Track/DAT Backlog/DAT Backlog.md
-inbox: doc/DAT Track/DAT Inbox/DAT Inbox.md
+backlog: doc/Track/Backlog/Backlog.md
+inbox: doc/Track/Inbox/Inbox.md
 stones:
   pebbles:
     member: titled
@@ -20,3 +20,4 @@ stones:
     counter: own
   inbox:
 namespace: true
+bare_facets: true

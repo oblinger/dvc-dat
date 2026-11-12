@@ -1,7 +1,7 @@
 ---
 description: "`from dvc_dat import Dat`: the `Dat` class, `Dat.manager.run`, `Dat.ns`, the spec file, the config"
 ---
-:>> [DAT](../../DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Class API](ha://pop/DAT~Class~API) 
+:>> [DAT](../../DAT.md) → [DAT Design](../Design.md) → [DAT API](DAT%20API.md) → [DAT Class API](ha://pop/DAT~Class~API) 
 # DAT Class API
 The `Dat` class — what a run makes, and everything you can do with one.
 
@@ -229,7 +229,7 @@ The file a dat holds is that template expanded once, at create — `name` is the
 
 ## Grammar — `{…}` in any template string
 
-Expanded once, when the dat is created, with the same `now` and `unique` its folder got; the expanded values are what the file holds ([DAT1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md) Q7).
+Expanded once, when the dat is created, with the same `now` and `unique` its folder got; the expanded values are what the file holds ([DAT1009](../../Track/Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md) Q7).
 
 | Form | Resolves to |
 | --- | --- |
@@ -290,4 +290,4 @@ Expanded once, when the dat is created, with the same `now` and `unique` its fol
 
 
 # BRIEF
-- 2026-09-23 — rewritten to the 2.3 + 2.4 surface ([DAT103](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/103%20-%20API%20refactor.md)) in Dan's module-doc member format: `Dat` and `DatContainer` as module docs, module functions as their own table; `DataConfig` removed; `Dat.load` lost `cwd`; `Dat.manager` a plain assignable class attribute; config renamed `.datconfig.yaml` with `art_folder`. The old § Dats on disk / One dat / Strings and configuration were folded into the member blocks; § Running, § Spec file, § Grammar, § Configuration kept as reference. Decided on [DAT1008](../../DAT%20Track/DAT%20Backlog/1008%20-%20Should%20configure%28%29%20disappear,%20and%20should%20the%20static%20namespace%20be%20the.md), [DAT1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md), [DAT1014](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/1014%20-%20Fold%20DataConfig%20into%20DatManager;%20settle%20the%20manager's%20public%20attributes.md), [DAT102](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/102%20-%20Dependencies%20by%20capture,%20and%20artifacts,%20in%20DAT%20itself.md).
+- 2026-09-23 — rewritten to the 2.3 + 2.4 surface ([DAT103](../../Track/Backlog/103%20-%20API%20refactor/103%20-%20API%20refactor.md)) in Dan's module-doc member format: `Dat` and `DatContainer` as module docs, module functions as their own table; `DataConfig` removed; `Dat.load` lost `cwd`; `Dat.manager` a plain assignable class attribute; config renamed `.datconfig.yaml` with `art_folder`. The old § Dats on disk / One dat / Strings and configuration were folded into the member blocks; § Running, § Spec file, § Grammar, § Configuration kept as reference. Decided on [DAT1008](../../Track/Backlog/1008%20-%20Should%20configure%28%29%20disappear,%20and%20should%20the%20static%20namespace%20be%20the.md), [DAT1009](../../Track/Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md), [DAT1014](../../Track/Backlog/103%20-%20API%20refactor/1014%20-%20Fold%20DataConfig%20into%20DatManager;%20settle%20the%20manager's%20public%20attributes.md), [DAT102](../../Track/Backlog/103%20-%20API%20refactor/102%20-%20Dependencies%20by%20capture,%20and%20artifacts,%20in%20DAT%20itself.md).

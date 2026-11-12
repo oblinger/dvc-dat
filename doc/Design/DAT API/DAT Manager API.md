@@ -1,7 +1,7 @@
 ---
 description: "`DatManager`: the one object — folders, artifacts, recording, its `ns`"
 ---
-:>> [DAT](../../DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Manager API](ha://pop/DAT~Manager~API) 
+:>> [DAT](../../DAT.md) → [DAT Design](../Design.md) → [DAT API](DAT%20API.md) → [DAT Manager API](ha://pop/DAT~Manager~API) 
 # DAT Manager API
 A `DatManager` is one world: its dat folders, its artifact folder, its `ns`, and the record of every run made there.
 
@@ -202,6 +202,6 @@ The sidecar decides the class; the manager takes none.
 | `do`, `Do`, `do=` | 2.37: `ns`, `Namespace`, `ns=`; `do.keys()` → `ns.mounts()` (DAT1051) |
 
 # BRIEF
-- 2026-09-23 — rewritten to the agreed 2.3 + 2.4 surface from the proposal module doc (now [DAT Manager API](DAT%20Manager%20API.md)) ([DAT103](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/103%20-%20API%20refactor.md); [DAT1014](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/1014%20-%20Fold%20DataConfig%20into%20DatManager;%20settle%20the%20manager's%20public%20attributes.md) part 1, [DAT102](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/102%20-%20Dependencies%20by%20capture,%20and%20artifacts,%20in%20DAT%20itself.md) part 2), in Dan's module-doc member format (bold name + signature, 4-space-indented description). The 2.3 branch history (§ Changed from the branch, Q1–Q3 calls, § On main) was dropped: Q1 survives as the `dat.code` sentence, Q2–Q3 as § The class of a dat.
+- 2026-09-23 — rewritten to the agreed 2.3 + 2.4 surface from the proposal module doc (now [DAT Manager API](DAT%20Manager%20API.md)) ([DAT103](../../Track/Backlog/103%20-%20API%20refactor/103%20-%20API%20refactor.md); [DAT1014](../../Track/Backlog/103%20-%20API%20refactor/1014%20-%20Fold%20DataConfig%20into%20DatManager;%20settle%20the%20manager's%20public%20attributes.md) part 1, [DAT102](../../Track/Backlog/103%20-%20API%20refactor/102%20-%20Dependencies%20by%20capture,%20and%20artifacts,%20in%20DAT%20itself.md) part 2), in Dan's module-doc member format (bold name + signature, 4-space-indented description). The 2.3 branch history (§ Changed from the branch, Q1–Q3 calls, § On main) was dropped: Q1 survives as the `dat.code` sentence, Q2–Q3 as § The class of a dat.
 - 2026-09-23 — method block IDs bare on Dan's word; this format has none per member.
 - 2026-09-22 — first written by DAT on Dan's ask for a page defining the manager, from `origin/manager-owns-do` at `3d8e1a0`.

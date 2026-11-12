@@ -1,7 +1,7 @@
 ---
 description: "the namespace `ns` on `Dat`, a revision and a transaction: your program's main, mounts, the mount table — the advanced half"
 ---
-:>> [DAT](../../DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Namespace API](ha://pop/DAT~Namespace~API) 
+:>> [DAT](../../DAT.md) → [DAT Design](../Design.md) → [DAT API](DAT%20API.md) → [DAT Namespace API](ha://pop/DAT~Namespace~API) 
 # DAT Namespace API
 The advanced half of `Dat.ns`: what a dotted name resolves to, how to make one mean something other than a Python import, and what that costs — the plain surface is [DAT API](DAT%20API.md). A ledger has the same object at a revision, `rev.ns`, and in a transaction, `t.ns` (§ On a ledger).
 
@@ -111,7 +111,7 @@ You are here because something in the namespace is *not* a Python import: a fold
 
 Two layers, checked in order.
 
-**The mount table**, if one is installed — names your program put there with `Dat.ns.mount(...)`, by folder, file, module or value. Nothing in YAML mounts anything, and nothing is imported on your behalf: the namespace is whatever the running program imported ([DAT1008](../../DAT%20Track/DAT%20Backlog/1008%20-%20Should%20configure%28%29%20disappear,%20and%20should%20the%20static%20namespace%20be%20the.md) Q2, [DAT1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md)). For the shell, `run:` names your own main — a module that makes the mounts and ends with `sys.exit(Dat.cli_main())` — so `just run …` runs inside it; with no `run:` the `run` recipe runs the library's own main, where a dotted name is a Python name and nothing else.
+**The mount table**, if one is installed — names your program put there with `Dat.ns.mount(...)`, by folder, file, module or value. Nothing in YAML mounts anything, and nothing is imported on your behalf: the namespace is whatever the running program imported ([DAT1008](../../Track/Backlog/1008%20-%20Should%20configure%28%29%20disappear,%20and%20should%20the%20static%20namespace%20be%20the.md) Q2, [DAT1009](../../Track/Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md)). For the shell, `run:` names your own main — a module that makes the mounts and ends with `sys.exit(Dat.cli_main())` — so `just run …` runs inside it; with no `run:` the `run` recipe runs the library's own main, where a dotted name is a Python name and nothing else.
 
 **The static floor**, always — the longest importable prefix of the name, imported, then `getattr` for the rest. `pkg.mod.CONST` imports `pkg.mod` and takes `CONST` off it. Nothing found raises the import's own `ImportError` or `AttributeError`, unless `default=` was given.
 
@@ -163,5 +163,5 @@ Each is one call in your program; build paths from `__file__`, since `relative_t
 | a bare `Do()` gets a world on first use | a bare `Do()` is a plain namespace; running a dat needs `Do(manager=m)` |
 
 # BRIEF
-- 2026-10-27 — renamed from DAT Do API for `ns` ([DAT1051](../../DAT%20Track/DAT%20Backlog/DAT%20Backlog.md#^1051)): `Dat.do` → `Dat.ns`, `keys` → `mounts`, § On a ledger added for `rev.ns` and `t.ns`.
-- 2026-09-23 — rewritten to the 2.3 surface ([DAT103](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/103%20-%20API%20refactor.md), [DAT1014](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/1014%20-%20Fold%20DataConfig%20into%20DatManager;%20settle%20the%20manager's%20public%20attributes.md)): § The names became the `Do` module doc in Dan's member format; `do.configure` and `do.config` are gone — a different world is an assignment to `Dat.manager`; `.dataconfig.yaml` → `.datconfig.yaml`; the TOC table dropped (the class table replaces it).
+- 2026-10-27 — renamed from DAT Do API for `ns` ([DAT1051](../../Track/Backlog/Backlog.md#^1051)): `Dat.do` → `Dat.ns`, `keys` → `mounts`, § On a ledger added for `rev.ns` and `t.ns`.
+- 2026-09-23 — rewritten to the 2.3 surface ([DAT103](../../Track/Backlog/103%20-%20API%20refactor/103%20-%20API%20refactor.md), [DAT1014](../../Track/Backlog/103%20-%20API%20refactor/1014%20-%20Fold%20DataConfig%20into%20DatManager;%20settle%20the%20manager's%20public%20attributes.md)): § The names became the `Do` module doc in Dan's member format; `do.configure` and `do.config` are gone — a different world is an assignment to `Dat.manager`; `.dataconfig.yaml` → `.datconfig.yaml`; the TOC table dropped (the class table replaces it).
