@@ -1,8 +1,8 @@
 """The two stores the ledger suite runs over: SQLite in a folder, Postgres by DSN.
 
 ``make(backend, folder)`` opens a fresh ledger. Postgres: one schema per ledger in a
-database made for this test session (dropped at its end), the art store in
-``folder/art``. The server is ``DVC_DAT_TEST_PG``, read by ``tests/pg_server.py``: no
+database made for this test session (dropped at its end), its bytes cached
+under ``DAT_CACHE`` (``conftest.cache_root``). The server is ``DVC_DAT_TEST_PG``, read by ``tests/pg_server.py``: no
 default address; unset, the ``pg`` cases skip; set and unreachable, they fail; port 5433
 refused without ``DVC_DAT_TEST_PG_ALLOW_5433=1``.
 """
@@ -56,14 +56,14 @@ def drop() -> None:
 
 
 def dsn(folder: Path) -> str:
-    """A fresh schema in the session database, as a ledger DSN with its art in ``folder/art``."""
+    """A fresh schema in the session database, as a ledger URI."""
     import psycopg
 
     url = database()
     schema = f"l_{uuid.uuid4().hex[:12]}"
     with psycopg.connect(url, autocommit=True) as c:
         c.execute(f'CREATE SCHEMA "{schema}"')
-    return f"{url}?options=-csearch_path%3D{schema}&art={Path(folder) / 'art'}"
+    return f"{url}?options=-csearch_path%3D{schema}"
 
 
 def make(backend: str, folder: Path) -> Ledger:

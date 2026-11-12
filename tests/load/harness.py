@@ -81,7 +81,7 @@ def make_schema(dsn: str) -> None:
     if not schema:
         return
     url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode([(k, v) for k, v in query
-                                                                          if k not in ("art", "options")]), ""))
+                                                                          if k != "options"]), ""))
     with psycopg.connect(url, autocommit=True) as c:
         c.execute(f'CREATE SCHEMA IF NOT EXISTS "{unquote(schema)}"')
 

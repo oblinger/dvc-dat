@@ -28,7 +28,7 @@ def env(monkeypatch):
 @pytest.mark.parametrize("url,expected", [
     ("postgresql://u@h/db", {5432}),
     ("postgresql://u@h:5433/db", {5433}),
-    ("postgres://u:pw@h:6000/db?art=/a", {6000}),
+    ("postgres://u:pw@h:6000/db?sslmode=require", {6000}),
     ("postgresql://u@h1:5432,h2:5433/db", {5432, 5433}),
     ("postgresql://u@h/db?port=5433", {5433}),
     ("postgresql://u@/db?host=/tmp&port=5433", {5433}),

@@ -33,7 +33,7 @@ def _target(store, tmp_path):
         return str(tmp_path / "ledger"), None
     server = pg_server.server()
     schema = f"load_{uuid.uuid4().hex[:10]}"
-    return f"{server}?options=-csearch_path%3D{schema}&art={tmp_path / 'art'}", (server, schema)
+    return f"{server}?options=-csearch_path%3D{schema}", (server, schema)
 
 
 @pytest.mark.parametrize("store", ["sqlite", "pg"])
@@ -43,7 +43,8 @@ def test_load_floor(tmp_path, store):
         out = subprocess.run(
             [sys.executable, "-m", "tests.load", "--processes", str(PROCESSES), "--transactions", str(OPS),
              "--keys", str(KEYS), "--ledger", ledger, "--results", str(tmp_path / "results"), "--timeout", "900"],
-            cwd=ROOT, capture_output=True, text=True, timeout=1200)
+            cwd=ROOT, capture_output=True, text=True, env={**os.environ, "DAT_CACHE": str(tmp_path / "cache")},
+            timeout=1200)
     finally:
         if pg:
             import psycopg
