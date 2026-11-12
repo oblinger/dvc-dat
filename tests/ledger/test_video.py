@@ -17,8 +17,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dvc_dat.ledger import Ledger, Video, register_store
-from dvc_dat.ledger import remote as remote_mod
+from dvc_dat.ledger import Ledger, Video, register_values
+from dvc_dat.ledger import backends as backends_mod
 from dvc_dat.ledger import video as video_mod
 from dvc_dat.ledger.codec import sha256
 
@@ -320,28 +320,27 @@ class CountingRemote:
     def _p(self, h):
         return self.root / h
 
-    def exists(self, h):
+    def has(self, h):
         return self._p(h).exists()
 
-    def put_path(self, path, h):
+    def push(self, path, h):
         self.root.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(path, self._p(h))
 
-    def get_to(self, h, dest):
+    def pull(self, h, path):
         self.gets.append(h)
-        shutil.copyfile(self._p(h), dest)
+        shutil.copyfile(self._p(h), path)
 
 
 @pytest.fixture
 def remote(world, tmp_path, monkeypatch):
     """``games`` keeps its values on a counting store; returns ``(ledger, the store)``."""
-    monkeypatch.setattr(remote_mod, "STORES", {})
-    monkeypatch.setattr(remote_mod, "_REMOTES", {})
-    monkeypatch.setattr(remote_mod, "probe", lambda: None)
+    monkeypatch.setattr(backends_mod, "_VALUES", dict(backends_mod._VALUES))
+    monkeypatch.setattr(backends_mod, "_MADE", {})
     store = CountingRemote(tmp_path / "bucket")
-    register_store("bucket", lambda ledger: store)
+    register_values("bucket", lambda uri: store)
     with world.transaction(by="t") as t:
-        t.add("db", "db/store", "bucket")
+        t.add("db", "db/values", "bucket://games")
     return world, store
 
 

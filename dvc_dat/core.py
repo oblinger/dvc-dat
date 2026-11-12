@@ -98,7 +98,7 @@ DAT_CONFIG_FILE = ".datconfig.yaml"
 ENV_PREFIX = "DAT_"
 _CONFIG_KEYS = ("dat_folders", "art_folder", "index", "manager", "verify",
                 "run",                 # `just run` only
-                "root", "default", "mounts", "stores",    # the ledger's (`ledgers`, `L`, `register_store`), read there
+                "root", "default", "mounts", "backends", "cache",   # the ledger's (`ledgers`, `L`, `backends`), read there
                 "namespace")           # `ledger`: the project's names are its ledger's
 _DEFAULT_DAT_FOLDER = "data"
 _DEFAULT_ART_FOLDER = "art"           # beside the dat folder, never inside it

@@ -9,13 +9,13 @@ from pathlib import Path
 import pytest
 
 import dvc_dat.ledger.copying as copying
-import dvc_dat.ledger.remote as remote_mod
+import dvc_dat.ledger.backends as backends_mod
 from dvc_dat import Dat, DatManager, core, dat
-from dvc_dat.ledger import Exists, Ledger, Ref, register_store
+from dvc_dat.ledger import Exists, Ledger, Ref, register_values
 from dvc_dat.ledger.txn import declined_by
 import backends
 from ledger_kinds import NumberedDat
-from test_value_store import FolderRemote, store
+from test_backends import FolderValues, store
 
 
 @pytest.fixture(autouse=True)
@@ -323,7 +323,7 @@ def published(path: Path) -> Dat:
 
 
 def dest_of(backend, tmp_path):
-    return backends.make(backend, tmp_path / "dest")
+    return backends.make(backend, tmp_path / "dest", cache=tmp_path / "dest-cache")
 
 
 def held(L, subject):
@@ -426,16 +426,14 @@ CLIP_BYTES = 4 * CLIP_WORDS
 
 
 def counted(L, tmp_path, monkeypatch):
-    monkeypatch.setattr(remote_mod, "STORES", {})
-    monkeypatch.setattr(remote_mod, "_REMOTES", {})
-    monkeypatch.setattr(remote_mod, "probe", lambda: None)
-    monkeypatch.delenv("DAT_STORE_LOCAL", raising=False)
+    monkeypatch.setattr(backends_mod, "_VALUES", dict(backends_mod._VALUES))
+    monkeypatch.setattr(backends_mod, "_MADE", {})
     made = {}
 
-    def make(ledger):
-        made["gcp"] = FolderRemote(tmp_path / "gcp", ledger)
+    def make(uri):
+        made["gcp"] = FolderValues(tmp_path / "gcp")
         return made["gcp"]
-    register_store("gcp", make)
+    register_values("bucket", make)
     store(L, "gcp")
     return made
 
@@ -479,18 +477,18 @@ def test_500_parents_load_for_two_fetches_each_and_no_child_byte(L, tmp_path, mo
     gcp = remotes["gcp"]
     shutil.rmtree(L._store.art.root, ignore_errors=True)
     L._values.clear()
-    gcp.gets.clear()
+    gcp.pulls.clear()
     head = L.at()
     t0 = time.monotonic()
     loaded = [head.load(f"run/{i}") for i in range(500)]
     took = time.monotonic() - t0
-    assert len(gcp.gets) == 1000 and took < 5.0                                 # 0.6 s measured alone
-    assert sum(gcp._p(h).stat().st_size for h in gcp.gets) < 500 * 1024         # no clip among them
+    assert len(gcp.pulls) == 1000 and took < 5.0                                 # 0.6 s measured alone
+    assert sum(gcp._p(h).stat().st_size for h in gcp.pulls) < 500 * 1024         # no clip among them
     assert not any((v.path / "viz").exists() for v in loaded)
-    gcp.gets.clear()
+    gcp.pulls.clear()
     viz = head.load("run/7/viz")
     assert (viz.path / "clip.bin").stat().st_size == CLIP_BYTES and viz.path == loaded[7].path / "viz"
-    assert CLIP_BYTES <= sum(gcp._p(h).stat().st_size for h in gcp.gets) < CLIP_BYTES + 4096
+    assert CLIP_BYTES <= sum(gcp._p(h).stat().st_size for h in gcp.pulls) < CLIP_BYTES + 4096
     print(f"500 parent loads with every fetch a miss: {took:.2f} s")
 
 

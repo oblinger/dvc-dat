@@ -7,7 +7,7 @@ sealed ``Value`` or a ``Ref``: each knows its ledger, which a name does not.
 A copy writes the value's bytes to the destination's store if absent (dedupe by hash, never decoded), its subject
 rows, its provenance rows (the ``db/code/<hash 16>`` item, the declarations of its preds, its mount, the commit of its
 run as ``(<value>, db/commit, <sha>)``, since one revision's clock cannot carry several commits), its one name, and
-``(<value>, db/copied-from, <ledger>@<rev>)``. The per-ledger rows ``db/store``, ``db/at``, ``db/rerunnable``, ``db/rerun``
+``(<value>, db/copied-from, <ledger>@<rev>)``. The per-ledger rows ``db/at``, ``db/rerunnable``, ``db/rerun``
 and an earlier ``db/copied-from`` stay behind. The subject is the source's, so a second copy adds nothing.
 
 A copy follows the value's subdats (SVP 241, 252): each ``db/subdat/<relpath>`` row's child is copied with it, and
@@ -69,7 +69,7 @@ COPIED_FROM = "db/copied-from"
 SPEC_ONLY = "db/spec-only"
 COMMIT = "db/commit"
 #: The rows of a value that are about the ledger holding it, not about the value.
-LEFT_BEHIND = frozenset({"db/store", AT, RERUNNABLE, RERUN, COPIED_FROM, SPEC_ONLY, COMMIT})
+LEFT_BEHIND = frozenset({AT, RERUNNABLE, RERUN, COPIED_FROM, SPEC_ONLY, COMMIT})
 #: The subdats a copy leaves on their ledger by default (SVP 252): a run is provenance, recomputable.
 SKIP = ("run",)
 

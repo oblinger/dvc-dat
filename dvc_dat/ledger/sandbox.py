@@ -112,6 +112,7 @@ from .env import Env, current_env, platform_items
 from .errors import ConfinedNetwork, ConfinedProcess, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
 from . import hooks
+from .backends import CACHE_ENV
 from .named import shipped_read_guard, shipped_section
 from .fn import (Fn, alias_reads, attach_run, drop_work, fn_mark, fn_mark_in_source, mounted_name, mounts_at,
                  mounts_hash, path_template, run_trace, save_run, seal_entry, wrap_result)
@@ -1084,6 +1085,14 @@ def install_worker(ledger: Any, mounts: List[Mount]) -> None:
     STATE.hosts, STATE.addrs = _ledger_endpoints(ledger.path)
 
 
+def _cache_root() -> Optional[str]:
+    """The caller's cache root (``backends.cache_root``), as a request ships it to the worker."""
+    from .backends import cache_root
+
+    root = cache_root()
+    return None if root is None else str(root)
+
+
 def read_only_ledger(target: Any, given: Any, base: Path) -> Any:
     """In the worker: a read-only handle on a ledger a body names (SVP 1521 Q3 (A)), and what the hooks let it reach."""
     from .ledger import Ledger
@@ -1322,7 +1331,7 @@ class Server:
         class and the caller's dat world (its folders, built afresh there as a ``DatManager``)."""
         req = {"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
                "keys": {k: encode_key(v, plain) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env),
-               "ledgers": shipped_section(), "read_guard": shipped_read_guard()}
+               "ledgers": shipped_section(), "read_guard": shipped_read_guard(), "cache": _cache_root()}
         if fn.kind == "dat":
             req.update({"template": fn._template, "returns": fn._returns, "world": hooks.layer()["world_of"]()})
         return _result(plain, self._ask(req), seal)
@@ -1330,7 +1339,7 @@ class Server:
     def version(self, plain: "Rev", prefix: str, env: Env) -> Optional[str]:
         """The mounted root ``prefix``'s ``__version__``, imported in a forked child (``import_version``)."""
         resp = self._ask({"op": "version", "ledger": str(plain.ledger.path), "rev": plain.id, "prefix": prefix,
-                          "env": _ship_env(env)})
+                          "env": _ship_env(env), "cache": _cache_root()})
         return resp["version"]
 
     def close(self) -> None:
@@ -1508,6 +1517,8 @@ def serve(req: Dict[str, Any], out: Any) -> None:
         code = {r: Checkout(v, c, d, Path(p) if p else None) for r, (v, c, d, p) in req["env"].items()}
         env = Env(code, platform_tag(), record=platform_record())     # where the function runs (SVP 1474)
         set_env_provider(lambda env=env: env)
+        if req.get("cache"):                        # the caller's cache root, whatever named it there
+            os.environ[CACHE_ENV] = req["cache"]
         ledger = Ledger(req["ledger"])
         plain = ledger.at(req["rev"])
         mounts, _rows = mounts_for(plain, env)

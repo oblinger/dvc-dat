@@ -55,7 +55,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 from .errors import LedgerError
 from .ledger import CONFIG, ENV, ROOT, Ledger, Target, _find, _is_name, _target, _values, _walk_up, opened, \
     root_target
-from .pgstore import is_dsn
+from .backends import is_uri
 
 #: The registry's subject prefix and predicates on root (SVP 1516): ``ledger/<name> ledger/location <where>``.
 REGISTRY = "ledger/"
@@ -346,7 +346,7 @@ def adopt_section(section: Section, read_only: Any) -> None:
 
 def handle_at(location: str) -> Ledger:
     """In a sandbox worker: the handle on a ledger named by location, for a ``Ref`` key on it."""
-    return _handle(location if is_dsn(location) else Path(location), location, Path.cwd(), None)
+    return _handle(location if is_uri(location) else Path(location), location, Path.cwd(), None)
 
 
 def ledger_named(name: str) -> Ledger:

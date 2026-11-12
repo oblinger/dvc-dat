@@ -21,32 +21,44 @@ def test_pg_dsn_opens_and_missing_is_ledger_error(dsn, tmp_path):
         Ledger(dsn)
     L = Ledger(dsn, create=True)
     assert Ledger(L.path).path == L.path
-    assert L._store.art.root == (tmp_path / "led" / "art").resolve()
+    assert L._store.art.root == (tmp_path / "cache" / L._store.name / "art").resolve()
     assert ":***@" in repr(L) and ":***@" not in L.path
 
 
-def test_pg_dsn_without_art_is_refused(dsn):
-    with pytest.raises(LedgerError, match="art"):
-        Ledger(dsn.split("&art=")[0], create=True)
+def test_pg_art_parameter_is_refused_naming_what_replaces_it(dsn):
+    with pytest.raises(LedgerError, match=r"\?art=.*removed.*DAT_CACHE.*db/values"):
+        Ledger(dsn + "&art=/somewhere", create=True)
+
+
+def test_pg_cache_is_the_env_then_the_config_and_neither_is_refused(dsn, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DAT_CACHE")
+    with pytest.raises(LedgerError, match="no cache folder.*DAT_CACHE.*cache:"):
+        Ledger(dsn, create=True)
+    (tmp_path / ".datconfig.yaml").write_text("cache: bytes\n")
+    L = Ledger(dsn, create=True)
+    assert L._store.art.root == (tmp_path / "bytes" / L._store.name / "art").resolve()
+    monkeypatch.setenv("DAT_CACHE", str(tmp_path / "env"))
+    assert Ledger(dsn)._store.art.root == (tmp_path / "env" / L._store.name / "art").resolve()
 
 
 def test_pg_unreachable_server_is_ledger_error(tmp_path):
     with pytest.raises(LedgerError, match="cannot connect"):
-        Ledger(f"postgresql://nobody:x@127.0.0.1:1/none?art={tmp_path}", create=True)
+        Ledger("postgresql://nobody:x@127.0.0.1:1/none", create=True)
 
 
-def test_pg_datconfig_names_the_dsn_and_art_is_relative_to_it(dsn, tmp_path, monkeypatch):
+def test_pg_datconfig_names_the_dsn_and_cache_is_relative_to_it(dsn, tmp_path, monkeypatch):
     proj = tmp_path / "proj"
     (proj / "sub").mkdir(parents=True)
-    rel = dsn.split("&art=")[0] + "&art=.dat/art"
-    (proj / ".datconfig.yaml").write_text(f"root: '{rel}'\ndefault: root\n")
+    (proj / ".datconfig.yaml").write_text(f"root: '{dsn}'\ndefault: root\ncache: .dat\n")
     monkeypatch.delenv("DAT_LEDGER", raising=False)
+    monkeypatch.delenv("DAT_CACHE")
     monkeypatch.chdir(proj / "sub")
     with pytest.raises(LedgerError, match="no ledger"):
         Ledger()
     monkeypatch.chdir(proj)
     L = Ledger(create=True)
-    assert L._store.art.root == (proj / ".dat" / "art").resolve()
+    assert L._store.art.root == (proj / ".dat" / L._store.name / "art").resolve()
     monkeypatch.chdir(proj / "sub")
     assert Ledger()._store.art.root == L._store.art.root
     monkeypatch.setenv("DAT_LEDGER", str(L.path))

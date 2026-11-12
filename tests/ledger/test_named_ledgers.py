@@ -85,7 +85,7 @@ def test_a_dropped_ledger_resolves_no_more(here):
 
 
 def test_a_registered_dsn_is_passed_through(here):
-    dsn = "postgresql://u@h:5432/prod_run26?art=art/prod_run26"
+    dsn = "postgresql://u@h:5432/prod_run26"
     root = project(here, make=())
     register(root, prod_run26=dsn)
     assert named.view_of(here / ".datconfig.yaml").get("prod_run26") == dsn
@@ -335,7 +335,7 @@ def test_two_registered_postgres_ledgers_are_separate_databases(here):
         for n in names:
             c.execute(f'CREATE DATABASE "{n}"')
     try:
-        dsns = {n: urlunsplit((parts.scheme, parts.netloc, "/" + n, f"art={here / n / 'art'}", "")) for n in names}
+        dsns = {n: urlunsplit((parts.scheme, parts.netloc, "/" + n, "", "")) for n in names}
         for dsn in dsns.values():
             Ledger(dsn, create=True)
         root = project(here, make=())

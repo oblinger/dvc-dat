@@ -68,11 +68,11 @@ OWN: Any = _Own()
 
 
 def ledger_key(ledger: Any) -> str:
-    """One ledger, however it was opened: its DSN, or its folder's real path."""
-    from .pgstore import is_dsn
+    """One ledger, however it was opened: its URI, or its folder's real path."""
+    from .backends import is_uri
 
     text = str(ledger.path)
-    return text if is_dsn(text) else os.path.realpath(text)
+    return text if is_uri(text) else os.path.realpath(text)
 
 
 @dataclass(frozen=True)
@@ -829,11 +829,11 @@ def _checkout(env: Env, repo: Optional[str]) -> Optional[Path]:
 def _dats(plain: "Rev", work: Optional[Path]) -> List[Any]:
     """Where an unsandboxed body may read inside its repo (Eval § 5.3): the dats (the dat world's folders
     and art folder, the ledger's art store), the ledger's own folder, and the body's path folder."""
-    from .pgstore import is_dsn
+    from .backends import is_uri
 
     manager = hooks.manager()
     out: List[Any] = [*manager._dat_folders, manager._art_folder, plain.ledger._store.art.root, work]
-    if not is_dsn(str(plain.ledger.path)):
+    if not is_uri(str(plain.ledger.path)):
         out.append(plain.ledger.path)
     return out
 

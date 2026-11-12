@@ -34,6 +34,7 @@ import uuid
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
+from .backends import VALUES, check_values
 from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, show, strip_hint, tag
 from .errors import ConfinedWrite, Exists, LockTimeout, SealBroken, Undeclared, Unlocked
 from .value import TIMEZONE, Value, check_loadable, dotted, is_moment, stamp, zone_named
@@ -95,22 +96,22 @@ class _Op:
 
 
 def _put_remote(r: Any, h: str, source: Any) -> None:
-    """Upload one part or encoding to the remote ``r`` unless it holds it: a file as it stands, an opener
+    """Push one part or encoding to the values backend ``r`` unless it holds it: a file as it stands, an opener
     spilled to a temp file first (checked against ``h``)."""
     from pathlib import Path
 
     from .store import _copy
 
-    if r.exists(h):
+    if r.has(h):
         return
     if isinstance(source, (str, os.PathLike)):
-        r.put_path(Path(source), h)
+        r.push(Path(source), h)
         return
     with tempfile.TemporaryDirectory(prefix="dat-upload-") as d:
         p = Path(d) / h
         with source() as f:
             _copy(f, p, h)
-        r.put_path(p, h)
+        r.push(p, h)
 
 
 def declined_by(rel: str, skip: Sequence[str]) -> bool:
@@ -509,30 +510,28 @@ class Transaction:
         return sink.hash
 
     def _upload(self) -> None:
-        """Put every part and the encoding of each value this transaction seals on the ledger's value store
-        (SVP 1511), and add ``(<subject>, db/store, <name>)`` naming it: nothing when the store resolves to
-        ``folder``, or inside a sandboxed body (its seal's upload runs in the parent). Write-once by hash, so a
-        blob a failed commit leaves behind is harmless."""
-        from .remote import FOLDER, PREDICATE, remote, resolve, store_name
+        """Push every part and the encoding of each value this transaction seals to the ledger's values URI, its
+        ``(db, db/values, <uri>)`` row at the transaction's base (SVP 1599): nothing with no row, or inside a
+        sandboxed body (its seal's push runs in the parent). Write-once by hash, so a blob a failed commit leaves
+        behind is harmless."""
+        from .backends import VALUES, values_at
         from .sandbox import STATE
 
         if not (self._new_seals or self._copies) or STATE.guard:
             return
-        name = resolve(store_name(self._snapshot()))
-        if name == FOLDER:
+        held = self._snapshot()._held("db", VALUES)
+        if not held:
             return
-        r = remote(name, self._ledger._store.name)
-        for subject, art, fetch, hashes in self._copies:
+        r = values_at(show(held[0].obj))
+        for _subject, art, fetch, hashes in self._copies:
             with art.fetching(fetch):
                 for h in hashes:
                     _put_remote(r, h, art._have(h))
-            self._ops.append(_Op(subject, PREDICATE, "str:" + name, True, seal_of=subject))
-        for v, subject in self._new_seals:
+        for v, _subject in self._new_seals:
             h = self._hash_of(v)
             for ph, source in v._stored_parts():
                 _put_remote(r, ph, source)
             _put_remote(r, h, self._staged[id(v)].path)
-            self._ops.append(_Op(subject, PREDICATE, "str:" + name, True, seal_of=subject))
 
     def _store_all(self) -> None:
         """The bytes of every seal, written at commit so bytes and rows land together (or neither).
@@ -741,10 +740,10 @@ class Transaction:
             _tag_name(subject, object)
         if predicate == TIMEZONE:
             zone_named(subject, object)
-        if predicate == "db/store":
-            from .remote import check_name
-
-            check_name(object, f"{subject} db/store")
+        if predicate == VALUES:
+            if subject != "db":
+                raise ValueError(f"{VALUES} is where the ledger's bytes live, a row of the subject db, not {subject!r}")
+            check_values(object, f"db {VALUES}")
         if predicate.startswith(SUBDAT) and isinstance(object, Value) and object.subject is not None:
             o = ref_text(dotted(type(object)), object.hash, object.subject)   # a subdat attached after the fact
         else:

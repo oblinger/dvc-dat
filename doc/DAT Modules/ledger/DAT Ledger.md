@@ -32,7 +32,7 @@ This page is the package `dvc_dat.ledger` as a caller sees it: the figure above,
 
 
 ## Ledger Interface
-The handle on one ledger: a folder holding `ledger.db` and the art store `art/`, or a Postgres database named by a DSN with its art store a folder. It finds or opens the ledger, hands out frozen views with `at` and write sets with `transaction`, and holds no reads of its own, so a long run reads one snapshot by construction. Nothing is created on disk without `create=True`. A `Ledger` is a context manager whose exit closes it.
+The handle on one ledger: a folder holding `ledger.db` and the art store `art/`, or a Postgres database named by a `postgresql://` URI, its bytes cached in a folder on this machine ([Backends](#Backends)). It finds or opens the ledger, hands out frozen views with `at` and write sets with `transaction`, and holds no reads of its own, so a long run reads one snapshot by construction. Nothing is created on disk without `create=True`. A `Ledger` is a context manager whose exit closes it.
 
 <!-- methods: dvc_dat.ledger.Ledger -->
 
@@ -92,7 +92,7 @@ A `Value` holding a video (SVP 249): a handle over a source, a URL (`gs://…`, 
 
 **Converting.** `convert(codec, pix_fmt=None, fps=None, audio="copy", options=())` is the one way to change a video's representation, and gives a new unsealed `Video`, leaving this one as it is. `codec` is any video encoder or codec `ffmpeg` has (`"h264"`, `"libx265"`, `"libvpx-vp9"`, `"ffv1"`): there is no list, and a name this `ffmpeg` lacks fails with its message. `fps` gives a constant rate, `audio` an audio encoder, `options` more `ffmpeg` output arguments. It reads the whole video when read or sealed.
 
-**Reading.** A load reads `manifest.json` and no segment. `frame(n)` fetches the one segment holding frame `n`, `frames(a, b)` and `iter()` the segments they cover as they reach them, each once, into the art store, through the value's store on a miss ([Value stores](#Value%20stores)). A frame is a `(height, width, 3)` `uint8` RGB `numpy` array. `clip(a, b)` is frames `[a, b)` and their audio as a new unsealed `Video`: the frames encoded anew, exact, when read whole or sealed, the audio copied, cut at the nearest packets. `path()` is the whole video, audio included, as one MP4 (Matroska for Matroska segments), its segments joined without re-encoding, once, under `art/video/`. `ffmpeg` and `ffprobe` must be on `PATH`.
+**Reading.** A load reads `manifest.json` and no segment. `frame(n)` fetches the one segment holding frame `n`, `frames(a, b)` and `iter()` the segments they cover as they reach them, each once, into the art store, pulled from the ledger's values URI on a miss ([Backends](#Backends)). A frame is a `(height, width, 3)` `uint8` RGB `numpy` array. `clip(a, b)` is frames `[a, b)` and their audio as a new unsealed `Video`: the frames encoded anew, exact, when read whole or sealed, the audio copied, cut at the nearest packets. `path()` is the whole video, audio included, as one MP4 (Matroska for Matroska segments), its segments joined without re-encoding, once, under `art/video/`. `ffmpeg` and `ffprobe` must be on `PATH`.
 
 **The encoding rule.** A `Video`'s value is its stored form, not the frames it decodes to: equal stored forms give the same bytes and a loaded one re-encodes to them. Sealing is the limit: it keeps the source's bytes, so the same frames in two encodings are two values, and encoding frames gives the same bytes for the same frames only under the same `ffmpeg` and `x264` builds.
 
@@ -128,8 +128,9 @@ The package's other exports: the two ledger handles (also exported from `dvc_dat
 | [bump_source](../../api/ledger.md#dvc_dat.ledger.bump_source) | Raise a module's `__version__` in its source |
 | [attr](../../api/ledger.md#dvc_dat.ledger.attr) | Walk a dotted path into an object |
 | [register_policy](../../api/ledger.md#dvc_dat.ledger.register_policy) | Name a memo policy a ledger's `db/memo-policy` row can select |
-| [register_store](../../api/ledger.md#dvc_dat.ledger.register_store) | Name a value store a ledger's `db/store` row can select |
-| [Remote](../../api/ledger.md#dvc_dat.ledger.Remote) | What a value store is: bytes by hash on a remote place |
+| [register_values](../../api/ledger.md#dvc_dat.ledger.register_values) | Register the backend of a values URI scheme, which a ledger's `db/values` row selects |
+| [register_triples](../../api/ledger.md#dvc_dat.ledger.register_triples) | Register the backend of a ledger location's URI scheme |
+| [Values](../../api/ledger.md#dvc_dat.ledger.Values) | What a values backend is: bytes by hash, `has`, `pull`, `push` |
 | [LedgerError](../../api/ledger.md#dvc_dat.ledger.errors.LedgerError) | Base of every ledger exception |
 | [Multiple](../../api/ledger.md#dvc_dat.ledger.errors.Multiple) | Several matched where one was required |
 | [NotEvaluated](../../api/ledger.md#dvc_dat.ledger.errors.NotEvaluated) | A miss this environment cannot run |
@@ -189,7 +190,7 @@ A read turns the rows at or before its revision into what they hold, by each pre
 
 | subject | what it holds |
 | --- | --- |
-| `db` | `db/version`, the release, the name of a whole state (`bump(t, "db")`, `L.at("M.m.p")`); `db/tag`, a name for the revision its transaction commits (`t.add("db", "db/tag", "2026-Q4-official")`, `L.at("2026-Q4-official")`): cardinality `many`, never reused (a name added before is `Exists`, nothing written), neither digits, `M.m.p` nor an ISO 8601 timestamp (a tag `2026-11-02` is `ValueError`); `db/format`; `db/timezone`, the IANA zone times print in, any revision may change it, validated when added, on the subject `db` only ([`timezone`](../../api/ledger.md#dvc_dat.ledger.Rev.timezone)); `db/memo-policy`, the memo policy's name ([Memoization and the platform](#Memoization%20and%20the%20platform)); `db/store`, the value store its values' bytes go to, `local` when absent ([Value stores](#Value%20stores)) |
+| `db` | `db/version`, the release, the name of a whole state (`bump(t, "db")`, `L.at("M.m.p")`); `db/tag`, a name for the revision its transaction commits (`t.add("db", "db/tag", "2026-Q4-official")`, `L.at("2026-Q4-official")`): cardinality `many`, never reused (a name added before is `Exists`, nothing written), neither digits, `M.m.p` nor an ISO 8601 timestamp (a tag `2026-11-02` is `ValueError`); `db/format`; `db/timezone`, the IANA zone times print in, any revision may change it, validated when added, on the subject `db` only ([`timezone`](../../api/ledger.md#dvc_dat.ledger.Rev.timezone)); `db/memo-policy`, the memo policy's name ([Memoization and the platform](#Memoization%20and%20the%20platform)); `db/values`, the values URI its values' bytes live at, the cache folder alone when absent, validated when added, on the subject `db` only ([Backends](#Backends)) |
 | `db/tx/<rev>` | `db/by`, `db/time`, the transaction's keywords |
 | `db/pred/<name>` | `db/cardinality`, `db/index`, `db/type` |
 | `db/code/<16 hex>` | `db/modules` (`relpath -> sha256` of every module the run loaded, a module its caller loaded first included, and every mounted file it read, through the namespace or by opening it), `db/mounts` (the mounts hash when sandboxed, `none` when installed): a snapshot of code, shared by every function in it and every result it made |
@@ -199,7 +200,7 @@ A read turns the rows at or before its revision into what they hold, by each pre
 | `db/repo/<repo>/<package>` | `db/version`, the clock of one versioned package (`plane`, `demo_game.etl`, `geometry`): written by the first clean run at a new `__version__`, never by a person (`bump_source` edits the source) |
 | `db/kind/<dotted>` | `db/moved`: a renamed class |
 | `ledger/<name>`, on the root ledger | `ledger/location`, where the ledger `<name>` is, and `ledger/dropped` once it is gone ([Many ledgers](#Many%20ledgers)); `ledger/lifetime`, what root declares of it: `permanent`, `archival` or `transient`, written once ([Copying](#Copying)) |
-| a sealed value's subject | `db/value`, `db/kind`, `db/provenance`, `db/preds`, `db/fn` (the function's dotted name), `db/keys`, `db/returns`, `db/reproducible`, `db/at` (the revision the run read, as a str, [Running over past revisions](#Running%20over%20past%20revisions)), `db/copied-from`, `db/commit` and `db/spec-only` on a copy, `db/sealed-at`, `db/deps/<item>` ([Value Provenance](#Value%20Provenance)); `db/store`, the store its bytes were put on (none: the writer's folder alone) ([Value stores](#Value%20stores)); `db/rerunnable` (`true` or `recursive`), the claim a [`pin`](../../api/ledger.md#dvc_dat.ledger.Transaction.pin) asserted, and `db/rerun`, the outcome `pin(rerun=True)` recorded ([Rerunnability](#Rerunnability)); `db/subdat/<relpath>`, a `ref:` to a subdat, `str:declined`, or `str:<ledger>@<rev>:<subject>` for one a copy left on its ledger ([Subdats](#Subdats)) |
+| a sealed value's subject | `db/value`, `db/kind`, `db/provenance`, `db/preds`, `db/fn` (the function's dotted name), `db/keys`, `db/returns`, `db/reproducible`, `db/at` (the revision the run read, as a str, [Running over past revisions](#Running%20over%20past%20revisions)), `db/copied-from`, `db/commit` and `db/spec-only` on a copy, `db/sealed-at`, `db/deps/<item>` ([Value Provenance](#Value%20Provenance)); `db/rerunnable` (`true` or `recursive`), the claim a [`pin`](../../api/ledger.md#dvc_dat.ledger.Transaction.pin) asserted, and `db/rerun`, the outcome `pin(rerun=True)` recorded ([Rerunnability](#Rerunnability)); `db/subdat/<relpath>`, a `ref:` to a subdat, `str:declined`, or `str:<ledger>@<rev>:<subject>` for one a copy left on its ledger ([Subdats](#Subdats)) |
 
 A `(db/pred/<p>, db/index, true)` row builds a partial SQL index on `<p>` in the transaction that commits it. A release is a `bump` of `db`, which moves its `db/version`, and `ledger.at("3.2.0")` reads that moment.
 
@@ -224,23 +225,30 @@ The row is outside the subject hash and re-points: a later seal of one subject, 
 ## Storage
 The quads live in one table, `quads(rev, ord, subject, predicate, object, added)`, keyed by `(rev, ord)` and indexed on `(subject, predicate, rev)` and `(predicate, object, rev)`: in `ledger.db` (SQLite, WAL mode) for a folder ledger, in a Postgres schema for a DSN ledger (`pip install 'dvc_dat[pg]'`). The object is a tagged string, `str:`, `json:` or `ref:<class>:<hash>[:<subject>]`, so a row reads without a schema.
 
-The art store holds bytes by sha256 at `sha256/<2>/<hex>`, write-once, so the same bytes are stored once however many subjects point at them. A value's encoding enters through a sink (`ArtStore.sink()`: a temp file hashed as written, renamed to its hash at close) and leaves through `ArtStore.open(h)`, a read stream; its parts enter by `put_path` (a hardlink on the same filesystem, else a streamed copy checked against the hash) and leave by `get_to`. No value's bytes are held in memory whole on either path (DAT 240). A value store (`Remote`) sees one blob per file plus one for the encoding, by the sha256 of the bytes as dvc-dat handed them; it may compress or wrap each blob, provided `get_to(h, dest)` yields bytes hashing to `h`. A stored `Dat`'s files and its materialised folder under `art/dats/` share inodes. The ledger's art store and the dat manager's `art/` are separate folders keyed the same way.
+The art store holds bytes by sha256 at `sha256/<2>/<hex>`, write-once, so the same bytes are stored once however many subjects point at them. A value's encoding enters through a sink (`ArtStore.sink()`: a temp file hashed as written, renamed to its hash at close) and leaves through `ArtStore.open(h)`, a read stream; its parts enter by `put_path` (a hardlink on the same filesystem, else a streamed copy checked against the hash) and leave by `get_to`. No value's bytes are held in memory whole on either path (DAT 240). A values backend (`Values`) sees one blob per file plus one for the encoding, by the sha256 of the bytes as dvc-dat handed them; it may compress or wrap each blob, provided `pull(h, path)` yields bytes hashing to `h`. A stored `Dat`'s files and its materialised folder under `art/dats/` share inodes. The ledger's art store and the dat manager's `art/` are separate folders keyed the same way.
 
-### Value stores
-The art store is a folder on the machine that opened the ledger. A **value store** is where the bytes also go, so a value sealed on one machine loads on another (SVP 1511). The ledger names it in one row, `(db, db/store, <name>)`, read at the sealing transaction's snapshot; absent, it is `local`. A name other than `local` and `folder` is a store some code in the process registered (`register_store`): dvc-dat carries no cloud code.
+### Backends
+A ledger carries two URIs, and the scheme of each picks its backend from a registry (SVP 1599). **triples** is the ledger's location, where its records live: a folder (the SQLite ledger there, also written `sqlite://<folder>`) or `postgresql://…`. **values** is where its bytes live beyond the machine that wrote them, one row in the ledger itself, `(db, db/values, <uri>)`, set like `db/timezone` and read back as `L.values`; with no row the bytes live in the cache folder alone. dvc-dat ships the triples backends `sqlite` and `postgresql` (one, whatever the host: a cloud's login stays outside the ledger) and the values backend `file` (`file:///abs/folder`); it carries no cloud code.
 
-- **Sealing.** A transaction that seals values on a store uploads each new value's parts and encoding (skipping any the remote holds) *before* it takes the write lock, so a large push never holds the ledger's other writers; under `lock=` the lock is already held. A blob a commit leaves behind when it then fails is harmless: write-once, by hash. A failed upload fails the commit, nothing written. The seal adds `(<value subject>, db/store, <name>)`, naming where its bytes went, and the local folder keeps its copy. A sandboxed body never uploads: its seal runs in the parent.
-- **Reading.** A read takes the bytes from the local folder; on a miss it reads the value's own `db/store` row and fetches from that store into the folder, which is so a cache, checked against the hash (`LedgerError` on a failed fetch or a wrong hash). A value with no row is read from the folder alone, as before 1511. A value stored on `azure` loads in a process whose `local` is `gcp`: the row, not the reader, names the store.
-- **`local`** is resolved once per process, first to last: `DAT_STORE_LOCAL` (a registered name, or `folder`); the cloud this machine is a VM of, by a 0.3 s probe of the link-local metadata endpoint (`169.254.169.254`: `gcp` on Compute Engine, `azure` on Azure), when this process registered that name; `stores: {local: <name>}` in the nearest `.datconfig.yaml`; else `folder`. With no store registered, `local` is `folder` and nothing is probed.
-- **`folder`** is the built-in store: the ledger's own art folder alone, nothing uploaded, no per-value row.
+- **Registering.** `register_values(scheme, factory)`: `factory(uri)` returns a `Values`, three methods by sha256 hex, `has(hash)`, `pull(hash, path)` and `push(path, hash)`. `register_triples(scheme, factory)`: `factory(uri, create, overlay)` returns a `Store`. A scheme nothing registered is `LedgerError` listing what is.
+- **`backends:`** in `.datconfig.yaml` lists dotted modules, each registering as it is imported. They are imported when a scheme is asked that nothing registered, once per config per process, so a fresh `dat` command has them.
+- **The cache.** A SQLite ledger's is `<folder>/art`. Any other ledger's is `<root>/<ledger name>/art`, `<root>` being `DAT_CACHE`, else `cache:` in the nearest `.datconfig.yaml` (relative to it); neither is `LedgerError`. It is the one per-machine fact: the values URI is the same for every reader.
+- **Sealing.** A transaction that seals values on a ledger with a `db/values` row pushes each new value's parts and encoding (skipping any the backend `has`) *before* it takes the write lock, so a large push never holds the ledger's other writers; under `lock=` the lock is already held. A blob a commit leaves behind when it then fails is harmless: write-once, by hash. A failed push fails the commit, nothing written. The cache keeps its copy. A sandboxed body never pushes: its seal runs in the parent.
+- **Reading.** A read takes the bytes from the cache; on a miss it pulls from the values URI at the ledger's top, whatever revision is being read (bytes move, history does not), into the cache, checked against the hash (`LedgerError` on a failed pull or a wrong hash).
+- **Layout.** Under a values URI the bytes of `<hash>` sit at `sha256/<2>/<hash>` by convention (`backends.blob_path`), as in the cache, so an art folder is a `file://` values store as it stands.
 
 ```python
-from dvc_dat.ledger import register_store
-# GcsRemote: your Remote
-register_store("gcp",
-               lambda ledger: GcsRemote("gs://data", ledger))
+from dvc_dat.ledger import register_values
+# Bucket: your Values (has, pull, push)
+register_values("gs", lambda uri: Bucket(uri))
 with L.transaction(by="dan") as t:
-    t.add("db", "db/store", "gcp")
+    t.add("db", "db/values", "gs://data/ledgers/games")
+```
+
+```yaml
+# .datconfig.yaml
+backends: [myproject.bucket]   # imported on a scheme miss
+cache: ~/data/ledgers          # <cache>/<ledger name>/art
 ```
 
 
@@ -249,7 +257,7 @@ A project may keep several ledgers, split by how long their data lives, so clean
 
 ```yaml
 # .datconfig.yaml: a folder relative to the file, or a DSN
-root: postgresql://dat@db/root?art=/data/art/root
+root: postgresql://dat@db/root
 # optional: the active ledger of a solo project
 default: do26
 ```
@@ -460,7 +468,7 @@ A predicate is a row the value carries, which the consumer writes; nothing like 
 
 
 ## Copying
-`t.copy(*values, deep=False, safe=True, rerunnable=False, skip=None)` moves a value or a reference to one onto another ledger, the one the transaction writes (SVP 251); `L.at().copy(v)` is the head form. The bytes go to the destination's store if absent, by hash and never decoded, with the subject rows and the provenance around them: the `db/code/<16 hex>` item, the preds' `db/cardinality` and `db/type`, a sandboxed function's mount when the prefix is free here, the run's commit as `(<value>, db/commit, <sha>)` (one revision's clock cannot hold the commits of a chain), and the value's one name, moved here as a seal moves it. The subject is the source's. `(<value>, db/copied-from, <ledger>@<rev>)` records the origin; a `Value` is read at its ledger's head, a `Ref` at its own revision. `db/store`, `db/at`, `db/rerunnable`, `db/rerun` and an earlier `db/copied-from` stay behind: they are about the ledger.
+`t.copy(*values, deep=False, safe=True, rerunnable=False, skip=None)` moves a value or a reference to one onto another ledger, the one the transaction writes (SVP 251); `L.at().copy(v)` is the head form. The bytes go to the destination's store if absent, by hash and never decoded, with the subject rows and the provenance around them: the `db/code/<16 hex>` item, the preds' `db/cardinality` and `db/type`, a sandboxed function's mount when the prefix is free here, the run's commit as `(<value>, db/commit, <sha>)` (one revision's clock cannot hold the commits of a chain), and the value's one name, moved here as a seal moves it. The subject is the source's. `(<value>, db/copied-from, <ledger>@<rev>)` records the origin; a `Value` is read at its ledger's head, a `Ref` at its own revision. `db/at`, `db/rerunnable`, `db/rerun` and an earlier `db/copied-from` stay behind: they are about the ledger.
 
 **Subdats** (SVP 252). A copy follows the value's `db/subdat/` rows ([Subdats](#Subdats)): each child is copied with it, and the child's subdats in turn, in the same revision. `skip` names the ones left on their ledger, relative-path suffixes from the copied value as `seal(skip=)` takes them: `None` is `("run",)`, since a run is provenance and recomputable; `()` follows every subdat; any other list adds to `("run",)`. A skipped child is not copied, and the parent's row for it here becomes the global reference `str:<ledger>@<rev>:<child subject>` to the original, which `dat.load` reads on that ledger. A `str:declined` row, or a reference from an earlier copy, travels as it is. `deep` does not override `skip`: a subdat is no input. `safe` judges each child as it judges any value the copy brings. The rows are outside the parent's subject and hash, so what happens to its subdats never moves either. The whole copy lands in one revision or, refused or failing midway, not at all.
 

@@ -269,7 +269,7 @@ class ArtStore:
     @contextmanager
     def fetching(self, fetch: Optional[Callable[[str, Path], None]]) -> Iterator[None]:
         """For the block, in this thread, a miss in ``open``/``get_to`` calls ``fetch(h, path)`` first, which puts
-        the bytes of ``h`` at ``path`` (a value's store, SVP 1511); ``None`` fetches nothing."""
+        the bytes of ``h`` at ``path`` (the ledger's values URI, SVP 1599); ``None`` fetches nothing."""
         old = getattr(self._scope, "fetch", None)
         self._scope.fetch = fetch
         try:
@@ -358,8 +358,9 @@ class Writer(ABC):
 
 
 class Store(ABC):
-    """What the ledger reads and writes; ``art`` is the art store (a folder, whatever the backend); ``name`` the
-    ledger's name on a value store (SVP 1511): a SQLite ledger's folder name, a Postgres ledger's database."""
+    """What the ledger reads and writes; ``art`` is the art store (a folder, whatever the backend: the cache of the
+    ledger's bytes on this machine); ``name`` the ledger's name: a SQLite ledger's folder name, a Postgres ledger's
+    database."""
 
     art: ArtStore
     name: str

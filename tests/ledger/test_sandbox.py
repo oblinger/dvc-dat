@@ -881,7 +881,7 @@ def test_an_unsandboxed_body_may_run_a_tool(sbx):
 
 
 def test_the_ledgers_own_endpoint_is_allowed():
-    hosts, addrs = _ledger_endpoints("postgresql://u:pw@127.0.0.1:5433/db?art=/tmp/a")
+    hosts, addrs = _ledger_endpoints("postgresql://u:pw@127.0.0.1:5433/db")
     assert hosts == {"127.0.0.1"} and addrs == {("127.0.0.1", 5433)}
     hosts, addrs = _ledger_endpoints("postgresql://u@[::1],127.0.0.1:6000/db")
     assert hosts == {"::1", "127.0.0.1"} and ("127.0.0.1", 6000) in addrs and ("::1", 5432) in addrs

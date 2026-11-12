@@ -2,6 +2,7 @@
 ledger and a flipper; every invariant must hold. The Postgres case needs ``DVC_DAT_TEST_PG``
 (``tests/pg_server.py``): skips when unset, fails when set and unreachable."""
 
+import os
 import json
 import subprocess
 import sys
@@ -24,7 +25,7 @@ def _pg_target(tmp_path):
     except Exception as e:      # named and not there fails: CI's pg job never skips green
         pytest.fail(f"no Postgres at {pg_server.redact(pg)}: {pg_server.redact(str(e))}", pytrace=False)
     schema = f"inproc_{uuid.uuid4().hex[:10]}"
-    return f"{pg}?options=-csearch_path%3D{schema}&art={tmp_path / 'art'}", (pg, schema)
+    return f"{pg}?options=-csearch_path%3D{schema}", (pg, schema)
 
 
 def _drop(target):
@@ -46,7 +47,8 @@ def test_inproc_invariants(tmp_path, store, lock):
             [sys.executable, "-m", "tests.load.inproc", "--handles", "3", "--threads", "6", "--transactions",
              "60", "--flips", "24", "--lock", str(lock), "--ledger", target, "--results",
              str(tmp_path / "results"), "--timeout", "300"],
-            cwd=ROOT, capture_output=True, text=True, timeout=600)
+            cwd=ROOT, capture_output=True, text=True, env={**os.environ, "DAT_CACHE": str(tmp_path / "cache")},
+            timeout=600)
     finally:
         if schema:
             _drop(schema)
