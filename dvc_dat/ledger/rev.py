@@ -1074,13 +1074,11 @@ class Ref:
         raise TypeError("a Ref is bound to an open ledger and does not pickle")
 
     def _fetch(self) -> Any:
-        """The fetch from the store the value's ``db/store`` row names (SVP 1511), for a miss in the local
-        folder; ``None`` with no row, or ``folder``: the folder alone, as before."""
-        from .remote import FOLDER, PREDICATE, fetcher
+        """The pull from the ledger's values URI (its ``db/values`` row at the top, SVP 1599), for a miss in the
+        cache folder; with no row it pulls nothing: the folder alone."""
+        from .backends import puller
 
-        held = self._p._held(self.subject, PREDICATE) if self.subject is not None else []
-        name = show(held[0].obj) if held else FOLDER
-        return None if name == FOLDER else fetcher(name, self._p.ledger._store.name)
+        return puller(self._p.ledger)
 
     def load(self) -> Value:
         """Fetch the bytes from the art store and decode them by ``type``.

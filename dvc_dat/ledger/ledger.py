@@ -1,8 +1,10 @@
 """``Ledger``: the store handle. One constructor (A49), ``at`` for views, ``transaction`` for writes.
 
-A ledger is a folder holding the database and the art store (A54.2), or a
-Postgres DSN ``postgresql://…?art=<folder>`` (``pgstore``); its location is
-either. ``Ledger(location)`` opens it; ``Ledger()`` opens the project's *active*
+A ledger is a folder holding the database and the art store (A54.2, also
+written ``sqlite://<folder>``), or a URI whose scheme a triples backend is
+registered for (``postgresql://…``, ``pgstore``); its location is either, and
+where its bytes live beyond this machine is its row ``(db, db/values, <uri>)``
+(``backends``, SVP 1599). ``Ledger(location)`` opens it; ``Ledger()`` opens the project's *active*
 ledger (A37, A44): ``DAT_LEDGER``, else the ``default:`` of the nearest
 ``.datconfig.yaml`` at or above the working directory, each a name (``root``,
 or one registered on root) or a location. ``root:`` in that file is the root
@@ -37,8 +39,8 @@ import yaml
 from .codec import show
 from .errors import LedgerError
 from .rev import Head, Rev
-from .pgstore import PostgresStore, is_dsn
-from .store import SqliteStore, Store
+from .backends import SQLITE, VALUES, is_uri, open_triples, scheme_of, sqlite_folder
+from .store import Store
 from .txn import Transaction
 from .value import is_moment, moment, stored_moment
 
@@ -52,7 +54,7 @@ _VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 _MONTH = re.compile(r"\d{4}-\d{2}")       # a ``revs`` bound written as a month, as its labels read
 PERIODS = ("day", "week", "month")         # ``revs``'s calendar selectors
 
-Target = Union[str, Path]                  # a DSN, or a folder
+Target = Union[str, Path]                  # a URI, or a folder
 
 #: Every ledger open in this process, oldest first: what ``<ledger>@<rev>`` resolves through first
 #: (``opened``). The latest handle on a name wins; a name is never reused (SVP 1516).
@@ -116,6 +118,10 @@ def refuse_removed(path: Optional[Path], values: Dict[str, Any]) -> None:
         raise ValueError(f"{path}: 'ledger:' was removed in dvc-dat 2.63 (SVP 239): write 'root: "
                          f"{values['ledger']}' and 'default: root', and 'namespace: ledger' when its names were "
                          "the ledger's")
+    if "stores" in values:
+        raise ValueError(f"{path}: 'stores:' was removed (SVP 1599): where a ledger's bytes live is its own row "
+                         "(db, db/values, <uri>), the same on every machine; list the modules that register its "
+                         "scheme under 'backends:'")
     if "ledgers" in values:
         raise ValueError(f"{path}: 'ledgers:' was removed in dvc-dat 2.63 (SVP 239): the list of ledgers is the "
                          "registry on the root ledger; write 'root: <location of the ledger holding the registry>' "
@@ -150,13 +156,18 @@ def _walk_up(start: Path) -> Tuple[Optional[Path], List[Path]]:
     return None, searched
 
 
+def _folder(text: str) -> str:
+    """A folder location as written: ``sqlite://<folder>`` is ``<folder>``."""
+    return sqlite_folder(text) if scheme_of(text) == SQLITE else text
+
+
 def _relative(cfg: Path, led: str) -> Path:
-    p = Path(led).expanduser()
+    p = Path(_folder(led)).expanduser()
     return p if p.is_absolute() else (cfg.parent / p)
 
 
 def _target(cfg: Path, led: str) -> Target:
-    return led if is_dsn(led) else _relative(cfg, led)
+    return led if is_uri(led) else _relative(cfg, led)
 
 
 def _is_name(name: Any) -> bool:
@@ -180,13 +191,13 @@ def root_target(cfg: Path, values: Dict[str, Any]) -> Tuple[Target, bool]:
 
 
 def _location(text: str) -> Target:
-    """``DAT_LEDGER`` or a ``default:`` read as a location: a DSN, else a folder."""
-    return text if is_dsn(text) else Path(text).expanduser()
+    """``DAT_LEDGER`` or a ``default:`` read as a location: a URI, else a folder."""
+    return text if is_uri(text) else Path(_folder(text)).expanduser()
 
 
 def _resolve(cfg: Optional[Path], values: Dict[str, Any],
              env: Optional[str]) -> Tuple[Target, Any, Path, Optional[Path]]:
-    """The active ledger: ``(target, as named in errors, base for a DSN's relative art=, config whose mounts
+    """The active ledger: ``(target, as named in errors, the folder it was named from, config whose mounts
     to assert or None)``. ``DAT_LEDGER`` first, then the config's ``default:``; each a name (``root``, or one
     registered on root, ``ledgers``) when the project has a config, else a location."""
     from .named import target_of
@@ -252,16 +263,18 @@ class Ledger:
     """One logical store of quads ``(rev, subject, predicate, object)``."""
 
     path: Union[Path, str]
-    """The resolved ledger folder; for a Postgres ledger, the DSN with its ``art`` parameter made absolute.
+    """The resolved ledger folder; for any other ledger, its URI.
 
     ``repr`` hides a DSN's password.
     """
 
     def __init__(self, location: Union[str, Path, None] = None, *, create: bool = False) -> None:
-        """``Ledger(location)`` opens the ledger at ``location``: a folder or a DSN.
+        """``Ledger(location)`` opens the ledger at ``location``: a folder or a URI.
 
-        ``location``, a ``Path``, or a ``str`` that is not a DSN, is a folder; a folder without ``ledger.db`` is
-        ``LedgerError``, and so is a file.
+        ``location``, a ``Path``, or a ``str`` that is not ``<scheme>://…``, is a folder (``sqlite://<folder>`` names
+        the same); a folder without ``ledger.db`` is ``LedgerError``, and so is a file. Any other URI is opened by
+        the triples backend registered for its scheme ([Backends][backends]): ``postgresql://`` built in; a scheme
+        nothing registered is ``LedgerError`` listing what is.
 
         ``Ledger()`` — ``location`` defaulting to ``None`` — opens the active ledger ([Many ledgers][many-ledgers]):
         ``DAT_LEDGER`` when set, else the ``default:`` of the nearest ``.datconfig.yaml`` at or above the working
@@ -284,8 +297,8 @@ class Ledger:
         else:
             if isinstance(location, str) and not location.strip():
                 raise TypeError("Ledger(location): an empty location; pass a folder or a DSN, or None to find it")
-            target = location if is_dsn(location) else Path(location).expanduser()
-            given, base = location, Path.cwd()      # where a DSN's relative art= resolves
+            target = location if is_uri(location) else Path(_folder(str(location))).expanduser()
+            given, base = location, Path.cwd()
         self._open(target, given, base, create)
         if cfg is not None and not create:
             self._assert_mounts(cfg)
@@ -305,10 +318,10 @@ class Ledger:
         self._values: Dict[Any, Any] = {}
         self._store: Store
         if isinstance(target, str):
-            store = PostgresStore(target, base=base, create=create, overlay=overlay)
+            store = open_triples(target, create, overlay)
             self._store = store
-            self.path: Union[str, Path] = store.dsn
-            self._shown = store.redacted
+            self.path: Union[str, Path] = getattr(store, "dsn", target)
+            self._shown = getattr(store, "redacted", target)
         else:
             folder = target.resolve()
             if folder.exists() and not folder.is_dir():
@@ -317,8 +330,21 @@ class Ledger:
                 raise LedgerError(f"no ledger at {given}")
             self.path = folder
             self._shown = str(folder)
-            self._store = SqliteStore(folder, overlay)
+            self._store = open_triples(f"{SQLITE}://{folder}", create, overlay)
         _OPEN.append(weakref.ref(self))
+
+    @property
+    def triples(self) -> str:
+        """The ledger's triples URI, where its records live: ``sqlite://<folder>``, or the URI it was opened by."""
+        return f"{SQLITE}://{self.path}" if isinstance(self.path, Path) else self.path
+
+    @property
+    def values(self) -> Optional[str]:
+        """The ledger's values URI, where its bytes live beyond this machine: its row ``(db, db/values, <uri>)`` at
+        the top, set as any setting is (``t.add("db", "db/values", "file:///shared/art")``); ``None`` with no
+        row, the bytes then living in this machine's folder alone ([Backends][backends])."""
+        held = Rev(self, self._store.top())._held("db", VALUES)
+        return show(held[0].obj) if held else None
 
     @property
     def read_only(self) -> bool:

@@ -29,7 +29,7 @@ from .fn import Fn, FnMark
 from .namespace import LedgerNamespace
 from .pin import Rerun
 from .policy import register_policy
-from .remote import Remote, register_store
+from .backends import Values, register_triples, register_values
 from .helpers import SourceBump, bump, bump_source
 from .ledger import Ledger
 from .named import L, ledgers, register_read_guard
@@ -40,7 +40,7 @@ from .video import Video
 
 __all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Transaction", "Value", "Video", "Fn", "FnMark", "Code",
            "LedgerNamespace", "Rerun",
-           "ledger_class", "register_policy", "register_read_guard", "register_store", "Remote", "bump", "bump_source", "SourceBump", "attr",
+           "ledger_class", "register_policy", "register_read_guard", "register_values", "register_triples", "Values", "bump", "bump_source", "SourceBump", "attr",
            "LedgerError", "Multiple", "NotEvaluated", "NotClean", "NotPinned", "NotCopied", "SpecOnly", "Differed",
            "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "ConfinedProcess", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
            "AliasLoop", "SealBroken"]

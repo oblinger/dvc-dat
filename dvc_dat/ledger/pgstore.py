@@ -1,11 +1,12 @@
 """The Postgres backend: the same quad table behind the same ``Store`` interface.
 
-A Postgres ledger is a DSN, ``postgresql://user:pw@host:port/db?art=<folder>``:
-the quads live in the database (in the first schema of the connection's
-``search_path``; ``options=-csearch_path%3D<schema>`` puts one ledger per
-schema), and the art store stays a folder, named by the DSN's ``art`` query
-parameter (relative to the ``.datconfig.yaml`` that names the DSN, else the
-working directory). ``art`` is stripped before the DSN reaches libpq.
+A Postgres ledger is a URI, ``postgresql://user:pw@host:port/db``: the quads
+live in the database (in the first schema of the connection's ``search_path``;
+``options=-csearch_path%3D<schema>`` puts one ledger per schema). One backend
+serves every host; a cloud's login stays outside (a proxy, a token in the
+URI). The bytes are cached in ``<cache root>/<database>/art`` on this machine
+(``DAT_CACHE``, else ``cache:`` in ``.datconfig.yaml``) and live at the
+ledger's values URI (``backends``, SVP 1599).
 
 Same rows, same order, same fold as ``SqliteStore``. What differs underneath:
 the write lock is ``SELECT … FOR UPDATE`` on the one row of ``ledger_lock``
@@ -26,7 +27,7 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, List, Optional, Sequence, Tuple
-from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from .errors import LedgerError, LockTimeout
 from .store import ArtStore, ReadOnlyArt, Row, Store, Writer, index_name
@@ -46,11 +47,6 @@ SCHEMA = (
 _CREATE_KEY = 0x6476635F646174
 
 
-def is_dsn(target: Any) -> bool:
-    """A string naming a Postgres ledger."""
-    return isinstance(target, str) and target.startswith(SCHEMES)
-
-
 def _psycopg() -> Any:
     try:
         import psycopg
@@ -59,16 +55,9 @@ def _psycopg() -> Any:
     return psycopg
 
 
-def _quote(v: str, safe: str = "", encoding: Any = None, errors: Any = None) -> str:
-    return quote(v, safe="/", encoding=encoding, errors=errors)
-
-
-def split_dsn(dsn: str, base: Path) -> Tuple[str, str, Path, str]:
-    """``(normalised dsn, libpq conninfo, art folder, redacted dsn)``; ``art`` resolved against ``base``."""
+def split_dsn(dsn: str) -> Tuple[str, str]:
+    """``(dsn, redacted dsn)``; a ``?art=`` parameter (removed, SVP 1599) is ``LedgerError`` naming what replaces it."""
     parts = urlsplit(dsn)
-    query = parse_qsl(parts.query, keep_blank_values=True)
-    arts = [v for k, v in query if k == "art"]
-    rest = [(k, v) for k, v in query if k != "art"]
     netloc = parts.netloc
     if "@" in netloc and ":" in netloc.split("@", 1)[0]:
         user = netloc.split("@", 1)[0].split(":", 1)[0]
@@ -76,16 +65,11 @@ def split_dsn(dsn: str, base: Path) -> Tuple[str, str, Path, str]:
     else:
         redacted_netloc = netloc
     redacted = urlunsplit((parts.scheme, redacted_netloc, parts.path, parts.query, ""))
-    if len(arts) != 1 or not arts[0]:
-        raise LedgerError(f"Postgres ledger {redacted}: name the art folder once in the query string, "
-                          "?art=<folder> (the bytes stay on a filesystem)")
-    art = Path(arts[0]).expanduser()
-    art = (art if art.is_absolute() else base / art).resolve()
-    conninfo = urlunsplit((parts.scheme, netloc, parts.path, urlencode(rest, quote_via=_quote), ""))
-    full = urlunsplit((parts.scheme, netloc, parts.path, urlencode(rest + [("art", str(art))], quote_via=_quote), ""))
-    redacted = urlunsplit((parts.scheme, redacted_netloc, parts.path,
-                           urlencode(rest + [("art", str(art))], quote_via=_quote), ""))
-    return full, conninfo, art, redacted
+    if any(k == "art" for k, _v in parse_qsl(parts.query, keep_blank_values=True)):
+        raise LedgerError(f"Postgres ledger {redacted}: '?art=' was removed (SVP 1599). The bytes' cache on this "
+                          "machine is <root>/<database>/art, <root> being DAT_CACHE or 'cache:' in .datconfig.yaml; "
+                          "where they live beyond it is the ledger's row (db, db/values, <uri>)")
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, "")), redacted
 
 
 def _has_nul(*vals: Optional[str]) -> bool:
@@ -96,12 +80,16 @@ class PostgresStore(Store):
     """One Postgres schema. Reads on a per-thread autocommit connection; each write on a connection of its own.
     Given ``overlay``, read-only: every connection's session refuses writes, the art a ``ReadOnlyArt``."""
 
-    def __init__(self, dsn: str, *, base: Path, create: bool, overlay: Optional[Path] = None) -> None:
-        self.dsn, self._conninfo, art, self.redacted = split_dsn(dsn, base)
+    def __init__(self, dsn: str, *, create: bool, overlay: Optional[Path] = None) -> None:
+        from .backends import cache_folder
+
+        self.dsn, self.redacted = split_dsn(dsn)
+        self._conninfo = self.dsn
         self.read_only = overlay is not None
-        self.art = ReadOnlyArt(art, overlay) if overlay is not None else ArtStore(art)
         parts = urlsplit(self.dsn)
         self.name = parts.path.lstrip("/") or (parts.username or "")      # libpq's default database: the user
+        art = cache_folder(self.name, self.redacted)
+        self.art = ReadOnlyArt(art, overlay) if overlay is not None else ArtStore(art)
         self._pg = _psycopg()
         self._local = threading.local()
         self._readers: List[Any] = []
