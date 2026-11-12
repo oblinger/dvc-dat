@@ -256,6 +256,20 @@ class TestArguments:
         code, out, _ = dat("my_letters", "dat.title=Quickie", "n=3", "--dry-run")
         assert code == 0 and "dat.title='Quickie'" in out and "n=3" in out
 
+    def test_a_dry_run_prints_the_resolved_spec(self):
+        """SVP 1138 Q1 (A): after the call, the spec the line would create -- its `dat.base` merged, the overrides
+        applied, resolved -- as YAML."""
+        import yaml
+        code, out, _ = dat("my_letters", "dat.title=Quickie", "n=3", "--dry-run")
+        call, _, text = out.partition("\n")
+        assert code == 0 and call.startswith("Dat.manager.run('my_letters')")
+        spec = yaml.safe_load(text)
+        assert spec["dat"] == {"do": "letterator.run", "title": "Quickie", "kwargs": {"n": 3}}
+        assert (spec["start"], spec["end"]) == (97, 122)       # 97 from my_letters, 122 from its base letterator
+
+    def test_a_dry_run_of_a_function_prints_the_call_alone(self):
+        assert dat("echo_args", "7", "k=1", "--dry-run") == (0, "Dat.manager.run('echo_args', 7, k=1)", "")
+
     def test_set_and_json_are_gone(self):
         for flag in ("--set", "--json"):
             code, _, err = dat("my_letters", flag, "dat.title=Quickie")
@@ -538,7 +552,12 @@ class TestLedgerDatRun:
     def test_dry_run_shows_the_run(self, tmp_path):
         make_dat_spec_project(tmp_path)
         code, out, _ = run_x("mnt.proj.specs.twice", "n=3", "--dry-run", cwd=tmp_path)
-        assert (code, out) == (0, "rev.run('mnt.proj.specs.twice')  with the spec updated by [n=3]")
+        call, _, text = out.partition("\n")
+        assert (code, call) == (0, "rev.run('mnt.proj.specs.twice')  with the spec updated by [n=3]")
+        import yaml
+        spec = yaml.safe_load(text)
+        assert spec["dat"]["do"] == "mnt.proj.runs.twice" and spec["dat"]["kwargs"] == {"n": 3}
+        assert spec["dat"]["name"] == "twice/n" and spec["command"] is True
 
 
 @needs_just
