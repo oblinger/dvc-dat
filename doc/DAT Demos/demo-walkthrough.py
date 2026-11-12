@@ -149,6 +149,7 @@ print(d3.get_path_name(), d3.get_spec()["model"], d3.get_results()["loss"])
 # `python -m mypkg.main`, which makes its mounts and hands the command line
 # to `Dat.cli_main()`. The cell does the same by hand, so it needs no `just`
 # on `PATH`. Every `KEY=VALUE` value is JSON, else the text as typed.
+# `--dry-run` prints the call and the spec it would create, resolved.
 
 # %%
 def x(*args):

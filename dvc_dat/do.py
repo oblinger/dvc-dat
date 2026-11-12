@@ -264,7 +264,9 @@ HYDRA'S GRAMMAR (dvc-dat[hydra])
                 by name
 
 OPTIONS
-    --dry-run   Print the call (each point's) instead of making it
+    --dry-run   Print the call (each point's) instead of making it; for a
+                spec, then the spec it would create, merged and resolved, as
+                YAML
     --usage     Print TARGET's own usage (a <base>.usage value, or the spec's
                 usage key), else this message
 
@@ -382,6 +384,12 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
             if isinstance(cmd, dict):
                 print(f"Dat.manager.run({target!r}{''.join(f', {a!r}' for a in fixed)})"
                       + (f"  with the spec updated by {point!r}" if point else ""))
+                try:
+                    _print_spec(ns, Namespace._fork_spec(apply_overrides(ns._merge_bases(cmd), point), fixed))
+                except Exception as e:
+                    if os.environ.get("DAT_DEBUG"):
+                        raise
+                    return _fail(f"cannot resolve {target!r}: {_message(e)}")
             else:
                 shown = [repr(target)] + [repr(a) for a in fixed] + [f"{o.key}={o.value!r}" for o in point]
                 print(f"Dat.manager.run({', '.join(shown)})")
@@ -398,6 +406,20 @@ def _cmd_do(argv: List[str], config: Union[None, str, Path] = None) -> int:
         if result is not None:
             print(result)
     return 0
+
+
+class _SpecDumper(yaml.SafeDumper):
+    """`--dry-run`'s YAML: a value YAML has no tag for (an object a `${ns:…}` reference inlined) is shown by its repr."""
+
+
+_SpecDumper.add_multi_representer(object, lambda dumper, obj: dumper.represent_str(repr(obj)))
+
+
+def _print_spec(namespace: Namespace, spec: Dict[str, Any]) -> None:
+    """`--dry-run`'s second part (SVP 1138 Q1 (A)): the spec this line would create, merged over its `dat.base`
+    chain and resolved (`namespace.expand_spec`), as YAML; keys in the spec's order."""
+    print(yaml.dump(namespace.expand_spec(spec), Dumper=_SpecDumper, sort_keys=False,
+                    default_flow_style=False, allow_unicode=True), end="")
 
 
 def _config_file(config: Union[None, str, Path]) -> Optional[Path]:
@@ -484,6 +506,13 @@ def _cmd_eval(ledger: Any, args: List[str], points: List[List[Override]], flags:
             print(f"rev.run({', '.join(shown)})" + (f"  with the spec updated by {point!r}" if point and not keys
                                                      and isinstance(run_target, dict) else "")
                   + (f", then named {alias!r}" if alias else ""))
+            if spec is not None and not main:
+                try:
+                    _print_spec(rev.ns, run_target if isinstance(run_target, dict) else spec)
+                except Exception as e:
+                    if os.environ.get("DAT_DEBUG"):
+                        raise
+                    return _fail(f"cannot resolve {target!r}: {_message(e)}")
             continue
         try:
             hit = rev.run(run_target, seal="get", path=alias, **keys)

@@ -65,7 +65,7 @@ The base install needs pyyaml alone; it stores a spec as given and expands `${un
 just run catalog.experiment epochs=200
 # the same: bin/x is `exec just run "$@"`
 x catalog.experiment epochs=200
-# print that Dat.manager.run(...) call instead of making it
+# print that Dat.manager.run(...) call instead of making it, then the resolved spec
 x catalog.experiment epochs=200 --dry-run
 just mounts catalog
 x --info

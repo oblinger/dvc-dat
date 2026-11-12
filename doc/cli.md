@@ -134,7 +134,7 @@ serial loop over the points is the whole sweeper.
 
 | Option | Does |
 |--------|------|
-| `--dry-run` | Print the call this line would make (each point's, with its overrides), without making it. |
+| `--dry-run` | Print the call this line would make (each point's, with its overrides), without making it; when `TARGET` is a spec, then the spec it would create — its `dat.base` chain merged, the overrides applied, every `${…}` resolved — as YAML. Outside a ledger a `${unique:}` in `dat.name` shows as its first value; the run counts it when it places the dat. |
 | `--usage` | Print `TARGET`'s own usage — a `<base>.usage` value, else the spec's `usage` key — else the general usage. |
 
 ## With a ledger: `run` evaluates

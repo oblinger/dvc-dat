@@ -43,7 +43,7 @@ Every line you can type: a word runs a target, a flag asks `x` about itself.
     `--set` with the value parsed as JSON: `--json rules='[[2, "x.f"]]'` — the quotes are the shell's, and `x` sees one word, key `rules`, JSON `[[2, "x.f"]]`. Repeats, and mixes freely with `--set`. ^json
 
 **x TARGET --dry-run**
-    Print the `Dat.manager.run(…)` call this line would make, without making it — to check a fork before paying for the run. ^dry-run
+    Print the `Dat.manager.run(…)` call this line would make, without making it — to check a fork before paying for the run. When `TARGET` is a spec, the call is followed by the spec the line would create, as YAML: its `dat.base` chain merged, the overrides applied, resolved by `expand_spec` (SVP 1138). ^dry-run
 
 **x TARGET --usage**
     `<first part of TARGET>.usage`, else the spec's `usage` key, else the general usage. ^usage
