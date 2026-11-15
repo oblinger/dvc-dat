@@ -339,6 +339,21 @@ PKG = {
             Path("/tmp/ledger-sandbox-scribble.txt").write_text("x")
             return {}
     '''),
+    "sbx/stage/top.py": textwrap.dedent('''
+        from dvc_dat import dat
+
+        @dat.fn
+        def top(rev, *, game: str) -> dict:
+            return {"inner": rev.run("mnt.sbx.stage.low.low", game=game).obj, "edit": 1}
+    '''),
+    "sbx/stage/low.py": textwrap.dedent('''
+        from dvc_dat import dat
+        from sbx.stage import helper
+
+        @dat.fn
+        def low(rev, *, game: str) -> dict:
+            return {"n": helper.double(int(rev[f"game/{game}", "n"]))}
+    '''),
     "sbx/stage/writes.py": textwrap.dedent('''
         import os
         import shutil
@@ -659,6 +674,25 @@ def test_an_unsandboxed_body_reading_its_repo_outside_the_dats_is_refused(sbx):
     assert v.obj == {"x": 1, "w": {"g": "G1"}, "inner": {"g": "G1"}}
     assert L.at()[v.subject, "db/provenance"] == "eval:unsandboxed"
     assert (repo / "sbx/stage/conf.yaml").read_text() == "k: 1\n"     # outside a body: nothing checked
+
+
+def test_a_nested_run_records_only_its_own_modules_not_its_callers(sbx):
+    """SVP 1729: a body nested in another under the same mount records its own closure, never the modules its
+    caller loaded (``sbx/stage/top.py`` here), so an edit to the caller alone reruns the caller alone."""
+    L, repo = sbx
+    v = L.at().run("mnt.sbx.stage.top.top", game="G1")
+    assert v.obj == {"inner": {"n": 6}, "edit": 1}
+    inner = L.at().run("mnt.sbx.stage.low.low", game="G1", seal="get")
+    assert inner is not None
+    want = ["sbx/stage/__init__.py", "sbx/stage/helper.py", "sbx/stage/low.py"]
+    assert sorted(L.at()[inner.dependencies["code"], "db/modules"]) == want
+    assert sorted(L.at()[v.dependencies["code"], "db/modules"]) == ["sbx/stage/__init__.py", "sbx/stage/top.py"]
+    (repo / "sbx/stage/top.py").write_text((repo / "sbx/stage/top.py").read_text().replace('"edit": 1', '"edit": 2'))
+    git(repo, "commit", "-q", "-am", "top: edited")
+    assert inner.matches(L.at()) and not v.matches(L.at())
+    w = L.at().run("mnt.sbx.stage.top.top", game="G1")
+    assert w.obj == {"inner": {"n": 6}, "edit": 2} and w.subject != v.subject
+    assert len(L.at().refs(fn="mnt.sbx.stage.low.low")) == 1        # the nested stage was a hit, not rerun
 
 
 def test_a_nested_eval_under_another_mount_runs_in_a_fresh_child(sbx):

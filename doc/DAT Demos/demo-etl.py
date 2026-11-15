@@ -334,11 +334,12 @@ with L.transaction(by="human:dan", why="name the summer report") as t:
 print(shown(comfort_report_value))
 # → {'comfortable': '182/368 days', 'top': ['Boston']}
 print(ran_since(counts_before))
-# → {'daily_comfort': 4, 'city_comfort': 4, 'comfort_report': 1}
+# → {'daily_comfort': 0, 'city_comfort': 0, 'comfort_report': 1}
 
 # %% [markdown]
 # The comfort report ran one step over the four cities: its run loaded `report.py`, and every report under the old code is stale, so the new one starts from none of them.
-# The stages below ran too, which they should not: they ran nested inside the report's body, in its worker, and the worker credits a nested run with the modules of the package its caller loaded, `report.py` among them, so the edit moved their code items as well (an open defect of the sandbox's module crediting, not of the reduce; a stage run on its own records only its own modules).
+# The stages below were hits: they ran nested inside the report's body, in its worker, and a nested run records only the modules it loaded itself, `stages.py` and `values.py`, never `report.py`, which its caller loaded.
+# Read back as hits, their results were decoded in the report's own body, so `values.py`, the module of their kind, is part of the report's code item this time.
 # No version bump was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a miss, and a miss runs at HEAD, clean or dirty (F520 Q39).
 
 # %% [markdown]
@@ -358,7 +359,7 @@ for item in sorted(comfort_report_value.dependencies):
 #   platform
 #   platform/record
 print(sorted(L.at()[comfort_report_value.dependencies["code"], "db/modules"]))
-# → ['comfort/__init__.py', 'comfort/report.py']
+# → ['comfort/__init__.py', 'comfort/report.py', 'comfort/values.py']
 
 # %% [markdown]
 # `just why` reads the same back from the shell: the summer report's dependencies one level down, whether they still hold, and what moved since `report/summer`'s last target (the Boston change's report): the code alone; and, a reduce step, what it was built from and the cities it added.
