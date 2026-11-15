@@ -15,7 +15,7 @@ api:: [`dvc_dat.ledger`](../../api/ledger.md) — the classes and functions, ren
 | Methods     |                                                                                                                                                                                                                                                                                                            |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ledger      | [path](../../api/ledger.md#dvc_dat.ledger.Ledger.path), [at](../../api/ledger.md#dvc_dat.ledger.Ledger.at), [revs](../../api/ledger.md#dvc_dat.ledger.Ledger.revs), [transaction](../../api/ledger.md#dvc_dat.ledger.Ledger.transaction), [close](../../api/ledger.md#dvc_dat.ledger.Ledger.close)                                                                                                                                                                                                                                 |
-| Rev         | [id](../../api/ledger.md#dvc_dat.ledger.Rev.id), [ledger](../../api/ledger.md#dvc_dat.ledger.Rev.ledger), [tx](../../api/ledger.md#dvc_dat.ledger.Rev.tx), [`[]`](../../api/ledger.md#dvc_dat.ledger.Rev.__getitem__), [get](../../api/ledger.md#dvc_dat.ledger.Rev.get), [in](../../api/ledger.md#dvc_dat.ledger.Rev.__contains__), [all](../../api/ledger.md#dvc_dat.ledger.Rev.all), [history](../../api/ledger.md#dvc_dat.ledger.Rev.history), [last_rev](../../api/ledger.md#dvc_dat.ledger.Rev.last_rev), [refs](../../api/ledger.md#dvc_dat.ledger.Rev.refs), [values](../../api/ledger.md#dvc_dat.ledger.Rev.values), [value](../../api/ledger.md#dvc_dat.ledger.Rev.value), [select](../../api/ledger.md#dvc_dat.ledger.Rev.select), [load](../../api/ledger.md#dvc_dat.ledger.Rev.load), [ns](../../api/ledger.md#dvc_dat.ledger.Rev.ns), [run](../../api/ledger.md#dvc_dat.ledger.Rev.run), [rerun](../../api/ledger.md#dvc_dat.ledger.Rev.rerun), [timezone](../../api/ledger.md#dvc_dat.ledger.Rev.timezone), [show_time](../../api/ledger.md#dvc_dat.ledger.Rev.show_time)                                                |
+| Rev         | [id](../../api/ledger.md#dvc_dat.ledger.Rev.id), [ledger](../../api/ledger.md#dvc_dat.ledger.Rev.ledger), [tx](../../api/ledger.md#dvc_dat.ledger.Rev.tx), [`[]`](../../api/ledger.md#dvc_dat.ledger.Rev.__getitem__), [get](../../api/ledger.md#dvc_dat.ledger.Rev.get), [in](../../api/ledger.md#dvc_dat.ledger.Rev.__contains__), [all](../../api/ledger.md#dvc_dat.ledger.Rev.all), [history](../../api/ledger.md#dvc_dat.ledger.Rev.history), [last_rev](../../api/ledger.md#dvc_dat.ledger.Rev.last_rev), [refs](../../api/ledger.md#dvc_dat.ledger.Rev.refs), [values](../../api/ledger.md#dvc_dat.ledger.Rev.values), [value](../../api/ledger.md#dvc_dat.ledger.Rev.value), [select](../../api/ledger.md#dvc_dat.ledger.Rev.select), [load](../../api/ledger.md#dvc_dat.ledger.Rev.load), [ns](../../api/ledger.md#dvc_dat.ledger.Rev.ns), [run](../../api/ledger.md#dvc_dat.ledger.Rev.run), [reduce](../../api/ledger.md#dvc_dat.ledger.Rev.reduce), [rerun](../../api/ledger.md#dvc_dat.ledger.Rev.rerun), [timezone](../../api/ledger.md#dvc_dat.ledger.Rev.timezone), [show_time](../../api/ledger.md#dvc_dat.ledger.Rev.show_time)                                                |
 | Ref         | [rev](../../api/ledger.md#dvc_dat.ledger.Ref.rev), [subject](../../api/ledger.md#dvc_dat.ledger.Ref.subject), [name](../../api/ledger.md#dvc_dat.ledger.Ref.name), [aliases](../../api/ledger.md#dvc_dat.ledger.Ref.aliases), [hash](../../api/ledger.md#dvc_dat.ledger.Ref.hash), [type](../../api/ledger.md#dvc_dat.ledger.Ref.type), [preds](../../api/ledger.md#dvc_dat.ledger.Ref.preds), [sealed_at](../../api/ledger.md#dvc_dat.ledger.Ref.sealed_at), [load](../../api/ledger.md#dvc_dat.ledger.Ref.load)                                                                                                                                   |
 | Row         | [rev](../../api/ledger.md#dvc_dat.ledger.Row.rev), [subject](../../api/ledger.md#dvc_dat.ledger.Row.subject), [predicate](../../api/ledger.md#dvc_dat.ledger.Row.predicate), [object](../../api/ledger.md#dvc_dat.ledger.Row.object), [added](../../api/ledger.md#dvc_dat.ledger.Row.added)                                                                                                                                                                                                 |
 | Transaction | [tx](../../api/ledger.md#dvc_dat.ledger.Transaction.tx), [previous_rev](../../api/ledger.md#dvc_dat.ledger.Transaction.previous_rev), [ns](../../api/ledger.md#dvc_dat.ledger.Transaction.ns), [rev](../../api/ledger.md#dvc_dat.ledger.Transaction.rev), [add](../../api/ledger.md#dvc_dat.ledger.Transaction.add), [update](../../api/ledger.md#dvc_dat.ledger.Transaction.update), [`[]=`](../../api/ledger.md#dvc_dat.ledger.Transaction.__setitem__), [remove](../../api/ledger.md#dvc_dat.ledger.Transaction.remove), [`del []`](../../api/ledger.md#dvc_dat.ledger.Transaction.__delitem__), [pin](../../api/ledger.md#dvc_dat.ledger.Transaction.pin)                                                                                                       |
@@ -200,7 +200,7 @@ A read turns the rows at or before its revision into what they hold, by each pre
 | `db/repo/<repo>/<package>` | `db/version`, the clock of one versioned package (`plane`, `demo_game.etl`, `geometry`): written by the first clean run at a new `__version__`, never by a person (`bump_source` edits the source) |
 | `db/kind/<dotted>` | `db/moved`: a renamed class |
 | `ledger/<name>`, on the root ledger | `ledger/location`, where the ledger `<name>` is, and `ledger/dropped` once it is gone ([Many ledgers](#Many%20ledgers)); `ledger/lifetime`, what root declares of it: `permanent`, `archival` or `transient`, written once ([Copying](#Copying)) |
-| a sealed value's subject | `db/value`, `db/kind`, `db/provenance`, `db/preds`, `db/fn` (the function's dotted name), `db/keys`, `db/returns`, `db/reproducible`, `db/at` (the revision the run read, as a str, [Running over past revisions](#Running%20over%20past%20revisions)), `db/copied-from`, `db/commit` and `db/spec-only` on a copy, `db/sealed-at`, `db/deps/<item>` ([Value Provenance](#Value%20Provenance)); `db/rerunnable` (`true` or `recursive`), the claim a [`pin`](../../api/ledger.md#dvc_dat.ledger.Transaction.pin) asserted, and `db/rerun`, the outcome `pin(rerun=True)` recorded ([Rerunnability](#Rerunnability)); `db/subdat/<relpath>`, a `ref:` to a subdat, `str:declined`, or `str:<ledger>@<rev>:<subject>` for one a copy left on its ledger ([Subdats](#Subdats)) |
+| a sealed value's subject | `db/value`, `db/kind`, `db/provenance`, `db/preds`, `db/fn` (the function's dotted name), `db/keys`, `db/returns`, `db/reproducible`, `db/at` (the revision the run read, as a str, [Running over past revisions](#Running%20over%20past%20revisions)), `db/reduce/from` and `db/reduce/more` on a reduce step ([Reduce](#Reduce)), `db/copied-from`, `db/commit` and `db/spec-only` on a copy, `db/sealed-at`, `db/deps/<item>` ([Value Provenance](#Value%20Provenance)); `db/rerunnable` (`true` or `recursive`), the claim a [`pin`](../../api/ledger.md#dvc_dat.ledger.Transaction.pin) asserted, and `db/rerun`, the outcome `pin(rerun=True)` recorded ([Rerunnability](#Rerunnability)); `db/subdat/<relpath>`, a `ref:` to a subdat, `str:declined`, or `str:<ledger>@<rev>:<subject>` for one a copy left on its ledger ([Subdats](#Subdats)) |
 
 A `(db/pred/<p>, db/index, true)` row builds a partial SQL index on `<p>` in the transaction that commits it. A release is a `bump` of `db`, which moves its `db/version`, and `ledger.at("3.2.0")` reads that moment.
 
@@ -387,6 +387,39 @@ A save writes the value's own rows once, under a subject hashing the dependencie
 
 
 
+### Reduce
+**`rev.reduce(name, over=[...], **keys)` reduces a set of inputs to one value and remembers each step under the sorted set it covers, so a set that grows reduces by its growth (SVP 242).** The function is a `@dat.fn` with two reserved keyword parameters: `acc`, the loaded result of the largest subset already reduced (`None` on the first step), and `more`, the inputs outside it, sorted, each a loaded `Value` where `over` gave a `Value` or a `Ref` and the key as given otherwise. Its result may be any type (games in, a table out). `rev.run` of it is `TypeError` ([`reduce`](../../api/ledger.md#dvc_dat.ledger.Rev.reduce)).
+
+```python
+@dat.fn
+def table(rev, *, acc, more: list, metric: str) -> dict:
+    rows = dict(acc.obj) if acc is not None else {}
+    for game in more:
+        m = rev.run("mnt.svp.metrics", game=game, metric=metric)
+        rows[game] = m.obj
+    return rows
+
+games = ["G1", "G2", "G3", "G4", "G5"]
+# one step over the five
+five = L.at().reduce("mnt.svp.table", over=games, metric="mota")
+# one step: acc is five's result, more is ["G6"]
+six = L.at().reduce("mnt.svp.table", over=["G6", *games],
+                    metric="mota")
+```
+
+The ask is a set: each input's identity is its `ref:<class>:<hash>` (a `Value`/`Ref`) or its canonical JSON, the set sorted by it, so an order is never a second entry, and an identity given twice is `ValueError`. The memo key is `db/keys` = `{"over": [...sorted], **keys}`. At the revision asked: (1) an exact entry whose dependencies hold is returned and nothing runs (`seal="get"` stops here); (2) else the function's entries (`db/fn`) with the same other keys whose `over` is a proper subset of the ask are judged largest first, newest seal first, as any memo entry is; the first that holds is `acc`; (3) the function runs once over `acc` and the rest, through `run`'s machinery (sandboxed under a mount), and the step is saved per `seal=` (its own transaction `by="reduce:<name>"`). Each step is one memo entry, with two rows beside a run's: `db/reduce/from`, the `acc` entry's subject (`none`), and `db/reduce/more`, the `over` entries handed as `more`. `acc` and each loaded input are `ref:` items of its trace; `just why` prints both rows.
+
+| change | effect |
+| --- | --- |
+| an input added | one step over the extras |
+| an input removed | an exact hit when that subset was asked once; else the largest remembered subset, the rest re-reduced |
+| a `Value`/`Ref` input's bytes change | a new identity: every partial holding the old one is no subset; the largest partial without it |
+| a run the body makes changes (its `eval:` item) | that item fails in every entry holding the input; the same fallback |
+| the function's code changes | every entry's `code` item fails: from scratch under the new code; old entries stay readable at their revisions |
+| another key | another ask, its own chain |
+
+There is no subtraction: a change to an early member costs a full reduce. **The law the author owes:** `f(f(None, A), B)` equals `f(None, A | B)` byte for byte, for any partition of the set. The ledger cannot check it; `fresh=True` skips both lookups and reduces the whole set from scratch, and a test compares it with the incremental result by `same_as`.
+
 ## Memoization and the platform
 A memo entry records the whole platform it ran on; the ledger decides, at each lookup, how much of it must agree (SVP 1474). **Record at write, policy at lookup.**
 
@@ -508,7 +541,7 @@ In the table `<value>` is the value's own subject and the other angle-bracketed 
 | `<value>` | `db/deps/<subject> <predicate>` | the held object | a row the body read with `rev[s, p]` or `get`, and what it held |
 | `<value>` | `db/deps/<name> db/alias` | `ref:<class>:<hash>` | a name the body loaded through, and the bytes it named |
 | `<value>` | `db/deps/ref:<class>:<hash>` | `ref:<class>:<hash>` | a value the body loaded, named by its bytes |
-| `<value>` | `db/deps/eval:<name>{keys}` | `ref:<class>:<hash>` | a nested `run`, and the result it got |
+| `<value>` | `db/deps/eval:<name>{keys}` | `ref:<class>:<hash>` | a nested `run`, and the result it got; a nested `reduce` too, its keys `{"over": [...sorted], ...}` |
 | `<value>` | `db/deps/foreign:{"at":"<ledger>@<rev>","name":<name>}` | `ref:<class>:<hash>` | a value or a run the body reached through any `Rev` but its recording one, on any ledger; provenance only |
 | `<value>` | `db/deps/q:{...}` | the sorted `ref:` list, or a token of the result | a query the body made (`refs`, `values`, `value`, `select`; any other read as `__call__`), and what it answered |
 | `<value>` | `db/deps/salt` | the mount's `db/salt` | the salt of the mount a sandboxed run was under, when set |

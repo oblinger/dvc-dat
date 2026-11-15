@@ -340,9 +340,11 @@ class Ledger:
 
     @property
     def values(self) -> Optional[str]:
-        """The ledger's values URI, where its bytes live beyond this machine: its row ``(db, db/values, <uri>)`` at
-        the top, set as any setting is (``t.add("db", "db/values", "file:///shared/art")``); ``None`` with no
-        row, the bytes then living in this machine's folder alone ([Backends][backends])."""
+        """The ledger's values URI, where its bytes live beyond this machine.
+
+        Its row ``(db, db/values, <uri>)`` at the top, set as any setting is
+        (``t.add("db", "db/values", "file:///shared/art")``); ``None`` with no row, the bytes then living in this
+        machine's folder alone ([Backends][backends])."""
         held = Rev(self, self._store.top())._held("db", VALUES)
         return show(held[0].obj) if held else None
 

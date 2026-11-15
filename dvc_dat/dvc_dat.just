@@ -1,6 +1,6 @@
 # dvc-dat's recipes, for a project's justfile to import. `just run TARGET`
 # is the one way to run; `x TARGET` (bin/x) is `just run TARGET`. Below
-# `mounts`, the ledger verbs: values, value, history, why, set, index, bump, pin, rerun.
+# `mounts`, the ledger verbs: values, value, history, why, set, index, bump, pin, rerun, reduce.
 #
 #     import 'dvc_dat.just'    # a link to the installed dvc_dat/dvc_dat.just
 #
@@ -133,3 +133,9 @@ pin name *args:
 [positional-arguments]
 rerun name:
     @"{{_dat_python}}" -m dvc_dat.ledger.recipes rerun "$@"
+
+# reduce NAME over=A,B,C [k=v ...]: a reduce function over a set, reusing the largest subset already reduced
+[no-cd]
+[positional-arguments]
+reduce name *args:
+    @"{{_dat_python}}" -m dvc_dat.ledger.recipes reduce "$@"

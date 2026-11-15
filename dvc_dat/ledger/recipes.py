@@ -1,10 +1,10 @@
 """The ledger's just verbs: `python -m dvc_dat.ledger.recipes <verb> [args]`.
 
-`values`, `value`, `history`, `why`, `set`, `index`, `bump`, `pin` and `rerun`, the recipes
-`dvc_dat.just` ships beside `run` and `mounts` (SVP 1465 Q1 (A)); a project
+`values`, `value`, `history`, `why`, `set`, `index`, `bump`, `pin`, `rerun` and `reduce`, the
+recipes `dvc_dat.just` ships beside `run` and `mounts` (SVP 1465 Q1 (A)); a project
 that does not import that file trampolines to this module. Each verb is one
 ledger call; running a function or a spec is not here but `just run`, the one
-way to run. What a Python caller spells out the verb supplies: the ledger
+way to run, except `reduce`, a reduce function's own call (SVP 242). What a Python caller spells out the verb supplies: the ledger
 (`Ledger()`: `DAT_LEDGER`, else the nearest `.datconfig.yaml`'s `default:`),
 `by=human:$USER`, `confirm=` (a typed `yes`), the checkout's packages on
 `sys.path` (`why`, `bump <module>`), short kind names, hash prefixes, and
@@ -146,6 +146,27 @@ def why(args):
         other = rev.load(prev)
         moved = ", ".join(f"{brief(k)} {brief(a)} -> {brief(b)}" for k, (b, a) in v.diff(other).items())
         print(f"since {short(other.subject)}, its last target: {moved or 'nothing moved'}")
+    step = reduced_from(rev, v.subject)
+    if step:
+        print(step)
+
+
+def reduced_from(rev, subject):
+    """A reduce step's line (SVP 242): the entry it was built from and the inputs it added; ``None`` for any other value."""
+    rfrom = rev.get(subject, "db/reduce/from")
+    if rfrom is None:
+        return None
+    more = rev.get(subject, "db/reduce/more") or []
+    shown = ", ".join(brief(x) if isinstance(x, str) and x.startswith("ref:") else json.dumps(x) for x in more)
+    return f"reduced from: {'(none)' if rfrom == 'none' else short(rfrom)}; more: {shown or '(none)'}"
+
+
+def over_value(text):
+    """`over=`: a JSON list, else comma-separated inputs, each JSON else the text as typed."""
+    v = arg_value(text)
+    if isinstance(v, list):
+        return v
+    return [arg_value(x) for x in text.split(",") if x]
 
 
 def set_recipe(args):
@@ -220,6 +241,23 @@ def pin_recipe(args):
           + (f", rerun {top[subject, 'db/rerun']}" if kw.get("rerun") else ""))
 
 
+def reduce_recipe(args):
+    """`reduce NAME over=A,B,C [k=v ...]`: `rev.reduce` at the head, then the step's line (SVP 242)."""
+    import_checkout()                       # an installed function resolves in the checkout
+    if not args:
+        sys.exit("reduce NAME over=A,B,C [k=v ...]")
+    name, rest = args[0], args[1:]
+    over = next((a.partition("=")[2] for a in rest if a.startswith("over=")), None)
+    if over is None:
+        sys.exit("reduce: over=A,B,C names the inputs")
+    kw = parse([a for a in rest if not a.startswith("over=")])
+    L = Ledger()
+    v = L.at().reduce(name, over=over_value(over), **kw)
+    rev = L.at()
+    print(f"{name}: {short(v.subject)}, over {len(rev[v.subject, 'db/keys']['over'])}")
+    print(reduced_from(rev, v.subject))
+
+
 def rerun_recipe(args):
     """`rerun VALUE`: run the pinned function again at its tag and compare the hash (SVP 250)."""
     import_checkout()
@@ -228,7 +266,7 @@ def rerun_recipe(args):
 
 
 RECIPES = {"values": values, "value": value, "history": history, "why": why, "set": set_recipe,
-           "index": index, "bump": bump_recipe, "pin": pin_recipe, "rerun": rerun_recipe}
+           "index": index, "bump": bump_recipe, "pin": pin_recipe, "rerun": rerun_recipe, "reduce": reduce_recipe}
 
 USAGE = "usage: python -m dvc_dat.ledger.recipes {" + ",".join(RECIPES) + "} [ARG ...]"
 

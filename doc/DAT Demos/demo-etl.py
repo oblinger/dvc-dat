@@ -16,8 +16,8 @@
 # > **Plan** (delete once the sections carry it). An ETL pipeline computes over a set of inputs in stages, and the ledger recomputes only the stages whose inputs moved.
 # >
 # > 1. **Setup: the city data**: each city's year of daily weather is a sealed value found by an alias; the city set the pipeline runs over is rows.
-# > 2. **A pipeline of stages**: a daily comfort per city (its weather plus a comfort column), a city comfort per city over a date range (the days binned by comfort level), a comfort report over a city set and a date range; asked once, every stage runs; asked again, every stage is a hit.
-# > 3. **Summer, and one more city**: one edit narrows the range to summer and adds a city; only the new city's daily comfort runs, then every city's summer binning and the report.
+# > 2. **A pipeline of stages**: a daily comfort per city (its weather plus a comfort column), a city comfort per city over a date range (the days binned by comfort level), a comfort report reduced over a city set and a date range; asked once, every stage runs; asked again, every stage is a hit.
+# > 3. **Summer, and one more city**: the range narrows to summer, so every city's summer binning and the report run; then a city joins, and only its own stages and one report step over it run.
 # > 4. **Changing a city's data**: only that city's daily comfort and what is downstream of it run.
 # > 5. **Changing one stage's code**: only that stage runs; the stages below it are hits.
 # >
@@ -210,66 +210,92 @@ print("sandboxed:", report_fn.code.sandboxed, " code:", report_fn.code)
 # %% [markdown]
 # ### Asking for the comfort report
 #
-# `rev.run(name, **keys)` returns the stage's result, running it only when no sealed result whose dependencies hold was sealed for the same keys.
-# The first report covers the whole year.
+# `rev.run(name, **keys)` returns a stage's result, running it only when no sealed result whose dependencies hold was sealed for the same keys.
+# The comfort report is a reduce over the city set: `rev.reduce(name, over=cities, **keys)` remembers each report under the sorted set of cities it covers, so a set that grows is reported by its growth; its function takes `acc`, the report over the cities already reduced, and `more`, the cities it adds.
+# The set's rows are read here, by the caller, and the first report covers the whole year.
 
 # %%
+REPORT = "mnt.comfort.report.comfort_report"
+
+
+def cities() -> list:
+    """The city set's cities, read off its `contains` rows."""
+    return L.at().all("cityset/representative", "contains")
+
+
+def shown(report_value) -> dict:
+    """A report's share of comfortable days and its two most comfortable cities."""
+    return {k: report_value.obj[k] for k in ("comfortable", "top")}
+
+
 counts_before = entry_counts()
-comfort_report_value = L.at().run("mnt.comfort.report.comfort_report", cityset="cityset/representative",
-                                  start="2026-01-01", end="2027-01-01")
-print(comfort_report_value.obj)
+comfort_report_value = L.at().reduce(REPORT, over=cities(), start="2026-01-01", end="2027-01-01")
+print(shown(comfort_report_value))
 # → {'comfortable': '213/1095 days', 'top': ['Austin', 'Boston']}
 print(ran_since(counts_before))
 # → {'daily_comfort': 3, 'city_comfort': 3, 'comfort_report': 1}
 print("db/version:", L.at()["db/repo/comfort-repo/comfort", "db/version"])
 # → db/version: 0.1.0: the clock, written by this first clean run
 # same as:
-#   just run mnt.comfort.report.comfort_report cityset=cityset/representative start=2026-01-01 end=2027-01-01
+#   just reduce mnt.comfort.report.comfort_report over=Boston,Austin,Chicago start=2026-01-01 end=2027-01-01
 
 # %% [markdown]
-# Everything ran: a daily comfort per city, a city comfort per city over the year, and the comfort report.
+# Everything ran: a daily comfort per city, a city comfort per city over the year, and the comfort report, one step over the three cities.
 
 # %%
 counts_before = entry_counts()
-again_value = L.at().run("mnt.comfort.report.comfort_report", cityset="cityset/representative",
-                         start="2026-01-01", end="2027-01-01")
+again_value = L.at().reduce(REPORT, over=cities(), start="2026-01-01", end="2027-01-01")
 print(again_value.subject == comfort_report_value.subject)
 # → True
 print(ran_since(counts_before))
 # → {'daily_comfort': 0, 'city_comfort': 0, 'comfort_report': 0}
-# same as (a hit):
-#   just run mnt.comfort.report.comfort_report cityset=cityset/representative start=2026-01-01 end=2027-01-01
 
 # %% [markdown]
 # Asked again, nothing ran: the comfort report is a hit.
-# In practice a pipeline is asked for from the shell, and `just run` is this same `rev.run` call: here, a third hit.
+# In practice a pipeline is asked for from the shell, and `just reduce` is this same `rev.reduce` call: here, a third hit, the cities in another order, which is the same set.
 
 # %%
-# !cd {repo_path} && just run mnt.comfort.report.comfort_report cityset=cityset/representative start=2026-01-01 end=2027-01-01
-# → hit  #<8 hex>
+# !cd {repo_path} && just reduce mnt.comfort.report.comfort_report over=Chicago,Boston,Austin start=2026-01-01 end=2027-01-01
+# → mnt.comfort.report.comfort_report: #<8 hex>, over 3
+# → reduced from: (none); more: "Austin", "Boston", "Chicago"
 
 # %% [markdown]
 # ## Summer, and one more city
 #
-# Two changes at once: Denver joins the set, and the report is asked for summer, June through August.
-# A new range is a new memo key for every city comfort; the daily comfort under it does not depend on the range, so only the new city's runs.
+# The report is asked for summer, June through August: a new range is a new memo key for every city comfort and for the report, whose steps over one range never stand in for another's.
+# The daily comfort does not depend on the range, so it is a hit.
+
+# %%
+counts_before = entry_counts()
+summer_value = L.at().reduce(REPORT, over=cities(), start="2026-06-01", end="2026-09-01")
+print(shown(summer_value))
+# → {'comfortable': '117/276 days', 'top': ['Boston', 'Chicago']}
+print(ran_since(counts_before))
+# → {'daily_comfort': 0, 'city_comfort': 3, 'comfort_report': 1}
+
+# %% [markdown]
+# Now Denver joins the set. The summer report over four cities finds the report over three, its largest subset already reduced, and runs one step: `acc` that report, `more` Denver alone.
 
 # %%
 with L.transaction(by="human:dan", why="Denver joins") as t:
     t.add("cityset/representative", "contains", "Denver")
 counts_before = entry_counts()
-comfort_report_value = L.at().run("mnt.comfort.report.comfort_report", cityset="cityset/representative",
-                                  start="2026-06-01", end="2026-09-01", path="report/summer")
-print(comfort_report_value.obj)
+comfort_report_value = L.at().reduce(REPORT, over=cities(), start="2026-06-01", end="2026-09-01")
+with L.transaction(by="human:dan", why="name the summer report") as t:
+    t.add("report/summer", "db/alias", comfort_report_value.subject)
+print(shown(comfort_report_value))
 # → {'comfortable': '175/368 days', 'top': ['Denver', 'Boston']}
 print(ran_since(counts_before))
-# → {'daily_comfort': 1, 'city_comfort': 4, 'comfort_report': 1}
-# the run, same as:
-#   just run mnt.comfort.report.comfort_report cityset=cityset/representative start=2026-06-01 end=2026-09-01 alias=report/summer
+# → {'daily_comfort': 1, 'city_comfort': 1, 'comfort_report': 1}
+rev = L.at()
+print("from:", rev[comfort_report_value.subject, "db/reduce/from"] == summer_value.subject,
+      " more:", rev[comfort_report_value.subject, "db/reduce/more"])
+# → from: True  more: ['Denver']
+# the step, same as:
+#   just reduce mnt.comfort.report.comfort_report over=Boston,Austin,Chicago,Denver start=2026-06-01 end=2026-09-01
 
 # %% [markdown]
-# Denver's daily comfort ran; Austin's, Boston's and Chicago's were hits, scored once for the year and binned again for summer.
-# All four city comforts ran over the new range, and the report ran once.
+# Denver's daily comfort and its summer city comfort ran, and the report ran one step over Denver; Austin's, Boston's and Chicago's stages were not asked for at all, their counts carried in the three-city report.
 
 # %% [markdown]
 # ## Changing a city's data
@@ -279,15 +305,17 @@ print(ran_since(counts_before))
 # %%
 seal_weather("Boston", seed=22)                 # Boston re-reported
 counts_before = entry_counts()
-comfort_report_value = L.at().run("mnt.comfort.report.comfort_report", cityset="cityset/representative",
-                                  start="2026-06-01", end="2026-09-01", path="report/summer")
+comfort_report_value = L.at().reduce(REPORT, over=cities(), start="2026-06-01", end="2026-09-01")
+with L.transaction(by="human:dan", why="name the summer report") as t:
+    t.add("report/summer", "db/alias", comfort_report_value.subject)
 print(ran_since(counts_before))
 # → {'daily_comfort': 1, 'city_comfort': 1, 'comfort_report': 1}
-# the run, same as:
-#   just run mnt.comfort.report.comfort_report cityset=cityset/representative start=2026-06-01 end=2026-09-01 alias=report/summer
+print("more:", L.at()[comfort_report_value.subject, "db/reduce/more"])
+# → more: ['Austin', 'Boston', 'Chicago', 'Denver']
 
 # %% [markdown]
-# Boston's daily comfort ran, then its summer city comfort and the report; the other three cities were hits, since they never read `weather/Boston`.
+# Boston's daily comfort ran, then its summer city comfort; the other three cities were hits, since they never read `weather/Boston`.
+# The report ran one step over all four: every report remembered held Boston's old counts, so none was a subset it could start from. A change to an early member costs the whole reduce, though not the stages below it.
 
 # %% [markdown]
 # ## Changing one stage's code
@@ -300,23 +328,23 @@ report_source = report_path.read_text().replace("[:2]", "[:1]").replace("two mos
 report_path.write_text(report_source)
 commit("report: the one most comfortable city", "comfort/report.py")
 counts_before = entry_counts()
-comfort_report_value = L.at().run("mnt.comfort.report.comfort_report", cityset="cityset/representative",
-                                  start="2026-06-01", end="2026-09-01", path="report/summer")
-print(comfort_report_value.obj)
+comfort_report_value = L.at().reduce(REPORT, over=cities(), start="2026-06-01", end="2026-09-01")
+with L.transaction(by="human:dan", why="name the summer report") as t:
+    t.add("report/summer", "db/alias", comfort_report_value.subject)
+print(shown(comfort_report_value))
 # → {'comfortable': '182/368 days', 'top': ['Boston']}
 print(ran_since(counts_before))
-# → {'daily_comfort': 0, 'city_comfort': 0, 'comfort_report': 1}
-# the run, same as:
-#   just run mnt.comfort.report.comfort_report cityset=cityset/representative start=2026-06-01 end=2026-09-01 alias=report/summer
+# → {'daily_comfort': 4, 'city_comfort': 4, 'comfort_report': 1}
 
 # %% [markdown]
-# Only the comfort report ran: its run loaded `report.py`, and no other stage's run did.
+# The comfort report ran one step over the four cities: its run loaded `report.py`, and every report under the old code is stale, so the new one starts from none of them.
+# The stages below ran too, which they should not: they ran nested inside the report's body, in its worker, and the worker credits a nested run with the modules of the package its caller loaded, `report.py` among them, so the edit moved their code items as well (an open defect of the sandbox's module crediting, not of the reduce; a stage run on its own records only its own modules).
 # No version bump was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a miss, and a miss runs at HEAD, clean or dirty (F520 Q39).
 
 # %% [markdown]
 # ## Reading a result's dependencies back
 #
-# A result's dependencies list every input it read: each stage below by its result's bytes (`eval:`), the set's rows (`q:`, the `all` call and its answer), its own code (`code`, the snapshot, and `fn`, the function's name in it) and the environment.
+# A result's dependencies list every input it read: each stage below by its result's bytes (`eval:`), its own code (`code`, the snapshot, and `fn`, the function's name in it) and the environment; a reduce step built on an earlier one would list that report too, by its bytes (`ref:`). The set's rows are not among them: the caller read them, and the report is keyed by the cities themselves.
 
 # %%
 for item in sorted(comfort_report_value.dependencies):
@@ -328,18 +356,19 @@ for item in sorted(comfort_report_value.dependencies):
 #   eval:mnt.comfort.stages.city_comfort{"city":"Denver","end":"2026-09-01","start":"2026-06-01"}
 #   fn
 #   platform
-#   q:{"__call__":"all","args":["cityset/representative","contains"],"since":null}
+#   platform/record
 print(sorted(L.at()[comfort_report_value.dependencies["code"], "db/modules"]))
-# → ['comfort/__init__.py', 'comfort/report.py', 'comfort/values.py']
+# → ['comfort/__init__.py', 'comfort/report.py']
 
 # %% [markdown]
-# `just why` reads the same back from the shell: the summer report's dependencies one level down, whether they still hold, and what moved since `report/summer`'s last target (the Boston change's report): the code alone.
+# `just why` reads the same back from the shell: the summer report's dependencies one level down, whether they still hold, and what moved since `report/summer`'s last target (the Boston change's report): the code alone; and, a reduce step, what it was built from and the cities it added.
 
 # %%
 # !cd {repo_path} && just why report/summer
 # → report/summer: #<8 hex>, matches the head
-# → dependencies: code <8 hex>, eval:mnt.comfort.stages.city_comfort{"city":"Austin","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, eval:mnt.comfort.stages.city_comfort{"city":"Boston","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, eval:mnt.comfort.stages.city_comfort{"city":"Chicago","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, eval:mnt.comfort.stages.city_comfort{"city":"Denver","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, fn mnt.comfort.report.comfort_report, platform <platform>, query {"__call__":"all","args":["cityset/representative","contains"],"since":null} -> 4 value(s)
+# → dependencies: code <8 hex>, eval:mnt.comfort.stages.city_comfort{"city":"Austin","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, eval:mnt.comfort.stages.city_comfort{"city":"Boston","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, eval:mnt.comfort.stages.city_comfort{"city":"Chicago","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, eval:mnt.comfort.stages.city_comfort{"city":"Denver","end":"2026-09-01","start":"2026-06-01"} ComfortCounts:<8 hex>, fn mnt.comfort.report.comfort_report, platform <platform>, platform/record <record>
 # → since #<8 hex>, its last target: code <8 hex> -> <8 hex>
+# → reduced from: (none); more: "Austin", "Boston", "Chicago", "Denver"
 
 # %%
 # clean up

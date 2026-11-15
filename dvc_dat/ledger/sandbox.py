@@ -115,7 +115,7 @@ from . import hooks
 from .backends import CACHE_ENV
 from .named import shipped_read_guard, shipped_section
 from .fn import (Fn, alias_reads, attach_run, drop_work, fn_mark, fn_mark_in_source, mounted_name, mounts_at,
-                 mounts_hash, path_template, run_trace, save_run, seal_entry, wrap_result)
+                 mounts_hash, path_template, reduce_args, run_trace, save_run, seal_entry, wrap_result)
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -555,11 +555,12 @@ def sandbox_code_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Optional[
 
 
 def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
-                  name: Optional[str] = None) -> Any:
+                  name: Optional[str] = None, reduce: Optional[Tuple[str, str]] = None) -> Any:
     """A miss: at HEAD, clean or dirty (Q39 (A)); the ``code`` item records the bytes it loaded.
 
-    ``save`` as ``Fn._run_base``'s. Into a ``Transaction`` (open here, in the parent), the worker runs a
-    draft and the parent saves it, since the transaction cannot cross the pipe."""
+    ``save`` and ``reduce`` as ``Fn._run_base``'s. Into a ``Transaction`` (open here, in the parent), the worker runs
+    a draft and the parent saves it, since the transaction cannot cross the pipe. A reduce step ships its ``db/keys``
+    (``enc``) and rows, its ``acc`` and ``more`` by subject (SVP 242)."""
     env = current_env()
     if fn._info["repo"] not in env.code:
         raise NotEvaluated(f"{fn.name}: repo {fn._info['repo']!r} has no checkout in this environment")
@@ -567,13 +568,14 @@ def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
     if IN_WORKER:
         running = STATE.frames[-1].mount if STATE.frames else None
         if running is None or running == fn._info["prefix"] or _UPSTREAM is None:
-            return run_here(fn, plain, kw, enc, save, name)     # nested under its own mount: in-process
+            return run_here(fn, plain, kw, enc, save, name, reduce)     # nested under its own mount: in-process
         server = _UPSTREAM                          # under another mount: a fresh child of the server
     else:
         server = _server()
+    step = None if reduce is None else {"enc": enc, "rows": list(reduce)}
     if save is True or save is False:
-        return server.call(fn, plain, kw, save, env)
-    draft = server.call(fn, plain, kw, False, env)
+        return server.call(fn, plain, kw, save, env, step)
+    draft = server.call(fn, plain, kw, False, env, step)
     run = draft.__dict__.get("_run")
     if run is None:
         raise TypeError(f"{fn.name} returned a {type(draft).__name__} sealed by v.seal(); run seals its own "
@@ -1111,7 +1113,8 @@ def read_only_ledger(target: Any, given: Any, base: Path) -> Any:
     return led
 
 
-def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name: Optional[str] = None) -> Any:
+def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name: Optional[str] = None,
+             reduce: Optional[Tuple[str, str]] = None) -> Any:
     """In the worker: import the function from the mounts and run it, confined, then seal (``_close_run``).
     A ledger function gets the recording ``Rev``, its keys and, when it takes one, its ``path`` folder; a
     dat's run function (``fn.kind == "dat"``) gets the dat made from its keys, the spec, in the work
@@ -1134,6 +1137,8 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
             try:
                 if work is not None and fn.kind != "dat":
                     os.chdir(work)                  # a relative path resolves in the dat being produced
+                if reduce is not None:              # acc and more loaded and recorded (SVP 242)
+                    kw = reduce_args(reading.rev, kw)
                 STATE.guard = True                  # the module's own load is confined like the body
                 try:
                     obj = getattr(importlib.import_module(modname), attr_name)
@@ -1155,12 +1160,12 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
                 raise
         if fn.kind == "dat":
             alias_reads(plain, out, rec)
-            value = _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, out, work)
+            value = _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, out, work, reduce)
             if work is not None and not work.exists():  # its folder is gone: so is the dat world's index of it
                 hooks.manager()._index_forget(str(work / "dat"))
             return value
         value = wrap_result(fn.name, obj, out)
-        return _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, value, work)
+        return _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, value, work, reduce)
     finally:
         STATE.guard = outer_guard
 
@@ -1188,7 +1193,7 @@ def _body(work: Optional[Path], mount: Optional[str] = None) -> Iterator[_Frame]
 
 def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], frame: _Frame, mounts: List[Mount],
                rows: Dict[str, Dict[str, str]], env: Env, enc: str, save: Any, name: Optional[str],
-               value: Any, work: Optional[Path]) -> Any:
+               value: Any, work: Optional[Path], reduce: Optional[Tuple[str, str]] = None) -> Any:
     """A run's code (the modules it loaded and the mounted files it read, beside ``fn``'s), its trace, and
     the result: a draft carrying its ``RunTrace`` (``save`` False) or the memo entry, provenance
     ``eval:sandbox``."""
@@ -1203,10 +1208,10 @@ def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], frame: _Frame, mounts:
     if salt is not None:
         trace["salt"] = salt
     if save is False:
-        attach_run(value, run_trace(fn, plain, trace, enc, "eval:sandbox", ran))
+        attach_run(value, run_trace(fn, plain, trace, enc, "eval:sandbox", ran, reduce=reduce))
         drop_work(work, value)
         return value
-    sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", ran, into=save, name=name)
+    sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", ran, into=save, name=name, reduce=reduce)
     drop_work(work, sealed)
     return sealed
 
@@ -1326,11 +1331,16 @@ class Server:
             if _SERVERS.get(self.key) is self:
                 del _SERVERS[self.key]
 
-    def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env) -> Any:
+    def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env,
+             reduce: Optional[Dict[str, Any]] = None) -> Any:
         """One call in a forked child. A dat's run function (DAT 1045, 1046) also ships its template, its
-        class and the caller's dat world (its folders, built afresh there as a ``DatManager``)."""
+        class and the caller's dat world (its folders, built afresh there as a ``DatManager``). A reduce step
+        (SVP 242) ships ``reduce``, its ``db/keys`` and rows, and ``more`` as a list, each input by its subject."""
+        keys = {k: encode_key(v, plain) for k, v in kw.items()}
+        if reduce is not None:
+            keys["more"] = [encode_key(v, plain) for v in kw["more"]]
         req = {"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
-               "keys": {k: encode_key(v, plain) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env),
+               "keys": keys, "seal": seal, "env": _ship_env(env), "reduce": reduce,
                "ledgers": shipped_section(), "read_guard": shipped_read_guard(), "cache": _cache_root()}
         if fn.kind == "dat":
             req.update({"template": fn._template, "returns": fn._returns, "world": hooks.layer()["world_of"]()})
@@ -1539,6 +1549,9 @@ def serve(req: Dict[str, Any], out: Any) -> None:
                 return v
             return Ref(ledger.at() if len(v) == 2 else handle_at(v[2]).at(v[3]), v[1])
         keys = {k: key(v) for k, v in req["keys"].items()}
+        step = req.get("reduce")
+        if step is not None:                        # more: a list of inputs, each a ref unshipped (SVP 242)
+            keys["more"] = [key(v) for v in keys["more"]]
         fn = plain.ns.load(req["name"])
         if not isinstance(fn, Fn):
             raise TypeError(f"{req['name']!r} resolves to {fn!r} in the worker, not a function")
@@ -1546,7 +1559,10 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             fn = dataclasses.replace(fn, _template=req.get("template"), _returns=req.get("returns") or "")
         kw = fn._bind(keys)
         with warnings.catch_warnings(record=True) as caught:  # the caller's, not the worker's stderr
-            value = run_here(fn, plain, kw, _enc(kw), req["seal"])
+            if step is None:
+                value = run_here(fn, plain, kw, _enc(kw), req["seal"])
+            else:
+                value = run_here(fn, plain, kw, step["enc"], req["seal"], reduce=tuple(step["rows"]))
         said = [(_warning_class(w.category), str(w.message)) for w in caught]
         if req["seal"]:
             send(out, {"ok": True, "subject": value.subject, "warnings": said})
