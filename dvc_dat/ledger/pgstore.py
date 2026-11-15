@@ -12,8 +12,14 @@ Same rows, same order, same fold as ``SqliteStore``. What differs underneath:
 the write lock is ``SELECT … FOR UPDATE`` on the one row of ``ledger_lock``
 (bounded by ``lock_timeout``); prefix scans compare bytes with the
 ``text_pattern_ops`` operators ``~>=~`` / ``~<~`` (a ``C``-order range, as
-SQLite's), which the ``text_pattern_ops`` indexes serve whatever the
-database's collation; ``db/index`` is a partial index as in SQLite. Statements
+SQLite's), which the ``text_pattern_ops`` index serves whatever the
+database's collation; ``db/index`` is a partial index as in SQLite. An index
+over the object holds ``md5(object)``, not the object (3.1.1, SVP 255 Q3): a
+btree entry is at most 8191 bytes and an object has no limit (a sandboxed call's
+``db/modules`` is ~20 KB), so an object lookup reads
+``md5(object) = md5(%s) AND object = %s``. A ledger made before 3.1.1 indexes
+the object itself until ``migrate(uri)`` rebuilds those indexes
+(``python -m dvc_dat.ledger.pgstore migrate URI``). Statements
 are never server-prepared, so each is planned with its values (a partial index
 or a prefix range is usable only then). Postgres text cannot hold NUL: a row
 carrying one is refused (``LedgerError``); a read asking for one finds nothing.
@@ -38,7 +44,7 @@ SCHEMA = (
     "CREATE TABLE IF NOT EXISTS quads (rev BIGINT NOT NULL, ord INTEGER NOT NULL, subject TEXT NOT NULL,"
     " predicate TEXT NOT NULL, object TEXT NOT NULL, added BOOLEAN NOT NULL, PRIMARY KEY (rev, ord))",
     "CREATE INDEX IF NOT EXISTS quads_sp ON quads (subject text_pattern_ops, predicate, rev)",
-    "CREATE INDEX IF NOT EXISTS quads_po ON quads (predicate, object text_pattern_ops, rev)",
+    "CREATE INDEX IF NOT EXISTS quads_po ON quads (predicate, md5(object), rev)",
     "CREATE TABLE IF NOT EXISTS ledger_lock (id INTEGER PRIMARY KEY CHECK (id = 1))",
     "INSERT INTO ledger_lock (id) VALUES (1) ON CONFLICT DO NOTHING",
 )
@@ -175,6 +181,9 @@ class PostgresStore(Store):
         sql = ""
         for col, val in cols:
             if val is not None:
+                if col == "object":                 # the indexes hold md5(object) (3.1.1); the object decides
+                    sql += " AND md5(object) = md5(%s)"
+                    params.append(val)
                 sql += f" AND {col} = %s"
                 params.append(val)
         if prefix is not None:
@@ -278,4 +287,87 @@ class PostgresWriter(Writer):
     def create_index(self, pred: str) -> None:
         lit = pred.replace("'", "''")
         self.conn.execute(f'CREATE INDEX IF NOT EXISTS "{index_name(pred)}" ON quads '
-                          f"(object text_pattern_ops, subject, rev) WHERE predicate = '{lit}'")
+                          f"{_PRED_COLUMNS} WHERE predicate = '{lit}'")
+
+
+_PRED_COLUMNS = "(md5(object), subject, rev)"
+
+
+def migrate(uri: str, *, timeout: float = 30.0) -> List[str]:
+    """Rebuild a pre-3.1.1 ledger's object indexes on ``md5(object)``; the names rebuilt, ``[]`` when none needed it.
+
+    ``quads_po`` becomes ``(predicate, md5(object), rev)`` and each ``db/index`` partial index
+    ``(md5(object), subject, rev)``, names kept, in one transaction holding the write lock (``ledger_lock``,
+    then ``quads`` itself for the rebuild; bounded by ``lock_timeout``): readers wait while it runs, a reader
+    or writer holding the table past ``timeout`` makes it ``LockTimeout`` with nothing changed. Idempotent:
+    an index already on ``md5(object)`` is left. Needs the table's owner. Queries are correct under either
+    index form, so a ledger may be read and written by 3.1.1 before it is migrated, and by 3.1.0 after.
+    """
+    from .store import index_name as _name
+
+    dsn, redacted = split_dsn(uri)
+    pg = _psycopg()
+    try:
+        conn = pg.connect(dsn, autocommit=False, prepare_threshold=None, connect_timeout=max(1, int(timeout)))
+    except pg.Error as e:
+        raise LedgerError(f"Postgres ledger {redacted}: cannot connect ({e})") from e
+    try:
+        try:
+            if not conn.execute("SELECT to_regclass('quads') IS NOT NULL AND to_regclass('ledger_lock') IS NOT NULL"
+                                ).fetchone()[0]:
+                raise LedgerError(f"no ledger at {redacted}")
+            conn.execute("SELECT set_config('lock_timeout', %s, true)", (f"{max(1, int(timeout * 1000))}ms",))
+            conn.execute("SELECT id FROM ledger_lock WHERE id = 1 FOR UPDATE")
+            defs = dict(conn.execute("SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = current_schema()"
+                                     " AND tablename = 'quads'").fetchall())
+            preds = {_name(s[len("db/pred/"):]): s[len("db/pred/"):] for (s,) in conn.execute(
+                "SELECT DISTINCT subject FROM quads WHERE predicate = 'db/index' AND left(subject, 8) = 'db/pred/'")}
+            todo = [n for n in ["quads_po"] + sorted(n for n in defs if n.startswith("pred_"))
+                    if n in defs and "md5(object)" not in defs[n]]
+            for n in todo:
+                if n == "quads_po":
+                    create = "CREATE INDEX quads_po ON quads (predicate, md5(object), rev)"
+                elif n in preds:
+                    lit = preds[n].replace("'", "''")
+                    create = f'CREATE INDEX "{n}" ON quads {_PRED_COLUMNS} WHERE predicate = \'{lit}\''
+                else:
+                    raise LedgerError(f"ledger {redacted}: index {n} names no db/index predicate; nothing changed")
+                conn.execute(f'DROP INDEX "{n}"')
+                conn.execute(create)
+            conn.commit()
+            return todo
+        except pg.errors.LockNotAvailable as e:
+            _rollback(conn)
+            raise LockTimeout(f"ledger {redacted}: migrate's locks not had within {timeout}s; nothing changed ({e})"
+                              ) from e
+        except pg.Error as e:
+            _rollback(conn)
+            raise LedgerError(f"ledger {redacted}: migrate refused, nothing changed ({e})") from e
+        except BaseException:
+            _rollback(conn)
+            raise
+    finally:
+        conn.close()
+
+
+def _main(argv: Sequence[str]) -> int:
+    """``python -m dvc_dat.ledger.pgstore migrate URI [URI ...]``: one line per ledger; exit 1 on any refusal."""
+    if len(argv) < 2 or argv[0] != "migrate":
+        print("usage: python -m dvc_dat.ledger.pgstore migrate URI [URI ...]")
+        return 2
+    code = 0
+    for uri in argv[1:]:
+        redacted = split_dsn(uri)[1] if uri.startswith(SCHEMES) else uri
+        try:
+            done = migrate(uri)
+            print(f"{redacted}: {'rebuilt ' + ', '.join(done) if done else 'already on md5(object)'}")
+        except LedgerError as e:
+            print(f"{redacted}: {e}")
+            code = 1
+    return code
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(_main(sys.argv[1:]))
