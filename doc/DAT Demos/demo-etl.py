@@ -211,7 +211,7 @@ print("sandboxed:", report_fn.code.sandboxed, " code:", report_fn.code)
 # ### Asking for the comfort report
 #
 # `rev.run(name, **keys)` returns a stage's result, running it only when no sealed result whose dependencies hold was sealed for the same keys.
-# The comfort report is a reduce over the city set: `rev.reduce(name, over=cities, **keys)` remembers each report under the sorted set of cities it covers, so a set that grows is reported by its growth; its function takes `acc`, the report over the cities already reduced, and `more`, the cities it adds.
+# The comfort report is a reduce over the city set: `rev.reduce(name, over=cities, **keys)` remembers each report under the sorted set of cities it covers, so a set that grows is reported by its growth and two sets already reported merge; its function, a `@dat.reduce_fn`, takes `accs`, reports over disjoint city sets already reduced, and `more`, the cities none of them covers.
 # The set's rows are read here, by the caller, and the first report covers the whole year.
 
 # %%
@@ -274,7 +274,7 @@ print(ran_since(counts_before))
 # → {'daily_comfort': 0, 'city_comfort': 3, 'comfort_report': 1}
 
 # %% [markdown]
-# Now Denver joins the set. The summer report over four cities finds the report over three, its largest subset already reduced, and runs one step: `acc` that report, `more` Denver alone.
+# Now Denver joins the set. The summer report over four cities finds the report over three, its largest subset already reduced, and runs one step: `accs` that report alone, `more` Denver alone.
 
 # %%
 with L.transaction(by="human:dan", why="Denver joins") as t:
@@ -288,7 +288,7 @@ print(shown(comfort_report_value))
 print(ran_since(counts_before))
 # → {'daily_comfort': 1, 'city_comfort': 1, 'comfort_report': 1}
 rev = L.at()
-print("from:", rev[comfort_report_value.subject, "db/reduce/from"] == summer_value.subject,
+print("from:", rev[comfort_report_value.subject, "db/reduce/from"] == [summer_value.subject],
       " more:", rev[comfort_report_value.subject, "db/reduce/more"])
 # → from: True  more: ['Denver']
 # the step, same as:
@@ -296,6 +296,29 @@ print("from:", rev[comfort_report_value.subject, "db/reduce/from"] == summer_val
 
 # %% [markdown]
 # Denver's daily comfort and its summer city comfort ran, and the report ran one step over Denver; Austin's, Boston's and Chicago's stages were not asked for at all, their counts carried in the three-city report.
+
+# %% [markdown]
+# ## Two reports merged
+#
+# Two people report autumn, September through November, each over half the set: one over Austin and Boston, one over Chicago and Denver.
+# Asked for the whole set, the reduce finds both reports, disjoint subsets of the ask, and runs one step: `accs` the two reports, `more` empty. Nothing below the report runs: each city's counts are carried in its half's report.
+
+# %%
+two_value = L.at().reduce(REPORT, over=["Austin", "Boston"], start="2026-09-01", end="2026-12-01")
+other_two_value = L.at().reduce(REPORT, over=["Chicago", "Denver"], start="2026-09-01", end="2026-12-01")
+counts_before = entry_counts()
+autumn_value = L.at().reduce(REPORT, over=cities(), start="2026-09-01", end="2026-12-01")
+print(shown(autumn_value))
+# → {'comfortable': '60/364 days', 'top': ['Austin', 'Boston']}
+print(ran_since(counts_before))
+# → {'daily_comfort': 0, 'city_comfort': 0, 'comfort_report': 1}
+rev = L.at()
+print("from:", rev[autumn_value.subject, "db/reduce/from"] == sorted([two_value.subject, other_two_value.subject]),
+      " more:", rev[autumn_value.subject, "db/reduce/more"])
+# → from: True  more: []
+fresh_value = L.at().reduce(REPORT, over=cities(), start="2026-09-01", end="2026-12-01", fresh=True)
+print("same as from scratch:", fresh_value.same_as(autumn_value))
+# → same as from scratch: True
 
 # %% [markdown]
 # ## Changing a city's data

@@ -53,7 +53,7 @@ cd tests && ./do hello_world       # the do-system smoke test
 ## Git & release
 
 - This is a **satellite repo**: commit the repo in the turn you touched it; `repo_sweep` is a backstop and every sweep commit is an agent that failed to (the top commit as of 2026-09-21 is one such sweep, "intent unknown" — DAT T002 names what it held).
-- Push only on Dan's word — the repo is public. Never commit anything from `data/` that is not a fixture.
+- SVP is dvc-dat's agent of record for now (Dan 2026-11-15; back to DAT later): it pushes, opens and merges PRs on green CI; a release, a version or a public-API change waits for Dan's word. Never commit anything from `data/` that is not a fixture.
 - **Cloud:** DAT is Dan's own work, so any rented box is **vast.ai, never GCP or Azure** — even when the change is for SVP, which runs on the other side of that line.
 
 ## Seams

@@ -114,8 +114,8 @@ from .code import Code
 from . import hooks
 from .backends import CACHE_ENV
 from .named import shipped_read_guard, shipped_section
-from .fn import (Fn, alias_reads, attach_run, drop_work, fn_mark, fn_mark_in_source, mounted_name, mounts_at,
-                 mounts_hash, path_template, reduce_args, run_trace, save_run, seal_entry, wrap_result)
+from .fn import (REDUCE_PARAMS, Fn, alias_reads, attach_run, drop_work, fn_mark, fn_mark_in_source, mounted_name,
+                 mounts_at, mounts_hash, path_template, reduce_args, run_trace, save_run, seal_entry, wrap_result)
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -481,7 +481,8 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
               _rev=rev, _takes_path=takes_path, _template=template, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name},
               kind="ledger" if mark is not None else "dat",
-              reproducible=mark.reproducible if mark is not None else None)
+              reproducible=mark.reproducible if mark is not None else None,
+              reducer=mark.reduce if mark is not None else False)
 
 
 def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str, str]) -> Code:
@@ -560,7 +561,7 @@ def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
 
     ``save`` and ``reduce`` as ``Fn._run_base``'s. Into a ``Transaction`` (open here, in the parent), the worker runs
     a draft and the parent saves it, since the transaction cannot cross the pipe. A reduce step ships its ``db/keys``
-    (``enc``) and rows, its ``acc`` and ``more`` by subject (SVP 242)."""
+    (``enc``) and rows, its ``accs`` and ``more`` by subject (SVP 242)."""
     env = current_env()
     if fn._info["repo"] not in env.code:
         raise NotEvaluated(f"{fn.name}: repo {fn._info['repo']!r} has no checkout in this environment")
@@ -1152,7 +1153,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
             try:
                 if work is not None and fn.kind != "dat":
                     os.chdir(work)                  # a relative path resolves in the dat being produced
-                if reduce is not None:              # acc and more loaded and recorded (SVP 242)
+                if reduce is not None:              # accs and more loaded and recorded (SVP 242)
                     kw = reduce_args(reading.rev, kw)
                 STATE.guard = True                  # the module's own load is confined like the body
                 try:
@@ -1350,10 +1351,11 @@ class Server:
              reduce: Optional[Dict[str, Any]] = None) -> Any:
         """One call in a forked child. A dat's run function (DAT 1045, 1046) also ships its template, its
         class and the caller's dat world (its folders, built afresh there as a ``DatManager``). A reduce step
-        (SVP 242) ships ``reduce``, its ``db/keys`` and rows, and ``more`` as a list, each input by its subject."""
+        (SVP 242) ships ``reduce``, its ``db/keys`` and rows, and ``accs`` and ``more`` as lists, each by its subject."""
         keys = {k: encode_key(v, plain) for k, v in kw.items()}
         if reduce is not None:
-            keys["more"] = [encode_key(v, plain) for v in kw["more"]]
+            for p in REDUCE_PARAMS:
+                keys[p] = [encode_key(v, plain) for v in kw[p]]
         req = {"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
                "keys": keys, "seal": seal, "env": _ship_env(env), "reduce": reduce,
                "ledgers": shipped_section(), "read_guard": shipped_read_guard(), "cache": _cache_root()}
@@ -1565,8 +1567,9 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             return Ref(ledger.at() if len(v) == 2 else handle_at(v[2]).at(v[3]), v[1])
         keys = {k: key(v) for k, v in req["keys"].items()}
         step = req.get("reduce")
-        if step is not None:                        # more: a list of inputs, each a ref unshipped (SVP 242)
-            keys["more"] = [key(v) for v in keys["more"]]
+        if step is not None:                        # accs and more: lists, each ref unshipped (SVP 242)
+            for p in REDUCE_PARAMS:
+                keys[p] = [key(v) for v in keys[p]]
         fn = plain.ns.load(req["name"])
         if not isinstance(fn, Fn):
             raise TypeError(f"{req['name']!r} resolves to {fn!r} in the worker, not a function")

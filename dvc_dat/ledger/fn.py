@@ -66,10 +66,11 @@ AT = "db/at"
 #: The default of ``seal=`` (``Fn.__call__``, ``Rev.run``): save to the fn's own ledger.
 OWN: Any = _Own()
 
-#: The parameters a reduce function reserves (SVP 242): ``acc``, the result of the largest subset already reduced
-#: (``None`` on the first step), and ``more``, the inputs outside it. A function taking both runs by ``rev.reduce``.
-REDUCE_PARAMS = ("acc", "more")
-#: A reduce step's rows beside a run's: the ``acc`` entry's subject (``none``), and the identities handed as ``more``.
+#: The keyword parameters a ``@dat.reduce_fn`` takes (SVP 242): ``accs``, earlier results of the same function over
+#: pairwise-disjoint subsets of the ask (``[]`` on the first step), and ``more``, the inputs none of them covers.
+REDUCE_PARAMS = ("accs", "more")
+#: A reduce step's rows beside a run's: the subjects of its ``accs`` entries, sorted (canonical JSON, ``[]`` for none),
+#: and the identities handed as ``more`` (canonical JSON).
 REDUCE_FROM = "db/reduce/from"
 REDUCE_MORE = "db/reduce/more"
 
@@ -95,8 +96,8 @@ class RunTrace:
     ``None`` outside any checkout or when the code declares no version. ``reproducible`` is the function's claim as
     its ``db/reproducible`` row holds it (``claim``), ``None`` for no row. ``at`` is the revision the run read, its
     ``db/at`` row (SVP 245); ``None`` only on a seal record written before the row existed. ``reduce_from`` and
-    ``reduce_more`` are a reduce step's ``db/reduce/from`` (the ``acc`` entry's subject, ``none``) and ``db/reduce/more``
-    (the identities handed as ``more``, canonical JSON), ``None`` on any other run (SVP 242)."""
+    ``reduce_more`` are a reduce step's ``db/reduce/from`` (the ``accs`` entries' subjects, sorted, canonical JSON) and
+    ``db/reduce/more`` (the identities handed as ``more``, canonical JSON), ``None`` on any other run (SVP 242)."""
 
     name: str
     enc: str
@@ -217,7 +218,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     if run.at is not None:
         extra.append((AT, "str:" + str(run.at)))
     if run.reduce_from is not None:
-        extra.append((REDUCE_FROM, "str:" + run.reduce_from))
+        extra.append((REDUCE_FROM, "json:" + canonical(reduce_sources(run.reduce_from))))
         extra.append((REDUCE_MORE, "json:" + (run.reduce_more or "[]")))
     if value.sealed and value.subject is None:
         extra.append(("db/sealed-at", "str:" + str(value.sealed)))
@@ -236,10 +237,64 @@ MARK = "__dat_fn__"
 
 @dataclass(frozen=True)
 class FnMark:
-    """What ``@dat.fn`` declares of a function, held on the function object: ``reproducible``, its claim as
-    written (``claim``, SVP 251 Q2). A run writes it as the ``db/reproducible`` row."""
+    """What ``@dat.fn`` or ``@dat.reduce_fn`` declares of a function, held on the function object: ``reproducible``,
+    its claim as written (``claim``, SVP 251 Q2), which a run writes as the ``db/reproducible`` row; ``reduce``, True
+    for a ``@dat.reduce_fn`` (SVP 242), run only by ``rev.reduce``."""
 
     reproducible: Any = None
+    reduce: bool = False
+
+
+def reduce_sources(obj: Any) -> List[str]:
+    """A ``db/reduce/from`` row as a list of subjects (SVP 242): a list as is; its text (canonical JSON) parsed; a bare
+    subject from before steps merged several ``accs`` is a one-element list, ``none`` the empty one."""
+    if isinstance(obj, str):
+        if obj.startswith("["):
+            obj = json.loads(obj)
+        else:
+            return [] if obj == "none" else [obj]
+    if not isinstance(obj, list) or not all(isinstance(x, str) for x in obj):
+        raise TypeError(f"db/reduce/from is a list of subjects, not {obj!r}")
+    return sorted(obj)
+
+
+def check_reduce_params(what: str, params: Dict[str, str], reduce: bool) -> None:
+    """The definition-time checks on a function's parameters, ``name -> kind`` (``"pos"`` the first positional,
+    ``"kw"`` any other parameter a keyword can bind, ``"other"`` a ``*args``/``**kw`` or positional-only one; SVP 242).
+    A ``@dat.reduce_fn`` takes keyword parameters ``accs`` and ``more`` and no ``acc``; a ``@dat.fn`` taking ``accs``,
+    or ``acc`` beside ``more``, is a reduce function marked wrong. ``TypeError`` naming the fix."""
+    if reduce:
+        if "acc" in params:
+            raise TypeError(f"@dat.reduce_fn {what}: takes acc; a reduce function takes accs, a list of earlier "
+                            "results over disjoint subsets, and more")
+        missing = [p for p in REDUCE_PARAMS if params.get(p) != "kw"]
+        if missing:
+            raise TypeError(f"@dat.reduce_fn {what}: a reduce function takes the keyword parameters accs and more "
+                            f"(missing: {', '.join(missing)})")
+    elif "accs" in params or ("acc" in params and "more" in params):
+        raise TypeError(f"@dat.fn {what}: takes {'accs' if 'accs' in params else 'acc and more'}, a reduce "
+                        "function's parameters; mark it @dat.reduce_fn, taking accs and more")
+
+
+def _param_kinds(func: Callable) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    for i, p in enumerate(inspect.signature(func).parameters.values()):
+        kw = p.kind in (inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        out[p.name] = "pos" if i == 0 else ("kw" if kw else "other")
+    return out
+
+
+def _ast_param_kinds(fdef: Any) -> Dict[str, str]:
+    a = fdef.args
+    out: Dict[str, str] = {}
+    pos = [x.arg for x in a.posonlyargs] + [x.arg for x in a.args]
+    for i, x in enumerate(pos):
+        out[x] = "pos" if i == 0 else ("other" if i < len(a.posonlyargs) else "kw")
+    out.update({x.arg: "kw" for x in a.kwonlyargs})
+    for v in (a.vararg, a.kwarg):
+        if v is not None:
+            out[v.arg] = "other"
+    return out
 
 
 def fn(func: Optional[Callable] = None, *, reproducible: Any = None) -> Any:
@@ -258,39 +313,65 @@ def fn(func: Optional[Callable] = None, *, reproducible: Any = None) -> Any:
     every memo lookup of it also asks for the same card and driver, and a rerun that differs is an error), ``True``
     (good enough: a rerun that differs is allowed), ``None`` (default, unknown), ``False`` (flaky), a clause ``(level,
     predicate, ...)``, or a list of clauses, first match wins. ``TypeError`` for anything else.
+
+    A function taking ``accs``, or ``acc`` beside ``more``, is a reduce function: ``TypeError`` pointing to
+    ``@dat.reduce_fn`` (SVP 242).
     """
+    return _mark(func, reproducible, False)
+
+
+def reduce_fn(func: Optional[Callable] = None, *, reproducible: Any = None) -> Any:
+    """``@dat.reduce_fn`` / ``@dat.reduce_fn(reproducible=...)``: mark a reduce function (SVP 242), run by
+    ``rev.reduce``.
+
+    ``f(rev, *, accs: list[R], more: list[T], **keys) -> R``: ``accs`` are earlier results of ``f`` itself over
+    pairwise-disjoint subsets of the ask, loaded; ``more`` the inputs none of them covers. Everything ``@dat.fn`` says
+    holds (the return annotation, ``reproducible``, a plain call runs the body); on top, the keyword parameters
+    ``accs`` and ``more`` are required at decoration and a parameter named ``acc`` is refused, all ``TypeError``.
+    ``rev.run`` of it is ``TypeError``; ``rev.reduce`` runs it. The law it owes: ``f(accs=[f(A), f(B)], more=C)``
+    equals ``f(accs=[], more=A | B | C)`` byte for byte, for any disjoint ``A``, ``B`` and any ``C``.
+    """
+    return _mark(func, reproducible, True)
+
+
+def _mark(func: Optional[Callable], reproducible: Any, reduce: bool) -> Any:
+    deco = "@dat.reduce_fn" if reduce else "@dat.fn"
     if func is None:
         clauses(reproducible)
-        return lambda f: fn(f, reproducible=reproducible)
+        return lambda f: _mark(f, reproducible, reduce)
     if not callable(func) or isinstance(func, type):
-        raise TypeError(f"@dat.fn goes on a function, not {func!r}")
+        raise TypeError(f"{deco} goes on a function, not {func!r}")
     clauses(reproducible)
+    what = repr(getattr(func, "__qualname__", func))
     ann = getattr(func, "__annotations__", {})
     if "return" not in ann:
-        raise TypeError(f"@dat.fn {getattr(func, '__qualname__', func)!r}: a return annotation is required "
+        raise TypeError(f"{deco} {what}: a return annotation is required "
                         "(-> a Value subclass, or any type to be wrapped in Value.Blob)")
-    setattr(func, MARK, FnMark(reproducible))
+    check_reduce_params(what, _param_kinds(func), reduce)
+    setattr(func, MARK, FnMark(reproducible, reduce))
     return func
 
 
 def fn_mark(obj: Any) -> Optional[FnMark]:
-    """The ``FnMark`` of a function marked ``@dat.fn``, else ``None`` (an undecorated function: a dat's run
-    function)."""
+    """The ``FnMark`` of a function marked ``@dat.fn`` or ``@dat.reduce_fn``, else ``None`` (an undecorated function:
+    a dat's run function)."""
     mark = getattr(obj, MARK, None)
     return mark if isinstance(mark, FnMark) else None
 
 
-def _dat_names(tree: Any) -> Tuple[set, set]:
-    """``(names bound to dvc_dat.dat, names bound to dvc_dat.dat.fn)`` by a module's top-level imports."""
+def _dat_names(tree: Any) -> Tuple[set, Dict[str, str]]:
+    """``(names bound to dvc_dat.dat, name -> "fn" or "reduce_fn" for names bound to those decorators)`` by a
+    module's top-level imports."""
     import ast
 
-    dats, fns = {"dat"}, set()
+    dats: set = {"dat"}
+    fns: Dict[str, str] = {}
     for node in tree.body:
         if isinstance(node, ast.ImportFrom):
             if node.module == "dvc_dat":
                 dats.update(a.asname or a.name for a in node.names if a.name == "dat")
             elif node.module in ("dvc_dat.dat", "dvc_dat.ledger.fn"):
-                fns.update(a.asname or a.name for a in node.names if a.name == "fn")
+                fns.update({a.asname or a.name: a.name for a in node.names if a.name in ("fn", "reduce_fn")})
         elif isinstance(node, ast.Import):
             dats.update(a.asname for a in node.names if a.name == "dvc_dat.dat" and a.asname)
     return dats, fns
@@ -298,35 +379,40 @@ def _dat_names(tree: Any) -> Tuple[set, set]:
 
 def fn_mark_in_source(tree: Any, fdef: Any) -> Optional[FnMark]:
     """The ``FnMark`` a function definition carries, read off its source (a mounted function is never imported
-    in the caller): ``@dat.fn``, ``@dat.fn(reproducible=...)``, ``dat`` being any name the module binds to
-    ``dvc_dat.dat`` (``from dvc_dat import dat``), or ``@dvc_dat.dat.fn``; ``None`` when unmarked."""
+    in the caller): ``@dat.fn``, ``@dat.fn(reproducible=...)``, ``@dat.reduce_fn`` and ``@dat.reduce_fn(...)``,
+    ``dat`` being any name the module binds to ``dvc_dat.dat`` (``from dvc_dat import dat``), or ``@dvc_dat.dat.fn``;
+    ``None`` when unmarked. The parameter checks ``@dat.reduce_fn`` and ``@dat.fn`` make at decoration are made here
+    too (``check_reduce_params``)."""
     import ast
 
     dats, fns = _dat_names(tree)
 
-    def is_fn(node: Any) -> bool:
+    def which(node: Any) -> Optional[str]:
         if isinstance(node, ast.Name):
-            return node.id in fns
-        if isinstance(node, ast.Attribute) and node.attr == "fn":
+            return fns.get(node.id)
+        if isinstance(node, ast.Attribute) and node.attr in ("fn", "reduce_fn"):
             v = node.value
-            return (isinstance(v, ast.Name) and v.id in dats) or (
-                isinstance(v, ast.Attribute) and v.attr == "dat" and isinstance(v.value, ast.Name)
-                and v.value.id == "dvc_dat")
-        return False
+            if (isinstance(v, ast.Name) and v.id in dats) or (
+                    isinstance(v, ast.Attribute) and v.attr == "dat" and isinstance(v.value, ast.Name)
+                    and v.value.id == "dvc_dat"):
+                return node.attr
+        return None
     for d in fdef.decorator_list:
-        if is_fn(d):
-            return FnMark()
-        if isinstance(d, ast.Call) and is_fn(d.func):
-            claim = None
-            for kw in d.keywords:
-                if kw.arg == "reproducible":
-                    try:
-                        claim = ast.literal_eval(kw.value)
-                    except ValueError:
-                        raise TypeError(f"@dat.fn on {fdef.name}: a mounted function is read off its file, so "
-                                        "reproducible= is a literal") from None
-                    clauses(claim)
-            return FnMark(claim)
+        kind = which(d.func if isinstance(d, ast.Call) else d)
+        if kind is None:
+            continue
+        reduce = kind == "reduce_fn"
+        claim = None
+        for kw in d.keywords if isinstance(d, ast.Call) else ():
+            if kw.arg == "reproducible":
+                try:
+                    claim = ast.literal_eval(kw.value)
+                except ValueError:
+                    raise TypeError(f"@dat.{kind} on {fdef.name}: a mounted function is read off its file, so "
+                                    "reproducible= is a literal") from None
+                clauses(claim)
+        check_reduce_params(repr(fdef.name), _ast_param_kinds(fdef), reduce)
+        return FnMark(claim, reduce)
     return None
 
 
@@ -390,8 +476,8 @@ def encode_keys(kw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def reduces(fn: "Fn") -> bool:
-    """Is ``fn`` a reduce function: a ``@dat.fn`` taking both ``acc`` and ``more`` (SVP 242)."""
-    return fn.kind == "ledger" and all(p in fn.signature.parameters for p in REDUCE_PARAMS)
+    """Is ``fn`` a reduce function: a ``@dat.reduce_fn`` (SVP 242)."""
+    return fn.kind == "ledger" and fn.reducer
 
 
 def identity(item: Any) -> str:
@@ -412,7 +498,7 @@ class Input:
 def reduce_keys(fn: "Fn", over: Any, keys: Dict[str, Any]) -> Tuple[Dict[str, Any], List[Input], str]:
     """``(the other keys bound, the inputs sorted by identity, db/keys)`` of a reduce (SVP 242): ``db/keys`` is
     ``{"over": [...sorted], **keys}``, canonical. ``over`` a str, bytes or a mapping is ``TypeError``; two inputs of
-    one identity ``ValueError``; a key named ``acc``, ``more`` or ``over`` ``TypeError``."""
+    one identity ``ValueError``; a key named ``accs``, ``more`` or ``over`` ``TypeError``."""
     if isinstance(over, (str, bytes, dict)) or not hasattr(over, "__iter__"):
         raise TypeError(f"{fn.name}: over is a sequence of inputs, not {type(over).__name__}")
     clash = sorted(set(keys) & {*REDUCE_PARAMS, "over"})
@@ -435,17 +521,17 @@ def reduce_keys(fn: "Fn", over: Any, keys: Dict[str, Any]) -> Tuple[Dict[str, An
 
 
 #: The items of a run's trace its environment writes (``code``, ``fn``, the platform, the mount's ``salt``), beside each
-#: ``code/<repo>``: a reduce step takes these from its own run, never from its ``acc``.
+#: ``code/<repo>``: a reduce step takes these from its own run, never from its ``accs``.
 ENV_ITEMS = frozenset({"code", "fn", "platform", "platform/record", "salt"})
 
 
 def reduce_args(rev: "Rev", kw: Dict[str, Any]) -> Dict[str, Any]:
-    """A reduce step's arguments as its body gets them: ``acc`` and each ``Value``/``Ref`` in ``more`` loaded, each
-    recorded through the recording ``rev`` as its ``ref:`` item; a key as given.
+    """A reduce step's arguments as its body gets them: each of ``accs`` and each ``Value``/``Ref`` in ``more`` loaded,
+    each recorded through the recording ``rev`` as its ``ref:`` item; a key as given.
 
-    ``acc``'s own dependencies join the step's trace too, all but the environment's (``ENV_ITEMS``, ``code/<repo>``):
-    a step holds while every input it covers holds, those it was handed in ``acc`` included, so an input's run that
-    moves fails every step built over it, however far down the chain it was added."""
+    Each acc's own dependencies join the step's trace too, all but the environment's (``ENV_ITEMS``,
+    ``code/<repo>``): a step holds while every input it covers holds, those it was handed in ``accs`` included, so an
+    input's run that moves fails every step built over it, however far down the chain it was added."""
     from .rev import Ref
 
     def load(x: Any) -> Any:
@@ -454,13 +540,12 @@ def reduce_args(rev: "Rev", kw: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(x, Value):
             rev._record_value(x)
         return x
-    acc = kw.get("acc")
-    if acc is not None:
-        acc = load(acc)
+    accs = [load(a) for a in kw.get("accs", [])]
+    for acc in accs:
         for item, recorded in acc.dependencies.items():
             if item not in ENV_ITEMS and not (item.startswith("code/") and " " not in item):
                 rev._record(item, recorded)
-    return dict(kw, acc=acc, more=[load(x) for x in kw.get("more", [])])
+    return dict(kw, accs=accs, more=[load(x) for x in kw.get("more", [])])
 
 
 MNT = "mnt"
@@ -562,7 +647,7 @@ def installed_fn(rev: "Rev", name: str, obj: Any) -> "Fn":
     sig, takes_path, template = signature_of(name, obj)
     return Fn(name=name, module=src, mount=None, signature=sig, env=env, code=code,
               _rev=rev, _obj=obj, _takes_path=takes_path, _template=template, _returns=returns_text(obj),
-              reproducible=mark.reproducible)
+              reproducible=mark.reproducible, reducer=mark.reduce)
 
 
 def source_of(name: str, obj: Any) -> Tuple[str, Path]:
@@ -690,6 +775,8 @@ class Fn:
     Read off the function object (installed) or its source, a literal (mounted). A run writes it as the
     ``db/reproducible`` row, which is what ``rerun`` and ``safe`` read ([Reproducibility][reproducibility]).
     """
+    reducer: bool = False
+    """True for a ``@dat.reduce_fn`` (SVP 242): ``rev.reduce`` runs it, ``rev.run`` refuses it."""
 
     def __repr__(self) -> str:
         """``<Fn plane.measure.length@2.7.1>``: the name, ``@`` its code's version (DAT 1036, 1037)."""
@@ -754,8 +841,8 @@ class Fn:
         from .txn import Transaction
 
         if reduces(self):
-            raise TypeError(f"{self.name} takes acc and more, a reduce function: rev.reduce({self.name!r}, over=[...]) "
-                            "runs it, never rev.run")
+            raise TypeError(f"{self.name} is a reduce function (@dat.reduce_fn): rev.reduce({self.name!r}, "
+                            "over=[...]) runs it, never rev.run")
         rev = self._rev
         plain = rev._plain()
         read_only = plain.ledger.read_only          # read by name in a sandboxed body: a lookup, never a run
@@ -826,15 +913,14 @@ class Fn:
         """``rev.reduce``: the result of this reduce function over the set ``over`` (SVP 242).
 
         An exact hit over the sorted set is returned and nothing runs (``seal="get"`` stops there, ``None`` on a miss);
-        else the function runs once with ``acc`` the result of the largest subset already reduced whose entry holds
-        (``largest_subset``; ``None`` when none does). ``fresh=True`` skips both, the exact hit and every partial, and
-        reduces the whole set and ``more`` the inputs outside it, sorted, and the
-        step is saved as ``seal=`` says, as on ``__call__``, its memo entry carrying ``db/reduce/from`` and
-        ``db/reduce/more``."""
+        else the function runs once with ``accs`` the results of disjoint subsets already reduced whose entries hold
+        (``partials``; ``[]`` when none does) and ``more`` the inputs none of them covers, sorted. ``fresh=True`` skips
+        both, the exact hit and every partial, and reduces the whole set. The step is saved as ``seal=`` says, as on
+        ``__call__``, its memo entry carrying ``db/reduce/from`` and ``db/reduce/more``."""
         from .txn import Transaction
 
         if not reduces(self):
-            raise TypeError(f"{self.name} is no reduce function: a @dat.fn taking both acc and more")
+            raise TypeError(f"{self.name} is no reduce function: mark it @dat.reduce_fn, taking accs and more")
         if not isinstance(fresh, bool):
             raise TypeError(f"fresh is True or False, not {fresh!r}")
         rev = self._rev
@@ -863,11 +949,11 @@ class Fn:
         if read_only:
             raise ConfinedWrite(f"{self.name}: no entry for these keys at {plain.ledger._store.name}@{plain.id}, "
                                 "a read-only ledger here; it runs nothing (seal='get' asks without refusing)")
-        part = None if fresh else largest_subset(plain, self.name, enc, [i.ident for i in items], widen)
-        acc_from, acc, have = part if part is not None else ("none", None, frozenset())
+        parts = [] if fresh else partials(plain, self.name, enc, [i.ident for i in items], widen)
+        have = frozenset().union(*(ids for _s, _v, ids in parts))
         more = [i for i in items if i.ident not in have]
-        kw = dict(rest, acc=acc, more=[i.given for i in more])
-        step = (acc_from, canonical([i.enc for i in more]))
+        kw = dict(rest, accs=[v for _s, v, _ids in parts], more=[i.given for i in more])
+        step = (canonical(sorted(s for s, _v, _ids in parts)), canonical([i.enc for i in more]))
         into = level if isinstance(level, Transaction) else None
         save: Any = True if isinstance(level, str) and level == "save" else (into if into is not None else False)
         if self.code.sandboxed:
@@ -908,7 +994,7 @@ class Fn:
                   name: Optional[str] = None, reduce: Optional[Tuple[str, str]] = None) -> Value:
         """Run in this process. ``save``: ``False``, a draft carrying its ``RunTrace``; ``True``, the
         memo entry in a transaction of its own; a ``Transaction``, the memo entry in it (named ``name``).
-        ``reduce``: a reduce step's ``(from, more)`` rows, its ``acc`` and ``more`` loaded here (SVP 242)."""
+        ``reduce``: a reduce step's ``(from, more)`` rows, its ``accs`` and ``more`` loaded here (SVP 242)."""
         from .sandbox import base_confined
         from .trace import RunFrame, running
         from .txn import code_token
@@ -1222,12 +1308,13 @@ def _holding(plain: "Rev", top: "Rev", widen: Sequence[str]) -> Callable[[str], 
     return holds
 
 
-def largest_subset(plain: "Rev", name: str, enc: str, have: Sequence[str],
-                   widen: Sequence[str] = ()) -> Optional[Tuple[str, Value, frozenset]]:
-    """``(subject, value, its identities)`` of the largest proper, non-empty subset of the ask already reduced whose
-    entry holds at ``plain`` (SVP 242), else ``None``; never runs. Candidates are the function's entries (``db/fn``,
-    indexed) whose ``db/keys`` other than ``over`` equal the ask's (``enc``) and whose ``over`` is within ``have``,
-    the ask's identities; judged largest first, ties newest seal first, as ``lookup`` judges one."""
+def partials(plain: "Rev", name: str, enc: str, have: Sequence[str],
+             widen: Sequence[str] = ()) -> List[Tuple[str, Value, frozenset]]:
+    """``[(subject, value, its identities)]``: the results already reduced over pairwise-disjoint, proper, non-empty
+    subsets of the ask whose entries hold at ``plain``, in the order picked (SVP 242); never runs. Candidates are the
+    function's entries (``db/fn``, indexed) whose ``db/keys`` other than ``over`` equal the ask's (``enc``) and whose
+    ``over`` is within ``have``, the ask's identities. Greedy: the largest that holds (ties newest seal first, as
+    ``lookup`` judges one), then the largest holding one disjoint from all picked, and so on."""
     from .rev import Ref
 
     top = plain.ledger.at()
@@ -1250,10 +1337,13 @@ def largest_subset(plain: "Rev", name: str, enc: str, have: Sequence[str],
         if 0 < len(ids) < len(ask) and ids <= ask:
             cands.append((len(ids), val[0].rev, val[0].ord, s, ids))
     holds = _holding(plain, top, widen)
+    picked: List[Tuple[str, Value, frozenset]] = []
+    taken: frozenset = frozenset()
     for _n, _r, _o, s, ids in sorted(cands, key=lambda c: c[:4], reverse=True):
-        if holds(s):
-            return s, Ref(top, s)._load(), ids
-    return None
+        if ids.isdisjoint(taken) and holds(s):
+            picked.append((s, Ref(top, s)._load(), ids))
+            taken |= ids
+    return picked
 
 
 def lookup_encoded(rev: "Rev", name: str, enc: str) -> Optional[Value]:

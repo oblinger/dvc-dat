@@ -134,7 +134,7 @@ pin name *args:
 rerun name:
     @"{{_dat_python}}" -m dvc_dat.ledger.recipes rerun "$@"
 
-# reduce NAME over=A,B,C [k=v ...]: a reduce function over a set, reusing the largest subset already reduced
+# reduce NAME over=A,B,C [k=v ...]: a reduce function over a set, merging disjoint subsets already reduced
 [no-cd]
 [positional-arguments]
 reduce name *args:

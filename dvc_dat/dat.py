@@ -8,6 +8,9 @@
     @dat.fn(reproducible="exact")        # ... claiming a rerun gives the same bytes (on one card)
     def detect(rev, *, video: Video) -> Table: ...
 
+    @dat.reduce_fn                       # a reduce function: rev.reduce(name, over=[...]) runs it (SVP 242)
+    def total(rev, *, accs: list, more: list) -> dict: ...
+
     @dat.warm                            # a process-level memo by the canonical hash of the arguments
     def kit_at(ledger, rev) -> Kit: ...
 
@@ -19,13 +22,13 @@
     dat.load("do26@512:sha256:<hex>")    # a value by the global reference; a bare name reads the active ledger
 
 ``at`` and ``load`` are ``dvc_dat.ledger.named``'s; ``ledger.at(rev)`` stays that ledger's alone (SVP 248).
-``fn`` is ``dvc_dat.ledger.fn.fn``, ``warm`` is ``dvc_dat.ledger.warm.warm`` and ``command`` is
+``fn`` is ``dvc_dat.ledger.fn.fn``, ``reduce_fn`` is ``dvc_dat.ledger.fn.reduce_fn``, ``warm`` is ``dvc_dat.ledger.warm.warm`` and ``command`` is
 ``dvc_dat.just.command``; each is documented there.
 """
 
 from .just import command
-from .ledger.fn import FnMark, fn, fn_mark
+from .ledger.fn import FnMark, fn, fn_mark, reduce_fn
 from .ledger.named import at, load
 from .ledger.warm import warm
 
-__all__ = ["fn", "warm", "command", "at", "load", "FnMark", "fn_mark"]
+__all__ = ["fn", "reduce_fn", "warm", "command", "at", "load", "FnMark", "fn_mark"]

@@ -65,7 +65,7 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 ## Decorators
 
-`from dvc_dat import dat`: `@dat.fn`, `@dat.warm`, `@dat.command` (SVP 250).
+`from dvc_dat import dat`: `@dat.fn`, `@dat.reduce_fn`, `@dat.warm`, `@dat.command` (SVP 250).
 
 ::: dvc_dat.dat
     options:
@@ -73,6 +73,8 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
       members: false
 
 ::: dvc_dat.ledger.fn.fn
+
+::: dvc_dat.ledger.fn.reduce_fn
 
 ::: dvc_dat.ledger.FnMark
 
