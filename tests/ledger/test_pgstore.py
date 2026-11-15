@@ -256,3 +256,54 @@ def test_pg_migrate_rebuilds_the_object_indexes_and_is_idempotent(dsn):
     obj = L._store.rows(L.at().id, subject="code/a")[0][4]
     assert L._store.subjects(L.at().id, predicate="home", obj=obj) == ["code/a"]
     assert L.at().get("game/G1", "home") == "A"
+
+
+def test_pg_a_read_at_a_committed_revision_is_answered_once_then_from_memory(dsn):
+    """SVP 255: rows are only appended, a revision in one transaction, so a read at or below a top this store saw
+    committed never changes: its second asking is no round trip. A read above it, or through an open write
+    transaction, always goes to the server; a later commit is seen at the new top."""
+    L = Ledger(dsn, create=True)
+    with L.transaction(by="t") as t:
+        t.add("game/G1", "home", "A")
+    st = L._store
+    asked = []
+    real = st.read
+
+    def read(sql, params=()):
+        asked.append(sql)
+        return real(sql, params)
+    st.read = read
+    top = L.at().id                                 # top() sees the commit: reads at or below it settle
+    first = st.rows(top, subject="game/G1")
+    n = len(asked)
+    assert st.rows(top, subject="game/G1") == first and len(asked) == n
+    assert st.subjects(top, predicate="home") == ["game/G1"] and st.subjects(top, predicate="home") == ["game/G1"]
+    assert len(asked) == n + 1
+    assert st.has_predicate("home", top) and st.has_predicate("home", top) and len(asked) == n + 2
+    st.rows(top + 5, subject="game/G1")
+    st.rows(top + 5, subject="game/G1")             # above the settled top: asked each time
+    assert len(asked) == n + 4
+    with st.writer(10, locked=False) as w, st.reading_through(w):
+        st.rows(top, subject="game/G1")
+        st.rows(top, subject="game/G1")                 # through an open write transaction: never kept
+    assert len(asked) == n + 6
+    with L.transaction(by="t") as t:
+        t.add("game/G1", "away", "B")
+    assert L.at()["game/G1"] == {"home": "A", "away": "B"}
+    assert st.rows(top, subject="game/G1") == first
+
+
+def test_pg_the_settled_cache_is_bounded(dsn, monkeypatch):
+    from dvc_dat.ledger import pgstore
+
+    monkeypatch.setattr(pgstore, "CACHE_ENTRIES", 3)
+    monkeypatch.setattr(pgstore, "CACHE_MAX_RESULT", 1)
+    L = Ledger(dsn, create=True)
+    with L.transaction(by="t") as t:
+        for i in range(5):
+            t.add(f"s/{i}", "p", "x")
+    st, top = L._store, L.at().id
+    for i in range(5):
+        st.rows(top, subject=f"s/{i}")
+    st.rows(top, predicate="p")                     # five rows: over the largest result kept
+    assert len(st._cache) == 3 and ("rows", top, None, "p", None, None, 0) not in st._cache

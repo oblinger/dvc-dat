@@ -9,7 +9,10 @@ name is ``[project].name`` of the ``pyproject.toml`` at its root, normalised
 the commit at HEAD, whether tracked files are modified (``dirty``: none whose
 path the repo's ``.gitattributes`` marks ``dat-noncode``, as ``core._code_of``), and the
 checkout ``path`` a mount's ``db/root`` resolves under. The commit is read on
-every call, never cached: a notebook commits mid-session.
+every call, never cached: a notebook commits mid-session. The one exception is
+``pinned()``: inside it (one memo lookup, one name's resolution) every call shares
+one discovery, made again only when the process has imported a module since (SVP 255:
+a memo hit discovered nine times, each a few git calls and a ``realpath`` per module).
 
 The platform record (SVP 1474) is what a memo entry stores of the machine its function ran on:
 ``platform`` (today's short tag, ``<os>-<machine>-py<X.Y>``), ``os``, ``machine``, ``python``
@@ -28,9 +31,11 @@ import re
 import subprocess
 import sys
 import sysconfig
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Tuple
 
 
 try:
@@ -87,8 +92,30 @@ def set_env_provider(provider: Optional[Provider]) -> Optional[Provider]:
     return old
 
 
+_pin: ContextVar[Optional[List[Any]]] = ContextVar("dvc_dat_env_pin", default=None)
+
+
 def current_env() -> Env:
-    return (_provider or discover)()
+    pin = _pin.get()
+    if pin is None:
+        return (_provider or discover)()
+    stamp = (_provider, len(sys.modules))
+    if not pin or pin[0] != stamp:
+        pin[:] = [stamp, (_provider or discover)()]
+    return pin[1]
+
+
+@contextmanager
+def pinned() -> Iterator[None]:
+    """Calls to ``current_env`` inside the block share one discovery (module doc); nested, the outer pin holds."""
+    if _pin.get() is not None:
+        yield
+        return
+    token = _pin.set([])
+    try:
+        yield
+    finally:
+        _pin.reset(token)
 
 
 def platform_tag() -> str:

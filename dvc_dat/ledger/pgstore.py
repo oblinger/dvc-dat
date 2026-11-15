@@ -19,7 +19,11 @@ btree entry is at most 8191 bytes and an object has no limit (a sandboxed call's
 ``db/modules`` is ~20 KB), so an object lookup reads
 ``md5(object) = md5(%s) AND object = %s``. A ledger made before 3.1.1 indexes
 the object itself until ``migrate(uri)`` rebuilds those indexes
-(``python -m dvc_dat.ledger.pgstore migrate URI``). Statements
+(``python -m dvc_dat.ledger.pgstore migrate URI``). A read at or below a revision this
+store has seen committed (``top()`` on its own connection) is answered from a bounded in-process cache after
+its first round trip: rows are only ever appended, each revision in one transaction, so such a read never
+changes (SVP 255: a memo hit repeated ~36 of its ~64 reads, each a ~40 ms round trip through a Cloud SQL
+proxy). A read through an open write transaction is never cached, nor sets what counts as committed. Statements
 are never server-prepared, so each is planned with its values (a partial index
 or a prefix range is usable only then). Postgres text cannot hold NUL: a row
 carrying one is refused (``LedgerError``); a read asking for one finds nothing.
@@ -30,6 +34,7 @@ Needs psycopg 3: ``pip install 'dvc_dat[pg]'``.
 from __future__ import annotations
 
 import threading
+from collections import OrderedDict
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, List, Optional, Sequence, Tuple
@@ -48,6 +53,10 @@ SCHEMA = (
     "CREATE TABLE IF NOT EXISTS ledger_lock (id INTEGER PRIMARY KEY CHECK (id = 1))",
     "INSERT INTO ledger_lock (id) VALUES (1) ON CONFLICT DO NOTHING",
 )
+
+#: The settled-read cache's bounds: entries kept, and the largest result (rows or subjects) it keeps.
+CACHE_ENTRIES = 8192
+CACHE_MAX_RESULT = 2000
 
 #: ``pg_advisory_xact_lock`` key serialising concurrent ``create=True`` (CREATE … IF NOT EXISTS races).
 _CREATE_KEY = 0x6476635F646174
@@ -101,6 +110,10 @@ class PostgresStore(Store):
         self._readers: List[Any] = []
         self._readers_lock = threading.Lock()
         self._gen = 0
+        self._settled = 0                   # the highest revision seen committed: reads at or below it are fixed
+        self._cache: "OrderedDict[Tuple[Any, ...], Any]" = OrderedDict()
+        self._cache_lock = threading.Lock()
+        self.cache_hits = 0
         try:
             conn = self._connect(30.0, autocommit=True)
         except self._pg.Error as e:
@@ -174,7 +187,30 @@ class PostgresStore(Store):
             raise
 
     def top(self) -> int:
-        return int(self.read("SELECT COALESCE(MAX(rev), 0) FROM quads")[0][0])
+        top = int(self.read("SELECT COALESCE(MAX(rev), 0) FROM quads")[0][0])
+        if getattr(self._local, "override", None) is None:     # a writer's own top may yet roll back
+            with self._cache_lock:
+                self._settled = max(self._settled, top)
+        return top
+
+    def _settled_read(self, key: Tuple[Any, ...], upto: int, fetch: Any) -> Any:
+        """``fetch()``, kept when ``upto`` is a committed revision (module doc): the same read again is no round
+        trip. A list result is handed back as a copy."""
+        if upto > self._settled or getattr(self._local, "override", None) is not None:
+            return fetch()
+        with self._cache_lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                self.cache_hits += 1
+                out = self._cache[key]
+                return list(out) if isinstance(out, list) else out
+        out = fetch()
+        if not isinstance(out, list) or len(out) <= CACHE_MAX_RESULT:
+            with self._cache_lock:
+                self._cache[key] = list(out) if isinstance(out, list) else out
+                while len(self._cache) > CACHE_ENTRIES:
+                    self._cache.popitem(last=False)
+        return out
 
     @staticmethod
     def _where(params: List[Any], cols: Sequence[Tuple[str, Optional[str]]], prefix: Optional[str]) -> str:
@@ -195,6 +231,11 @@ class PostgresStore(Store):
              obj: Optional[str] = None, prefix: Optional[str] = None, after: int = 0) -> List[Row]:
         if _has_nul(subject, predicate, obj, prefix):
             return []
+        return self._settled_read(("rows", upto, subject, predicate, obj, prefix, after), upto,
+                                  lambda: self._rows(upto, subject, predicate, obj, prefix, after))
+
+    def _rows(self, upto: int, subject: Optional[str], predicate: Optional[str], obj: Optional[str],
+              prefix: Optional[str], after: int) -> List[Row]:
         params: List[Any] = [upto, after]
         sql = ("SELECT rev, ord, subject, predicate, object, added FROM quads WHERE rev <= %s AND rev > %s"
                + self._where(params, (("subject", subject), ("predicate", predicate), ("object", obj)), prefix)
@@ -205,6 +246,11 @@ class PostgresStore(Store):
                  prefix: Optional[str] = None, subject: Optional[str] = None, after: int = 0) -> List[str]:
         if _has_nul(subject, predicate, obj, prefix):
             return []
+        return self._settled_read(("subjects", upto, predicate, obj, prefix, subject, after), upto,
+                                  lambda: self._subjects(upto, predicate, obj, prefix, subject, after))
+
+    def _subjects(self, upto: int, predicate: Optional[str], obj: Optional[str], prefix: Optional[str],
+                  subject: Optional[str], after: int) -> List[str]:
         params: List[Any] = [upto, after]
         sql = ("SELECT subject, MIN(rev * 4294967296 + ord) FROM quads WHERE rev <= %s AND rev > %s AND added"
                + self._where(params, (("predicate", predicate), ("object", obj), ("subject", subject)), prefix)
@@ -214,7 +260,8 @@ class PostgresStore(Store):
     def has_predicate(self, predicate: str, upto: int) -> bool:
         if _has_nul(predicate):
             return False
-        return bool(self.read("SELECT 1 FROM quads WHERE predicate = %s AND rev <= %s LIMIT 1", (predicate, upto)))
+        return self._settled_read(("has", predicate, upto), upto, lambda: bool(
+            self.read("SELECT 1 FROM quads WHERE predicate = %s AND rev <= %s LIMIT 1", (predicate, upto))))
 
     def index_names(self) -> List[str]:
         return [r[0] for r in self.read("SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()"
