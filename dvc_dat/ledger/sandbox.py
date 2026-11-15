@@ -607,11 +607,26 @@ _REAL_IMPORT_MODULE: Any = None
 
 
 def _credit(names: List[str], before: Optional[Set[str]]) -> None:
-    """``names`` were imported by the running body; ``before`` the modules present before a first load."""
+    """``names`` were imported by the running body; ``before`` the modules present before a first load.
+
+    One import statement can load several modules of a chain (``import a.b`` loads ``a``, then ``a.b``), each
+    placed in ``sys.modules`` before its own code runs, so the order of ``sys.modules`` splits what was added:
+    a module pulled in what was added after it and before the next module of the chain, never that next module
+    or what it pulled (SVP 1729: a package is not credited with a sibling submodule its first import loaded, so
+    a nested body importing the package is not credited with its caller's module). An import nested in a
+    module's own code was credited first, by its own call: ``setdefault`` keeps that."""
     if before is not None:
-        added = set(sys.modules) - before
-        for n in added:
-            _PULLED.setdefault(n, added - {n})
+        added = [n for n in list(sys.modules) if n not in before]
+        chain = set(names)
+        for i, n in enumerate(added):
+            if n in _PULLED:
+                continue
+            pulled: Set[str] = set()
+            for m in added[i + 1:]:
+                if m in chain:
+                    break
+                pulled.add(m)
+            _PULLED[n] = pulled
     if STATE.frames:
         STATE.frames[-1].requested.update(n for n in names if n in sys.modules)
 
