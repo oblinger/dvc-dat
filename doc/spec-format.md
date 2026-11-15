@@ -28,10 +28,11 @@ that process can import.
 dat:
   kind: dvc_dat.core.Dat
   base: catalog.base_template
-  name: "runs/{YYYY}-{MM}/exp{unique}"
+  name: runs/${now:%Y-%m}/exp${unique:}
   do: scripts.run_experiment
   args: [1, 2, 3]
-  kwargs: {verbose: true}
+  kwargs: {verbose: true, tag: base}
+  preds: {tag: "${dat.kwargs.tag}"}
   target_exists: error
 ```
 
@@ -42,12 +43,13 @@ dat:
 | `name` | The path template for the dat's folder. Used when `Dat.create()` is given no `path`. |
 | `do` | Dotted name of the function to run. |
 | `args` | Positional arguments for it, after the dat itself. |
-| `kwargs` | Keyword arguments for it. |
+| `kwargs` | Keyword arguments for it, and the spec's defaults for them: a keyword on `run` or `create` overrides one key by key, and the stored spec holds the merged `dat.kwargs`. A template reads one as `${dat.kwargs.tag}`. A value a template reads that is not an argument of the function lives under any plain node (`params: {tag: base}`, read `${params.tag}`). A `dat.defaults` node is refused at create (gone in 3.0, SVP 1519). |
+| `preds` | Pred names to templates (SVP 1508), resolved at create like every string; each must come out a string, number or bool. They are the dat's own preds, sealed onto its value on a ledger. |
 | `target_exists` | What to do when the folder is already there. |
 
 `kind`, `name`, `do` and `target_exists` are strings. A value that arrives as
-something else is an error — which is how an unquoted `{…}` reference in YAML
-is caught (see **References** below).
+something else is an error — which is how a value YAML read as a flow mapping
+(one starting `{`) is caught.
 
 ### `target_exists`
 
@@ -58,8 +60,8 @@ is caught (see **References** below).
 | `overwrite` | Delete the folder and recreate it |
 | `increment` | Count up (`_2`, `_3`, …) until the path is free |
 
-A template with `{unique}` in its `dat.name` increments whether or not
-`increment` is set. `overwrite` is refused on `{cwd}`.
+A template with `${unique:}` in its `dat.name` increments whether or not
+`increment` is set. `overwrite` is refused on `${cwd:}`, and deletes only inside a dat folder or the art folder: an absolute name (or a `..`) outside them with `overwrite` is `ValueError`, raised before anything is removed.
 
 ## Running a dat
 
@@ -77,6 +79,12 @@ creates the dat and returns it.
 updated spec is written as the new dat's `_spec_.yaml`, and the new dat then
 runs with no call-site arguments. So the arguments of every run are on disk, in
 the spec of the dat that run produced.
+A call-site argument is literal data: each `${` in it is escaped before the
+merge, so the resolve at create leaves it exactly as passed (on the base
+install one holding `${` is refused, naming `dvc-dat[expand]`).
+`Dat.create(template, **kwargs)` merges its keywords the same way and runs nothing.
+A template reads a keyword by its node: `${dat.kwargs.game}` anywhere in the
+spec, `dat.name` and `dat.preds` included.
 
 ## Custom fields
 
@@ -96,20 +104,22 @@ dat = Dat.load("runs/my_experiment")
 dat.get_spec()["parameters"]["learning_rate"]   # 0.01
 ```
 
-## References: the `{}` grammar
+## References: the `${…}` grammar
 
-Any string value in a **template** may carry `{…}` references. They are
-expanded **once, when the dat is created** — with the same `now` and `unique`
-the folder got — and the expanded spec is what `_spec_.yaml` holds. A spec on
-disk is a record: `get_spec()` is the file and `{now}` is the moment it was
-made. The one exception is `dat.name`, which keeps the path template as
-given, never the path it expanded to; the folder the dat landed in is its
-name (`get_path_name()`). A reference to a class or an object inside a longer
-string is a `TypeError` at create, and no folder is made.
+Any string value in a **template** may carry `${…}` references, OmegaConf's
+grammar: `${batch}` a node of the spec, `${ns:a.b}` a namespace name,
+`${now:%Y}`, `${unique:}`, `${cwd:}` the built-ins, `\${` a literal `${`.
+They are resolved **once, when the dat is created** — after `dat.base` is
+merged, with the same moment and count the folder got — and the resolved spec
+is what `_spec_.yaml` holds. A spec on disk is a record: `get_spec()` is the
+file and `${now:}` was the moment it was made. The one exception is
+`dat.name`, which keeps the path template as given, never the path it
+resolved to; the folder the dat landed in is its name (`get_path_name()`). A
+`dat.name` in the `{…}` grammar retired in 3.0 is refused, naming the new
+spelling; the base install resolves `${unique:}` alone.
 
-The grammar itself — the built-ins, dotted names and calls through the
-namespace, `{unique}`, YAML quoting, the errors — is one page:
-[Expansion](expand.md).
+The grammar itself — the tiers, the built-ins, names and calls through the
+namespace, `${unique:}`, the errors — is one page: [Expansion](expand.md).
 
 ## Inheritance: `dat.base`
 
@@ -118,7 +128,7 @@ namespace, `{unique}`, YAML quoting, the errors — is one page:
 ```yaml
 dat:
   kind: dvc_dat.core.Dat
-defaults:
+params:
   optimizer: adam
   epochs: 100
 ```
@@ -129,7 +139,7 @@ defaults:
 dat:
   kind: dvc_dat.core.Dat
   base: catalog.base
-defaults:
+params:
   epochs: 200
 custom_param: true
 ```
@@ -139,7 +149,7 @@ custom_param: true
 ```yaml
 dat:
   kind: dvc_dat.core.Dat
-defaults:
+params:
   optimizer: adam
   epochs: 200
 custom_param: true
@@ -147,8 +157,8 @@ custom_param: true
 
 `dat.base` is gone from the result — the stored spec stands on its own.
 Resolution is recursive, and an override wins even when its value is `0`, `""`
-or `false`. `Dat.manager.expand_spec(spec)` returns the merged spec with every `{}`
-filled, which is what `create` stores (bar `dat.name`).
+or `false`. `Dat.ns.expand_spec(spec)` returns the merged spec with every `${…}`
+resolved, which is what `create` stores (bar `dat.name`).
 
 A list inherits from several specs at once, merged left to right:
 
@@ -215,23 +225,21 @@ dropped.
 `_result_.yaml` is written only by `dat.save()`: `create` writes no results
 file, and a run leaves its record in memory until the dat is saved. Every
 save stamps `dat.standing` — `rolling`, `open`, `sealed` or
-`referenceable`, what that save earned (see [Standing](concepts.md#standing)).
+`referenceable`, what that save earned (see [Standing](concepts.md#standing-how-far-a-dat-can-be-relied-on)).
 In the spec, `dat.standing` is a demand, `rolling` or `referenceable`.
 `dat.sha256` is the hash of the content saved, stamped by every save: the
 sha256 of sorted `relpath\0sha256` lines over every file in the folder but
-the `run/` sub-dat. `_spec_.yaml` is hashed as its sorted-key YAML dump with
+its subdats: `run/` and any other folder inside it whose spec names `dat.kind`. `_spec_.yaml` is hashed as its sorted-key YAML dump with
 `dat.name` left out (the name is the dat's address, not its content), and
 `_result_.yaml` as its sorted-key dump with `dat.sha256` set to `excluded`,
 so the hash can live inside the file it covers. `dat.hash: functional` marks
-a file hashed this way; a file without it was written before 3.0 and hashes
-by the 2.x rule, every file as its bytes, the name and all. `dat.verify()`
+a file hashed this way, the only rule; a hash a 2.x save stamped does not
+verify. `dat.verify()`
 recomputes it the same way and is `True` while the content is exactly as it
 was last saved — a changed data file, recipe or result makes it `False`;
-reformatting the YAML, renaming the dat or anything under `run/` does not. A file written before 2.14 carries no `dat.standing` and reads by
-the 2.13 rule: sealed when it has `dat.run_time` or `$MANUAL` and no
-`unsealed` entry, referenceable when it says `dat.referenceable: true`,
-rolling when its spec says `dat.rolling: true`, else open. A dat saved before
-2.9 carries no hash and is open until saved.
+reformatting the YAML, renaming the dat or anything under a subdat does not. A results file with no `dat.standing` (never saved, or written
+before 2.14, whose 2.13 keys are not read) is open, rolling when its spec
+demands `dat.standing: rolling`, until saved.
 
 ```yaml
 dat:
@@ -246,7 +254,7 @@ accuracy: 0.95
 
 Arguments are **not** recorded here. They are in the spec.
 
-## The run sub-dat
+## The `run/` folder
 
 Every run makes `run/` inside the dat, a dat of its own with a minimal
 `_spec_.yaml` and a `_result_.yaml` holding the execution — when, how long,

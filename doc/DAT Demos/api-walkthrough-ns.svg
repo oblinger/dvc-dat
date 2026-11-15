@@ -121,12 +121,12 @@
 <text x="910" y="276" font-size="30" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold" text-anchor="middle">.ns</text>
 <path d="M990,252 H1062 V590" fill="none" stroke="#222" stroke-width="1.5"/>
 <text x="1026" y="244" font-size="13" fill="#000" font-family="Menlo, monospace" xml:space="preserve" font-weight="bold" text-anchor="middle">load</text>
-<rect x="786" y="500" width="250" height="40" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<text x="798" y="524" font-size="12.5" fill="#555" font-family="Menlo, monospace" xml:space="preserve">&lt;Fn plane.measure.length@2.7.1&gt;</text>
-<path d="M1062,520 H1038" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<rect x="786" y="570" width="250" height="40" fill="#fff" stroke="#222" stroke-width="1.5"/>
-<text x="798" y="594" font-size="12.5" fill="#555" font-family="Menlo, monospace" xml:space="preserve">&lt;Fn plane.measure.length@2.7.2&gt;</text>
-<path d="M1062,590 H1038" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
-<path d="M438.0,550 C 600,550 600,520 784,520" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)" stroke-dasharray="4,3"/>
-<path d="M438.0,554 C 600,554 600,590 784,590" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)" stroke-dasharray="4,3"/>
+<rect x="780" y="500" width="264" height="40" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<text x="790" y="524" font-size="11.5" fill="#555" font-family="Menlo, monospace" xml:space="preserve">&lt;Fn mnt.plane.measure.length@2.7.1&gt;</text>
+<path d="M1062,520 H1046" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<rect x="780" y="570" width="264" height="40" fill="#fff" stroke="#222" stroke-width="1.5"/>
+<text x="790" y="594" font-size="11.5" fill="#555" font-family="Menlo, monospace" xml:space="preserve">&lt;Fn mnt.plane.measure.length@2.7.2&gt;</text>
+<path d="M1062,590 H1046" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)"/>
+<path d="M438.0,550 C 600,550 600,520 778,520" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)" stroke-dasharray="4,3"/>
+<path d="M438.0,554 C 600,554 600,590 778,590" fill="none" stroke="#222" stroke-width="1.5" marker-end="url(#head)" stroke-dasharray="4,3"/>
 </svg>

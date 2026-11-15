@@ -54,6 +54,13 @@ def kept_folder(tmp_path, monkeypatch):
     return tmp_path / "kept"
 
 
+@pytest.fixture(autouse=True)
+def cache_root(tmp_path, monkeypatch):
+    """A Postgres ledger's bytes are cached under the test's own folder: ``<tmp>/cache/<database>/art`` (SVP 1599)."""
+    monkeypatch.setenv("DAT_CACHE", str(tmp_path / "cache"))
+    return tmp_path / "cache"
+
+
 @pytest.fixture(params=backends.BACKENDS)
 def backend(request):
     """``sqlite`` or ``pg``: every test taking a ledger fixture runs once per store."""

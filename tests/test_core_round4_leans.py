@@ -5,7 +5,7 @@ import sys
 import pytest
 
 from dvc_dat import Namespace
-from dvc_dat.do import _parse_yaml_prefix
+from dvc_dat.namespace import _parse_yaml_prefix
 
 
 def test_only_a_first_line_of_yaml_alone_is_inline_yaml():

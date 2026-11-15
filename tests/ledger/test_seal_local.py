@@ -2,7 +2,8 @@
 
 import pytest
 
-from dvc_dat.ledger import Dat, Ref, SealBroken
+from dvc_dat import Dat
+from dvc_dat.ledger import Ref, SealBroken
 from dvc_dat.ledger.kept import Kept, age
 from ledger_kinds import Cut, Plain, Video
 

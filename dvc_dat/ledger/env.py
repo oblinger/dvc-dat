@@ -32,12 +32,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
-from ..core import CODE_PATHSPEC
 
 try:
     import tomllib
 except ImportError:  # pragma: no cover - 3.10
     tomllib = None  # type: ignore
+
+
+#: The git attribute a repo sets on paths that are not code (``doc/** dat-noncode``
+#: in its ``.gitattributes``): a change under them leaves the checkout clean.
+NONCODE_ATTR = "dat-noncode"
+#: The pathspec of a checkout's code: the whole tree from its top, less what
+#: ``.gitattributes`` marks ``dat-noncode``.  Every dirty check uses it.
+CODE_PATHSPEC = (":/", f":(top,exclude,attr:{NONCODE_ATTR})")
 
 
 @dataclass(frozen=True)

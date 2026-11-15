@@ -64,10 +64,10 @@ scratch_project_path = Path("scratch/just-demo").resolve()
 shutil.copytree("demo_game", scratch_project_path,
                 ignore=shutil.ignore_patterns("__pycache__"))
 os.chdir(scratch_project_path)
-L = Ledger(create=True)              # .datconfig.yaml + .dat/ledger
+L = Ledger(create=True)              # .datconfig.yaml + the root ledger under data/
 with open(".datconfig.yaml", "a") as config_file:
     config_file.write("mounts:\n"                       # db/mount rows:
-                      "  demo_game.etl: demo_game/etl\n"  # the ETL stages
+                      "  mnt.demo_game.etl: demo_game/etl\n"  # the ETL stages
                       "run: python3 -m demo_main\n")     # the main: cli
 dvc_dat_just_path = files("dvc_dat") / "dvc_dat.just"
 Path("justfile").write_text(
@@ -87,7 +87,7 @@ def git(*args: str) -> str:
     return done.stdout.strip()
 
 
-spec_record = {"main": "demo_game.etl.model.train", "game": "G1"}
+spec_record = {"main": "mnt.demo_game.etl.model.train", "game": "G1"}
 Path("model-G1.yaml").write_text(yaml.safe_dump(spec_record))
 Path(".gitignore").write_text(".dat/\n")
 git("init", "-q")
@@ -180,7 +180,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # %%
 # !cat model-G1.yaml
 # → game: G1
-# → main: demo_game.etl.model.train
+# → main: mnt.demo_game.etl.model.train
 
 # %%
 # !just run model-G1.yaml alias=model/prod
@@ -188,7 +188,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 
 # %% [markdown]
 # The dat is a value. It is
-# `rev.run("demo_game.etl.model.train", game="G1", path="model/prod")`:
+# `rev.run("mnt.demo_game.etl.model.train", game="G1", path="model/prod")`:
 # `path=` names the result and builds its folder there (Q36).
 #
 # The file's contents are the whole set of keys; a key on the line
@@ -206,12 +206,12 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # → hit  model/prod  game=G1 stage=model metrics.count=12 …
 
 # %% [markdown]
-# `train` carries `@command(args="game=…", help="…")`, and its
-# module is under the ledger's mount of `demo_game.etl` (`mounts:`
+# `train` carries `@dat.command(args="game=…", help="…")`, and its
+# module is under the ledger's mount `mnt.demo_game.etl` (`mounts:`
 # in `.datconfig.yaml`); `run` reads the commands off the mounted
 # files and writes one recipe per command into `.dat/targets.just`,
 # which the justfile imports. It is
-# `just run demo_game.etl.model.train game=G1`: the same keys as the
+# `just run mnt.demo_game.etl.model.train game=G1`: the same keys as the
 # spec, so a hit. Anything not marked stays `just run <target>`.
 
 # %% [markdown]
@@ -472,15 +472,16 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 
 # %%
 # !cat .datconfig.yaml
-# → ledger: .dat/ledger
+# → default: root
+# → namespace: ledger
 # → mounts:
-# →   demo_game.etl: demo_game/etl
+# →   mnt.demo_game.etl: demo_game/etl
 # → run: python3 -m demo_main
 
 # %% [markdown]
 # Every recipe opens the ledger with `Ledger()`, which walks up from
 # the cwd to the nearest `.datconfig.yaml` and opens the ledger its
-# `ledger:` line names. Notice `DAT_LEDGER` wins over the walk, here
+# `default:` names (here `root`). Notice `DAT_LEDGER` wins over the walk, here
 # naming a ledger that does not exist.
 
 # %%

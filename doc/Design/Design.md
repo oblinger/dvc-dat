@@ -9,4 +9,4 @@ description: "system spec — architecture, API"
 | ...                                      | [DAT Design Hooks](Design%20Hooks.md),                                                                                                                     |
 
 # DAT Design
-The system spec for [dvc-dat](../DAT%20Modules/dat.md): what it is made of ([DAT Architecture](../DAT%20Architecture.md)) and what a consumer codes against ([DAT API](DAT%20API/DAT%20API.md)).
+The system spec for [dvc-dat](../DAT%20Modules/DAT%20Dat.md): what it is made of ([DAT Architecture](../DAT%20Architecture.md)) and what a consumer codes against ([DAT API](DAT%20API/DAT%20API.md)).

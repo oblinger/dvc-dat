@@ -20,7 +20,7 @@ Items (Module § Value ``Dependencies``):
     the short tag ``<os>-<machine>-py<X.Y>`` of the platform it ran on; holds when the
     ledger's memo policy (``policy``, the ``(db, db/memo-policy)`` row at the top) reduces the
     stored record and the environment's to the same string, card and driver added under
-    ``deterministic=True`` (SVP 1474). (A sandboxed entry's third-party modules are in
+    a claim of ``exact`` (SVP 1474). (A sandboxed entry's third-party modules are in
     ``code``, each by its bytes or its distribution's ``RECORD``; there is no
     whole-``uv.lock`` item.)
 ``platform/record``
@@ -38,19 +38,28 @@ Items (Module § Value ``Dependencies``):
     yields an entry with the recorded hash (A42, A45).
 ``salt``
     the ``db/salt`` of the mount a sandboxed function ran under, when set.
+``foreign:{"at": "<ledger>@<rev>", "name": <name>}``
+    a value or a run reached in the body through any ``Rev`` but the recording one, on any ledger
+    (``note_read``, SVP 1521 Q2 (A)) -> the ``ref:`` it gave. Provenance only: always holds, so it never
+    enters the hit test and a name moving on another ledger is no miss. ``deep`` and ``safe`` read it.
 ``q:{...}``
     a ``refs``/``values``/``value``/``select`` query (the whole query as
     canonical JSON, ``kind`` dotted, A41, A47) -> the sorted ``ref:`` list it
     answered; any other read (``all``, ``in``, a 1- or
-    3-position bracket, ``history`` (recorded as ``rows``), ``get`` with
+    3-position bracket, ``history`` (recorded as ``rows``), ``last_rev``, ``get`` with
     ``since``) is ``q:{"__call__": …}`` -> a token of its result (for
-    ``history``, its row count).
+    ``history``, its row count; for ``last_rev``, the revision).
 """
 
 from __future__ import annotations
 
+import contextvars
 import json
-from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence
+import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Optional, Sequence
 
 from .codec import canonical, ref_text, strip_hint
 from .errors import AliasLoop, LedgerError
@@ -61,6 +70,113 @@ if TYPE_CHECKING:
     from .rev import Rev
 
 NONE = "<none>"
+#: The prefix of an item a run read through any ``Rev`` but its recording one (``note_read``).
+FOREIGN = "foreign:"
+
+
+class RunFrame:
+    """The run in progress: its revision, ``plain``; ``rev``, the recording ``Rev`` its body holds; ``rec``, the
+    items it records; and the ``ref:`` keys it was called with, which a body may load through their own ``Ref``
+    with nothing to add."""
+
+    def __init__(self, plain: "Rev", rec: Dict[str, str], enc: str) -> None:
+        from .fn import ledger_key
+        from .rev import Rev
+
+        self.plain = plain
+        self.rec = rec
+        self.rev = Rev(plain.ledger, plain.id, _rec=rec)
+        self.key = ledger_key(plain.ledger)
+        keys = json.loads(enc)
+        self.keys = {v for v in keys.values() if isinstance(v, str) and v.startswith("ref:")}
+        #: Set while ``running`` holds it: a thread that outlives the run reads for no run after.
+        self.open = False
+
+    @property
+    def at(self) -> str:
+        """``<ledger>@<rev>``: the revision the run is against."""
+        return rev_text(self.plain)
+
+
+#: The current run. A read during a run is recorded on the run whose work made it, never on another (SVP 1549) and
+#: never dropped (SVP 1551): Python gives neither a new thread nor a pool's work item its starter's context, so
+#: ``Thread.start`` and ``ThreadPoolExecutor.submit`` are patched below to carry this one variable. Work handed over
+#: by any other road reads for no run unless wrapped in ``contextvars.copy_context().run``.
+_RUN: "contextvars.ContextVar[Optional[RunFrame]]" = contextvars.ContextVar("dvc_dat_run", default=None)
+_thread_start = threading.Thread.start
+_pool_submit = ThreadPoolExecutor.submit
+
+
+def _carried(frame: Optional[RunFrame], work: Callable[..., Any]) -> Callable[..., Any]:
+    """``work``, run with ``frame`` as the current run whatever thread runs it (SVP 1551)."""
+    def carried(*args: Any, **kwargs: Any) -> Any:
+        token = _RUN.set(frame)
+        try:
+            return work(*args, **kwargs)
+        finally:
+            _RUN.reset(token)
+    return carried
+
+
+def _start(self: threading.Thread) -> None:
+    """``Thread.start``: a thread started inside a run reads for that run. A new thread starts with an empty
+    context, so without this a thread a body starts would read for no run."""
+    frame = _RUN.get()
+    if frame is not None:
+        self.run = _carried(frame, self.run)  # type: ignore[method-assign]
+    _thread_start(self)
+
+
+def _submit(self: ThreadPoolExecutor, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+    """``ThreadPoolExecutor.submit``: the work reads for the submitter's run, or for none, whichever thread of the
+    pool runs it and whenever that thread was started (SVP 1551). An ``InterpreterPoolExecutor`` is out of scope, as
+    a child process is."""
+    interp = sys.modules.get("concurrent.futures.interpreter")
+    if interp is not None and isinstance(self, interp.InterpreterPoolExecutor):
+        return _pool_submit(self, fn, *args, **kwargs)
+    return _pool_submit(self, _carried(_RUN.get(), fn), *args, **kwargs)
+
+
+threading.Thread.start = _start  # type: ignore[method-assign]
+ThreadPoolExecutor.submit = _submit  # type: ignore[method-assign, assignment]
+
+
+def current_run() -> Optional[RunFrame]:
+    """The run this code is inside: the one the work was started or submitted in, while that run is open."""
+    frame = _RUN.get()
+    return frame if frame is not None and frame.open else None
+
+
+@contextmanager
+def running(frame: RunFrame) -> Iterator[RunFrame]:
+    """``frame`` is the current run inside the block; blocks nest, so a nested run sees its own reads."""
+    token = _RUN.set(frame)
+    frame.open = True
+    try:
+        yield frame
+    finally:
+        frame.open = False
+        _RUN.reset(token)
+
+
+def rev_text(rev: "Rev") -> str:
+    """``<ledger>@<rev>``: a revision by the ledger's name, the global reference of SVP 239."""
+    return f"{rev.ledger._store.name}@{rev.id}"
+
+
+def note_read(rev: "Rev", name: str, text: str) -> None:
+    """The ambient hook (SVP 1521 Q2 (A)): a value or a run reached through ``rev``, which records nothing, joins
+    the current run as a ``foreign:`` item. Raw rows are not tracked. A value the run was called with, on its
+    own ledger, is in its keys already. Outside any run: nothing."""
+    from .fn import ledger_key
+
+    frame = current_run()
+    if frame is None:
+        return
+    text = strip_hint(text)
+    if text in frame.keys and (rev.ledger is frame.plain.ledger or ledger_key(rev.ledger) == frame.key):
+        return
+    frame.rec[FOREIGN + canonical({"at": rev_text(rev), "name": name})] = text
 
 
 def token(obj: Any) -> str:
@@ -147,6 +263,9 @@ def _requery(rev: "Rev", body: Dict[str, Any]) -> str:
                 return token(tuple(args) in rev)
             if call == "rows":
                 return token(len(rev.history(*args, since=since)))
+            if call == "last_rev":
+                found = rev.last_rev(*args, since=since)
+                return token(found.id if found is not None else None)
             if call == "preds":
                 return token(dict(Ref(rev, args[0])._preds()))
             if call == "aliases":
@@ -182,10 +301,11 @@ class _RefText(str):
 
 def salt_at(rev: "Rev", nm: Optional[str]) -> str:
     """The ``salt`` of the mount the function named ``nm`` (an ``fn`` item) resolves under, at ``rev``."""
-    from .fn import mounts_at
+    from .fn import MNT, mounts_at
 
-    if not nm:
-        return NONE
+    if not nm or not nm.startswith(MNT + "."):
+        return NONE                             # an installed function: under no mount
+    nm = nm[len(MNT) + 1:]
     best = None
     for prefix, info in mounts_at(rev).items():
         if nm.startswith(prefix + ".") and (best is None or len(prefix) > len(best[0])):
@@ -220,6 +340,8 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
     # the other items hold no space (a ref, an eval: name, a q: item outside its JSON, a repo by name).
     if " " not in item and item.startswith("ref:"):
         return True
+    if foreign_of(item) is not None:            # provenance only (SVP 1521 Q2 (A))
+        return True
     if item.startswith("code/") and (" " not in item or item[len("code/"):] in env().code):
         code = env().code.get(item[len("code/"):])
         c = code.commit if code is not None else None
@@ -252,6 +374,18 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
     return (strip_hint(text) if text.startswith("ref:") else show(text)) == recorded
 
 
+def foreign_of(item: str) -> Optional[Dict[str, str]]:
+    """The ``{"at", "name"}`` of a ``foreign:`` item, or ``None`` when the item is anything else (a row read of a
+    subject starting ``foreign:{`` among them)."""
+    if not item.startswith(FOREIGN + "{"):
+        return None
+    try:
+        body = json.loads(item[len(FOREIGN):])
+    except ValueError:
+        return None
+    return body if isinstance(body, dict) and set(body) == {"at", "name"} else None
+
+
 def _query_of(item: str) -> Optional[Dict[str, Any]]:
     """The query a ``q:`` item recorded, or ``None`` when the item is a row read of a subject starting ``q:{``."""
     try:
@@ -263,7 +397,7 @@ def _query_of(item: str) -> Optional[Dict[str, Any]]:
 
 def trace_matches(rev: "Rev", trace: Dict[str, str], widen: Sequence[str] = ()) -> bool:
     """Every item holds at ``rev``: the memo's hit test. Never runs a function. The ``platform`` item is
-    judged by the ledger's memo policy at its top, ``widen`` (``policy.DETERMINISTIC``) added."""
+    judged by the ledger's memo policy at its top, ``widen`` (``policy.EXACT_FIELDS``) added."""
     from .env import current_env
     from .policy import judge, policy_at
 

@@ -60,6 +60,9 @@ One world's namespace; it is not callable — running is `manager.run(target, ..
 | [name_of](#^name-of) | The dotted name `load` takes back to `obj` |
 | [mount](#^mount) | Add one mount: folder, file, module or value |
 | [mounts](#^mounts) | The mount table, `{prefix: location}` |
+| [expand](#^expand) | A template filled through this namespace's names, a str |
+| [expand_spec](#^expand-spec) | Merge `dat.base`, then `expand` every string |
+| [quote_spec](#^quote-spec) | Every brace doubled: survives one expansion |
 
 **manager**`: DatManager`
     The world this namespace belongs to; one `ns` per manager, one manager per `ns`. On `Dat.ns` it is `Dat.manager`. A bare `Namespace()` has none and is a plain namespace of Python objects: `mount`, `load`, `name_of` and `mounts` all work with no manager and no default world built; reading `manager` before `Namespace(manager=m)`, or a manager built with `ns=` adopting it, raises `RuntimeError`. ^manager
@@ -76,8 +79,17 @@ One world's namespace; it is not callable — running is `manager.run(target, ..
 **mounts**`() -> Dict[str, str]`
     The mount table: each mounted prefix and where it loads from — a file, a folder entry, or a module's import name. A `value` mount has no location and is not listed; `just mounts` (`x --list`) prints every mounted name. ^mounts
 
+**expand**`(text: str, /, **vars) -> str`
+    `text` with its `${…}` references resolved, always a str (2.44, SVP 1500; the `${…}` grammar since 1519). The keywords are the top-level nodes of a one-string tree (`ns.expand("ann/${g}/${unique:}", g="G7")`), each value data, never resolved; `${ns:a.b}` is `load`, called when it is a function (`${ns:a.b, 1, x}` with literal arguments); `${now:%Y}`, `${cwd:}` and `${unique:}` the built-ins, one moment in this namespace's zone (the machine's; a ledger revision's `db db/timezone`). A result that is not a str or a number is `TypeError`. `${unique:}` is the first count here (`""`, or `1` as a whole path segment); on a ledger it counts. Only `${unique:}` is resolved without `dvc-dat[expand]` ([Expansion](../../expand.md)). ^expand
+
+**expand_spec**`(spec: Any, /) -> Any`
+    A copy of `spec` merged over its `dat.base` chain (bases named through this namespace), then every string value resolved once (OmegaConf's `to_container(resolve=True)`), the built-ins one moment; keys are left alone. A string value that is exactly one reference is the object it names (`cfg: ${ns:svp.defaults}` inlines the dict). `create` stores what this returns, except `dat.name`. ^expand-spec
+
+**quote_spec**`(spec: Any) -> Any`
+    A copy of `spec` with each `${` in a string escaped (`\${`, backslashes before it doubled), so the resolve gives `spec` back; call-site run arguments are quoted so. A spec with no `${` comes back as given; one holding `${` needs `dvc-dat[expand]`. ^quote-spec
+
 ## On a ledger
-A `LedgerNamespace`: the same interface, its names the ledger's `db/mount` rows at one revision, longest prefix first; a name under no mount is imported. A mounted `.yaml`/`.json` comes back a dict, a mounted function its `Fn` (read off the file, never imported here), a mounted literal its value; a `@ledger_fn` it imports to comes back its `Fn`.
+A `LedgerNamespace`: the same interface, its mounted names the ledger's `db/mount` rows at one revision, longest prefix first. A mounted name starts `mnt.` (`mnt.<prefix>...`, as `t.ns.mount` names it; the row never carries `mnt`); everything else imports, so the two never clash, and `mnt` alone or a `mnt.` name under no mount is `ImportError` naming the mounts. A mounted `.yaml`/`.json` comes back a dict, a mounted function its `Fn` (read off the file, never imported here), a mounted literal its value; a `@dat.fn` it imports to comes back its `Fn`. `rev.ns.expand` resolves `${ns:…}` names through those rows, takes its clock in the revision's display zone (`db db/timezone`, UTC with none), and counts `${unique:}`: tried at 1, 2, 3, … until no `db/alias` names a value by it and no folder is at it under the data folder; a whole path segment counts `1, 2, 3`, a suffix `"", _2, _3`; `t.ns.expand` also skips the names the transaction minted or aliased already.
 
 | Where | Is |
 | --- | --- |
@@ -86,15 +98,15 @@ A `LedgerNamespace`: the same interface, its names the ledger's `db/mount` rows 
 | `Dat.manager.ns` | in a ledger project, the namespace at the head |
 
 ```python
-f = L.at().ns.load("plane.measure.length")   # an Fn
+f = L.at().ns.load("mnt.plane.measure.length")   # an Fn, sandboxed; "plane.measure.length" imports
 L.at().ns.mounts()
 # {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
 with L.transaction(by="human:dan") as t:
-    t.ns.mount("plane", root="plane", repo="geometry-app")
-    t.ns.mount("mymodule", root="mymodule")   # this project's repo
+    t.ns.mount("mnt.plane", root="plane", repo="geometry-app")
+    t.ns.mount("mnt.mymodule", root="mymodule")   # this project's repo
 ```
 
-`mounts()` is the `db/mount` rows, `{prefix: {"root": ..., "repo": ...}}`. `t.ns.mount(at, *, root, repo=None)` writes the two rows `db/mount/<at> db/root` and `db/repo` through `t.update`, and needs no `lock=`; `repo` defaults to the project's own repository, the git checkout holding the `.datconfig.yaml` the manager loaded, named as discovery names repos, and with no such file is `ValueError`; `t.ns.load` reads `previous_rev`, so it does. `mount` anywhere else — `rev.ns`, `Dat.ns` in a ledger project — is `TypeError` naming `t.ns.mount`. Full ledger reference: [DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md).
+`mounts()` is the `db/mount` rows, `{prefix: {"root": ..., "repo": ...}}`. `t.ns.mount(at, *, root, repo=None)` takes `at` as `mnt.<prefix>` and writes the two rows `db/mount/<prefix> db/root` and `db/repo` through `t.update`, and needs no `lock=`; an `at` outside `mnt.` (`mnt` alone included) is `ValueError`, nothing prefixed for you (1505 Q1); a `.datconfig.yaml` `mounts:` key is the same name, `mnt.<prefix>: <root>`, and a key outside `mnt.` is `ValueError` the same way; `repo` defaults to the project's own repository, the git checkout holding the `.datconfig.yaml` the manager loaded, named as discovery names repos, and with no such file is `ValueError`; `t.ns.load` reads `previous_rev`, so it does. `mount` anywhere else — `rev.ns`, `Dat.ns` in a ledger project — is `TypeError` naming `t.ns.mount`. Full ledger reference: [DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 
 
@@ -151,7 +163,7 @@ Each is one call in your program; build paths from `__file__`, since `relative_t
 | `do.keys()` | `ns.mounts()`, the mount table |
 | `rev.resolve(name)` | `rev.ns.load(name)` |
 | `LedgerDo` | `LedgerNamespace` |
-| `t.update("db/mount/<p>", {"db/root": ..., "db/repo": ...})` | `t.ns.mount("<p>", root=...)`, `repo=` only for another repo (the `update` still works) |
+| `t.update("db/mount/<p>", {"db/root": ..., "db/repo": ...})` | `t.ns.mount("mnt.<p>", root=...)`, `repo=` only for another repo (the `update` still works) |
 
 ## 2.3 – 2.8
 

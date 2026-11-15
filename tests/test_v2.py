@@ -14,7 +14,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from dvc_dat import Dat, DatManager, Namespace  # noqa: E402
-from dvc_dat.core import expand, expand_spec  # noqa: E402
 
 ns, merge_dicts = Dat.ns, Dat.merge_dicts
 from dvc_dat.core import DAT_CONFIG_FILE, SPEC_YAML, RESULT_YAML  # noqa: E402
@@ -86,9 +85,9 @@ class TestForkRule:
         assert Dat.manager.run("v2_args", 1, 2) == {"args": [1, 2], "kwargs": {}}   # not [4,5,6,1,2]
         assert stored(Dat.load(name))["dat"]["args"] == [1, 2]
 
-    def test_a_sealed_dat_does_not_rerun_and_forks_when_given_arguments(self):
+    def test_a_dat_is_refused_and_its_spec_runs_beside_it(self):
         ns.mount(at="v2_forkable", value={
-            "dat": {"do": "v2_echo", "name": f"{V2}/forkable{{unique}}"}})
+            "dat": {"do": "v2_echo", "name": f"{V2}/forkable${{unique:}}"}})
         for stale in (f"{V2}/forkable", f"{V2}/forkable_2"):
             if Dat.manager.exists(stale):
                 Dat.load(stale).delete()
@@ -98,15 +97,15 @@ class TestForkRule:
         spec_file = Path(dat.get_path(), SPEC_YAML)
         before = spec_file.read_bytes()
 
-        # No arguments: a sealed dat does not run again.
+        # A dat is not a run target (SVP 1508): it ran once, when made.
         with pytest.raises(Exception) as err:
-            Dat.manager.run(dat)
-        assert "sealed" in str(err.value.__cause__)
+            Dat.manager.run(dat, 9)
+        assert isinstance(err.value.__cause__, TypeError)
         assert spec_file.read_bytes() == before
         assert not Dat.manager.exists(f"{V2}/forkable_2")
 
-        # Arguments: a new dat, and the original spec is untouched.
-        assert Dat.manager.run(dat, 9) == {"args": [9], "kwargs": {}}
+        # Its recipe again: a new dat beside it, and the original spec is untouched.
+        assert Dat.manager.run(dat.get_spec(), 9) == {"args": [9], "kwargs": {}}
         assert spec_file.read_bytes() == before
         forked = Dat.load(f"{V2}/forkable_2")
         assert forked.get_path() != dat.get_path()
@@ -144,7 +143,7 @@ class TestBaseList:
         ns.mount(at="v2_base_a", value={"dat": {}, "x": 1, "shared": "from_a"})
         ns.mount(at="v2_base_b", value={"dat": {}, "y": 2, "shared": "from_b"})
 
-        spec = Dat.manager.expand_spec({"dat": {"base": ["v2_base_a", "v2_base_b"]}, "z": 3})
+        spec = ns.expand_spec({"dat": {"base": ["v2_base_a", "v2_base_b"]}, "z": 3})
         assert (spec["x"], spec["y"], spec["z"]) == (1, 2, 3)
         assert spec["shared"] == "from_b"      # the later entry wins
         assert "base" not in spec["dat"]
@@ -161,65 +160,77 @@ class TestBaseList:
         assert spec["shared"] == "from_b" and spec["x"] == 1 and spec["y"] == 2
 
     def test_expand_spec_merges_the_base_then_fills_its_references(self):
-        ns.mount(at="v2_base_tmpl", value={"dat": {"kwargs": {"who": "{who}"}}})
-        spec = Dat.manager.expand_spec({"dat": {"base": "v2_base_tmpl"}}, {"who": "dat"})
-        assert spec == {"dat": {"kwargs": {"who": "dat"}}}
+        pytest.importorskip("omegaconf")
+        ns.mount(at="v2_base_tmpl", value={"dat": {"kwargs": {"who": "${who}"}}})
+        spec = ns.expand_spec({"dat": {"base": "v2_base_tmpl"}, "who": "dat"})
+        assert spec == {"dat": {"kwargs": {"who": "dat"}}, "who": "dat"}
 
     def test_merge_bases_is_not_a_do_verb(self):
         assert not hasattr(Namespace, "merge_bases") and not hasattr(ns, "merge_bases")
 
     def test_a_falsy_override_still_overrides(self):
         ns.mount(at="v2_base_truthy", value={"dat": {}, "flag": True, "count": 7})
-        spec = Dat.manager.expand_spec({"dat": {"base": "v2_base_truthy"}, "flag": False, "count": 0})
+        spec = ns.expand_spec({"dat": {"base": "v2_base_truthy"}, "flag": False, "count": 0})
         assert spec["flag"] is False and spec["count"] == 0
 
 
 class TestExpand:
+    """`ns.expand` (doc/expand.md): a str to a str, through the namespace's own names (the `${…}` grammar, 1519 R3)."""
+
+    @pytest.fixture(autouse=True)
+    def _expand_tier(self):
+        pytest.importorskip("omegaconf")
+
     def test_built_ins(self):
         now = datetime.now()
-        assert expand("{YYYY}") == now.strftime("%Y")
-        assert expand("{YY}") == now.strftime("%Y")[2:]
-        assert expand("run-{YYYY}-{MM}") == now.strftime("run-%Y-%m")
-        assert expand("{cwd}") == os.getcwd()
-        assert expand("{unique}") == ""
+        assert ns.expand("${now:%Y}") == now.strftime("%Y")
+        assert ns.expand("${now:%y}") == now.strftime("%y")
+        assert ns.expand("run-${now:%Y}-${now:%m}") == now.strftime("run-%Y-%m")
+        assert ns.expand("${cwd:}") == os.getcwd()
+        assert ns.expand("x${unique:}") == "x" and ns.expand("events/${unique:}") == "events/1"   # no ledger
 
-    def test_vars_and_literal_braces(self):
-        assert expand("hello {who}!", {"who": "dat"}) == "hello dat!"
-        assert expand("{{literal}}") == "{literal}"
-        assert expand("{{{who}}}", {"who": "x"}) == "{x}"
+    def test_keywords_are_nodes_and_a_brace_is_text(self):
+        assert ns.expand("hello ${who}!", who="dat") == "hello dat!"
+        assert ns.expand("{literal}") == "{literal}"
+        assert ns.expand("{${who}}", who="x") == "{x}"
+        assert ns.expand("${text}", text="t") == "t"           # the template is positional only
+        assert ns.expand("\\${HOME}") == "${HOME}"
+        assert ns.expand("${who}", who="${not_resolved}") == "${not_resolved}"   # a keyword is data
 
-    def test_an_unknown_undotted_name_is_an_error(self):
-        with pytest.raises(KeyError):
-            expand("{no_such_name}")
+    def test_a_missing_node_is_an_error(self):
+        from omegaconf.errors import InterpolationKeyError
 
-    def test_a_dotted_name_resolves_through_do_load(self):
-        import collections
-        assert expand("{collections.OrderedDict}") is collections.OrderedDict  # a class: itself
-        assert expand("sep is {os.sep}") == f"sep is {os.sep}"   # embedded: a string
-        with pytest.raises(TypeError):
-            expand("cls is {collections.OrderedDict}")           # embedded: not a scalar
+        with pytest.raises(InterpolationKeyError, match="no_such_name"):
+            ns.expand("${no_such_name}", given_one=1)
+
+    def test_a_name_resolves_through_the_namespace(self):
+        assert ns.expand("sep is ${ns:os.sep}") == f"sep is {os.sep}"
+        assert ns.expand("${ns:os.sep}") == os.sep
+
+    def test_always_a_string(self):
+        with pytest.raises(TypeError, match="string or a number"):
+            ns.expand("${ns:collections.OrderedDict}")            # a class: never the object
+        with pytest.raises(TypeError, match="string or a number"):
+            ns.expand("${thing}", thing={"a": 1})
+        assert ns.expand("${thing}", thing=7) == "7" and ns.expand("[${thing}]", thing=7) == "[7]"
+        with pytest.raises(TypeError, match="takes a str"):
+            ns.expand({"a": "${now:%Y}"})
 
     def test_a_function_is_called_with_no_arguments(self):
-        assert expand("{os.getcwd}") == os.getcwd()
-        assert expand("at {os.getcwd}/x") == f"at {os.getcwd()}/x"
+        assert ns.expand("${ns:os.getcwd}") == os.getcwd()
+        assert ns.expand("at ${ns:os.getcwd}/x") == f"at {os.getcwd()}/x"
 
     def test_literal_arguments_call_it(self):
-        assert expand('{os.path.join("a", "b")}') == os.path.join("a", "b")
-        assert expand("{builtins.max(1, 7, 3)}") == 7
-        assert expand("{builtins.round(2.567, ndigits=1)}") == 2.6
-        assert expand("{collections.OrderedDict()}") == {}       # parentheses call a class
+        assert ns.expand("${ns:os.path.join, a, b}") == os.path.join("a", "b")
+        assert ns.expand("${ns:builtins.max, 1, 7, 3}") == "7"
+        with pytest.raises(Exception, match="not callable"):
+            ns.expand("${ns:os.sep, 1}")
 
-    @pytest.mark.parametrize("ref", ["{os.path.join(x)}", "{builtins.max(1 + 2)}",
-                                     "{builtins.max(*[1])}", "{builtins.max(1))}"])
-    def test_arguments_are_literals_only(self, ref):
-        with pytest.raises(ValueError, match="expand"):
-            expand(ref)
+    def test_a_keyword_argument_is_a_parse_error(self):
+        from omegaconf.errors import GrammarParseError
 
-    def test_a_call_needs_a_dotted_callable(self):
-        with pytest.raises(ValueError, match="only a dotted name"):
-            expand("{who()}", {"who": "x"})
-        with pytest.raises(TypeError, match="not callable"):
-            expand("{os.sep()}")
+        with pytest.raises(GrammarParseError):
+            ns.expand("${ns:builtins.round, 2.567, ndigits=1}")
 
     def test_mounted_functions_are_called_and_callable_objects_are_not(self):
         class Proxy:                      # like SVP's `asset`: callable, attribute access
@@ -229,31 +240,48 @@ class TestExpand:
                 raise AssertionError("a callable object is never called")
         ns.mount(value=lambda: "c2dbdc6", at="v2_meta.commit")
         ns.mount(value=Proxy(), at="v2_asset.proxy")
-        assert expand("{v2_meta.commit}") == "c2dbdc6"
-        assert isinstance(expand("{v2_asset.proxy}"), Proxy)
+        assert ns.expand("${ns:v2_meta.commit}") == "c2dbdc6"
+        assert isinstance(ns.expand_spec({"p": "${ns:v2_asset.proxy}"})["p"], Proxy)
 
-    def test_a_whole_value_reference_keeps_the_object(self):
-        marker = object()
-        assert expand("{thing}", {"thing": marker}) is marker
-        assert expand("[{thing}]", {"thing": 7}) == "[7]"
+    def test_expand_spec_inlines_a_whole_value_reference(self):
+        assert ns.expand_spec({"x": "${ns:os.sep}", "y": "[${ns:os.sep}]"}) == {"x": os.sep, "y": f"[{os.sep}]"}
+        assert ns.expand_spec(["${ns:os.sep}"]) == [os.sep]
+        import collections
+        assert ns.expand_spec({"c": "${ns:collections.OrderedDict}"})["c"] is collections.OrderedDict
 
     def test_expand_spec_walks_the_tree_and_leaves_keys_alone(self):
-        spec = {"{YYYY}": ["{YY}", {"deep": "{who}"}, 5], "plain": None}
-        out = expand_spec(spec, {"who": "dat"})
-        assert list(out) == ["{YYYY}", "plain"]        # keys are never expanded
-        assert out["{YYYY}"][0] == datetime.now().strftime("%Y")[2:]
-        assert out["{YYYY}"][1] == {"deep": "dat"}
-        assert out["{YYYY}"][2] == 5 and out["plain"] is None
-        assert spec["{YYYY}"][1]["deep"] == "{who}"    # the input is not touched
+        spec = {"${now:%Y}": ["${now:%y}", {"deep": "${who}"}, 5], "who": "dat", "plain": None}
+        out = ns.expand_spec(spec)
+        assert list(out) == ["${now:%Y}", "who", "plain"]        # keys are never resolved
+        assert out["${now:%Y}"][0] == datetime.now().strftime("%y")
+        assert out["${now:%Y}"][1] == {"deep": "dat"}
+        assert out["${now:%Y}"][2] == 5 and out["plain"] is None
+        assert spec["${now:%Y}"][1]["deep"] == "${who}"           # the input is not touched
+
+    def test_quote_spec_survives_one_resolve(self):
+        spec = {"re": r"\d{3}", "l": ["{x}", "echo ${HOME}", "\\${y}", 1]}
+        assert ns.expand_spec(ns.quote_spec(spec)) == spec
+        assert Namespace.quote_spec(spec) == ns.quote_spec(spec)
+
+    def test_each_namespace_expands_through_its_own_names(self, tmp_path):
+        own = Namespace()
+        own.mount(value="mine", at="v2_own.word")
+        assert own.expand("${ns:v2_own.word}") == "mine"
+        with pytest.raises(Exception):
+            ns.expand("${ns:v2_own.word}")                 # the default world never saw that mount
+
+    def test_the_manager_has_no_expand(self):
+        assert not hasattr(DatManager, "expand") and not hasattr(DatManager, "expand_spec")
 
 
 class TestGetSpec:
     def test_create_expands_once_and_the_file_is_the_record(self):
-        """T011 Q7 (B): every `{}` is expanded at create; the file holds the values."""
+        """T011 Q7 (B): every `${…}` is resolved at create; the file holds the values."""
+        pytest.importorskip("omegaconf")
         dat = Dat.create(path=f"{V2}/expanded", spec={
             "dat": {"kind": "Dat", "target_exists": "overwrite"},
-            "stamp": "{YYYY}", "sep": "{os.sep}", "cfg": "{test_v2.SAMPLE}",
-            "where": "{os.getcwd}"})
+            "stamp": "${now:%Y}", "sep": "${ns:os.sep}", "cfg": "${ns:test_v2.SAMPLE}",
+            "where": "${ns:os.getcwd}"})
 
         year = datetime.now().strftime("%Y")
         assert dat.get_spec()["stamp"] == year
@@ -264,21 +292,21 @@ class TestGetSpec:
         assert dat.get_spec()["dat"]["name"] == f"{V2}/expanded"   # the name is the folder
 
     def test_a_reference_to_a_non_data_object_is_refused_at_create(self):
+        pytest.importorskip("omegaconf")
         with pytest.raises(TypeError):
             Dat.create(path=f"{V2}/notdata", spec={
-                "dat": {"kind": "Dat", "target_exists": "overwrite"}, "fn": "{collections.OrderedDict}"})
+                "dat": {"kind": "Dat", "target_exists": "overwrite"}, "fn": "${ns:collections.OrderedDict}"})
         assert not Dat.manager.exists(f"{V2}/notdata")
 
-    def test_a_fork_from_a_dat_lands_beside_it(self):
-        template = {"dat": {"do": "v2_echo", "name": f"{V2}/parent{{unique}}"}}
+    def test_a_run_of_a_dats_spec_lands_beside_it(self):
+        template = {"dat": {"do": "v2_echo", "name": f"{V2}/parent${{unique:}}"}}
         Dat.manager.run(template, 1)
         parent = Dat.load(f"{V2}/parent")
-        assert parent.get_spec()["dat"]["name"] == f"{V2}/parent{{unique}}"   # the template (Q36)
-        assert parent.get_path_name() == f"{V2}/parent"                      # its expansion, the folder
-        Dat.manager.run(parent, 2)
+        assert parent.get_spec()["dat"]["name"] == f"{V2}/parent${{unique:}}"   # the template (Q36)
+        assert parent.get_path_name() == f"{V2}/parent"                         # its expansion, the folder
+        Dat.manager.run(parent.get_spec(), 2)
         child = Dat.load(f"{V2}/parent_2")
         assert child.get_spec()["dat"]["args"] == [2]
-        assert child.get_spec()["dat"]["target_exists"] == "increment"
 
 
 class Strict(Dat):
@@ -380,7 +408,7 @@ class TestExplicitConfig:
     def test_importing_dvc_dat_reads_no_config(self, tmp_path):
         result = subprocess.run(
             [sys.executable, "-c",
-             "import dvc_dat; print(dvc_dat.core._default_manager, dvc_dat.Dat.ns._current())"],
+             "import dvc_dat.core; print(dvc_dat.core._default_manager, dvc_dat.Dat.ns._current())"],
             cwd=tmp_path, capture_output=True, text=True,
             env={**os.environ, "PYTHONPATH": str(REPO_ROOT)})
         assert result.returncode == 0, result.stderr
@@ -425,7 +453,7 @@ def test_first_use_installs_the_config(tmp_path):
 
 
 def test_increment_on_a_plain_name_counts_up(tmp_path, restore_manager):
-    """`target_exists: increment` on a name with no `{unique}` appends `_2`, `_3`
+    """`target_exists: increment` on a name with no `${unique:}` appends `_2`, `_3`
     instead of spinning forever (found 2026-09-22)."""
     Dat.manager = DatManager(dat_folders=[str(tmp_path / "data")], ns=ns)
     spec ={"dat": {"kind": "Dat", "name": "plain", "target_exists": "increment"}}

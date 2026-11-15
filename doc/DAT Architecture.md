@@ -39,7 +39,7 @@ the dat manager's `dvc_dat.Dat`: it hashes every file in the folder and
 reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 
 - **The dat constructor is a value function.** A function marked
-  `@ledger_fn` declares `path: Path`; `run` binds a fresh folder under
+  `@dat.fn` declares `path: Path`; `run` binds a fresh folder under
   `$DAT_WORK`, the body writes the dat there and returns `Dat(path)`,
   the seal moves the files into the ledger's art store, and the call's
   `path=` names the result, its folder a view at the name.
@@ -57,13 +57,14 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
   keeps `ledger.db` (or a Postgres schema) and its own `art/`. Both key
   bytes by sha256; they are separate folders.
 - **One configuration file.** `.datconfig.yaml` configures the dat
-  manager and, under `ledger:`, names the ledger, or under `ledgers:`
-  several by name (`ledgers.record`); `Ledger()` and `L` find the active
-  one by walking up from the working directory (`DAT_LEDGER`, else the
-  section's `default:` from `.datconfig.override.yaml`) and assert its
-  `mounts:` as ledger rows. A `ledger:` key makes the project's names
-  the ledger's `db/mount` rows; a `ledgers:` section does so only with
-  `namespace: ledger`.
+  manager and, under `root:`, names the root ledger, whose registry
+  lists every other ledger (`ledgers.games`, SVP 239); without it the
+  root is a SQLite folder under the first dat folder, made on first
+  use. `Ledger()` and `L` find the active one by walking up from the
+  working directory (`DAT_LEDGER`, else the file's `default:`) and
+  assert its `mounts:` as ledger rows. `namespace: ledger` makes the
+  project's names the ledger's `db/mount` rows. There is no override
+  file.
 
 ## Designed, not yet built
 
@@ -75,8 +76,8 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 
 ## Where the detail lives
 
-- [`DAT Modules/`](DAT%20Modules/): the two module docs above, and [`dat.md`](DAT%20Modules/dat.md).
-- The notebooks in [`DAT Demos/`](DAT%20Demos/):
+- `DAT Modules/`: the two module docs above.
+- The notebooks in `DAT Demos/`:
   [`ledger-triples.py`](DAT%20Demos/ledger-triples.ipynb) (the quad store
   alone), [`ledger-values.py`](DAT%20Demos/ledger-values.ipynb) (values,
   functions, evaluation), [`ledger-dats.py`](DAT%20Demos/ledger-dats.ipynb) 
@@ -84,7 +85,7 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
   [`ledger-just.py`](DAT%20Demos/ledger-just.ipynb) (the human's verbs).
 - The dat half's guides: [Concepts](concepts.md),
   [Spec Format](spec-format.md), [Mounts](mount-commands.md),
-  [Command Line](cli.md), [Overview](overview.md).
+  [Command Line](cli.md).
 - The design pages live in the project's design vault, found by name:
   **SVP447 Ledger Module**, **SVP447 Eval**, **SVP447 Versions**,
   **SVP447 Values**.

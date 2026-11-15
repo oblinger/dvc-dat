@@ -16,7 +16,7 @@
 # #### Setup
 
 # %%
-import os, shutil, subprocess, sys, textwrap
+import copy, os, shutil, subprocess, sys, textwrap
 from pathlib import Path
 
 from IPython.display import SVG, display
@@ -29,7 +29,7 @@ os.chdir(demos_path)
 scratch_path = demos_path / "scratch/api-walkthrough"
 shutil.rmtree(scratch_path, ignore_errors=True)   # a re-run starts clean
 for module_name in [m for m in sys.modules
-                    if m.split(".")[0] in ("geometry", "plane", "mymodule")]:
+                    if m.split(".")[0] in ("geometry", "plane", "timestables", "game_pipeline")]:
     del sys.modules[module_name]                  # the modules the parts write into scratch
 sys.path[:] = [p for p in sys.path if not p.startswith(str(scratch_path))]
 scratch_path.mkdir(parents=True)
@@ -50,7 +50,7 @@ def git_commit(message, *paths, cwd=None):
         subprocess.run(git_cmd + ["commit", "-q", "-m", message], cwd=cwd, check=True)
 
 
-dats_project_path = scratch_path / "q-dats"       # the Dats project; its folder and pyproject name it q-dats
+dats_project_path = scratch_path / "dats-demo"       # the Dats project; its folder and pyproject name it dats-demo
 
 
 def show(name):
@@ -346,11 +346,11 @@ show("api-walkthrough-values")   # black: the parts every value has; gray: an ex
 # class Video(Value):
 #     def __init__(self, frames: bytes):
 #         self.frames = frames
-#     def encode(self) -> bytes:
-#         return self.frames
+#     def encode(self, out) -> None:
+#         out.write(self.frames)
 #     @classmethod
-#     def decode(cls, data: bytes, store) -> "Video":
-#         return cls(data)
+#     def decode(cls, src, store) -> "Video":
+#         return cls(src.read())
 # ```
 
 # %% [markdown]
@@ -463,9 +463,9 @@ __version__ = "5.3.9"
 
 (repo_path / "geometry/main.py").write_text('''\
 import math
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
-@ledger_fn
+@dat.fn
 def distance(rev, a, b) -> float:
     dx, dy = b[0] - a[0], b[1] - a[1]
     print(f"ran: sqrt({dx}² + {dy}²) = {math.dist(a, b)}")
@@ -478,9 +478,9 @@ __version__ = "2.7.1"
 
 (repo_path / "plane/measure.py").write_text('''\
 import math
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
-@ledger_fn
+@dat.fn
 def length(rev, a, b) -> float:
     return math.dist(a, b) * 0.5     # metres per unit
 ''')
@@ -554,8 +554,8 @@ print("db/repo/geometry-app:", L.at()["db/repo/geometry-app"])
 # %% [markdown]
 # ### Sandboxed functions
 #
-# `t.ns.mount(at, root=, repo=)` puts the repo's folder `plane`
-# under the name `plane`: two `db/mount/plane` rows; `ns.mounts()` is
+# `t.ns.mount("mnt.plane", root=, repo=)` puts the repo's folder `plane`
+# under the names `mnt.plane...` (a mount is always named `mnt.<prefix>`): two `db/mount/plane` rows; `ns.mounts()` is
 # the mount table at a revision. A name under a mount loads in a
 # sandbox, a fresh interpreter holding only that folder. Its version
 # is the mounted package's `__version__`; the checksum of the files
@@ -563,17 +563,17 @@ print("db/repo/geometry-app:", L.at()["db/repo/geometry-app"])
 
 # %%
 with L.transaction(by="human:dan") as t:
-    t.ns.mount("plane", root="plane", repo="geometry-app")   # the two db/mount/plane rows
+    t.ns.mount("mnt.plane", root="plane", repo="geometry-app")   # the two db/mount/plane rows
 print("mounts:", L.at().ns.mounts())
 # → mounts: {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
 show_file(repo_path / "plane/__init__.py")
 show_file(repo_path / "plane/measure.py")
 
 # %%
-length_fn = L.at().ns.load("plane.measure.length")
+length_fn = L.at().ns.load("mnt.plane.measure.length")
 segment_value = length_fn(a=(0, 0), b=(3, 4))
 print("fn:", repr(length_fn), " code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed)
-# → fn: <Fn plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
+# → fn: <Fn mnt.plane.measure.length@2.7.1>  code: <Code plane@2.7.1>  sandboxed: True
 print("result:", segment_value.obj)                 # → result: 2.5
 print("geometry db/version:", L.at()["db/repo/geometry-app/geometry", "db/version"])   # → geometry db/version: 5.3.9
 print("plane db/version:", L.at()["db/repo/geometry-app/plane", "db/version"])         # → plane db/version: 2.7.1
@@ -601,7 +601,7 @@ print("result's code:", segment_value.dependencies["code"], " is the sandbox:",
       segment_value.dependencies["code"] == sandbox.subject)
 # → result's code: db/code/1fa8b8c101e51d7a  is the sandbox: True
 print("result's fn:", segment_value.dependencies["fn"])
-# → result's fn: plane.measure.length
+# → result's fn: mnt.plane.measure.length
 
 # %% [markdown]
 # Change the code, and bump the version with it, and the snapshot is
@@ -612,13 +612,13 @@ measure_path = repo_path / "plane/measure.py"
 measure_path.write_text(measure_path.read_text().replace("* 0.5 ", "* 0.25"))
 (repo_path / "plane/__init__.py").write_text('__version__ = "2.7.2"\n')
 git_commit("quarter metres", cwd=repo_path)
-new_length_fn = L.at().ns.load("plane.measure.length")
+new_length_fn = L.at().ns.load("mnt.plane.measure.length")
 print("new fn:", repr(new_length_fn), " sandbox:", repr(new_length_fn.code))
-# → new fn: <Fn plane.measure.length@2.7.2>  sandbox: <Code plane@2.7.2>
+# → new fn: <Fn mnt.plane.measure.length@2.7.2>  sandbox: <Code plane@2.7.2>
 print("new result:", new_length_fn(a=(0, 0), b=(3, 4)).obj)    # → new result: 1.25
 print("old result's code:", segment_value.dependencies["code"], " fn:", segment_value.dependencies["fn"],
       " holds:", segment_value.obj)
-# → old result's code: db/code/1fa8b8c101e51d7a  fn: plane.measure.length  holds: 2.5
+# → old result's code: db/code/1fa8b8c101e51d7a  fn: mnt.plane.measure.length  holds: 2.5
 
 # %% [markdown]
 # ## Ledger evaluation
@@ -724,22 +724,22 @@ show("api-walkthrough-dats")
 # %% [markdown]
 # #### Project setup
 #
-# The Dats part works in its own project, a git checkout named `q-dats` whose `.datconfig.yaml` makes it a plain dat project, its dats in `data/`; `mymodule` holds a run function and two template specs.
+# The Dats part works in its own project, a git checkout named `dats-demo` whose `.datconfig.yaml` makes it a plain dat project, its dats in `data/`; `timestables` holds a run function that writes a multiplication table and two template specs.
 
 # %%
 dats_project_path.mkdir(parents=True, exist_ok=True)
 os.chdir(dats_project_path)
 Path(".gitignore").write_text(".dat/\ndata/\n")
-Path("pyproject.toml").write_text('[project]\nname = "q-dats"\nversion = "0.1.0"\n')
+Path("pyproject.toml").write_text('[project]\nname = "dats-demo"\nversion = "0.1.0"\n')
 subprocess.run(git_cmd + ["init", "-q"], check=True)
-git_commit("q-dats")
+git_commit("dats-demo")
 sys.path.insert(0, str(dats_project_path))
 Path(".datconfig.yaml").write_text("dat_folders: data\n")   # a plain dat project: its dats live in data/
 Dat.manager = None                   # the dat world reloads from this folder
 
 # %%
 # the files: a run function in mult.py, two template specs in specs/
-module_path = Path("mymodule")
+module_path = Path("timestables")
 (module_path / "specs").mkdir(parents=True)
 (module_path / "__init__.py").write_text('__version__ = "0.1.0"\n')   # the code's version, in its source
 (module_path / "mult.py").write_text('''\
@@ -763,103 +763,95 @@ def build_table(dat, n=10, start=1):
     dat.save()
     return dat
 ''')
-(module_path / "specs/table_base.yaml").write_text('''\
+(module_path / "specs/times_base.yaml").write_text('''\
 dat:
   kwargs: {start: 1}
 notes: shared defaults
 ''')
-(module_path / "specs/table12.yaml").write_text('''\
+(module_path / "specs/times12.yaml").write_text('''\
 dat:
-  base: mymodule.specs.table_base
-  name: tables/{YYYY}/table12{unique}
-  do: mymodule.mult.build_table
+  base: timestables.specs.times_base
+  name: tables/${now:%Y}/times${dat.kwargs.n}${unique:}
+  do: timestables.mult.build_table
   kwargs: {n: 12}
 ''')
-git_commit("mymodule", "mymodule")   # only the module: .datconfig.yaml stays untracked, so its later edits leave the checkout clean
-Dat.ns.mount(folder="mymodule", at="mymodule")   # mymodule's files join the dat world's namespace:
-# mymodule/specs/table12.yaml answers to mymodule.specs.table12, build_table in mult.py to mymodule.mult.build_table
+git_commit("timestables", "timestables")   # only the module: .datconfig.yaml stays untracked, so its later edits leave the checkout clean
+Dat.ns.mount(folder="timestables", at="timestables")   # timestables's files join the dat world's namespace:
+# timestables/specs/times12.yaml answers to timestables.specs.times12, build_table in mult.py to timestables.mult.build_table
 
 
 
 # %% [markdown]
 # A spec's `dat:` part is what the dat system reads: `do:` names the
 # run function, `kwargs:` its arguments, `base:` a spec to inherit,
-# `name:` a folder template; above, `table12` inherits `table_base`.
+# `name:` a folder template; above, `times12` inherits `times_base`.
 
 # %% [markdown]
-# ## Dat creation
+# ## Running a dat, step by step
 #
-# A dat is created in three steps:
+# A run is seven steps from a spec's name and the call's keywords to a kept result:
 #
-# 1. **Look up** its spec by name: `Dat.ns.load(name)` is the object
-#    a dotted name names, here the spec file's dict as written.
-# 2. **Expand** it: `Dat.manager.expand_spec(spec)` merges the spec
-#    over its `dat.base`, which it drops, then fills every template
-#    variable `{}`; `{YYYY}` is the year, `{unique}` empty.
-# 3. **Instantiate** it: `Dat.create(spec=expanded_spec)` is the Dat
-#    object, its folder made and `_spec_.yaml` written. Nothing runs.
+# 1. **Load the spec**: `Dat.ns.load(name)` is the spec file's dict as written.
+# 2. **Apply the keywords**: each keyword sets its entry in `dat.kwargs`.
+# 3. **Resolve**: `Dat.ns.expand_spec(spec)` merges the spec over its `dat.base`, which it drops, and resolves every `${…}`: `${dat.kwargs.n}` is the keyword's node, `${now:%Y}` the year, `${unique:}` the first count, empty.
+# 4. **Memo key**: on a ledger, the expanded spec without `dat.name`, looked up before anything runs.
+# 5. **Create**: `Dat.create(spec=expanded_spec)` makes the Dat, its folder and `_spec_.yaml`.
+# 6. **Run**: the function `dat.do` names is called with the dat and `dat.kwargs`.
+# 7. **Seal**: on a ledger, the result is sealed as the memo entry.
+#
+# Steps 4 and 7 are the ledger's; "Running and storing a dat on the ledger" below shows them. Here are the others, by hand, with the keyword `n=5`.
 
 # %%
-spec = Dat.ns.load("mymodule.specs.table12")    # 1. the spec as written
-expanded_spec = Dat.manager.expand_spec(spec)   # 2. dat.base merged in, every {…} filled
-table12_dat = Dat.create(spec=expanded_spec)    # 3. the Dat and its folder
-
-# %%
-# print results
-table12_path = Path(table12_dat.get_path())
+spec = Dat.ns.load("timestables.specs.times12")     # 1. the spec as written
+keyed_spec = copy.deepcopy(spec)
+Dat.set(keyed_spec, "dat.kwargs.n", 5)              # 2. the keyword n=5 replaces n: 12
+expanded_spec = Dat.ns.expand_spec(keyed_spec)    # 3. dat.base merged in, every ${…} resolved
 print("SPEC:    ", spec)
-print("EXPANDED:", expanded_spec)   # base: gone, kwargs gains start, notes appears, name: filled
-print("DAT:     ", repr(table12_dat))
-print("FILES:   ", sorted(os.listdir(table12_path)))
-print("_SPEC_.YAML:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_text(), "    "))
+print("KEYWORDS:", keyed_spec)
+print("EXPANDED:", expanded_spec)   # base: gone, kwargs gains start, notes appears, name: filled, ${dat.kwargs.n} from the keyword
+
+# %%
+times5_dat = Dat.create(spec=expanded_spec)         # 5. the Dat and its folder; nothing runs
+times5_path = Path(times5_dat.get_path())
+print("DAT:     ", repr(times5_dat))
+print("FILES:   ", sorted(os.listdir(times5_path)))
+print("_SPEC_.YAML:\n" + textwrap.indent((times5_path / "_spec_.yaml").read_text(), "    "))
 # _spec_.yaml: the expanded spec, plus kind: dvc_dat.core.Dat
 
+# %%
+run_function = Dat.ns.load(expanded_spec["dat"]["do"])
+run_function(times5_dat, **expanded_spec["dat"]["kwargs"])   # 6. the run: build_table(dat, n=5, start=1)
+print("FILES:", sorted(os.listdir(times5_path)))
+print("CELLS:", times5_dat.get_results()["cells"])
+
 # %% [markdown]
-# ## `Dat.create`, the three steps in one call
-#
-# `Dat.create(spec=name)` is the shorthand: it looks the spec up,
-# expands it (base merged, `{}` filled) and instantiates the dat.
-# Nothing runs.
+# `Dat.create(name, **keywords)` is steps 1, 2, 3 and 5 in one call; it runs nothing.
 
 # %%
-shorthand_dat = Dat.create(spec="mymodule.specs.table12")   # steps 1-3
-
-# %%
-# print results
+shorthand_dat = Dat.create("timestables.specs.times12", n=5)
 shorthand_path = Path(shorthand_dat.get_path())
 print("DAT:", repr(shorthand_dat))
-print("MANUAL _SPEC_.YAML:\n" + textwrap.indent((table12_path / "_spec_.yaml").read_text(), "    "))
-print("SHORTHAND _SPEC_.YAML:\n" + textwrap.indent((shorthand_path / "_spec_.yaml").read_text(), "    "))
-# the same kwargs, do, kind and notes; name: tables/2026/table12 by hand, tables/{YYYY}/table12{unique} in the shorthand
+print("BY HAND _SPEC_.YAML:\n" + textwrap.indent((times5_path / "_spec_.yaml").read_text(), "    "))
+print("ONE CALL _SPEC_.YAML:\n" + textwrap.indent((shorthand_path / "_spec_.yaml").read_text(), "    "))
+# the same kwargs, do, kind and notes; name: tables/2026/times5 by hand, the template in the one call
 
 # %% [markdown]
-# One difference, in `name:`. The shorthand expands `{}` after it
-# places the folder, with the placement's own `{YYYY}` and `{unique}`:
-# `table12` is taken, so `{unique}` counts up to `_2`, and
-# `_spec_.yaml` keeps `name:` as the template. By hand,
-# `expand_spec` sees no folder, so `{unique}` is always empty and
-# `name:` is filled once; were `tables/2026/table12` taken, step 3
-# would raise `FileExistsError` instead of counting up.
+# One difference, in `name:`. The one call resolves the spec as it places the folder, with the placement's own moment and count: `times5` is taken, so `${unique:}` counts up to `_2`, and `_spec_.yaml` keeps `name:` as the template. By hand, `expand_spec` sees no folder, so `${unique:}` is always empty and `name:` is filled once; were `tables/2026/times5` taken, step 5 would raise `FileExistsError` instead of counting up.
 
 # %% [markdown]
-# ## Running a dat
+# `Dat.manager.run(name, **keywords)` is steps 1, 2, 3, 5 and 6 in one call, and it records the run in `dat.run`, the `run` folder the hand-run dat above lacks.
 #
-# `Dat.manager.run(dat)` is the one way to run a dat: it calls the
-# spec's run function with the dat and the spec's kwargs, in place,
-# and records the run in `dat.run`. `save()` in the run function
-# seals the folder, its results in `_result_.yaml`.
-# The cell runs once: a sealed dat refuses a second run, which
-# `RuntimeError: ... is sealed` reports.
+# A dat runs once, by the call that makes it, so each call makes its own folder; with no keyword, `n` is the spec's 12. `save()` in the run function seals the folder, its results in `_result_.yaml`.
 
 # %%
-Dat.manager.run(table12_dat)   # calls build_table in mult.py with this dat and n=12, start=1
-
-# %%
-# print results
-print("FILES:", sorted(os.listdir(table12_path)))
-print("CELLS:", table12_dat.get_results()["cells"])
-print("TABLE.CSV:\n" + textwrap.indent("\n".join((table12_path / "table.csv").read_text().splitlines()[:3]), "    "))
-print("_RESULT_.YAML:\n" + textwrap.indent((table12_path / "_result_.yaml").read_text(), "    "))
+# creates tables/2026/times12, then calls build_table in mult.py
+# with it and n=12, start=1; build_table returns the dat
+times12_dat = Dat.manager.run("timestables.specs.times12")
+times12_path = Path(times12_dat.get_path())
+print("FILES:", sorted(os.listdir(times12_path)))
+print("CELLS:", times12_dat.get_results()["cells"])
+print("TABLE.CSV:\n" + textwrap.indent("\n".join((times12_path / "table.csv").read_text().splitlines()[:3]), "    "))
+print("_RESULT_.YAML:\n" + textwrap.indent((times12_path / "_result_.yaml").read_text(), "    "))
 
 # %% [markdown]
 # `dat.run` is the run's record, a sub-dat in the dat's `run/`
@@ -867,20 +859,20 @@ print("_RESULT_.YAML:\n" + textwrap.indent((table12_path / "_result_.yaml").read
 # and the hash it sealed. It is outside the dat's own hash.
 
 # %%
-run_results = table12_dat.run.get_results()["dat"]
-print("run:", repr(table12_dat.run))   # run: <Dat: tables/2026/table12/run>
+run_results = times12_dat.run.get_results()["dat"]
+print("run:", repr(times12_dat.run))   # run: <Dat: tables/2026/times12/run>
 print("run_at:", run_results["run_at"])   # run_at: when the run started
 print("run_time:", run_results["run_time"])   # run_time: how long build_table took
 print("code:", run_results["code"])   # code: the branch, commit and dirty flag of the checkout holding mult.py
 
 # %% [markdown]
-# Given a name, `Dat.manager.run` creates the dat from the spec
-# first: it returns what the run function returned, a new folder
-# every call.
+# Each call makes a new folder and returns what the run function
+# returned. Running a dat's recipe again is a run of its spec,
+# `Dat.manager.run(dat.get_spec())`; a `Dat` itself is refused.
 
 # %%
-again_dat = Dat.manager.run("mymodule.specs.table12")   # same as: Dat.manager.run(Dat.create(spec="mymodule.specs.table12"))
-print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/table12_3>
+again_dat = Dat.manager.run("timestables.specs.times12")
+print("dat:", repr(again_dat))   # dat: <Dat: tables/2026/times12_2>
 print("files:", sorted(os.listdir(again_dat.get_path())))
 # files: ['_result_.yaml', '_spec_.yaml', 'log.txt', 'run', 'table.csv']
 
@@ -891,25 +883,29 @@ print("files:", sorted(os.listdir(again_dat.get_path())))
 # rerun; a dat is a value, sealed under a name and loaded back; dats
 # are found by their preds.
 #
-# `Ledger(create=True)` makes the ledger in this folder and adds
-# `ledger:` to `.datconfig.yaml`; the reloaded dat world names
+# `Ledger(create=True)` makes the root ledger under `data/` and adds
+# `default: root` and `namespace: ledger` to `.datconfig.yaml`; the reloaded dat world names
 # through it. In a ledger project names come from the ledger's
-# mounts alone and `Dat.ns.mount` is refused, so `mymodule` is
+# mounts alone and `Dat.ns.mount` is refused, so `timestables` is
 # mounted with `t.ns.mount`, which writes two `db/mount` rows; the
-# earlier mount went with the old world.
+# earlier mount went with the old world. A ledger-mounted name starts
+# `mnt.`, so the spec's `base:` and `do:` become `mnt.timestables...`.
 #
 # #### Setup
 
 # %%
-L = Ledger(create=True)              # .dat/ledger, and ledger: in .datconfig.yaml
+L = Ledger(create=True)              # the root ledger under data/, and default: root in .datconfig.yaml
 Dat.manager = None                   # the dat world reloads, its namespace the ledger's
 print(".datconfig.yaml:", Path(".datconfig.yaml").read_text().splitlines())
-# → .datconfig.yaml: ['dat_folders: data', 'ledger: .dat/ledger']
-import mymodule                      # discovery finds the checkout, the repo q-dats
-with L.transaction(by="human:dan", why="mount mymodule") as t:
-    t.ns.mount("mymodule", root="mymodule")   # the two db/mount rows: the folder, and the repo, by default this project's, q-dats
+# → .datconfig.yaml: ['dat_folders: data', 'default: root', 'namespace: ledger']
+import timestables                      # discovery finds the checkout, the repo dats-demo
+with L.transaction(by="human:dan", why="mount timestables") as t:
+    t.ns.mount("mnt.timestables", root="timestables")   # the two db/mount rows: the folder, and the repo, by default this project's, dats-demo
+spec_file_path = Path("timestables/specs/times12.yaml")   # a ledger-mounted name starts mnt.: base: and do: name the mount
+spec_file_path.write_text(spec_file_path.read_text().replace(" timestables.", " mnt.timestables."))
+git_commit("timestables: ledger names", "timestables")
 try:
-    Dat.ns.mount(folder="mymodule", at="mymodule")
+    Dat.ns.mount(folder="timestables", at="timestables")
 except TypeError as e:
     print("refused:", str(e).split(" (")[0])
 # → refused: a ledger project names things through its db/mount rows
@@ -917,43 +913,37 @@ except TypeError as e:
 # %% [markdown]
 # ### Ledger run
 #
-# `L.at().run(name)` is a run remembered on the ledger: the result
-# found if this code computed it before, else run and sealed as the
-# memo entry. One call creates the dat in the three steps, runs it,
-# and remembers it.
+# `L.at().run(name, **keywords)` is all seven steps: the result found if this code computed it before, else the dat created, run and sealed as the memo entry.
 
 # %%
-table12_value = L.at().run("mymodule.specs.table12")
-print("ran:", repr(table12_value))   # ran: <Dat tables/2026/table12>: the spec's template, filled in the ledger's data folder
+times12_value = L.at().run("mnt.timestables.specs.times12")
+print("ran:", repr(times12_value))   # ran: <Dat tables/2026/times12>: the spec's template, filled in the ledger's data folder
 
 # %% [markdown]
 # #### What the run did, piece by piece
 #
-# The run took the three creation steps, through the ledger's
-# mounts: `Dat.ns.load` read the spec off the mounted file, never
-# imported; `expand_spec` merged its base and filled its `{}`. The
-# expanded spec, `dat.name` removed and `dat.kind` set, is the memo
-# key, stored as the value's `db/keys`.
+# Steps 1 to 3 ran through the ledger's mounts: `Dat.ns.load` read the spec off the mounted file, never imported. Step 4 is the expanded spec with `dat.name` removed and `dat.kind` set; it is the memo key, stored as the value's `db/keys`.
 
 # %%
-# print results
-print("SPEC:    ", Dat.ns.load("mymodule.specs.table12"))
-print("EXPANDED:", Dat.manager.expand_spec(Dat.ns.load("mymodule.specs.table12")))
-print("DB/KEYS: ", L.at()[table12_value.subject, "db/keys"])   # the memo key
+expanded_spec = Dat.ns.expand_spec(Dat.ns.load("mnt.timestables.specs.times12"))   # 3. the spec's own n
+memo_key = copy.deepcopy(expanded_spec)                                                  # 4. the memo key
+memo_key["dat"].pop("name")
+memo_key["dat"]["kind"] = "dvc_dat.core.Dat"
+print("EXPANDED:", expanded_spec)
+print("MEMO KEY:", memo_key)
+print("DB/KEYS: ", L.at()[times12_value.subject, "db/keys"])   # the same dict, stored
+print("SAME:    ", memo_key == L.at()[times12_value.subject, "db/keys"])   # True
 
 # %% [markdown]
-# The run function loads as an `Fn`, a ledger function: kind `dat`
-# (undecorated, run through a spec), sandboxed because it is
-# mounted. It ran in a sandboxed worker, its code the mounted files
-# it loaded; `db/fn` names it, and the first clean run wrote the
-# package's version clock, `db/repo/q-dats/mymodule` `db/version`.
+# Steps 5 and 6 ran in a sandboxed worker: the run function loads as an `Fn`, a ledger function of kind `dat` (undecorated, run through a spec), sandboxed because it is mounted, its code the mounted files it loaded. Step 7 sealed the result: `db/fn` names the function, `sealed` is the moment, and the first clean run wrote the package's version clock, `db/repo/dats-demo/timestables` `db/version`.
 
 # %%
 # print results
-run_fn = Dat.ns.load("mymodule.mult.build_table")
+run_fn = Dat.ns.load("mnt.timestables.mult.build_table")
 print("FN:         ", repr(run_fn), " kind:", run_fn.kind, " sandboxed:", run_fn.code.sandboxed)
-print("DB/FN:      ", L.at()[table12_value.subject, "db/fn"])
-print("DB/VERSION: ", L.at()["db/repo/q-dats/mymodule", "db/version"])   # db/repo/q-dats/mymodule
+print("SEALED:     ", times12_value.sealed)
+print("DB/FN:      ", L.at()[times12_value.subject, "db/fn"])
+print("DB/VERSION: ", L.at()["db/repo/dats-demo/timestables", "db/version"])   # db/repo/dats-demo/timestables
 
 # %% [markdown]
 # The same spec asked again is a memo hit: nothing runs, nothing is
@@ -961,22 +951,22 @@ print("DB/VERSION: ", L.at()["db/repo/q-dats/mymodule", "db/version"])   # db/re
 
 # %%
 top_id = L.at().id
-again_value = L.at().run("mymodule.specs.table12")
-print("hit:", again_value.subject == table12_value.subject,
+again_value = L.at().run("mnt.timestables.specs.times12")
+print("hit:", again_value.subject == times12_value.subject,
       " nothing written:", L.at().id == top_id)   # hit: True  nothing written: True
 
 # %% [markdown]
-# ### Storing a handmade dat on the ledger
+# ### Storing a dat on the ledger
 #
 # On a ledger a dat is a value: sealed under a name, loaded back,
-# found by its preds. The hand-made `table12_dat` is sealed here; nothing
+# found by its preds. The run's `times12_dat` is sealed here; nothing
 # runs. Its preds are its spec's `kwargs` and its result's entries,
 # read from the folder.
 
 # %%
 with L.transaction(by="human:dan") as t:
-    table12_dat.seal(t, name="table/12")   # the folder's files go to the art store; the row names the kind, dvc_dat.core.Dat
-print("dat:", repr(table12_dat), " sealed:", table12_dat.sealed)   # dat: <Dat table/12>  sealed: <the seal's moment>
+    times12_dat.seal(t, name="table/12")   # the folder's files go to the art store; the row names the kind, dvc_dat.core.Dat
+print("dat:", repr(times12_dat), " sealed:", times12_dat.sealed)   # dat: <Dat table/12>  sealed: <the seal's moment>
 
 loaded_dat = L.at().load("table/12")       # the folder rebuilt from the store; nothing runs
 print("files:", sorted(os.listdir(loaded_dat.get_path())))
@@ -1002,7 +992,7 @@ print("preds:", dict(sorted(loaded_dat.preds.items())))
 
 # %%
 for n in (5, 9):
-    L.at().run("mymodule.specs.table12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.manager.run
+    L.at().run("mnt.timestables.specs.times12", n=n)   # kwargs update the spec's dat.kwargs, as with Dat.manager.run
 
 # %%
 # print results
@@ -1011,3 +1001,88 @@ print("N=12:    ", L.at().values(kind=Dat, n=12))       # the run and the handma
 print("CELLS=81:", repr(L.at().value(kind=Dat, cells=81)))   # exactly one: the n=9 run
 print("N, CELLS:", L.at().select(("n", "cells"), kind=Dat))   # every dat, two preds each
 print("N=5:     ", L.at().select(("cells",), kind=Dat, n=5))   # one pred of the n=5 dat
+
+# %% [markdown]
+# ## A pipeline run: the base case on one game
+#
+# A pipeline run is a dat run: the spec holds the pipeline's parameters, a keyword names the game, and the dat holds what each stage wrote.
+#
+# `game_pipeline` is a two-stage pipeline, detect then track, and `specs/base.yaml` is its base case: its parameters as data, with no game. `{game}` in `name:` comes from the keyword, and `dat.preds` adds one pred of the spec's own.
+
+# %%
+pipeline_path = Path("game_pipeline")
+(pipeline_path / "specs").mkdir(parents=True, exist_ok=True)
+(pipeline_path / "__init__.py").write_text('__version__ = "1.0.0"\n')
+(pipeline_path / "stages.py").write_text('''\
+import json
+from pathlib import Path
+
+
+def detect(game, min_score):
+    """The frames of `game` with a detection scoring at least `min_score`."""
+    seed = sum(map(ord, game))
+    scores = {frame: ((frame * 37 + seed) % 11) / 10 for frame in range(60)}
+    return [frame for frame, score in scores.items() if score >= min_score]
+
+
+def track(detections, max_gap):
+    """Detections no more than `max_gap` frames apart joined into tracks."""
+    tracks = []
+    for frame in detections:
+        if tracks and frame - tracks[-1][-1] <= max_gap:
+            tracks[-1].append(frame)
+        else:
+            tracks.append([frame])
+    return tracks
+
+
+def run_game(dat, game, min_score=0.5, max_gap=2):
+    """The run function: each stage reads the one before it and writes its file into the dat."""
+    detections = detect(game, min_score)
+    tracks = track(detections, max_gap)
+    Path(dat.get_path(), "detections.json").write_text(json.dumps(detections))
+    Path(dat.get_path(), "tracks.json").write_text(json.dumps(tracks))
+    dat.get_results().update(detections=len(detections), tracks=len(tracks))
+    dat.save()
+    return dat
+''')
+(pipeline_path / "specs/base.yaml").write_text('''\
+dat:
+  name: runs/${dat.kwargs.game}/base${unique:}
+  do: mnt.game_pipeline.stages.run_game
+  kwargs: {min_score: 0.5, max_gap: 2}
+  preds: {pipeline: base}
+''')
+git_commit("game_pipeline", "game_pipeline")
+with L.transaction(by="human:dan", why="mount the pipeline") as t:
+    t.ns.mount("mnt.game_pipeline", root="game_pipeline")
+
+# %% [markdown]
+# ### The base case on G1
+#
+# `game="G1"` is step 2: the keyword joins `dat.kwargs`, fills `${dat.kwargs.game}` in `name:`, is part of the memo key and is handed to the run function.
+
+# %%
+base_g1_value = L.at().run("mnt.game_pipeline.specs.base", game="G1")
+print("ran:", repr(base_g1_value))   # ran: <Dat runs/G1/base>
+print("files:", sorted(os.listdir(base_g1_value.get_path())))
+# files: ['_result_.yaml', '_spec_.yaml', 'detections.json', 'run', 'tracks.json']
+print("memo kwargs:", L.at()[base_g1_value.subject, "db/keys"]["dat"]["kwargs"])
+# memo kwargs: {'game': 'G1', 'max_gap': 2, 'min_score': 0.5}
+print("preds:", dict(sorted(base_g1_value.preds.items())))
+# preds: the kwargs, game included, the two results, and pipeline from dat.preds
+
+# %% [markdown]
+# ### Asking again, and changing a parameter
+#
+# The same game and spec is a memo hit; a keyword that changes a parameter is a new memo key, so it runs, and the base case's result stays.
+
+# %%
+top_id = L.at().id
+again_value = L.at().run("mnt.game_pipeline.specs.base", game="G1")
+print("hit:", again_value.subject == base_g1_value.subject,
+      " nothing written:", L.at().id == top_id)   # hit: True  nothing written: True
+strict_value = L.at().run("mnt.game_pipeline.specs.base", game="G1", min_score=0.8)
+print("ran:", repr(strict_value))   # ran: <Dat runs/G1/base_2>
+print("G1 RUNS:", L.at().select(("min_score", "detections", "tracks"), kind=Dat, game="G1"))
+# G1 RUNS: [('0.5', '32', '6'), ('0.8', '16', '16')]: one tuple per run of G1, found by the keyword as a pred

@@ -43,7 +43,7 @@ FILES = {
     "catalog/base.yaml": """
         dat:
           do: mypkg.train.train
-          name: "runs/{YYYY}-{MM}-{DD}/exp{unique}"
+          name: runs/${now:%Y-%m-%d}/exp${unique:}
           kwargs: {epochs: 10, lr: 0.1}
         model: {layers: 2, width: 64}
     """,
@@ -132,12 +132,12 @@ print((Path(d.get_path()) / "_result_.yaml").read_text())
 #
 # A created dat's spec never changes. A variation is a new dat made from an edited
 # copy. The copy's `dat.name` is the folder the original landed in, so ask for
-# `increment` (or pass `path=`) to land beside it. `Dat.manager.run(dat)` runs a dat as it is.
+# `increment` (or pass `path=`) to land beside it. `Dat.manager.run(spec)` creates the dat and runs it.
 
 # %%
 spec = merge_dicts(d.get_spec(), {"dat": {"target_exists": "increment"},
                                   "model": {"width": 256}})
-d3 = Dat.manager.run(Dat.create(spec=spec))
+d3 = Dat.manager.run(spec)
 print(d3.get_path_name(), d3.get_spec()["model"], d3.get_results()["loss"])
 
 
@@ -149,6 +149,7 @@ print(d3.get_path_name(), d3.get_spec()["model"], d3.get_results()["loss"])
 # `python -m mypkg.main`, which makes its mounts and hands the command line
 # to `Dat.cli_main()`. The cell does the same by hand, so it needs no `just`
 # on `PATH`. Every `KEY=VALUE` value is JSON, else the text as typed.
+# `--dry-run` prints the call and the spec it would create, resolved.
 
 # %%
 def x(*args):

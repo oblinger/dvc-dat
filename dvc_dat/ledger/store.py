@@ -34,7 +34,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import IO, Any, Callable, ContextManager, Iterator, List, Optional, Sequence, Tuple, Union
 
-from .codec import hash_text, sha256
+from .codec import HashSink, hash_text
+
+try:
+    import fcntl
+except ImportError:             # not a POSIX platform: fsync alone
+    fcntl = None  # type: ignore[assignment]
 from .errors import LedgerError, LockTimeout
 
 #: ``(rev, ord, subject, predicate, object, added)``
@@ -64,6 +69,29 @@ def file_sha(path: Path) -> str:
         for block in iter(lambda: f.read(BLOCK), b""):
             d.update(block)
     return d.hexdigest()
+
+
+def flush(fd: int) -> None:
+    """Make the bytes behind ``fd`` durable: ``F_FULLFSYNC`` on macOS, where ``fsync`` leaves them in the
+    drive's cache (a removable drive pulled after an ``fsync`` can lose them), else ``fsync``. A filesystem
+    that refuses ``F_FULLFSYNC`` (``ENOTSUP``, some network mounts) gets the ``fsync`` it does support."""
+    full = getattr(fcntl, "F_FULLFSYNC", None) if fcntl is not None else None
+    if full is not None:
+        try:
+            fcntl.fcntl(fd, full)
+            return
+        except OSError:
+            pass
+    os.fsync(fd)
+
+
+def flush_path(path: Path) -> None:
+    """:func:`flush` a file or a folder by path; a folder's flush makes a rename inside it durable."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        flush(fd)
+    finally:
+        os.close(fd)
 
 
 def _copy(src: IO[bytes], dest: Path, h: str) -> None:
@@ -119,13 +147,15 @@ def clone(src: Any, dest: Path) -> bool:
 CLONES = [0]
 
 
-def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bool = False) -> bool:
+def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bool = False,
+          durable: bool = False) -> bool:
     """Put the bytes of ``source`` (sha256 ``h``) at ``dest``, write-once; ``True`` when written here.
 
     A ``Path`` is hardlinked when ``link`` and the filesystem allows it, else, with ``clone_ok``,
     cloned copy-on-write where the filesystem can (``clone``; the clone is checked against ``h``),
     else copied in blocks (and checked against ``h``); an opener is always copied. The bytes land at
-    a temp name and are renamed into place, so a reader never sees a partial file.
+    a temp name and are renamed into place, so a reader never sees a partial file. With ``durable``
+    the temp file is flushed (:func:`flush`) before the rename and the folder after it.
     """
     if dest.exists():
         return False
@@ -154,53 +184,156 @@ def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bo
         else:
             with source() as f:
                 _copy(f, tmp, h)
+        if durable:
+            flush_path(tmp)
         os.replace(tmp, dest)
+        if durable:
+            flush_path(dest.parent)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
     return True
 
 
+class FileSink(HashSink):
+    """A sink backed by a temp file in ``folder`` (DAT 240): the bytes stream to disk as they are hashed,
+    never held whole. At close, with ``dest`` (hash -> path), the file is renamed to ``dest(hash)``, write-once
+    (``created`` says whether it landed here; with ``expect``, a hash other than ``expect`` lands nowhere);
+    without ``dest`` it stays at ``path``, staged, until the owner places or ``discard``s it. Used as a
+    context manager, an exception in the block discards the file. With ``durable`` the file is flushed
+    (:func:`flush`) before it is closed, and its folder after the rename."""
+
+    def __init__(self, folder: Path, dest: Optional[Callable[[str], Path]] = None, *,
+                 expect: Optional[str] = None, durable: bool = False) -> None:
+        super().__init__()
+        folder.mkdir(parents=True, exist_ok=True)
+        self.path: Optional[Path] = folder / f".sink-{uuid.uuid4().hex}"
+        self._f: Optional[IO[bytes]] = open(self.path, "wb")
+        self._dest = dest
+        self._expect = expect
+        self._durable = durable
+        self.created = False
+
+    def _out(self, view: memoryview) -> None:
+        assert self._f is not None
+        self._f.write(view)
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        f, self._f = self._f, None
+        try:
+            if f is not None:
+                if self._durable:
+                    f.flush()
+                    flush(f.fileno())
+                f.close()
+        finally:
+            super().close()
+        if self._dest is None or self.path is None:
+            return
+        tmp, self.path = self.path, None
+        dest = self._dest(self.hash)
+        if (self._expect is not None and self.hash != self._expect) or dest.exists():
+            tmp.unlink(missing_ok=True)
+            return
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(tmp, dest)
+        if self._durable:
+            flush_path(dest.parent)
+        self.path, self.created = dest, True
+
+    def discard(self) -> None:
+        """Close and drop a staged (or unfinished) file; a placed one is not touched."""
+        if not self.closed:
+            self._dest = None
+            self.close()
+        if self.path is not None and not self.created:
+            self.path.unlink(missing_ok=True)
+            self.path = None
+
+    def __exit__(self, et: Any, ev: Any, tb: Any) -> None:
+        if et is not None:
+            self.discard()
+        else:
+            self.close()
+
+
 class ArtStore:
-    """Bytes by ``sha256:<hex>``, write-once, in a folder."""
+    """Bytes by ``sha256:<hex>``, write-once, in a folder; on a miss inside ``fetching``, fetched into it."""
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
+        self._scope = threading.local()
+
+    @contextmanager
+    def fetching(self, fetch: Optional[Callable[[str, Path], None]]) -> Iterator[None]:
+        """For the block, in this thread, a miss in ``open``/``get_to`` calls ``fetch(h, path)`` first, which puts
+        the bytes of ``h`` at ``path`` (the ledger's values URI, SVP 1599); ``None`` fetches nothing."""
+        old = getattr(self._scope, "fetch", None)
+        self._scope.fetch = fetch
+        try:
+            yield
+        finally:
+            self._scope.fetch = old
+
+    def _have(self, h: str) -> Path:
+        p = self.path(h)
+        if not p.exists():
+            fetch = getattr(self._scope, "fetch", None)
+            if fetch is not None:
+                fetch(h, p)
+            if not p.exists():
+                raise FileNotFoundError(f"art store {self.root}: no bytes for {h}")
+        return p
 
     def path(self, h: str) -> Path:
         return self.root / "sha256" / h[:2] / h
 
+    @property
+    def dats(self) -> Path:
+        """The data folder, where a ``Dat``'s folder is rebuilt."""
+        return self.root / "dats"
+
     def exists(self, h: str) -> bool:
         return self.path(h).exists()
 
-    def put(self, data: bytes) -> str:
-        """Store small bytes held in memory (an encoding, a manifest); return their hash."""
-        h = sha256(data)
-        p = self.path(h)
-        if not p.exists():
-            p.parent.mkdir(parents=True, exist_ok=True)
-            tmp = p.with_suffix(".tmp-" + str(threading.get_ident()))
-            tmp.write_bytes(data)
-            tmp.replace(p)
-        return h
+    def sink(self, *, staged: bool = False) -> FileSink:
+        """A write stream for one encoding (DAT 240): hashed as written, renamed at close to its place by hash,
+        write-once (``created``), so a reader never sees a partial file. ``staged``: left at a temp name in
+        the store's folder (``path``) for the owner to place with ``put_path`` or ``discard``."""
+        return FileSink(self.root / "tmp", None if staged else self.path)
 
     def put_path(self, source: Source, h: str) -> bool:
         """Store a part by its hash ``h`` without reading it into memory: a hardlink to the file on the
         same filesystem, else a streamed copy to a temp name and a rename; ``True`` when written here."""
         return place(source, self.path(h), h)
 
-    def get(self, h: str) -> bytes:
-        p = self.path(h)
-        if not p.exists():
-            raise FileNotFoundError(f"art store {self.root}: no bytes for {h}")
-        return p.read_bytes()
+    def open(self, h: str) -> IO[bytes]:
+        """The bytes of ``h`` as a read stream (a real, seekable file); inside ``fetching`` a miss fetches first."""
+        return open(self._have(h), "rb")
 
     def get_to(self, h: str, dest: Path) -> None:
         """Put the bytes of ``h`` at ``dest`` (a hardlink on the same filesystem, else a streamed copy)."""
-        p = self.path(h)
-        if not p.exists():
-            raise FileNotFoundError(f"art store {self.root}: no bytes for {h}")
-        place(p, Path(dest), h)
+        place(self._have(h), Path(dest), h)
+
+
+class ReadOnlyArt(ArtStore):
+    """A ledger's art store as a read-only handle sees it (SVP 1521 Q3 (A)): bytes come from ``root``; what a read
+    has to place (a ``Dat``'s folder, bytes fetched from the value's store) lands in ``overlay``, the reader's own,
+    so that nothing lands on the ledger."""
+
+    def __init__(self, root: Path, overlay: Path) -> None:
+        super().__init__(root)
+        self.overlay = Path(overlay)
+
+    def path(self, h: str) -> Path:
+        p = super().path(h)
+        return p if p.exists() else self.overlay / "sha256" / h[:2] / h
+
+    @property
+    def dats(self) -> Path:
+        return self.overlay / "dats"
 
 
 def index_name(pred: str) -> str:
@@ -225,9 +358,13 @@ class Writer(ABC):
 
 
 class Store(ABC):
-    """What the ledger reads and writes; ``art`` is the art store (a folder, whatever the backend)."""
+    """What the ledger reads and writes; ``art`` is the art store (a folder, whatever the backend: the cache of the
+    ledger's bytes on this machine); ``name`` the ledger's name: a SQLite ledger's folder name, a Postgres ledger's
+    database."""
 
     art: ArtStore
+    name: str
+    read_only: bool = False
 
     @abstractmethod
     def top(self) -> int:
@@ -270,16 +407,21 @@ class Store(ABC):
 
 
 class SqliteStore(Store):
-    """One SQLite file. Reads on a per-thread connection; each write on a connection of its own."""
+    """One SQLite file. Reads on a per-thread connection; each write on a connection of its own. Given ``overlay``,
+    read-only: every connection ``mode=ro``, nothing made or changed on open, the art a ``ReadOnlyArt``."""
 
-    def __init__(self, folder: Path) -> None:
+    def __init__(self, folder: Path, overlay: Optional[Path] = None) -> None:
         self.folder = Path(folder)
         self.path = self.folder / "ledger.db"
-        self.art = ArtStore(self.folder / "art")
+        self.name = self.folder.name
+        self.read_only = overlay is not None
+        self.art = ReadOnlyArt(self.folder / "art", overlay) if overlay is not None else ArtStore(self.folder / "art")
         self._local = threading.local()
         self._readers: List[sqlite3.Connection] = []
         self._readers_lock = threading.Lock()
         self._gen = 0
+        if self.read_only:
+            return
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             conn = self._connect(30.0)
@@ -291,6 +433,9 @@ class SqliteStore(Store):
             raise LedgerError(f"sqlite ledger {self.path}: cannot open ({e})") from e
 
     def _connect(self, timeout: float) -> sqlite3.Connection:
+        if self.read_only:
+            return sqlite3.connect(f"{self.path.as_uri()}?mode=ro", uri=True, isolation_level=None, timeout=timeout,
+                                   check_same_thread=False)
         return sqlite3.connect(str(self.path), isolation_level=None, timeout=timeout, check_same_thread=False)
 
     @contextmanager

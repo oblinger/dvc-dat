@@ -1,5 +1,6 @@
 """Sandbox mode: a mounted package in a real tiny git checkout, run in a worker (discovery, no stand-in)."""
 
+import contextlib
 import subprocess
 import sys
 import textwrap
@@ -7,7 +8,7 @@ import textwrap
 import backends
 import pytest
 
-from dvc_dat.ledger import (ConfinedNetwork, ConfinedWrite, LedgerError, NotClean, NotEvaluated, UnmountedImport,
+from dvc_dat.ledger import (ConfinedNetwork, Ledger, ConfinedProcess, ConfinedWrite, LedgerError, NotClean, NotEvaluated, UnmountedImport,
                              UntracedRead, set_env_provider)
 from dvc_dat.ledger import sandbox
 from dvc_dat.ledger.codec import sha256
@@ -19,43 +20,57 @@ PKG = {
     "sbx/other.py": "X = 1\n",
     "sbx/stage/__init__.py": "",
     "flat/calc.py": textwrap.dedent('''
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
         from flatpkg import util
 
-        @ledger_fn
+        @dat.fn
         def area(rev, *, side: int) -> dict:
             return {"area": util.square(side)}
     '''),
     "flat/util.py": "def square(x):\n    return x * x\n",
+    "flat/foreign.py": textwrap.dedent('''
+        from dvc_dat import dat, ledgers
+
+        @dat.fn
+        def seen(rev, *, ledger: str, name: str) -> dict:
+            return {"seen": ledgers[ledger].at().load(name).obj}
+    '''),
     "flat/where.py": textwrap.dedent('''
         import os
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
-        @ledger_fn
+        @dat.fn
         def pid(rev, *, side: int) -> dict:
             import sys
             return {"pid": os.getpid(), "stage": [m for m in sys.modules if m.startswith("sbx.stage")]}
     '''),
     "sbx/stage/kinds.py": textwrap.dedent('''
-        from dvc_dat.ledger import Value, ledger_class, ledger_fn
+        from dvc_dat.ledger import Value, ledger_class
+        from dvc_dat import dat
 
         @ledger_class(preds=("game",))
         class Tagged(Value):
             def __init__(self, data: bytes):
                 self.data = data
-            def encode(self) -> bytes:
-                return self.data
+            def encode(self, out) -> None:
+                out.write(self.data)
             @classmethod
-            def decode(cls, data, store):
-                return cls(data)
+            def decode(cls, src, store):
+                return cls(src.read())
 
-        @ledger_fn
+        @dat.fn
         def tagged(rev, *, game: str) -> Tagged:
             v = Tagged(game.encode())
             v.preds["game"] = game
             return v
     '''),
     "sbx/stage/helper.py": "def double(x):\n    return 2 * x\n",
+    "sbx/stage/guard.py": textwrap.dedent('''
+        def refuse(name):
+            """The read guard of the tests (SVP 1596): ``far`` is refused."""
+            if name == "far":
+                raise PermissionError(f"{name}: refused by the read guard")
+    '''),
     "sbx/stage/runs.py": textwrap.dedent('''
         import os
         from pathlib import Path
@@ -75,11 +90,11 @@ PKG = {
             from dvc_dat import Dat
             ns, r = Dat.manager.ns, dat.get_results()
             r["kind"] = type(ns).__name__
-            r["base"] = ns.load("sbx.stage.specs.base")                # a mounted yaml
-            r["literal"] = ns.load("sbx.stage.runs.TABLE")["dat"]["kwargs"]
-            r["fn"] = ns.load("sbx.stage.runs.table").kind             # a mounted run function: its Fn
-            r["spec"] = Dat.manager.expand_spec(ns.load("sbx.stage.specs.table"))["dat"]  # base merged, {…} filled
-            r["expanded"] = Dat.manager.expand_spec({"n": "{sbx.stage.runs.TABLE}"})["n"]["dat"]["kwargs"]
+            r["base"] = ns.load("mnt.sbx.stage.specs.base")                # a mounted yaml
+            r["literal"] = ns.load("mnt.sbx.stage.runs.TABLE")["dat"]["kwargs"]
+            r["fn"] = ns.load("mnt.sbx.stage.runs.table").kind             # a mounted run function: its Fn
+            r["spec"] = ns.expand_spec(ns.load("mnt.sbx.stage.specs.table"))["dat"]  # base merged, ${…} filled
+            r["expanded"] = ns.expand_spec({"n": "${ns:sbx.stage.runs.TABLE}"})["n"]["dat"]["kwargs"]
             try:
                 ns.mount(value={}, at="x")
                 r["mount"] = "allowed"
@@ -87,18 +102,18 @@ PKG = {
                 r["mount"] = "db/mount" in str(e)
             dat.save()
 
-        TABLE = {"dat": {"do": "sbx.stage.runs.table", "kwargs": {"n": 3}}}
+        TABLE = {"dat": {"do": "mnt.sbx.stage.runs.table", "kwargs": {"n": 3}}}
     '''),
     "sbx/stage/slow.py": textwrap.dedent('''
         import time
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
-        @ledger_fn
+        @dat.fn
         def slow(rev, *, n: int) -> dict:
             time.sleep(3)
             return {"who": "slow", "n": n}
 
-        @ledger_fn
+        @dat.fn
         def fast(rev, *, n: int) -> dict:
             return {"who": "fast", "n": n}
     '''),
@@ -107,11 +122,11 @@ PKG = {
         import json
         from pathlib import Path
         import yaml
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
         CONF = Path(__file__).parent / "stage" / "conf.yaml"
 
-        @ledger_fn
+        @dat.fn
         def peek(rev, *, how: str) -> dict:
             if how == "open":
                 return {"n": len(open(CONF).read())}
@@ -119,7 +134,7 @@ PKG = {
                 return {"n": len(yaml.safe_load(CONF.open()))}
             return {"n": len(CONF.read_text())}
 
-        @ledger_fn
+        @dat.fn
         def calm(rev, *, game: str, path: Path) -> dict:
             from sbx import other                    # importing a repo module reads it: the import system
             (path / "x.json").write_text(json.dumps({"g": game}))
@@ -127,93 +142,199 @@ PKG = {
             return {"x": other.X, "w": json.loads((path / "x.json").read_text()),
                     "inner": rev.run("sbx.plain.leaf", game=game).obj}
 
-        @ledger_fn
+        @dat.fn
         def leaf(rev, *, game: str) -> dict:
             return {"g": game}
     '''),
     "sbx/stage/specs/base.yaml": "dat:\n  kwargs: {n: 3}\n",
     "sbx/stage/specs/table.yaml": textwrap.dedent('''
         dat:
-          base: sbx.stage.specs.base
-          name: tables/y{unique}
-          do: sbx.stage.runs.table
+          base: mnt.sbx.stage.specs.base
+          name: tables/y${unique:}
+          do: mnt.sbx.stage.runs.table
     '''),
-    "sbx/stage/specs/table3.json": '{"dat": {"do": "sbx.stage.runs.table", "kwargs": {"n": 3}}}',
+    "sbx/stage/specs/table3.json": '{"dat": {"do": "mnt.sbx.stage.runs.table", "kwargs": {"n": 3}}}',
     "sbx/stage/fns.py": textwrap.dedent('''
         import importlib
         from pathlib import Path
-        from dvc_dat.ledger import Dat, ledger_fn
+        from dvc_dat import Dat
+        from dvc_dat import dat
 
-        @ledger_fn
+        @dat.fn
         def count(rev, *, game: str) -> dict:
             n = int(rev[f"game/{game}", "n"])
             return {"n": importlib.import_module("sbx.stage.helper").double(n)}
 
-        @ledger_fn
+        @dat.fn
         def nested(rev, *, game: str) -> dict:
-            return {"inner": rev.run("sbx.stage.fns.count", game=game).obj}
+            return {"inner": rev.run("mnt.sbx.stage.fns.count", game=game).obj}
 
-        @ledger_fn
+        @dat.fn
         def members(rev, *, s: str) -> list:
             return sorted(rev.all(s, "contains"))
 
-        @ledger_fn
+        @dat.fn
         def folder(rev, *, game: str, path: Path) -> Dat:
             (path / "f.txt").write_text(game)
             return Dat(path)
 
-        @ledger_fn
+        @dat.fn
         def pid(rev, *, game: str) -> dict:
             from sbx.stage import helper
             helper.CALLS = getattr(helper, "CALLS", 0) + 1
             import os
             return {"pid": os.getpid(), "calls": helper.CALLS}
 
-        @ledger_fn
+        @dat.fn
+        def foreign(rev, *, where: str, name: str) -> dict:
+            from dvc_dat.ledger import Ledger
+            return {"seen": Ledger(where).at().load(name).obj}
+
+        @dat.fn
+        def foreign_key(rev, *, clip) -> dict:
+            return {"seen": clip.load().obj}
+
+        @dat.fn
+        def foreign_config(rev, *, name: str) -> dict:
+            from dvc_dat import ledgers
+            return {"seen": ledgers[name].at().load("G1").obj}
+
+        @dat.fn
+        def by_name(rev, *, ledger: str, at, name: str) -> dict:
+            from dvc_dat import ledgers
+            return {"seen": ledgers[ledger].at(at).load(name).obj}
+
+        @dat.fn
+        def by_reference(rev, *, ref: str) -> dict:
+            from dvc_dat import dat
+            return {"seen": dat.load(ref).obj}
+
+        @dat.fn
+        def by_revision(rev, *, at: str, name: str) -> dict:
+            from dvc_dat import dat
+            return {"seen": dat.at(at).load(name).obj}
+
+        @dat.fn
+        def queries(rev, *, ledger: str, at: int) -> dict:
+            from dvc_dat import ledgers
+            return {"seen": sorted(v.obj["game"] for v in ledgers[ledger].at(at).values(kind="dvc_dat.ledger.value.Value.Blob"))}
+
+        @dat.fn
+        def raw_row(rev, *, ledger: str, s: str, p: str) -> dict:
+            from dvc_dat import ledgers
+            return {"seen": ledgers[ledger].at()[s, p]}
+
+        @dat.fn
+        def reads_a_run(rev, *, ledger: str, game: str, mode: str = "") -> dict:
+            from dvc_dat import ledgers
+            kw = {"seal": mode} if mode else {}
+            v = ledgers[ledger].at().run("mnt.sbx.stage.fns.count", game=game, **kw)
+            return {"seen": None if v is None else v.obj}
+
+        @dat.fn
+        def reads_a_dat(rev, *, ledger: str, name: str) -> dict:
+            from dvc_dat import ledgers
+            d = ledgers[ledger].at().load(name)
+            return {"seen": (d.path / "f.txt").read_text()}
+
+        @dat.fn
+        def opens_art(rev, *, ledger: str, name: str) -> dict:
+            from dvc_dat import ledgers
+            led = ledgers[ledger]
+            v = led.at().load(name)
+            return {"size": len(open(led._store.art.path(v.hash), "rb").read())}
+
+        @dat.fn
+        def opens_file(rev, *, ledger: str, file: str) -> dict:
+            from dvc_dat import ledgers
+            ledgers[ledger].at()
+            return {"size": len(open(file, "rb").read())}
+
+        @dat.fn
+        def nested_foreign(rev, *, ledger: str, name: str) -> dict:
+            return {"inner": rev.run("mnt.flatpkg.foreign.seen", ledger=ledger, name=name).obj}
+
+        @dat.fn
+        def writes_foreign(rev, *, ledger: str, how: str) -> dict:
+            import sqlite3
+            from dvc_dat import ledgers
+            from dvc_dat.ledger import Value
+            from dvc_dat.ledger.txn import Transaction
+            led = ledgers[ledger]
+            db = str(getattr(led._store, "path", "") or "")
+            if how == "transaction":
+                with led.transaction(by="body") as t:
+                    t.add("game/G9", "n", "9")
+            elif how == "direct":
+                with Transaction(led, "body", None, {}) as t:
+                    t.add("game/G9", "n", "9")
+            elif how == "head":
+                led.at().pin(led.at().load("G1"))
+            elif how == "seal":
+                Value.Blob({"game": 9}).seal(led, name="G9")
+            elif how == "store":
+                with led._store.writer(1.0, locked=False) as w:
+                    w.insert(w.next_rev(), [("game/G9", "n", "str:9", True)])
+            elif how == "connect":
+                sqlite3.connect(db).execute("INSERT INTO quads VALUES (999, 0, 's', 'p', 'str:o', 1)")
+            elif how == "connect-rw":
+                sqlite3.connect(f"file:{db}?mode=rw", uri=True).execute("INSERT INTO quads VALUES (999, 0, 's', 'p', 'str:o', 1)")
+            elif how == "connect-ro-then-rw":
+                sqlite3.connect(f"file:{db}?mode=ro&mode=rw", uri=True).execute(
+                    "INSERT INTO quads VALUES (999, 0, 's', 'p', 'str:o', 1)")
+            elif how == "art":
+                (led._store.art.root / "planted").write_text("x")
+            elif how == "draft":
+                led.at().run("mnt.sbx.stage.fns.count", game="G1", seal=False)
+            elif how == "named-result":
+                led.at().run("mnt.sbx.stage.fns.count", game="G1", path="planted")
+            return {"done": how}
+
+        @dat.fn
         def die(rev, *, game: str) -> dict:
             import os
             os._exit(3)
 
-        @ledger_fn
+        @dat.fn
         def libs(rev, *, game: str) -> dict:
             import colorsys
             import xlsxwriter
             return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0], "x": bool(xlsxwriter.__version__)}
 
-        @ledger_fn
+        @dat.fn
         def borrow(rev, *, game: str) -> dict:
             from sbx import other
             return {"x": other.X}
 
-        @ledger_fn
+        @dat.fn
         def conf(rev, *, game: str) -> dict:
             return {"text": (Path(__file__).parent / "conf.yaml").read_text()}
 
-        @ledger_fn
+        @dat.fn
         def hue(rev, *, game: str) -> dict:
             import colorsys
             return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0]}
 
-        @ledger_fn
+        @dat.fn
         def outer_hue(rev, *, game: str) -> dict:
             import colorsys                         # loaded here first: the nested hue imports it again
-            return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0], "inner": rev.run("sbx.stage.fns.hue", game=game).obj}
+            return {"h": colorsys.rgb_to_hsv(0, 0, 0)[0], "inner": rev.run("mnt.sbx.stage.fns.hue", game=game).obj}
 
-        @ledger_fn
+        @dat.fn
         def cross(rev, *, game: str) -> dict:
             import os
-            return {"me": os.getpid(), "same": rev.run("sbx.stage.fns.pid", game=game).obj["pid"],
-                    "other": rev.run("flatpkg.where.pid", side=2).obj}
+            return {"me": os.getpid(), "same": rev.run("mnt.sbx.stage.fns.pid", game=game).obj["pid"],
+                    "other": rev.run("mnt.flatpkg.where.pid", side=2).obj}
 
-        @ledger_fn
+        @dat.fn
         def base_inside(rev, *, game: str) -> dict:
             return {"x": rev.run("colorsys.rgb_to_hsv").obj}
 
-        @ledger_fn
+        @dat.fn
         def snoop(rev, *, game: str) -> dict:
             return {"n": len(Path("/etc/hosts").read_text())}
 
-        @ledger_fn
+        @dat.fn
         def scribble(rev, *, game: str) -> dict:
             Path("/tmp/ledger-sandbox-scribble.txt").write_text("x")
             return {}
@@ -224,7 +345,7 @@ PKG = {
         import sqlite3
         import tempfile
         from pathlib import Path
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
         def _dirfd(d, w):
             fd = os.open(d, os.O_RDONLY)
@@ -280,7 +401,7 @@ PKG = {
             (d / "tree").mkdir()
             (d / "tree" / "f").write_text("f")
 
-        @ledger_fn
+        @dat.fn
         def write(rev, *, how: str, where: str, path: Path) -> dict:
             if where == "work":                     # every way, inside the dat being produced: all allowed
                 for name, act in HOWS.items():
@@ -306,7 +427,7 @@ PKG = {
         from pathlib import Path
         import dvc_dat
         import yaml
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
         HOWS = {
             "open": lambda p: Path(p).read_text(),
@@ -319,7 +440,7 @@ PKG = {
             "copy": lambda p: shutil.copy(p, Path.cwd() / "copied"),
         }
 
-        @ledger_fn
+        @dat.fn
         def read(rev, *, how: str, where: str, path: Path) -> dict:
             places = {"stdlib": os.__file__, "site": yaml.__file__, "dvc_dat": dvc_dat.__file__,
                       "prefix": os.path.join(sys.prefix, "pyvenv.cfg"), "repo": Path(__file__).parents[2] / "pyproject.toml",
@@ -327,7 +448,7 @@ PKG = {
             out = HOWS[how](places.get(where) or where)
             return {"n": len(out) if isinstance(out, list) else -1}
 
-        @ledger_fn
+        @dat.fn
         def allowed(rev, *, game: str, path: Path) -> dict:
             (path / "mine.txt").write_text(game)
             n = len(Path(__file__).read_text()) > 0 and sorted(os.listdir(Path(__file__).parent)) != []
@@ -337,42 +458,73 @@ PKG = {
             return {"n": bool(n), "mine": Path("mine.txt").read_text(), "art": art.is_dir() and bool(os.listdir(art)),
                     "registry": len(jsonschema_specifications.REGISTRY) > 0, "h": colorsys.rgb_to_hsv(0, 0, 0)}
 
-        @ledger_fn
+        @dat.fn
         def library_data(rev, *, game: str) -> dict:
             from importlib.resources import files
             return {"n": len(list(files("jsonschema_specifications").joinpath("schemas").iterdir()))}
     '''),
     "sbx/stage/eager.py": textwrap.dedent('''
         from pathlib import Path
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
         HOSTS = Path("/etc/hosts").read_text()     # at load: the module's own load is confined too
 
-        @ledger_fn
+        @dat.fn
         def f(rev, *, game: str) -> dict:
             return {}
     '''),
+    "sbx/stage/procs.py": textwrap.dedent('''
+        import os
+        import subprocess
+        from dvc_dat import dat
+
+        @dat.fn
+        def shell(rev, *, how: str, out: str) -> dict:
+            cmd = f"cat /etc/hosts > {out}"
+            if how == "run":
+                subprocess.run(["sh", "-c", cmd], check=True)
+            elif how == "system":
+                os.system(cmd)
+            elif how == "posix_spawn":
+                os.waitpid(os.posix_spawn("/bin/sh", ["sh", "-c", cmd], dict(os.environ)), 0)
+            elif how == "fork":
+                pid = os.fork()
+                if pid == 0:
+                    os._exit(0)
+                os.waitpid(pid, 0)
+            elif how == "exec":
+                os.execv("/bin/sh", ["sh", "-c", cmd])
+            return {"ran": how}
+    '''),
+    "sbx/tools.py": textwrap.dedent('''
+        import subprocess
+        from dvc_dat import dat
+
+        @dat.fn
+        def echo(rev, *, text: str) -> dict:
+            return {"out": subprocess.run(["echo", text], capture_output=True, text=True, check=True).stdout}
+    '''),
     "sbx/stage/net.py": textwrap.dedent('''
         import socket
-        from dvc_dat.ledger import ledger_fn
+        from dvc_dat import dat
 
-        @ledger_fn
+        @dat.fn
         def resolve(rev, *, host: str) -> dict:
             return {"n": len(socket.getaddrinfo(host, 80))}
 
-        @ledger_fn
+        @dat.fn
         def dial(rev, *, port: int) -> dict:
             with socket.socket() as s:
                 s.connect(("127.0.0.1", port))
             return {}
 
-        @ledger_fn
+        @dat.fn
         def datagram(rev, *, port: int) -> dict:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.sendto(b"x", ("127.0.0.1", port))
             return {}
 
-        @ledger_fn
+        @dat.fn
         def pair(rev, *, text: str) -> dict:
             a, b = socket.socketpair()
             with a, b:
@@ -414,45 +566,72 @@ def sbx(tmp_path, monkeypatch, backend):
     set_env_provider(old)
 
 
+# --- 1467 Q14 (B): a ledger-mounted name is mnt.<at>...; any other name imports --------------------------------
+def test_a_mnt_name_resolves_through_the_mount(sbx):
+    L, repo = sbx
+    f = L.at().ns.load("mnt.sbx.stage.fns.count")
+    assert f.code.sandboxed and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
+
+
+def test_the_bare_name_imports_and_never_touches_the_mount(sbx):
+    L, _repo = sbx
+    f = L.at().ns.load("sbx.stage.fns.count")                 # sbx is importable here: installed
+    assert not f.code.sandboxed and f.mount is None and f.name == "sbx.stage.fns.count"
+    with pytest.raises(ImportError, match="flatpkg"):          # mounted, not installed: the import's own error
+        L.at().ns.load("flatpkg.calc.area")
+    assert L.at().ns.load("mnt.flatpkg.calc.area").mount == "flatpkg"
+
+
+def test_a_mounted_fns_name_starts_mnt_and_loads_back(sbx):
+    L, _repo = sbx
+    f = L.at().ns.load("mnt.sbx.stage.fns.count")
+    assert f.name == "mnt.sbx.stage.fns.count" and str(f).startswith("mnt.sbx.stage.fns.count@")
+    assert repr(f).startswith("<Fn mnt.sbx.stage.fns.count@")
+    g = L.at().ns.load(f.name)
+    assert g.name == f.name and g.code.subject == f.code.subject and g.mount == f.mount
+    v = L.at().run(f.name, game="G1")
+    assert v.dependencies["fn"] == f.name and L.at()[v.subject, "db/fn"] == f.name
+
+
 def test_sandboxed_eval_seals_records_loaded_modules_and_hits(sbx):
     L, repo = sbx
-    f = L.at().ns.load("sbx.stage.fns.count")
+    f = L.at().ns.load("mnt.sbx.stage.fns.count")
     assert f.code.sandboxed and f.mount == "sbx.stage" and f.module == repo / "sbx/stage/fns.py"
-    v = L.at().run("sbx.stage.fns.count", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.count", game="G1")
     assert v.sealed and v.obj == {"n": 6} and L.at()[v.subject, "db/provenance"] == "eval:sandbox"
     mods = L.at()[v.dependencies["code"], "db/modules"]
     assert sorted(mods) == ["sbx/stage/__init__.py", "sbx/stage/fns.py", "sbx/stage/helper.py"]
-    assert v.dependencies["fn"] == "sbx.stage.fns.count"
+    assert v.dependencies["fn"] == "mnt.sbx.stage.fns.count"
     assert "code/sbx-repo" not in v.dependencies and v.dependencies["game/G1 n"] == "3"
     top = L.at().id
-    assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return x + x\n")
     git(repo, "commit", "-q", "-am", "two")
     assert not v.matches(L.at())                    # the run-time import's file moved
-    w = L.at().run("sbx.stage.fns.count", game="G1")
+    w = L.at().run("mnt.sbx.stage.fns.count", game="G1")
     assert w.same_as(v) and w.subject != v.subject and list(v.diff(w)) == ["code"]
 
 
 def test_nested_eval_in_process_and_work_folder(sbx):
     L, _repo = sbx
-    v = L.at().run("sbx.stage.fns.nested", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.nested", game="G1")
     assert v.obj == {"inner": {"n": 6}}
-    assert any(k.startswith("eval:sbx.stage.fns.count") for k in v.dependencies)
-    d = L.at().run("sbx.stage.fns.folder", game="G1")
+    assert any(k.startswith("eval:mnt.sbx.stage.fns.count") for k in v.dependencies)
+    d = L.at().run("mnt.sbx.stage.fns.folder", game="G1")
     assert (d.path / "f.txt").read_text() == "G1" and d.name == "anonymous/Dat"
-    e = L.at().run("sbx.stage.fns.folder", game="G1", path="games/G1")      # a hit, renamed
+    e = L.at().run("mnt.sbx.stage.fns.folder", game="G1", path="games/G1")      # a hit, renamed
     assert e.subject == d.subject and e.name == "games/G1" and (e.path / "f.txt").read_text() == "G1"
 
 
 def test_a_mounted_file_the_body_opens_is_in_its_code_item(sbx):
     L, repo = sbx
-    v = L.at().run("sbx.stage.fns.conf", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.conf", game="G1")
     mods = L.at()[v.dependencies["code"], "db/modules"]
     assert mods["sbx/stage/conf.yaml"] == sha256((repo / "sbx/stage/conf.yaml").read_bytes())
-    assert L.at().run("sbx.stage.fns.conf", game="G1").subject == v.subject
+    assert L.at().run("mnt.sbx.stage.fns.conf", game="G1").subject == v.subject
     (repo / "sbx/stage/conf.yaml").write_text("k: 2\n")
     assert not v.matches(L.at())
-    w = L.at().run("sbx.stage.fns.conf", game="G1")
+    w = L.at().run("mnt.sbx.stage.fns.conf", game="G1")
     assert w.obj == {"text": "k: 2\n"} and w.subject != v.subject
 
 
@@ -460,9 +639,9 @@ def test_a_module_the_caller_loaded_is_recorded_for_the_nested_entry(sbx):
     import colorsys
 
     L, _repo = sbx
-    v = L.at().run("sbx.stage.fns.outer_hue", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.outer_hue", game="G1")
     assert v.obj == {"h": 0.0, "inner": {"h": 0.0}}
-    inner = L.at().run("sbx.stage.fns.hue", game="G1", seal="get")
+    inner = L.at().run("mnt.sbx.stage.fns.hue", game="G1", seal="get")
     assert inner is not None
     want = sha256(open(colorsys.__file__, "rb").read())
     assert L.at()[inner.dependencies["code"], "db/modules"]["py:colorsys.py"] == want
@@ -484,22 +663,22 @@ def test_an_unsandboxed_body_reading_its_repo_outside_the_dats_is_refused(sbx):
 
 def test_a_nested_eval_under_another_mount_runs_in_a_fresh_child(sbx):
     L, _repo = sbx
-    v = L.at().run("sbx.stage.fns.cross", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.cross", game="G1")
     assert v.obj["same"] == v.obj["me"]                         # its own mount: in-process (Q37 (ii))
     assert v.obj["other"]["pid"] != v.obj["me"] and v.obj["other"]["stage"] == []    # fresh, nothing of the caller's
-    other = L.at().run("flatpkg.where.pid", side=2, seal="get")
+    other = L.at().run("mnt.flatpkg.where.pid", side=2, seal="get")
     assert other is not None and other.obj == v.obj["other"]
-    assert v.dependencies["eval:flatpkg.where.pid{\"side\":2}"].endswith(other.hash)
+    assert v.dependencies["eval:mnt.flatpkg.where.pid{\"side\":2}"].endswith(other.hash)
     assert sorted(L.at()[other.dependencies["code"], "db/modules"]) == ["flat/where.py"]
     with L.transaction(by="t") as t:                            # a draft into a transaction, across mounts
-        w = L.at().run("sbx.stage.fns.cross", game="G2", seal=t)
+        w = L.at().run("mnt.sbx.stage.fns.cross", game="G2", seal=t)
     assert w.sealed and w.obj["other"]["pid"] != w.obj["me"]
 
 
 def test_an_unsandboxed_eval_nested_in_a_sandboxed_body_is_refused_by_name(sbx):
     L, _repo = sbx
     with pytest.raises(NotEvaluated, match="colorsys.rgb_to_hsv is unsandboxed .* mount 'sbx.stage'; mount it"):
-        L.at().run("sbx.stage.fns.base_inside", game="G1")
+        L.at().run("mnt.sbx.stage.fns.base_inside", game="G1")
 
 
 def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):
@@ -509,32 +688,49 @@ def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):
         t.add("db/pred/contains", "db/cardinality", "many")
         t.add("set/A", "contains", "G2")
         t.add("set/A", "contains", "G1")
-    v = L.at().run("sbx.stage.fns.members", s="set/A")
+    v = L.at().run("mnt.sbx.stage.fns.members", s="set/A")
     assert v.obj == ["G1", "G2"] and any(k.startswith("all") or "contains" in k for k in v.dependencies)
+
+
+def test_a_past_revision_crosses_the_pipe_and_a_draft_saved_later_says_it(sbx):
+    """SVP 245: the worker's ``Rev`` reads at the revision, ``db/at`` is written by either side of the pipe."""
+    L, _repo = sbx
+    read = L.at().id
+    with L.transaction(by="t") as t:
+        t["game/G1", "n"] = "4"
+    v = L.at(read).run("mnt.sbx.stage.fns.count", game="G1")
+    assert v.obj == {"n": 6} and v.at.id == read and L.at()[v.subject, "db/at"] == str(read)
+    with L.transaction(by="t") as t:
+        late = L.at(read + 1).run("mnt.sbx.stage.fns.count", game="G1", seal=t)
+    assert late.obj == {"n": 8} and late.at.id == read + 1
+    draft = L.at(read).run("mnt.sbx.stage.fns.pid", game="G1", seal=False)
+    assert draft.at.id == read
+    draft.seal(L)
+    assert L.at()[draft.subject, "db/at"] == str(read)
 
 
 def test_refusals(sbx):
     L, repo = sbx
     with pytest.raises(UnmountedImport, match="sbx.other from sbx.stage.fns"):
-        L.at().run("sbx.stage.fns.borrow", game="G1")
+        L.at().run("mnt.sbx.stage.fns.borrow", game="G1")
     with pytest.raises(UntracedRead):
-        L.at().run("sbx.stage.fns.snoop", game="G1")
+        L.at().run("mnt.sbx.stage.fns.snoop", game="G1")
     with pytest.raises(ConfinedWrite, match="writes only in its path folder") as e:
-        L.at().run("sbx.stage.fns.scribble", game="G1")
+        L.at().run("mnt.sbx.stage.fns.scribble", game="G1")
     assert not isinstance(e.value, UntracedRead)
     old = L.at(1)
     (repo / "sbx/other.py").write_text("X = 2\n")
     git(repo, "commit", "-q", "-am", "elsewhere")
     with pytest.raises(NotClean, match="binds db/repo/sbx-repo to"):
-        old.run("sbx.stage.fns.count", game="G1", clean=True)
-    assert old.run("sbx.stage.fns.count", game="G1").obj == {"n": 6}   # no gate: it runs at HEAD (Q39)
+        old.run("mnt.sbx.stage.fns.count", game="G1", clean=True)
+    assert old.run("mnt.sbx.stage.fns.count", game="G1").obj == {"n": 6}   # no gate: it runs at HEAD (Q39)
 
 
 def test_salt_item(sbx):
     L, _repo = sbx
     with L.transaction(by="t") as t:
         t.add("db/mount/sbx.stage", "db/salt", "v2")
-    v = L.at().run("sbx.stage.fns.count", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.count", game="G1")
     assert v.dependencies["salt"] == "v2" and v.matches(L.at())
     with L.transaction(by="t") as t:
         t.add("db/mount/sbx.stage", "db/salt", "v3")
@@ -543,56 +739,56 @@ def test_salt_item(sbx):
 
 def test_a_mount_root_without_init_imports_namespace_style(sbx):
     L, _repo = sbx
-    f = L.at().ns.load("flatpkg.calc.area")
+    f = L.at().ns.load("mnt.flatpkg.calc.area")
     assert f.code.sandboxed and f.mount == "flatpkg"
-    v = L.at().run("flatpkg.calc.area", side=3)
+    v = L.at().run("mnt.flatpkg.calc.area", side=3)
     assert v.obj == {"area": 9}
     assert sorted(L.at()[v.dependencies["code"], "db/modules"]) == ["flat/calc.py", "flat/util.py"]
-    assert L.at().run("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # the package case
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1").obj == {"n": 6}      # the package case
 
 
 def test_a_draft_keeps_preds_and_runs_on_a_dirty_tree(sbx):
     L, repo = sbx
-    v = L.at().run("sbx.stage.kinds.tagged", game="G1", seal=False)
+    v = L.at().run("mnt.sbx.stage.kinds.tagged", game="G1", seal=False)
     assert not v.sealed and v.preds == {"game": "G1"} and v.dependencies["code"].startswith("db/code/")
     (repo / "sbx/other.py").write_text("X = 3\n")              # dirty
-    assert L.at().run("sbx.stage.fns.count", game="G1", seal=False).obj == {"n": 6}
-    assert L.at().run("sbx.stage.fns.count", game="G1").obj == {"n": 6}      # a miss runs dirty (Q39)
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1", seal=False).obj == {"n": 6}
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1").obj == {"n": 6}      # a miss runs dirty (Q39)
     with pytest.raises(NotClean, match="uncommitted changes"):
-        L.at().run("sbx.stage.fns.count", game="G1", clean=True)
+        L.at().run("mnt.sbx.stage.fns.count", game="G1", clean=True)
 
 
 def test_a_dirty_edit_to_a_loaded_module_is_a_new_value_and_reverting_hits(sbx):
     L, repo = sbx
-    v = L.at().run("sbx.stage.fns.count", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.count", game="G1")
     top = L.at().id
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return 3 * x\n")     # uncommitted
-    w = L.at().run("sbx.stage.fns.count", game="G1")
+    w = L.at().run("mnt.sbx.stage.fns.count", game="G1")
     assert w.obj == {"n": 9} and w.subject != v.subject and L.at().id == top + 1
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return 2 * x\n")
-    assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top + 1
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1").subject == v.subject and L.at().id == top + 1
     (repo / "sbx/other.py").write_text("X = 4\n")              # a module the run never loaded
-    assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1").subject == v.subject
 
 
 def test_a_committed_edit_recomputes_with_no_bump(sbx):
     L, repo = sbx
-    v = L.at().run("sbx.stage.fns.count", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.count", game="G1")
     (repo / "sbx/stage/helper.py").write_text("def double(x):\n    return 4 * x\n")
     git(repo, "commit", "-q", "-am", "four")                   # the rev still names the old commit
-    w = L.at().run("sbx.stage.fns.count", game="G1")
+    w = L.at().run("mnt.sbx.stage.fns.count", game="G1")
     assert w.obj == {"n": 12} and w.subject != v.subject and not v.matches(L.at())
 
 
 def test_each_call_is_a_fresh_process(sbx):
     L, _repo = sbx
-    a = L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj
-    b = L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj
+    a = L.at().run("mnt.sbx.stage.fns.pid", game="G1", seal=False).obj
+    b = L.at().run("mnt.sbx.stage.fns.pid", game="G1", seal=False).obj
     assert a["calls"] == b["calls"] == 1 and a["pid"] != b["pid"]
     assert sandbox._server().alive()
     with pytest.raises(RuntimeError, match=r"ended \(exit code 3\) before it replied"):
-        L.at().run("sbx.stage.fns.die", game="G1")
-    assert L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1   # the server lives on
+        L.at().run("mnt.sbx.stage.fns.die", game="G1")
+    assert L.at().run("mnt.sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1   # the server lives on
 
 
 def test_an_idle_server_is_retired_and_the_next_call_starts_one(sbx, monkeypatch):
@@ -601,14 +797,14 @@ def test_an_idle_server_is_retired_and_the_next_call_starts_one(sbx, monkeypatch
     L, _repo = sbx
     monkeypatch.setattr(sandbox, "IDLE_SECONDS", 0.5)
     shutdown()
-    assert L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1
+    assert L.at().run("mnt.sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1
     s = sandbox._SERVERS[sys.executable]
     for _ in range(100):
         if s.proc.poll() is not None:
             break
         time.sleep(0.1)
     assert s.proc.poll() is not None and s.retired and sys.executable not in sandbox._SERVERS
-    assert L.at().run("sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1
+    assert L.at().run("mnt.sbx.stage.fns.pid", game="G1", seal=False).obj["calls"] == 1
     assert sandbox._SERVERS[sys.executable] is not s and sandbox._SERVERS[sys.executable].alive()
 
 
@@ -618,7 +814,7 @@ def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
 
     pytest.importorskip("xlsxwriter")
     L, _repo = sbx
-    v = L.at().run("sbx.stage.fns.libs", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.libs", game="G1")
     mods = L.at()[v.dependencies["code"], "db/modules"]
     assert mods["py:colorsys.py"] == sha256(open(colorsys.__file__, "rb").read())
     assert mods["dist:xlsxwriter"].startswith(md.version("xlsxwriter") + ":")
@@ -632,8 +828,8 @@ def test_third_party_modules_are_in_the_fn_item(sbx, monkeypatch):
 def test_resolve_refuses_an_unmounted_import_at_load(sbx):
     L, _repo = sbx
     with pytest.raises(UnmountedImport, match="sbx.other from sbx.stage.fns; mount it or move it"):
-        L.at().ns.load("sbx.stage.fns.borrow")
-    assert L.at().ns.load("sbx.stage.fns.snoop").code.sandboxed   # same module, no such import
+        L.at().ns.load("mnt.sbx.stage.fns.borrow")
+    assert L.at().ns.load("mnt.sbx.stage.fns.snoop").code.sandboxed   # same module, no such import
 
 
 def test_network_refused(sbx):
@@ -642,23 +838,50 @@ def test_network_refused(sbx):
     L, _repo = sbx
     assert issubclass(ConfinedNetwork, PermissionError) and issubclass(ConfinedNetwork, LedgerError)
     with pytest.raises(ConfinedNetwork, match="example.com: a sandboxed function does not use the network"):
-        L.at().run("sbx.stage.net.resolve", host="example.com")
+        L.at().run("mnt.sbx.stage.net.resolve", host="example.com")
     with socket.socket() as srv:
         srv.bind(("127.0.0.1", 0))
         srv.listen(1)
         srv.setblocking(False)
         port = srv.getsockname()[1]
         with pytest.raises(ConfinedNetwork, match=f"127.0.0.1:{port}"):
-            L.at().run("sbx.stage.net.dial", port=port)
+            L.at().run("mnt.sbx.stage.net.dial", port=port)
         with pytest.raises(BlockingIOError):
             srv.accept()                            # refused before the connect was made
     with pytest.raises(ConfinedNetwork):
-        L.at().run("sbx.stage.net.datagram", port=9)
-    assert L.at().run("sbx.stage.net.pair", text="hi").obj == {"echo": "hi"}   # a local socket is not the network
+        L.at().run("mnt.sbx.stage.net.datagram", port=9)
+    assert L.at().run("mnt.sbx.stage.net.pair", text="hi").obj == {"echo": "hi"}   # a local socket is not the network
+
+
+# --- 1467 Q8 (A): a sandboxed body creates no process; a body that needs a tool runs unsandboxed ---------------
+PROC_HOWS = {"run": "subprocess.Popen", "system": "os.system", "posix_spawn": "os.posix_spawn", "fork": "os.fork",
+             "exec": "os.exec"}
+
+
+def test_a_sandboxed_body_creates_no_process(sbx, tmp_path):
+    L, _repo = sbx
+    assert issubclass(ConfinedProcess, PermissionError) and issubclass(ConfinedProcess, LedgerError)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    for how, event in PROC_HOWS.items():
+        out = outside / f"{how}.txt"
+        with pytest.raises(ConfinedProcess, match=f"{event}: a sandboxed function creates no process"):
+            L.at().run("mnt.sbx.stage.procs.shell", how=how, out=str(out))
+        assert not out.exists()
+        assert L.at().run("mnt.sbx.stage.procs.shell", how=how, out=str(out), seal="get") is None   # nothing sealed
+    assert list(outside.iterdir()) == []
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1").obj == {"n": 6}   # the next call's fork is the server's
+
+
+def test_an_unsandboxed_body_may_run_a_tool(sbx):
+    L, _repo = sbx
+    assert not L.at().ns.load("sbx.tools.echo").code.sandboxed
+    v = L.at().run("sbx.tools.echo", text="hi")
+    assert v.obj == {"out": "hi\n"} and L.at()[v.subject, "db/provenance"] == "eval:unsandboxed"
 
 
 def test_the_ledgers_own_endpoint_is_allowed():
-    hosts, addrs = _ledger_endpoints("postgresql://u:pw@127.0.0.1:5433/db?art=/tmp/a")
+    hosts, addrs = _ledger_endpoints("postgresql://u:pw@127.0.0.1:5433/db")
     assert hosts == {"127.0.0.1"} and addrs == {("127.0.0.1", 5433)}
     hosts, addrs = _ledger_endpoints("postgresql://u@[::1],127.0.0.1:6000/db")
     assert hosts == {"::1", "127.0.0.1"} and ("127.0.0.1", 6000) in addrs and ("::1", 5432) in addrs
@@ -672,7 +895,7 @@ WRITE_HOWS = ["open", "os.open", "o_trunc", "write_text", "mkdir", "makedirs", "
 
 def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
     L, repo = sbx
-    assert L.at().run("sbx.stage.writes.write", how="all", where="work").obj == {"n": len(WRITE_HOWS) + 2}
+    assert L.at().run("mnt.sbx.stage.writes.write", how="all", where="work").obj == {"n": len(WRITE_HOWS) + 2}
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "seed").write_text("s")
@@ -682,19 +905,19 @@ def test_writes_confined_to_the_dat_being_produced(sbx, tmp_path):
     before = sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*"))
     for how in WRITE_HOWS:
         with pytest.raises(ConfinedWrite, match="a sandboxed function writes only in its path folder"):
-            L.at().run("sbx.stage.writes.write", how=how, where=str(outside))
+            L.at().run("mnt.sbx.stage.writes.write", how=how, where=str(outside))
     assert sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*")) == before
     assert (outside / "seed").read_text() == "s"
     for where in ("scratch", "art"):
         for how in ("open", "mkdir", "mkstemp"):
             with pytest.raises(ConfinedWrite):
-                L.at().run("sbx.stage.writes.write", how=how, where=where)
+                L.at().run("mnt.sbx.stage.writes.write", how=how, where=where)
     with pytest.raises(ConfinedWrite):
-        L.at().run("sbx.stage.writes.write", how="mkstemp-default", where="")
+        L.at().run("mnt.sbx.stage.writes.write", how="mkstemp-default", where="")
     with pytest.raises(ConfinedWrite):                  # a path relative to a descriptor on a mount
-        L.at().run("sbx.stage.writes.write", how="dir_fd", where="mount")
+        L.at().run("mnt.sbx.stage.writes.write", how="dir_fd", where="mount")
     with pytest.raises(ConfinedWrite):                  # os.open by a descriptor: its audit event names no dir_fd
-        L.at().run("sbx.stage.writes.write", how="os.open-dir_fd", where="mount")
+        L.at().run("mnt.sbx.stage.writes.write", how="os.open-dir_fd", where="mount")
     assert not (repo / "sbx/stage/by-fd").exists() and not (repo / "sbx/stage/by-fd-open").exists()
 
 
@@ -705,8 +928,8 @@ SWALLOWED = ["glob", "walk"]            # they catch the OSError themselves: the
 def test_reads_confined_to_the_mounts_the_dats_and_the_work_folder(sbx, tmp_path):
     pytest.importorskip("jsonschema_specifications")
     L, _repo = sbx
-    L.at().run("sbx.stage.fns.folder", game="G1")           # something in the art store
-    v = L.at().run("sbx.stage.reads.allowed", game="G1")
+    L.at().run("mnt.sbx.stage.fns.folder", game="G1")           # something in the art store
+    v = L.at().run("mnt.sbx.stage.reads.allowed", game="G1")
     assert v.obj == {"n": True, "mine": "G1", "art": True, "registry": True, "h": (0.0, 0.0, 0.0)}
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -714,31 +937,31 @@ def test_reads_confined_to_the_mounts_the_dats_and_the_work_folder(sbx, tmp_path
     for where in ("stdlib", "site", "dvc_dat", "prefix", "repo", "scratch", str(outside / "f.txt")):
         for how in READ_HOWS:
             with pytest.raises(UntracedRead, match="outside the mounts, the dats and the path folder"):
-                L.at().run("sbx.stage.reads.read", how=how, where=where)
+                L.at().run("mnt.sbx.stage.reads.read", how=how, where=where)
         for how in SWALLOWED:
-            assert L.at().run("sbx.stage.reads.read", how=how, where=where).obj == {"n": 0}
+            assert L.at().run("mnt.sbx.stage.reads.read", how=how, where=where).obj == {"n": 0}
     with pytest.raises(UntracedRead):                       # a library's data, read after its import
-        L.at().run("sbx.stage.reads.library_data", game="G1")
+        L.at().run("mnt.sbx.stage.reads.library_data", game="G1")
     with pytest.raises(UntracedRead, match="/etc/hosts"):    # a mounted module's own load
-        L.at().run("sbx.stage.eager.f", game="G1")
+        L.at().run("mnt.sbx.stage.eager.f", game="G1")
 
 
 def test_a_sandboxed_draft_saved_later_is_the_memo_entry(sbx):
     L, _repo = sbx
-    d = L.at().run("sbx.stage.fns.count", game="G1", seal=False)
+    d = L.at().run("mnt.sbx.stage.fns.count", game="G1", seal=False)
     assert d.subject is None and "_run" in d.__dict__
     d.seal(L)
     assert L.at()[d.subject, "db/provenance"] == "eval:sandbox"
-    assert L.at().run("sbx.stage.fns.count", game="G1", seal="get").subject == d.subject
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1", seal="get").subject == d.subject
 
 
 def test_a_sandboxed_run_saves_into_a_transaction(sbx):
     L, _repo = sbx
     with L.transaction(by="t") as t:
-        v = L.at().run("sbx.stage.fns.count", game="G1", seal=t)
+        v = L.at().run("mnt.sbx.stage.fns.count", game="G1", seal=t)
         t[v.subject, "status"] = "ok"
-    assert L.at()[v.subject, "status"] == "ok" and L.at()[v.subject, "db/fn"] == "sbx.stage.fns.count"
-    assert L.at().run("sbx.stage.fns.count", game="G1").subject == v.subject
+    assert L.at()[v.subject, "status"] == "ok" and L.at()[v.subject, "db/fn"] == "mnt.sbx.stage.fns.count"
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1").subject == v.subject
 
 
 # -- DAT 1045, 1046: rev.run of a spec whose run function is mounted runs in the worker -----------------
@@ -756,7 +979,7 @@ def world(tmp_path):
         Dat.manager = before
 
 
-RUN = {"dat": {"do": "sbx.stage.runs.table", "name": "tables/t{unique}", "kwargs": {"n": 3}}}
+RUN = {"dat": {"do": "mnt.sbx.stage.runs.table", "name": "tables/t${unique:}", "kwargs": {"n": 3}}}
 
 
 def test_a_mounted_dat_run_runs_in_the_worker_and_hits_after_a_commit(sbx, world):
@@ -768,7 +991,7 @@ def test_a_mounted_dat_run_runs_in_the_worker_and_hits_after_a_commit(sbx, world
     assert v.get_results()["out"] == 6 and v.get_results()["pid"] != os.getpid()
     assert "sbx.stage.runs" not in sys.modules                     # never imported here
     rows = L.at()
-    assert rows[v.subject, "db/provenance"] == "eval:sandbox" and rows[v.subject, "db/fn"] == "sbx.stage.runs.table"
+    assert rows[v.subject, "db/provenance"] == "eval:sandbox" and rows[v.subject, "db/fn"] == "mnt.sbx.stage.runs.table"
     assert "code/sbx-repo" not in v.dependencies
     mods = rows[v.dependencies["code"], "db/modules"]
     assert {"sbx/stage/runs.py", "sbx/stage/helper.py"} <= set(mods)    # what the run loaded
@@ -787,15 +1010,15 @@ def test_one_memo_key_by_every_route_through_the_mounts(sbx, world):
     L, _repo = sbx
     v = L.at().run(RUN)
     top = L.at().id
-    for target, kwargs in [("sbx.stage.specs.table", {}),           # a yaml spec, its base merged
-                           ("sbx.stage.specs.table3", {}),          # a json spec
-                           ("sbx.stage.runs.TABLE", {}),            # a literal in a mounted module
-                           ("sbx.stage.runs.table", {"n": 3}),      # the run function: {dat: {do: <name>}}
-                           ({"dat": {"do": "sbx.stage.runs.table"}}, {"n": 3})]:   # a spec dict, kwargs merged
+    for target, kwargs in [("mnt.sbx.stage.specs.table", {}),           # a yaml spec, its base merged
+                           ("mnt.sbx.stage.specs.table3", {}),          # a json spec
+                           ("mnt.sbx.stage.runs.TABLE", {}),            # a literal in a mounted module
+                           ("mnt.sbx.stage.runs.table", {"n": 3}),      # the run function: {dat: {do: <name>}}
+                           ({"dat": {"do": "mnt.sbx.stage.runs.table"}}, {"n": 3})]:   # a spec dict, kwargs merged
         hit = L.at().run(target, **kwargs)
         assert hit.subject == v.subject and L.at().id == top, target
     assert "sbx.stage.runs" not in sys.modules
-    assert L.at().run("sbx.stage.specs.table", n=4).subject != v.subject   # kwargs fork the spec
+    assert L.at().run("mnt.sbx.stage.specs.table", n=4).subject != v.subject   # kwargs fork the spec
 
 
 def test_resolve_hands_back_a_dict_an_fn_or_the_object(sbx):
@@ -805,17 +1028,17 @@ def test_resolve_hands_back_a_dict_an_fn_or_the_object(sbx):
 
     L, _repo = sbx
     rev = L.at()
-    assert rev.ns.load("sbx.stage.specs.table") == {"dat": {"base": "sbx.stage.specs.base",
-                                                            "name": "tables/y{unique}",
-                                                            "do": "sbx.stage.runs.table"}}
-    assert rev.ns.load("sbx.stage.specs.base.dat.kwargs") == {"n": 3}      # a dotted tail walks into the file
-    run_fn, ledger_fn_ = rev.ns.load("sbx.stage.runs.table"), rev.ns.load("sbx.stage.fns.count")
+    assert rev.ns.load("mnt.sbx.stage.specs.table") == {"dat": {"base": "mnt.sbx.stage.specs.base",
+                                                            "name": "tables/y${unique:}",
+                                                            "do": "mnt.sbx.stage.runs.table"}}
+    assert rev.ns.load("mnt.sbx.stage.specs.base.dat.kwargs") == {"n": 3}      # a dotted tail walks into the file
+    run_fn, ledger_fn_ = rev.ns.load("mnt.sbx.stage.runs.table"), rev.ns.load("mnt.sbx.stage.fns.count")
     assert isinstance(run_fn, Fn) and run_fn.kind == "dat" and run_fn.code.sandboxed
     assert isinstance(ledger_fn_, Fn) and ledger_fn_.kind == "ledger" and ledger_fn_.code.sandboxed
-    assert rev.ns.load("sbx.stage.runs.TABLE")["dat"]["kwargs"] == {"n": 3}
+    assert rev.ns.load("mnt.sbx.stage.runs.TABLE")["dat"]["kwargs"] == {"n": 3}
     assert rev.ns.load("os.path.join") is os.path.join                  # under no mount: imported
     with pytest.raises(ImportError):
-        rev.ns.load("sbx.stage.specs.nothing")                          # a mounted prefix owns its names
+        rev.ns.load("mnt.sbx.stage.specs.nothing")                          # a mounted prefix owns its names
     with pytest.raises(TypeError, match="runs through a spec"):
         run_fn(n=3)
     assert "sbx.stage.runs" not in sys.modules
@@ -825,7 +1048,7 @@ def test_update_writes_a_mount_that_resolve_sees(sbx):
     L, _repo = sbx
     with L.transaction(by="t") as t:
         t.update("db/mount/flat2", {"db/root": "flat", "db/repo": "sbx-repo"})
-    f = L.at().ns.load("flat2.calc.area")
+    f = L.at().ns.load("mnt.flat2.calc.area")
     assert f.code.sandboxed and f.mount == "flat2"
 
 
@@ -844,27 +1067,28 @@ def test_a_mounted_dat_run_draft_and_transaction(sbx, world):
 def test_a_mounted_dat_runs_body_is_confined(sbx, world):
     L, _repo = sbx
     with pytest.raises(ConfinedWrite, match="ledger-sandbox-dat-scribble"):
-        L.at().run({"dat": {"do": "sbx.stage.runs.scribble"}})
+        L.at().run({"dat": {"do": "mnt.sbx.stage.runs.scribble"}})
 
 
 def test_a_spec_naming_a_mounted_ledger_function_is_refused(sbx, world):
     L, _repo = sbx
     with pytest.raises(TypeError, match="rev.run"):
-        L.at().run({"dat": {"do": "sbx.stage.fns.count"}})
+        L.at().run({"dat": {"do": "mnt.sbx.stage.fns.count"}})
 
 
 def test_a_sandboxed_dat_body_names_through_the_ledger_mounts(sbx, world):
     """DAT 1047: inside a sandboxed dat body ``Dat.manager.ns`` is a ``LedgerNamespace`` at the run's rev, so a
     mounted spec, literal or function resolves through the mounts the caller used; ``mount`` is refused.
     The caller's own world (here a plain ``Namespace``) is not what the body sees."""
-    from dvc_dat.do import Namespace
+    from dvc_dat.namespace import Namespace
 
+    pytest.importorskip("omegaconf")
     L, _repo = sbx
     assert type(world.ns) is Namespace
-    r = L.at().run({"dat": {"do": "sbx.stage.runs.names"}}).get_results()
+    r = L.at().run({"dat": {"do": "mnt.sbx.stage.runs.names"}}).get_results()
     assert r["kind"] == "LedgerNamespace" and r["mount"] is True
     assert r["base"] == {"dat": {"kwargs": {"n": 3}}} and r["literal"] == {"n": 3} and r["fn"] == "dat"
-    assert r["spec"] == {"kwargs": {"n": 3}, "name": "tables/y", "do": "sbx.stage.runs.table"}
+    assert r["spec"] == {"kwargs": {"n": 3}, "name": "tables/y", "do": "mnt.sbx.stage.runs.table"}
     assert r["expanded"] == {"n": 3}
     assert "sbx.stage.runs" not in sys.modules
 
@@ -877,12 +1101,350 @@ def test_a_ledger_projects_do_names_through_the_mounts(sbx, tmp_path):
 
     L, _repo = sbx
     m = DatManager(dat_folders=[str(tmp_path / "data")], ns=LedgerNamespace(L))
-    dat = m.create("sbx.stage.specs.table")                             # the spec, through the mounts
-    m.run(dat)                                                           # its run function, here
+    m.run("mnt.sbx.stage.specs.table")                                   # the spec through the mounts, run here
+    dat = m.load("tables/y")
     assert dat.get_path_name() == "tables/y" and dat.get_results()["out"] == 6
     assert dat.subject is None and L.at().values(kind=Dat) == []
     with pytest.raises(TypeError, match="db/mount"):
         m.ns.mount(value={"dat": {}}, at="x")
+
+
+def foreign_items(v):
+    """``(at, name, ref)`` of each ``foreign:`` item of a value's trace."""
+    from dvc_dat.ledger.trace import foreign_of
+
+    return sorted((b["at"], b["name"], r) for k, r in v.dependencies.items() if (b := foreign_of(k)) is not None)
+
+
+@pytest.fixture
+def other(sbx, tmp_path, monkeypatch, backend):
+    """A second ledger, registered as ``games`` in the caller's config: ``G1`` at two revisions, a raw row, and a
+    third ledger, ``far``, registered and never opened. -> ``(L, ledger, rev of the first G1, rev of the second)``."""
+    from dvc_dat.ledger import Value
+
+    L, repo = sbx
+    games = backends.make(backend, tmp_path / "games")
+    far = backends.make(backend, tmp_path / "far")
+    with games.transaction(by="t") as t:
+        t.add("db/mount/sbx.stage", "db/root", "sbx/stage")
+        t.add("db/mount/sbx.stage", "db/repo", "sbx-repo")
+        t.add("db/mount/flatpkg", "db/root", "flat")
+        t.add("db/mount/flatpkg", "db/repo", "sbx-repo")
+        t.add("game/G1", "n", "3")
+        Value.Blob({"game": 1}).seal(t, name="G1")
+        t.add("game/raw", "n", "7")
+    first = games.at().id
+    with games.transaction(by="t") as t:
+        Value.Blob({"game": 2}).seal(t, name="G1")
+    root = backends.make(backend, tmp_path / "root")
+    register(root, games=games.path, far=far.path)
+    (repo / ".datconfig.yaml").write_text(f"root: '{root.path}'\n")
+    with caller_in(repo, monkeypatch):
+        yield L, games, first, games.at().id
+
+
+@contextlib.contextmanager
+def caller_in(folder, monkeypatch):
+    """The caller's working directory, whose ``.datconfig.yaml`` names the ledgers; the default dat world, which a
+    run there makes from that config, is the one before it again afterwards."""
+    from dvc_dat import Dat
+
+    before = Dat.manager
+    monkeypatch.chdir(folder)
+    try:
+        yield
+    finally:
+        Dat.manager = before                    # its namespace answers to it again, as the setter does
+
+
+def text_of(v):
+    from dvc_dat.ledger.codec import ref_text
+    from dvc_dat.ledger.value import dotted
+
+    return ref_text(dotted(type(v)), v.hash)
+
+
+def test_ledger_at_a_location_stays_refused_in_a_body(other):
+    """SVP 1521: only a name opens read-only; ``Ledger(location)`` opens a store that may write."""
+    L, games, _first, _second = other
+    if isinstance(games.path, str):
+        pytest.skip("SQLite's refusal: a Postgres location opens on the run's server, as the network hook allows")
+    with pytest.raises(ConfinedWrite):
+        L.at().run("mnt.sbx.stage.fns.foreign", where=str(games.path), name="G1")
+
+
+def test_a_body_reads_a_registered_ledger_by_name_and_it_is_recorded(other):
+    """Q3 (A): the read works, and is one ``foreign:`` item with the revision and the name."""
+    L, games, first, second = other
+    v = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=second, name="G1")
+    assert v.obj == {"seen": {"game": 2}}
+    want = games.at(second).load("G1")
+    assert foreign_items(v) == [(f"{games._store.name}@{second}", "G1", text_of(want))]
+    assert foreign_items(L.at().load(v.subject)) == foreign_items(v)            # as rows on the run's ledger
+
+
+def test_a_name_the_caller_dropped_does_not_cross_to_the_body(other):
+    """SVP 239: the caller's view crosses, ``del`` included; a caller that never read root ships root's location,
+    and the body reads the registry there (the test above)."""
+    from dvc_dat import ledgers
+
+    L, _games, _first, second = other
+    assert "far" in ledgers                                      # the caller reads root: its view is filled
+    del ledgers["far"]
+    with pytest.raises(KeyError, match="dropped"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="far", at=None, name="G1")
+    v = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=second, name="G1")
+    assert v.obj == {"seen": {"game": 2}}
+
+
+def test_a_body_reads_a_pinned_older_revision(other):
+    """A stated revision reads that revision: the older value, recorded at the older revision."""
+    L, games, first, second = other
+    a = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=first, name="G1")
+    b = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=second, name="G1")
+    assert (a.obj, b.obj) == ({"seen": {"game": 1}}, {"seen": {"game": 2}})
+    assert foreign_items(a) == [(f"{games._store.name}@{first}", "G1", text_of(games.at(first).load("G1")))]
+    assert foreign_items(b)[0][0] == f"{games._store.name}@{second}"
+
+
+@pytest.mark.parametrize("fn,keys", [("by_reference", {"ref": "{name}@{rev}:G1"}),
+                                     ("by_revision", {"at": "{name}@{rev}", "name": "G1"})])
+def test_the_global_reference_reaches_a_registered_ledger(other, tmp_path, fn, keys):
+    """``dat.load`` and ``dat.at`` by ``<ledger>@<rev>``, where the name is the config's (the fixture's is both)."""
+    L, games, first, _second = other
+    if isinstance(games.path, str):
+        pytest.skip("each Postgres test ledger is a schema of one database: its name is the database's, no entry's")
+    keys = {k: v.format(name="games", rev=first) for k, v in keys.items()}
+    v = L.at().run(f"mnt.sbx.stage.fns.{fn}", **keys)
+    assert v.obj == {"seen": {"game": 1}}
+    assert [a for a, _n, _r in foreign_items(v)] == [f"games@{first}"]
+
+
+def test_a_foreign_read_in_a_body_is_provenance_only(other):
+    """Q2 (A) unchanged in the sandbox: a name moving on another ledger is no miss."""
+    from dvc_dat.ledger import Value
+
+    L, games, _first, second = other
+    a = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G1")
+    with games.transaction(by="t") as t:
+        Value.Blob({"game": 3}).seal(t, name="G1")
+    again = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G1")
+    assert again.subject == a.subject and again.obj == {"seen": {"game": 2}}
+    assert foreign_items(again)[0][0].endswith(f"@{second}")
+
+
+def test_a_query_in_a_body_records_each_value_and_a_raw_row_records_nothing(other):
+    L, games, first, second = other
+    v = L.at().run("mnt.sbx.stage.fns.queries", ledger="games", at=second)
+    assert v.obj["seen"] == [1, 2] and len(foreign_items(v)) == 2
+    w = L.at().run("mnt.sbx.stage.fns.raw_row", ledger="games", s="game/raw", p="n")
+    assert w.obj == {"seen": "7"} and foreign_items(w) == []
+
+
+@pytest.mark.parametrize("how", ["transaction", "direct", "head", "seal", "store", "connect", "connect-rw",
+                                 "connect-ro-then-rw", "art", "draft", "named-result"])
+def test_a_body_writes_nothing_on_a_ledger_it_read(other, tmp_path, how):
+    """Each way of writing refused, and the ledger as it was: the rows, the art folder."""
+    L, games, _first, second = other
+    pg = isinstance(games.path, str)
+    if pg and how.startswith("connect"):
+        pytest.skip("a raw sqlite3 connection: SQLite's")
+    art = sorted(p for p in games._store.art.root.rglob("*"))
+    with pytest.raises(Exception) as e:
+        L.at().run("mnt.sbx.stage.fns.writes_foreign", ledger="games", how=how)
+    if how == "store":                                  # around Transaction: the connection is the floor
+        assert "read" in str(e.value).lower(), repr(e.value)
+    else:
+        assert type(e.value) is ConfinedWrite, repr(e.value)
+    assert games.at().id == second
+    assert sorted(p for p in games._store.art.root.rglob("*")) == art
+
+
+def test_a_read_of_a_ledger_not_there_says_so(other):
+    L, games, _first, _second = other
+    with pytest.raises(KeyError, match="'nope': no such ledger .*games, far"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="nope", at=None, name="G1")
+    with pytest.raises(KeyError, match="no revision 999"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=999, name="G1")
+    with pytest.raises(KeyError, match="has no value"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G404")
+
+
+def register(root, **where):
+    """Rows of root's registry (SVP 239): ``ledger/<name> ledger/location <where>``."""
+    with root.transaction(by="t") as t:
+        for name, loc in where.items():
+            t.add(f"ledger/{name}", "ledger/location", str(loc))
+
+
+def test_a_registered_ledger_not_on_disk_and_a_caller_with_no_section_say_so(sbx, tmp_path, monkeypatch):
+    L, repo = sbx
+    root = Ledger(tmp_path / "root", create=True)
+    register(root, gone=tmp_path / "gone")
+    (repo / ".datconfig.yaml").write_text(f"root: {root.path}\n")
+    with caller_in(repo, monkeypatch):
+        with pytest.raises(LedgerError, match="no ledger at gone"):
+            L.at().run("mnt.sbx.stage.fns.by_name", ledger="gone", at=None, name="G1")
+    assert not (tmp_path / "gone").exists()
+    (repo / ".datconfig.yaml").unlink()
+    with caller_in(tmp_path, monkeypatch):
+        with pytest.raises(LedgerError, match="no ledgers: the caller"):
+            L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G1")
+
+
+def test_a_ref_key_on_another_ledger_loads_in_the_worker(other):
+    """SVP 1521: ``encode_key`` carries the ledger and the revision beside the subject, so the key holds its value,
+    at the Ref's revision, and the load is a ``foreign:`` item."""
+    from dvc_dat.ledger import Ref
+
+    L, games, first, _second = other
+    v = L.at().run("mnt.sbx.stage.fns.foreign_key", clip=Ref(games.at(first), "G1"))
+    assert v.obj == {"seen": {"game": 1}}
+    assert foreign_items(v) == [(f"{games._store.name}@{first}", "G1", text_of(games.at(first).load("G1")))]
+    again = L.at().run("mnt.sbx.stage.fns.foreign_key", clip=Ref(games.at(first), "G1"))
+    assert again.subject == v.subject                                           # the same keys: a hit
+
+
+def test_a_sealed_value_key_on_another_ledger_loads_in_the_worker(other):
+    L, games, first, _second = other
+    v = L.at().run("mnt.sbx.stage.fns.foreign_key", clip=games.at(first).load("G1"))
+    assert v.obj == {"seen": {"game": 1}} and len(foreign_items(v)) == 1
+
+
+def test_a_ref_key_on_the_runs_own_ledger_adds_nothing(sbx):
+    from dvc_dat.ledger import Ref, Value
+
+    L, _repo = sbx
+    with L.transaction(by="t") as t:
+        Value.Blob({"game": 5}).seal(t, name="mine")
+    v = L.at().run("mnt.sbx.stage.fns.foreign_key", clip=Ref(L.at(), "mine"))
+    assert v.obj == {"seen": {"game": 5}} and foreign_items(v) == []
+
+
+def test_an_unsaved_value_is_still_no_key(sbx):
+    """Q4 (A): not part of the standard for now."""
+    from dvc_dat.ledger import Value
+
+    L, _repo = sbx
+    with pytest.raises(ValueError, match="an unsaved Blob; seal it first"):
+        L.at().run("mnt.sbx.stage.fns.foreign_key", clip=Value.Blob({"game": 1}))
+
+
+def test_a_body_reads_a_run_on_another_ledger_and_never_runs_one(other, sbx):
+    """A run read is the memo lookup there: a hit is a ``foreign:`` item, ``seal="get"`` on a miss is ``None``, and a
+    miss otherwise is refused, since running there would write there."""
+    L, games, _first, _second = other
+    miss = L.at().run("mnt.sbx.stage.fns.reads_a_run", ledger="games", game="G1", mode="get")
+    assert miss.obj == {"seen": None} and foreign_items(miss) == []
+    top = games.at().id
+    with pytest.raises(ConfinedWrite, match="runs nothing"):
+        L.at().run("mnt.sbx.stage.fns.reads_a_run", ledger="games", game="G1")
+    assert games.at().id == top
+    entry = games.at().run("mnt.sbx.stage.fns.count", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.reads_a_run", ledger="games", game="G1")
+    assert v.obj == {"seen": entry.obj}
+    [(at, name, ref)] = foreign_items(v)
+    assert at == f"{games._store.name}@{games.at().id}" and ref == text_of(entry)
+    assert name == 'eval:mnt.sbx.stage.fns.count{"game":"G1"}'
+
+
+def test_a_dat_on_another_ledger_is_read_with_nothing_placed_there(other, tmp_path):
+    """Its folder is rebuilt in the child's overlay, not under that ledger's ``art/dats``."""
+    from dvc_dat import Dat
+
+    L, games, _first, _second = other
+    src = tmp_path / "dat-src"
+    src.mkdir()
+    (src / "f.txt").write_text("hello")
+    d = Dat(src)
+    with games.transaction(by="t") as t:
+        d.seal(t)
+    dats = games._store.art.root / "dats"
+    before = sorted(p.name for p in dats.iterdir()) if dats.exists() else []
+    v = L.at().run("mnt.sbx.stage.fns.reads_a_dat", ledger="games", name=d.subject)
+    assert v.obj == {"seen": "hello"} and len(foreign_items(v)) == 1
+    assert (sorted(p.name for p in dats.iterdir()) if dats.exists() else []) == before
+
+
+def test_the_read_allowance_is_the_ledger_opened_and_no_other(other, tmp_path):
+    """The hook allows the art store of a ledger the body opened; a registered ledger it did not open, and the
+    opened ledger's database file, stay ``UntracedRead``."""
+    L, games, _first, _second = other
+    v = L.at().run("mnt.sbx.stage.fns.opens_art", ledger="games", name="G1")
+    assert v.obj["size"] > 0
+    secret = tmp_path / "far" / "art" / "planted"
+    secret.parent.mkdir(parents=True, exist_ok=True)
+    secret.write_text("x")
+    with pytest.raises(UntracedRead):
+        L.at().run("mnt.sbx.stage.fns.opens_file", ledger="games", file=str(secret))
+    if not isinstance(games.path, str):
+        with pytest.raises(UntracedRead):
+            L.at().run("mnt.sbx.stage.fns.opens_file", ledger="games", file=str(games.path / "ledger.db"))
+
+
+def test_a_nested_run_under_another_mount_sees_the_same_ledgers(other):
+    """A fresh child of the server gets the section the first child was given, and records in its own entry."""
+    L, games, _first, second = other
+    v = L.at().run("mnt.sbx.stage.fns.nested_foreign", ledger="games", name="G1")
+    assert v.obj == {"inner": {"seen": {"game": 2}}}
+    inner = L.at().run("mnt.flatpkg.foreign.seen", ledger="games", name="G1", seal="get")
+    assert foreign_items(inner)[0][0].endswith(f"@{second}") and foreign_items(v) == []
+
+
+
+# --- SVP 1596: the read guard, called with a ledger's name before a named open --------------------------------------
+@pytest.fixture
+def guarded(other):
+    """``other`` with ``sbx.stage.guard.refuse`` registered (``far`` refused), removed after."""
+    from dvc_dat.ledger import register_read_guard
+    from sbx.stage.guard import refuse
+
+    register_read_guard(refuse)
+    try:
+        yield other
+    finally:
+        register_read_guard(None)
+
+
+def test_the_read_guard_refuses_a_named_open_in_the_caller(guarded):
+    from dvc_dat import dat, ledgers
+    from dvc_dat.ledger import register_read_guard
+
+    _L, games, first, _second = guarded
+    for open_far in (lambda: ledgers.far, lambda: ledgers["far"], lambda: dat.at("far@1"),
+                     lambda: dat.load("far@1:G1")):
+        with pytest.raises(PermissionError, match="far: refused by the read guard"):
+            open_far()
+    assert ledgers.games.at(first).load("G1").obj == {"game": 1}               # another name opens
+    register_read_guard(None)
+    assert ledgers.far.at().id >= 0                                             # no guard: it opens
+
+
+@pytest.mark.parametrize("fn,keys", [("by_name", {"ledger": "far", "at": None, "name": "G1"}),
+                                     ("by_reference", {"ref": "far@1:G1"}),
+                                     ("by_revision", {"at": "far@1", "name": "G1"}),
+                                     ("nested_foreign", {"ledger": "far", "name": "G1"})])
+def test_the_read_guard_refuses_a_named_open_in_a_sandboxed_body(guarded, fn, keys):
+    """The guard crosses to the worker by its import path (a nested child under another mount too), and its
+    exception is the caller's."""
+    L, games, _first, second = guarded
+    if isinstance(games.path, str) and fn in ("by_reference", "by_revision"):
+        pytest.skip("each Postgres test ledger is a schema of one database: its name is the database's, no entry's")
+    with pytest.raises(PermissionError, match="far: refused by the read guard"):
+        L.at().run(f"mnt.sbx.stage.fns.{fn}", **keys)
+    v = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=second, name="G1")
+    assert v.obj == {"seen": {"game": 2}}                                       # another name opens
+
+
+def test_a_read_guard_is_a_function_its_import_path_finds(sbx):
+    from dvc_dat.ledger import register_read_guard
+
+    def local(name):
+        pass
+
+    for bad in (local, lambda name: None, "sbx.stage.guard.refuse"):
+        with pytest.raises(TypeError):
+            register_read_guard(bad)
 
 
 def test_rev_has_one_run_and_ns():
@@ -898,9 +1460,9 @@ def test_a_call_interrupted_while_the_worker_runs_leaves_the_next_call_its_own_r
     L, _repo = sbx
     with pytest.raises(Exception):
         with L.transaction(by="t", lock=1) as t:
-            L.at().run("sbx.stage.slow.slow", n=7, seal=t)
-    assert L.at().run("sbx.stage.slow.fast", n=1).obj == {"who": "fast", "n": 1}
-    assert L.at().run("sbx.stage.slow.fast", n=2).obj == {"who": "fast", "n": 2}
+            L.at().run("mnt.sbx.stage.slow.slow", n=7, seal=t)
+    assert L.at().run("mnt.sbx.stage.slow.fast", n=1).obj == {"who": "fast", "n": 1}
+    assert L.at().run("mnt.sbx.stage.slow.fast", n=2).obj == {"who": "fast", "n": 2}
 
 
 def test_a_sandboxed_entry_records_the_platform_of_the_worker_it_ran_in(sbx, monkeypatch):
@@ -912,6 +1474,6 @@ def test_a_sandboxed_entry_records_the_platform_of_the_worker_it_ran_in(sbx, mon
     real = env_module.platform_record()
     monkeypatch.setattr(env_module, "platform_record", lambda: dict(real, card="the caller's card"))
     L, _repo = sbx
-    v = L.at().run("sbx.stage.fns.count", game="G1")
+    v = L.at().run("mnt.sbx.stage.fns.count", game="G1")
     assert json.loads(v.dependencies["platform/record"]) == real
-    assert L.at().run("sbx.stage.fns.count", game="G1", seal="get").subject == v.subject   # the default policy
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1", seal="get").subject == v.subject   # the default policy

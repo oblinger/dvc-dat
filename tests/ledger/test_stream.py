@@ -3,6 +3,7 @@ held whole; ``decode(name=)``, ``Dat.kind_ok``, ``DAT_WORK``. The 2 GB acceptanc
 ``DAT_SLOW=1`` (a subprocess, so its RSS is its own)."""
 
 import io
+import json
 import os
 import subprocess
 import sys
@@ -10,7 +11,8 @@ import textwrap
 
 import pytest
 
-from dvc_dat.ledger import Dat, Ref, Value
+from dvc_dat import Dat
+from dvc_dat.ledger import Ref, Value
 from dvc_dat.ledger.codec import sha256
 from dvc_dat.ledger.kept import Kept
 from dvc_dat.ledger.store import file_sha
@@ -94,9 +96,10 @@ def test_a_load_by_alias_lands_under_its_name_and_follows_a_repoint(L, tmp_path)
 def test_decode_without_name_still_loads():
     class Old(Dat):
         @classmethod
-        def decode(cls, data, store):
+        def decode(cls, src, store):
+            data = src.read()
             obj = cls.__new__(cls)
-            obj.path = cls._materialise(data, store)
+            obj.path = cls._materialise(sha256(data), json.loads(data)["files"], store)
             return obj
 
     from dvc_dat.ledger.value import takes_name
@@ -130,7 +133,8 @@ def test_dat_work_names_the_work_parent(coded, tmp_path, monkeypatch):
 SCRIPT = textwrap.dedent("""
     import json, os, resource, sys
     from pathlib import Path
-    from dvc_dat.ledger import Dat, Ledger
+    from dvc_dat import Dat
+    from dvc_dat.ledger import Ledger
     from dvc_dat.ledger.kept import Kept
 
     root = Path(sys.argv[1])
@@ -151,7 +155,7 @@ SCRIPT = textwrap.dedent("""
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * scale
     art = L._store.art
     linked = []
-    for rel, h in sorted(json.loads(art.get(d.hash))["files"].items()):
+    for rel, h in sorted(Dat._stored_manifest(art, d.hash).items()):
         linked.append(os.path.samefile(art.path(h), Kept().blob(h)) and os.path.samefile(art.path(h), d.path / rel))
     print(json.dumps({"growth": peak - before, "before": before, "peak": peak, "linked": linked,
                       "bytes": sum(p.stat().st_size for p in d.path.iterdir())}))

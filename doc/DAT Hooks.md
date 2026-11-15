@@ -5,8 +5,4 @@ Text outside a section is not kept. -->
 
 | Hook | Comment |
 |---|---|
-| [DAT Modules dat](ha://DAT/DAT%20Modules%20dat) |  |
 
-#### DAT Modules dat
-action:: markdown
-arg:: /Users/oblinger/ob/grove/dvc-dat-ledger2/doc/DAT Modules/dat.md

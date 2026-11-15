@@ -59,16 +59,17 @@ sys.path.insert(0, str(Path("demo_game").resolve()))   # Video, PlainVideo
 #     def __init__(self, frames: bytes):
 #         self.frames = frames
 #
-#     def encode(self) -> bytes:
-#         return self.frames
+#     def encode(self, out) -> None:
+#         out.write(self.frames)
 #
 #     @classmethod
-#     def decode(cls, data: bytes, store) -> "PlainVideo":
-#         return cls(data)
+#     def decode(cls, src, store) -> "PlainVideo":
+#         return cls(src.read())
 # ```
 #
-# `encode` and `decode` say how the object becomes bytes and back;
-# here the bytes are the frames.
+# `encode` writes the object's bytes to a stream the store opens, and
+# `decode` reads them back from one, so a value is never held whole in
+# memory to be stored or loaded; here the bytes are the frames.
 
 # %%
 from demo_game.game import PlainVideo
@@ -551,12 +552,12 @@ geometry_source = '''\
 """`geometry`: any Python function can be a ledger function."""
 import math
 
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
 ORIGIN = (0, 0)
 
 
-@ledger_fn
+@dat.fn
 def distance(rev, a, b=ORIGIN, *, metric="euclidean") -> float:
     """The distance between points `a` and `b`, by default the origin."""
     if metric == "manhattan":
@@ -570,7 +571,7 @@ print("log:", git("log", "--oneline"))
 # → log: <7 hex> geometry: distance
 
 # %% [markdown]
-# `@ledger_fn` marks `distance` as a ledger function and leaves it a
+# `@dat.fn` marks `distance` as a ledger function and leaves it a
 # plain function: nothing is wrapped and no row is written on
 # import; the return annotation is required. `a` is positional, `b`
 # defaults to the module's `ORIGIN`, and `metric` is keyword-only:
@@ -637,12 +638,12 @@ measure_source = '''\
 """`plane.measure`: a length in metres."""
 import math
 
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
 from .units import SCALE                   # the one import of its own
 
 
-@ledger_fn
+@dat.fn
 def length(rev, a, b) -> float:
     """The length of the segment from `a` to `b`, in metres."""
     return math.dist(a, b) * SCALE
@@ -652,8 +653,8 @@ git("add", "plane")
 git("commit", "-m", "plane: measure, units")
 
 with L.transaction(by="human:dan", why="mount plane") as t:
-    # the two db/mount/plane rows: plane.measure loads from plane/measure.py in the geometry repo
-    t.ns.mount("plane", root="plane", repo="geometry")
+    # the two db/mount/plane rows: mnt.plane.measure loads from plane/measure.py in the geometry repo
+    t.ns.mount("mnt.plane", root="plane", repo="geometry")
 rev = L.at()
 print("mount rows:", rev["db/mount/plane"])
 # → mount rows: {'db/root': 'plane', 'db/repo': 'geometry'}
@@ -662,15 +663,15 @@ print("mount rows:", rev["db/mount/plane"])
 # Mounting says where a function's source is read from. It is rows
 # on the ledger: a dotted prefix (`plane`), the folder it resolves
 # to (`db/root`, relative to the repo's checkout) and the repo
-# (`db/repo`). Every name under the prefix now resolves inside that
-# folder: `plane.measure` is `plane/measure.py`. A `.datconfig.yaml`
-# `mounts:` entry is sugar for these rows.
+# (`db/repo`). Every name `mnt.plane...` now resolves inside that
+# folder: `mnt.plane.measure` is `plane/measure.py`; a name not starting `mnt.` is imported. A `.datconfig.yaml`
+# `mounts:` entry, `mnt.plane: plane`, is sugar for these rows.
 
 # %% [markdown]
 # #### A function under a mount
 
 # %%
-length_fn = rev.ns.load("plane.measure.length")
+length_fn = rev.ns.load("mnt.plane.measure.length")
 print("code:", repr(length_fn.code), " sandboxed:", length_fn.code.sandboxed, " mount:", length_fn.mount)
 # → code: <Code plane@<commit, 8 hex>>  sandboxed: True  mount: plane
 segment_value = length_fn(a=(0, 0), b=(3, 4))
@@ -699,16 +700,16 @@ reach_source = '''\
 """`plane.reach`: two functions the sandbox refuses."""
 from pathlib import Path
 
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 
 
-@ledger_fn
+@dat.fn
 def from_origin(rev, p) -> float:
     from geometry import distance       # geometry.py, outside plane/
     return distance(rev, p)
 
 
-@ledger_fn
+@dat.fn
 def note(rev, text) -> int:
     return Path("/tmp/plane-note.txt").write_text(text)   # outside its folder
 '''
@@ -717,7 +718,7 @@ git("add", "plane/reach.py")
 git("commit", "-m", "plane: reach")
 
 try:
-    from_origin_fn = rev.ns.load("plane.reach.from_origin")
+    from_origin_fn = rev.ns.load("mnt.plane.reach.from_origin")
     from_origin_fn(p=(3, 4))
 except UnmountedImport as e:
     print("UnmountedImport:", e)
@@ -738,7 +739,7 @@ except UnmountedImport as e:
 
 # %%
 try:
-    note_fn = rev.ns.load("plane.reach.note")
+    note_fn = rev.ns.load("mnt.plane.reach.note")
     note_fn(text="hello")
 except ConfinedWrite as e:
     print("ConfinedWrite:", e)
@@ -877,11 +878,11 @@ print("returns:", L.at()[far_value.subject, "db/returns"])
 # %%
 clips_source = '''\
 """`clips`: a ledger function that returns a Video."""
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
 from demo_game.game import Video
 
 
-@ledger_fn
+@dat.fn
 def clip(rev, *, video: str, start: int, end: int) -> Video:
     """Frames `start` to `end` of the video `video` names."""
     source = rev.load(video)                 # traced: the alias, the bytes

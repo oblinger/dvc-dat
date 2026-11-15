@@ -18,11 +18,9 @@ from dvc_dat.core import ART_FILE, DAT_CONFIG_FILE, INDEX_FILE, RESULT_YAML  # n
 
 
 def run_cause(m, dat):
-    """`m.run(dat)`, re-raising what the run raised, unwrapped from its `In <dat>`."""
-    try:
-        return m.run(dat)
-    except Exception as e:
-        raise (e.__cause__ or e) from None
+    """The run of a dat just created, `m._execute(dat)`: the step `m.run(spec)` takes after the create
+    (a dat runs once, by the call that makes it, SVP 1508), raising what the run raised."""
+    return m._execute(dat)
 
 
 def sha(data: bytes) -> str:
@@ -122,8 +120,6 @@ class TestArtifacts:
             m.save_artifact(clip, "video/G1")
 
     def test_a_missing_artifact_names_itself(self, m):
-        with pytest.raises(FileNotFoundError, match="art:video/nope"):
-            m.load("art:video/nope")
         with pytest.raises(KeyError, match="not in the index"):
             m.load("sha256:" + "0" * 64)
 
@@ -137,8 +133,6 @@ class TestArtifacts:
         m = DatManager(dat_folders=[str(tmp_path / "dats")])
         with pytest.raises(RuntimeError, match="no art_folder"):
             m.save_artifact(clip, name="video/G1")
-        with pytest.raises(RuntimeError, match="no art_folder"):
-            m.load("art:video/G1")
 
     @pytest.mark.parametrize("dats, art", [("data", "data/art"), ("data/runs", "data"),
                                            ("data", "data")])
@@ -323,10 +317,12 @@ class TestOneNamespace:
             m.load("games/G1")
 
 
-class TestLegacyStore:
+class TestOldStoreNotRead:
+    """No legacy stores (SVP 1467 Q9): what 2.13 wrote is not read."""
+
     @pytest.fixture
     def old(self, tmp_path):
-        """An artifact as 2.13 left it: `art:` name, `kind`, no index."""
+        """An artifact as 2.13 left it: `art:` name, `kind`, a singular `name`, no index."""
         home = tmp_path / "art" / "video" / "G1"
         home.mkdir(parents=True)
         (home / "G1.mp4").write_bytes(b"frames")
@@ -335,21 +331,17 @@ class TestLegacyStore:
             "sha256": "sha256:" + sha(b"frames"), "saved_at": "2026-09-24T00:00:00+00:00"}))
         return DatManager(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "art"))
 
-    def test_an_art_name_loads_with_the_prefix_stripped(self, old):
-        assert old.load("art:video/G1").read_bytes() == b"frames"
-        assert old.load("video/G1") == old.load("art:video/G1")
-        assert old.standing("art:video/G1") == "referenceable"
+    def test_an_art_name_is_not_an_artifact(self, m, clip):
+        m.save_artifact(clip, name="video/G1")
+        with pytest.raises(KeyError):
+            m.load("art:video/G1")
+        assert m.standing("art:video/G1") is None
 
-    def test_reindex_gives_it_its_urn(self, old):
+    def test_reindex_keys_no_singular_name(self, old):
         old.reindex()
-        assert old.load("sha256:" + sha(b"frames")).name == "G1.mp4"
-
-    def test_a_legacy_name_in_a_map_counts_as_an_artifact(self, old):
-        dat = old.create({"dat": {}}, path="d")
-        with old.recording(dat):
-            old.record_dependency("art:video/G1", "sha256:" + sha(b"frames"))
-        dat.save()
-        assert stored_results(dat)["dat"]["standing"] == "referenceable"
+        index = old._read_index()
+        assert "sha256:" + sha(b"frames") in index
+        assert "video/G1" not in index and "art:video/G1" not in index
 
 
 def uses_both(dat, prev):
@@ -383,7 +375,7 @@ class TestCapture:
     def test_a_runs_loads_land_in_its_dependencies(self, world):
         dat = world.create({"dat": {"do": "uses_both", "kwargs": {"prev": "prev"}}},
                            path="run")
-        assert world.run(dat) == "ran"
+        assert world._execute(dat) == "ran"
         deps = stored_results(dat)["dat"]["dependencies"]
         assert deps == {"prev": world.load("prev").get_results()["dat"]["sha256"],
                         "video/G1": self.digest}
@@ -397,12 +389,12 @@ class TestCapture:
     def test_a_run_with_no_loads_says_so(self, world):
         world.ns.mount(value=lambda dat: dat.save(), at="quiet")
         dat = world.create({"dat": {"do": "quiet"}}, path="quiet_run")
-        world.run(dat)
+        world._execute(dat)
         assert stored_results(dat)["dat"]["dependencies"] == {}
 
     def test_a_nested_run_records_its_own_and_appears_once_outside(self, world):
         dat = world.create({"dat": {"do": "outer"}}, path="outer_run")
-        world.run(dat)
+        world._execute(dat)
         inner = world.load("inner")
         assert stored_results(dat)["dat"]["dependencies"] == \
             {"inner": inner.get_results()["dat"]["sha256"], "video/G1": self.digest}
@@ -441,7 +433,7 @@ class TestCapture:
         m = Store(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "art"))
         m.ns.mount(value=lambda dat: dat.save(), at="quiet")
         dat = m.create({"dat": {"do": "quiet"}}, path="wrapped")
-        m.run(dat)
+        m._execute(dat)
         assert stored_results(dat)["dat"]["dependencies"] == {}
 
     def test_two_threads_recording_at_once_do_not_mix(self, world):
@@ -489,7 +481,7 @@ class TestSeal:
     def test_run_does_not_save(self, m, clean_code):
         m.ns.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="unsaved")
-        assert m.run(dat) == "ran"
+        assert m._execute(dat) == "ran"
         assert not Path(dat.get_path(), RESULT_YAML).exists()
         assert "run_at" not in dat.get_results()["dat"]     # the run is the sub-dat's
         assert dat.run.get_results()["dat"]["run_at"]
@@ -507,7 +499,7 @@ class TestSeal:
             seen["checkpoint"] = stored_results(dat)["dat"]["sha256"]
         m.ns.mount(value=fn, at="saves")
         dat = m.create({"dat": {"do": "saves"}}, path="inside")
-        m.run(dat)
+        m._execute(dat)
         assert seen["inside"] == "open" and seen["checkpoint"]
         results = stored_results(dat)["dat"]
         assert "run_time" not in results
@@ -516,15 +508,19 @@ class TestSeal:
         run = stored_results(dat.run)["dat"]
         assert run["run_time"] and run["content"] == results["sha256"]
 
-    def test_an_open_dat_runs_again_in_place(self, m):
+    def test_run_refuses_a_dat_and_names_its_spec(self, m):
         m.ns.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="twice")
-        assert m.run(dat) == "ran" and m.run(dat) == "ran"
+        with pytest.raises(Exception) as e:
+            m.run(dat)
+        assert isinstance(e.value.__cause__, TypeError) and "get_spec()" in str(e.value.__cause__)
+        assert dat.run is None                                   # nothing ran
+        assert m.run(dat.get_spec() | {"dat": {**dat.get_spec()["dat"], "name": "again"}}) == "ran"
 
-    def test_run_refuses_a_sealed_dat(self, m):
+    def test_the_run_step_refuses_a_sealed_dat(self, m):
         m.ns.mount(value=lambda dat: dat.save(), at="saves")
         dat = m.create({"dat": {"do": "saves"}}, path="ran_once")
-        m.run(dat)
+        m._execute(dat)
         with pytest.raises(RuntimeError, match="sealed"):
             run_cause(m, dat)
 
@@ -564,19 +560,19 @@ class TestStanding:
     def test_a_rolling_dat_runs_again(self, m):
         m.ns.mount(value=lambda dat: dat.save(), at="saves")
         dat = m.create({"dat": {"do": "saves", "standing": "rolling"}}, path="roll")
-        m.run(dat)
-        m.run(dat)
+        m._execute(dat)
+        m._execute(dat)
         assert m.standing("roll") == "rolling"
 
     def test_referenceable_inputs_and_clean_code_earn_referenceable(self, w, clean_code):
         for src in ("base", "video/G1"):
             dat = w.create({"dat": {"do": "reads", "args": [src]}}, path=f"r_{src}")
-            w.run(dat)
+            w._execute(dat)
             assert w.standing(dat) == "referenceable"
 
     def test_a_rolling_input_caps_the_run_at_sealed(self, w, clean_code):
         dat = w.create({"dat": {"do": "reads", "args": ["roll"]}}, path="r1")
-        w.run(dat)
+        w._execute(dat)
         assert stored_results(dat)["dat"]["standing"] == "sealed"
 
     def test_dirty_code_caps_the_run_at_sealed(self, w, monkeypatch):
@@ -584,12 +580,12 @@ class TestStanding:
         monkeypatch.setattr(core, "_code_of", lambda fn: {
             "branch": "main", "commit": "c", "dirty": True})
         dat = w.create({"dat": {"do": "reads", "args": ["base"]}}, path="dirty")
-        w.run(dat)
+        w._execute(dat)
         assert w.standing("dirty") == "sealed"
 
     def test_an_open_input_keeps_the_run_open_for_good(self, w):
         dat = w.create({"dat": {"do": "reads", "args": ["draft"]}}, path="r2")
-        w.run(dat)
+        w._execute(dat)
         results = stored_results(dat)
         assert results["dat"]["dependencies"]["draft"] == "unsealed"
         assert results["dat"]["standing"] == "open" == w.standing("r2")
@@ -632,7 +628,10 @@ class TestStanding:
         assert Dat.standing("certainly/not/here") is None
 
 
-class TestLegacyResults:
+class TestOldResultsNotRead:
+    """No legacy stores (SVP 1467 Q9): a results file with no stamped `dat.standing` is open,
+    whatever 2.13 keys it carries."""
+
     def write(self, tmp_path, name, spec, result=None):
         folder = tmp_path / "dats" / name
         folder.mkdir(parents=True)
@@ -640,21 +639,27 @@ class TestLegacyResults:
         if result is not None:
             (folder / RESULT_YAML).write_text(yaml.safe_dump(result))
 
-    def test_2_13_files_read_by_the_2_13_rule(self, m, tmp_path):
+    def test_2_13_keys_are_not_read(self, m, tmp_path):
         self.write(tmp_path, "ref", {"dat": {}}, {"dat": {
             "run_time": "00:00:01.000", "referenceable": True, "sha256": "sha256:x"}})
         self.write(tmp_path, "sealed", {"dat": {}}, {"dat": {
             "dependencies": {"$MANUAL": "manual"}, "referenceable": False}})
         self.write(tmp_path, "roll", {"dat": {"rolling": True}})
-        assert [m.standing(n) for n in ("ref", "sealed", "roll")] == \
-            ["referenceable", "sealed", "rolling"]
+        assert [m.standing(n) for n in ("ref", "sealed", "roll")] == ["open", "open", "open"]
 
-    def test_a_dat_saved_before_2_9_is_open(self, m, tmp_path):
+    def test_unstamped_results_are_open_until_saved(self, m, tmp_path):
         self.write(tmp_path, "old", {"dat": {"kind": "Dat"}}, {"accuracy": 0.5})
         dat = m.load("old")
         assert m.standing("old") == "open" and not dat.verify()
         dat.save()                                          # sealed by hand, now
         assert m.standing("old") == "referenceable" and dat.verify()
+
+    def test_a_run_record_in_the_dats_own_results_is_not_its_run(self, m):
+        dat = m.create({"dat": {}}, path="hand")
+        Dat.set(dat.get_results(), "dat.run_at", "2026-09-21 16:20:19")
+        Dat.set(dat.get_results(), "dat.code", {"branch": "main", "commit": "c", "dirty": True})
+        dat.save()                                          # no run/: the dirty record is not consulted
+        assert m.standing("hand") == "referenceable"
 
 
 class TestVerifyingLoad:
@@ -741,8 +746,6 @@ class TestLoadPath:
     def test_a_missing_name_raises(self, m):
         with pytest.raises(KeyError):
             m.load_path("nope")
-        with pytest.raises(FileNotFoundError):
-            m.load_path("art:video/nope")
 
 
 def test_code_of():
@@ -756,7 +759,7 @@ class TestTheRun:
     def test_the_run_is_a_sub_dat_with_the_execution_facts(self, m, clean_code):
         m.ns.mount(value=lambda dat: "ran", at="plain")
         dat = m.create({"dat": {"do": "plain"}}, path="runs/one")
-        m.run(dat)
+        m._execute(dat)
         run = dat.run
         assert run.get_path() == os.path.join(dat.get_path(), "run")
         assert (Path(run.get_path()) / "_spec_.yaml").exists()
@@ -803,27 +806,24 @@ class TestTheRun:
     def test_a_rolling_dat_replaces_its_run(self, m, clean_code):
         m.ns.mount(value=lambda dat: dat.save(), at="roll")
         dat = m.create({"dat": {"do": "roll", "standing": "rolling"}}, path="runs/roll")
-        m.run(dat)
+        m._execute(dat)
         first = stored_results(dat.run)["dat"]
         Path(dat.run.get_path(), "work", "left.txt").write_text("from the first run")
-        m.run(dat)
+        m._execute(dat)
         second = stored_results(dat.run)["dat"]
         assert second["content"] == dat.get_results()["dat"]["sha256"]
         assert not (Path(dat.run.get_path()) / "work" / "left.txt").exists()
         assert first["run_at"] <= second["run_at"]
 
-    def test_a_dat_written_before_3_0_hashes_as_it_did(self, m, tmp_path):
+    def test_a_dat_hashed_by_the_2x_rule_no_longer_verifies(self, m, tmp_path):
+        """No legacy stores (SVP 1467 Q9): one rule, the functional one; a 2.x hash is refused."""
         folder = tmp_path / "dats" / "old"
         folder.mkdir(parents=True)
-        (folder / "_spec_.yaml").write_text(yaml.safe_dump({"dat": {"kind": "dvc_dat.core.Dat"}}))
+        (folder / "_spec_.yaml").write_text(yaml.safe_dump({"dat": {"kind": "dvc_dat.core.Dat", "name": "old"}}))
         (folder / "out.txt").write_text("old content")
-        result = {"dat": {"run_at": "2026-09-21 16:20:19", "run_time": "00:00:00.011",
-                          "code": {"branch": "main", "commit": "c", "dirty": False},
-                          "dependencies": {}, "standing": "referenceable"}}
+        result = {"dat": {"dependencies": {}, "standing": "referenceable"}}
         import dvc_dat.core as core
         from copy import deepcopy
-        hashed = deepcopy(result)
-        Dat.set(hashed, "dat.sha256", core._hash_dat(str(folder), result))
         # the hash as 2.x computed it: every file, _result_.yaml as its dump with the placeholder
         import hashlib
         lines = []
@@ -836,13 +836,13 @@ class TestTheRun:
         text = yaml.dump(canon, Dumper=core._SpecDumper, sort_keys=True)
         lines.append(f"{RESULT_YAML}\0{hashlib.sha256(text.encode()).hexdigest()}\n")
         old_rule = "sha256:" + hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
-        assert hashed["dat"]["sha256"] == old_rule
+        assert core._hash_dat(str(folder), result) != old_rule
+        hashed = deepcopy(result); Dat.set(hashed, "dat.sha256", old_rule)
         (folder / RESULT_YAML).write_text(yaml.safe_dump(hashed))
-        dat = m.load("old")
-        assert dat.verify() and dat.run is None
-        assert m.standing("old") == "referenceable"
-        with pytest.raises(RuntimeError, match="saved once"):
-            dat.save()
+        assert not m.load("old").verify()
+        m._dat_cache.clear()
+        with pytest.raises(ValueError, match="hashes to sha256:.*not its stored"):
+            m.load("old", verify=True)
 
     def test_copy_without_the_run(self, m, clean_code):
         m.ns.mount(value=lambda dat: dat.save(), at="plain")

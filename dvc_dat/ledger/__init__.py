@@ -6,12 +6,15 @@ everything held or handed back is a ``Value``; a sealed computation is a memo
 entry findable by ``Rev.run``. SQLite backend; ``run`` unsandboxed (in this
 process) or sandboxed (under a ``db/mount/<prefix>``, in a worker).
 
-    from dvc_dat.ledger import Ledger, Ref, ledger_fn, ledger_class, bump, bump_source, attr
-    from dvc_dat import L, ledgers       # L: the active ledger; ledgers.record: one by name
-    rev = L.at()
+    from dvc_dat.ledger import Ledger, Ref, ledger_class, bump, bump_source, attr
+    from dvc_dat import L, ledgers, dat  # L: the active ledger; ledgers.record: one by name; dat: @dat.fn
+    rev = L.at()                         # the head: a Rev that is also a transaction (L.at().pin(v))
     with L.transaction(by="human:dan", lock=10, why="release") as t:
         bump(t, "db", "minor", confirm=lambda old, new: True)   # the release row: db db/version; L.at("0.1.0") reads it
     bump_source("demo_game")             # __version__ in the source; the next clean run moves db/repo/demo-game/demo_game
+
+``Dat`` is ``dvc_dat.Dat``: the ledger loads without the Dat layer (1519 R1), which registers itself with
+``dvc_dat.ledger.hooks`` when it is imported, so a dat is a ``Value`` the moment ``Dat`` exists.
 
 The environment is found by discovery; ``set_env_provider``, ``Env`` and
 ``Checkout`` are the test suite's seam only (A51), importable by name.
@@ -19,21 +22,25 @@ The environment is found by discovery; ``set_env_provider``, ``Env`` and
 
 from .code import Code
 from .env import Checkout, Env, set_env_provider  # noqa: F401  (the test seam, importable by name)
-from .errors import (AliasLoop, ConfinedNetwork, ConfinedWrite, Exists, LedgerError, LockTimeout, Multiple, NotClean, NotEvaluated, SealBroken, Undeclared, Unlocked,
-                     Unindexed,
+from .errors import (AliasLoop, ConfinedNetwork, ConfinedProcess, ConfinedWrite, Differed, Exists, LedgerError, LockTimeout, Multiple, NotClean, NotCopied, NotEvaluated, NotPinned,
+                     SealBroken, SpecOnly, Undeclared, Unlocked, Unindexed,
                      UnmountedImport, UntracedRead)
-from .fn import Fn, ledger_fn
+from .fn import Fn, FnMark
 from .namespace import LedgerNamespace
+from .pin import Rerun
 from .policy import register_policy
+from .backends import Values, register_triples, register_values
 from .helpers import SourceBump, bump, bump_source
 from .ledger import Ledger
-from .named import L, ledgers
-from .rev import Ref, Rev, Row
+from .named import L, ledgers, register_read_guard
+from .rev import Head, Ref, Rev, Row
 from .txn import Transaction, attr
 from .value import Value, ledger_class
-from ..core import Dat                  # one class: a dat is a Value (DAT 1038)
+from .video import Video
 
-__all__ = ["Ledger", "ledgers", "L", "Rev", "Ref", "Row", "Transaction", "Value", "Dat", "Fn", "Code", "LedgerNamespace",
-           "ledger_fn", "ledger_class", "register_policy", "bump", "bump_source", "SourceBump", "attr", "LedgerError", "Multiple", "NotEvaluated", "NotClean",
-           "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
+__all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Transaction", "Value", "Video", "Fn", "FnMark", "Code",
+           "LedgerNamespace", "Rerun",
+           "ledger_class", "register_policy", "register_read_guard", "register_values", "register_triples", "Values", "bump", "bump_source", "SourceBump", "attr",
+           "LedgerError", "Multiple", "NotEvaluated", "NotClean", "NotPinned", "NotCopied", "SpecOnly", "Differed",
+           "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "ConfinedProcess", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
            "AliasLoop", "SealBroken"]

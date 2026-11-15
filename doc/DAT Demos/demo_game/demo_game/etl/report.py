@@ -1,11 +1,12 @@
 """`demo_game.etl.report`: one parquet `Value.Table` over a game set."""
 import pyarrow as pa
 
-from dvc_dat.ledger import Value, ledger_fn
+from dvc_dat.ledger import Value
+from dvc_dat import dat
 from demo_game.etl.dat import StageDat
 
 
-@ledger_fn
+@dat.fn
 def scores(rev, *, gameset: str) -> Value.Table:
     models = rev.values(kind=StageDat, stage="model",
                         gameset=gameset)        # traced: a q: item

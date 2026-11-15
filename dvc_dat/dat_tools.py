@@ -1,11 +1,13 @@
-import os
-from typing import Union, Iterable, Dict, List, Any, Callable, Tuple
+from __future__ import annotations
 
-import numpy as np
-import pandas as pd
-from pandas import DataFrame, ExcelWriter, Series
+import os
+from typing import TYPE_CHECKING, Union, Iterable, Dict, List, Any, Callable, Tuple
+
 from dvc_dat import Dat, DatContainer
 from dvc_dat.do import ns
+
+if TYPE_CHECKING:
+    from pandas import DataFrame, Series
 
 """
 Helper functions for creating data frames and manipulating data frames.
@@ -22,6 +24,16 @@ API
 
 
 """
+
+
+def _pandas() -> Any:
+    """pandas, which the tables need (dvc-dat[tools]); ``ImportError`` naming the extra when it is absent."""
+    try:
+        import pandas
+    except ImportError:
+        raise ImportError("dvc_dat.dat_tools: the tables need pandas, which the base install leaves out; "
+                          "install dvc-dat[tools]") from None
+    return pandas
 
 
 Points = List[Dict[str, Any]]
@@ -117,6 +129,9 @@ def to_excel(df: DataFrame, *,
     verbose: bool,
         If True, the report is printed to the console.  (default True???)
     """
+    pd = _pandas()
+    import numpy as np                          # pandas's own dependency
+
     df = df.copy()
     if transform:
         df = transform(df)
@@ -179,7 +194,7 @@ def to_excel(df: DataFrame, *,
 def _create_sheets(path, df, sheet_prefix, sheets, columns, verbose, show, index):
     if os.path.exists(path):
         os.remove(path)
-    with ExcelWriter(path, engine='xlsxwriter') as writer:
+    with _pandas().ExcelWriter(path, engine='xlsxwriter') as writer:
         if not sheets:
             df.to_excel(writer, sheet_name=sheet_prefix or "Sheet1", index=index)
         else:
@@ -303,7 +318,7 @@ class Cube(object):
 
     def get_df(self) -> DataFrame:
         """Returns the cube as a Pandas DataFrame."""
-        return DataFrame(self.points)
+        return _pandas().DataFrame(self.points)
 
     def _add_dats(self, source: Union[Dat, str, Iterable],
             this_index: Union[int, str], indicies: Dict[str, str]) -> None:

@@ -1,6 +1,6 @@
 """Core latent bugs (deep scan round 4, 2026-10-27): a fork that wipes or reuses its parent, an overwrite
 that hands back the old object or wipes the old dat before its spec is made, a stored literal brace
-re-expanded, a dat.base cycle, a _spec_.json dat's save, the k=v grammar, a dotted --set under a scalar."""
+re-expanded, a dat.base cycle, a _spec_.json dat's save, the k=v grammar, a dotted override under a scalar."""
 import json
 from pathlib import Path
 
@@ -29,17 +29,15 @@ def _seal(dat, *a, **k):
     return dat
 
 
-# --- F1: forking a Dat whose spec says target_exists: overwrite deletes the parent ---------
-def test_fork_of_overwrite_dat_keeps_parent(world):
+# --- F1 (SVP 1508): a Dat is not a run target; its folder is untouched by the refusal --------
+def test_run_of_a_dat_is_refused_and_keeps_it(world):
     world.ns.mount(at="seal_fn", value=_seal)
     parent = world.run({"dat": {"do": "seal_fn", "name": "exp1", "target_exists": "overwrite",
                                 "kwargs": {"x": 1}}})
     Path(parent.get_path(), "precious.txt").write_text("only copy")
-    try:
+    with pytest.raises(Exception) as e:
         world.run(parent, x=2)
-    except Exception:
-        pass        # today: the fork rmtree's the parent, then trips on the stale cached (sealed) parent
-    # docstring: "forks a new dat from its spec ... a fork lands beside its parent"
+    assert isinstance(e.value.__cause__, TypeError) and "get_spec()" in str(e.value.__cause__)
     assert Path(parent.get_path(), "precious.txt").exists()
 
 
@@ -53,22 +51,49 @@ def test_overwrite_create_returns_fresh_dat(world):
     assert second.get_spec()["v"] == 2
 
 
-# --- F2: forking a Dat whose spec says target_exists: use returns the parent, args dropped --
-def test_fork_of_use_dat_runs_with_new_args(world):
+# --- F4: a stored spec is expanded already; its recipe runs again quoted, dat.name put back ----
+def test_rerun_of_a_stored_spec_with_a_literal_brace(world):
+    pytest.importorskip("omegaconf")
     world.ns.mount(at="seal_fn", value=_seal)
-    parent = world.run({"dat": {"do": "seal_fn", "name": "exp2", "target_exists": "use",
-                                "kwargs": {"x": 1}}})
-    child = world.run(parent, x=2)
-    assert Dat.get(child.get_spec(), "dat.kwargs.x") == 2
+    parent = world.run({"dat": {"do": "seal_fn", "name": "exp4${unique:}"}, "note": "\\${literal} {x}"})
+    assert parent.get_spec()["note"] == "${literal} {x}"       # resolved once, as documented
+    spec = world.ns.quote_spec(parent.get_spec())
+    spec["dat"]["name"] = parent.get_spec()["dat"]["name"]
+    child = world.run(spec, x=2)
+    assert child.get_spec()["note"] == "${literal} {x}"
+    assert child.get_path_name() == "exp4_2" and Dat.get(child.get_spec(), "dat.kwargs.x") == 2
 
 
-# --- F4: forking a stored dat re-expands its already-expanded spec ------------------------
-def test_fork_of_dat_with_literal_brace_in_spec(world):
-    world.ns.mount(at="seal_fn", value=_seal)
-    parent = world.run({"dat": {"do": "seal_fn", "name": "exp4"}, "note": "{{literal}}"})
-    assert parent.get_spec()["note"] == "{literal}"       # expanded once, as documented
-    child = world.run(parent, x=2)                         # today: KeyError unknown name {literal}
-    assert child.get_spec()["note"] == "{literal}"
+# --- 1467 Q2 (A): a call-site argument is data; the run receives exactly what was passed ---
+def _kw(dat, *args, **kwargs):
+    return [list(args), kwargs]
+
+
+def test_run_kwarg_with_braces_kept_as_typed(world):
+    world.ns.mount(at="kw_fn", value=_kw)
+    assert world.run({"dat": {"do": "kw_fn"}}, pattern=r"\d{3}") == [[], {"pattern": r"\d{3}"}]
+
+
+def test_run_kwarg_with_escaped_braces_kept_as_typed(world):
+    world.ns.mount(at="kw_fn", value=_kw)
+    out = world.run({"dat": {"do": "kw_fn"}}, "{a}", fmt="{{x}}", when="{now}")
+    assert out == [["{a}"], {"fmt": "{{x}}", "when": "{now}"}]
+
+
+def test_a_spec_template_still_expands_beside_a_literal_kwarg(world):
+    pytest.importorskip("omegaconf")
+    world.ns.mount(at="kw_fn", value=_kw)
+    out = world.run({"dat": {"do": "kw_fn", "kwargs": {"y": "\\${lit}", "z": "${dat.kwargs.pattern}"}}},
+                    pattern="${x}")
+    assert out == [[], {"y": "${lit}", "z": "${x}", "pattern": "${x}"}]
+
+
+def test_cli_kwarg_with_braces_kept_as_typed(world, capsys):
+    from dvc_dat.do import _cmd_do
+    world.ns.mount(at="kw_fn", value=_kw)
+    world.ns.mount(at="kw_tmpl", value={"dat": {"do": "kw_fn"}})
+    assert _cmd_do(["kw_tmpl", r"pattern=\d{3}"]) == 0
+    assert capsys.readouterr().out.strip() == str([[], {"pattern": r"\d{3}"}])
 
 
 # --- F5: a dat.base cycle is unbounded recursion, not a clear error -----------------------
@@ -76,7 +101,7 @@ def test_base_cycle_is_a_clear_error(world):
     world.ns.mount(at="cyc_a", value={"dat": {"base": "cyc_b"}})
     world.ns.mount(at="cyc_b", value={"dat": {"base": "cyc_a"}})
     with pytest.raises((ValueError, TypeError, KeyError)):
-        world.expand_spec({"dat": {"base": "cyc_a"}})
+        world.ns.expand_spec({"dat": {"base": "cyc_a"}})
 
 
 # --- F6: save() of a dat whose spec is _spec_.json (spec-format: "a _spec_.json is read too")
@@ -125,23 +150,24 @@ def test_failed_overwrite_create_keeps_old_dat(world):
     world.create({"dat": {"name": "keep", "target_exists": "overwrite"}, "v": 1})
     old = Path(world._dat_folders[0], "keep")
     (old / "result.csv").write_text("hours of compute")
-    with pytest.raises(KeyError):
-        world.create({"dat": {"name": "keep", "target_exists": "overwrite"}, "v": "{typo}"})
+    pytest.importorskip("omegaconf")
+    with pytest.raises(Exception, match="typo"):
+        world.create({"dat": {"name": "keep", "target_exists": "overwrite"}, "v": "${typo}"})
     # spec-format: a reference that does not resolve is an error at create "and no folder is made"
     assert (old / "result.csv").exists()
 
 
 
 
-# --- F13: a --set dotted key under a scalar it set itself escapes as a traceback ------------
+# --- F13: a dotted key under a scalar the line set itself is a CLI error, not a traceback ------------
 def test_set_dotted_under_scalar_is_a_cli_error(world):
     from dvc_dat.do import _cmd_do
     world.ns.mount(at="tmpl13", value={"dat": {}})
     # _cmd_do turns a malformed line into exit 1 + "run: ..." -- it catches ValueError only
-    assert _cmd_do(["tmpl13", "--set", "a=1", "--set", "a.b=2"]) == 1
+    assert _cmd_do(["tmpl13", "p.a=1", "p.a.b=2"]) == 1
 
 
-# --- --set / --json set one spec key: a dict or a named list replaces, never merges (cli.md § Options) ---
+# --- an override sets the key it names: a dict or a named list replaces, never merges (cli.md § Overrides) ---
 _SEEN = {}
 
 
@@ -149,15 +175,14 @@ def _see(dat, *a, **k):
     _SEEN["spec"] = dat.get_spec()
 
 
-def test_set_and_json_set_the_key_they_name(world):
+def test_an_override_sets_the_key_it_names(world):
     from dvc_dat.do import _cmd_do
     world.ns.mount(at="see_fn", value=_see)
-    world.ns.mount(at="tmpl5", value={"dat": {"do": "see_fn"}, "cfg": {"a": 1},
-                                      "stages": [{"name": "x", "k": 1}, {"name": "y"}]})
-    assert _cmd_do(["tmpl5", "--json", "cfg={}", "--json", 'stages=[{"name": "z"}]',
-                    "--set", "dat.title=T"]) == 0
+    world.ns.mount(at="tmpl5", value={"dat": {"do": "see_fn"}, "p": {"cfg": {"a": 1},
+                                      "stages": [{"name": "x", "k": 1}, {"name": "y"}]}})
+    assert _cmd_do(["tmpl5", "p.cfg={}", 'p.stages=[{"name": "z"}]', "dat.title=T"]) == 0
     spec = _SEEN["spec"]
-    assert spec["cfg"] == {} and spec["stages"] == [{"name": "z"}]
+    assert spec["p"]["cfg"] == {} and spec["p"]["stages"] == [{"name": "z"}]
     assert spec["dat"]["do"] == "see_fn" and spec["dat"]["title"] == "T"     # a dotted key sets one leaf
 
 
@@ -274,3 +299,38 @@ def test_an_array_mounted_as_a_value_loads(world):
     np = pytest.importorskip("numpy")
     world.ns.mount(at="arr", value=np.arange(3))
     assert list(world.ns.load("arr")) == [0, 1, 2]
+
+
+# --- 1467 Q4 (A): a URN whose index key a same-hash twin's delete dropped is found by a walk on the miss ------
+def test_urn_survives_deleting_a_same_hash_twin(world):
+    world.ns.mount(at="seal_fn", value=_seal)
+    a = world.run({"dat": {"do": "seal_fn", "name": "twin_a"}, "k": 1})
+    b = world.run({"dat": {"do": "seal_fn", "name": "twin_b"}, "k": 1})
+    urn = a._sha256()
+    assert urn == b._sha256()                       # the hash leaves out dat.name
+    b.delete()
+    assert urn not in world._read_index()           # the later twin held the key; its delete dropped it
+    assert world.load(urn).get_path() == a.get_path()
+    assert world._read_index()[urn] == {"dat": "twin_a"}    # re-keyed: the next load is the index's
+    a.delete()
+    with pytest.raises(KeyError, match="no saved dat holds it"):
+        world.load(urn)
+
+
+# --- 1467 Q13 (A): overwrite deletes only inside dat_folders or the art_folder --------------------------------
+def test_overwrite_outside_the_dat_folders_is_refused_and_deletes_nothing(world, tmp_path):
+    outside = tmp_path / "elsewhere" / "exp"
+    outside.mkdir(parents=True)
+    (outside / "precious.txt").write_text("only copy")
+    for name in (str(outside), "../elsewhere/exp"):
+        with pytest.raises(ValueError, match="outside the dat folders and the art folder"):
+            world.create({"dat": {"name": name, "target_exists": "overwrite"}})
+        assert (outside / "precious.txt").read_text() == "only copy"
+
+
+def test_overwrite_inside_the_dat_folders_still_overwrites(world, tmp_path):
+    first = world.create({"dat": {"name": "ow_in", "target_exists": "overwrite"}, "v": 1})
+    Path(first.get_path(), "stale.txt").write_text("old")
+    absolute = str(tmp_path / "data" / "ow_in")
+    second = world.create({"dat": {"name": absolute, "target_exists": "overwrite"}, "v": 2})
+    assert second.get_spec()["v"] == 2 and not Path(second.get_path(), "stale.txt").exists()

@@ -10,6 +10,9 @@ record at commit. What stays is sealed and never saved: ``listing`` shows it, ``
 removes it. The root is ``$DAT_KEPT``, else ``~/.cache/dvc-dat/kept``. Layout:
 ``blobs/<sha256>`` (one file per distinct kept blob) and ``sealed/<entry>.json`` (one per seal).
 A new seal of a folder replaces the unkept records of that folder (their bytes are gone).
+Every record and kept blob lands at a temp name, is flushed (``F_FULLFSYNC`` on macOS), and is
+renamed into place, its folder flushed after: a kept folder on a removable drive pulled right after
+a seal holds the whole record or none of it.
 
     just sealed                       # the listing (python -m dvc_dat.ledger.kept)
     just sealed purge [older=14d]     # drop values sealed more than 14 days ago, never saved
@@ -27,8 +30,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from .codec import sha256
-from .store import Part, place
+from .store import FileSink, Part, flush, flush_path, place
 
 
 def root() -> Path:
@@ -53,12 +55,22 @@ class Kept:
     def _write(path: Path, data: bytes) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
-        tmp.write_bytes(data)
+        with open(tmp, "wb") as f:
+            f.write(data)
+            f.flush()
+            flush(f.fileno())
         os.replace(tmp, path)
+        flush_path(path.parent)
 
-    def seal(self, record: Dict[str, Any], data: Optional[bytes] = None, parts: Iterable[Part] = ()) -> str:
-        """Write the record of one ``v.seal()``; with ``data`` (``keep=True``) keep the encoding and its
-        ``parts`` (``(sha256, source)``) too. Returns the new entry's id.
+    def sink(self) -> FileSink:
+        """A write stream for one kept encoding: hashed as written, renamed at close to ``blobs/<sha256>``
+        (write-once), never held in memory whole (DAT 240)."""
+        return FileSink(self.root / "blobs", self._blob_path, durable=True)
+
+    def seal(self, record: Dict[str, Any], keep: bool = False, parts: Iterable[Part] = ()) -> str:
+        """Write the record of one ``v.seal()``; with ``keep`` (``keep=True``) the encoding is kept already
+        (written through ``sink``, under the record's ``hash``) and its ``parts`` (``(sha256, source)``) are
+        kept too. Returns the new entry's id.
 
         Each part is cloned into ``blobs/`` copy-on-write where the filesystem can (APFS ``clonefile``,
         Linux reflink: no disk), else copied in 1 MiB blocks; either way checked against its hash, never
@@ -66,16 +78,15 @@ class Kept:
         An unkept record of a folder replaces the unkept records of that folder.
         """
         rec = dict(record)
-        rec["kept"] = data is not None
+        rec["kept"] = bool(keep)
         rec["parts"] = []
-        if data is not None:
+        if keep:
             names = []
             for h, source in parts:
-                place(source, self._blob_path(h), h, link=False, clone_ok=True)
+                place(source, self._blob_path(h), h, link=False, clone_ok=True, durable=True)
                 names.append(h)
-            b = sha256(data)
-            if not self._blob_path(b).exists():
-                self._write(self._blob_path(b), data)
+            b = rec["hash"]
+            self.blob(b)                        # written through sink() before the record
             rec["parts"] = names
             rec["bytes"] = sum(self._blob_path(n).stat().st_size for n in dict.fromkeys(names + [b]))
         entry = f"{rec['sealed_at'].replace(':', '')}-{time.time_ns():x}-{uuid.uuid4().hex[:8]}"   # sorts by time
@@ -134,8 +145,8 @@ class Kept:
     def purge(self, older: _dt.timedelta) -> List[str]:
         """Drop every entry sealed more than ``older`` ago (and every unreadable one), then every blob
         no entry names and older than an hour (a concurrent ``put`` may not have written its entry yet)."""
-        cut = (_dt.datetime.now(_dt.timezone.utc) - older).strftime("%Y-%m-%dT%H:%M:%SZ")
-        gone = [e["entry"] for e in self.listing() if (e.get("sealed_at") or "") <= cut]
+        cut = _dt.datetime.now(_dt.timezone.utc) - older
+        gone = [e["entry"] for e in self.listing() if _sealed_before(e.get("sealed_at"), cut)]
         for entry in gone:
             self.drop(entry)
         live = set()
@@ -148,6 +159,14 @@ class Kept:
             if p.name not in live and not p.name.endswith(".tmp") and p.stat().st_mtime < settled:
                 p.unlink(missing_ok=True)
         return gone
+
+
+def _sealed_before(stamp: Any, cut: "_dt.datetime") -> bool:
+    """A record's ``sealed_at`` (ISO 8601 with an offset) is at or before ``cut``; an unreadable one is."""
+    try:
+        return _dt.datetime.fromisoformat(stamp) <= cut
+    except (TypeError, ValueError):
+        return True
 
 
 # -- the record's deps, preds and environment ---------------------------------------------------

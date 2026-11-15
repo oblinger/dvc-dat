@@ -18,6 +18,7 @@ A bare ``int``, ``float``, ``bool`` or ``None`` is refused by ``add`` (Q5 (A)).
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import re
 from typing import Any, Optional, Tuple
@@ -34,6 +35,58 @@ def canonical(doc: Any, *, strict: bool = False) -> str:
 def sha256(data: bytes) -> str:
     """The hex sha256 of ``data``."""
     return hashlib.sha256(data).hexdigest()
+
+
+class HashSink(io.RawIOBase):
+    """A write-only, forward-only binary stream that hashes and counts what passes through it (DAT 240):
+    ``hash`` (hex sha256) and ``size`` read what was written so far. A subclass also writes the bytes
+    somewhere (``store.FileSink``). ``seek`` is refused: an encoder that seeks back would make the digest
+    wrong."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._digest = hashlib.sha256()
+        self._size = 0
+
+    def writable(self) -> bool:
+        return True
+
+    def seekable(self) -> bool:
+        return False
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        raise io.UnsupportedOperation(f"{type(self).__name__} is forward-only: an encoder writes its bytes once, "
+                                      "in order, and never seeks")
+
+    def tell(self) -> int:
+        return self._size
+
+    def write(self, b: Any) -> int:
+        if self.closed:
+            raise ValueError(f"write to a closed {type(self).__name__}")
+        view = memoryview(b).cast("B")
+        self._digest.update(view)
+        self._out(view)
+        self._size += len(view)
+        return len(view)
+
+    def _out(self, view: memoryview) -> None:
+        """Where the bytes go besides the digest: nowhere, here."""
+
+    @property
+    def hash(self) -> str:
+        """The hex sha256 of everything written."""
+        return self._digest.hexdigest()
+
+    @property
+    def size(self) -> int:
+        """How many bytes were written."""
+        return self._size
+
+
+def hash_sink() -> HashSink:
+    """A sink backed by nothing: what a value's ``hash`` and a repeat check encode into."""
+    return HashSink()
 
 
 def hash_text(text: str, n: int = 64) -> str:
@@ -92,3 +145,50 @@ def show(text: str) -> str:
     """A stored object as one line of text: a str as is, JSON canonical, a ref as its tag text."""
     t, _, rest = text.partition(":")
     return text if t == "ref" else rest
+
+
+#: ``dotted_get``'s marker for "no default given".
+NO_DEFAULT: Any = object()
+
+
+def dotted_get(source: Any, keys: Any, default_value: Any = NO_DEFAULT) -> Any:
+    """The value at a dotted key path (``"dat.do"``, or a list of keys) in a dict tree (``Dat.get``'s walk).
+
+    A missing key, or a value that is ``None``, returns ``default_value``, and is ``KeyError`` when none is
+    given; a non-dict on the path is ``ValueError``."""
+    d = source
+    if isinstance(keys, str):
+        keys = keys.split(".")
+    result = None
+    for k in keys:
+        if d is None:
+            break
+        if not isinstance(d, dict):
+            raise ValueError(f"GET: Expected dict value for {k!r} not {d!r}")
+        d = d.get(k)
+    else:
+        result = d
+    if result is not None:
+        return result
+    if default_value is NO_DEFAULT:
+        raise KeyError(f"GET: Key {keys} not found in {source!r}")
+    return default_value
+
+
+def dotted_set(source: Any, keys: Any, value: Any) -> None:
+    """Set ``value`` at a dotted key path in a dict tree, creating missing levels as dicts (``Dat.set``'s walk);
+    a non-dict on the path is ``ValueError``."""
+    assert source is not None, "set method requires a non None dict"
+    assert len(keys) > 0, "set method requires at least one key"
+    if isinstance(keys, str):
+        keys = keys.split(".")
+    for k in keys[:-1]:
+        if not isinstance(source, dict):
+            raise ValueError(f"Expected dict value for {k!r} not {source!r}")
+        sub = source.get(k)
+        if sub is None:
+            sub = source[k] = {}
+        source = sub
+    if not isinstance(source, dict):
+        raise ValueError(f"Expected dict value for {keys[-1]!r} not {source!r}")
+    source[keys[-1]] = value

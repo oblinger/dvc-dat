@@ -17,18 +17,19 @@ _VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
 def bump(t: Transaction, subject: str, part: str = "patch", *,
          confirm: Optional[Callable[[str, str], bool]] = None) -> str:
-    """Read ``subject``'s ``db/version`` through ``t.previous_rev`` (``0.0.0`` when absent), add the next by
-    ``part``, return it. ``db/version`` is the version predicate on every subject (DAT 1052 Q3): on ``db`` it
-    is the release ``L.at("M.m.p")`` reads; a bare ``version`` row is user data and is not read.
+    """Read ``subject``'s ``db/version`` through ``t.previous_rev``, add the next by ``part``, and return it.
 
-    A read-then-write, so ``t`` must be opened with ``lock=``: unlocked, ``t.previous_rev`` raises
-    ``Unlocked`` and nothing is written.
+    ``db/version`` (``0.0.0`` when absent) is the version predicate on every subject (DAT 1052 Q3): on ``db`` it is
+    the release ``L.at("M.m.p")`` reads; a bare ``version`` row is user data and is not read.
 
-    For clocks only: a subject holding a ``db/alias`` row raises ``TypeError`` naming the alias (a
-    value's version is a pred; a new version is a new seal and a re-point), and so does a ``db/repo/``
-    subject: a code version lives in its source (``bump_source``), and the first clean run after it moves
-    the ``db/repo/<repo>/<package>`` clock, which the ledger alone writes (DAT 1043, 1044). ``minor`` and ``major`` need ``confirm(old, new)`` to answer
-    ``True``; without ``confirm`` they are refused (A38). Nothing is written on any refusal.
+    A read-then-write, so ``t`` must be opened with ``lock=``: unlocked, ``t.previous_rev`` raises ``Unlocked`` and
+    nothing is written.
+
+    For clocks only: a subject holding a ``db/alias`` row raises ``TypeError`` naming the alias (a value's version is
+    a pred; a new version is a new seal and a re-point), and so does a ``db/repo/`` subject: a code version lives in
+    its source (``bump_source``), and the first clean run after it moves the ``db/repo/<repo>/<package>`` clock, which
+    the ledger alone writes (DAT 1043, 1044). ``minor`` and ``major`` need ``confirm(old, new)`` to answer ``True``;
+    without ``confirm`` they are refused (A38). Nothing is written on any refusal.
     """
     if subject.startswith("db/repo/"):
         raise TypeError(f"{subject}: a code version lives in its source; just bump <module> [part] edits "
@@ -84,16 +85,21 @@ def bump_source(module: str, part: str = "patch", *,
                 confirm: Optional[Callable[[str, str], bool]] = None) -> SourceBump:
     """Raise ``module``'s ``__version__`` by ``part`` in its source: one line rewritten, nothing else.
 
-    ``module`` is a dotted name importable in this process. The version is the innermost one on its
-    dotted path: the module's own file, then each enclosing package's ``__init__.py`` up to the
-    top-level package, the first holding one line ``__version__ = "X.Y.Z"`` (so ``demo_game.etl``, a
-    mount's root declaring its own, finds ``demo_game/etl/__init__.py``; ``mymodule.mult`` finds
-    ``mymodule/__init__.py``). ``minor`` and ``major`` need ``confirm(old, new)`` to answer ``True``, as
-    ``bump``. Never commits and never touches a ledger: the first clean run after the commit moves the
-    ``db/repo/<repo>/<package>`` clock (DAT 1043, 1044). ``repo`` is the checkout's name by discovery, ``None`` outside one.
-    Refusals, nothing written: ``ModuleNotFoundError`` for a module that does not resolve, ``ValueError``
-    for no ``__version__`` line (naming the top-level package's file) or one that is not
-    ``MAJOR.MINOR.PATCH``."""
+    ``module`` is a dotted name importable in this process. The version is the innermost one on its dotted path: the
+    module's own file, then each enclosing package's ``__init__.py`` up to the top-level package, the first holding
+    one line ``__version__ = "X.Y.Z"`` (so ``demo_game.etl``, a mount's root declaring its own, finds
+    ``demo_game/etl/__init__.py``; ``mymodule.mult`` finds ``mymodule/__init__.py``). ``minor`` and ``major`` need
+    ``confirm(old, new)`` to answer ``True``, as ``bump``. Never commits and never touches a ledger: the first clean
+    run after the commit moves the ``db/repo/<repo>/<package>`` clock (DAT 1043, 1044). ``repo`` is the checkout's
+    name by discovery, ``None`` outside one.
+
+    Refusals, nothing written: ``ModuleNotFoundError`` for a module that does not resolve, ``ValueError`` for no
+    ``__version__`` line (naming the top-level package's file) or one that is not ``MAJOR.MINOR.PATCH``.
+
+    Returns ``SourceBump(module, old, new, path, repo, package)``: ``package`` is the dotted root whose file holds the
+    version, the ``<package>`` of the ``db/repo/<repo>/<package>`` clock the next clean run moves. A mount name is
+    reached by its dotted module name, not by ``db/mount/<prefix>``. ``just bump <module> [part]`` is this call.
+    """
     from .env import _git, repo_name
 
     if not isinstance(module, str) or not module:

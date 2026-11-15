@@ -10,7 +10,7 @@ from dvc_dat import Dat, DatContainer, DatManager
 
 from ledger_kinds import CALLS, NotedDat
 
-SPEC = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/table{unique}", "kwargs": {"n": 12, "start": 1}}}
+SPEC = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/table${unique:}", "kwargs": {"n": 12, "start": 1}}}
 
 
 @pytest.fixture
@@ -32,7 +32,7 @@ def made(spec=SPEC, **kwargs):
 
 
 def test_the_ledger_dat_is_the_core_dat():
-    assert ledger_pkg.Dat is Dat and issubclass(Dat, ledger_pkg.Value)
+    assert "Dat" not in ledger_pkg.__all__ and issubclass(Dat, ledger_pkg.Value)
     assert not hasattr(ledger_pkg.value, "Dat")
 
 
@@ -61,8 +61,8 @@ def test_a_dats_preds_default_to_its_kwargs_and_results(L, world):
 
 
 def test_values_of_kind_dat_find_it(L, world):
-    made().seal(L, name="table/12")
-    made(n=5).seal(L, name="table/5")
+    made().seal(L, name="table/12", skip=("run",))
+    made(n=5).seal(L, name="table/5", skip=("run",))
     assert [str(v) for v in L.at().values(kind=Dat)] == ["table/12", "table/5"]
     assert str(L.at().value(n=5)) == "table/5"
 
@@ -126,6 +126,33 @@ def test_rev_run_kwargs_fork_the_spec_and_path_names_it(coded, world):
     assert coded.at().run(SPEC, n=6, seal="get") is None
 
 
+def test_rev_run_fills_the_name_and_seals_the_preds(coded, world):
+    """SVP 1508, 1519 (Dan 2026-11-07): the spec's own ``dat.kwargs`` are its defaults, the call's keywords over them
+    key by key; they fill ``dat.name`` and ``dat.preds``; the preds are rows on the sealed value; the memo key keeps
+    the preds' template, not their expansion, and the merged kwargs."""
+    pytest.importorskip("omegaconf")
+    CALLS.clear()
+    spec = {"dat": {**SPEC["dat"], "name": "tables/${dat.kwargs.n}-${dat.kwargs.start}",
+                    "preds": {"size": "n${dat.kwargs.n}s${dat.kwargs.start}"}}}
+    v = coded.at().run(spec, n=5)                                       # start: the spec's own, 1
+    assert str(v) == "tables/5-1" and v.preds["size"] == "n5s1"
+    rows = coded.at()
+    assert rows.get(v.subject, "size") == "n5s1"
+    keys = rows.get(v.subject, "db/keys")["dat"]
+    assert keys["preds"] == {"size": "n${dat.kwargs.n}s${dat.kwargs.start}"} and keys["kwargs"] == {"n": 5, "start": 1}
+    over = coded.at().run(spec, n=5, start=3)                           # a keyword over the spec's own
+    assert str(over) == "tables/5-3" and coded.at().get(over.subject, "db/keys")["dat"]["kwargs"] == {"n": 5, "start": 3}
+    spec["dat"]["kwargs"]["start"] = 2                                  # a new default: a new key, a new name
+    assert str(coded.at().run(spec, n=5)) == "tables/5-2" and CALLS == {"build_table": 3}
+    spec["dat"]["kwargs"]["start"] = 1
+    assert coded.at().run(spec, n=5).subject == v.subject and CALLS == {"build_table": 3}
+
+
+def test_a_dat_defaults_node_is_refused(coded, world):
+    with pytest.raises(ValueError, match="dat.defaults is gone"):
+        coded.at().run({"dat": {**SPEC["dat"], "defaults": {"tag": ""}}})
+
+
 def test_rev_run_takes_a_spec_by_name_or_its_run_function_by_name(coded, world):
     CALLS.clear()
     a = coded.at().run("ledger_kinds.TABLE_SPEC")                       # a dict, by its dotted name
@@ -176,7 +203,7 @@ def test_a_ledger_project_gets_the_ledgers_do_and_a_plain_one_the_plain_do(tmp_p
     led, plain = tmp_path / "led", tmp_path / "plain"
     led.mkdir()
     plain.mkdir()
-    (led / ".datconfig.yaml").write_text("ledger: .dat/ledger\n")
+    (led / ".datconfig.yaml").write_text("root: .dat/ledger\ndefault: root\nnamespace: ledger\n")
     Ledger(led / ".dat" / "ledger", create=True)
     (plain / ".datconfig.yaml").write_text("dat_folders: data\n")
     m = DatManager.load_dat_config(led)
@@ -188,3 +215,10 @@ def test_a_ledger_project_gets_the_ledgers_do_and_a_plain_one_the_plain_do(tmp_p
     assert type(p.ns) is Namespace
     p.ns.mount(value={"dat": {}}, at="specs.x")
     assert p.ns.load("specs.x") == {"dat": {}}
+
+
+def test_a_path_template_counts_a_whole_segment_through_rev_ns(coded, world):
+    """SVP 1500: ``dat.name``'s ``${unique:}`` on a ledger run is ``rev.ns.expand``'s counter."""
+    spec = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/${unique:}", "kwargs": {"n": 12, "start": 1}}}
+    assert str(coded.at().run(spec, n=5)) == "tables/1"
+    assert str(coded.at().run(spec, n=6)) == "tables/2"

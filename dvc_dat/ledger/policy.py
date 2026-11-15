@@ -18,7 +18,8 @@ every entry, old or new, is judged by the policy in force at the lookup. Built-i
 
 ``register_policy(name, fn)`` adds one in code; the triple stores the name, so every process that looks
 up under it must register it first (an unregistered name is ``LedgerError`` at the lookup).
-``deterministic=True`` on a call adds ``card`` and ``driver`` to whatever the policy compares.
+A function claiming ``exact`` (``@dat.fn(reproducible="exact")``) adds ``card`` and ``driver`` to whatever the
+policy compares.
 
 The index: each store handle keeps ``subject -> policy(stored record)`` for every memo entry, stamped with
 the policy (name and function) it was built under. A lookup compares the stamp with the policy in force,
@@ -44,8 +45,8 @@ Policy = Callable[[Mapping[str, Any]], str]
 SUBJECT = "db"
 PREDICATE = "db/memo-policy"
 DEFAULT = "platform"
-#: What ``deterministic=True`` adds to the policy's comparison.
-DETERMINISTIC = ("card", "driver")
+#: What a function claiming ``exact`` adds to the policy's comparison.
+EXACT_FIELDS = ("card", "driver")
 
 
 def _platform(r: Mapping[str, Any]) -> str:
@@ -61,8 +62,14 @@ BUILT_IN = frozenset(POLICIES)
 
 
 def register_policy(name: str, fn: Policy) -> None:
-    """Make ``fn`` (record -> ``str``) the memo policy named ``name``, for a ``(db, db/memo-policy, name)`` row
-    to select; a built-in name is refused. Registering a name again replaces it (the index rebuilds)."""
+    """Make ``fn`` (record -> ``str``) the memo policy named ``name``.
+
+    For a ``(db, db/memo-policy, name)`` row to select ([Memoization and the platform][memoization-and-the-platform]);
+    a built-in name (``platform``, ``card``) is ``ValueError``. Registering a name again replaces it (the index
+    rebuilds).
+
+    Process-local: every process that looks up under the name registers it first, else the lookup is ``LedgerError``.
+    """
     if not isinstance(name, str) or not name:
         raise TypeError(f"a policy name is a non-empty str, not {name!r}")
     if name in BUILT_IN:

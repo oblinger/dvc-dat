@@ -12,6 +12,7 @@ import pytest
 tests_dir = Path(__file__).parent
 sys.path.insert(0, str(tests_dir.parent))
 
+import pg_server  # noqa: E402
 from dvc_dat import Dat, DatManager  # noqa: E402
 
 ns = Dat.ns
@@ -27,6 +28,24 @@ import mounts  # noqa: E402,F401  -- the test namespace; a program imports its o
 # Everything else builds its world under `tmp_path` and spreads across workers.
 # `tryfirst`: xdist reads the marks in its own collection hook.
 _OWN_WORLD = {"test_capture_and_artifacts.py"}
+
+
+@pytest.fixture(autouse=True)
+def _the_default_world_is_restored():
+    """A test that replaces `Dat.manager` puts it back.  One that does not fails here, at itself, and the
+    world is restored: left changed, every later test in the process reads the wrong one, which only a
+    sequential run shows (SVP 1546)."""
+    from dvc_dat import core
+    before = core._default_manager
+    yield
+    after = core._default_manager
+    if after is not before:
+        core._default_manager = before
+        pytest.fail(f"the test left Dat.manager changed ({after!r}); restore it", pytrace=False)
+
+
+def pytest_configure(config):
+    pg_server.check_environment()       # DVC_DAT_TEST_PG on port 5433 stops the run before it starts (SVP 1548)
 
 
 @pytest.hookimpl(tryfirst=True)

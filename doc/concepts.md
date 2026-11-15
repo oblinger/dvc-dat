@@ -30,7 +30,7 @@ dat = Dat.load("runs/2026-09/exp")
 **Dotted names** (`catalog.experiment`, `os.path.join`) name source code:
 templates, functions, constants. `ns.load` resolves them — first against the
 names the program mounted with `ns.mount(...)` (in code; the config's `mounts:`
-key is the ledger's, asserted by `Ledger()` as `db/mount/<prefix>` rows), then by import: the longest importable
+key, `mnt.<prefix>: <root>`, is the ledger's, asserted by `Ledger()` as `db/mount/<prefix>` rows, whose names load as `mnt.<prefix>...`), then by import: the longest importable
 prefix of the name is imported and the rest is `getattr`-ed. So any importable
 object has a name whether or not it was mounted, and `ns.name_of(obj)` gives the
 name that loads back to it.
@@ -56,9 +56,28 @@ Dat.manager.run("catalog.experiment", 3, epochs=200)
 ```
 
 The consequence is the point: **the spec is the record.** Nothing about the
-arguments goes into `_result_.yaml`, and no sealed dat is ever rewritten by a
-run. Handing a dat arguments forks a new one and leaves the original
-byte-identical; `Dat.manager.run(dat)` with none re-runs it in place while it is open.
+arguments goes into `_result_.yaml`, and no dat is ever rewritten by a run. A
+dat is run once, by the call that makes it; running its recipe again is
+`Dat.manager.run(dat.get_spec(), **kwargs)`, a new dat beside it.
+`Dat.create(spec, **kwargs)` is the same create with no run.
+
+**Keywords are also expansion variables** (SVP 1508). The keywords of `run` and
+`create` merge into the spec's own `dat.kwargs` key by key -- the spec's are its
+defaults, a keyword wins -- and the stored spec holds the merged `dat.kwargs`. A
+template anywhere in the spec, `dat.name` included, reads one as
+`${dat.kwargs.name}`, the value the run receives. `dat.preds` maps pred names to such templates; expanded at
+create, they are preds the dat carries, sealed onto its value on a ledger:
+
+```yaml
+dat:
+  name: fp/${dat.kwargs.pipe}/${dat.kwargs.card}/${dat.kwargs.game}${dat.kwargs.posture}
+  kwargs: {posture: ""}
+  preds: {card: "${dat.kwargs.card}", game: "${dat.kwargs.game}"}
+```
+
+`Dat.create(spec, pipe="1-3-5", card="h100", game="G1")` makes
+`fp/1-3-5/h100/G1`, with `dat.kwargs` those three and `posture: ""`, and the
+preds `card: h100`, `game: G1`; `posture="-hl"` on the call makes `fp/1-3-5/h100/G1-hl`.
 
 ## The seal
 
@@ -81,12 +100,13 @@ run wrote, and `_result_.yaml`. The run that made it is a **sub-dat**,
 replaced each time it runs). Its results hold the execution: `dat.run_at`,
 `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` (the branch, commit and
 dirty flag of the git checkout holding the code's source, blind to paths its
-`.gitattributes` marks `dat-noncode`; nothing outside a checkout) and `dat.content`, the `dat.sha256` the run sealed. Its `work/` is
+`.gitattributes` marks `dat-noncode`; nothing outside a checkout), `dat.run_rev` (on a ledger, the `<ledger>@<rev>` it ran against) and `dat.content`, the `dat.sha256` the run sealed. Its `work/` is
 the run's scratch, and the working directory while the code runs: a file the
 code writes without naming a place lands there. `dat.run` is the sub-dat
 (`None` for a dat filled by hand).
 
-The run is **not content**. `dat.sha256` leaves `run/` out, and leaves
+The run is **not content**. `dat.sha256` leaves `run/` out, as it leaves out
+every dat inside the folder, a repo inside a repo, and it leaves
 `dat.name` out of the spec, since the name is where the dat is, not what it
 is. So two runs of one recipe hash the same when the code is functional —
 on two machines, at two paths, on two days — and a dat that hashes
@@ -94,12 +114,12 @@ differently from its twin wrote something undeclared, which is usually
 sitting in `work/`. Dependencies key on the hash, so nothing can depend on a
 run: a run loaded inside a recording is recorded `unsealed`, as any dat
 without a hash is. A run sub-dat carries `dat.standing: sealed` once it has
-finished and no `dat.sha256` of its own (its scratch may be large). A dat
-written before 3.0 holds its run's record in its own results and hashes by
-the 2.x rule, whole folder and name included; `dat.hash: functional` in
-`_result_.yaml` marks the rule a file follows.
+finished and no `dat.sha256` of its own (its scratch may be large).
+`dat.hash: functional` in `_result_.yaml` names the rule, the only one: a dat
+written before 3.0 is not read as one (its 2.x hash does not verify, and a run
+record in its own results is not its run).
 
-## Standing
+## Standing: how far a dat can be relied on
 
 Every save stamps **`dat.standing`**, how far the dat can be relied on:
 
@@ -165,7 +185,7 @@ never by parsing a path.
 A **world** is a `DatManager`: a list of dat folders and the namespace that
 names things in them. A manager owns its `ns` — a `Namespace` bound to it, carrying
 its mounts and its `load` — and everything the manager does (a
-dotted spec, `dat.base`, `{}` expansion, resolving a name to a folder, every
+dotted spec, `dat.base`, `${…}` resolution, resolving a name to a folder, every
 run) goes through that `ns` and no other. Running is the manager's own
 `m.run(...)`; its folders are its own business.
 
@@ -177,7 +197,7 @@ m = DatManager(dat_folders=["/work/dats"])
 m.ns.mount(folder="catalog", at="catalog", relative_to=root)
 m.run("catalog.experiment", lr=0.5)  # created and run inside m
 m.load("runs/experiment1")           # searched in m's folders
-m.expand_spec(spec)                  # dat.base merged, {} filled, through m's namespace
+m.ns.expand_spec(spec)               # dat.base merged, ${…} resolved
 ```
 
 The constructor is keyword-only and `dat_folders` is a required list: all are
@@ -221,9 +241,9 @@ A manager takes no class: `m.create(spec)` and `m.load(name)` build the class
 the spec's `dat.kind` names. `Run.load(name)` and `Run.create(...)` are the
 typed forms on the default world — the result is a `Run`, or a `TypeError`.
 
-`m.run(target, ...)` is the one way to run a dat outside a ledger: a dat
-runs in place, a spec or its name is forked, created and run, a callable is
-called. It is fixed; a project wanting other run machinery subclasses the
+`m.run(target, ...)` is the one way to run a dat outside a ledger: a spec or
+its name is forked, created and run, a callable is called; a `Dat` is
+`TypeError` (run its spec, `m.run(dat.get_spec())`). It is fixed; a project wanting other run machinery subclasses the
 manager, not `Dat`. Every run in a world goes through the manager's private
 `_execute(dat)`: `m.run(...)`, each `m.run(...)` a running function makes,
 and a ledger's dat runs land there, so a subclass of `DatManager` that
@@ -256,7 +276,7 @@ Dat.save_artifact("/tmp/lock.json")
 
 `Dat.save_artifact` and `Dat.load_artifact` forward to the default world's
 `save_artifact(source, *, type=None, name=None, link=False)` and
-`load_artifact(name, *, verify=None)`, `name` a name, an `art:` name or a
+`load_artifact(name, *, verify=None)`, `name` a name or a
 URN; `Dat.load` stays a dat's, and `dat.save()` a
 dat's seal. `save_artifact` returns the artifact's
 URN, `sha256:<hex>`. **The type** is what `load_artifact` hands the payload's path
@@ -283,9 +303,9 @@ URN. The store keeps one index file, `_index_.json` in the artifact folder
 (`index:` in `.datconfig.yaml` moves it), keyed by every artifact name and
 every `sha256:` URN — an artifact's, and each saved dat's current hash. It is
 written through a lock and a rename, so it is never torn; `m.reindex()`
-rebuilds it from the folders. A named artifact's folder is found without it,
-so a store written before 2.14 loads by name as it stands, and `art:` names
-written then still load, the prefix stripped.
+rebuilds it from the folders. Two dats with equal content share one hash and the index keys it to one of them; a URN the index misses is looked for in the dat folders (each saved dat's stored hash, nothing re-hashed) and re-keyed to the first dat holding it, so deleting one twin never strands the other, and only a URN no saved dat holds is `KeyError`. A named artifact's folder is found without it.
+A store written before 2.14 is not read: an `art:` name is a plain name, and a
+2.13 sidecar's single `name` is no key.
 
 The artifact folder is `art_folder:` in `.datconfig.yaml`, else `art/`
 beside the config file — a sibling of `data/`. The artifact folder and the
@@ -326,35 +346,38 @@ so a child names only the entries it changes, adds or removes
 Resolution is recursive and happens before the spec is written, so `dat.base`
 never appears in a stored spec: what is on disk is the whole recipe.
 
-## References: the `{}` grammar
+## References: the `${…}` grammar
 
-Any string in a spec may carry `{…}` references. `Dat.create` expands them
-once, with the same `now` and `unique` the folder got, and writes the result:
-`get_spec()` returns the stored values, and nothing is expanded on read.
+Any string in a spec may carry `${…}` references, OmegaConf's grammar.
+`Dat.create` resolves them once, with the same moment and count the folder
+got, and writes the result: `get_spec()` returns the stored values, and
+nothing is resolved on read. Resolving a single string is a method of a
+namespace, `ns.expand(text, **vars)`, so each namespace (`Dat.ns`,
+`manager.ns`, `rev.ns`) resolves `${ns:…}` through its own names.
 
 ```python
 from dvc_dat import Dat
 
-expand = Dat.manager.expand
+ns = Dat.ns
 
 # 'runs/2026-09/exp'
-expand("runs/{YYYY}-{MM}/exp")
+ns.expand("runs/${now:%Y-%m}/exp")
 
-# the object ns.load('svp.CONFIG') returns
-expand("{svp.CONFIG}")
+# 'runs/G7/exp': a keyword is a top-level node
+ns.expand("runs/${game}/exp", game="G7")
 ```
 
-- an **undotted** name is a built-in (`YYYY YY MM DD HH mm SS now cwd unique`)
-  or a key of the `vars` dict you pass; anything else is a `KeyError`
-- a **dotted** name resolves through `ns.load`, at create; a function is
-  called (`{meta.commit}`), and `{meta.tag("v", 2)}` calls it with literals
-- `{{` and `}}` are the literal braces
-- a string that is *exactly* one reference returns the referenced **object**;
-  otherwise references are substituted as text
+- `${a.b}` is a **node** of the spec, an absolute path (`${dat.kwargs.game}`)
+- `${ns:a.b}` resolves through the namespace's `load`; a function is
+  called (`${ns:meta.commit}`), and `${ns:meta.tag, v, 2}` calls it with literals
+- `${now:%Y}`, `${unique:}`, `${cwd:}` are the built-ins; `\${` is a literal `${`
+- a brace without `$` is plain text
+- `expand` always returns a string; in a spec, a value that is *exactly* one
+  reference is replaced by the **object** it names
 
-In YAML, a value that *begins* with `{` must be quoted — `name: "{svp.CONFIG}"`
-— or YAML reads it as a flow mapping and the spec arrives with a dict where a
-string belongs. `validate_spec` names that case.
+The base install expands `${unique:}` alone; the rest needs `dvc-dat[expand]`.
+The whole grammar, the tiers, `${unique:}` and the clock's zone:
+[Expansion](expand.md).
 
 ## Validation
 
@@ -409,9 +432,9 @@ root: `load_dat_config` puts it first on `sys.path`, so the project's own
 modules resolve from any working directory, installed or not.
 
 The file is found by walking up from the working directory, or from the path
-given to `DatManager.load_dat_config(start)`. A `.datconfig.override.yaml`
-wins over it, and `DAT_FOLDERS` / `DAT_ART_FOLDER` in the environment win
-over both; `DAT_FOLDERS` names one folder (its value is not split). `run` is
+given to `DatManager.load_dat_config(start)`; it is the one config file, with
+no override file beside it. `DAT_FOLDERS` / `DAT_ART_FOLDER` in the
+environment win over it; `DAT_FOLDERS` names one folder (its value is not split). `run` is
 read by the `run` recipe of `dvc_dat.just` only (`DAT_RUN` overrides it
 there). The recipe hands its child the config it found as `DAT_CLI_CONFIG`,
 which `cli_main()` alone reads.
@@ -423,4 +446,4 @@ See [Mounts](mount-commands.md) for what a program can mount.
 - [Spec Format](spec-format.md) — `_spec_.yaml` and `_result_.yaml` reference
 - [Mounts](mount-commands.md) — names that are not imports
 - [Command Line](cli.md) — `just run`, `x`, and `dvc_dat.just`
-- [Overview](overview.md) — API reference
+- [API Reference](api/index.md) — every public class and function

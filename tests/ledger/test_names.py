@@ -4,7 +4,8 @@ import os
 
 import pytest
 
-from dvc_dat.ledger import Dat, Ref, Value
+from dvc_dat import Dat
+from dvc_dat.ledger import Ref, Value
 from ledger_kinds import CALLS
 from test_memo import world  # noqa: F401  (the fixture)
 
@@ -57,6 +58,7 @@ def test_an_absolute_path_makes_the_folder_there_and_names_nothing(world, tmp_pa
 
 
 def test_the_path_template_then_the_anonymous_one(world):
+    pytest.importorskip("omegaconf")          # `games/${game}` reads a key: the expand tier
     p = world.at().run("ledger_kinds.placed", game="G1")
     assert p.name == "games/G1" and (p.path / "g.txt").read_text() == "G1"
     a = world.at().run("ledger_kinds.folder", game="G1")

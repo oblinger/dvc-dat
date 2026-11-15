@@ -1,0 +1,16 @@
+name: ffmpeg
+description: ffmpeg and ffprobe, a pinned static build from a GitHub release, so no job waits on an Ubuntu mirror.
+runs:
+  using: composite
+  steps:
+    # apt's azure.archive.ubuntu.com stalled for 6 h on one run and 40 min on another (2026-11-06), and a
+    # 6-minute limit on it failed outright. Same choice as pandoc in docs.yml.
+    - shell: bash
+      run: |
+        base=https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0
+        curl -fsSL --retry 5 --max-time 120 -o /tmp/ffmpeg "$base/ffmpeg-linux-x64"
+        curl -fsSL --retry 5 --max-time 120 -o /tmp/ffprobe "$base/ffprobe-linux-x64"
+        echo "ed652b2f32e0851d1946894fb8333f5b677c1b2ce6b9d187910a67f8b99da028  /tmp/ffmpeg" | sha256sum -c -
+        echo "a339171d90f7482b2db02234e261b9e00d51526391f87fa633d5da7b98a28cf4  /tmp/ffprobe" | sha256sum -c -
+        sudo install -m 755 /tmp/ffmpeg /tmp/ffprobe /usr/local/bin/
+        ffmpeg -version | head -1

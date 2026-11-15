@@ -42,7 +42,7 @@ def test_walk_up_finds_the_config_and_none_is_ledger_error(tmp_path, monkeypatch
         Ledger()
     monkeypatch.chdir(tmp_path)
     L = Ledger(create=True)
-    assert (tmp_path / ".datconfig.yaml").read_text() == "ledger: .dat/ledger\n"
+    assert (tmp_path / ".datconfig.yaml").read_text() == "default: root\nnamespace: ledger\n"
     monkeypatch.chdir(deep)
     assert Ledger().path == L.path
 
@@ -50,10 +50,10 @@ def test_walk_up_finds_the_config_and_none_is_ledger_error(tmp_path, monkeypatch
 def test_create_in_cwd_opens_an_existing_config_and_refuses_with_dat_ledger(tmp_path, monkeypatch):
     monkeypatch.delenv("DAT_LEDGER", raising=False)
     monkeypatch.chdir(tmp_path)
-    (tmp_path / ".datconfig.yaml").write_text("ledger: elsewhere\n")
+    (tmp_path / ".datconfig.yaml").write_text("root: elsewhere\ndefault: root\n")
     L = Ledger(create=True)
     assert L.path == (tmp_path / "elsewhere").resolve()
-    assert (tmp_path / ".datconfig.yaml").read_text() == "ledger: elsewhere\n"
+    assert (tmp_path / ".datconfig.yaml").read_text() == "root: elsewhere\ndefault: root\n"
     monkeypatch.setenv("DAT_LEDGER", str(tmp_path / "elsewhere"))
     with pytest.raises(ValueError):
         Ledger(create=True)
@@ -64,12 +64,23 @@ def test_mounts_sugar_asserted_once_on_walk_up(tmp_path, monkeypatch):
     monkeypatch.delenv("DAT_LEDGER", raising=False)
     monkeypatch.chdir(tmp_path)
     Ledger(create=True)
-    (tmp_path / ".datconfig.yaml").write_text("ledger: .dat/ledger\nmounts:\n  pkg.etl: pkg/etl\n")
+    (tmp_path / ".datconfig.yaml").write_text("default: root\nmounts:\n  mnt.pkg.etl: pkg/etl\n")
     L = Ledger()
     rev = L.at()
     assert rev["db/mount/pkg.etl"] == {"db/root": "pkg/etl", "db/repo": tmp_path.name}
     assert rev[rev.tx, "db/by"].startswith("config:")
     assert Ledger().at().id == rev.id                       # unchanged: nothing written
+
+
+@pytest.mark.parametrize("key", ["etl", "pkg.etl", "mnt", "mntx.etl", "mnt..etl"])
+def test_mounts_sugar_refuses_a_key_outside_mnt(tmp_path, monkeypatch, key):
+    monkeypatch.delenv("DAT_LEDGER", raising=False)
+    monkeypatch.chdir(tmp_path)
+    Ledger(create=True)
+    (tmp_path / ".datconfig.yaml").write_text(f"default: root\nmounts:\n  {key}: pkg/etl\n")
+    with pytest.raises(ValueError, match=r"mounts:: a mount is named mnt\.<prefix>"):
+        Ledger()
+    assert Ledger(tmp_path / "data" / ".ledgers" / "root").at().ns.mounts() == {}
 
 
 # -- transactions ---------------------------------------------------------------------------------
@@ -89,7 +100,8 @@ def test_one_transaction_one_revision_and_tx_rows_last(L):
 def test_every_transaction_is_stamped_and_time_is_refused(L):
     with L.transaction(by="t") as t:
         t.add("s", "p", "1")
-    assert len(t.rev[t.rev.tx, "db/time"]) == 20                 # UTC, YYYY-MM-DDTHH:MM:SSZ
+    assert t.rev[t.rev.tx, "db/time"].endswith("Z")             # stored UTC, ISO 8601 to the second
+    assert len(t.rev[t.rev.tx, "db/time"]) == 20
     with pytest.raises(TypeError, match="time= is gone"):
         L.transaction(by="t", time=True)
 
@@ -381,8 +393,17 @@ def test_bare_version_is_opaque_user_data(L):
     assert L.at()["model/m", "db/version"] == "0.0.1"
 
 
+def test_a_dev_version_is_a_clock_version_but_not_a_ledger_release(L):
+    """SVP 1482: ``.devN`` is legal on a clock subject; the release on ``db`` is what ``L.at("M.m.p")`` reads, plain."""
+    write(L, ("model/m", "db/version", "1.3.6.dev2"))
+    assert L.at()["model/m", "db/version"] == "1.3.6.dev2"
+    with pytest.raises(ValueError, match="a ledger's release"):
+        with L.transaction(by="t") as t:
+            t.add("db", "db/version", "1.3.6.dev2")
+
+
 def test_db_version_is_semver_checked_at_add(L):
-    """``db/version`` objects are ``MAJOR.MINOR.PATCH`` strings; anything else is refused at ``add``."""
+    """``db/version`` objects are ``MAJOR.MINOR.PATCH[.devN]`` strings; anything else is refused at ``add``."""
     for bad in ("1.2", "v1.2.3", "1.2.3-rc1", 3, None):
         with pytest.raises(ValueError, match="db/version"):
             with L.transaction(by="t") as t:

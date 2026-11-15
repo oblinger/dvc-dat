@@ -1,12 +1,13 @@
-"""``ledger_fn``, ``Fn`` and ``run`` (``Fn.__call__``): a revision function resolved at a ``Rev``.
+"""``dat.fn``, ``Fn`` and ``run`` (``Fn.__call__``): a revision function resolved at a ``Rev``.
 
-``@ledger_fn`` declares and returns the function unchanged (A52): a plain call
-runs the body and returns an unsealed ``Value``, recording nothing.
+``@dat.fn`` (``from dvc_dat import dat``) declares and returns the function unchanged (A52): a plain call
+runs the body and returns an unsealed ``Value``, recording nothing;
+``@dat.fn(reproducible=...)`` adds a claim about the function (``FnMark``, ``claim``, SVP 251 Q2).
 ``rev.ns.load(name)`` resolves a dotted name at a revision; a function comes
 back an ``Fn``: under a mounted prefix (``db/mount/<prefix>`` rows) a sandboxed
 function, read off the mounted file and run in a worker (``sandbox``);
 otherwise an installed one, resolved in this process. Its ``kind`` is
-``"ledger"`` for a ``@ledger_fn`` (its keys are its memo key and it receives
+``"ledger"`` for a ``@dat.fn`` (its keys are its memo key and it receives
 them) and ``"dat"`` for an undecorated function, a dat's run function (its memo
 key is the expanded spec, and it receives the dat made from it; DAT 1046).
 Calling the ``Fn`` is ``run``: a memo lookup over
@@ -33,22 +34,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from .codec import canonical, hash_text, ref_text, sha256
+from .claim import PREDICATE as REPRODUCIBLE, claim_text, clauses, widens
+from .codec import canonical, dotted_get, hash_text, ref_text, sha256
 from .env import Env, current_env, platform_items, repo_of
-from .errors import NotClean, NotEvaluated
-from .policy import DETERMINISTIC
+from .errors import ConfinedWrite, NotClean, NotEvaluated
+from .policy import EXACT_FIELDS
 from .code import Code
 from .value import Blob, Value, check_loadable, dotted
-from ..core import Dat
+from . import hooks
 
 if TYPE_CHECKING:
     from .rev import Rev
 
 #: The control options of a call (Q41): never keys, never hashed. A function may declare one as a
 #: key and is then called through ``kwargs=``; a declared ``path`` is the folder it builds (Q36).
-RESERVED_KEYS = ("seal", "clean", "path", "kwargs", "deterministic")
+RESERVED_KEYS = ("seal", "clean", "path", "kwargs")
 #: The name a folder-producing miss gets with neither ``path=`` nor a template (as ``Dat.create``).
-ANONYMOUS = "anonymous/Dat{unique}"
+ANONYMOUS = "anonymous/Dat${unique:}"
 
 
 class _Own:
@@ -58,16 +60,26 @@ class _Own:
         return "<the fn's ledger>"
 
 
+#: A run's result: the revision its run read (SVP 245), beside ``db/fn`` and ``db/keys``; read back as ``v.at``.
+AT = "db/at"
+
 #: The default of ``seal=`` (``Fn.__call__``, ``Rev.run``): save to the fn's own ledger.
 OWN: Any = _Own()
 
+#: The parameters a reduce function reserves (SVP 242): ``acc``, the result of the largest subset already reduced
+#: (``None`` on the first step), and ``more``, the inputs outside it. A function taking both runs by ``rev.reduce``.
+REDUCE_PARAMS = ("acc", "more")
+#: A reduce step's rows beside a run's: the ``acc`` entry's subject (``none``), and the identities handed as ``more``.
+REDUCE_FROM = "db/reduce/from"
+REDUCE_MORE = "db/reduce/more"
+
 
 def ledger_key(ledger: Any) -> str:
-    """One ledger, however it was opened: its DSN, or its folder's real path."""
-    from .pgstore import is_dsn
+    """One ledger, however it was opened: its URI, or its folder's real path."""
+    from .backends import is_uri
 
     text = str(ledger.path)
-    return text if is_dsn(text) else os.path.realpath(text)
+    return text if is_uri(text) else os.path.realpath(text)
 
 
 @dataclass(frozen=True)
@@ -80,7 +92,11 @@ class RunTrace:
     unsandboxed run (``repo`` ``None`` outside any), for the code check at a late save. ``clock`` is
     ``(repo, package, version, commit)`` of the code that ran, sandboxed or not, for the
     ``db/repo/<repo>/<package> db/version`` and ``db/repo/<repo> db/commit`` a seal advances (DAT 1043, 1044);
-    ``None`` outside any checkout or when the code declares no version."""
+    ``None`` outside any checkout or when the code declares no version. ``reproducible`` is the function's claim as
+    its ``db/reproducible`` row holds it (``claim``), ``None`` for no row. ``at`` is the revision the run read, its
+    ``db/at`` row (SVP 245); ``None`` only on a seal record written before the row existed. ``reduce_from`` and
+    ``reduce_more`` are a reduce step's ``db/reduce/from`` (the ``acc`` entry's subject, ``none``) and ``db/reduce/more``
+    (the identities handed as ``more``, canonical JSON), ``None`` on any other run (SVP 242)."""
 
     name: str
     enc: str
@@ -94,6 +110,10 @@ class RunTrace:
     dirty: bool = False
     returns: str = ""
     clock: Optional[Tuple[str, str, str, str]] = None
+    reproducible: Optional[str] = None
+    at: Optional[int] = None
+    reduce_from: Optional[str] = None
+    reduce_more: Optional[str] = None
 
     def record(self) -> Dict[str, Any]:
         """As JSON, for a ``v.seal()`` seal record."""
@@ -121,11 +141,15 @@ def clock_of(fn: "Fn", code: Code) -> Optional[Tuple[str, str, str, str]]:
 
 
 def run_trace(fn: "Fn", plain: "Rev", trace: Dict[str, str], enc: str, provenance: str,
-              code: Code, repo: Optional[str] = None, dirty: bool = False) -> RunTrace:
-    """``code`` is what ran: ``fn.code``, with a sandboxed run's run-time loads beside its own."""
+              code: Code, repo: Optional[str] = None, dirty: bool = False,
+              reduce: Optional[Tuple[str, str]] = None) -> RunTrace:
+    """``code`` is what ran: ``fn.code``, with a sandboxed run's run-time loads beside its own; ``reduce`` a reduce
+    step's ``(from, more)`` rows (SVP 242)."""
+    rfrom, rmore = reduce if reduce is not None else (None, None)
     return RunTrace(name=fn.name, enc=enc, trace=dict(trace), provenance=provenance, code_subject=code.subject,
                     code_rows=tuple(code._rows()), ledger=ledger_key(plain.ledger), sandboxed=fn.code.sandboxed,
-                    repo=repo, dirty=dirty, returns=fn._returns, clock=clock_of(fn, code))
+                    repo=repo, dirty=dirty, returns=fn._returns, clock=clock_of(fn, code),
+                    reproducible=claim_text(fn.reproducible), at=plain.id, reduce_from=rfrom, reduce_more=rmore)
 
 
 def attach_run(value: Value, run: RunTrace) -> Value:
@@ -158,14 +182,15 @@ def check_late_code(run: RunTrace, env: Env) -> None:
 
 
 def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
-             refuse_held: bool = False) -> str:
+             refuse_held: bool = False, plan: Optional[List[Any]] = None) -> str:
     """Write ``value`` as ``run``'s memo entry into the open transaction ``t``; its subject.
 
     The entry ``seal_entry`` always wrote: ``db/fn`` (the dotted name), ``db/keys``, ``db/returns``
-    (the function's return annotation), the trace as
+    (the function's return annotation), ``db/reproducible`` (its claim, when it makes one), ``db/at`` (the
+    revision the run read: provenance, outside the subject's hash and the hit test, SVP 245), the trace as
     ``db/deps/*`` (``code`` naming the ``db/code/<hash 16>`` item, written once), ``db/value``, under
-    ``<hash of (fn, keys, trace, preds, value)>``. ``refuse_held``: an
-    identical entry already on the ledger raises ``_AlreadySealed`` (the caller loads it)."""
+    ``<hash of (fn, keys, trace, preds, value)>``, its subdats with it (``plan``, ``Transaction._subdat_plan``); a
+    reduce step adds ``db/reduce/from`` and ``db/reduce/more`` (SVP 242), outside the hash. ``refuse_held``: an identical entry already on the ledger raises ``_AlreadySealed`` (the caller loads it)."""
 
     if value.sealed and value.subject is None and "_run" not in value.__dict__:
         raise TypeError(f"{run.name} returned a {type(value).__name__} sealed by v.seal(); run seals its "
@@ -173,19 +198,27 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     t._open("seal")
     value._sealable()
     check_loadable(value)
+    plan = t._subdat_plan(value, None) if plan is None else plan
     if ledger_key(t._ledger) != run.ledger:
         raise ValueError(f"{run.name}: the result ran against {run.ledger}; its memo entry goes there, "
                          f"not to {ledger_key(t._ledger)}")
     pred_rows, canon = t._encode_preds(value)
-    vtext = ref_text(dotted(type(value)), value.hash)
+    vtext = ref_text(dotted(type(value)), t._hash_of(value))
     subject = hash_text(canonical({"fn": run.name, "keys": json.loads(run.enc), "trace": run.trace,
                                    "preds": canon, "value": vtext}))
-    if refuse_held and t._snapshot()._held(subject, "db/value"):
-        raise _AlreadySealed(subject)
+    if refuse_held and t._snapshot()._held(subject, "db/value") and not _spec_only(t._snapshot(), subject):
+        raise _AlreadySealed(subject)           # a spec-only entry takes the bytes of this run (SVP 251)
     t._ensure_code(run.code_subject, run.code_rows)
     if run.clock is not None:
         t._advance_clock(*run.clock)
     extra = [("db/fn", "str:" + run.name), ("db/keys", "json:" + run.enc), ("db/returns", "str:" + run.returns)]
+    if run.reproducible is not None:
+        extra.append((REPRODUCIBLE, "json:" + run.reproducible))
+    if run.at is not None:
+        extra.append((AT, "str:" + str(run.at)))
+    if run.reduce_from is not None:
+        extra.append((REDUCE_FROM, "str:" + run.reduce_from))
+        extra.append((REDUCE_MORE, "json:" + (run.reduce_more or "[]")))
     if value.sealed and value.subject is None:
         extra.append(("db/sealed-at", "str:" + str(value.sealed)))
     if name is None:
@@ -193,24 +226,108 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     value.__dict__["_run"] = run            # an abandoned transaction leaves a draft that can be saved again
     t._seal(value, subject, run.trace, run.provenance, pred_rows, extra, name)
     t._freeze(value, subject, run.trace)
+    t._seal_subdats(plan, value, subject, name, run.provenance)
     return subject
 
 
-def ledger_fn(func: Callable) -> Callable:
-    """Mark a value function: it takes the ``Rev`` first and keywords after, and returns a ``Value``.
+#: The attribute ``@dat.fn`` leaves on a function: its ``FnMark``.
+MARK = "__dat_fn__"
 
-    The return annotation is required (``TypeError`` at decoration): a ``Value`` subclass means the
-    result must be one; any other annotation means a bare result is wrapped in ``Value.Blob`` (A31).
-    The function comes back unchanged and still callable (A52); nothing is written on import.
+
+@dataclass(frozen=True)
+class FnMark:
+    """What ``@dat.fn`` declares of a function, held on the function object: ``reproducible``, its claim as
+    written (``claim``, SVP 251 Q2). A run writes it as the ``db/reproducible`` row."""
+
+    reproducible: Any = None
+
+
+def fn(func: Optional[Callable] = None, *, reproducible: Any = None) -> Any:
+    """``@dat.fn`` / ``@dat.fn(reproducible=...)``: mark a value function.
+
+    It takes the ``Rev`` first and keywords after, and returns a ``Value``. ``func`` comes back unchanged and still
+    callable (A52): a plain call runs the body with whatever ``Rev`` it is given, records nothing and seals nothing,
+    which is how it is unit-tested; nothing is written on import.
+
+    The return annotation is required (``TypeError`` at decoration): a ``Value`` subclass means the result must be
+    one; any other annotation means a bare result is wrapped in ``Value.Blob`` (A31). A non-callable or a class is
+    ``TypeError`` too.
+
+    ``reproducible`` (``FnMark``, the grammar in ``claim``) is how far a rerun of it can be trusted
+    ([Reproducibility][reproducibility]); a run writes it as the ``db/reproducible`` row: ``"exact"`` (bit-identical;
+    every memo lookup of it also asks for the same card and driver, and a rerun that differs is an error), ``True``
+    (good enough: a rerun that differs is allowed), ``None`` (default, unknown), ``False`` (flaky), a clause ``(level,
+    predicate, ...)``, or a list of clauses, first match wins. ``TypeError`` for anything else.
     """
-    if not callable(func):
-        raise TypeError(f"@ledger_fn goes on a function, not {func!r}")
+    if func is None:
+        clauses(reproducible)
+        return lambda f: fn(f, reproducible=reproducible)
+    if not callable(func) or isinstance(func, type):
+        raise TypeError(f"@dat.fn goes on a function, not {func!r}")
+    clauses(reproducible)
     ann = getattr(func, "__annotations__", {})
     if "return" not in ann:
-        raise TypeError(f"@ledger_fn {getattr(func, '__qualname__', func)!r}: a return annotation is required "
+        raise TypeError(f"@dat.fn {getattr(func, '__qualname__', func)!r}: a return annotation is required "
                         "(-> a Value subclass, or any type to be wrapped in Value.Blob)")
-    func.__ledger_fn__ = True  # type: ignore[attr-defined]
+    setattr(func, MARK, FnMark(reproducible))
     return func
+
+
+def fn_mark(obj: Any) -> Optional[FnMark]:
+    """The ``FnMark`` of a function marked ``@dat.fn``, else ``None`` (an undecorated function: a dat's run
+    function)."""
+    mark = getattr(obj, MARK, None)
+    return mark if isinstance(mark, FnMark) else None
+
+
+def _dat_names(tree: Any) -> Tuple[set, set]:
+    """``(names bound to dvc_dat.dat, names bound to dvc_dat.dat.fn)`` by a module's top-level imports."""
+    import ast
+
+    dats, fns = {"dat"}, set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "dvc_dat":
+                dats.update(a.asname or a.name for a in node.names if a.name == "dat")
+            elif node.module in ("dvc_dat.dat", "dvc_dat.ledger.fn"):
+                fns.update(a.asname or a.name for a in node.names if a.name == "fn")
+        elif isinstance(node, ast.Import):
+            dats.update(a.asname for a in node.names if a.name == "dvc_dat.dat" and a.asname)
+    return dats, fns
+
+
+def fn_mark_in_source(tree: Any, fdef: Any) -> Optional[FnMark]:
+    """The ``FnMark`` a function definition carries, read off its source (a mounted function is never imported
+    in the caller): ``@dat.fn``, ``@dat.fn(reproducible=...)``, ``dat`` being any name the module binds to
+    ``dvc_dat.dat`` (``from dvc_dat import dat``), or ``@dvc_dat.dat.fn``; ``None`` when unmarked."""
+    import ast
+
+    dats, fns = _dat_names(tree)
+
+    def is_fn(node: Any) -> bool:
+        if isinstance(node, ast.Name):
+            return node.id in fns
+        if isinstance(node, ast.Attribute) and node.attr == "fn":
+            v = node.value
+            return (isinstance(v, ast.Name) and v.id in dats) or (
+                isinstance(v, ast.Attribute) and v.attr == "dat" and isinstance(v.value, ast.Name)
+                and v.value.id == "dvc_dat")
+        return False
+    for d in fdef.decorator_list:
+        if is_fn(d):
+            return FnMark()
+        if isinstance(d, ast.Call) and is_fn(d.func):
+            claim = None
+            for kw in d.keywords:
+                if kw.arg == "reproducible":
+                    try:
+                        claim = ast.literal_eval(kw.value)
+                    except ValueError:
+                        raise TypeError(f"@dat.fn on {fdef.name}: a mounted function is read off its file, so "
+                                        "reproducible= is a literal") from None
+                    clauses(claim)
+            return FnMark(claim)
+    return None
 
 
 def returns_text(func: Callable) -> str:
@@ -270,6 +387,104 @@ def encode_keys(kw: Dict[str, Any]) -> Dict[str, Any]:
         else:
             out[k] = nested(v, k)
     return out
+
+
+def reduces(fn: "Fn") -> bool:
+    """Is ``fn`` a reduce function: a ``@dat.fn`` taking both ``acc`` and ``more`` (SVP 242)."""
+    return fn.kind == "ledger" and all(p in fn.signature.parameters for p in REDUCE_PARAMS)
+
+
+def identity(item: Any) -> str:
+    """One reduce input's identity, as its ``over`` entry holds it (``encode_keys``): a ``Value``/``Ref`` its
+    ``ref:<class>:<hash>``, any other input its canonical JSON. The ``over`` list is sorted by it."""
+    return item if isinstance(item, str) and item.startswith("ref:") else canonical(item)
+
+
+@dataclass(frozen=True)
+class Input:
+    """One input of a reduce: ``given`` as the caller passed it, ``enc`` its ``over`` entry, ``ident`` its identity."""
+
+    given: Any
+    enc: Any
+    ident: str
+
+
+def reduce_keys(fn: "Fn", over: Any, keys: Dict[str, Any]) -> Tuple[Dict[str, Any], List[Input], str]:
+    """``(the other keys bound, the inputs sorted by identity, db/keys)`` of a reduce (SVP 242): ``db/keys`` is
+    ``{"over": [...sorted], **keys}``, canonical. ``over`` a str, bytes or a mapping is ``TypeError``; two inputs of
+    one identity ``ValueError``; a key named ``acc``, ``more`` or ``over`` ``TypeError``."""
+    if isinstance(over, (str, bytes, dict)) or not hasattr(over, "__iter__"):
+        raise TypeError(f"{fn.name}: over is a sequence of inputs, not {type(over).__name__}")
+    clash = sorted(set(keys) & {*REDUCE_PARAMS, "over"})
+    if clash:
+        raise TypeError(f"{fn.name}: {', '.join(clash)} is reserved by reduce, never a key")
+    if "over" in fn.signature.parameters:
+        raise TypeError(f"{fn.name}: a reduce function's key is never named 'over', the inputs' place in db/keys")
+    bound = fn._bind(dict(keys, **{p: None for p in REDUCE_PARAMS}))
+    rest = {k: v for k, v in bound.items() if k not in REDUCE_PARAMS}
+    inputs: Dict[str, Input] = {}
+    for x in over:
+        enc = encode_keys({"over": x})["over"]
+        item = Input(x, enc, identity(enc))
+        if item.ident in inputs:
+            raise ValueError(f"{fn.name}: {item.ident[:72]} is in over twice; a reduce is over a set")
+        inputs[item.ident] = item
+    items = [inputs[k] for k in sorted(inputs)]
+    enc_keys = canonical(dict(encode_keys(rest), over=[i.enc for i in items]))
+    return rest, items, enc_keys
+
+
+#: The items of a run's trace its environment writes (``code``, ``fn``, the platform, the mount's ``salt``), beside each
+#: ``code/<repo>``: a reduce step takes these from its own run, never from its ``acc``.
+ENV_ITEMS = frozenset({"code", "fn", "platform", "platform/record", "salt"})
+
+
+def reduce_args(rev: "Rev", kw: Dict[str, Any]) -> Dict[str, Any]:
+    """A reduce step's arguments as its body gets them: ``acc`` and each ``Value``/``Ref`` in ``more`` loaded, each
+    recorded through the recording ``rev`` as its ``ref:`` item; a key as given.
+
+    ``acc``'s own dependencies join the step's trace too, all but the environment's (``ENV_ITEMS``, ``code/<repo>``):
+    a step holds while every input it covers holds, those it was handed in ``acc`` included, so an input's run that
+    moves fails every step built over it, however far down the chain it was added."""
+    from .rev import Ref
+
+    def load(x: Any) -> Any:
+        if isinstance(x, Ref):
+            x = x._load()
+        if isinstance(x, Value):
+            rev._record_value(x)
+        return x
+    acc = kw.get("acc")
+    if acc is not None:
+        acc = load(acc)
+        for item, recorded in acc.dependencies.items():
+            if item not in ENV_ITEMS and not (item.startswith("code/") and " " not in item):
+                rev._record(item, recorded)
+    return dict(kw, acc=acc, more=[load(x) for x in kw.get("more", [])])
+
+
+MNT = "mnt"
+"""The reserved top segment of a ledger-mounted name (1467 Q14 (B)): ``mnt.<at>...`` names what the mount
+``db/mount/<at>`` serves; a name not starting ``mnt.`` is never a mount and is imported. A mount is named with
+it, ``t.ns.mount("mnt.<at>", ...)`` and a ``.datconfig.yaml`` ``mounts:`` key ``mnt.<at>`` alike (1505 Q1); the
+rows, ``mounts()`` and the in-process module names never carry it."""
+
+
+def mounted_name(dotted: str) -> str:
+    """The ledger name of ``dotted`` under a mount: ``plane.measure.length`` -> ``mnt.plane.measure.length``."""
+    return f"{MNT}.{dotted}"
+
+
+def mount_prefix(at: str, where: str) -> str:
+    """The prefix of the ``db/mount/<prefix>`` rows a mount named ``at`` writes: ``at`` is ``mnt.<prefix>``
+    (1505 Q1), and anything outside ``mnt.`` (``mnt`` alone included) is ``ValueError``; nothing is prefixed for
+    you."""
+    rest = at[len(MNT) + 1:] if at.startswith(MNT + ".") else ""
+    if not rest or not all(rest.split(".")):
+        hint = mounted_name(at) if at and at != MNT and all(at.split(".")) else MNT + ".<prefix>"
+        raise ValueError(f"{where}: a mount is named {MNT}.<prefix>, got {at!r} (write {hint!r}); a mount is "
+                         f"outside {MNT}. never")
+    return rest
 
 
 def mounts_at(rev: "Rev") -> Dict[str, Dict[str, str]]:
@@ -334,18 +549,20 @@ def signature_of(name: str, obj: Callable) -> Tuple[inspect.Signature, bool, Opt
 
 def installed_fn(rev: "Rev", name: str, obj: Any) -> "Fn":
     """The ``Fn`` of a function resolved in this process (no mount): ``kind`` ``"ledger"`` when it is a
-    ``@ledger_fn``, else ``"dat"`` (a dat's run function), its ``Code`` the static closure of its module."""
+    ``@dat.fn``, else ``"dat"`` (a dat's run function), its ``Code`` the static closure of its module."""
     if not callable(obj):
         raise TypeError(f"{name!r} is {obj!r}, not a function")
     modname, src = source_of(name, obj)
     env = current_env()
     code = installed_code(modname, src, env)
-    if not getattr(obj, "__ledger_fn__", False):
+    mark = fn_mark(obj)
+    if mark is None:
         return Fn(name=name, module=src, mount=None, signature=inspect.Signature(), env=env, code=code,
                   _rev=rev, _obj=obj, _takes_path=True, kind="dat")
     sig, takes_path, template = signature_of(name, obj)
     return Fn(name=name, module=src, mount=None, signature=sig, env=env, code=code,
-              _rev=rev, _obj=obj, _takes_path=takes_path, _template=template, _returns=returns_text(obj))
+              _rev=rev, _obj=obj, _takes_path=takes_path, _template=template, _returns=returns_text(obj),
+              reproducible=mark.reproducible)
 
 
 def source_of(name: str, obj: Any) -> Tuple[str, Path]:
@@ -403,15 +620,55 @@ class Fn:
     """A revision function, resolved at ``_rev``; calling it is ``run``. Not on the timeline: no subject.
     ``name`` is the dotted string it was loaded by; ``code`` the snapshot it is looked up in, which alone
     has identity (``code.subject``, DAT 1037). ``kind`` is read off the function: ``"ledger"`` for a
-    ``@ledger_fn``, ``"dat"`` for an undecorated one, a dat's run function, which runs only through a
-    spec (``rev.run(spec)``; its keys are the expanded spec, DAT 1046)."""
+    ``@dat.fn``, ``"dat"`` for an undecorated one, a dat's run function, which runs only through a
+    spec (``rev.run(spec)``; its keys are the expanded spec, DAT 1046). ``reproducible`` is the function's
+    own claim as written (``@dat.fn(reproducible=...)``, SVP 251 Q2)."""
 
     name: str
+    """The dotted name it was resolved by."""
     module: Path
+    """The function's source file."""
     mount: Optional[str]
+    """The mounted prefix the name resolved under; ``None`` for installed code."""
     signature: inspect.Signature
+    """The keys the function takes, without the leading ``Rev`` and without ``path``."""
     env: Env
+    """The environment the function resolved in: repos and commits, platform."""
     code: Code
+    """The code it is loaded from, at a version: the snapshot, which alone has identity.
+
+    A ``Code(Value)`` (DAT 1037), computed at ``rev.ns.load``; a run writes its identity as the ``db/code/<16 hex>``
+    item, and the rest of it is not written to the ledger. Its name is ``<unit>@<version>``: the unit is the mount
+    prefix for mounted code (``plane``, ``algs.ocr``) and the function's top-level package for installed code
+    (``geometry``).
+
+    Its identity is the bytes: ``encode()`` is the canonical ``{"modules": relpath -> sha256, "mounts": <hash of the
+    db/mount rows, or null>}``, ``hash`` its sha256, and ``subject`` ``db/code/<16 hex>``, the first 16 of the hash
+    (the 16 hex the memo key carried as ``db/fn/<name>/<16 hex>`` before); two functions in one snapshot share it, and
+    any changed byte in a module makes a new one.
+
+    Read-only properties describe it, fixed at load and not hashed: ``sandboxed`` (True for mounted code), ``version``
+    (the name after ``@``), ``modules`` (the relpaths the loader walked: under the repo root when mounted, under the
+    top-level package's parent when installed), ``mounts`` (``prefix -> {repo, root}``, empty when installed),
+    ``commit`` (the checkout's at load, or ``None``), ``lock`` (the git blob id of that checkout's ``uv.lock``, or
+    ``None``) and ``package`` (the dotted root whose declared version ``version`` is, the unit, or ``None`` when the
+    version came from a commit or the hash: the ``<package>`` of the ``db/repo/<repo>/<package>`` clock a clean run
+    moves, DAT 1044).
+
+    The version is read as a module attribute after import, never parsed from source, and a declared version counts
+    only from a clean checkout (DAT 1043): when the checkout holding the code has modified tracked files, the version
+    is ``<commit 8>+dirty`` whatever ``__version__`` says (mounted: the last commit touching the loaded files, else
+    HEAD; installed: HEAD).
+
+    Clean, mounted: the root package's ``__version__`` (imported in the worker); else the last commit touching the
+    loaded files, 8 hex, ``+dirty`` when one differs from HEAD; else ``#`` + the first 8 hex of ``hash``. Clean or
+    outside any checkout (a wheel), installed: ``__version__`` on the top-level package; else the version of the
+    distribution providing it; else the short commit (8 hex) of the checkout holding it; else ``#`` + 8 hex of
+    ``hash``.
+
+    The version is a name for people over the hash, and the commit is a result's ``code/<repo>`` dependency item, so
+    neither moves ``subject``, the identity and the memo key.
+    """
     _rev: Any = field(repr=False, compare=False)
     _obj: Any = field(repr=False, compare=False, default=None)
     _takes_path: bool = field(repr=False, compare=False, default=False)
@@ -419,6 +676,20 @@ class Fn:
     _returns: str = field(repr=False, compare=False, default="")
     _info: Dict[str, Any] = field(repr=False, compare=False, default_factory=dict)
     kind: str = "ledger"
+    """``"ledger"`` or ``"dat"``, read off the function.
+
+    ``"ledger"`` for a ``@dat.fn``: its keys are its memo key and it receives them. ``"dat"`` for an undecorated
+    function, a dat's run function (DAT 1046): its memo key is the expanded spec, and it receives the dat made from
+    that spec in its work folder; it runs only through a spec (``rev.run(spec)``, ``rev.run(name, **kwargs)``), and a
+    direct call is ``TypeError``. A plain ``Dat.manager.run`` in a ledger project runs a mounted one in the calling
+    process, nothing memoised.
+    """
+    reproducible: Any = None
+    """The claim ``@dat.fn(reproducible=...)`` made about the function, as written.
+
+    Read off the function object (installed) or its source, a literal (mounted). A run writes it as the
+    ``db/reproducible`` row, which is what ``rerun`` and ``safe`` read ([Reproducibility][reproducibility]).
+    """
 
     def __repr__(self) -> str:
         """``<Fn plane.measure.length@2.7.1>``: the name, ``@`` its code's version (DAT 1036, 1037)."""
@@ -448,36 +719,56 @@ class Fn:
         return out
 
     def __call__(self, *, seal: Any = OWN, clean: bool = False, path: Any = None,
-                 kwargs: Optional[Dict[str, Any]] = None, deterministic: bool = False,
-                 **keys: Any) -> Optional[Value]:
-        """``f(k=v, ...)`` or ``f(kwargs={...})``: eval. The control options (Q41), never keys:
+                 kwargs: Optional[Dict[str, Any]] = None, **keys: Any) -> Optional[Value]:
+        """``f(k=v, ...)`` or ``f(kwargs={...})``: eval.
 
-        ``seal``: where the result goes (DAT 1028). ``"get"``: the saved result if one holds, else
-        ``None``; never runs. ``False``: run, keep nothing; the trace is on the result. ``True``: run,
-        seal it locally (``v.seal()``), off the ledger. A ``Ledger`` (default: the one the fn was loaded
-        from): the saved result if one holds, else run and save it as the memo entry in a transaction of
-        its own. An open ``Transaction`` on that ledger: the same, saved into it. A later ``v.seal(L)``
-        or ``v.seal(t)`` of a ``False``/``True`` result writes the same memo entry.
-        ``clean=True``: the code must be a clean representation of a version,
-        the checkout clean and at the commit the rev's ``db/repo/<repo> db/commit`` row names, else ``NotClean``
-        (Q39), before any lookup; ``False`` (default): a sandboxed call runs at HEAD, clean or dirty.
-        ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder
-        there a view when it is a ``Dat``; an absolute path makes the folder there and names nothing
-        (Q36). A hit asked for under a new name takes that name. ``kwargs``: the function's whole key
-        set, for a key that is also a control option's name; inline keys beside it are ``TypeError``.
-        ``deterministic=True``: the lookup also asks that the entry ran on the same ``card`` and ``driver``,
-        on top of the ledger's memo policy (SVP 1474); the entry written is the same either way."""
+        The control options are exactly ``seal``, ``clean``, ``path`` and ``kwargs``, never keys and never hashed
+        (Q41).
+
+        ``seal``: where the result goes (DAT 1028, [Running][running]). ``"get"``: the saved result if one holds, else
+        ``None``; never runs. ``False``: run, keep nothing; the trace is on the result. ``True``: run, seal it locally
+        (``v.seal()``), off the ledger. A ``Ledger`` (default: the one the fn was loaded from): the saved result if
+        one holds, else run and save it as the memo entry in a transaction of its own, the value's subject fixed at
+        once and its revision at commit. An open ``Transaction`` on that ledger: the same, saved into it. Another
+        ledger, or anything else, is ``ValueError``. A later ``v.seal(L)`` or ``v.seal(t)`` of a ``False``/``True``
+        result writes the same memo entry. With ``seal=t``, ``path=`` must be relative: it is the name the entry is
+        saved under.
+
+        ``clean=True``: the code must be a clean representation of a version, the checkout clean and at the commit the
+        rev's ``db/repo/<repo> db/commit`` row names, else ``NotClean`` (Q39), before any lookup; ``False`` (default):
+        a sandboxed call runs at HEAD, clean or dirty. An unsandboxed call needs the function's code in a clean git
+        checkout regardless, else ``NotEvaluated``.
+
+        ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder there a view when
+        it is a ``Dat``; an absolute path makes the folder there and names nothing (Q36). A hit asked for under a new
+        name takes that name. Keys bind to the signature with defaults applied; ``kwargs={...}`` passes the whole key
+        set instead, for a key that is also a control option's name; inline keys beside it are ``TypeError``.
+
+        A function claiming ``exact`` in any clause (``@dat.fn(reproducible="exact")``, SVP 251 Q2): the lookup also
+        asks that the entry ran on the same ``card`` and ``driver``
+        ([``reproducible``][dvc_dat.ledger.Fn.reproducible]), on top of the ledger's memo policy ([Memoization and the
+        platform][memoization-and-the-platform], SVP 1474); the entry written is the same either way.
+
+        A result that is not an instance of a ``Value``-subclass return annotation is ``TypeError``.
+        """
         from .txn import Transaction
 
-        if not self.code.sandboxed:
+        if reduces(self):
+            raise TypeError(f"{self.name} takes acc and more, a reduce function: rev.reduce({self.name!r}, over=[...]) "
+                            "runs it, never rev.run")
+        rev = self._rev
+        plain = rev._plain()
+        read_only = plain.ledger.read_only          # read by name in a sandboxed body: a lookup, never a run
+        if not self.code.sandboxed and not read_only:
             from . import sandbox
 
             if sandbox.IN_WORKER and sandbox.STATE.frames:
                 raise NotEvaluated(f"{self.name} is unsandboxed (under no mount): it does not run nested inside "
                                    f"the sandboxed body of mount {sandbox.STATE.frames[-1].mount!r}; mount it")
-        rev = self._rev
-        plain = rev._plain()
         level = seal_level(self.name, plain, seal, clean, path)
+        if read_only and (level is True or level is False or path is not None):
+            raise ConfinedWrite(f"{self.name}: {plain.ledger._store.name} is read-only here: seal='get' or the "
+                                "default reads an entry; seal=True, seal=False and path= do not apply")
         if kwargs is not None:
             if keys:
                 raise TypeError(f"{self.name}: the keys go inline or in kwargs=, never both "
@@ -492,16 +783,21 @@ class Fn:
         item = f"eval:{self.name}{enc}"
         target = None if path is None else os.fspath(path)
         if level not in (True, False):
-            hit = lookup(plain, self.name, enc, widen=DETERMINISTIC if deterministic else ())
+            hit = lookup(plain, self.name, enc, widen=EXACT_FIELDS if widens(self.reproducible) else ())
             if hit is not None or level == "get":
-                rev._record(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
+                rev._record_run(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
                 at = target if target is not None or hit is None or self.kind != "dat" else hit.name
+                if read_only:
+                    return hit
                 return place(plain.ledger, hit, at) if hit is not None and at is not None else hit
+            if read_only:
+                raise ConfinedWrite(f"{self.name}: no entry for these keys at {plain.ledger._store.name}@{plain.id}, "
+                                    "a read-only ledger here; it runs nothing (seal='get' asks without refusing)")
         into = level if isinstance(level, Transaction) else None
         # False: a draft; True: the memo entry in a transaction of its own; a Transaction: into it
         save: Any = True if isinstance(level, str) and level == "save" else (into if into is not None else False)
         if into is not None and target is None and self._takes_path:
-            target = fresh_name(plain.ledger, self._template or ANONYMOUS, self._name_keys(kw))
+            target = fresh_name(into.ns, self._template or ANONYMOUS, kw)
         name = target if into is not None and target is not None and not os.path.isabs(target) else None
         if into is not None and target is not None and name is None:
             raise ValueError(f"{self.name}: path={target!r} is absolute; with seal=t the result is saved at "
@@ -517,18 +813,75 @@ class Fn:
                 raise TypeError(f"{self.name} returned a {type(value).__name__} sealed by v.seal(); run seals "
                                 "its own result, so return it unsealed")
             value.seal()
-        rev._record(item, ref_text(dotted(type(value)), value.hash))
+        rev._record_run(item, ref_text(dotted(type(value)), value.hash))
         if into is not None:
             return value
-        if target is None and self._takes_path and isinstance(value, Dat):
-            target = fresh_name(plain.ledger, self._template or ANONYMOUS, self._name_keys(kw))
+        if target is None and self._takes_path and hooks.is_dat(value):
+            target = fresh_name(plain.ns, self._template or ANONYMOUS, kw)
         return place(plain.ledger, value, target) if target is not None else value
 
-    def _name_keys(self, kw: Dict[str, Any]) -> Dict[str, Any]:
-        """What a path template expands with: the keys; for a dat, its spec's ``dat.kwargs``."""
-        if self.kind == "dat":
-            return dict(Dat.get(kw, "dat.kwargs", None) or {})
-        return kw
+    def _reduce(self, over: Any, keys: Dict[str, Any], seal: Any = OWN, clean: bool = False,
+                fresh: bool = False) -> Optional[Value]:
+        """``rev.reduce``: the result of this reduce function over the set ``over`` (SVP 242).
+
+        An exact hit over the sorted set is returned and nothing runs (``seal="get"`` stops there, ``None`` on a miss);
+        else the function runs once with ``acc`` the result of the largest subset already reduced whose entry holds
+        (``largest_subset``; ``None`` when none does). ``fresh=True`` skips both, the exact hit and every partial, and
+        reduces the whole set and ``more`` the inputs outside it, sorted, and the
+        step is saved as ``seal=`` says, as on ``__call__``, its memo entry carrying ``db/reduce/from`` and
+        ``db/reduce/more``."""
+        from .txn import Transaction
+
+        if not reduces(self):
+            raise TypeError(f"{self.name} is no reduce function: a @dat.fn taking both acc and more")
+        if not isinstance(fresh, bool):
+            raise TypeError(f"fresh is True or False, not {fresh!r}")
+        rev = self._rev
+        plain = rev._plain()
+        read_only = plain.ledger.read_only
+        if not self.code.sandboxed and not read_only:
+            from . import sandbox
+
+            if sandbox.IN_WORKER and sandbox.STATE.frames:
+                raise NotEvaluated(f"{self.name} is unsandboxed (under no mount): it does not run nested inside "
+                                   f"the sandboxed body of mount {sandbox.STATE.frames[-1].mount!r}; mount it")
+        level = seal_level(self.name, plain, seal, clean, None)
+        if read_only and (level is True or level is False):
+            raise ConfinedWrite(f"{self.name}: {plain.ledger._store.name} is read-only here: seal='get' or the "
+                                "default reads an entry; seal=True and seal=False do not apply")
+        if clean:
+            check_clean(self, plain, current_env())
+        rest, items, enc = reduce_keys(self, over, keys)
+        item = f"eval:{self.name}{enc}"
+        widen = EXACT_FIELDS if widens(self.reproducible) else ()
+        if level == "get" or (level not in (True, False) and not fresh):
+            hit = lookup(plain, self.name, enc, widen=widen)
+            if hit is not None or level == "get":
+                rev._record_run(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
+                return hit
+        if read_only:
+            raise ConfinedWrite(f"{self.name}: no entry for these keys at {plain.ledger._store.name}@{plain.id}, "
+                                "a read-only ledger here; it runs nothing (seal='get' asks without refusing)")
+        part = None if fresh else largest_subset(plain, self.name, enc, [i.ident for i in items], widen)
+        acc_from, acc, have = part if part is not None else ("none", None, frozenset())
+        more = [i for i in items if i.ident not in have]
+        kw = dict(rest, acc=acc, more=[i.given for i in more])
+        step = (acc_from, canonical([i.enc for i in more]))
+        into = level if isinstance(level, Transaction) else None
+        save: Any = True if isinstance(level, str) and level == "save" else (into if into is not None else False)
+        if self.code.sandboxed:
+            from .sandbox import run_sandboxed
+
+            value = run_sandboxed(self, plain, kw, enc, save, None, reduce=step)
+        else:
+            value = self._run_base(plain, kw, enc, save, None, reduce=step)
+        if level is True:
+            if value.sealed:
+                raise TypeError(f"{self.name} returned a {type(value).__name__} sealed by v.seal(); run seals "
+                                "its own result, so return it unsealed")
+            value.seal()
+        rev._record_run(item, ref_text(dotted(type(value)), value.hash))
+        return value
 
     def _function(self) -> Callable:
         """The function itself, for a plain ``Dat.ns`` run (nothing memoised): installed, the object;
@@ -551,11 +904,12 @@ class Fn:
         return repo         # a db/repo/<repo> db/commit row names a clean run, not where evals may run
 
     def _run_base(self, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
-                  name: Optional[str] = None) -> Value:
+                  name: Optional[str] = None, reduce: Optional[Tuple[str, str]] = None) -> Value:
         """Run in this process. ``save``: ``False``, a draft carrying its ``RunTrace``; ``True``, the
-        memo entry in a transaction of its own; a ``Transaction``, the memo entry in it (named ``name``)."""
-        from .rev import Rev
+        memo entry in a transaction of its own; a ``Transaction``, the memo entry in it (named ``name``).
+        ``reduce``: a reduce step's ``(from, more)`` rows, its ``acc`` and ``more`` loaded here (SVP 242)."""
         from .sandbox import base_confined
+        from .trace import RunFrame, running
         from .txn import code_token
 
         env = current_env()
@@ -565,12 +919,15 @@ class Fn:
         if self.kind == "dat":
             return self._run_dat(plain, kw, enc, save, name, env, repo)
         rec: Dict[str, str] = {}
+        frame = RunFrame(plain, rec, enc)
         work = work_folder() if self._takes_path else None
         args = dict(kw, path=work) if work is not None else kw
         value = None
         try:
-            with base_confined(_checkout(env, repo), _dats(plain, work)):
-                out = self._obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+            with base_confined(_checkout(env, repo), _dats(plain, work)), running(frame):
+                if reduce is not None:
+                    args = reduce_args(frame.rev, args)
+                out = self._obj(frame.rev, **args)
             value = wrap_result(self.name, self._obj, out)
             trace = dict(rec)
             trace.update({"code": self.code.subject, "fn": self.name, **platform_items(env)})
@@ -579,9 +936,9 @@ class Fn:
             if save is False:
                 dirty = bool(repo is not None and env.code[repo].dirty)
                 return attach_run(value, run_trace(self, plain, trace, enc, "eval:unsandboxed", self.code,
-                                                   repo=repo, dirty=dirty))
+                                                   repo=repo, dirty=dirty, reduce=reduce))
             value = seal_entry(self, plain, value, trace, enc, "eval:unsandboxed", self.code, into=save,
-                               name=name, repo=repo)
+                               name=name, repo=repo, reduce=reduce)
             return value
         finally:
             drop_work(work, value)
@@ -589,16 +946,18 @@ class Fn:
     def _run_dat(self, plain: "Rev", spec: Dict[str, Any], enc: str, save: Any, name: Optional[str],
                  env: Env, repo: Optional[str]) -> Value:
         """A dat's run function, run here (``_run_base``): the dat made from the spec in a work folder and
-        run (``manager._execute``), its recorded dependencies that are ledger names entered as alias reads."""
+        run (``manager._execute``), its recorded dependencies that are ledger names entered as alias reads.
+        The run is the current run, so the manager's namespace and ``dat.at`` are at ``plain`` (SVP 1521)."""
         from .sandbox import base_confined
+        from .trace import RunFrame, running
         from .txn import code_token
 
         rec: Dict[str, str] = {}
         work = work_folder()
         value: Any = None
-        manager = Dat.manager
+        manager = hooks.manager()
         try:
-            with base_confined(_checkout(env, repo), _dats(plain, work)):
+            with base_confined(_checkout(env, repo), _dats(plain, work)), running(RunFrame(plain, rec, enc)):
                 dat = manager.create(dat_spec(spec, self._template), path=str(work / "dat"))
                 manager._execute(dat)
             value = dat
@@ -630,33 +989,37 @@ def _checkout(env: Env, repo: Optional[str]) -> Optional[Path]:
 def _dats(plain: "Rev", work: Optional[Path]) -> List[Any]:
     """Where an unsandboxed body may read inside its repo (Eval § 5.3): the dats (the dat world's folders
     and art folder, the ledger's art store), the ledger's own folder, and the body's path folder."""
-    from .pgstore import is_dsn
+    from .backends import is_uri
 
-    manager = Dat.manager
+    manager = hooks.manager()
     out: List[Any] = [*manager._dat_folders, manager._art_folder, plain.ledger._store.art.root, work]
-    if not is_dsn(str(plain.ledger.path)):
+    if not is_uri(str(plain.ledger.path)):
         out.append(plain.ledger.path)
     return out
 
 
 def dat_spec(keys: Dict[str, Any], template: Optional[str]) -> Dict[str, Any]:
-    """The spec a dat is created from: its memo key (the expanded spec) with its ``dat.name`` template back."""
-    import copy
+    """The spec a dat is created from: its memo key (the expanded spec) quoted, so ``create``'s expansion hands
+    its values back as they are, with its ``dat.preds`` template (SVP 1508) and its ``dat.name`` template
+    back, which that expansion fills."""
+    from ..expand import quote_spec
 
-    spec = copy.deepcopy(keys)
+    spec = quote_spec(keys)
+    preds = keys["dat"].get("preds")
+    if preds is not None:
+        spec["dat"]["preds"] = preds
     if template is not None:
         spec["dat"]["name"] = template
     return spec
 
 
-def alias_reads(plain: "Rev", dat: Dat, rec: Dict[str, str]) -> None:
+def alias_reads(plain: "Rev", dat: Any, rec: Dict[str, str]) -> None:
     """The dat's recorded dependencies that are names on the ledger, recorded as the bindings they read."""
     from .rev import Ref, Rev
 
     recording = Rev(plain.ledger, plain.id, _rec=rec)
-    head = plain.ledger.at()
-    for dep in sorted(Dat.get(dat.get_results(), "dat.dependencies", None) or {}):
-        if head._held(dep, "db/alias"):
+    for dep in sorted(dotted_get(dat.get_results(), "dat.dependencies", None) or {}):
+        if plain._held(dep, "db/alias"):
             Ref(recording, dep)                     # records `<dep> db/alias`, the binding it read
 
 
@@ -709,27 +1072,14 @@ def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
                        f"the checkout is at {(code.commit or '?')[:8]}")
 
 
-def fresh_name(ledger: Any, template: str, keys: Dict[str, Any]) -> str:
-    """The path template expanded with the call's keys (Q36): ``{unique}`` counts up (``""``,
-    ``_2``, ...) until no name holds a value there and no folder is at it; without ``{unique}`` the
-    name moves to the new value (A70)."""
-    import datetime as _dt
-
-    from ..core import _builtins, expand
-
-    now = _dt.datetime.now()
-    data = ledger._store.art.root / "dats"
-    head = ledger.at()
-    for count in range(1, 100000):
-        unique = "" if count == 1 else f"_{count}"
-        text = expand(template, {**_builtins(now), **keys, "unique": unique})
-        if not isinstance(text, str) or not text:
-            raise TypeError(f"path template {template!r} expanded to {text!r}, not a path")
-        if "{unique}" not in template:
-            return text
-        if os.path.isabs(text) or (not head._held(text, "db/alias") and not (data / text).exists()):
-            return text
-    raise RuntimeError(f"path template {template!r}: no free name")
+def fresh_name(ns: Any, template: str, keys: Dict[str, Any]) -> str:
+    """The path template expanded with the call's keys through the ledger namespace ``ns`` (Q36):
+    ``ns.expand`` counts ``${unique:}`` until no name holds a value there and no folder is at it; without
+    ``${unique:}`` the name moves to the new value (A70)."""
+    text = ns.expand(template, **keys)
+    if not text:
+        raise TypeError(f"path template {template!r} expanded to {text!r}, not a path")
+    return text
 
 
 def place(ledger: Any, value: Value, target: str) -> Value:
@@ -737,11 +1087,11 @@ def place(ledger: Any, value: Value, target: str) -> Value:
     ``<data folder>/<name>`` as a view; absolute, the folder made there, no name. Unsaved
     (``seal=False`` or ``True``): the name is set on the object, saved with it."""
     if os.path.isabs(target):
-        if isinstance(value, Dat) and value.subject is not None:
+        if hooks.is_dat(value) and value.subject is not None:
             art = ledger._store.art
             value._forget()
-            value.path = Dat._materialise(art.get(value.hash), art, target)
-        elif isinstance(value, Dat):
+            value.path = value._materialise(value.hash, value._stored_manifest(art, value.hash), art, target)
+        elif hooks.is_dat(value):
             raise ValueError(f"path={target!r}: an unsaved Dat stays where it was built (seal=False or True)")
         return value
     if value.subject is None:
@@ -771,7 +1121,7 @@ def drop_work(work: Optional[Path], value: Any) -> None:
 
     if work is None or not work.exists():
         return
-    if isinstance(value, Dat) and value.rev is None:        # unsaved, or saved by a transaction still open
+    if hooks.is_dat(value) and value.rev is None:        # unsaved, or saved by a transaction still open
         p = os.path.realpath(value.path)
         if p == os.path.realpath(work) or p.startswith(os.path.realpath(work) + os.sep):
             return
@@ -794,52 +1144,108 @@ class _AlreadySealed(Exception):
 
 def seal_entry(fn: Fn, plain: "Rev", value: Value, trace: Dict[str, str], enc: str, provenance: str,
                code: Code, into: Any = True, name: Optional[str] = None,
-               repo: Optional[str] = None) -> Value:
+               repo: Optional[str] = None, reduce: Optional[Tuple[str, str]] = None) -> Value:
     """Seal an eval's result as a memo entry: into the open transaction ``into``, or (``True``) in a
-    transaction of its own, handing back the identical entry when one is sealed already."""
+    transaction of its own (``by="eval:<name>"``, a reduce step's ``by="reduce:<name>"``), handing back the
+    identical entry when one is sealed already."""
     from .rev import Ref
 
     if value.sealed and value.subject is None:
         raise TypeError(f"{fn.name} returned a {type(value).__name__} sealed by v.seal(); run seals its own "
                         "result, so return it unsealed")
-    run = run_trace(fn, plain, trace, enc, provenance, code, repo=repo)
+    run = run_trace(fn, plain, trace, enc, provenance, code, repo=repo, reduce=reduce)
     if into is not True:
         save_run(into, value, run, name)
         return value
     ledger = plain.ledger
     try:
-        with ledger.transaction(by=f"eval:{fn.name}") as t:
+        with ledger.transaction(by=f"{'eval' if reduce is None else 'reduce'}:{fn.name}") as t:
             save_run(t, value, run, None, refuse_held=True)
     except _AlreadySealed as e:
-        return Ref(ledger.at(), e.subject).load()
+        return Ref(ledger.at(), e.subject)._load()
     return value
+
+
+def _spec_only(rev: "Rev", subject: str) -> bool:
+    from .rev import Ref
+
+    return Ref(rev, subject)._spec_only()
 
 
 def lookup(plain: "Rev", name: str, enc: str, widen: Sequence[str] = ()) -> Optional[Value]:
     """The latest-sealed entry for ``(name, keys)`` whose dependencies hold at ``plain``; never runs.
     The memo index (``policy.reduced``) skips a candidate whose platform the policy already rules out;
-    every other candidate is judged in full (``trace_matches``, ``widen`` added to the policy)."""
-    from .policy import judge, policy_at, reduced
+    every other candidate is judged in full (``trace_matches``, ``widen`` added to the policy). A spec-only copy
+    (SVP 251) holds no bytes to hand back: it is no hit."""
     from .rev import Ref
-    from .trace import trace_matches
 
     top = plain.ledger.at()
-    pname, pfn = policy_at(top)
-    keys = reduced(top, pname, pfn)
-    want = judge(pfn, current_env().platform_record())
     cands = []
     for s in top._store.subjects(top.id, predicate="db/keys", obj="json:" + enc):
         fnh = top._held(s, "db/fn")
         val = top._held(s, "db/value")
         if fnh and fnh[0].obj == "str:" + name and val:
             cands.append((val[0].rev, val[0].ord, s))
+    holds = _holding(plain, top, widen)
     for _r, _o, s in sorted(cands, reverse=True):
+        if holds(s):
+            return Ref(top, s)._load()
+    return None
+
+
+def _holding(plain: "Rev", top: "Rev", widen: Sequence[str]) -> Callable[[str], bool]:
+    """``holds(subject)``: is that memo entry a hit at ``plain`` (``lookup``'s test, one candidate at a time): its
+    platform not ruled out by the memo index (``policy.reduced``), its bytes here (not spec-only, SVP 251), and
+    every dependency holding (``trace_matches``, ``widen`` added to the policy)."""
+    from .policy import judge, policy_at, reduced
+    from .trace import trace_matches
+
+    pname, pfn = policy_at(top)
+    keys = reduced(top, pname, pfn)
+    want = judge(pfn, current_env().platform_record())
+
+    def holds(s: str) -> bool:
         if s in keys and (keys[s] is None or keys[s] != want):
-            continue                                # the policy rules its platform out: no row read
+            return False                            # the policy rules its platform out: no row read
+        if _spec_only(top, s):
+            return False
         trace = {p[len("db/deps/"):]: h.obj.partition(":")[2]
                  for _s, p, h in top._held_rows(subject=s) if p.startswith("db/deps/")}
-        if trace_matches(plain, trace, widen):
-            return Ref(top, s).load()
+        return trace_matches(plain, trace, widen)
+    return holds
+
+
+def largest_subset(plain: "Rev", name: str, enc: str, have: Sequence[str],
+                   widen: Sequence[str] = ()) -> Optional[Tuple[str, Value, frozenset]]:
+    """``(subject, value, its identities)`` of the largest proper, non-empty subset of the ask already reduced whose
+    entry holds at ``plain`` (SVP 242), else ``None``; never runs. Candidates are the function's entries (``db/fn``,
+    indexed) whose ``db/keys`` other than ``over`` equal the ask's (``enc``) and whose ``over`` is within ``have``,
+    the ask's identities; judged largest first, ties newest seal first, as ``lookup`` judges one."""
+    from .rev import Ref
+
+    top = plain.ledger.at()
+    rest = json.loads(enc)
+    rest.pop("over", None)
+    rest_text = canonical(rest)
+    ask = set(have)
+    cands = []
+    for s in top._store.subjects(top.id, predicate="db/fn", obj="str:" + name):
+        fnh, val, kh = top._held(s, "db/fn"), top._held(s, "db/value"), top._held(s, "db/keys")
+        if not (fnh and fnh[0].obj == "str:" + name and val and kh and kh[0].obj.startswith("json:")):
+            continue
+        doc = json.loads(kh[0].obj[len("json:"):])
+        if not isinstance(doc, dict) or not isinstance(doc.get("over"), list):
+            continue
+        over = doc.pop("over")
+        if canonical(doc) != rest_text:
+            continue
+        ids = frozenset(identity(x) for x in over)
+        if 0 < len(ids) < len(ask) and ids <= ask:
+            cands.append((len(ids), val[0].rev, val[0].ord, s, ids))
+    holds = _holding(plain, top, widen)
+    for _n, _r, _o, s, ids in sorted(cands, key=lambda c: c[:4], reverse=True):
+        if holds(s):
+            return s, Ref(top, s)._load(), ids
     return None
 
 
@@ -863,10 +1269,10 @@ def code_holds(rev: "Rev", subject: str, name: Optional[str]) -> bool:
     if show(mounts[0].obj) != "none":           # a mounts hash: sandboxed
         from .sandbox import sandbox_code_at
 
-        return sandbox_code_at(rev, name, json.loads(show(mods[0].obj))) == subject
+        if not name.startswith(MNT + "."):
+            return False
+        return sandbox_code_at(rev, name[len(MNT) + 1:], json.loads(show(mods[0].obj))) == subject
     try:
-        if any(name.startswith(prefix + ".") for prefix in mounts_at(rev._plain())):
-            return False                        # mounted since: the code is the mount's now
         modname, src = source_of(name, resolve_in_process(name))
         return installed_code(modname, src, current_env()).subject == subject
     except (ImportError, TypeError):

@@ -121,15 +121,10 @@ class TestCommandLine:
                           "   q  rrr  S  t  uuu  v  jackpot   XXX  y")
 
     def test_tweaking_command_from_cmdline(self):
-        line = """./do my_letters --set "dat.title=Re-configured letterator" """ + \
-                """--json rules='[[2, "my_letters.triple_it"]]'"""
-        expect = """a  bbb  c  ddd  e  fff  g  hhh  i""" + \
-                 """  jjj  k  lll  m  nnn  o  ppp  q  rrr  s  ttt  u  vvv  w  xxx  y"""
-        assert run_capture_tail(line) == expect
-
-    def test_setting_multiple_params_at_once(self):
-        line = """./do my_letters --set dat.title=Quickie --set start=100 --set end=110"""
-        expect = """D  e  fff  g  h  JACKPOT JACKPOT JACKPOT   j  k  lll  m"""
+        line = """./do my_letters "dat.title=Re-configured letterator" """
+        expect = ("a  jackpot   ccc  D  e  fff  g  h  "
+                  "JACKPOT JACKPOT JACKPOT   j  k  lll  m  N  ooo  jackpot"
+                  "   q  rrr  S  t  uuu  v  jackpot   XXX  y")
         assert run_capture_tail(line) == expect
 
 
@@ -179,7 +174,7 @@ class TestTemplatedDatCreationAndDeletion:
         assert dat.delete(), "Couldn't delete Persistable"
 
     def test_creation_and_deletion_with_spec(self):
-        spec1 = {"dat": {"name": "test_dats/{YY}-{MM} Dats{unique}"}}
+        spec1 = {"dat": {"name": "test_dats/Dats${unique:}"}}
         dat, _ = ns._dat_from_template(spec1)
         assert dat, "Couldn't create Persistable"
         assert dat.get_path_name().startswith("test_dats/"), "Wrong path"
@@ -223,26 +218,28 @@ class TestManagerRun:
         m.ns.mount(at="tmpl", value={"dat": {"do": "echo", "name": "runs/t", "kwargs": {"x": 1}}})
         return m
 
-    def test_a_dat_runs_in_place_and_dat_run_is_the_record(self, m):
-        dat = m.create({"dat": {"do": "echo", "args": [3]}}, path="in_place")
-        assert m.run(dat) == {"name": "in_place", "args": [3], "kwargs": {}}
+    def test_a_spec_runs_once_and_dat_run_is_the_record(self, m):
+        assert m.run({"dat": {"do": "echo", "args": [3], "name": "once"}}) == {
+            "name": "once", "args": [3], "kwargs": {}}
+        dat = m.load("once")
         assert isinstance(dat.run, Dat)                          # still the record, not a verb
         record = dat.run.get_results()["dat"]
         assert "run_at" in record and "run_time" in record
 
-    def test_a_dat_with_arguments_forks_beside_it(self, m):
+    def test_a_dat_is_refused_with_or_without_arguments(self, m):
         dat = m.create({"dat": {"do": "echo", "args": [3]}}, path="parent")
-        out = m.run(dat, 9, y=2)
+        for call in ((dat,), (dat, 9)):
+            with pytest.raises(Exception, match="In <Dat") as e:
+                m.run(*call)
+            assert isinstance(e.value.__cause__, TypeError) and "get_spec()" in str(e.value.__cause__)
+        assert dat.run is None                                   # nothing ran
+        out = m.run(dat.get_spec() | {"dat": {**dat.get_spec()["dat"], "target_exists": "increment"}}, 9, y=2)
         assert out == {"name": "parent_2", "args": [9], "kwargs": {"y": 2}}
-        assert dat.run is None                                   # the parent never ran
 
-    def test_a_sealed_dat_is_refused(self, m):
-        m.ns.mount(at="saves", value=lambda dat: dat.save())
-        dat = m.create({"dat": {"do": "saves"}}, path="sealed")
-        m.run(dat)
-        with pytest.raises(Exception, match="In <Dat") as e:
-            m.run(dat)
-        assert isinstance(e.value.__cause__, RuntimeError) and "sealed" in str(e.value.__cause__)
+    def test_create_takes_keywords_and_runs_nothing(self, m):
+        dat = m.create("tmpl", path="made", y=2)
+        assert dat.get_spec()["dat"]["kwargs"] == {"x": 1, "y": 2}
+        assert dat.run is None
 
     def test_a_spec_name_creates_and_runs(self, m):
         assert m.run("tmpl") == {"name": "runs/t", "args": [], "kwargs": {"x": 1}}

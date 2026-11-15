@@ -32,12 +32,28 @@ body's ``path`` folder, the dat being produced
 writes inside a body (a nested eval's seal, a dat materialised into the art
 store) run ``unguarded``. The same hook refuses a host-name lookup or an internet
 send (``ConfinedNetwork``), except to a Postgres ledger's own endpoint.
+And it refuses process creation (``ConfinedProcess``: ``subprocess``, ``os.system``,
+``os.exec*``, ``os.posix_spawn``, ``os.fork``), whose reads and writes it could not see; a body
+that needs a tool runs unsandboxed (base mode). The worker's own fork happens in the server, outside the guard.
 A nested eval under the running body's own mount runs in-process and its loads count toward its own
 entry (Q37 (ii)); one under another mount runs in a fresh child of the server, asked for up the child's
 channel. A nested unsandboxed (base-mode) call is refused, ``NotEvaluated`` naming the mount and the
 function. An in-process nested eval's code includes a module its
 caller loaded first: the worker's ``__import__`` credits every import a body makes, loaded
 already or not, with what that module's first import pulled in.
+
+Another ledger from a body (SVP 1521 Q3 (A)): the caller's ``ledgers`` view crosses on the request (``shipped_section``), and
+``ledgers.<name>``, ``dat.at("<name>@<rev>")`` and ``dat.load("<name>@<rev>:<value>")`` open that ledger read-only
+(``read_only_ledger``), once per child, SQLite or Postgres, after the caller's read guard (SVP 1596: shipped by its
+import path, ``shipped_read_guard``, imported at the body's first named open); a ``Ref`` or sealed ``Value`` key on another ledger crosses
+with its location and opens the same way. Opening one adds its art store to ``STATE.reads``, its database to
+``STATE.foreign`` (a ``sqlite3.connect`` there passes only as ``mode=ro``) and its endpoint to the network hook's.
+What a read must place (a ``Dat``'s folder, bytes fetched from the value's store) goes to a folder of the child's, gone
+with it (``ReadOnlyArt``). A value or a run read is a ``foreign:`` item (``trace.note_read``); a raw row is untracked. The
+handle writes nothing: ``Transaction`` refuses it (``ConfinedWrite``), its database connections are read-only, and
+``rev.run`` on it is a lookup, a miss ``ConfinedWrite``, since a run there would write there. ``Ledger(<location>)`` in a
+body is still ``ConfinedWrite`` at its open: a store it opens may write. Not closed: a body holding psycopg can connect to
+a Postgres endpoint the network hook passes and, with write rights on that login, write through its own connection.
 
 A dat's run function under a mount (an ``Fn`` of kind ``"dat"``, DAT 1045, 1046)
 runs through the same call: its keys are the spec, expanded in the parent, and the
@@ -76,6 +92,7 @@ import inspect
 import os
 import pickle
 import re
+import shutil
 import socket
 import struct
 import subprocess
@@ -88,14 +105,17 @@ import warnings
 from pathlib import Path
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple
+from urllib.parse import unquote
 
 from .codec import sha256
 from .env import Env, current_env, platform_items
-from .errors import ConfinedNetwork, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
+from .errors import ConfinedNetwork, ConfinedProcess, ConfinedWrite, NotEvaluated, UnmountedImport, UntracedRead
 from .code import Code
-from ..core import Dat, DatManager
-from .fn import (Fn, alias_reads, attach_run, dat_spec, drop_work, mounts_at, mounts_hash, path_template,
-                 run_trace, save_run, seal_entry, wrap_result)
+from . import hooks
+from .backends import CACHE_ENV
+from .named import shipped_read_guard, shipped_section
+from .fn import (Fn, alias_reads, attach_run, drop_work, fn_mark, fn_mark_in_source, mounted_name, mounts_at,
+                 mounts_hash, path_template, reduce_args, run_trace, save_run, seal_entry, wrap_result)
 
 if TYPE_CHECKING:
     from .rev import Rev
@@ -394,8 +414,7 @@ def third_party_now(key: str) -> str:
     return "<missing>"
 
 
-def _signature(fdef: ast.FunctionDef, name: str,
-               marks: Set[str] = frozenset({"ledger_fn"})) -> Tuple[inspect.Signature, bool, Optional[str], str, bool]:
+def _signature(fdef: ast.FunctionDef, name: str) -> Tuple[inspect.Signature, bool, Optional[str], str]:
     a = fdef.args
     params = []
     pos = a.posonlyargs + a.args
@@ -426,7 +445,7 @@ def _signature(fdef: ast.FunctionDef, name: str,
     keep = [p for p in rest if p.name != "path"]
     template = path_template(folder.default) if folder is not None else None
     returns = ast.unparse(fdef.returns) if fdef.returns is not None else ""
-    return inspect.Signature(keep), folder is not None, template, returns, _decorated(fdef, marks)
+    return inspect.Signature(keep), folder is not None, template, returns
 
 
 def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> Fn:
@@ -449,37 +468,20 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
         fdef = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == attr_name), None)
         if fdef is None:
             raise ImportError(f"{name!r}: no function {attr_name!r} in {f[0]}")
-        marks = _ledger_fn_names(tree)
-        decorated = _decorated(fdef, marks)
-        if decorated:
-            sig, takes_path, template, returns, _ = _signature(fdef, name, marks)
+        mark = fn_mark_in_source(tree, fdef)     # @dat.fn, read off the source (SVP 250 Q4, A11)
+        if mark is not None:
+            sig, takes_path, template, returns = _signature(fdef, name)
         else:                                       # a dat's run function: its keys are a spec (DAT 1046)
             sig, takes_path, template, returns = inspect.Signature(), True, None, ""
         check_mounted_imports(mounts, modname, attr_name)
         mods = module_shas(closure(mounts, [modname]))
-    return Fn(name=name, module=f[0],
+    return Fn(name=mounted_name(name), module=f[0],
               mount=m.prefix, signature=sig, env=Env(env.code, env.platform, mounts_hash(plain), env.record),
               code=mounted_code(plain, env, m, modname, mods),
               _rev=rev, _takes_path=takes_path, _template=template, _returns=returns,
               _info={"repo": m.repo, "prefix": m.prefix, "modname": modname, "attr": attr_name},
-              kind="ledger" if decorated else "dat")
-
-
-def _ledger_fn_names(tree: ast.Module) -> Set[str]:
-    """The names ``ledger_fn`` is bound to in a module, read off its source: ``ledger_fn`` itself and
-    every ``from ... import ledger_fn as <alias>`` at its top level."""
-    names = {"ledger_fn"}
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom):
-            names.update(a.asname for a in node.names if a.name == "ledger_fn" and a.asname)
-    return names
-
-
-def _decorated(fdef: ast.FunctionDef, marks: Set[str] = frozenset({"ledger_fn"})) -> bool:
-    """Is the function marked ``@ledger_fn`` (by name, an import alias of it in ``marks``, or attribute),
-    read off its source."""
-    return any((isinstance(d, ast.Name) and d.id in marks)
-               or (isinstance(d, ast.Attribute) and d.attr == "ledger_fn") for d in fdef.decorator_list)
+              kind="ledger" if mark is not None else "dat",
+              reproducible=mark.reproducible if mark is not None else None)
 
 
 def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str, str]) -> Code:
@@ -513,7 +515,10 @@ def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str,
 
 def root_version(plain: "Rev", env: Env, prefix: str) -> Optional[str]:
     """The mounted root package's ``__version__``, read after importing it the way a run does: in a
-    forked child of the warm server, confined (in the worker itself, here), leaving nothing imported."""
+    forked child of the warm server, confined (in the worker itself, here), leaving nothing imported.
+    On a ledger read by name: ``None``, since nothing runs there and its mount may be none of this run's."""
+    if plain.ledger.read_only:
+        return None
     if IN_WORKER:
         return import_version(prefix)
     return _server().version(plain, prefix, env)
@@ -550,11 +555,12 @@ def sandbox_code_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Optional[
 
 
 def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
-                  name: Optional[str] = None) -> Any:
+                  name: Optional[str] = None, reduce: Optional[Tuple[str, str]] = None) -> Any:
     """A miss: at HEAD, clean or dirty (Q39 (A)); the ``code`` item records the bytes it loaded.
 
-    ``save`` as ``Fn._run_base``'s. Into a ``Transaction`` (open here, in the parent), the worker runs a
-    draft and the parent saves it, since the transaction cannot cross the pipe."""
+    ``save`` and ``reduce`` as ``Fn._run_base``'s. Into a ``Transaction`` (open here, in the parent), the worker runs
+    a draft and the parent saves it, since the transaction cannot cross the pipe. A reduce step ships its ``db/keys``
+    (``enc``) and rows, its ``acc`` and ``more`` by subject (SVP 242)."""
     env = current_env()
     if fn._info["repo"] not in env.code:
         raise NotEvaluated(f"{fn.name}: repo {fn._info['repo']!r} has no checkout in this environment")
@@ -562,13 +568,14 @@ def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
     if IN_WORKER:
         running = STATE.frames[-1].mount if STATE.frames else None
         if running is None or running == fn._info["prefix"] or _UPSTREAM is None:
-            return run_here(fn, plain, kw, enc, save, name)     # nested under its own mount: in-process
+            return run_here(fn, plain, kw, enc, save, name, reduce)     # nested under its own mount: in-process
         server = _UPSTREAM                          # under another mount: a fresh child of the server
     else:
         server = _server()
+    step = None if reduce is None else {"enc": enc, "rows": list(reduce)}
     if save is True or save is False:
-        return server.call(fn, plain, kw, save, env)
-    draft = server.call(fn, plain, kw, False, env)
+        return server.call(fn, plain, kw, save, env, step)
+    draft = server.call(fn, plain, kw, False, env, step)
     run = draft.__dict__.get("_run")
     if run is None:
         raise TypeError(f"{fn.name} returned a {type(draft).__name__} sealed by v.seal(); run seals its own "
@@ -679,6 +686,8 @@ class _State:
     interpreter: List[str] = []                     # where an unmounted module's own import may read
     works: List[Optional[str]] = []                 # the path folder of each running body, innermost last
     store: str = ""                                 # the ledger's own database file (a folder ledger)
+    foreign: Set[str] = set()                       # the database files of ledgers opened read-only
+    overlays: List[Path] = []                       # where those ledgers' reads placed what they had to
     hosts: Set[str] = set()                         # the ledger's own endpoint, by name and by address
     addrs: Set[Tuple[str, int]] = set()
 
@@ -827,6 +836,9 @@ def _network(event: str, args: Any) -> None:
         raise ConfinedNetwork(f"{addr[0]}:{addr[1]}: a sandboxed function does not use the network")
 
 
+# process creation: what a child reads and writes is beyond this hook (1467 Q8 (A)). The worker's own fork is the
+# server's, outside the guard.
+_PROCESS = frozenset({"subprocess.Popen", "os.exec", "os.posix_spawn", "os.fork", "os.system"})
 _OS_READS = ("os.listdir", "os.scandir", "os.listxattr", "os.getxattr")
 _DEV_NULL = [os.path.realpath(os.devnull)]
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC
@@ -884,6 +896,9 @@ def _check_write(p: Optional[str]) -> None:
 def _audit(event: str, args: Any) -> None:
     if not STATE.guard:
         return
+    if event in _PROCESS:
+        raise ConfinedProcess(f"{event}: a sandboxed function creates no process; one that needs a tool runs "
+                              "unsandboxed")
     if event in _NET_NAME or event in _NET_SEND:
         _network(event, args)
         return
@@ -893,9 +908,13 @@ def _audit(event: str, args: Any) -> None:
         return
     if event == "sqlite3.connect":
         db = os.fsdecode(os.fspath(args[0])) if isinstance(args[0], (str, bytes, os.PathLike)) else ""
-        db = db[5:].partition("?")[0] if db.startswith("file:") else db
-        if db and db != ":memory:" and os.path.realpath(db) != STATE.store:
-            _check_write(os.path.realpath(db))
+        query = ""
+        if db.startswith("file:"):
+            db, _, query = db[5:].partition("?")
+            db = unquote(db)
+        real = os.path.realpath(db)
+        if db and db != ":memory:" and real != STATE.store and not (real in STATE.foreign and query == "mode=ro"):
+            _check_write(real)
         return
     if event in _OS_READS:
         _check_read(_resolve(args[0] if args and args[0] is not None else "."), sys._getframe(1))
@@ -1068,12 +1087,39 @@ def install_worker(ledger: Any, mounts: List[Mount]) -> None:
     STATE.hosts, STATE.addrs = _ledger_endpoints(ledger.path)
 
 
-def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name: Optional[str] = None) -> Any:
+def _cache_root() -> Optional[str]:
+    """The caller's cache root (``backends.cache_root``), as a request ships it to the worker."""
+    from .backends import cache_root
+
+    root = cache_root()
+    return None if root is None else str(root)
+
+
+def read_only_ledger(target: Any, given: Any, base: Path) -> Any:
+    """In the worker: a read-only handle on a ledger a body names (SVP 1521 Q3 (A)), and what the hooks let it reach."""
+    from .ledger import Ledger
+
+    with unguarded():
+        overlay = Path(tempfile.mkdtemp(prefix="foreign-", dir=os.environ.get("DAT_SCRATCH") or None))
+        STATE.overlays.append(overlay)
+        led = Ledger._opened(target, given, base, None, overlay)
+        led.at()                                    # a ledger that does not open says so here, in the body's call
+        hosts, addrs = _ledger_endpoints(led.path)
+    STATE.hosts, STATE.addrs = STATE.hosts | hosts, STATE.addrs | addrs
+    STATE.reads = STATE.reads + [os.path.realpath(led._store.art.root), os.path.realpath(overlay)]
+    db = getattr(led._store, "path", None)
+    if isinstance(db, Path):
+        STATE.foreign = STATE.foreign | {os.path.realpath(db)}
+    return led
+
+
+def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name: Optional[str] = None,
+             reduce: Optional[Tuple[str, str]] = None) -> Any:
     """In the worker: import the function from the mounts and run it, confined, then seal (``_close_run``).
     A ledger function gets the recording ``Rev``, its keys and, when it takes one, its ``path`` folder; a
     dat's run function (``fn.kind == "dat"``) gets the dat made from its keys, the spec, in the work
     folder, run by the dat world's ``_execute`` (DAT 1046)."""
-    from .rev import Rev
+    from .trace import RunFrame, running
 
     outer_guard = STATE.guard
     STATE.guard = False                             # around the body, the ledger's own machinery runs
@@ -1085,87 +1131,45 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
         work = Path(tempfile.mkdtemp(prefix="work-", dir=os.environ.get("DAT_SCRATCH") or None)) \
             if fn._takes_path else None
         rec: Dict[str, str] = {}
-        with _body(work, fn._info["prefix"]) as frame:
+        reading = RunFrame(plain, rec, enc)
+        with _body(work, fn._info["prefix"]) as frame, running(reading):
             cwd = os.getcwd()
             try:
                 if work is not None and fn.kind != "dat":
                     os.chdir(work)                  # a relative path resolves in the dat being produced
+                if reduce is not None:              # acc and more loaded and recorded (SVP 242)
+                    kw = reduce_args(reading.rev, kw)
                 STATE.guard = True                  # the module's own load is confined like the body
                 try:
                     obj = getattr(importlib.import_module(modname), attr_name)
                     if fn.kind == "dat":
-                        if not callable(obj) or getattr(obj, "__ledger_fn__", False):
+                        if not callable(obj) or fn_mark(obj) is not None:
                             raise TypeError(f"{fn.name} is {obj!r}, not a dat's run function")
-                    elif not getattr(obj, "__ledger_fn__", False):
-                        raise TypeError(f"{fn.name!r} is not a ledger function (mark it @ledger_fn)")
+                    elif fn_mark(obj) is None:
+                        raise TypeError(f"{fn.name!r} is not a ledger function (mark it @dat.fn)")
                     else:
                         args = dict(kw, path=work) if work is not None else kw
-                        out = obj(Rev(plain.ledger, plain.id, _rec=rec), **args)
+                        out = obj(reading.rev, **args)
                 finally:
                     STATE.guard = False
                     os.chdir(cwd)
                 if fn.kind == "dat":
-                    out = _run_dat(fn, obj, kw, work)
+                    out = hooks.layer()["run_dat"](fn, obj, kw, work)
             except BaseException:
                 drop_work(work, None)
                 raise
         if fn.kind == "dat":
             alias_reads(plain, out, rec)
-            value = _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, out, work)
+            value = _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, out, work, reduce)
             if work is not None and not work.exists():  # its folder is gone: so is the dat world's index of it
-                Dat.manager._index_forget(str(work / "dat"))
+                hooks.manager()._index_forget(str(work / "dat"))
             return value
         value = wrap_result(fn.name, obj, out)
-        return _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, value, work)
+        return _close_run(fn, plain, rec, frame, mounts, rows, env, enc, save, name, value, work, reduce)
     finally:
         STATE.guard = outer_guard
 
 
-class _WorkerWorld(DatManager):
-    """The dat world of a dat run in the worker (DAT 1045): the caller's dat folders and art folder. Its
-    index (a dat's hash to its name) is the dat world's own machinery, so its writes stand outside the
-    guard, as the ledger's own. Its ``ns`` is a ``LedgerNamespace`` bound to the run's rev (DAT 1047): a name the
-    body looks up (``Dat.manager.ns.load``, a spec's ``base``/``do``, ``{}`` expansion) walks the same
-    ``db/mount`` rows the caller resolved the run through, read from the worker's checkout; ``mount`` is
-    refused."""
-
-    @contextmanager
-    def _index_update(self) -> Iterator[Dict[str, Dict[str, str]]]:
-        with unguarded():
-            with super()._index_update() as index:
-                yield index
-
-
-def _run_dat(fn: Fn, run: Any, spec: Dict[str, Any], work: Path) -> Dat:
-    """The dat branch of ``run_here``: ``Dat.manager.create`` from the spec in ``work``, then ``_execute`` with
-    ``run`` (imported from the mounts) as its ``dat.do``, its body confined (writes only in the work
-    folder); the world's own machinery around it unguarded."""
-    manager = Dat.manager
-
-    @functools.wraps(run)
-    def confined(*args: Any, **kwargs: Any) -> Any:
-        old = STATE.guard
-        STATE.guard = True
-        try:
-            return run(*args, **kwargs)
-        finally:
-            STATE.guard = old
-    registered = manager.ns._registered_values or {}
-    before = registered.get(fn.name, _NONE)
-    manager.ns._reg_value(fn.name, confined)       # _execute loads dat.do through the world
-    try:
-        dat = manager.create(dat_spec(spec, fn._template), path=str(work / "dat"))
-        manager._execute(dat)
-    finally:
-        values = manager.ns._registered_values or {}
-        if before is _NONE:
-            values.pop(fn.name, None)
-        else:
-            values[fn.name] = before
-    return dat
-
-
-_NONE = object()
 
 
 @contextmanager
@@ -1189,7 +1193,7 @@ def _body(work: Optional[Path], mount: Optional[str] = None) -> Iterator[_Frame]
 
 def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], frame: _Frame, mounts: List[Mount],
                rows: Dict[str, Dict[str, str]], env: Env, enc: str, save: Any, name: Optional[str],
-               value: Any, work: Optional[Path]) -> Any:
+               value: Any, work: Optional[Path], reduce: Optional[Tuple[str, str]] = None) -> Any:
     """A run's code (the modules it loaded and the mounted files it read, beside ``fn``'s), its trace, and
     the result: a draft carrying its ``RunTrace`` (``save`` False) or the memo entry, provenance
     ``eval:sandbox``."""
@@ -1204,10 +1208,10 @@ def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], frame: _Frame, mounts:
     if salt is not None:
         trace["salt"] = salt
     if save is False:
-        attach_run(value, run_trace(fn, plain, trace, enc, "eval:sandbox", ran))
+        attach_run(value, run_trace(fn, plain, trace, enc, "eval:sandbox", ran, reduce=reduce))
         drop_work(work, value)
         return value
-    sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", ran, into=save, name=name)
+    sealed = seal_entry(fn, plain, value, trace, enc, "eval:sandbox", ran, into=save, name=name, reduce=reduce)
     drop_work(work, sealed)
     return sealed
 
@@ -1228,15 +1232,20 @@ def recv(stream: Any) -> Any:
     return pickle.loads(stream.read(n))
 
 
-def encode_key(v: Any) -> Any:
+def encode_key(v: Any, plain: "Rev") -> Any:
+    """A key across the pipe: a ``Ref`` or a sealed ``Value`` by its subject; on another ledger by the name it was
+    given, with that ledger's location and the revision, so that a read through it is recorded under that name
+    (SVP 1521)."""
+    from .fn import ledger_key
     from .rev import Ref
     from .value import Value
 
-    if isinstance(v, Ref):
+    if not isinstance(v, (Ref, Value)):
+        return v
+    rev = v.rev
+    if rev is None or ledger_key(rev.ledger) == ledger_key(plain.ledger):
         return ("__ref__", v.subject)
-    if isinstance(v, Value):
-        return ("__ref__", v.subject)
-    return v
+    return ("__ref__", v._given if isinstance(v, Ref) else v.subject, str(rev.ledger.path), rev.id)
 
 
 #: Seconds a warm server may sit idle before it is retired (stopped; the next call starts a fresh one).
@@ -1322,22 +1331,25 @@ class Server:
             if _SERVERS.get(self.key) is self:
                 del _SERVERS[self.key]
 
-    def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env) -> Any:
+    def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env,
+             reduce: Optional[Dict[str, Any]] = None) -> Any:
         """One call in a forked child. A dat's run function (DAT 1045, 1046) also ships its template, its
-        class and the caller's dat world (its folders, built afresh there as a ``DatManager``)."""
+        class and the caller's dat world (its folders, built afresh there as a ``DatManager``). A reduce step
+        (SVP 242) ships ``reduce``, its ``db/keys`` and rows, and ``more`` as a list, each input by its subject."""
+        keys = {k: encode_key(v, plain) for k, v in kw.items()}
+        if reduce is not None:
+            keys["more"] = [encode_key(v, plain) for v in kw["more"]]
         req = {"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
-               "keys": {k: encode_key(v) for k, v in kw.items()}, "seal": seal, "env": _ship_env(env)}
+               "keys": keys, "seal": seal, "env": _ship_env(env), "reduce": reduce,
+               "ledgers": shipped_section(), "read_guard": shipped_read_guard(), "cache": _cache_root()}
         if fn.kind == "dat":
-            world = Dat.manager
-            req.update({"template": fn._template, "returns": fn._returns,
-                        "world": {"dat_folders": list(world._dat_folders), "art_folder": world._art_folder,
-                                  "index": world._index_file, "verify": world._verify}})
+            req.update({"template": fn._template, "returns": fn._returns, "world": hooks.layer()["world_of"]()})
         return _result(plain, self._ask(req), seal)
 
     def version(self, plain: "Rev", prefix: str, env: Env) -> Optional[str]:
         """The mounted root ``prefix``'s ``__version__``, imported in a forked child (``import_version``)."""
         resp = self._ask({"op": "version", "ledger": str(plain.ledger.path), "rev": plain.id, "prefix": prefix,
-                          "env": _ship_env(env)})
+                          "env": _ship_env(env), "cache": _cache_root()})
         return resp["version"]
 
     def close(self) -> None:
@@ -1359,7 +1371,7 @@ def _result(plain: "Rev", resp: Dict[str, Any], seal: bool) -> Any:
     for category, message in resp.get("warnings", ()):
         warnings.warn(message, category, stacklevel=4)
     if seal:
-        return Ref(plain.ledger.at(), resp["subject"]).load()
+        return Ref(plain.ledger.at(), resp["subject"])._load()
     v = pickle.loads(resp["value"])
     top = plain.ledger.at()
     v.__dict__["_preds"] = {k: _unship(top, x) for k, x in resp.get("preds", {}).items()}
@@ -1412,13 +1424,14 @@ atexit.register(shutdown)
 
 
 def _warm() -> None:
-    """What every child shares, loaded once before any fork: the ledger's machinery (never a mounted
-    module, never CUDA), the installed distributions' map and the platform record (SVP 1474: probed
+    """What every child shares, loaded once before any fork: the ledger's machinery and the Dat layer (never a
+    mounted module, never CUDA), the installed distributions' map and the platform record (SVP 1474: probed
     once here, so no child runs ``nvidia-smi``)."""
     from . import kept, ledger, namespace, rev, rundat, store, trace, txn, value  # noqa: F401
-    from .. import just  # noqa: F401 - `@command` on a mounted function imports it in the body
+    from .. import do, just  # noqa: F401 - `@command` on a mounted function imports just in the body
     from .env import platform_record
 
+    hooks.layer()                       # the Dat layer: a body's `Dat`, a dat run's world (1519 R1)
     _dist_map()
     platform_record()
 
@@ -1507,12 +1520,15 @@ def serve(req: Dict[str, Any], out: Any) -> None:
     """In the forked child: confine this process, run the call, reply on ``out``."""
     from .env import Checkout, platform_record, platform_tag, set_env_provider
     from .ledger import Ledger
+    from .named import adopt_read_guard, adopt_section, handle_at
     from .rev import Ref
 
     try:
         code = {r: Checkout(v, c, d, Path(p) if p else None) for r, (v, c, d, p) in req["env"].items()}
         env = Env(code, platform_tag(), record=platform_record())     # where the function runs (SVP 1474)
         set_env_provider(lambda env=env: env)
+        if req.get("cache"):                        # the caller's cache root, whatever named it there
+            os.environ[CACHE_ENV] = req["cache"]
         ledger = Ledger(req["ledger"])
         plain = ledger.at(req["rev"])
         mounts, _rows = mounts_for(plain, env)
@@ -1522,14 +1538,20 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             return
         if req.get("world") is not None:            # a dat's run function: the caller's dat world
             w = req["world"]
-            from .namespace import LedgerNamespace
-
-            Dat.manager = _WorkerWorld(dat_folders=w["dat_folders"], art_folder=w["art_folder"],
-                                       index=w["index"], verify=w["verify"], ns=LedgerNamespace(rev=plain))
+            hooks.layer()["install_world"](w, plain)
             STATE.reads = STATE.reads + [os.path.realpath(f) for f in w["dat_folders"]] + (
                 [os.path.realpath(w["art_folder"])] if w["art_folder"] else [])
-        keys = {k: (Ref(ledger.at(), v[1]) if isinstance(v, tuple) and len(v) == 2 and v[0] == "__ref__"
-                    else v) for k, v in req["keys"].items()}
+        adopt_section(req["ledgers"], read_only_ledger)
+        adopt_read_guard(req["read_guard"])
+
+        def key(v: Any) -> Any:
+            if not (isinstance(v, tuple) and v and v[0] == "__ref__"):
+                return v
+            return Ref(ledger.at() if len(v) == 2 else handle_at(v[2]).at(v[3]), v[1])
+        keys = {k: key(v) for k, v in req["keys"].items()}
+        step = req.get("reduce")
+        if step is not None:                        # more: a list of inputs, each a ref unshipped (SVP 242)
+            keys["more"] = [key(v) for v in keys["more"]]
         fn = plain.ns.load(req["name"])
         if not isinstance(fn, Fn):
             raise TypeError(f"{req['name']!r} resolves to {fn!r} in the worker, not a function")
@@ -1537,7 +1559,10 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             fn = dataclasses.replace(fn, _template=req.get("template"), _returns=req.get("returns") or "")
         kw = fn._bind(keys)
         with warnings.catch_warnings(record=True) as caught:  # the caller's, not the worker's stderr
-            value = run_here(fn, plain, kw, _enc(kw), req["seal"])
+            if step is None:
+                value = run_here(fn, plain, kw, _enc(kw), req["seal"])
+            else:
+                value = run_here(fn, plain, kw, step["enc"], req["seal"], reduce=tuple(step["rows"]))
         said = [(_warning_class(w.category), str(w.message)) for w in caught]
         if req["seal"]:
             send(out, {"ok": True, "subject": value.subject, "warnings": said})
@@ -1551,6 +1576,9 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             blob = None
         send(out, {"ok": False, "exc": blob, "type": type(e).__name__, "message": str(e),
                    "traceback": traceback.format_exc()})
+    finally:
+        for overlay in STATE.overlays:
+            shutil.rmtree(overlay, ignore_errors=True)
 
 
 def _warning_class(category: Any) -> Any:

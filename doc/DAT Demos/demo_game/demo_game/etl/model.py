@@ -2,13 +2,13 @@
 import json
 from pathlib import Path
 
-from dvc_dat.just import command
-from dvc_dat.ledger import ledger_fn
+from dvc_dat import dat
+from dvc_dat import dat
 from demo_game.etl.dat import StageDat, build
 
 
-@command(args="game=…", help="train the model on one game's tracks")
-@ledger_fn
+@dat.command(args="game=…", help="train the model on one game's tracks")
+@dat.fn
 def train(rev, *, game: str, path: Path) -> StageDat:
     epochs = int(rev["cfg/train", "epochs"])            # traced
     d = build(rev, {"main": "demo_game.etl.model.fit", "stage": "model",
@@ -18,7 +18,7 @@ def train(rev, *, game: str, path: Path) -> StageDat:
 
 
 def fit(rev, path, *, game, epochs, **_):
-    trk = rev.run("demo_game.etl.track.tracks", game=game)
+    trk = rev.run("mnt.demo_game.etl.track.tracks", game=game)
     runs = json.loads((trk.path / "tracks.json").read_text())
     weights = [round(r * epochs / 100, 3) for r in runs]
     (path / "weights.json").write_text(json.dumps(weights))

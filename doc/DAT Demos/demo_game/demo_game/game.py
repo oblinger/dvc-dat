@@ -8,7 +8,8 @@ Written to the ledger design of 2026-10-18 (T534).
 import random
 import time
 
-from dvc_dat.ledger import Ref, Value, ledger_class, ledger_fn
+from dvc_dat.ledger import Ref, Value, ledger_class
+from dvc_dat import dat
 
 
 class PlainVideo(Value):
@@ -17,12 +18,12 @@ class PlainVideo(Value):
     def __init__(self, frames: bytes):
         self.frames = frames
 
-    def encode(self) -> bytes:
-        return self.frames
+    def encode(self, out) -> None:
+        out.write(self.frames)
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "PlainVideo":
-        return cls(data)
+    def decode(cls, src, store) -> "PlainVideo":
+        return cls(src.read())
 
 
 @ledger_class(preds=("game", "camera", "span"))
@@ -32,12 +33,12 @@ class Video(Value):
     def __init__(self, frames: bytes):
         self.frames = frames
 
-    def encode(self) -> bytes:
-        return self.frames
+    def encode(self, out) -> None:
+        out.write(self.frames)
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "Video":
-        return cls(data)
+    def decode(cls, src, store) -> "Video":
+        return cls(src.read())
 
 
 @ledger_class(preds=("game", "version", "video", "team"))
@@ -47,12 +48,12 @@ class Cut(Value):
     def __init__(self, clip: bytes):
         self.clip = clip
 
-    def encode(self) -> bytes:
-        return self.clip
+    def encode(self, out) -> None:
+        out.write(self.clip)
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "Cut":
-        return cls(data)
+    def decode(cls, src, store) -> "Cut":
+        return cls(src.read())
 
 
 def cut_video(raw: Video, home: str, away: str) -> bytes:
@@ -64,7 +65,7 @@ def cut_video(raw: Video, home: str, away: str) -> bytes:
     return raw.frames[:16] + f"|{home}-{away}".encode()
 
 
-@ledger_fn
+@dat.fn
 def cut(rev, *, game: str, version: str) -> Cut:
     """Cut a game: rows read through `rev`, the video by preds."""
     home = rev[f"game/{game}", "home"]      # traced: game/G1 home
@@ -77,7 +78,7 @@ def cut(rev, *, game: str, version: str) -> Cut:
     return c
 
 
-@ledger_fn
+@dat.fn
 def thumb(rev, *, clip: Ref) -> dict:
     """Downstream of one cut, keyed by the cut itself.
 
@@ -88,14 +89,14 @@ def thumb(rev, *, clip: Ref) -> dict:
     return {"bytes": len(c.clip), "head": c.clip[:4].hex()}
 
 
-@ledger_fn
+@dat.fn
 def poster(rev, *, game: str) -> dict:
     """Downstream of the game's current cut, reached by its alias."""
     c = rev.load(f"game/{game}")    # traced: game/G1 db/alias
     return {"game": game, "bytes": len(c.clip)}
 
 
-@ledger_fn
+@dat.fn
 def noisy(rev, *, game: str) -> dict:
     """A nondeterministic stand-in (T527's case): runs disagree."""
     time.sleep(1)                   # long enough for two to race
@@ -109,9 +110,9 @@ class Still(Value):
     def __init__(self, image: bytes):
         self.image = image
 
-    def encode(self) -> bytes:
-        return self.image
+    def encode(self, out) -> None:
+        out.write(self.image)
 
     @classmethod
-    def decode(cls, data: bytes, store) -> "Still":
-        return cls(data)
+    def decode(cls, src, store) -> "Still":
+        return cls(src.read())

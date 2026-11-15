@@ -53,8 +53,9 @@ L = Ledger(scratch_ledger_path)                # reopened by path
 #
 # In real code a project names its ledger once and every script in
 # it says `Ledger()` with no argument. `Ledger(create=True)` with no
-# path makes a project here: it writes `.datconfig.yaml` with a
-# `ledger:` line and creates the ledger it names.
+# path makes a project here: it writes `.datconfig.yaml` with
+# `default: root` and creates the root ledger, a SQLite folder under
+# `data/` (a `root:` key would say where instead).
 
 # %%
 project_path = Path("scratch/triples-demo/project").resolve()
@@ -63,15 +64,17 @@ os.chdir(project_path)
 L = Ledger(create=True)                   # .datconfig.yaml + ledger
 
 print((project_path / ".datconfig.yaml").read_text())
-# ledger: .dat/ledger
+# default: root
+# namespace: ledger
 
 # %% [markdown]
-# The one line is the whole config this notebook needs: `ledger:`,
-# a path relative to the file's own folder. The same file carries a
+# Those lines are the whole config this notebook needs: the active
+# ledger is the root, and the project's names are its ledger's. The same file carries a
 # project's `mounts:` (the values and dats notebooks), and dvc-dat's
 # own keys; it is the file the dat manager already reads. `Ledger()`
 # walks up from the working directory to the nearest `.datconfig.yaml`
-# carrying `ledger:` and never creates anything.
+# and opens what its `default:` names; besides the root, made on
+# first use when no `root:` names it, it never creates anything.
 
 # %%
 L = Ledger()                              # the project's ledger
@@ -800,21 +803,6 @@ print(L.at()["schema/tape", "db/version"])  # 0.0.9: add went back
 # `add` can set a clock backwards; `bump` is the helper that only
 # goes up.
 
-
-# %% [markdown]
-# ### The spellings of `at`
-#
-# Five spellings, one revision each: the top, a number, a digit string,
-# a release version, a tag. A day is not one; a revision's `db/time`
-# row dates it, and a day lookup walks those stamps.
-
-# %%
-with L.transaction(by="human:dan", lock=10) as t:
-    bump(t, "db")                                 # the release, 0.0.1
-    t.add("db", "db/tag", "2026-Q4-official")     # a name for this revision
-top = L.at().id
-for which in (None, top - 1, str(top - 1), "0.0.1", "2026-Q4-official"):
-    print(f"at({which!r}):", L.at(which).id)
 # %%
 with L.transaction(by="agent:release", lock=5) as t:
     v = t["db/repo/demo-game/demo_game", "db/version"]

@@ -37,10 +37,10 @@ def run(dat, epochs=1, lr=0.1):
 
 
 baseline = {
-    "dat": {"name": "runs/{YYYY}-{MM}/baseline{unique}",
+    "dat": {"name": "runs/${now:%Y-%m}/baseline${unique:}",
             "do": "mymodule.train.run",
             "kwargs": {"epochs": 10, "lr": 0.1}},
-    "notes": "started {now}",
+    "notes": "started ${now:}",
     "modules": [],
     "learn_params": {
         "alpha": 0.5  # this specified
@@ -53,8 +53,8 @@ baseline = {
 from dvc_dat import Dat, L, ledgers
 
 m = Dat.manager              # the default world
-L                            # the active ledger: DAT_LEDGER, else the config's
-ledgers["jb-26"]             # a named one, ledgers.<name> too (DAT Ledger)
+L                            # the active ledger: DAT_LEDGER, else default:
+ledgers.do26                 # a named one, ledgers["do26"] too (DAT Ledger)
 Dat.save_artifact("clips/G1.mp4", name="games/G1/video")
 
 Dat.manager.run("mymodule.train.baseline")          # -> data/runs/2026-09/baseline/
@@ -63,7 +63,8 @@ Dat.manager.run("mymodule.train.baseline", lr=0.5)  # a fork -> .../baseline_2/
 d = Dat.load("runs/2026-09/baseline_2")
 d.get_results()["accuracy"]   # 0.95
 Dat.standing(d)               # 'referenceable': runs no more
-Dat.manager.run(d, lr=0.01)   # forks a new dat; baseline_2 untouched
+# its recipe again: a new dat
+Dat.manager.run(d.get_spec(), lr=0.01)
 Dat.load_artifact("games/G1/video")  # a Path, or its type's
 ```
 
@@ -82,9 +83,9 @@ $ cd analysis/scratch && x mymodule.train.baseline lr=0.4
 
 ### `data/runs/2026-09/baseline_2/_spec_.yaml`
 ```yaml
-# Written by the fork, expanded once; never rewritten
+# Written by the fork, resolved once; never rewritten
 dat:
-  name: runs/{YYYY}-{MM}/baseline{unique}   # the template, as given
+  name: runs/${now:%Y-%m}/baseline${unique:}  # the template
   do: mymodule.train.run
   kwargs:
     epochs: 10
@@ -105,11 +106,12 @@ dat:
   sha256: sha256:7c0a…        # this dat's own, stamped by save
 ```
 
-- **The spec on disk is the record.** Every `{…}` in the template was expanded once, when the fork created the folder — `notes` is the moment it was made, `lr: 0.5` is what ran; `name` alone keeps its template, and the folder it filled to (`runs/2026-09/baseline_2`) is the dat's name. Nothing is expanded again, and nothing is re-supplied to reproduce it.
+- **The spec on disk is the record.** Every `${…}` in the template was resolved once, when the fork created the folder — `notes` is the moment it was made, `lr: 0.5` is what ran; `name` alone keeps its template, and the folder it filled to (`runs/2026-09/baseline_2`) is the dat's name. Nothing is resolved again, and nothing is re-supplied to reproduce it.
 - **`_result_.yaml` carries no arguments** — only what the function stored, plus when it ran, how long, which code, what it loaded, and its own content hash ([DAT Manager API](DAT%20Manager%20API.md) § What a run records).
 - **A run saves nothing; `save()` seals, once.** `run` ends with `dat.save()`, which seals the dat when the run returns; a save anywhere else adds the dependency `$MANUAL` ([DAT Class API](DAT%20Class%20API.md) § save).
-- **Arguments never ride beside a spec.** `Dat.manager.run(d)` re-runs a dat only while it is open; `Dat.manager.run(d, lr=0.01)` forks — the copy lands beside its parent as `baseline_2_2` — and the dat on disk is never rewritten.
-- **A dat is a ledger value.** `Dat` is a `dvc_dat.ledger.Value`, one class (DAT1038): `seal`, `preds` and `subject` are on every dat, and `dat.kind` names the kind of its ledger row too. `d.seal(t, name="runs/baseline_2")` keeps the saved folder on a ledger, its preds `epochs`, `lr`, `accuracy` read from the spec's kwargs and the results; `L.at().run("mymodule.train.baseline", lr=0.5)` is the fork above, made once and then found, one `run` for a dat and a ledger function alike (DAT1046), a mounted run function running in the sandbox worker ([DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md#Running)).
+- **Arguments never ride beside a spec.** A dat runs once, when it is made; `Dat.manager.run(d.get_spec(), lr=0.01)` runs its recipe again as a new dat, and the dat on disk is never rewritten. `Dat.create(spec, **kwargs)` makes a dat from the same keywords and runs nothing.
+- **Keywords fill the spec** (SVP 1508). The keywords of `run` and `create` merge into `dat.kwargs`, and a template reads them by their node: `dat.name: runs/${dat.kwargs.lr}` with `lr=0.5` is `runs/0.5`. `dat.preds`, a map of pred names to such templates, is resolved with the rest and carried as the dat's preds, sealed onto its value on a ledger ([spec-format](../../spec-format.md)).
+- **A dat is a ledger value.** `Dat` is a `dvc_dat.ledger.Value`, one class (DAT 1038): `seal`, `preds` and `subject` are on every dat, and `dat.kind` names the kind of its ledger row too. `d.seal(t, name="runs/baseline_2")` keeps the saved folder on a ledger, its preds `epochs`, `lr`, `accuracy` read from the spec's kwargs and the results; `L.at().run("mymodule.train.baseline", lr=0.5)` is the fork above, made once and then found, one `run` for a dat and a ledger function alike (DAT 1046), a mounted run function running in the sandbox worker ([DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md#Running)).
 
 
 
@@ -118,7 +120,7 @@ dat:
 
 ## Conceptual model
 
-A **dat** is a folder holding `_spec_.yaml`, a complete argumentless recipe for itself, and `_result_.yaml`, what running it produced. **`Dat.manager.run`** is the one run and **`Dat.ns`** the one namespace: a dotted name means what `import` means in this environment, `getattr` below that, with `ns.mount(...)` calls in your program layered on top ([DAT Namespace API](DAT%20Namespace%20API.md)). **Arguments never ride beside a spec** — they fork a new one. Every spec string may carry `{…}` references, expanded once when the dat is created. And **a path is an address, not a record**: `dat.name` may organise a folder tree however you like, but nothing reads meaning back out of it — a dat loads by name and by nothing else, and everything *about* a dat is in its spec. Finding the right dat by what its spec says is the ledger's: a dat sealed there is a value found by its preds, its spec's kwargs and its results ([DAT1007](../../Track/Backlog/1007%20-%20Find%20dats%20by%20their%20metadata,%20not%20by%20name%20structure%20the%20search%20facility.md), DAT1038).
+A **dat** is a folder holding `_spec_.yaml`, a complete argumentless recipe for itself, and `_result_.yaml`, what running it produced. **`Dat.manager.run`** is the one run and **`Dat.ns`** the one namespace: a dotted name means what `import` means in this environment, `getattr` below that, with `ns.mount(...)` calls in your program layered on top ([DAT Namespace API](DAT%20Namespace%20API.md)). **Arguments never ride beside a spec** — they fork a new one. Every spec string may carry `${…}` references, OmegaConf's grammar, resolved once when the dat is created. And **a path is an address, not a record**: `dat.name` may organise a folder tree however you like, but nothing reads meaning back out of it — a dat loads by name and by nothing else, and everything *about* a dat is in its spec. Finding the right dat by what its spec says is the ledger's: a dat sealed there is a value found by its preds, its spec's kwargs and its results ([DAT 1007](../../Track/Backlog/1007%20-%20Find%20dats%20by%20their%20metadata,%20not%20by%20name%20structure%20the%20search%20facility.md), DAT 1038).
 
 
 # Changes
@@ -127,12 +129,16 @@ A **dat** is a folder holding `_spec_.yaml`, a complete argumentless recipe for 
 
 `Dat.run()` → `Dat.manager.run(a_dat)`; `Dat.manager.do` → `Dat.do`; `DoManager`/`SimpleMethodManager` → the one `do`, configured for you on first use ([DAT Namespace API](DAT%20Namespace%20API.md)); spec key `dat.path` → `dat.name`; `dat.spec.dat.kind` → `d.get_spec()["dat"]["kind"]`; pydantic specs → a `validate_spec` override; `dat.base` may now be a list; call-site arguments no longer append to `dat.args` — they replace them, and they fork; config `mount_commands:` → `do.mount(...)` calls in your own program, and `run: python -m mypkg.main` for the shell ([DAT Namespace API](DAT%20Namespace%20API.md)); config `local_prefix` + `extra_local_prefixes` → `dat_folders`; config `python:` → `run:`; `bin/X` → `bin/x`; the `do TARGET` subcommand → `x TARGET`; `--set KEY VALUE` / `--sets` → `--set KEY=VALUE`, repeated; `get_spec(raw=True)` → gone, the file holds the expanded values ([DAT1009](../../Track/Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md)). From 2.x: the table in https://github.com/oblinger/dvc-dat/blob/main/CHANGELOG.md § 2.2.0.
 
-**From 2.37:** `Dat.do` → `Dat.ns`, `manager.do` → `manager.ns`, `Do` → `Namespace`, `do.keys()` → `ns.mounts()`, `DatManager(do=)` → `ns=`; on a ledger `rev.resolve(name)` → `rev.ns.load(name)`, `LedgerDo` → `LedgerNamespace`, and `t.ns.mount(at, root=, repo=)` writes a mount ([DAT Namespace API](DAT%20Namespace%20API.md), DAT1051).
+**From 2.44:** `Dat.manager.expand(text, vars)` / `expand_spec(spec, vars)` → `ns.expand(text, **vars)` / `ns.expand_spec(spec, **vars)` on any namespace (`Dat.ns`, `manager.ns`, `rev.ns`, `t.ns`), each through its own names; `expand` returns a str always (a whole-value reference inlines only in `expand_spec`); on a ledger namespace the counter counts ([Expansion](../../expand.md)).
+
+**From 3.0 (1519):** the `{…}` grammar → OmegaConf's `${…}`: `{YYYY}` → `${now:%Y}`, `{unique}` → `${unique:}`, `{cwd}` → `${cwd:}`, `{a.b}` → `${ns:a.b}`, a call variable `{game}` → `${dat.kwargs.game}`, `{{` → `{`; `ns.expand_spec(spec, **vars)` → `ns.expand_spec(spec)`; `from dvc_dat.ledger import Dat` → `from dvc_dat import Dat`; `x … --set k=v` → `x … k=v` (a dotted key is a path into the spec); `pip install dvc-dat[expand]` for any `${` but `${unique:}`, `[hydra]` for Hydra's override grammar, `[tools]` for the tables ([Expansion](../../expand.md), [CLI](../../cli.md)).
+
+**From 2.37:** `Dat.do` → `Dat.ns`, `manager.do` → `manager.ns`, `Do` → `Namespace`, `do.keys()` → `ns.mounts()`, `DatManager(do=)` → `ns=`; on a ledger `rev.resolve(name)` → `rev.ns.load(name)`, `LedgerDo` → `LedgerNamespace`, and `t.ns.mount(at, root=, repo=)` writes a mount ([DAT Namespace API](DAT%20Namespace%20API.md), DAT 1051).
 
 **From 2.35:** `Dat.do(x, …)` → `Dat.manager.run(x, …)`; `manager.execute(dat)` → `manager.run(dat)`; `Dat.do` is the namespace only, and `dat.run` is still the run record (DAT1049).
 
 **From 2.13:** `Dat.status(name)` → `Dat.standing(name)`; `dat.rolling: true` → `dat.standing: rolling`; `execute(dat, referenceable=True)` → `dat.standing: referenceable` in the spec; `save(src, "art:k/r")` → `Dat.save_artifact(src, type=f, name="k/r")` (2.15; `m.save_artifact` on a manager); `register_artifact(k, f)` → `type=f` at save, mounted when it cannot be imported; `load("art:k/r")` → `Dat.load_artifact("k/r")` ([DAT Manager API](DAT%20Manager%20API.md) § save_artifact).
 
-**From 2.7:** `from dvc_dat import do` → `do = Dat.do`; `dvc_dat.cli_main` / `merge_dicts` → `Dat.cli_main` / `Dat.merge_dicts`; `dvc_dat.expand` → `Dat.manager.expand` — the package exports `Dat`, `DatContainer`, `DatManager`, `Do`.
+**From 2.7:** `from dvc_dat import do` → `do = Dat.do`; `dvc_dat.cli_main` / `merge_dicts` → `Dat.cli_main` / `Dat.merge_dicts`; `dvc_dat.expand` → `Dat.manager.expand` (2.44: `ns.expand`, a method of every namespace) — the package exports `Dat`, `DatContainer`, `DatManager`, `Do`.
 
 **From 2.2:** `DataConfig.new(cwd=…)` → `DatManager.load_dat_config(start)`; `do.configure(…)` / `do.config` → assign `Dat.manager`; `.dataconfig.yaml` → `.datconfig.yaml`; `DatManager(config)` → `DatManager(dat_folders=[…])`; `Dat.load(name, cwd=…)` → `Dat.load(name)`; new in 2.4: artifacts (`save`, `register_artifact`, `art:` names) and `dat.dependencies` ([DAT Manager API](DAT%20Manager%20API.md)).

@@ -23,8 +23,8 @@ transaction's own ``db/tx/<rev>`` rows (A50).
 from __future__ import annotations
 
 import ctypes
-import datetime as _dt
 import json
+import os
 import re
 import signal
 import tempfile
@@ -32,11 +32,12 @@ import threading
 import time as _time
 import uuid
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, sha256, show, strip_hint, tag
-from .errors import Exists, LockTimeout, SealBroken, Undeclared, Unlocked
-from .value import Value, check_loadable, dotted
+from .backends import VALUES, check_values
+from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, show, strip_hint, tag
+from .errors import ConfinedWrite, Exists, LockTimeout, SealBroken, Undeclared, Unlocked
+from .value import TIMEZONE, Value, check_loadable, dotted, is_moment, stamp, zone_named
 
 if TYPE_CHECKING:
     from .ledger import Ledger
@@ -47,7 +48,13 @@ if TYPE_CHECKING:
 FORMAT = "dvc-dat-ledger/1"
 
 #: A sealed subject's own predicates (besides its preds, named by its ``db/preds`` row).
-SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys", "db/sealed-at"})
+SEAL_PREDICATES = frozenset({"db/value", "db/kind", "db/provenance", "db/preds", "db/fn", "db/keys", "db/sealed-at",
+                             "db/reproducible", "db/at"})
+
+
+#: A parent's row per subdat: ``db/subdat/<relpath>``, a ``ref:`` to the child or ``str:declined``. Written with the
+#: seal, outside the subject hash and re-pointable, so it is no seal predicate: ``t.add`` may attach a child later.
+SUBDAT = "db/subdat/"
 
 
 def is_seal_predicate(p: str, frozen: Sequence[str]) -> bool:
@@ -55,7 +62,10 @@ def is_seal_predicate(p: str, frozen: Sequence[str]) -> bool:
 
 
 def attr(obj: Any, path: str) -> Any:
-    """Walk a dotted path over dicts, dataclasses and records; ``KeyError`` at the first missing step."""
+    """Walk a dotted path over mappings, sequences (integer steps) and attributes.
+
+    ``KeyError`` at the first missing step, ``TypeError`` for an empty path.
+    """
     if not isinstance(path, str) or not path:
         raise TypeError(f"a path is a non-empty dotted str, not {path!r}")
     cur = obj
@@ -83,6 +93,38 @@ class _Op:
     def __init__(self, s: str, p: str, o: str, added: bool, seal_of: Optional[str] = None,
                  pred: bool = False) -> None:
         self.s, self.p, self.o, self.added, self.seal_of, self.pred = s, p, o, added, seal_of, pred
+
+
+def _put_remote(r: Any, h: str, source: Any) -> None:
+    """Push one part or encoding to the values backend ``r`` unless it holds it: a file as it stands, an opener
+    spilled to a temp file first (checked against ``h``)."""
+    from pathlib import Path
+
+    from .store import _copy
+
+    if r.has(h):
+        return
+    if isinstance(source, (str, os.PathLike)):
+        r.push(Path(source), h)
+        return
+    with tempfile.TemporaryDirectory(prefix="dat-upload-") as d:
+        p = Path(d) / h
+        with source() as f:
+            _copy(f, p, h)
+        r.push(p, h)
+
+
+def declined_by(rel: str, skip: Sequence[str]) -> bool:
+    """Is the subdat at ``rel`` (a relpath from the sealing dat) declined by the suffixes ``skip``? An entry names
+    the subdat's folder or a folder above it, by its last path parts: ``viz`` is ``viz`` and ``run/viz``, and
+    ``galleries`` is ``galleries/a``."""
+    parts = rel.split("/")
+    for entry in skip:
+        want = entry.strip("/").split("/")
+        for end in range(len(want), len(parts) + 1):
+            if parts[end - len(want):end] == want:
+                return True
+    return False
 
 
 def _name(x: Any, what: str) -> str:
@@ -119,22 +161,27 @@ def check_provenance(provenance: Optional[str]) -> str:
     return provenance
 
 
-_SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+_SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:\.dev(\d+))?$")
 
 
-def _semver(text: Any) -> Optional[Tuple[int, int, int]]:
-    """``MAJOR.MINOR.PATCH`` as a tuple of ints, else ``None``."""
+def _semver(text: Any) -> Optional[Tuple[int, ...]]:
+    """``MAJOR.MINOR.PATCH`` or ``MAJOR.MINOR.PATCH.devN`` as a tuple of ints in version order, else ``None``:
+    ``1.3.5 < 1.3.6.dev1 < 1.3.6.dev2 < 1.3.6`` (PEP 440, SVP 1482)."""
     m = _SEMVER.match(text) if isinstance(text, str) else None
-    return (int(m[1]), int(m[2]), int(m[3])) if m else None
+    if m is None:
+        return None
+    return (int(m[1]), int(m[2]), int(m[3])) + ((0, int(m[4])) if m[4] is not None else (1, 0))
 
 
 def _tag_name(subject: str, name: Any) -> None:
     """A ``db/tag`` row names the revision its transaction commits: on ``db``, a str that is neither a revision
-    number nor a version, which ``Ledger.at`` reads first."""
+    number, a version nor a moment (``2026-11-02T14``), which ``Ledger.at`` reads first."""
     if subject != "db":
         raise ValueError(f"db/tag names a revision: its subject is db, not {subject!r}")
-    if not isinstance(name, str) or not name.strip() or name.isdigit() or _semver(name) is not None:
-        raise ValueError(f"a db/tag is a name, a str neither digits nor MAJOR.MINOR.PATCH, not {name!r}")
+    if (not isinstance(name, str) or not name.strip() or name.isdigit() or _semver(name) is not None
+            or is_moment(name)):
+        raise ValueError(f"a db/tag is a name, a str neither digits, MAJOR.MINOR.PATCH nor an ISO 8601 "
+                         f"timestamp, not {name!r}")
 
 
 def code_token(env_commit: Optional[str]) -> str:
@@ -153,6 +200,8 @@ class Transaction:
 
     def __init__(self, ledger: "Ledger", by: "str | Dict[str, Any]", lock: Optional[float],
                  preds: Dict[str, Any]) -> None:
+        if ledger.read_only:
+            raise ConfinedWrite(f"{ledger._store.name}: a ledger a sandboxed function opened by name is read-only")
         self._ledger = ledger
         self._by = by_text(by)
         if lock is not None and (isinstance(lock, bool) or not isinstance(lock, (int, float)) or lock <= 0):
@@ -162,6 +211,11 @@ class Transaction:
         self._lock = lock
         #: A placeholder for ``db/tx/<rev>``, rewritten at commit.
         self.tx = f"db/tx/pending-{uuid.uuid4().hex[:12]}"
+        """A placeholder for this revision's tx subject.
+
+        Rewritten to ``db/tx/<rev>`` at commit wherever it appears as a subject or a ``str`` object, so the body can
+        write rows about its own transaction.
+        """
         self._preds: List[Tuple[str, str]] = []
         for k, v in preds.items():
             if k.startswith("db/"):
@@ -179,11 +233,18 @@ class Transaction:
         self._pending: Dict[int, Tuple[Value, str]] = {}
         self._finalize: List[Tuple[Value, str, Dict[str, str], Optional[str]]] = []
         self._codes: set = set()
-        self._clocks: Dict[Tuple[str, str], Tuple[int, int, int]] = {}   # the highest version seen
+        self._namings: List[_Op] = []         # the name adds of _name_value: one name, re-checked at commit
+        self._minted: set = set()             # the names t.ns.expand counted ${unique:} to (distinct per mint)
+        self._clocks: Dict[Tuple[str, str], Tuple[int, ...]] = {}   # the highest version seen
         self._commits: Dict[str, str] = {}
         #: Values this body froze, with their preds before (``None``: sealed by ``v.seal()`` before).
         self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
         self._to_store: List[Value] = []
+        self._new_seals: List[Tuple[Value, str]] = []      # values this transaction writes db/value for
+        self._copied: set = set()               # the subjects this transaction copied in (SVP 251)
+        #: (subject, the source's art store, its fetch, the hashes to bring): placed at commit, with the rows.
+        self._copies: List[Tuple[str, Any, Any, List[str]]] = []
+        self._staged: Dict[int, Any] = {}       # id(value) -> FileSink: its encoding, written once (DAT 240)
         self._created: List[Any] = []
         self._cm: Any = None
         self._w: Any = None
@@ -195,9 +256,13 @@ class Transaction:
 
     @property
     def previous_rev(self) -> "Rev":
-        """The previous revision: the top as it stands while ``lock=`` holds, with every read operator a
-        revision has. Without ``lock=`` it raises ``Unlocked``: another writer may commit between open
-        and exit, so an unlocked transaction has no well-defined previous revision."""
+        """The previous revision: the top as it stands while ``lock=`` holds, with every read operator a revision has.
+
+        While ``lock=`` holds, a write built on what it reads is built on current data and no other writer commits in
+        between; the revision written is ``previous_rev.id + 1``. Without ``lock=`` it raises ``Unlocked``: another
+        writer may commit between open and exit, so there is no well-defined previous revision. ``RuntimeError``
+        before entry.
+        """
         if self._opened is None:
             raise RuntimeError("a transaction has no previous_rev until its with block is entered")
         if self._lock is None:
@@ -206,9 +271,23 @@ class Transaction:
 
     @property
     def ns(self) -> "LedgerNamespace":
-        """The ledger's namespace at ``previous_rev`` (DAT 1051): ``t.ns.load(name)`` as ``rev.ns.load``
-        (it reads, so it needs ``lock=``), and ``t.ns.mount(at, root=..., repo=...)`` writes the
-        ``db/mount/<at>`` rows ``db/root`` and ``db/repo`` through ``t.update`` (no lock needed)."""
+        """The ledger's namespace at ``previous_rev`` (DAT 1051).
+
+        ``t.ns.load(name)`` as [`rev.ns`][dvc_dat.ledger.Rev.ns] (it reads, so it needs ``lock=``);
+        ``t.ns.expand(template, **vars)`` counts ``${unique:}`` against the snapshot at open and skips the names this
+        transaction minted or aliased already, so a loop minting in one transaction gets distinct names
+        ([Expansion][expansion-nsexpand]); ``t.ns.mount(at, *, root, repo=None)`` takes ``at`` as ``mnt.<prefix>``,
+        the name its names load under, and writes the two ``db/mount/<prefix>`` rows ``db/root`` and ``db/repo``
+        through ``t.update``, reads nothing and needs no lock.
+
+        ``repo`` defaults to the project's own repository: the git checkout holding the ``.datconfig.yaml``
+        ``Dat.manager`` was loaded from, named as discovery names it (its ``pyproject.toml`` name, normalised, else
+        its folder), so the ``db/repo/<name>`` rows agree; with no such file, or one in no checkout, it is
+        ``ValueError`` naming ``repo=``. A mount from another repo names it.
+
+        A missing or non-``str`` ``root``, an empty ``repo``, or a ``folder=``-style keyword is ``TypeError``; an
+        ``at`` outside ``mnt.`` (``mnt`` alone included) is ``ValueError``; nothing is prefixed for you (1505 Q1).
+        """
         from .namespace import LedgerNamespace
 
         return LedgerNamespace(txn=self, unguarded=True)
@@ -216,7 +295,11 @@ class Transaction:
     # -- reads: the previous revision's (DAT 1051) ---------------------------
 
     def get(self, *pattern: Any, **kwargs: Any) -> Any:
-        """``Rev.get`` at ``previous_rev``; this transaction's pending writes are not seen."""
+        """``Rev.get`` at ``previous_rev`` (DAT 1051): the [Rev][rev-interface] reads of the same names.
+
+        So they need ``lock=`` and are ``Unlocked`` without it. This transaction's own ``add``, ``update``, bracket
+        writes and seals are pending and not seen: ``t[s, p] = o; t[s, p]`` reads the old value.
+        """
         return self.previous_rev.get(*pattern, **kwargs)
 
     def all(self, *pattern: Any, **kwargs: Any) -> list:
@@ -255,6 +338,10 @@ class Transaction:
         """``t[s, p]`` / ``t[s]`` read at ``previous_rev``; ``t[s, p] = o`` and ``t[s] = {...}`` write."""
         return self.previous_rev[key]
 
+    def _names_minted(self, name: str) -> bool:
+        """``name`` was minted by ``t.ns.expand`` in this transaction, or is pending as a ``db/alias`` subject."""
+        return name in self._minted or any(op.added and op.p == "db/alias" and op.s == name for op in self._ops)
+
     def _snapshot(self) -> "Rev":
         """The top at open, for the package's own declaration and seal checks; no lock required."""
         if self._opened is None:
@@ -263,7 +350,11 @@ class Transaction:
 
     @property
     def rev(self) -> "Rev":
-        """The revision the exit wrote."""
+        """The revision the exit wrote.
+
+        The state after this transaction, so it exists only once committed; ``RuntimeError`` before. Under ``lock=``
+        the number it will be is ``previous_rev.id + 1``.
+        """
         if self._rev is None:
             raise RuntimeError(f"transaction is {self._state}: it has no rev")
         return self._rev
@@ -334,6 +425,13 @@ class Transaction:
                 self._cm.__exit__(et, ev, tb)
             return False
         self._state = "committing"
+        try:
+            self._upload()                      # before the write lock (unless lock= holds it already)
+        except BaseException as e:
+            self._abandon()
+            if self._cm is not None:
+                self._cm.__exit__(type(e), e, e.__traceback__)
+            raise
         wrote = False
         try:
             if self._cm is not None:
@@ -361,7 +459,10 @@ class Transaction:
             raise
         self._rev = self._ledger.at(rev)
         self._state = "committed"           # the revision is written, whatever a post-commit hook does
-        self._finish()
+        try:
+            self._finish()
+        finally:
+            self._drop_staged()
         return False
 
     def _abandon(self, drop_bytes: bool = True) -> None:
@@ -385,24 +486,72 @@ class Transaction:
             except OSError:
                 pass
         self._created = []
+        self._drop_staged()
+
+    def _drop_staged(self) -> None:
+        """Remove the staged encodings' temp files (a placed encoding is a hardlink of its own)."""
+        for sink in self._staged.values():
+            sink.discard()
+        self._staged = {}
+
+    def _hash_of(self, value: Value) -> str:
+        """The hash of the encoding a save of ``value`` stores, encoded once per transaction (DAT 240): written
+        through a sink to a staged file in the art store's folder, hashed as it goes, never held whole. The
+        upload sends that file and the commit links it into place; the staged copy goes when the transaction
+        ends, either way."""
+        sink = self._staged.get(id(value))
+        if sink is None:
+            from .sandbox import unguarded
+
+            with unguarded():                   # the ledger's own write, also inside a sandboxed body
+                with self._ledger._store.art.sink(staged=True) as sink:
+                    value._write_stored(sink)
+            self._staged[id(value)] = sink
+        return sink.hash
+
+    def _upload(self) -> None:
+        """Push every part and the encoding of each value this transaction seals to the ledger's values URI, its
+        ``(db, db/values, <uri>)`` row at the transaction's base (SVP 1599): nothing with no row, or inside a
+        sandboxed body (its seal's push runs in the parent). Write-once by hash, so a blob a failed commit leaves
+        behind is harmless."""
+        from .backends import VALUES, values_at
+        from .sandbox import STATE
+
+        if not (self._new_seals or self._copies) or STATE.guard:
+            return
+        held = self._snapshot()._held("db", VALUES)
+        if not held:
+            return
+        r = values_at(show(held[0].obj))
+        for _subject, art, fetch, hashes in self._copies:
+            with art.fetching(fetch):
+                for h in hashes:
+                    _put_remote(r, h, art._have(h))
+        for v, _subject in self._new_seals:
+            h = self._hash_of(v)
+            for ph, source in v._stored_parts():
+                _put_remote(r, ph, source)
+            _put_remote(r, h, self._staged[id(v)].path)
 
     def _store_all(self) -> None:
         """The bytes of every seal, written at commit so bytes and rows land together (or neither).
 
         One value at a time, one part at a time: each part is hardlinked or streamed into the art
-        store (``put_path``), never read whole; the encoding (a manifest, for a ``Dat``) is checked
-        against the sealed hash before anything of the value is written."""
+        store (``put_path``), never read whole; the encoding (a manifest, for a ``Dat``), staged once by
+        the seal, is hardlinked into place last."""
         art = self._ledger._store.art
         for v in self._to_store:
-            data = v._stored_bytes()
-            if sha256(data) != v.hash:
-                raise ValueError(f"{type(v).__name__}.encode is not deterministic: two calls gave two hashes")
-            for h, source in v._stored_parts():
-                if art.put_path(source, h):
-                    self._created.append(art.path(h))
-            if not art.exists(v.hash):
-                art.put(data)
-                self._created.append(art.path(v.hash))
+            h = self._hash_of(v)
+            for ph, source in v._stored_parts():
+                if art.put_path(source, ph):
+                    self._created.append(art.path(ph))
+            if art.put_path(self._staged[id(v)].path, h):
+                self._created.append(art.path(h))
+        for _subject, source, fetch, hashes in self._copies:
+            with source.fetching(fetch):
+                for h in hashes:
+                    if art.put_path(source._have(h), h):
+                        self._created.append(art.path(h))
 
     def _finish(self) -> None:
         from .rev import Ref
@@ -430,6 +579,14 @@ class Transaction:
                     Kept().drop(entry)          # saved: the seal record (and its kept bytes' claim) goes
 
     def _write(self, w: Any) -> int:
+        """Write this transaction's rows as revision ``rev``, inside the write lock.
+
+        The head ``before`` (``rev - 1``) is read here, so what an unlocked transaction decided at open from its
+        snapshot is re-checked against what other writers committed meanwhile (1467 Q3 (A)): a value sealed
+        meanwhile is not sealed again; a clock add (``db/repo/<repo>/<package> db/version``) at or below the
+        head's version is dropped, so the clock never moves back; a naming's name add (``db/alias`` from
+        ``_name_value``) retracts every other name the head holds for that value, so a value has one name. Only a
+        commit carrying such ops pays: one row lookup each."""
         from .rev import Rev
 
         rev = w.next_rev()
@@ -439,11 +596,15 @@ class Transaction:
             before = Rev(self._ledger, rev - 1)
             dropped = {op.seal_of for op in self._ops
                        if op.seal_of and op.p == "db/value" and before._held(op.seal_of, "db/value")}
+            stale = {id(op) for op in self._ops if self._stale_clock(before, op)}
+            retract = self._other_names(before)
         rows: List[Tuple[str, str, str, bool]] = []
         kept: List[_Op] = []
-        for op in self._ops:
+        for op in self._ops + retract:
             if op.seal_of in dropped:
                 continue            # sealed meanwhile by another writer: idempotent
+            if id(op) in stale:
+                continue            # the clock moved meanwhile to this version or past it: never back
             s = txs if op.s == self.tx else op.s
             o = "str:" + txs if op.o == "str:" + self.tx else op.o
             rows.append((s, op.p, o, op.added))
@@ -455,8 +616,7 @@ class Transaction:
             if not any(r[0] == SUBJECT and r[1] == PREDICATE for r in rows):
                 rows.append((SUBJECT, PREDICATE, "str:" + DEFAULT, True))      # the memo policy (SVP 1474)
         rows.append((txs, "db/by", self._by, True))
-        stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        rows.append((txs, "db/time", "str:" + stamp, True))
+        rows.append((txs, "db/time", "str:" + stamp(), True))
         rows.extend((txs, k, o, True) for k, o in self._preds)
         self._store_all()
         w.insert(rev, rows)
@@ -467,6 +627,31 @@ class Transaction:
             if op.added and op.p == "db/index" and op.s.startswith("db/pred/") and op.o == "str:true":
                 w.create_index(op.s[len("db/pred/"):])
         return rev
+
+    @staticmethod
+    def _stale_clock(before: "Rev", op: _Op) -> bool:
+        """``op`` adds a package clock the head ``before`` already holds at its version or higher."""
+        if not (op.added and op.p == "db/version" and op.s.startswith("db/repo/")):
+            return False
+        held = before._held(op.s, "db/version")
+        head = _semver(show(held[0].obj)) if held else None
+        seen = _semver(show(op.o))
+        return head is not None and seen is not None and head >= seen
+
+    def _other_names(self, before: "Rev") -> List[_Op]:
+        """The retractions a naming (``_name_value``: a seal's ``name=``, ``v.name = ...``) needs at commit: every
+        other name the head ``before`` holds for the value it names, unless this transaction already retracts it or
+        names the value by it. A bare ``t.add(name, "db/alias", ...)`` adds a name and retracts none, as at open."""
+        out: List[_Op] = []
+        live = {id(o) for o in self._ops} if self._namings else set()
+        for op in self._namings:
+            if id(op) not in live:
+                continue            # dropped from the body (a refused record write)
+            mine = {(o.s, o.added) for o in self._ops + out if o.p == "db/alias" and o.o == op.o}
+            for other in before._aliases_of(show(op.o)):
+                if other != op.s and (other, False) not in mine and (other, True) not in mine:
+                    out.append(_Op(other, "db/alias", op.o, False))
+        return out
 
     def _validate(self, R: "Rev", ops: List[_Op]) -> None:
         from .rev import Ref, type_ok
@@ -533,27 +718,53 @@ class Transaction:
         return plain
 
     def add(self, subject: str, predicate: str, object: Any) -> None:
-        """Append one row; the predicate's cardinality, at read time, decides what it means."""
+        """Append one add row.
+
+        The predicate's cardinality, at read time, decides what it means. ``object`` is a ``str``, a JSON ``dict`` or
+        ``list``, or a ``Ref`` to a sealed value; a ``Value`` is ``TypeError`` naming ``seal``; a bare number, bool or
+        ``None`` is ``TypeError`` (a number is its string). ``predicate == "db/value"`` is ``TypeError``: only a seal
+        writes it.
+        """
         self._open("add")
         _name(subject, "subject")
         _name(predicate, "predicate")
         if predicate == "db/value":
             raise TypeError("db/value rows are written by v.seal alone")
-        if predicate == "db/version" and _semver(object) is None:
-            raise ValueError(f"{subject} db/version: the object is a MAJOR.MINOR.PATCH str, not {object!r}")
+        if predicate == "db/version":
+            seen = _semver(object)
+            if seen is None:
+                raise ValueError(f"{subject} db/version: the object is a MAJOR.MINOR.PATCH[.devN] str, not {object!r}")
+            if subject == "db" and seen[3] == 0:
+                raise ValueError(f"db db/version: a ledger's release is MAJOR.MINOR.PATCH, not {object!r}")
         if predicate == "db/tag":
             _tag_name(subject, object)
-        o = self._encode(object)
+        if predicate == TIMEZONE:
+            zone_named(subject, object)
+        if predicate == VALUES:
+            if subject != "db":
+                raise ValueError(f"{VALUES} is where the ledger's bytes live, a row of the subject db, not {subject!r}")
+            check_values(object, f"db {VALUES}")
+        if predicate.startswith(SUBDAT) and isinstance(object, Value) and object.subject is not None:
+            o = ref_text(dotted(type(object)), object.hash, object.subject)   # a subdat attached after the fact
+        else:
+            o = self._encode(object)
         if predicate == "db/alias" and tag(o) != "str":
             raise TypeError("a db/alias row's object is the subject it names, a str")
         self._ops.append(_Op(subject, predicate, o, True))
 
     def update(self, subject: str, record: Dict[str, Any]) -> None:
-        """``t.update(s, {p: o, ...})``: an ``add`` per key of ``record``, nothing else (DAT 1050). A list
-        under a many predicate adds each element; any other value is one row. No read of the previous
-        revision, no retraction, so no ``lock=``; ``db/`` keys are taken as ``add`` takes them. Contrast
-        ``t[s] = {...}``, which makes the rows equal (retracts what the dict omits, needs ``lock=``) and
-        refuses ``db/`` keys. ``t.update("db/mount/pkg", {"db/root": "pkg", "db/repo": "r"})`` is a mount."""
+        """An ``add`` per key of ``record``, nothing else (DAT 1050).
+
+        A ``list`` under a ``many`` predicate adds each element; any other value is one row. It reads nothing and
+        retracts nothing, so it needs no ``lock=`` (``t.update(s, {p: o, ...})``); ``db/`` keys are taken as ``add``
+        takes them (``db/value`` is ``TypeError``), so ``t.update("db/mount/pkg", {"db/root": "pkg", "db/repo":
+        "r"})`` writes a mount, as ``t.ns.mount("mnt.pkg", root="pkg", repo="r")`` does (``repo`` defaulting to the
+        project's).
+
+        A non-``dict`` record or a key that is not a non-empty ``str`` is ``TypeError``, and a refused record writes
+        no row. Contrast ``t[s] = {...}``, which makes the rows equal (retracts what the dict omits, needs ``lock=``)
+        and refuses ``db/`` keys.
+        """
         self._open("update")
         _name(subject, "subject")
         if not isinstance(record, dict):
@@ -572,11 +783,57 @@ class Transaction:
             raise
 
     def remove(self, subject: str, predicate: str, object: Any) -> None:
-        """Append one remove row: out of the set on a many predicate, the tombstone on a one predicate."""
+        """Append one remove row: out of the set on a ``many`` predicate, the tombstone on a ``one`` predicate."""
         self._open("remove")
         _name(subject, "subject")
         _name(predicate, "predicate")
         self._ops.append(_Op(subject, predicate, self._encode(object), False))
+
+    def pin(self, value: Any, *, recursive: bool = False, rerun: bool = False) -> str:
+        """Make ``value`` rerunnable ([Rerunnability][rerunnability]; SVP 250).
+
+        Tag the commit its run names, ``dat/<commit12>``, in the repo's checkout here, push the tag to its remote and
+        wait, then add ``(db/repo/<repo>/<commit12>, db/pinned, dat/<commit12>)`` (once per commit per ledger) and
+        ``(<value>, db/rerunnable, true|recursive)``, the value's claim that its run can be rerun: its commit pinned,
+        its function importable by its dotted name from that commit (a top-level ``@dat.fn`` of its module at that
+        commit: no closure, no lambda, no function made at import), every input on this ledger; ``recursive=True``
+        asserts the claim of every input that is a run's result too, down to values with no run.
+
+        ``value`` is a sealed ``Value``, a ``Ref`` or a name. Refused with ``NotPinned`` (nothing written, no tag
+        pushed): a value that is no run's result; a revision naming no ``db/repo/<repo> db/commit`` for its repo (code
+        with no ``__version__``, or outside a checkout); a commit unknown to the checkout here or not holding the
+        bytes the run loaded (a sandboxed run from a dirty checkout); a function not importable by its name at the
+        commit; an input on no ledger; a push the remote refuses (the local tag is removed, so a later pin pushes
+        again). A pinned commit pays no push, a pinned value adds no row, and ``recursive`` is never downgraded.
+
+        ``rerun=True`` runs [`rerun`][dvc_dat.ledger.Rev.rerun] (``rev.rerun``) now and adds ``(<value>, db/rerun,
+        <outcome>)``; ``differed-deterministic`` (a claim of ``exact``) is ``Differed`` and writes nothing. Returns
+        the tag. Needs no ``lock=``. ``L.at().pin(value)`` is the one-shot form.
+        """
+        from .pin import pin
+
+        return pin(self, value, recursive=recursive, rerun=rerun)
+
+    def copy(self, *values: Any, deep: bool = False, safe: bool = True, rerunnable: bool = False,
+             skip: Optional[Sequence[str]] = None) -> List[str]:
+        """Copy each sealed ``Value`` or ``Ref`` onto this transaction's ledger ([Copying][copying]; SVP 251).
+
+        Its bytes if absent (same hash), its subject and provenance rows, its name, and ``(<value>, db/copied-from,
+        <ledger>@<rev>)``, landing with this revision; its subdats (the ``db/subdat/`` rows) with it, recursively,
+        all or none (SVP 252). ``skip``: relative-path suffixes of the subdats left on their ledger, as ``seal(skip=)``
+        takes them; ``None`` is ``("run",)``, ``()`` follows every subdat, any other adds to ``("run",)``. A skipped
+        subdat's row here is the global reference ``<ledger>@<rev>:<subject>`` to the original, a ``str``.
+        ``deep``: its inputs too, recursively, whatever their ledgers; it does not override ``skip``.
+        ``safe``: an input on a ledger whose lifetime ranks below this one's is copied by the same rule, one at or
+        above is referenced; a value its claim lets be rerun keeps only its spec (``db/spec-only``), and a source's
+        ``db/rerunnable`` is asserted again here. ``safe`` reads every lifetime on the root ledger (``(ledger/<name>,
+        ledger/lifetime, ...)`` on ``ledgers.root``) and refuses when one is undeclared or an input cannot be found; ``safe=False`` never looks and
+        promises nothing. ``rerunnable``: assert the claim here, as ``pin``. Refused with ``NotCopied``, nothing
+        written. Returns the subjects. ``L.at().copy(v)`` is the head form. See ``dvc_dat.ledger.copying``.
+        """
+        from .copying import copy
+
+        return copy(self, values, deep=deep, safe=safe, rerunnable=rerunnable, skip=skip)
 
     # -- declarations as the body sees them: the snapshot at open plus this transaction's own rows ---------------
 
@@ -665,9 +922,14 @@ class Transaction:
         return rows, canon
 
     def _by_name(self, d: Any, h: str, what: str) -> str:
-        """The subject of a dep sealed before it was saved, found by the name it was to be saved under."""
+        """The subject of a dep sealed before it was saved: the value this transaction holds with those bytes
+        (a subdat sealed against its parent, before either was saved), else found by the name it was to be saved
+        under."""
         from .rev import Ref
 
+        for v, s in self._pending.values():
+            if v.hash == h:
+                return s
         name = d.name if hasattr(d, "text") else d.__dict__.get("_loaded_as")
         if name is None:
             raise ValueError(f"{what} {d!r} is sealed but saved nowhere: save it first (v.seal(t))")
@@ -741,13 +1003,14 @@ class Transaction:
         trace["platform"] = env.platform
 
     def _seal_value(self, value: Value, *, deps: Sequence[Any] = (), name: Optional[str] = None,
-                    provenance: Optional[str] = None) -> str:
+                    provenance: Optional[str] = None, skip: Optional[Iterable[str]] = None,
+                    plan: Optional[List[Any]] = None) -> str:
         """``value.seal(t)``: seal into the immutable subject ``<hash of (dependencies, preds, bytes)>``; return it.
 
         On this line the seal freezes ``preds`` (read-only), and sets ``sealed``, ``subject`` and
         ``dependencies``; only ``rev`` waits for the commit. A seal refused here, or a transaction abandoned
         later (a body exception, a refusal at commit), leaves the value unsealed with its preds a plain
-        dict (A43).
+        dict (A43). Its subdats seal with it (``_seal_subdats``; ``skip``: ``Value.seal``).
         """
         self._open("seal")
         if not isinstance(value, Value):
@@ -756,6 +1019,7 @@ class Transaction:
             raise ValueError(f"{value!r} is sealed already; a different value is a new object")
         value._sealable()
         check_loadable(value)
+        plan = self._subdat_plan(value, skip) if plan is None else plan
         local = value.__dict__.get("_local")
         run = value.__dict__.get("_run")
         if run is not None:                             # a run's result: its memo entry (DAT 1028)
@@ -765,25 +1029,29 @@ class Transaction:
             if deps or provenance is not None:
                 raise TypeError(f"a run's result carries its trace ({run.name}); deps= and provenance= are "
                                 "a hand seal's")
-            if local is not None and not local["kept"] and sha256(value.encode()) != local["hash"]:
+            if local is not None and not local["kept"] and self._hash_of(value) != local["hash"]:
                 raise SealBroken(f"{type(value).__name__} sealed at {value.sealed}: its bytes changed since; "
                                  "seal a new value (or seal with keep=True to keep the bytes)")
             if name is not None:
                 _name(name, "name")
             check_late_code(run, current_env())
-            return save_run(self, value, run, name)
+            return save_run(self, value, run, name, plan=plan)
+        return self._seal_hand(value, deps, name, provenance if local else check_provenance(provenance), local, plan)
+
+    def _seal_hand(self, value: Value, deps: Sequence[Any], name: Optional[str], provenance: str,
+                   local: Optional[Dict[str, Any]], plan: List[Any]) -> str:
+        """Seal a value that is no run's result, then its subdats; its subject."""
         env = None
         extra: List[Tuple[str, str]] = []
         if local is not None:
             if deps or provenance is not None:
                 raise TypeError(f"deps and provenance were fixed by v.seal() at {value.sealed}; "
                                 "save with v.seal(t) alone")
-            if not local["kept"] and sha256(value.encode()) != local["hash"]:
+            if not local["kept"] and self._hash_of(value) != local["hash"]:
                 raise SealBroken(f"{type(value).__name__} sealed at {value.sealed}: its bytes changed since; "
                                  "seal a new value (or seal with keep=True to keep the bytes)")
             deps, provenance, env = local["deps"], local["provenance"], local["env"]
             extra.append(("db/sealed-at", "str:" + str(value.sealed)))
-        provenance = check_provenance(provenance)
         if name is None:
             name = value.__dict__.get("_name")          # Value(name=...): the name it is saved under
         if name is not None:
@@ -792,24 +1060,65 @@ class Transaction:
         trace: Dict[str, str] = {}
         self._dep_items(deps, trace)
         self._env_items(trace, env=env)
-        vtext = ref_text(dotted(type(value)), value.hash)
+        vtext = ref_text(dotted(type(value)), self._hash_of(value))
         subject = hash_text(canonical({"trace": trace, "preds": canon, "value": vtext}))
         self._seal(value, subject, trace, provenance, pred_rows, extra, name)
         self._freeze(value, subject, trace)
+        self._seal_subdats(plan, value, subject, name, provenance)
         return subject
+
+    def _subdat_plan(self, value: Value, skip: Optional[Iterable[str]], base: str = "") -> List[Any]:
+        """``(relpath, the subdat or None when declined, its own plan)`` of each subdat of ``value``, made and
+        checked before anything is sealed, so a subdat that may not seal refuses the whole seal."""
+        if isinstance(skip, str):
+            raise TypeError(f"skip takes relative-path suffixes, a tuple or list, not the str {skip!r}")
+        entries = None if skip is None else tuple(skip)
+        declined = () if entries == () else (*type(value).skip_subdats, *(entries or ()))
+        plan: List[Any] = []
+        for rel, child in value._subdats():
+            if declined_by(base + rel, declined):
+                plan.append((rel, None, []))
+                continue
+            child._sealable()
+            check_loadable(child)
+            plan.append((rel, child, self._subdat_plan(child, declined or None, f"{base}{rel}/")))
+        return plan
+
+    def _seal_subdats(self, plan: List[Any], value: Value, subject: str, name: Optional[str],
+                      provenance: str) -> None:
+        """Seal the subdats of ``value``, just sealed as ``subject``, and write its ``db/subdat/<relpath>`` rows
+        (SVP 241): each a value of its own, ``<name>/<relpath>``, its one dep the parent, the parent's provenance;
+        one carrying a run's trace or a ``v.seal()`` keeps what it carries. The rows are outside the subject hash
+        and re-point: they land even when the subject exists already, each revision reading its own. Children
+        finish before their parent, whose folder a commit may move (a subclass's ``_after_seal``)."""
+        mark = len(self._finalize)
+        for rel, child, below in plan:
+            predicate = f"db/subdat/{rel}"
+            if child is None:
+                self._ops.append(_Op(subject, predicate, "str:declined", True))
+                continue
+            child_name = f"{name}/{rel}" if name else None
+            local = child.__dict__.get("_local")
+            if local is not None or "_run" in child.__dict__:
+                s = self._seal_value(child, name=child_name, plan=below)
+            else:
+                s = self._seal_hand(child, (value,), child_name, provenance, None, below)
+            self._ops.append(_Op(subject, predicate, ref_text(dotted(type(child)), self._hash_of(child), s), True))
+        if len(self._finalize) > mark:
+            self._finalize.append(self._finalize.pop(mark - 1))
 
     def _freeze(self, value: Value, subject: str, trace: Dict[str, str]) -> None:
         """The seal fixes subject, dependencies and preds now; the revision is assigned at commit (Q25 (D))."""
         from types import MappingProxyType
         from .value import FrozenPreds
 
-        h = value.hash
+        h = self._hash_of(value)
         if value.sealed:
             self._frozen.append((value, None))
         else:
             self._frozen.append((value, dict(value.preds)))
             value.__dict__["_preds"] = FrozenPreds(value.preds)
-            value.sealed = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            value.sealed = stamp()
         value.subject = subject
         value.dependencies = MappingProxyType(dict(trace))
         value.__dict__["_hash"] = h
@@ -817,13 +1126,14 @@ class Transaction:
 
     def _seal(self, value: Value, subject: str, trace: Dict[str, str], provenance: str,
               pred_rows: List[Tuple[str, str]], extra: List[Tuple[str, str]], alias: Optional[str]) -> None:
-        h = value.hash
+        h = self._hash_of(value)
         already = any(s == subject for _v, s in self._pending.values())
         if not already:
             self._to_store.append(value)
         self._pending[id(value)] = (value, subject)
         self._finalize.append((value, subject, dict(trace), alias))
         if not already and not self._snapshot()._held(subject, "db/value"):
+            self._new_seals.append((value, subject))
             ops: List[Tuple[str, str, bool]] = [
                 ("db/value", ref_text(dotted(type(value)), h), False),
                 ("db/kind", "str:" + dotted(type(value)), False),
@@ -839,12 +1149,15 @@ class Transaction:
 
     def _name_value(self, subject: str, name: Optional[str]) -> None:
         """Name ``subject`` (Q36, A70): ``name db/alias subject``, every other name of it retracted, so a
-        value has one name; ``None`` unnames it."""
+        value has one name; ``None`` unnames it. The other names are read at open; ``_write`` retracts any added
+        meanwhile."""
         for other in self._snapshot()._aliases_of(subject):
             if other != name:
                 self._ops.append(_Op(other, "db/alias", "str:" + subject, False))
         if name is not None:
-            self._ops.append(_Op(name, "db/alias", "str:" + subject, True))
+            op = _Op(name, "db/alias", "str:" + subject, True)
+            self._ops.append(op)
+            self._namings.append(op)
 
     def _ensure_code(self, subject: str, rows: Sequence[Tuple[str, str]]) -> None:
         """Write the ``db/code/<hash 16>`` item once (DAT 1037): many results, and many functions, share it."""
@@ -863,10 +1176,11 @@ class Transaction:
         ``preds()``, kept by ``t[s] = {...}``. Written by the ledger alone, never by a person (``bump_source`` edits
         the source).
 
-        Only a plain ``MAJOR.MINOR.PATCH`` counts: a dirty checkout's ``<commit 8>+dirty``, a bare commit
-        or a ``#hash`` moves neither. Read through the snapshot at open. The version, per package (the
-        highest this body ran): absent or lower, this transaction adds it; equal, nothing; higher on the row, a warning and nothing (the
-        clock never moves back). The commit: added whenever it differs from the row."""
+        Only a ``MAJOR.MINOR.PATCH[.devN]`` counts (``.devN`` below its patch, SVP 1482): a dirty checkout's
+        ``<commit 8>+dirty``, a bare commit or a ``#hash`` moves neither. Read through the snapshot at open, and re-checked at commit in the write
+        lock (``_write``). The version, per package (the highest this body ran): absent or lower, this transaction
+        adds it; equal, nothing; higher on the row, a warning and nothing (the clock never moves back). The commit:
+        added whenever it differs from the row."""
         seen = _semver(version)
         if seen is None:
             return
@@ -900,8 +1214,14 @@ class Transaction:
         return s
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        """``t[s, p] = o``: an ``add`` on a one predicate, no lock needed. ``t[s] = {...}``: make the user rows
-        equal (A34, A43), read through ``previous_rev``, so it needs ``lock=``."""
+        """``t[s, p] = o``: an ``add`` on a ``one`` predicate, no lock needed.
+
+        A ``many`` or ``db/`` predicate is ``TypeError``. ``t[s] = {...}`` makes the subject's user rows equal to the
+        dict at the next revision (A34, A43), reading what the subject holds through ``previous_rev``, so it needs
+        ``lock=`` (``Unlocked`` without); ``t[s] = t.previous_rev[s]`` writes nothing.
+
+        Brackets take exact subjects; a glob is ``TypeError``.
+        """
         self._open("a bracket write")
         if isinstance(key, tuple):
             if len(key) != 2:
@@ -952,8 +1272,11 @@ class Transaction:
             raise
 
     def __delitem__(self, key: Any) -> None:
-        """``del t[s, p]``: retract what ``p`` holds on ``s``. ``del t[s]``: every user row; ``db/`` rows survive.
-        Both read through ``previous_rev``, so they need ``lock=``."""
+        """``del t[s, p]`` retracts what ``p`` holds on ``s``; ``del t[s]`` retracts every user row.
+
+        ``db/`` rows survive, and a ``db/`` predicate is ``TypeError``. Both read through ``previous_rev``, so they
+        need ``lock=`` (``Unlocked`` without).
+        """
         self._open("a bracket delete")
         if isinstance(key, tuple):
             if len(key) != 2:
