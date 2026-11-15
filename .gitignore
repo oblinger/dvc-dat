@@ -19,7 +19,7 @@ __pycache__
 /tests/art/
 .vscode/
 
-# Anchor (DAS repo-anchor shape, 2026-10-19): the Track folder is a grout worktree, never history
+# Anchor (DAS repo-anchor shape, 2026-10-19): the Track folder is a plain ignored folder, never history
 
 /doc/*Track/
 /doc/**/*Track/
@@ -27,7 +27,7 @@ __pycache__
 /doc/.obsidian/
 
 /.claude/settings.local.json
-# grout (HA F471)
+# anchor-vault (HA F471)
 .obsidian/
 doc/*Track/
 

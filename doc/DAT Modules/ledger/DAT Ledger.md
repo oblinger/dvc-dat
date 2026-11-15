@@ -1,7 +1,7 @@
 ---
 description: "The ledger half of dvc_dat: quads read as of a revision, values stored by content, value functions evaluated with their dependencies traced. Source: `dvc_dat/ledger/`."
 ---
-:>> [DAT](../../DAT%20Track/DAT.md) → [DAT doc Modules Ledger](ha://p/DAT%20doc%20Modules%20Ledger) 
+:>> [DAT](../../DAT.md) → [DAT doc Modules Ledger](ha://pop/DAT~doc~Modules~Ledger) 
 # DAT Ledger
 The ledger is a project's history: every fact a quad `(rev, subject, predicate, object)`, every read a frozen view as of one revision, every value stored by its content and found by its preds.
 
@@ -42,7 +42,7 @@ A frozen view of the ledger as of one revision, made by `Ledger.at`, never by ha
 <!-- methods: dvc_dat.ledger.Rev -->
 
 ## Ref Interface
-A reference to one value at one moment, named without fetching a byte: the subject and the revision, nothing loaded until `load`. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is `<Ref label>` and its `str` the bare label: the value's name (the alias naming it written latest), else `#` + the hash's first 8 hex (DAT 1036). Made from a recording `Rev`, it traces its reads into the dependencies like the `Rev` would.
+A reference to one value at one moment, named without fetching a byte: the subject and the revision, nothing loaded until `load`. Making one resolves the `db/alias` chain from `name`; a cycle or more than 8 hops is `AliasLoop`. A `Ref` is frozen, equal and hashed by subject, and does not pickle (it is bound to an open ledger). Its `repr` is `<Ref label>` and its `str` the bare label: the value's name (the alias naming it written latest), else `#` + the hash's first 8 hex (DAT1036). Made from a recording `Rev`, it traces its reads into the dependencies like the `Rev` would.
 
 <!-- methods: dvc_dat.ledger.Ref -->
 
@@ -186,7 +186,7 @@ A read turns the rows at or before its revision into what they hold, by each pre
 
 
 ## The db/ vocabulary
-`db/<p>` is a predicate the ledger interprets, on any subject; everything bare is the user's and the ledger reads nothing into it (DAT 1052 Q2, Q3). Every subject the ledger writes itself lives under `db/`, and since DAT 1044 the code clocks do too. `db/version` is the version identifier, on any subject: the release on `db`, a code clock, and the version of anything of yours you version (`bump(t, "schema/metrics")`); its object is a `MAJOR.MINOR.PATCH` string, checked at `add`. A bare `version` is yours, free text the ledger never reads. The ledger's configuration is ordinary rows written by ordinary transactions, so a declared index, cardinality or mount has a revision and a history like any fact.
+`db/<p>` is a predicate the ledger interprets, on any subject; everything bare is the user's and the ledger reads nothing into it (DAT1052 Q2, Q3). Every subject the ledger writes itself lives under `db/`, and since DAT1044 the code clocks do too. `db/version` is the version identifier, on any subject: the release on `db`, a code clock, and the version of anything of yours you version (`bump(t, "schema/metrics")`); its object is a `MAJOR.MINOR.PATCH` string, checked at `add`. A bare `version` is yours, free text the ledger never reads. The ledger's configuration is ordinary rows written by ordinary transactions, so a declared index, cardinality or mount has a revision and a history like any fact.
 
 | subject | what it holds |
 | --- | --- |
@@ -421,7 +421,7 @@ The ask is a set: each input's identity is its `ref:<class>:<hash>` (a `Value`/`
 There is no subtraction: a change to an early member costs a full reduce. **The law the author owes:** `f(f(None, A), B)` equals `f(None, A | B)` byte for byte, for any partition of the set. The ledger cannot check it; `fresh=True` skips both lookups and reduces the whole set from scratch, and a test compares it with the incremental result by `same_as`.
 
 ## Memoization and the platform
-A memo entry records the whole platform it ran on; the ledger decides, at each lookup, how much of it must agree (SVP 1474). **Record at write, policy at lookup.**
+A memo entry records the whole platform it ran on; the ledger decides, at each lookup, how much of it must agree (SVP1474). **Record at write, policy at lookup.**
 
 **The record.** Every run's entry stores two platform items. `platform` is the short tag `<os>-<machine>-py<X.Y>` (`linux-x86_64-py3.11`), as every entry before 1474 did. `platform/record` is the full record as canonical JSON, captured where the function ran: in the sandbox worker for a mounted function, in the calling process for an installed one, and for a draft saved later the machine it ran on, not the one that saved it.
 

@@ -78,7 +78,10 @@ plugins:
 exclude_docs: |
   DAT Track/
   DAT Design/
+  Track/
+  Design/
   DAT Hooks.md
+  DAT.md
   Docs.md
   DAT User Docs.md
   *.py

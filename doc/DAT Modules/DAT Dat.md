@@ -1,7 +1,7 @@
 ---
 description: "`Dat`, `DatManager`, `DatContainer`, `Namespace`: the folder that is its own recipe, and the world that makes, loads, runs and seals it. Source: `dvc_dat/core.py`, `dvc_dat/do.py`."
 ---
-:>> [DAT](../DAT%20Track/DAT.md) → [DAT Dat](ha://p/DAT%20Dat) 
+:>> [DAT](../DAT.md) → [DAT Dat](ha://pop/DAT~Dat) 
 # DAT Dat
 A dat is a folder whose `_spec_.yaml` is a complete, argumentless recipe for itself and whose `_result_.yaml` holds what running it produced, sealed under a content hash.
 
@@ -18,7 +18,7 @@ This page covers the dat half of `dvc_dat`: `Dat`, `DatManager` and `DatContaine
 
 
 ## Dat Interface
-A folder of data described by its `_spec_.yaml`, held in memory as the spec as written, the mutable results, and the path. A dat is made by `Dat.create` or `DatManager.create` and read by `Dat.load` or `DatManager.load`; `Dat(path, spec, result)` is the constructor those call, and `Dat(path)` alone is the dat already in that folder, its spec and results read from there (`{}` each when absent). A dat is also a ledger value, one class (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Value` and carries the folder codec, so `seal`, `preds`, `subject`, `sealed` and `hash` are on every dat; its bytes are the folder's manifest, its preds default to the spec's scalar `dat.kwargs` and the results' scalar top-level entries, and a dat seals as a value once saved ([DAT Ledger § Dat Interface](ledger/DAT%20Ledger.md#Dat%20Interface)). Subclasses are the dat's kinds: `dat.kind` in the spec names one, and a subclass overrides `validate_spec` to check its own fields. The class-level members act on the default world, `Dat.manager`; an instance acts on the manager that loaded it.
+A folder of data described by its `_spec_.yaml`, held in memory as the spec as written, the mutable results, and the path. A dat is made by `Dat.create` or `DatManager.create` and read by `Dat.load` or `DatManager.load`; `Dat(path, spec, result)` is the constructor those call, and `Dat(path)` alone is the dat already in that folder, its spec and results read from there (`{}` each when absent). A dat is also a ledger value, one class (DAT1038): `Dat` subclasses `dvc_dat.ledger.Value` and carries the folder codec, so `seal`, `preds`, `subject`, `sealed` and `hash` are on every dat; its bytes are the folder's manifest, its preds default to the spec's scalar `dat.kwargs` and the results' scalar top-level entries, and a dat seals as a value once saved ([DAT Ledger § Dat Interface](ledger/DAT%20Ledger.md#Dat%20Interface)). Subclasses are the dat's kinds: `dat.kind` in the spec names one, and a subclass overrides `validate_spec` to check its own fields. The class-level members act on the default world, `Dat.manager`; an instance acts on the manager that loaded it.
 
 <!-- methods: dvc_dat.core.Dat -->
 

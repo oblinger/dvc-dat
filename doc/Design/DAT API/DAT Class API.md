@@ -1,7 +1,7 @@
 ---
 description: "`from dvc_dat import Dat`: the `Dat` class, `Dat.manager.run`, `Dat.ns`, the spec file, the config"
 ---
-:>> [DAT](../../DAT%20Track/DAT.md) → [DAT Design](../DAT%20Design.md) → [DAT API](DAT%20API.md) → [DAT Class API](ha://p/DAT%20Class%20API) 
+:>> [DAT](../../DAT.md) → [DAT Design](../Design.md) → [DAT API](DAT%20API.md) → [DAT Class API](ha://pop/DAT~Class~API) 
 # DAT Class API
 The `Dat` class — what a run makes, and everything you can do with one.
 
@@ -91,7 +91,7 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
     A plain class attribute: `None` until first use, when the getter builds the default world with `DatManager.load_dat_config()`. Assign a manager to replace the default world (`Dat.manager = Store(dat_folders=[...], ns=Dat.ns)` keeps the mounts). Every subclass sees the same object. `dat.manager` on an instance is the manager that loaded it, else this one — a run's function loads through `dat.manager`. ^manager
 
 **ns**`: Namespace`
-    The default world's namespace: a forwarder to `Dat.manager.ns`, whichever manager that is when it is used. `Dat.ns.mount(...)` and `Dat.ns.load(...)` name things; `ns = Dat.ns` binds a shortcut that follows a later reassignment of `Dat.manager`. It is not callable: `Dat.manager.run("x", lr=0.5)` runs ([Running](#Running); 2.35, DAT 1049). ^ns
+    The default world's namespace: a forwarder to `Dat.manager.ns`, whichever manager that is when it is used. `Dat.ns.mount(...)` and `Dat.ns.load(...)` name things; `ns = Dat.ns` binds a shortcut that follows a later reassignment of `Dat.manager`. It is not callable: `Dat.manager.run("x", lr=0.5)` runs ([Running](#Running); 2.35, DAT1049). ^ns
 
 **create**`(spec: dict | str | None = None, *, path: str | None = None, **kwargs) -> Dat`
     Classmethod. `Dat.manager.create(spec, path=path, **kwargs)`, typed, running nothing: the keywords merge into `dat.kwargs` as data, read by a template as `${dat.kwargs.x}` (SVP 1508; 1519); a `dat.kind` naming a class outside `cls` is `TypeError`, checked before any folder is made; with no `dat.kind`, the class it is called on is written. `spec` is a dict or a dotted name; `path` is a template under the first dat folder, default `dat.name`, else `anonymous/Dat${unique:}`, with `dat.target_exists` settling a collision. ^create
@@ -232,7 +232,7 @@ The file a dat holds is that template resolved once, at create — `name` keeps 
 
 ## Grammar — `${…}` in any template string
 
-OmegaConf's grammar, resolved once when the dat is created (after `dat.base` is merged), with the same moment and count its folder got; the resolved values are what the file holds ([DAT 1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md) Q7; 1519). The base install resolves `${unique:}` alone; the rest needs `dvc-dat[expand]`.
+OmegaConf's grammar, resolved once when the dat is created (after `dat.base` is merged), with the same moment and count its folder got; the resolved values are what the file holds ([DAT 1009](../../Track/Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md) Q7; 1519). The base install resolves `${unique:}` alone; the rest needs `dvc-dat[expand]`.
 
 | Form | Resolves to |
 | --- | --- |
@@ -297,4 +297,4 @@ The whole grammar, as `ns.expand`: [Expansion](../../expand.md).
 
 
 # BRIEF
-- 2026-09-23 — rewritten to the 2.3 + 2.4 surface ([DAT 103](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/103%20-%20API%20refactor.md)) in Dan's module-doc member format: `Dat` and `DatContainer` as module docs, module functions as their own table; `DataConfig` removed; `Dat.load` lost `cwd`; `Dat.manager` a plain assignable class attribute; config renamed `.datconfig.yaml` with `art_folder`. The old § Dats on disk / One dat / Strings and configuration were folded into the member blocks; § Running, § Spec file, § Grammar, § Configuration kept as reference. Decided on [DAT 1008](../../DAT%20Track/DAT%20Backlog/1008%20-%20Should%20configure%28%29%20disappear,%20and%20should%20the%20static%20namespace%20be%20the.md), [DAT 1009](../../DAT%20Track/DAT%20Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md), [DAT 1014](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/1014%20-%20Fold%20DataConfig%20into%20DatManager;%20settle%20the%20manager's%20public%20attributes.md), [DAT 102](../../DAT%20Track/DAT%20Backlog/103%20-%20API%20refactor/102%20-%20Dependencies%20by%20capture,%20and%20artifacts,%20in%20DAT%20itself.md).
+- 2026-09-23 — rewritten to the 2.3 + 2.4 surface ([DAT103](../../Track/Backlog/103%20-%20API%20refactor/103%20-%20API%20refactor.md)) in Dan's module-doc member format: `Dat` and `DatContainer` as module docs, module functions as their own table; `DataConfig` removed; `Dat.load` lost `cwd`; `Dat.manager` a plain assignable class attribute; config renamed `.datconfig.yaml` with `art_folder`. The old § Dats on disk / One dat / Strings and configuration were folded into the member blocks; § Running, § Spec file, § Grammar, § Configuration kept as reference. Decided on [DAT1008](../../Track/Backlog/1008%20-%20Should%20configure%28%29%20disappear,%20and%20should%20the%20static%20namespace%20be%20the.md), [DAT1009](../../Track/Backlog/1009%20-%20The%20config's%20key%20names%20and%20the%20CLI's%20one%20verb,%20before%202.0%20is%20tagged.md), [DAT1014](../../Track/Backlog/103%20-%20API%20refactor/1014%20-%20Fold%20DataConfig%20into%20DatManager;%20settle%20the%20manager's%20public%20attributes.md), [DAT102](../../Track/Backlog/103%20-%20API%20refactor/102%20-%20Dependencies%20by%20capture,%20and%20artifacts,%20in%20DAT%20itself.md).
