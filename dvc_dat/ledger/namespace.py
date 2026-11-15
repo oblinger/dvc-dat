@@ -35,6 +35,7 @@ import yaml
 from ..expand import expand_text, has_unique
 from ..namespace import Namespace
 from . import hooks
+from .env import pinned
 from .errors import NotEvaluated
 from .fn import MNT, Fn, fn_mark, installed_fn, mount_prefix, mounted_name, mounts_at
 
@@ -52,20 +53,26 @@ def resolve_name(rev: "Rev", name: str) -> Any:
     if not _dotted(name):
         raise ImportError(f"{name!r} is not a dotted name")
     if name == MNT or name.startswith(MNT + "."):
-        plain = rev._plain()
-        mounts = mounts_at(plain)
-        inner = name[len(MNT) + 1:]
-        for prefix, info in sorted(mounts.items(), key=lambda kv: -len(kv[0])):
-            if inner == prefix or inner.startswith(prefix + "."):
-                return _mounted(rev, name, inner, prefix, info)
-        listed = ", ".join(mounted_name(p) for p in sorted(mounts)) or "none"
-        what = f"{MNT!r} alone names no mount" if not inner else f"{name!r}: no ledger mount answers to {inner!r}"
-        raise ImportError(f"{what}; a mounted name is {MNT}.<prefix>..., and the mounts at rev {plain.id} are: "
-                          f"{listed}")
+        with pinned():
+            return _resolve_mounted(rev, name)
     obj = Namespace._load_static(name)
     if callable(obj) and fn_mark(obj) is not None:
         return installed_fn(rev, name, obj)
     return obj
+
+
+def _resolve_mounted(rev: "Rev", name: str) -> Any:
+    """``resolve_name`` of a ``mnt.`` name, under one environment discovery (``env.pinned``)."""
+    plain = rev._plain()
+    mounts = mounts_at(plain)
+    inner = name[len(MNT) + 1:]
+    for prefix, info in sorted(mounts.items(), key=lambda kv: -len(kv[0])):
+        if inner == prefix or inner.startswith(prefix + "."):
+            return _mounted(rev, name, inner, prefix, info)
+    listed = ", ".join(mounted_name(p) for p in sorted(mounts)) or "none"
+    what = f"{MNT!r} alone names no mount" if not inner else f"{name!r}: no ledger mount answers to {inner!r}"
+    raise ImportError(f"{what}; a mounted name is {MNT}.<prefix>..., and the mounts at rev {plain.id} are: "
+                      f"{listed}")
 
 
 def _dotted(name: Any) -> bool:

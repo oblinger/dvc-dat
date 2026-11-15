@@ -119,3 +119,34 @@ def test_two_live_checkouts_sharing_a_name_resolve_to_the_latest_imported(tmp_pa
     finally:
         sys.modules.pop("twin_first_1023", None)
         sys.modules.pop("twin_second_1023", None)
+
+
+def test_pinned_shares_one_discovery_until_a_module_is_imported(tmp_path, monkeypatch):
+    """SVP 255: inside ``pinned`` (one memo lookup, one name's resolution) ``current_env`` discovers once; an import
+    since discovers again; outside it, every call discovers (a notebook commits mid-session)."""
+    from dvc_dat.ledger import set_env_provider
+    from dvc_dat.ledger.env import Env, current_env, pinned
+
+    calls = []
+
+    def provider():
+        calls.append(1)
+        return Env({}, "p")
+    old = set_env_provider(provider)
+    try:
+        current_env(), current_env()
+        assert len(calls) == 2
+        with pinned():
+            a = current_env()
+            with pinned():
+                assert current_env() is a
+            assert len(calls) == 3
+            (tmp_path / "pinned_newmod_255.py").write_text("X = 1\n")
+            monkeypatch.syspath_prepend(str(tmp_path))
+            import pinned_newmod_255  # noqa: F401
+            current_env(), current_env()
+            assert len(calls) == 4
+        current_env()
+        assert len(calls) == 5
+    finally:
+        set_env_provider(old)

@@ -195,3 +195,41 @@ def test_racing_entries_both_kept_latest_wins(world):
     [t.start() for t in ts]
     [t.join() for t in ts]
     assert len({v.subject for v in out}) == 1           # deterministic: one subject
+
+
+class _Reads:
+    """Counts the store's row and subject reads (every backend's round trips go through these)."""
+
+    def __init__(self, store, monkeypatch):
+        self.n = 0
+        for meth in ("rows", "subjects"):
+            orig = getattr(store, meth)
+
+            def counted(*a, _orig=orig, **kw):
+                self.n += 1
+                return _orig(*a, **kw)
+            monkeypatch.setattr(store, meth, counted)
+
+
+def _hit_reads(world, monkeypatch):
+    reads = _Reads(world._store, monkeypatch)
+    world.at().run("ledger_kinds.cut", game="G1")
+    monkeypatch.undo()
+    return reads.n
+
+
+def test_a_memo_hit_reads_a_bounded_number_of_rows_whatever_else_shares_its_keys(world, monkeypatch):
+    """SVP 255: every entry sharing the hit's ``db/keys`` (91 metrics over one run) cost two reads per lookup, so a
+    hit slowed as the ledger grew (444 round trips, 22 s through a Cloud SQL proxy). Only the function's own
+    entries under those keys are read now."""
+    a = world.at().run("ledger_kinds.cut", game="G1")
+    assert CALLS["cut"] == 1
+    keys = world.at()._held(a.subject, "db/keys")[0].obj
+    base = _hit_reads(world, monkeypatch)
+    with world.transaction(by="t") as t:
+        for i in range(30):                         # other functions' entries under the very same keys
+            t.add(f"decoy/{i}", "db/fn", f"other.fn{i}")
+            t.add(f"decoy/{i}", "db/keys", {"game": "G1", "version": "1.0.0"})
+    assert world.at()._held("decoy/0", "db/keys")[0].obj == keys
+    assert _hit_reads(world, monkeypatch) == base
+    assert base <= 40 and CALLS["cut"] == 1

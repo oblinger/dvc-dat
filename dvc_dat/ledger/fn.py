@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence,
 
 from .claim import PREDICATE as REPRODUCIBLE, claim_text, clauses, widens
 from .codec import canonical, dotted_get, hash_text, ref_text, sha256
-from .env import Env, current_env, platform_items, repo_of
+from .env import Env, current_env, pinned, platform_items, repo_of
 from .errors import ConfinedWrite, NotClean, NotEvaluated
 from .policy import EXACT_FIELDS
 from .code import Code
@@ -783,7 +783,8 @@ class Fn:
         item = f"eval:{self.name}{enc}"
         target = None if path is None else os.fspath(path)
         if level not in (True, False):
-            hit = lookup(plain, self.name, enc, widen=EXACT_FIELDS if widens(self.reproducible) else ())
+            with pinned():
+                hit = lookup(plain, self.name, enc, widen=EXACT_FIELDS if widens(self.reproducible) else ())
             if hit is not None or level == "get":
                 rev._record_run(item, ref_text(dotted(type(hit)), hit.hash) if hit is not None else "<none>")
                 at = target if target is not None or hit is None or self.kind != "dat" else hit.name
@@ -1181,7 +1182,13 @@ def lookup(plain: "Rev", name: str, enc: str, widen: Sequence[str] = ()) -> Opti
 
     top = plain.ledger.at()
     cands = []
+    # Two indexed reads, then rows only for the entries of this function under these keys. Every function
+    # called with the same keys (91 metrics over one run's line-up) shares ``db/keys``: reading each of those
+    # entries' rows cost two round trips apiece, growing with the ledger (SVP 255).
+    of_fn = set(top._store.subjects(top.id, predicate="db/fn", obj="str:" + name))
     for s in top._store.subjects(top.id, predicate="db/keys", obj="json:" + enc):
+        if s not in of_fn:
+            continue
         fnh = top._held(s, "db/fn")
         val = top._held(s, "db/value")
         if fnh and fnh[0].obj == "str:" + name and val:
