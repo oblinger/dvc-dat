@@ -434,6 +434,10 @@ def make_ledger_project(root: Path, hand: str = "", targets: bool = True) -> Non
         "def plain(dat, n=1):\n"
         "    dat.get_results()['out'] = n\n"
         "    dat.save()\n"
+        "\n"
+        "@dat.fn\n"
+        "def seen(rev, *, acc, more: list) -> dict:\n"
+        "    return dict(acc.obj if acc is not None else {}, **{str(x): 1 for x in more})\n"
     )
     (root / "ledger_main.py").write_text(
         "import sys\n"
@@ -647,6 +651,20 @@ class TestLedgerVerbs:
         assert run_x("mnt.proj.fns.double", "n=3", "alias=six", cwd=tmp_path)[0] == 0
         code, out, err = just("why", "six", cwd=tmp_path)
         assert code == 0 and out.startswith("six: #") and "matches the head" in out, err
+
+    def test_reduce_then_why_names_the_step(self, tmp_path):
+        make_ledger_project(tmp_path)
+        code, out, err = just("reduce", "mnt.proj.fns.seen", "over=G1,G2", cwd=tmp_path)
+        assert code == 0 and out.splitlines()[1] == 'reduced from: (none); more: "G1", "G2"', (out, err)
+        first = out.split()[1].rstrip(",")
+        code, out, err = just("reduce", "mnt.proj.fns.seen", "over=G2,G3,G1", cwd=tmp_path)
+        assert code == 0 and out.splitlines()[1] == f'reduced from: {first}; more: "G3"', (out, err)
+        subject = out.split()[1].rstrip(",")
+        from dvc_dat.ledger import Ledger
+        full = next(s for s in Ledger(tmp_path / ".dat" / "ledger").at()._store.subjects(10 ** 9, predicate="db/fn")
+                    if s.startswith(subject[1:]))
+        code, out, err = just("why", full, cwd=tmp_path)
+        assert code == 0 and f'reduced from: {first}; more: "G3"' in out, (out, err)
 
     def test_index(self, tmp_path):
         make_ledger_project(tmp_path)

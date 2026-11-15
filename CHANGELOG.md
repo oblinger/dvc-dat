@@ -8,6 +8,8 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **`rev.reduce(name, over=[...], **keys)`: a reduce over a set of values, incremental by the largest subset already reduced (SVP 242, Dan 2026-11-15; additive, no version bump until the owner cuts one).** A reduce function is a `@dat.fn` taking two reserved keyword parameters, `acc` (the result of the largest subset already reduced, `None` on the first step) and `more` (the inputs outside it, sorted, a `Value`/`Ref` loaded); its result may be any type. Each step is one memo entry keyed by the sorted set, `db/keys` = `{"over": [...sorted], **keys}`, an input's identity its `ref:` or its canonical JSON, so the order never makes a second entry; it carries `db/reduce/from` (the `acc` entry's subject, `none`) and `db/reduce/more` (the inputs it added). An exact entry is a hit, nothing run; else the function's entries with the same other keys whose `over` is a proper subset of the ask are judged largest first, the first that holds is `acc`, and the function runs once over the rest. `fresh=True` reduces the whole set from scratch, the author's check of the law `f(f(None, A), B) == f(None, A | B)` by `same_as`. `rev.run` of a reduce function is `TypeError`. New `just reduce NAME over=A,B,C k=v`; `just why` prints a step's `reduced from:` and `more:`. Docs: DAT Ledger § Reduce.
+
 ## 3.1.1 — 2026-11-15
 
 The Postgres object-index fix (SVP 255 Q3), the patch Dan approved 2026-11-15 ("you can go ahead and upgrade the patch number for this"); it also carries the URI-scheme backends (SVP 1599) and `--dry-run`'s spec (SVP 1138), landed after 3.1.0 and held for this cut. Each Postgres ledger runs `python -m dvc_dat.ledger.pgstore migrate <uri>` once.
