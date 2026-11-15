@@ -2,6 +2,8 @@
 ledger, the lock, byte-order prefix scans under a non-C collation, NUL, the indexes.
 Everything else runs over both stores through the ``L`` fixture."""
 
+import base64
+import random
 import threading
 import time
 
@@ -194,3 +196,63 @@ def test_pg_lock_alarm_mid_read_leaves_the_reader_usable(dsn):
     with L.transaction(by="t", lock=5) as t:
         t.add("game/G1", "away", "C")
     assert L.at().get("game/G1", "away") == "C"
+
+
+#: past Postgres's 8191-byte btree entry even compressed (a sandboxed call's ``db/modules`` is ~20 KB)
+BIG = base64.b64encode(random.Random(255).randbytes(15000)).decode()
+
+
+def _plan(L, sql, params):
+    conn = L._store._reader()
+    conn.execute("SET enable_seqscan = off")
+    try:
+        return " ".join(r[0] for r in conn.execute("EXPLAIN " + sql, params))
+    finally:
+        conn.execute("RESET enable_seqscan")
+
+
+def test_pg_a_20kb_object_is_stored_and_found_by_object_equality(dsn):
+    """``quads_po`` and a ``db/index`` partial index hold ``md5(object)``, not the object (SVP 255 Q3): a
+    20 KB object commits, reads back whole, and an object-equality lookup finds it through the index."""
+    L = Ledger(dsn, create=True)
+    with L.transaction(by="t") as t:
+        t.add("db/pred/modules", "db/index", "true")
+    with L.transaction(by="t") as t:
+        t.add("code/a", "modules", BIG)
+        t.add("code/b", "modules", BIG[:-1])
+        t.add("code/c", "other", BIG)
+    assert L.at().get("code/a", "modules") == BIG
+    top, obj = L.at().id, L._store.rows(L.at().id, subject="code/a")[0][4]
+    assert len(obj) > 20000
+    assert L._store.subjects(top, predicate="modules", obj=obj) == ["code/a"]
+    assert [r[2] for r in L._store.rows(top, predicate="other", obj=obj)] == ["code/c"]
+    q = "SELECT subject FROM quads WHERE predicate = %s AND md5(object) = md5(%s) AND object = %s"
+    assert "quads_po" in _plan(L, q, ("other", obj, obj))
+    assert "pred_" in _plan(L, q, ("modules", obj, obj))
+
+
+def test_pg_migrate_rebuilds_the_object_indexes_and_is_idempotent(dsn):
+    """A ledger made before 3.1.1 indexes the object itself; ``migrate`` rebuilds ``quads_po`` and every
+    ``db/index`` partial index on ``md5(object)``, keeps their names, and a second run changes nothing."""
+    from dvc_dat.ledger import pgstore
+
+    L = Ledger(dsn, create=True)
+    with L.transaction(by="t") as t:
+        t.add("db/pred/home", "db/index", "true")
+        t.add("game/G1", "home", "A")
+    conn = L._store._reader()
+    pred = next(n for n in L._store.index_names() if n.startswith("pred_"))
+    conn.execute("DROP INDEX quads_po")
+    conn.execute("CREATE INDEX quads_po ON quads (predicate, object text_pattern_ops, rev)")
+    conn.execute(f'DROP INDEX "{pred}"')
+    conn.execute(f"CREATE INDEX \"{pred}\" ON quads (object text_pattern_ops, subject, rev) WHERE predicate = 'home'")
+    assert pgstore.migrate(dsn) == ["quads_po", pred]
+    defs = dict(conn.execute("SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = current_schema()"
+                             " AND tablename = 'quads'").fetchall())
+    assert "md5(object)" in defs["quads_po"] and "md5(object)" in defs[pred] and "'home'" in defs[pred]
+    assert pgstore.migrate(dsn) == []
+    with L.transaction(by="t") as t:
+        t.add("code/a", "home", BIG)
+    obj = L._store.rows(L.at().id, subject="code/a")[0][4]
+    assert L._store.subjects(L.at().id, predicate="home", obj=obj) == ["code/a"]
+    assert L.at().get("game/G1", "home") == "A"
