@@ -810,13 +810,13 @@ class Rev:
 
     def reduce(self, name: str, /, *, over: Any, seal: Any = OWN, clean: bool = False, fresh: bool = False,
                **keys: Any) -> Optional[Value]:
-        """One value reduced from the set of values ``over``, reusing the largest subset already reduced (SVP 242).
+        """One value reduced from the set ``over``, merging results of subsets already reduced (SVP 242).
 
         This is the API form of ``just reduce NAME over=A,B,C KEY=VALUE``. ``name`` resolves as on
-        [``run``][dvc_dat.ledger.Rev.run] and names a reduce function: a ``@dat.fn`` with the two reserved keyword
-        parameters ``acc`` and ``more``, ``fn(rev, *, acc, more, **keys)``. ``keys`` are its other keys, as on any
-        run; a key named ``acc``, ``more`` or ``over``, or a name that is no reduce function, is ``TypeError``.
-        ``rev.run`` of a reduce function is ``TypeError`` too.
+        [``run``][dvc_dat.ledger.Rev.run] and names a reduce function, marked ``@dat.reduce_fn``:
+        ``fn(rev, *, accs, more, **keys)``. ``keys`` are its other keys, as on any run; a key named ``accs``, ``more``
+        or ``over``, or a name that is no reduce function, is ``TypeError``. ``rev.run`` of a reduce function is
+        ``TypeError`` too.
 
         ``over`` is a sequence of inputs, each a JSON-able key (a game id), a sealed ``Value`` or a ``Ref``. They are a
         set: each one's identity is its ``ref:<class>:<hash>`` (a ``Value``/``Ref``) or its canonical JSON, the set is
@@ -824,24 +824,27 @@ class Rev:
         key, ``db/keys``, is ``{"over": [...sorted], **keys}``.
 
         The steps, at this revision: an exact entry for the set whose dependencies hold is returned, nothing run
-        (``seal="get"`` stops here, ``None`` on a miss). Else the function's entries with the same other keys whose
-        ``over`` is a proper subset of the ask are judged largest first, newest seal first, as a memo entry is; the
-        first that holds is ``acc``, loaded, and ``more`` is the ask's inputs outside it, sorted, a ``Value``/``Ref``
-        loaded and a key as given. None holds: ``acc`` is ``None`` and ``more`` the whole set. ``fresh=True`` skips both
-        lookups, the exact entry and every partial, and reduces the whole set from scratch.
+        (``seal="get"`` stops here, ``None`` on a miss). Else the partials are picked among the function's entries with
+        the same other keys whose ``over`` is a proper subset of the ask, each judged as a memo entry is: greedily, the
+        largest that holds (ties newest seal first), then the largest holding one disjoint from all picked, and so on.
+        They are ``accs``, loaded, in that order, and ``more`` is the ask's inputs none of them covers, sorted, a
+        ``Value``/``Ref`` loaded and a key as given. None holds: ``accs`` is ``[]`` and ``more`` the whole set.
+        ``fresh=True`` skips both lookups, the exact entry and every partial, and reduces the whole set from scratch.
         The function runs once over them, where ``run`` would run it (sandboxed under a mount, else in this process).
 
         Each step is one memo entry, its result whatever type the function returns, with two rows beside a run's:
-        ``db/reduce/from``, the ``acc`` entry's subject (``none``), and ``db/reduce/more``, the identities handed as
-        ``more`` (canonical JSON). A transaction of its own is ``by="reduce:<name>"``.
+        ``db/reduce/from``, the ``accs`` entries' subjects as a sorted JSON list (``[]`` for none), and
+        ``db/reduce/more``, the identities handed as ``more`` (canonical JSON). Each acc's dependencies join the
+        step's trace. A transaction of its own is ``by="reduce:<name>"``.
 
         ``seal`` and ``clean`` behave as on [``Fn.__call__``][dvc_dat.ledger.Fn.__call__]; ``seal=False`` and
-        ``seal=True`` skip the exact lookup and still start from the largest subset. A draft carries its ``from`` and
+        ``seal=True`` skip the exact lookup and still start from the partials. A draft carries its ``from`` and
         ``more``, so a later ``v.seal(L)`` writes the same entry.
 
-        The law the author owes: ``f(f(None, A), B)`` equals ``f(None, A | B)`` byte for byte, for any partition of a
-        set into ``A`` and ``B``. The ledger does not check it; ``fresh=True`` reduces the whole set from scratch, and
-        a test compares that with the incremental result by ``same_as``. See [Reduce][reduce].
+        The law the author owes: ``f(accs=[f(A), f(B)], more=C)`` equals ``f(accs=[], more=A | B | C)`` byte for
+        byte, for any disjoint ``A``, ``B`` and any ``C``. The ledger does not check it; ``fresh=True`` reduces the
+        whole set from scratch, and a test compares that with the incremental result by ``same_as``. See
+        [Reduce][reduce].
         """
         from .fn import Fn
         from .namespace import LedgerNamespace
@@ -852,7 +855,7 @@ class Rev:
         with unguarded():                          # in a sandboxed body: the lookup and seal are the ledger's
             fn = LedgerNamespace(rev=self).load(name)
             if not isinstance(fn, Fn) or fn.kind != "ledger":
-                raise TypeError(f"reduce: {name!r} is {fn!r}, not a @dat.fn taking acc and more")
+                raise TypeError(f"reduce: {name!r} is {fn!r}, not a @dat.reduce_fn taking accs and more")
             return fn._reduce(over, keys, seal=seal, clean=clean, fresh=fresh)
 
     def rerun(self, value: Any) -> "Rerun":

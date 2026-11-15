@@ -435,9 +435,10 @@ def make_ledger_project(root: Path, hand: str = "", targets: bool = True) -> Non
         "    dat.get_results()['out'] = n\n"
         "    dat.save()\n"
         "\n"
-        "@dat.fn\n"
-        "def seen(rev, *, acc, more: list) -> dict:\n"
-        "    return dict(acc.obj if acc is not None else {}, **{str(x): 1 for x in more})\n"
+        "@dat.reduce_fn\n"
+        "def seen(rev, *, accs: list, more: list) -> dict:\n"
+        "    out = {k: v for a in accs for k, v in a.obj.items()}\n"
+        "    return dict(sorted(dict(out, **{str(x): 1 for x in more}).items()))\n"
     )
     (root / "ledger_main.py").write_text(
         "import sys\n"
@@ -665,6 +666,13 @@ class TestLedgerVerbs:
                     if s.startswith(subject[1:]))
         code, out, err = just("why", full, cwd=tmp_path)
         assert code == 0 and f'reduced from: {first}; more: "G3"' in out, (out, err)
+        code, out, err = just("reduce", "mnt.proj.fns.seen", "over=G4,G5", cwd=tmp_path)
+        other = out.split()[1].rstrip(",")
+        code, out, err = just("reduce", "mnt.proj.fns.seen", "over=G1,G2,G3,G4,G5", cwd=tmp_path)
+        merged = ", ".join(sorted([subject, other], key=lambda s: next(
+            f for f in Ledger(tmp_path / ".dat" / "ledger").at()._store.subjects(10 ** 9, predicate="db/fn")
+            if f.startswith(s[1:]))))
+        assert code == 0 and out.splitlines()[1] == f"reduced from: {merged}; more: (none)", (out, err)
 
     def test_index(self, tmp_path):
         make_ledger_project(tmp_path)

@@ -152,13 +152,16 @@ def why(args):
 
 
 def reduced_from(rev, subject):
-    """A reduce step's line (SVP 242): the entry it was built from and the inputs it added; ``None`` for any other value."""
+    """A reduce step's line (SVP 242): the entries it merged and the inputs it added; ``None`` for any other value."""
+    from .fn import reduce_sources
+
     rfrom = rev.get(subject, "db/reduce/from")
     if rfrom is None:
         return None
+    accs = ", ".join(short(s) for s in reduce_sources(rfrom))
     more = rev.get(subject, "db/reduce/more") or []
     shown = ", ".join(brief(x) if isinstance(x, str) and x.startswith("ref:") else json.dumps(x) for x in more)
-    return f"reduced from: {'(none)' if rfrom == 'none' else short(rfrom)}; more: {shown or '(none)'}"
+    return f"reduced from: {accs or '(none)'}; more: {shown or '(none)'}"
 
 
 def over_value(text):

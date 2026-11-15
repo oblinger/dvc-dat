@@ -15,7 +15,7 @@ index pred             # declare a pred indexed
 bump name part="patch" # bump a version: <module> edits its __version__ in the source; db is the ledger's release (a/b: a ledger clock); minor and major ask for yes
 pin name *args         # pin VALUE [recursive=true] [rerun=true]: tag and push the commit behind a value, so its run can be rerun
 rerun name             # rerun VALUE: run a pinned value's function again at its tag and compare the hash
-reduce name *args      # reduce NAME over=A,B,C [k=v ...]: a reduce function over a set, reusing the largest subset already reduced
+reduce name *args      # reduce NAME over=A,B,C [k=v ...]: a reduce function over a set, merging disjoint subsets already reduced
 ```
 <!-- /usage -->
 
@@ -272,7 +272,7 @@ short kind names and hash prefixes.
 | `just bump NAME [patch\|minor\|major]` | a module: its `__version__` in the source; `db` or a `a/b` subject: a ledger clock | `bump_source`, `bump` |
 | `just pin VALUE [recursive=true] [rerun=true]` | tag and push the commit behind a value; assert it is rerunnable (SVP 250) | `L.at().pin(value, ...)` |
 | `just rerun VALUE` | run a pinned value's function again at its tag and compare the hash | `rev.rerun(value)` |
-| `just reduce NAME over=A,B,C [k=v ...]` | a reduce function over a set of inputs, reusing the largest subset already reduced; prints the entry and the step (`reduced from:`, `more:`), which `just why` prints too (SVP 242) | `rev.reduce(name, over=[...], **keys)` |
+| `just reduce NAME over=A,B,C [k=v ...]` | a `@dat.reduce_fn` over a set of inputs, merging the results of disjoint subsets already reduced; prints the entry and the step (`reduced from:` its accs, `more:`), which `just why` prints too (SVP 242) | `rev.reduce(name, over=[...], **keys)` |
 
 A `k=v` value is JSON when it parses, else the text as typed. A refusal
 prints `<Error>: <message>` and exits `1`. The interpreter is

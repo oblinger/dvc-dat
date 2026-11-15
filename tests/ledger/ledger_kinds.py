@@ -386,33 +386,41 @@ class NumberedDat(Dat):
     """A dat carrying one declared pred."""
 
 
-#: Each step of ``count``: the ``more`` it was handed, an input by its name (SVP 242).
+#: Each step of ``count``: the ``more`` it was handed, an input by its name, and the ``accs``, each by its names
+#: (SVP 242).
 STEPS = []
+MERGED = []
 
 
 def _input_name(x):
     return x if isinstance(x, str) else x.obj["game"]
 
 
-@dat.fn
-def count(rev, *, acc, more: list, tag: str = "t") -> dict:
+@dat.reduce_fn
+def count(rev, *, accs, more: list, tag: str = "t") -> dict:
     """A counting reduce (SVP 242): each input's name -> the times it was handed to a step. Lawful: an input is
-    handed once in any chain, and the merge is a sum. The steps are counted outside the bytes, in ``STEPS``."""
+    handed once in any chain, and the merge is a sum. The steps are counted outside the bytes: ``STEPS`` the ``more``
+    of each, ``MERGED`` the ``accs`` of each, each acc by its sorted names."""
     _count("count")
     STEPS.append([_input_name(x) for x in more])
-    out = dict(acc.obj) if acc is not None else {}
+    MERGED.append([sorted(a.obj) for a in accs])
+    out = {}
+    for acc in accs:
+        for k, n in acc.obj.items():
+            out[k] = out.get(k, 0) + n
     for x in more:
         out[_input_name(x)] = out.get(_input_name(x), 0) + 1
-    return out
+    return dict(sorted(out.items()))
 
 
-@dat.fn
-def count_calls(rev, *, acc, more: list) -> dict:
+@dat.reduce_fn
+def count_calls(rev, *, accs, more: list) -> dict:
     """``count`` with its steps in the bytes, ``calls``: it breaks the law, so ``fresh=True`` differs (SVP 242)."""
-    out = dict(acc.obj) if acc is not None else {"calls": 0}
-    out["calls"] += 1
+    out = {"calls": 1 + sum(a.obj["calls"] for a in accs)}
+    for acc in accs:
+        out.update({k: v for k, v in acc.obj.items() if k != "calls"})
     out.update({x: 1 for x in more})
-    return out
+    return dict(sorted(out.items()))
 
 
 @dat.fn
@@ -421,11 +429,13 @@ def counts_inside(rev, *, games: list) -> dict:
     return {"n": len(rev.reduce("ledger_kinds.count", over=games).obj)}
 
 
-@dat.fn
-def tally(rev, *, acc, more: list) -> dict:
-    """A reduce reading one row per input: each step's trace holds its own inputs' rows and its ``acc``'s."""
+@dat.reduce_fn
+def tally(rev, *, accs, more: list) -> dict:
+    """A reduce reading one row per input: each step's trace holds its own inputs' rows and each acc's."""
     _count("tally")
-    out = dict(acc.obj) if acc is not None else {}
+    out = {}
+    for acc in accs:
+        out.update(acc.obj)
     for game in more:
         out[game] = rev[f"game/{game}", "n"]
-    return out
+    return dict(sorted(out.items()))

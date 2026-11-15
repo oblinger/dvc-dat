@@ -23,7 +23,7 @@ ns = Dat.ns     # the namespace shortcut; follows Dat.manager
 | `Namespace` | A namespace; every manager has one |
 | `L` | The active ledger: `DAT_LEDGER`, else the config's `default:` |
 | `ledgers` | The project's ledgers by name, from the registry on the root ledger: `ledgers.<name>`, `ledgers["do26"]`, `del`, set, iterate |
-| `dat` | The decorators: `@dat.fn`, `@dat.warm`, `@dat.command` |
+| `dat` | The decorators: `@dat.fn`, `@dat.reduce_fn`, `@dat.warm`, `@dat.command` |
 | `__version__` | The package version |
 
 Everything else hangs off those four classes:
@@ -41,7 +41,7 @@ Everything else hangs off those four classes:
 |------|----------------|
 | [Dat, DatManager, DatContainer](core.md) | `dvc_dat.core`: the dat folder, the manager that creates, loads and runs dats, and `merge_dicts`; the `${…}` grammar is `Namespace.expand` |
 | [Namespace](do.md) | `dvc_dat.do`: `ns`, dotted names to objects, mounts, and `cli_main`, the command line |
-| [Ledger](ledger.md) | `dvc_dat.ledger`: `Ledger`, `Rev`, `Transaction`, `Value`, the decorators `dat.fn`, `dat.warm`, `dat.command`, pin and rerun, the active ledger `L` and `ledgers`, the release helpers, the errors |
+| [Ledger](ledger.md) | `dvc_dat.ledger`: `Ledger`, `Rev`, `Transaction`, `Value`, the decorators `dat.fn`, `dat.reduce_fn`, `dat.warm`, `dat.command`, pin and rerun, the active ledger `L` and `ledgers`, the release helpers, the errors |
 | [Commands](just.md) | `dvc_dat.just`: `@dat.command`, the declared commands that become `just <name>` recipes |
 | [Dat tools](dat_tools.md) | `dvc_dat.dat_tools`, mounted as `dt`: listing dats and reporting over them |
 

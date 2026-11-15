@@ -388,37 +388,76 @@ A save writes the value's own rows once, under a subject hashing the dependencie
 
 
 ### Reduce
-**`rev.reduce(name, over=[...], **keys)` reduces a set of inputs to one value and remembers each step under the sorted set it covers, so a set that grows reduces by its growth (SVP 242).** The function is a `@dat.fn` with two reserved keyword parameters: `acc`, the loaded result of the largest subset already reduced (`None` on the first step), and `more`, the inputs outside it, sorted, each a loaded `Value` where `over` gave a `Value` or a `Ref` and the key as given otherwise. Its result may be any type (games in, a table out). `rev.run` of it is `TypeError` (`reduce`).
+**`rev.reduce(name, over=[...], **keys)` reduces a set of inputs to one value and remembers each step under the sorted set it covers, so a set that grows reduces by its growth, and two sets already reduced merge without re-reading their inputs (SVP 242).**
+
+**`name` is the dotted name of a reduce function**, resolved exactly as `rev.run` resolves a name (a mount such as `mnt.svp.table`, or an installed function). It must be marked `@dat.reduce_fn`, which checks at definition that the function takes the keyword parameters `accs` and `more`:
 
 ```python
-@dat.fn
-def table(rev, *, acc, more: list, metric: str) -> dict:
-    rows = dict(acc.obj) if acc is not None else {}
+@dat.reduce_fn
+def f(rev, *, accs: list[R], more: list[T],
+      **keys) -> R: ...
+```
+
+| parameter | holds |
+| --- | --- |
+| `accs` | earlier results of `f` itself, same other keys, over pairwise-disjoint subsets of the ask, loaded; `[]` on a first step |
+| `more` | the inputs none of `accs` covers, sorted; each a loaded `Value` where `over` gave a `Value` or `Ref`, else the key as given (a game id) |
+| `**keys` | the function's other keys, as on any run; part of the memo key, so another `metric=` is another chain |
+| return `R` | the reduced value over the union of `accs`' sets and `more`; **the type each of `accs` holds on a later step** |
+
+`@dat.reduce_fn` takes what `@dat.fn` takes (`reproducible=`, the required return annotation) and refuses a parameter named `acc`; a `@dat.fn` taking `accs`, or `acc` beside `more`, is refused at definition, pointing here. `rev.reduce` of anything but a reduce function is `TypeError`, and so is `rev.run` of one. A mounted reduce function runs in the sandbox worker, as `run` would run it.
+
+**How this relates to a classic reduce.** A classic reduce folds a list with a binary operator on one type, `op(T, T) → T`: `op(op(x1, x2), x3)`. Systems that reduce in pieces split that operator in two: Spark's `aggregate` (a `seqOp` adding one input to an accumulator, a `combOp` merging two accumulators), Flink's `AggregateFunction` (`add`, `merge`), Java's `Collector` (accumulator, combiner), a Postgres aggregate (state transition, combine function) and Hadoop's combiner. A reduce function is both halves in one function: **`more` is the add half and `accs` the merge half.** The result type `R` may differ from the input type `T` (games in, a metric table out), so a result must carry whatever merging needs: a mean keeps its count beside it, a median the values. A classic `op` is the special case `R = T`: `f(accs=[a], more=[b])` is `op(a, b)`.
+
+```python
+@dat.reduce_fn
+def table(rev, *, accs: list, more: list,
+          metric: str) -> dict:
+    rows = {}
+    # merge: each acc a table over its own games
+    for acc in accs:
+        rows.update(acc.obj)
+    # add: one game at a time
     for game in more:
-        m = rev.run("mnt.svp.metrics", game=game, metric=metric)
+        m = rev.run("mnt.svp.metrics", game=game,
+                    metric=metric)
         rows[game] = m.obj
     return rows
 
+T = "mnt.svp.table"
 games = ["G1", "G2", "G3", "G4", "G5"]
-# one step over the five
-five = L.at().reduce("mnt.svp.table", over=games, metric="mota")
-# one step: acc is five's result, more is ["G6"]
-six = L.at().reduce("mnt.svp.table", over=["G6", *games],
+# one step over the five: accs [], more the five
+five = L.at().reduce(T, over=games, metric="mota")
+# one step: accs [five's result], more ["G6"]
+six = L.at().reduce(T, over=["G6", *games],
                     metric="mota")
+# another chain, then the union:
+# one step, accs [six, east], more []
+east = L.at().reduce(T, over=["H1", "H2"],
+                     metric="mota")
+both = L.at().reduce(T, over=["G6", *games, "H1", "H2"],
+                     metric="mota")
 ```
 
-The ask is a set: each input's identity is its `ref:<class>:<hash>` (a `Value`/`Ref`) or its canonical JSON, the set sorted by it, so an order is never a second entry, and an identity given twice is `ValueError`. The memo key is `db/keys` = `{"over": [...sorted], **keys}`. At the revision asked: (1) an exact entry whose dependencies hold is returned and nothing runs (`seal="get"` stops here); (2) else the function's entries (`db/fn`) with the same other keys whose `over` is a proper subset of the ask are judged largest first, newest seal first, as any memo entry is; the first that holds is `acc`; (3) the function runs once over `acc` and the rest, through `run`'s machinery (sandboxed under a mount), and the step is saved per `seal=` (its own transaction `by="reduce:<name>"`). Each step is one memo entry, with two rows beside a run's: `db/reduce/from`, the `acc` entry's subject (`none`), and `db/reduce/more`, the `over` entries handed as `more`. `acc` and each loaded input are `ref:` items of its trace; `just why` prints both rows.
+**The steps.** The ask is a set: each input's identity is its `ref:<class>:<hash>` (a `Value`/`Ref`) or its canonical JSON, the set sorted by it, so an order is never a second entry, and an identity given twice is `ValueError`. The memo key is `db/keys` = `{"over": [...sorted], **keys}`. At the revision asked:
+
+1. An exact entry whose dependencies hold is returned and nothing runs (`seal="get"` stops here, `None` on a miss).
+2. Else the partials are picked: the function's entries (`db/fn`) with the same other keys whose `over` is a proper subset of the ask, judged as any memo entry is. Greedy: the largest that holds (ties: newest seal first), then the largest holding one disjoint from every one picked, and so on. They are `accs`, in that order; `more` is the ask's inputs none of them covers.
+3. The function runs once over them, through `run`'s machinery (sandboxed under a mount), and the step is saved per `seal=` (its own transaction `by="reduce:<name>"`).
+
+`fresh=True` skips steps 1 and 2: `accs` is `[]` and `more` the whole set. `seal=False` and `seal=True` skip step 1 only. Each step is one memo entry, with two rows beside a run's: `db/reduce/from`, the subjects of the `accs` entries as a sorted JSON list (`[]` on a first step), and `db/reduce/more`, the `over` entries handed as `more`. Each acc and each loaded input is a `ref:` item of its trace, and each acc's own dependencies join it (all but the environment's), so an input moving fails every step built over it. `just why` and `just reduce` print both rows: `reduced from: <subject>, <subject>; more: ...`.
 
 | change | effect |
 | --- | --- |
-| an input added | one step over the extras |
-| an input removed | an exact hit when that subset was asked once; else the largest remembered subset, the rest re-reduced |
-| a `Value`/`Ref` input's bytes change | a new identity: every partial holding the old one is no subset; the largest partial without it |
+| an input added | one step over the extras, `accs` the largest remembered subset |
+| two disjoint sets already reduced, their union asked | one step, `accs` both, `more` empty |
+| an input removed | an exact hit when that subset was asked once; else the largest disjoint partials, the rest re-reduced |
+| a `Value`/`Ref` input's bytes change | a new identity: every partial holding the old one is no subset; the largest partials without it |
 | a run the body makes changes (its `eval:` item) | that item fails in every entry holding the input; the same fallback |
 | the function's code changes | every entry's `code` item fails: from scratch under the new code; old entries stay readable at their revisions |
 | another key | another ask, its own chain |
 
-There is no subtraction: a change to an early member costs a full reduce. **The law the author owes:** `f(f(None, A), B)` equals `f(None, A | B)` byte for byte, for any partition of the set. The ledger cannot check it; `fresh=True` skips both lookups and reduces the whole set from scratch, and a test compares it with the incremental result by `same_as`.
+There is no subtraction: a change to an early member costs a re-reduce of every partial holding it. **The law the author owes:** `f(accs=[f(A), f(B)], more=C)` equals `f(accs=[], more=A ∪ B ∪ C)` byte for byte, for any disjoint `A`, `B` and any `C` (so the order of `accs`, and how a set was split, never shows). The ledger cannot check it; `fresh=True` reduces the whole set from scratch, and a test compares it with the incremental result by `same_as`.
 
 ## Memoization and the platform
 A memo entry records the whole platform it ran on; the ledger decides, at each lookup, how much of it must agree (SVP1474). **Record at write, policy at lookup.**
@@ -522,6 +561,7 @@ The decorators, under one name so code says what each belongs to (SVP 250 Q4): `
 | dvc_dat.dat | |
 | --- | --- |
 | [fn](#The%20function) | Mark a function as a value function; `reproducible=` its claim |
+| [reduce_fn](#Reduce) | Mark a function as a reduce function, taking `accs` and `more`; `rev.reduce` runs it |
 | [warm](#The%20execution%20environment) | A process-level memo by the canonical hash of the arguments |
 | command | Mark a function a command: also `just <name>` |
 
