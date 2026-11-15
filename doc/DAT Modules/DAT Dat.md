@@ -42,12 +42,12 @@ A namespace of dotted names, bound to the `DatManager` whose world it names; not
 
 | dvc_dat | |
 | --- | --- |
-| [Dat](../api/core.md#dvc_dat.core.Dat) | The folder that is its own recipe |
-| [DatContainer](../api/core.md#dvc_dat.core.DatContainer) | A dat holding dats |
-| [DatManager](../api/core.md#dvc_dat.core.DatManager) | A world of dats |
-| [Namespace](../api/do.md#dvc_dat.namespace.Namespace) | A namespace bound to a world |
-| [L](../api/ledger.md#dvc_dat.ledger.named) | The active ledger |
-| [ledgers](../api/ledger.md#dvc_dat.ledger.named.Ledgers) | The project's ledgers by name |
+| [Dat](#Dat%20Interface) | The folder that is its own recipe |
+| [DatContainer](#DatContainer%20Interface) | A dat holding dats |
+| [DatManager](#DatManager%20Interface) | A world of dats |
+| [Namespace](#Namespace%20Interface) | A namespace bound to a world |
+| [L](ledger/DAT%20Ledger.md#Many%20ledgers) | The active ledger |
+| [ledgers](ledger/DAT%20Ledger.md#Many%20ledgers) | The project's ledgers by name |
 | `__version__` | The package version |
 
 # Dat Semantics
@@ -79,7 +79,7 @@ A `${unique:}` in the template increments whatever `target_exists` says. The `${
 ## Sealing and the content hash
 Every `save` writes `_result_.yaml` and stamps `dat.sha256`, the hash of the dat's content: the sha256 of sorted `relpath\0sha256` lines over every file in the folder except `run/`, with `_spec_.yaml` counted as its sorted-key YAML dump less `dat.name`, and `_result_.yaml` as its sorted-key dump with `dat.sha256` set to `excluded`, so the hash sits inside the file it covers. `dat.hash: functional` in the results names this rule, the only one; a hash a 2.x save stamped does not verify. The name and the run are not content, so two runs of one recipe at two places hash the same when the code is functional, and a dat that hashes differently from its twin wrote something undeclared.
 
-The save that counts seals the dat, after which `save` and a run refuse it. Inside the dat's own run a save is a checkpoint, written `open`, and asks for the seal, which the run performs when the function returns. A save anywhere else, a folder filled by hand or a run's results saved after it returned, seals at once and adds the dependency `$MANUAL: manual`. At the seal the dependency map keeps its roots only ([roots](../api/core.md#dvc_dat.core.DatManager.roots)). `verify()`, and a load with `verify`, recompute the hash the same way: a changed data file, recipe or result fails it; a reformatted YAML file, a renamed dat or anything under `run/` does not.
+The save that counts seals the dat, after which `save` and a run refuse it. Inside the dat's own run a save is a checkpoint, written `open`, and asks for the seal, which the run performs when the function returns. A save anywhere else, a folder filled by hand or a run's results saved after it returned, seals at once and adds the dependency `$MANUAL: manual`. At the seal the dependency map keeps its roots only (`roots`). `verify()`, and a load with `verify`, recompute the hash the same way: a changed data file, recipe or result fails it; a reformatted YAML file, a renamed dat or anything under `run/` does not.
 
 
 

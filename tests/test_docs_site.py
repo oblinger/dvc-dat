@@ -144,6 +144,52 @@ def test_a_module_page_holds_no_third_level(page):
     assert "#^" not in text, "a link to a block id: member links reach the API reference"
 
 
+@pytest.mark.parametrize("page", MODULE_PAGES)
+def test_a_module_page_links_no_member_anchor_of_the_api_reference(page):
+    """A method links to its section of the module page (SVP 1731): an `api/*.md#…` anchor exists only on the
+    site, so in the vault the click lands at the top of a `:::` stub. The `api::` line links the page itself."""
+    text = (REPO / "doc" / f"{page}.md").read_text()
+    into_api = re.findall(r"\]\((?:\.\./)*api/[^)#\s]*#[^)]*\)", text)
+    assert not into_api, f"{page}: links into an API anchor, not a section of the page: {into_api[:5]}"
+
+
+def headings(path: Path) -> set:
+    """A page's heading texts, as Obsidian matches a `#fragment`: the exact text, fences skipped."""
+    found, in_fence = set(), False
+    for line in path.read_text().splitlines():
+        if line.lstrip().startswith(("```", "~~~")):
+            in_fence = not in_fence
+        m = None if in_fence else re.match(r"#{1,6}\s+(.*?)\s*$", line)
+        if m:
+            found.add(m.group(1))
+    return found
+
+
+@pytest.mark.parametrize("page", MODULE_PAGES)
+def test_every_heading_link_of_a_module_page_resolves_in_obsidian(page):
+    """Obsidian resolves `[x](#Heading%20Text)` by the decoded heading's exact text in the target file, not by
+    a slug, so a GitHub-style `#heading-text` lands at the top of the page there (SVP 1731)."""
+    source = REPO / "doc" / f"{page}.md"
+    links = re.findall(r"\]\(([^)#\s:]*\.md|)#([^)\s]+)\)", source.read_text())
+    checked, unresolved = 0, []
+    for path, fragment in links:
+        if fragment.startswith("^"):
+            continue
+        target = (source.parent / unquote(path)).resolve() if path else source
+        checked += 1
+        if not target.exists() or unquote(fragment) not in headings(target):
+            unresolved.append(f"{path}#{fragment}")
+    assert checked > 5
+    assert not unresolved, f"{page}: {len(unresolved)} of {checked} heading links resolve to no heading: {unresolved}"
+
+
+def test_reduce_in_the_methods_table_lands_on_the_reduce_section():
+    text = (REPO / "doc" / "DAT Modules/ledger/DAT Ledger.md").read_text()
+    rev_row = next(line for line in text.splitlines() if line.startswith("| Rev "))
+    assert "[reduce](#Reduce)" in rev_row
+    assert re.search(r"^### Reduce$", text, re.MULTILINE)
+
+
 @pytest.mark.parametrize("page", sorted((REPO / "doc" / "api").glob("*.md")), ids=lambda p: p.stem)
 def test_every_api_page_opens_with_its_modules_figure_and_a_link_back(page):
     head = page.read_text().split("\n")[:7]
@@ -183,6 +229,17 @@ def test_every_method_row_resolves_to_an_id_in_the_api_reference(page):
     assert len(hrefs) > 20
     missing = sorted(hrefs - ids)
     assert not missing, f"{page}: method rows with no API anchor: {missing}"
+
+
+@needs_site
+@pytest.mark.parametrize("page", MODULE_PAGES)
+def test_every_in_page_link_of_a_module_page_resolves_on_the_site(page):
+    html = (SITE / page / "index.html").read_text()
+    ids = set(re.findall(r'id="([^"]+)"', html))
+    fragments = {unquote(h) for h in re.findall(r'href="#([^"]+)"', html)}
+    assert len(fragments) > 5
+    missing = sorted(fragments - ids)
+    assert not missing, f"{page}: in-page links with no heading id: {missing}"
 
 
 @needs_site
