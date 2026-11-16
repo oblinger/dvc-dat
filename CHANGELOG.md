@@ -8,6 +8,13 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+## 3.2.0 — 2026-11-16
+
+The ledger spill (SVP 1738, #312 and #313), cut as a minor on Dan's word 2026-11-16 ("go ahead and do a minor version number advancement"). Nothing to migrate: existing rows read as before, and a ledger with neither setting spills at the default.
+
+- **A ledger spills a large value to the artifact store; two settings per ledger, `db/spill-threshold` and `db/max-fact` (SVP 1738, Dan 2026-11-15; additive).** A value whose encoded size is over the threshold (default 65536 bytes, floor 128) is stored in its row as `spill:<str|json>:<sha256>:<size>` and its bytes go to the art store by hash, pushed to the values URI with the transaction (`dvc_dat/ledger/spill.py`). A value over `db/max-fact` (default none) is refused with `FactTooLarge`, nothing written; a max at or below the threshold means the ledger never spills. A single get (`rev[s, p]`, `rev.get`, `v.preds[p]`) returns the real value; `all`, `history`, `select`, `rev[s]` and iterating preds return a `Spilled` (`tag`, `hash`, `size`, `load()`). **A query cannot filter on a spilled value except by whole-value equality**, matched by hash. `db/` rows are never spilled or refused; a copy re-judges each value against the destination's settings.
+- **A value spilled inside a sandboxed function body reaches the values URI (SVP 1738, #313; tests only).** A body's seal, a nested run under the same or another mount and a draft saved into a parent transaction each push the spilled bytes; a body's own transaction that would spill is refused with nothing written.
+
 ## 3.1.2 — 2026-11-15
 
 `rev.reduce` and `@dat.reduce_fn` (SVP 242, #305 and #310), the fix to a nested sandboxed run's module credit (SVP 1729, #306) and the memo-hit cost fix (SVP 255, #309), cut as a patch on Dan's word 2026-11-15 ("just treat it as another patch"). Nothing to migrate.
