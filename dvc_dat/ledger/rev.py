@@ -8,6 +8,8 @@ walks history unfolded, removes included. The subject reads (``refs``, ``values`
 rows are subjects. No pattern read decodes a ``ref:`` object: it comes back a
 ``Ref``, unloaded (Q35). Inside a value function the ``Rev`` handed to the body
 traces what it reads into the value's dependencies (``dependencies``).
+A ``spill:`` object (SVP 1738, ``spill``) comes back a ``Spilled`` from every read but the single-object ones
+(``rev[s, p]``, ``rev.get(s, p)``), which load it.
 """
 
 from __future__ import annotations
@@ -16,10 +18,11 @@ import importlib
 import json
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
-from .codec import canonical, encode_plain, is_hash, parse_ref, ref_text, show, strip_hint, tag
+from .codec import canonical, encode_plain, is_hash, parse_ref, ref_text, show, spill_text, strip_hint, tag, tag_of
 from .errors import AliasLoop, Multiple, Unindexed
 from .fn import OWN
 from .fold import Held, fold
+from .spill import FLOOR, Spilled
 from .value import TIMEZONE, FrozenPreds, Value, dotted, shown_in, takes_name, zone_named
 
 if TYPE_CHECKING:
@@ -261,13 +264,27 @@ class Rev:
             return json.loads(rest)
         if t == "ref":
             return Ref._from_text(self._plain(), text)
+        if t == "spill":
+            return Spilled(self._plain(), text)
         raise ValueError(f"row object {text[:60]!r}: unknown tag")
+
+    def _object(self, text: str) -> Any:
+        """``_decode``, a spilled object loaded: what a single-object read returns."""
+        o = self._decode(text)
+        return o.load() if isinstance(o, Spilled) else o
+
+    @staticmethod
+    def _wants(text: str) -> Tuple[str, ...]:
+        """The stored texts holding the object ``text``: it, and its ``spill:`` form when it could be spilled."""
+        if tag(text) in ("str", "json") and len(text) * 4 > FLOOR and len(text.encode("utf-8")) > FLOOR:
+            return (text, spill_text(text))
+        return (text,)
 
     def _check_type(self, p: str, text: str) -> None:
         decl = self._type(p)
         if decl is not None and not type_ok(self.ledger, decl, text):
             raise TypeError(f"{p!r} is declared db/type {decl!r} at rev {self.id}; the stored object is "
-                            f"{tag(text)}:{show(text)[:40]!r} (the loose reads, all and rev[s], return it)")
+                            f"{tag_of(text)}:{show(text)[:40]!r} (the loose reads, all and rev[s], return it)")
 
     def _subdat_children(self, subject: str) -> List[Tuple[str, str]]:
         """``(relpath, child subject)`` of each sealed subdat of ``subject`` (its ``db/subdat/`` rows)."""
@@ -345,6 +362,8 @@ class Rev:
         """The stored text a pattern's object position compares by (a ref without its hint)."""
         if isinstance(o, Ref):
             return o._text()
+        if isinstance(o, Spilled):
+            return o._text
         if isinstance(o, Value):
             if o.subject is None:
                 raise ValueError("an unsaved Value is in no row")
@@ -373,11 +392,11 @@ class Rev:
             if exact is not None:
                 return [self._decode(h.obj) for h in self._held(exact, p, after)]
             return [(s, self._decode(h.obj)) for s, _p, h in self._held_rows(after, predicate=p, prefix=prefix)]
-        want = strip_hint(self._objtext(pattern[2]))
+        wants = self._wants(strip_hint(self._objtext(pattern[2])))
         if exact is not None:
-            return [self.ledger.at(h.rev) for h in self._held(exact, p, after) if strip_hint(h.obj) == want]
+            return [self.ledger.at(h.rev) for h in self._held(exact, p, after) if strip_hint(h.obj) in wants]
         return [(s, self.ledger.at(h.rev)) for s, _p, h in self._held_rows(after, predicate=p, prefix=prefix)
-                if strip_hint(h.obj) == want]
+                if strip_hint(h.obj) in wants]
 
     def _record_of(self, s: str, after: int = 0) -> Dict[str, Any]:
         rec: Dict[str, Any] = {}
@@ -415,7 +434,7 @@ class Rev:
             if not held:
                 return (False, None)
             self._check_type(p, held[0].obj)
-            return (True, self._decode(held[0].obj))
+            return (True, self._object(held[0].obj))
         found = self._pattern(key, after)
         return (bool(found), found[0] if found else None)
 
@@ -471,8 +490,8 @@ class Rev:
         if not (isinstance(triple, tuple) and len(triple) == 3):
             raise TypeError("`in` takes a (subject, predicate, object) triple")
         s, p, o = triple
-        want = strip_hint(self._objtext(o))
-        out = any(strip_hint(h.obj) == want for h in self._held(s, p))
+        wants = self._wants(strip_hint(self._objtext(o)))
+        out = any(strip_hint(h.obj) in wants for h in self._held(s, p))
         self._record_call("in", triple, None, out)
         return out
 
@@ -524,8 +543,8 @@ class Rev:
         found = self._store.rows(self.id, subject=exact, predicate=predicate, prefix=prefix,
                                  after=self._after(since))
         if n == 3:
-            want = strip_hint(self._objtext(pattern[2]))
-            found = [r for r in found if strip_hint(r[4]) == want]
+            wants = self._wants(strip_hint(self._objtext(pattern[2])))
+            found = [r for r in found if strip_hint(r[4]) in wants]
         return found
 
     # -- subject reads --------------------------------------------------------
@@ -563,7 +582,7 @@ class Rev:
                 raise TypeError(f"a where key is a non-empty str, not {p!r}")
             self._queryable(p)
             w = self._wanted(v)
-            cons.append((p, None if w is None else [w]))
+            cons.append((p, None if w is None else list(self._wants(w))))
         if kind is not None:
             cons.append(("db/kind", ["str:" + n for n in kind_names(self.ledger, kind, self)]))
         if fn is not None:
@@ -935,7 +954,7 @@ def describe(s: Any, kind: Any, fn: Any, where: Optional[Dict[str, Any]], preds:
 
 def type_ok(ledger: "Ledger", decl: str, text: str) -> bool:
     """Does a stored object's tag satisfy a ``db/type`` declaration (``str``, ``json``, or a class)."""
-    t = tag(text)
+    t = tag_of(text)
     if decl in ("str", "json"):
         return t == decl
     if t != "ref":

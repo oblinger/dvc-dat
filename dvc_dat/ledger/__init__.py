@@ -22,7 +22,7 @@ The environment is found by discovery; ``set_env_provider``, ``Env`` and
 
 from .code import Code
 from .env import Checkout, Env, set_env_provider  # noqa: F401  (the test seam, importable by name)
-from .errors import (AliasLoop, ConfinedNetwork, ConfinedProcess, ConfinedWrite, Differed, Exists, LedgerError, LockTimeout, Multiple, NotClean, NotCopied, NotEvaluated, NotPinned,
+from .errors import (AliasLoop, ConfinedNetwork, ConfinedProcess, ConfinedWrite, Differed, Exists, FactTooLarge, LedgerError, LockTimeout, Multiple, NotClean, NotCopied, NotEvaluated, NotPinned,
                      SealBroken, SpecOnly, Undeclared, Unlocked, Unindexed,
                      UnmountedImport, UntracedRead)
 from .fn import Fn, FnMark
@@ -34,13 +34,14 @@ from .helpers import SourceBump, bump, bump_source
 from .ledger import Ledger
 from .named import L, ledgers, register_read_guard
 from .rev import Head, Ref, Rev, Row
+from .spill import Spilled
 from .txn import Transaction, attr
 from .value import Value, ledger_class
 from .video import Video
 
-__all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Transaction", "Value", "Video", "Fn", "FnMark", "Code",
+__all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Spilled", "Transaction", "Value", "Video", "Fn", "FnMark", "Code",
            "LedgerNamespace", "Rerun",
            "ledger_class", "register_policy", "register_read_guard", "register_values", "register_triples", "Values", "bump", "bump_source", "SourceBump", "attr",
            "LedgerError", "Multiple", "NotEvaluated", "NotClean", "NotPinned", "NotCopied", "SpecOnly", "Differed",
            "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "ConfinedProcess", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
-           "AliasLoop", "SealBroken"]
+           "AliasLoop", "SealBroken", "FactTooLarge"]

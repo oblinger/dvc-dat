@@ -20,6 +20,8 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 ::: dvc_dat.ledger.Row
 
+::: dvc_dat.ledger.Spilled
+
 ::: dvc_dat.ledger.Transaction
 
 ::: dvc_dat.ledger.attr

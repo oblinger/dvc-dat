@@ -182,10 +182,13 @@ def note_read(rev: "Rev", name: str, text: str) -> None:
 def token(obj: Any) -> str:
     """A read's result as one comparable string."""
     from .rev import Ref, Rev, Row
+    from .spill import Spilled
 
     def conv(x: Any) -> Any:
         if isinstance(x, Ref):
             return x._text()
+        if isinstance(x, Spilled):
+            return x._text
         if isinstance(x, Rev):
             return f"rev:{x.id}"
         if isinstance(x, Value):

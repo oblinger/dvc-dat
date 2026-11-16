@@ -8,7 +8,9 @@ A copy writes the value's bytes to the destination's store if absent (dedupe by 
 rows, its provenance rows (the ``db/code/<hash 16>`` item, the declarations of its preds, its mount, the commit of its
 run as ``(<value>, db/commit, <sha>)``, since one revision's clock cannot carry several commits), its one name, and
 ``(<value>, db/copied-from, <ledger>@<rev>)``. The per-ledger rows ``db/at``, ``db/rerunnable``, ``db/rerun``
-and an earlier ``db/copied-from`` stay behind. The subject is the source's, so a second copy adds nothing.
+and an earlier ``db/copied-from`` stay behind. The subject is the source's, so a second copy adds nothing. A pred
+stored spilled there (SVP 1738) is judged by this ledger's settings at commit: its bytes brought when it spills here
+too, else written inline.
 
 A copy follows the value's subdats (SVP 241, 252): each ``db/subdat/<relpath>`` row's child is copied with it, and
 the child's subdats in turn, all in this revision. ``skip`` declines some, by relative-path suffix from the copied
@@ -45,7 +47,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
 
 from .claim import EXACT, claim_of, unconditional
-from .codec import show
+from .codec import is_spill, show
 from .errors import LedgerError, NotCopied, NotPinned
 from .fn import AT, ledger_key, mounts_at
 from .named import rev_named
@@ -274,7 +276,12 @@ def _write(t: "Transaction", item: Item) -> None:
     if item.spec:
         add.append((SPEC_ONLY, "str:true", False))
     if not top._held(subject, "db/value"):
+        from .spill import Spilled
+
         for p, o, pred in add:
+            if is_spill(o):
+                spilled = Spilled(rev, o)
+                t._spill_from.setdefault(spilled.hash, spilled._opener())
             t._ops.append(_Op(subject, p, o, True, seal_of=subject, pred=pred))
     if not item.spec:
         ref = Ref(rev, subject)
