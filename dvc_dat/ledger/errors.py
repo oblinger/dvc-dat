@@ -121,3 +121,7 @@ class SealBroken(LedgerError, ValueError):
 
     It was not kept.
     """
+
+
+class FactTooLarge(LedgerError, ValueError):
+    """At commit, a user row whose object encodes to more bytes than the ledger's ``db/max-fact``; nothing written."""

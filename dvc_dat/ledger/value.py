@@ -31,7 +31,19 @@ _EMPTY: Mapping[str, str] = MappingProxyType({})
 
 
 class FrozenPreds(dict):
-    """A sealed value's preds: a dict that refuses every change (``TypeError``)."""
+    """A sealed value's preds: a dict that refuses every change (``TypeError``).
+
+    A pred stored spilled (SVP 1738) is a ``Spilled`` in the dict; ``preds[p]`` and ``preds.get(p)`` load it, while
+    iterating (``items``, ``values``) hands back the ``Spilled`` unfetched."""
+
+    def __getitem__(self, k: Any) -> Any:
+        from .spill import Spilled
+
+        v = dict.__getitem__(self, k)
+        return v.load() if isinstance(v, Spilled) else v
+
+    def get(self, k: Any, default: Any = None) -> Any:
+        return self[k] if k in self else default
 
     def _refuse(self, *a: Any, **k: Any) -> None:
         raise TypeError("cannot modify a sealed value's preds")

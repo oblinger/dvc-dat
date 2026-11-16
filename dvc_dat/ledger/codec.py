@@ -11,6 +11,9 @@ The third position of a row is stored as one of three tagged strings:
     subject is an optional hint, written only on a row ``add`` made from a
     ``Ref`` (A28). In ``db/value``, typed preds, ``db/keys`` and dependencies it is
     omitted, so a dependency is its bytes, not its entry (A21).
+``spill:<str|json>:<hex sha256>:<size>``
+    a ``str`` or JSON object too large for the row (SVP 1738, ``spill``): the sha256 and byte size of its
+    ``str:``/``json:`` text, whose bytes are in the art store under that hash.
 
 A bare ``int``, ``float``, ``bool`` or ``None`` is refused by ``add`` (Q5 (A)).
 """
@@ -123,6 +126,45 @@ def tag(text: str) -> str:
     return text.partition(":")[0]
 
 
+def is_spill(text: str) -> bool:
+    return text.startswith("spill:")
+
+
+def spill_text(text: str) -> str:
+    """The ``spill:`` reference to a ``str:``/``json:`` text: its tag, the sha256 and byte size of its UTF-8."""
+    data = text.encode("utf-8")
+    return f"spill:{tag(text)}:{sha256(data)}:{len(data)}"
+
+
+def parse_spill(text: str) -> Tuple[str, str, int]:
+    """``(tag, hash, size)`` of a ``spill:`` text."""
+    _s, t, rest = text.split(":", 2)
+    h, _, size = rest.partition(":")
+    if t not in ("str", "json") or not is_hash(h) or not size.isdigit():
+        raise ValueError(f"row object {text[:80]!r}: a spill is spill:<str|json>:<sha256 hex>:<size>")
+    return t, h, int(size)
+
+
+def tag_of(text: str) -> str:
+    """The tag of the object a stored text holds: a spill's own (``str`` or ``json``), else its tag."""
+    return text.split(":", 2)[1] if is_spill(text) else tag(text)
+
+
+def same(a: str, b: str) -> bool:
+    """Do two stored texts hold the same object: equal, or one a ``spill:`` of the other (sizes compared first,
+    so a plain text is hashed only when its size is the spill's)."""
+    if a == b:
+        return True
+    if is_spill(a) == is_spill(b):
+        return False
+    s, p = (a, b) if is_spill(a) else (b, a)
+    if p.startswith("ref:"):
+        return False
+    size = int(s.rpartition(":")[2])
+    data = p.encode("utf-8")
+    return len(data) == size and s == f"spill:{tag(p)}:{sha256(data)}:{size}"
+
+
 def encode_plain(obj: Any) -> Optional[str]:
     """The tagged string of a ``str`` or JSON document; ``None`` when ``obj`` is neither."""
     if isinstance(obj, str):
@@ -142,9 +184,9 @@ def refuse_scalar(obj: Any) -> None:
 
 
 def show(text: str) -> str:
-    """A stored object as one line of text: a str as is, JSON canonical, a ref as its tag text."""
+    """A stored object as one line of text: a str as is, JSON canonical, a ref or a spill as its tag text."""
     t, _, rest = text.partition(":")
-    return text if t == "ref" else rest
+    return text if t in ("ref", "spill") else rest
 
 
 #: ``dotted_get``'s marker for "no default given".

@@ -17,12 +17,15 @@ sealed subject's own predicates), the ``db/alias`` target check (A18, A45)
 and the ``db/type`` check (A36, A44). Rows land in body order, then
 ``(db, db/format, …)`` and, unless the body wrote one, ``(db, db/memo-policy, platform)`` on a
 ledger's first transaction, then the
-transaction's own ``db/tx/<rev>`` rows (A50).
+transaction's own ``db/tx/<rev>`` rows (A50). A user row whose object is over the ledger's ``db/max-fact`` is
+refused at commit, and one over its ``db/spill-threshold`` is written as a ``spill:`` reference, its bytes stored and
+pushed with the seals' (SVP 1738, ``spill``).
 """
 
 from __future__ import annotations
 
 import ctypes
+import io
 import json
 import os
 import re
@@ -35,8 +38,10 @@ import warnings
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from .backends import VALUES, check_values
-from .codec import canonical, encode_plain, hash_text, parse_ref, ref_text, refuse_scalar, show, strip_hint, tag
-from .errors import ConfinedWrite, Exists, LockTimeout, SealBroken, Undeclared, Unlocked
+from .codec import (canonical, encode_plain, hash_text, is_spill, parse_ref, parse_spill, ref_text, refuse_scalar, same,
+                    sha256, show, spill_text, strip_hint, tag, tag_of)
+from .errors import ConfinedWrite, Exists, FactTooLarge, LockTimeout, SealBroken, Undeclared, Unlocked
+from .spill import MAX_FACT, SPILL_THRESHOLD, Spilled, check_setting, limits
 from .value import TIMEZONE, Value, check_loadable, dotted, is_moment, stamp, zone_named
 
 if TYPE_CHECKING:
@@ -245,6 +250,13 @@ class Transaction:
         #: (subject, the source's art store, its fetch, the hashes to bring): placed at commit, with the rows.
         self._copies: List[Tuple[str, Any, Any, List[str]]] = []
         self._staged: Dict[int, Any] = {}       # id(value) -> FileSink: its encoding, written once (DAT 240)
+        #: Spills (SVP 1738), decided at commit: the stored text of an op (by id) or a keyword (by index), when it
+        #: differs from the body's; the bytes each spill text written needs, hash -> source; and where the bytes of a
+        #: spill text carried in from a ledger (a copy, a ``Spilled`` added) are read, hash -> opener.
+        self._spilled: Dict[int, str] = {}
+        self._kw_spilled: Dict[int, str] = {}
+        self._spill_bytes: Dict[str, Any] = {}
+        self._spill_from: Dict[str, Any] = {}
         self._created: List[Any] = []
         self._cm: Any = None
         self._w: Any = None
@@ -426,6 +438,7 @@ class Transaction:
             return False
         self._state = "committing"
         try:
+            self._spill()                       # max-fact and spill-threshold, at the base: nothing written yet
             self._upload()                      # before the write lock (unless lock= holds it already)
         except BaseException as e:
             self._abandon()
@@ -517,7 +530,7 @@ class Transaction:
         from .backends import VALUES, values_at
         from .sandbox import STATE
 
-        if not (self._new_seals or self._copies) or STATE.guard:
+        if not (self._new_seals or self._copies or self._spill_bytes) or STATE.guard:
             return
         held = self._snapshot()._held("db", VALUES)
         if not held:
@@ -532,6 +545,52 @@ class Transaction:
             for ph, source in v._stored_parts():
                 _put_remote(r, ph, source)
             _put_remote(r, h, self._staged[id(v)].path)
+        for h, source in self._spill_bytes.items():
+            _put_remote(r, h, source)
+
+    def _spill(self) -> None:
+        """Judge every user row's object against the ledger's ``db/max-fact`` and ``db/spill-threshold`` at the
+        base (SVP 1738): over the max, ``FactTooLarge``; over the threshold, the row is written as ``spill_text`` and
+        its bytes are stored with the seals'. A ``spill:`` text carried in is judged by the size it names: kept, its
+        bytes brought, or written inline when this ledger would not spill it."""
+        rows = [(id(op), op.s, op.p, op.o, op.added, self._spilled) for op in self._ops]
+        rows += [(i, self.tx, k, o, True, self._kw_spilled) for i, (k, o) in enumerate(self._preds)]
+        if not any(not p.startswith("db/") for _k, _s, p, _o, _a, _d in rows):
+            return
+        threshold, cap = limits(self._snapshot())
+        art = self._ledger._store.art
+        for key, s, p, o, added, out in rows:
+            if p.startswith("db/") or tag(o) not in ("str", "json", "spill"):
+                continue
+            if is_spill(o):
+                _t, h, size = parse_spill(o)
+                source = self._spill_from.get(h) or self._own_bytes(h)
+            else:
+                data = o.encode("utf-8")
+                size, h, source = len(data), sha256(data), (lambda data=data: io.BytesIO(data))
+            if added and cap is not None and size > cap:
+                raise FactTooLarge(f"{s} {p}: the object is {size} bytes encoded, over ledger "
+                                   f"{self._ledger._store.name}'s max fact of {cap} bytes (db {MAX_FACT}); "
+                                   "nothing written")
+            if size > threshold or (is_spill(o) and not added):
+                if not is_spill(o):
+                    out[key] = spill_text(o)
+                if added and not art.exists(h):
+                    self._spill_bytes[h] = source
+            elif is_spill(o):
+                with source() as f:
+                    out[key] = f.read().decode("utf-8")        # spilled there, inline here
+
+    def _own_bytes(self, h: str) -> Any:
+        """An opener of ``h`` in this ledger's own art store, pulled from its values URI on a miss."""
+        from .backends import puller
+
+        art, fetch = self._ledger._store.art, puller(self._ledger)
+
+        def opener() -> Any:
+            with art.fetching(fetch):
+                return art.open(h)
+        return opener
 
     def _store_all(self) -> None:
         """The bytes of every seal, written at commit so bytes and rows land together (or neither).
@@ -552,6 +611,9 @@ class Transaction:
                 for h in hashes:
                     if art.put_path(source._have(h), h):
                         self._created.append(art.path(h))
+        for h, opener in self._spill_bytes.items():
+            if art.put_path(opener, h):
+                self._created.append(art.path(h))
 
     def _finish(self) -> None:
         from .rev import Ref
@@ -606,7 +668,7 @@ class Transaction:
             if id(op) in stale:
                 continue            # the clock moved meanwhile to this version or past it: never back
             s = txs if op.s == self.tx else op.s
-            o = "str:" + txs if op.o == "str:" + self.tx else op.o
+            o = "str:" + txs if op.o == "str:" + self.tx else self._spilled.get(id(op), op.o)
             rows.append((s, op.p, o, op.added))
             kept.append(op)
         if rev == 1:
@@ -617,7 +679,7 @@ class Transaction:
                 rows.append((SUBJECT, PREDICATE, "str:" + DEFAULT, True))      # the memo policy (SVP 1474)
         rows.append((txs, "db/by", self._by, True))
         rows.append((txs, "db/time", "str:" + stamp(), True))
-        rows.extend((txs, k, o, True) for k, o in self._preds)
+        rows.extend((txs, k, self._kw_spilled.get(i, o), True) for i, (k, o) in enumerate(self._preds))
         self._store_all()
         w.insert(rev, rows)
         with store.reading_through(w):
@@ -689,9 +751,9 @@ class Transaction:
                 decl = R._type(op.p)
                 if decl is not None and not type_ok(self._ledger, decl, op.o):
                     raise TypeError(f"{op.p!r} is declared db/type {decl!r}; {op.s[:24]!r} was given "
-                                    f"{tag(op.o)}:{show(op.o)[:40]!r}; nothing written")
-                if op.pred and decl is None and tag(op.o) != "str":
-                    what = "a list or dict" if tag(op.o) == "json" else "a Value"
+                                    f"{tag_of(op.o)}:{show(op.o)[:40]!r}; nothing written")
+                if op.pred and decl is None and tag_of(op.o) != "str":
+                    what = "a list or dict" if tag_of(op.o) == "json" else "a Value"
                     raise TypeError(f"pred {op.p!r} is a one pred with no db/type: {what} is refused at the seal "
                                     f"(declare db/cardinality many, or db/type json or a class)")
 
@@ -711,6 +773,9 @@ class Transaction:
             if o.hash is None:
                 raise TypeError(f"a Ref row object names a sealed value; {o.name!r} holds none")
             return ref_text(o._cls, o.hash, o.subject)
+        if isinstance(o, Spilled):
+            self._spill_from.setdefault(o.hash, o._opener())      # its bytes, wherever it was read
+            return o._text
         refuse_scalar(o)
         plain = encode_plain(o)
         if plain is None:
@@ -744,6 +809,8 @@ class Transaction:
             if subject != "db":
                 raise ValueError(f"{VALUES} is where the ledger's bytes live, a row of the subject db, not {subject!r}")
             check_values(object, f"db {VALUES}")
+        if predicate in (SPILL_THRESHOLD, MAX_FACT):
+            check_setting(subject, predicate, object)
         if predicate.startswith(SUBDAT) and isinstance(object, Value) and object.subject is not None:
             o = ref_text(dotted(type(object)), object.hash, object.subject)   # a subdat attached after the fact
         else:
@@ -1258,14 +1325,14 @@ class Transaction:
                 if self._card_now(p) == "many":
                     want = [self._encode(m) for m in (o if isinstance(o, list) else [o])]
                     for h in held:
-                        if strip_hint(h) not in [strip_hint(w) for w in want]:
+                        if not any(same(strip_hint(h), strip_hint(w)) for w in want):
                             self._ops.append(_Op(s, p, h, False))
                     for w in want:
-                        if strip_hint(w) not in [strip_hint(h) for h in held]:
+                        if not any(same(strip_hint(w), strip_hint(h)) for h in held):
                             self._ops.append(_Op(s, p, w, True))
                 else:
                     w = self._encode(o)
-                    if not held or strip_hint(held[0]) != strip_hint(w):
+                    if not held or not same(strip_hint(held[0]), strip_hint(w)):
                         self._ops.append(_Op(s, p, w, True))
         except BaseException:
             del self._ops[mark:]                    # a refused key writes none of the record, as update
