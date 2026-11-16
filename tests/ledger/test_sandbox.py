@@ -339,6 +339,50 @@ PKG = {
             Path("/tmp/ledger-sandbox-scribble.txt").write_text("x")
             return {}
     '''),
+    "sbx/stage/spills.py": textwrap.dedent('''
+        from dvc_dat import dat
+        from sbx.stage.kinds import Tagged
+
+        @dat.fn
+        def big(rev, *, n: int) -> Tagged:
+            v = Tagged(b"big")
+            v.preds["game"] = "g" * n               # over the spill threshold: a spill: row
+            return v
+
+        @dat.fn
+        def direct(rev, *, n: int) -> dict:
+            with rev.ledger.transaction(by="body") as t:      # the body's own commit: guarded, so no push
+                t.add("x", "game", "g" * n)
+            return {}
+
+        @dat.fn
+        def nested_big(rev, *, n: int) -> dict:
+            return {"inner": rev.run("mnt.sbx.stage.spills.big", n=n).subject}
+
+        @dat.fn
+        def other_mount_big(rev, *, n: int) -> dict:
+            return {"inner": rev.run("mnt.flatpkg.spills.big", n=n).subject}
+    '''),
+    "flat/spills.py": textwrap.dedent('''
+        from dvc_dat import dat
+        from dvc_dat.ledger import Value, ledger_class
+
+        @ledger_class(preds=("game",))
+        class Big(Value):
+            def __init__(self, data: bytes):
+                self.data = data
+            def encode(self, out) -> None:
+                out.write(self.data)
+            @classmethod
+            def decode(cls, src, store):
+                return cls(src.read())
+
+        @dat.fn
+        def big(rev, *, n: int) -> Big:
+            v = Big(b"flat")
+            v.preds["game"] = "f" * n
+            return v
+    '''),
     "sbx/stage/top.py": textwrap.dedent('''
         from dvc_dat import dat
 
@@ -1511,3 +1555,75 @@ def test_a_sandboxed_entry_records_the_platform_of_the_worker_it_ran_in(sbx, mon
     v = L.at().run("mnt.sbx.stage.fns.count", game="G1")
     assert json.loads(v.dependencies["platform/record"]) == real
     assert L.at().run("mnt.sbx.stage.fns.count", game="G1", seal="get").subject == v.subject   # the default policy
+
+
+# -- SVP 1738: a value spilled by a sandboxed body reaches the ledger's values URI -------------------------------
+def _spilled_pred_reaches_the_values_uri(L, tmp_path, subject, fill):
+    """The row is a ``spill:`` reference, its bytes are at the values URI, and with the local copy gone only the
+    values URI can supply them: the read pulls them back."""
+    from dvc_dat.ledger.spill import DEFAULT_THRESHOLD
+
+    text = L._store.rows(L._store.top(), subject=subject, predicate="game")[-1][4]
+    assert text.startswith("spill:str:"), text[:40]
+    h = text.split(":")[2]
+    blob = tmp_path / "shared" / "sha256" / h[:2] / h
+    assert blob.is_file() and sha256(blob.read_bytes()) == h       # pushed, not left in the local art store only
+    L._store.art.path(h).unlink()
+    assert not L._store.art.exists(h)
+    assert L.at()[subject, "game"] == fill * (DEFAULT_THRESHOLD + 10) and L._store.art.exists(h)
+
+
+def _values_uri(L, tmp_path):
+    with L.transaction(by="t") as t:
+        t.add("db", "db/values", f"file://{tmp_path / 'shared'}")
+
+
+def test_a_pred_spilled_by_a_sandboxed_run_is_pushed_to_the_values_uri(sbx, tmp_path):
+    from dvc_dat.ledger.spill import DEFAULT_THRESHOLD
+
+    L, _repo = sbx
+    _values_uri(L, tmp_path)
+    v = L.at().run("mnt.sbx.stage.spills.big", n=DEFAULT_THRESHOLD + 10)
+    _spilled_pred_reaches_the_values_uri(L, tmp_path, v.subject, "g")
+
+
+def test_a_pred_spilled_by_a_run_nested_in_a_sandboxed_body_is_pushed_to_the_values_uri(sbx, tmp_path):
+    from dvc_dat.ledger.spill import DEFAULT_THRESHOLD
+
+    L, _repo = sbx
+    _values_uri(L, tmp_path)
+    v = L.at().run("mnt.sbx.stage.spills.nested_big", n=DEFAULT_THRESHOLD + 10)
+    _spilled_pred_reaches_the_values_uri(L, tmp_path, v.obj["inner"], "g")
+
+
+def test_a_pred_spilled_by_a_run_nested_under_another_mount_is_pushed_to_the_values_uri(sbx, tmp_path):
+    from dvc_dat.ledger.spill import DEFAULT_THRESHOLD
+
+    L, _repo = sbx
+    _values_uri(L, tmp_path)
+    v = L.at().run("mnt.sbx.stage.spills.other_mount_big", n=DEFAULT_THRESHOLD + 10)     # a fresh child
+    _spilled_pred_reaches_the_values_uri(L, tmp_path, v.obj["inner"], "f")
+
+
+def test_a_pred_spilled_by_a_sandboxed_draft_saved_in_the_parent_is_pushed_to_the_values_uri(sbx, tmp_path):
+    from dvc_dat.ledger.spill import DEFAULT_THRESHOLD
+
+    L, _repo = sbx
+    _values_uri(L, tmp_path)
+    with L.transaction(by="t") as t:
+        v = L.at().run("mnt.sbx.stage.spills.big", n=DEFAULT_THRESHOLD + 10, seal=t)
+    _spilled_pred_reaches_the_values_uri(L, tmp_path, v.subject, "g")
+
+
+def test_a_bodys_own_transaction_spilling_a_row_is_refused_and_leaves_no_reference(sbx, tmp_path):
+    """The one commit that skips the push (``Transaction._upload`` under ``STATE.guard``) cannot store the bytes
+    either: refused, nothing written, so no ``spill:`` row names bytes that never left this machine."""
+    from dvc_dat.ledger.spill import DEFAULT_THRESHOLD
+
+    L, _repo = sbx
+    _values_uri(L, tmp_path)
+    top = L.at().id
+    with pytest.raises(ConfinedWrite, match="writes only in its path folder"):
+        L.at().run("mnt.sbx.stage.spills.direct", n=DEFAULT_THRESHOLD + 10)
+    assert L.at().id == top and L._store.rows(L._store.top(), subject="x", predicate="game") == []
+    assert not (tmp_path / "shared").exists()
