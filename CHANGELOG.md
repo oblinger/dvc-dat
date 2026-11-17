@@ -8,6 +8,8 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **`DatManager.below(name)` and `DatManager.standing_of(name)`: the per-dat steps of a seal's trim and standing walk, overridable (SVP 1493; additive).** `roots` reads each entry's own list through `below`, and the standing walk each input's standing through `standing_of`; behaviour is unchanged. A manager that holds a dat's record elsewhere (sv-pipe's folded assets ledger) overrides those two instead of copying `roots`.
+
 ## 3.2.0 — 2026-11-16
 
 The ledger spill (SVP 1738, #312 and #313), cut as a minor on Dan's word 2026-11-16 ("go ahead and do a minor version number advancement"). Nothing to migrate: existing rows read as before, and a ledger with neither setting spills at the default.

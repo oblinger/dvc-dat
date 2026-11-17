@@ -90,7 +90,10 @@ with the whole record. A save anywhere else — a data folder filled by hand, or
 a run's results saved after it returned — seals at once and adds the
 dependency `$MANUAL`: well defined, but what it was made from is not fully
 recorded. At the seal the dependency map keeps its roots only: an entry that
-another entry already depends on is dropped.
+another entry already depends on is dropped. The manager reads each entry's own
+list through `DatManager.below(name)` and each input's standing through
+`DatManager.standing_of(name)`, both by loading the dat; a manager that holds a
+dat's record elsewhere (a ledger) overrides those two and nothing else.
 
 ## The run
 

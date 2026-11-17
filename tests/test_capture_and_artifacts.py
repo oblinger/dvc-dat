@@ -690,6 +690,45 @@ class TestHeldAsks:
         mid.save()
         assert list(m.roots({"a": "x", "b": "y"})) == ["b"]
 
+    def test_below_is_the_trims_per_dat_step(self, m, clip, tmp_path):
+        """SVP 1493: `roots` reads each entry's list through `below`; empty for $MANUAL, an artifact, a dat not
+        found; a subclass answering a dat with no folder trims as if it were there."""
+        m.create({"dat": {}}, path="a").save()
+        mid = m.create({"dat": {}}, path="b")
+        with m.recording(mid):
+            m.load("a")
+        mid.save()
+        assert set(m.below("b")) == {"a"} and m.below("a") == {"$MANUAL": "manual"}
+        m.save_artifact(clip, name="video/G1")
+        assert m.below("$MANUAL") == {} and m.below("video/G1") == {} and m.below("nothing") == {}
+
+        class Held(DatManager):
+            def below(self, name):
+                return {"a": "x"} if name == "ghost" else super().below(name)
+        held = Held(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "art"))
+        assert list(held.roots({"a": "x", "ghost": "y"})) == ["ghost"]
+        assert list(held.roots({"a": "x", "b": "y"})) == ["b"]
+
+    def test_standing_of_is_the_walks_per_dat_step(self, m, tmp_path):
+        """SVP 1493: the standing walk reads a dat's standing through `standing_of`; None for a dat not found, so a
+        hashed entry with no folder counts referenceable -- unless a subclass that holds its record says otherwise."""
+        m.create({"dat": {}}, path="a").save()
+        assert m.standing_of("a") == m.standing("a") == "referenceable" and m.standing_of("nothing") is None
+
+        def seal(manager, path):
+            d = manager.create({"dat": {}}, path=path)
+            with manager.recording(d):
+                manager.record_dependency("ghost", "0" * 64)
+            d.save()
+            return manager.standing(path)
+        assert seal(m, "d") == "referenceable"
+
+        class Held(DatManager):
+            def standing_of(self, name):
+                return "sealed" if name == "ghost" else super().standing_of(name)
+        held = Held(dat_folders=[str(tmp_path / "dats")], art_folder=str(tmp_path / "art"))
+        assert seal(held, "e") == "sealed"
+
     def test_code_of(self):
         code = DatManager.code_of(test_code_of)
         assert code is None or set(code) == {"branch", "commit", "dirty"}
