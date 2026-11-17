@@ -24,7 +24,7 @@ from copy import deepcopy
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, Iterator, List, Mapping, Optional, Tuple, Type, TypeVar, Union
 
 import yaml
 
@@ -1248,33 +1248,56 @@ class DatManager:
 
     def roots(self, deps: Dict[str, Any]) -> Dict[str, Any]:
         """`deps` less every entry that another entry's dat lists among its own dependencies -- the trim a seal applies.
+
+        Each entry's own list is `below(name)`, so a manager that knows a dat without its folder overrides that alone.
         """
-        below: set = set()
+        under: set = set()
         for name in deps:
-            if name == DEP_MANUAL or self._artifact_folder(name) is not None:
-                continue
-            try:
-                dat = self._load(name)
-            except (KeyError, FileNotFoundError):
-                continue
-            below.update(Dat.get(dat.get_results(), DAT_DEPENDENCIES, None) or {})
-        return {k: v for k, v in deps.items() if k not in below}
+            under.update(self.below(name))
+        return {k: v for k, v in deps.items() if k not in under}
+
+    def below(self, name: str) -> Mapping[str, Any]:
+        """The dependencies the dat `name` lists (its `dat.dependencies`, name to hash), as a seal's trim reads them.
+
+        Empty for the `$MANUAL` mark, an artifact, and a dat not found. The per-dat step of `roots`: a subclass that
+        holds a dat's record elsewhere (a ledger) overrides it and calls `super()` for the rest.
+        """
+        if name == DEP_MANUAL or self._artifact_folder(name) is not None:
+            return {}
+        try:
+            dat = self._load(name)
+        except (KeyError, FileNotFoundError):
+            return {}
+        return Dat.get(dat.get_results(), DAT_DEPENDENCIES, None) or {}
+
+    def standing_of(self, name: str) -> Optional[str]:
+        """The standing of the dat `name` as a seal's standing walk reads it: the dat loaded, its last write; `None`
+        when it is not found.
+
+        The per-dat step of the walk (an input's standing, which caps what a seal earns): a subclass that holds a
+        dat's record elsewhere (a ledger) overrides it and calls `super()` for the rest. Unlike `standing`, it loads
+        the dat by name as `load` does; an artifact and the `$MANUAL` mark never reach it.
+        """
+        try:
+            dat = self._load(name)
+        except (KeyError, FileNotFoundError):
+            return None
+        return dat._standing()
 
     def _dep_standing(self, name: str, value: Any) -> str:
         """An input's standing: an artifact or a `$MANUAL` mark referenceable,
-        an entry recorded `unsealed` open, a dat its own, anything else
-        recorded by hand referenceable when it carries a hash."""
+        an entry recorded `unsealed` open, a dat its own (`standing_of`),
+        anything else recorded by hand referenceable when it carries a hash."""
         if name == DEP_MANUAL:
             return REFERENCEABLE
         if value == DEP_UNSEALED:
             return OPEN
         if self._artifact_folder(name) is not None:
             return REFERENCEABLE
-        try:
-            dat = self._load(name)
-        except (KeyError, FileNotFoundError):
+        standing = self.standing_of(name)
+        if standing is None:
             return REFERENCEABLE if value is not None else SEALED
-        return dat._standing()
+        return standing
 
     def _earned(self, dat: "Dat", deps: Dict[str, Any]) -> Tuple[str, str]:
         """The standing a seal earns, and why it is no higher: the least of its
