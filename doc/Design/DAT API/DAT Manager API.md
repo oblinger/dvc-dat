@@ -1,7 +1,7 @@
 ---
 description: "`DatManager`: the one object — folders, artifacts, recording, its `ns`"
 ---
-:>> [DAT](../../DAT.md) → [DAT Design](../Design.md) → [DAT API](DAT%20API.md) → [DAT Manager API](ha://pop/DAT~Manager~API) 
+:>> [DAT](../../DAT.md) → [Design](../Design.md) → [DAT API](DAT%20API.md) → [DAT Manager API](DAT%20Manager%20API.md) 
 # DAT Manager API
 A `DatManager` is one world: its dat folders, its artifact folder, its `ns`, and the record of every run made there.
 

@@ -1,4 +1,4 @@
-:>> [DAT](DAT.md) → [DAT mount-commands](ha://pop/DAT~mount-commands) 
+:>> [DAT](DAT.md) → [mount-commands](mount-commands.md) 
 # Mounts
 Mounts: how a dotted name resolves, and how to mount names that are not imports.
 
