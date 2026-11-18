@@ -502,7 +502,7 @@ A memo entry records the whole platform it ran on; the ledger decides, at each l
 | `cuda` | the CUDA version torch was built against, else `null` |
 | `torch` | the installed torch version, else `null` |
 
-The record is probed once per process; torch is never imported to read it. A hand seal (`v.seal(t)` of a value no run made) records `platform` alone, as before.
+The record is probed once per process; torch is never imported to read it. A hand seal (`v.seal(t)` of a value no run made) records both items too, the record being that of the machine `v.seal()` ran on; a seal record written before the record existed carries `platform` alone.
 
 **The policy.** A policy is a function from a record to a string; a lookup hits an entry only when `policy(stored record) == policy(current record)`, every other dependency item holding as before. A field the policy reads that a record lacks is a miss, never a hit: an entry written before 1474 holds only `platform`, read as the record `{"platform": <tag>}`, so a policy reading `card` never matches it, while the default still does. Built-ins:
 
@@ -592,7 +592,7 @@ The decorators, under one name so code says what each belongs to (SVP 250 Q4): `
 | command | Mark a function a command: also `just <name>` |
 
 # Value Provenance
-A value's provenance is stored in the ledger as triples whose subject is the value: beside its `db/value` row and its preds, one `db/deps/<item>` row for every input the computation depended on. These rows are the value's *dependencies*. They are written once, at the save, and never change; whether the dependencies still *hold* is computed, by re-asking each item at a revision. Every object is one string, the identity the input had when the value was computed, so two values' dependencies compare row by row and nothing is loaded.
+A value's provenance is stored in the ledger as triples whose subject is the value: beside its `db/value` row and its preds, one `db/deps/<item>` row for every input the computation depended on. These rows are the value's *dependencies*; the rest of this page also calls them its *trace*, the name for what a run records as it reads, so "a value has no trace" means it was sealed by hand and its dependencies were declared rather than recorded. They are written once, at the save, and never change; whether the dependencies still *hold* is computed, by re-asking each item at a revision. Every object is one string, the identity the input had when the value was computed, so two values' dependencies compare row by row and nothing is loaded.
 
 ## The dependencies
 In the table `<value>` is the value's own subject and the other angle-bracketed names are variables: the predicate names the input, the object is the identity it had.
@@ -642,6 +642,6 @@ A sealed value never changes: an `add` or `remove` on one of its own rows is `Ex
 
 # BRIEF
 
-- Written from `dvc_dat/ledger/*.py` at v2.18.0. Every name here must exist in the code; re-read the code, not this page, before changing a signature.
+- Written from `dvc_dat/ledger/*.py` at v2.18.0 and edited with the code since (the package is at 3.2.0). Every name here must exist in the code; re-read the code, not this page, before changing a signature.
 - Each member's contract and refusals are its docstring; this page is the overview, tables generated from those docstrings, and the topics that span classes (246).
 - The figure is hand-written SVG; edit it directly.
