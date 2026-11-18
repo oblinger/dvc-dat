@@ -1,4 +1,4 @@
-:>> [DAT](DAT.md) → [DAT index](ha://pop/DAT~index) 
+:>> [DAT](DAT.md) → [index](index.md) 
 # dvc_dat Documentation
 The front page of the dvc_dat docs: what the package does, and where to read next.
 

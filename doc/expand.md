@@ -1,4 +1,4 @@
-:>> [DAT](DAT.md) → [DAT expand](ha://pop/DAT~expand) 
+:>> [DAT](DAT.md) → [expand](expand.md) 
 # Expansion: `ns.expand`
 The `${…}` grammar, OmegaConf's: a spec's strings are resolved once, when the dat is created, through OmegaConf with four resolvers of DAT's; on the base install `${unique:}` alone is expanded, by DAT itself.
 

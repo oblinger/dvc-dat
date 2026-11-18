@@ -1,4 +1,4 @@
-:>> [DAT](DAT.md) → [DAT about](ha://pop/DAT~about) 
+:>> [DAT](DAT.md) → [about](about.md) 
 # About
 Who built dvc_dat, and the versioning rule for its public contract.
 
