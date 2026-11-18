@@ -9,6 +9,6 @@ Text outside a section is not kept. -->
 
 #### DAT Design DAT Architecture
 action:: doc
-arg:: /Users/oblinger/ob/kmr/SYS/Bespoke/DAT/DAT Design/DAT Architecture.svg
+arg:: /Users/oblinger/ob/grove/dvc-dat/doc/Design/DAT Architecture.svg
 description:: three subsystems and where they meet
 description_hash:: 11240441253700534014
