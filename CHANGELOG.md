@@ -9,6 +9,7 @@ Every user-visible change to `dvc_dat`, newest first.
 ## Unreleased
 
 - **`DatManager.below(name)` and `DatManager.standing_of(name)`: the per-dat steps of a seal's trim and standing walk, overridable (SVP 1493; additive).** `roots` reads each entry's own list through `below`, and the standing walk each input's standing through `standing_of`; behaviour is unchanged. A manager that holds a dat's record elsewhere (sv-pipe's folded assets ledger) overrides those two instead of copying `roots`.
+- **A sealed blob never shares an inode with a working or materialised file (SVP 1780; fix).** `put_path` hardlinked a sealed folder's files into the art store, and `get_to` hardlinked blobs into `art/dats/<name>/`, so an in-place write to either file (a rolling `Dat.save()` rewriting `_result_.yaml`, an editor saving a page) changed the blob under its name: two blobs of a resealed document were lost so. `store.place` now clones copy-on-write where the filesystem can (APFS `clonefile`, Linux reflink: no disk), else copies in blocks; its `link=` and `clone_ok=` arguments are gone. On a filesystem with no clone (ext4) a seal and a load by name now copy each part, so disk and time grow by the value's size. A placed file carries its source's mtime, and a load by name trusts a file agreeing with its blob on (size, mtime) where it trusted a shared inode. New `ArtStore.mismatched()`: the blobs whose bytes no longer hash to their name. Folders placed before keep their links until replaced.
 
 ## 3.2.0 — 2026-11-16
 

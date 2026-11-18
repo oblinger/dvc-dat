@@ -502,7 +502,7 @@ class Transaction:
         self._drop_staged()
 
     def _drop_staged(self) -> None:
-        """Remove the staged encodings' temp files (a placed encoding is a hardlink of its own)."""
+        """Remove the staged encodings' temp files (a placed encoding is a clone or copy of its own)."""
         for sink in self._staged.values():
             sink.discard()
         self._staged = {}
@@ -595,9 +595,9 @@ class Transaction:
     def _store_all(self) -> None:
         """The bytes of every seal, written at commit so bytes and rows land together (or neither).
 
-        One value at a time, one part at a time: each part is hardlinked or streamed into the art
-        store (``put_path``), never read whole; the encoding (a manifest, for a ``Dat``), staged once by
-        the seal, is hardlinked into place last."""
+        One value at a time, one part at a time: each part is cloned or streamed into the art
+        store (``put_path``), never read whole and never linked; the encoding (a manifest, for a ``Dat``),
+        staged once by the seal, is placed last."""
         art = self._ledger._store.art
         for v in self._to_store:
             h = self._hash_of(v)

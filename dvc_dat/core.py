@@ -1708,8 +1708,9 @@ class Dat(Value, metaclass=_DatMeta):
         """The dat's folder, ``get_path()`` as a ``Path``.
 
         After a save it is the stored copy under ``art/dats/<16 hex>/``, or ``art/dats/<name>/`` when named; after a
-        load by an alias, ``art/dats/<alias>/`` -- its view in the ledger's data folder. Those files are hardlinks
-        into the art store where the filesystem allows: write a new folder and seal it, never edit one in place.
+        load by an alias, ``art/dats/<alias>/`` -- its view in the ledger's data folder. Those files are clones or
+        copies of the art store's, never links: an edit there cannot reach a sealed blob, but it is not sealed
+        either; write a new folder and seal it, never edit one in place.
         """
         return Path(self._path)
 
@@ -2261,7 +2262,7 @@ class Dat(Value, metaclass=_DatMeta):
     def _materialise(h: str, files: Dict[str, str], store: Any, name: Optional[str] = None) -> Path:
         """The folder of the manifest `files` (hash `h`), under `<store root>/dats/` (the data folder): at
         `<name>` when a name is given (an absolute path: there), else at the hash's first 16 hex. Files are
-        placed by `store.get_to` (hardlinks on the same filesystem); a named folder holding other
+        placed by `store.get_to` (clones where the filesystem can, never links); a named folder holding other
         content is replaced by a new folder, never edited in place, a subdat placed inside it kept."""
         from .ledger.sandbox import unguarded     # the store's own write, also inside a sandboxed body
 
@@ -2449,8 +2450,9 @@ class _DatPreds(dict):
 
 
 def _holds(dest: Path, files: Dict[str, str], store: Any) -> bool:
-    """Does the folder hold exactly these files with these hashes (a linked file is checked by inode)?  A
-    subdat placed inside it is not among them."""
+    """Does the folder hold exactly these files with these hashes?  A file agreeing with its blob on (size, mtime)
+    -- as `store.place` leaves it, until either is written -- is not re-hashed. A subdat placed inside it is not
+    among them."""
     from .ledger.store import file_sha
 
     found = set()
@@ -2463,7 +2465,8 @@ def _holds(dest: Path, files: Dict[str, str], store: Any) -> bool:
     for rel, h in files.items():
         p, blob = dest / rel, store.path(h)
         try:
-            if os.path.samefile(p, blob):
+            a, b = os.stat(p), os.stat(blob)
+            if (a.st_size, a.st_mtime_ns) == (b.st_size, b.st_mtime_ns):
                 continue
         except OSError:
             pass

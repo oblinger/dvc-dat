@@ -1,4 +1,4 @@
-"""Streaming values: parts by (sha256, source), hardlinked or streamed into the stores, never
+"""Streaming values: parts by (sha256, source), cloned or streamed into the stores (never linked), never
 held whole; ``decode(name=)``, ``Dat.kind_ok``, ``DAT_WORK``. The 2 GB acceptance run is behind
 ``DAT_SLOW=1`` (a subprocess, so its RSS is its own)."""
 
@@ -32,16 +32,22 @@ def folder(path, **files):
     return path
 
 
-def test_a_saved_dat_hardlinks_its_files_into_the_art_store(L, tmp_path):
-    src = folder(tmp_path / "src", **{"a.txt": "one", "b.txt": "two"})
-    ino = (src / "a.txt").stat().st_ino
+def test_a_write_through_a_working_or_materialised_file_never_reaches_a_sealed_blob(L, tmp_path):
+    """SVP 1780: a document sealed from its working folder, loaded by name, then each file rewritten in place (as a
+    rolling save rewrites ``_result_.yaml``, or an editor its page): every blob still hashes to its name."""
+    src = folder(tmp_path / "src", **{"page.md": "one", "_result_.yaml": "rev: 4\n"})
     d = Dat(src)
-    d.seal(L, name="clip/1")
-    blob = L._store.art.path(sha256(b"one"))
-    if L._store.art.root.stat().st_dev == src.stat().st_dev:
-        assert blob.stat().st_ino == ino
-    assert (d.path / "b.txt").read_text() == "two"
-    assert Ref(L.at(), "clip/1").hash == d.hash
+    d.seal(L, name="pub/D1")
+    art = L._store.art
+    view = Ref(L.at(), "pub/D1").load().path
+    for f in (src / "page.md", src / "_result_.yaml", view / "page.md", view / "_result_.yaml"):
+        with open(f, "w") as out:                          # an in-place write, the inode kept
+            out.write("rev: 6\n")
+    assert art.mismatched() == []
+    for h in Dat._stored_manifest(art, d.hash).values():
+        assert file_sha(art.path(h)) == h
+    assert (view / "page.md").read_text() == "rev: 6\n"
+    assert Ref(L.at(), "pub/D1").hash == d.hash
 
 
 def test_a_kept_dat_copies_its_parts_so_the_source_may_change(L, tmp_path):
@@ -154,10 +160,10 @@ SCRIPT = textwrap.dedent("""
     s = d.seal(L, name="big/1")
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * scale
     art = L._store.art
-    linked = []
+    apart = []
     for rel, h in sorted(Dat._stored_manifest(art, d.hash).items()):
-        linked.append(os.path.samefile(art.path(h), Kept().blob(h)) and os.path.samefile(art.path(h), d.path / rel))
-    print(json.dumps({"growth": peak - before, "before": before, "peak": peak, "linked": linked,
+        apart.append(not os.path.samefile(art.path(h), Kept().blob(h)) and not os.path.samefile(art.path(h), d.path / rel))
+    print(json.dumps({"growth": peak - before, "before": before, "peak": peak, "apart": apart,
                       "bytes": sum(p.stat().st_size for p in d.path.iterdir())}))
 """)
 
@@ -174,4 +180,4 @@ def test_a_2gb_dat_seals_kept_and_saves_in_bounded_memory(tmp_path):
     print(r)
     assert r["bytes"] == 2_147_483_648
     assert r["growth"] < 100 * 1024 ** 2, r
-    assert all(r["linked"]), r
+    assert all(r["apart"]), r

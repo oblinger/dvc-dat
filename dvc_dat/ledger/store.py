@@ -9,9 +9,9 @@ backend. ``SqliteStore`` is below; ``PostgresStore`` is in ``pgstore``.
 
 A SQLite ledger is a folder: ``ledger.db`` and ``art/`` (bytes by hash,
 and ``art/dats/`` where a ``Dat`` is materialised) inside it (A54). A large
-value's parts enter the art store by ``put_path`` (a hardlink on the same
-filesystem, else a streamed copy) and leave by ``get_to``; no part's bytes
-are ever held in memory whole.
+value's parts enter the art store by ``put_path`` (a copy-on-write clone where
+the filesystem can, else a streamed copy; never a hardlink) and leave by
+``get_to``; no part's bytes are ever held in memory whole.
 
 ``quads(rev, ord, subject, predicate, object, added)``: ``rev`` the revision,
 ``ord`` the row's place within its transaction, ``object`` the tagged string
@@ -143,19 +143,20 @@ def clone(src: Any, dest: Path) -> bool:
     return False
 
 
-#: How many parts ``place(..., clone=True)`` cloned in this process (the tests read it).
+#: How many parts ``place`` cloned in this process (the tests read it).
 CLONES = [0]
 
 
-def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bool = False,
-          durable: bool = False) -> bool:
+def place(source: Source, dest: Path, h: str, *, durable: bool = False) -> bool:
     """Put the bytes of ``source`` (sha256 ``h``) at ``dest``, write-once; ``True`` when written here.
 
-    A ``Path`` is hardlinked when ``link`` and the filesystem allows it, else, with ``clone_ok``,
-    cloned copy-on-write where the filesystem can (``clone``; the clone is checked against ``h``),
-    else copied in blocks (and checked against ``h``); an opener is always copied. The bytes land at
-    a temp name and are renamed into place, so a reader never sees a partial file. With ``durable``
-    the temp file is flushed (:func:`flush`) before the rename and the folder after it.
+    A ``Path`` is cloned copy-on-write where the filesystem can (``clone``: no disk), else copied in
+    blocks; an opener is always copied; either way the bytes are checked against ``h``. Never a hardlink:
+    the placed file and its source are two inodes, so an in-place write to either (a rolling
+    ``_result_.yaml``, an editor saving a page) cannot reach the other, and a blob keeps its name (SVP 1780).
+    A ``Path``'s mtime is carried over, so a placed file and its blob agree on (size, mtime) until one is
+    written. The bytes land at a temp name and are renamed into place, so a reader never sees a partial
+    file. With ``durable`` the temp file is flushed (:func:`flush`) before the rename and the folder after it.
     """
     if dest.exists():
         return False
@@ -163,24 +164,18 @@ def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bo
     tmp = dest.with_name(f"{dest.name}.tmp-{uuid.uuid4().hex[:8]}")
     try:
         if isinstance(source, (str, os.PathLike)):
-            linked = False
-            if link:
-                try:
-                    os.link(source, tmp)
-                    linked = True
-                except OSError:
-                    pass
-            if not linked and clone_ok and clone(source, tmp):
-                linked = True
+            if clone(source, tmp):
                 CLONES[0] += 1
                 got = file_sha(tmp)
                 if got != h:
                     tmp.unlink(missing_ok=True)
                     raise ValueError(f"a part named {h[:12]}… hashes to {got[:12]}…: its source changed since it "
                                      "was hashed")
-            if not linked:
+            else:
                 with open(source, "rb") as f:
                     _copy(f, tmp, h)
+            st = os.stat(source)
+            os.utime(tmp, ns=(st.st_atime_ns, st.st_mtime_ns))
         else:
             with source() as f:
                 _copy(f, tmp, h)
@@ -305,8 +300,8 @@ class ArtStore:
         return FileSink(self.root / "tmp", None if staged else self.path)
 
     def put_path(self, source: Source, h: str) -> bool:
-        """Store a part by its hash ``h`` without reading it into memory: a hardlink to the file on the
-        same filesystem, else a streamed copy to a temp name and a rename; ``True`` when written here."""
+        """Store a part by its hash ``h`` without reading it into memory (:func:`place`: a clone where the
+        filesystem can, else a streamed copy, never a link); ``True`` when written here."""
         return place(source, self.path(h), h)
 
     def open(self, h: str) -> IO[bytes]:
@@ -314,8 +309,19 @@ class ArtStore:
         return open(self._have(h), "rb")
 
     def get_to(self, h: str, dest: Path) -> None:
-        """Put the bytes of ``h`` at ``dest`` (a hardlink on the same filesystem, else a streamed copy)."""
+        """Put the bytes of ``h`` at ``dest`` (a clone or a copy, never a link: :func:`place`)."""
         place(self._have(h), Path(dest), h)
+
+    def mismatched(self) -> List[Tuple[str, str]]:
+        """``(name, sha256 of its bytes)`` for every blob under ``sha256/`` whose bytes no longer hash to its name,
+        in name order; reads every blob, writes nothing (SVP 1780)."""
+        out = []
+        for p in sorted((self.root / "sha256").glob("*/*")):
+            if p.is_file() and len(p.name) == 64:
+                got = file_sha(p)
+                if got != p.name:
+                    out.append((p.name, got))
+        return out
 
 
 class ReadOnlyArt(ArtStore):

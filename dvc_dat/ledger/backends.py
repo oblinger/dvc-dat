@@ -274,12 +274,12 @@ class FileValues:
     def pull(self, hash: str, path: Path) -> None:
         from .store import place
 
-        place(self._path(hash), Path(path), hash, link=False)
+        place(self._path(hash), Path(path), hash)
 
     def push(self, path: Path, hash: str) -> None:
         from .store import place
 
-        place(Path(path), self._path(hash), hash, link=False)
+        place(Path(path), self._path(hash), hash)
 
 
 # -- pull, push ------------------------------------------------------------------------------ #

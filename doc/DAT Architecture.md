@@ -44,7 +44,8 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
   the seal moves the files into the ledger's art store, and the call's
   `path=` names the result, its folder a view at the name.
 - **A dat streams.** Its files are its parts, hashed in 1 MiB blocks and
-  hardlinked into the art store (a streamed copy across filesystems), so
+  cloned copy-on-write into the art store (a streamed copy where the
+  filesystem cannot clone; never a hardlink), so
   a GB-scale folder seals and saves in memory bounded by its manifest.
 - **An ETL pipeline is a set of value functions.** Each stage runs
   the stage below it and returns a dat; a change upstream re-derives
