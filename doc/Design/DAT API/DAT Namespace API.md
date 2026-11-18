@@ -175,5 +175,5 @@ Each is one call in your program; build paths from `__file__`, since `relative_t
 | a bare `Do()` gets a world on first use | a bare `Do()` is a plain namespace; running a dat needs `Do(manager=m)` |
 
 # BRIEF
-- 2026-10-27 — renamed from DAT Do API for `ns` ([DAT1051](../../Track/Backlog/Backlog.md#^1051)): `Dat.do` → `Dat.ns`, `keys` → `mounts`, § On a ledger added for `rev.ns` and `t.ns`.
+- 2026-10-27 — renamed from DAT Do API for `ns` ([DAT1051](../../Track/Backlog/1051%20-%20ns,%20the%20namespace%20object%20on%20Dat,%20a%20revision%20and%20a%20transaction;%20a.md)): `Dat.do` → `Dat.ns`, `keys` → `mounts`, § On a ledger added for `rev.ns` and `t.ns`.
 - 2026-09-23 — rewritten to the 2.3 surface ([DAT103](../../Track/Backlog/103%20-%20API%20refactor/103%20-%20API%20refactor.md), [DAT1014](../../Track/Backlog/103%20-%20API%20refactor/1014%20-%20Fold%20DataConfig%20into%20DatManager;%20settle%20the%20manager's%20public%20attributes.md)): § The names became the `Do` module doc in Dan's member format; `do.configure` and `do.config` are gone — a different world is an assignment to `Dat.manager`; `.dataconfig.yaml` → `.datconfig.yaml`; the TOC table dropped (the class table replaces it).
