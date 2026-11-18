@@ -2,7 +2,7 @@
 description: "The spine of dvc-dat's documentation: every page a user of the library reads, by kind."
 ---
 
-| -[Docs](Docs.md)-                      | : the spine of dvc-dat's documentation<br>→ [DAT Doc](ha://pop/DAT~Doc)                                                                                                                                                                                                |
+| -[Docs](Docs.md)-                      | : the spine of dvc-dat's documentation<br>→ [DAT](DAT.md) → [Docs](Docs.md)                                                                                                                                                                                            |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [User Docs](DAT%20User%20Docs.md)      | [Tutorials](DAT%20User%20Docs.md), the API docs, the site, the architecture: the user's spine |
 | Architecture                           | [DAT Architecture](DAT%20Architecture.md),  Modules: [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md), [DAT Dat](DAT%20Modules/DAT%20Dat.md),                                                                                                                        |
