@@ -2281,11 +2281,15 @@ class Dat(Value, metaclass=_DatMeta):
                     (dest / rel).parent.mkdir(parents=True, exist_ok=True)
                     (old / rel).rename(dest / rel)
                 shutil.rmtree(old, ignore_errors=True)
+            placed = False
             for rel, h in files.items():
                 p = dest / rel
                 if not p.exists():
                     store.get_to(h, p)
+                    placed = True
             dest.mkdir(parents=True, exist_ok=True)
+            if placed:
+                store.stamp(dest, files)
         return dest
 
     @classmethod
@@ -2450,10 +2454,11 @@ class _DatPreds(dict):
 
 
 def _holds(dest: Path, files: Dict[str, str], store: Any) -> bool:
-    """Does the folder hold exactly these files with these hashes?  A file agreeing with its blob on (size, mtime)
-    -- as `store.place` leaves it, until either is written -- is not re-hashed. A subdat placed inside it is not
-    among them."""
-    from .ledger.store import file_sha
+    """Does the folder hold exactly these files with these hashes?  A file standing as `store.stamp` recorded it (same
+    inode, size, mtime and ctime) is not re-hashed; any other is, and a folder found to hold them is stamped again. A
+    file that is its blob's own inode (a hardlink placed before SVP 1780) is not held, so the folder is placed anew
+    and the alias cut. A subdat placed inside it is not among them."""
+    from .ledger.store import file_sha, stamp_holds
 
     found = set()
     for root, dirs, names in os.walk(dest):
@@ -2462,16 +2467,22 @@ def _holds(dest: Path, files: Dict[str, str], store: Any) -> bool:
             found.add(Path(root, n).relative_to(dest).as_posix())
     if found != set(files):
         return False
+    rows = store.stamps(dest)
+    stale = False
     for rel, h in files.items():
-        p, blob = dest / rel, store.path(h)
+        p = dest / rel
         try:
-            a, b = os.stat(p), os.stat(blob)
-            if (a.st_size, a.st_mtime_ns) == (b.st_size, b.st_mtime_ns):
-                continue
+            if os.path.samefile(p, store.path(h)):
+                return False
         except OSError:
             pass
+        if stamp_holds(rows.get(rel), p, h):
+            continue
+        stale = True
         if file_sha(p) != h:
             return False
+    if stale:
+        store.stamp(dest, files)
     return True
 
 

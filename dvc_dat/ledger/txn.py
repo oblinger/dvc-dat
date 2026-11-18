@@ -502,7 +502,7 @@ class Transaction:
         self._drop_staged()
 
     def _drop_staged(self) -> None:
-        """Remove the staged encodings' temp files (a placed encoding is a clone or copy of its own)."""
+        """Remove the staged encodings' temp files (an encoding moved into place has no temp file left)."""
         for sink in self._staged.values():
             sink.discard()
         self._staged = {}
@@ -597,14 +597,14 @@ class Transaction:
 
         One value at a time, one part at a time: each part is cloned or streamed into the art
         store (``put_path``), never read whole and never linked; the encoding (a manifest, for a ``Dat``),
-        staged once by the seal, is placed last."""
+        staged once by the seal, is moved into place last (``put_staged``: a rename, no copy)."""
         art = self._ledger._store.art
         for v in self._to_store:
             h = self._hash_of(v)
             for ph, source in v._stored_parts():
                 if art.put_path(source, ph):
                     self._created.append(art.path(ph))
-            if art.put_path(self._staged[id(v)].path, h):
+            if art.put_staged(self._staged[id(v)].path, h):
                 self._created.append(art.path(h))
         for _subject, source, fetch, hashes in self._copies:
             with source.fetching(fetch):
