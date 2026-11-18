@@ -49,7 +49,8 @@ def test_path_names_a_dat_and_its_folder_is_a_view(world):
     assert CALLS["folder"] == n and e.subject == d.subject
     assert e.name == "games/uno" and Ref(world.at(), "games/one").hash is None
     assert (data / "games/uno/a.txt").read_text() == "G1"
-    assert os.path.samefile(data / "games/uno/a.txt", world._store.art.path(Dat(data / "games/uno")._manifest()["a.txt"]))
+    blob = world._store.art.path(Dat(data / "games/uno")._manifest()["a.txt"])
+    assert blob.read_text() == "G1" and not os.path.samefile(data / "games/uno/a.txt", blob)   # a copy, never a link
 
 
 def test_an_absolute_path_makes_the_folder_there_and_names_nothing(world, tmp_path):

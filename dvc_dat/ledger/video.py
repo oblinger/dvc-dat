@@ -233,7 +233,7 @@ class Video(Value):
 
     def _stage(self) -> Tuple[Path, Dict[str, str], Dict[str, Any]]:
         """The source converted to the stored form in a local folder: ``(folder, files, manifest)``. Done once and
-        kept while the object lives (the save hardlinks the files into the art store)."""
+        kept while the object lives (the save clones or copies the files into the art store)."""
         staged = self.__dict__.get("_staged")
         if staged is not None:
             return staged

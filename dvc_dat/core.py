@@ -1708,8 +1708,9 @@ class Dat(Value, metaclass=_DatMeta):
         """The dat's folder, ``get_path()`` as a ``Path``.
 
         After a save it is the stored copy under ``art/dats/<16 hex>/``, or ``art/dats/<name>/`` when named; after a
-        load by an alias, ``art/dats/<alias>/`` -- its view in the ledger's data folder. Those files are hardlinks
-        into the art store where the filesystem allows: write a new folder and seal it, never edit one in place.
+        load by an alias, ``art/dats/<alias>/`` -- its view in the ledger's data folder. Those files are clones or
+        copies of the art store's, never links: an edit there cannot reach a sealed blob, but it is not sealed
+        either; write a new folder and seal it, never edit one in place.
         """
         return Path(self._path)
 
@@ -2261,7 +2262,7 @@ class Dat(Value, metaclass=_DatMeta):
     def _materialise(h: str, files: Dict[str, str], store: Any, name: Optional[str] = None) -> Path:
         """The folder of the manifest `files` (hash `h`), under `<store root>/dats/` (the data folder): at
         `<name>` when a name is given (an absolute path: there), else at the hash's first 16 hex. Files are
-        placed by `store.get_to` (hardlinks on the same filesystem); a named folder holding other
+        placed by `store.get_to` (clones where the filesystem can, never links); a named folder holding other
         content is replaced by a new folder, never edited in place, a subdat placed inside it kept."""
         from .ledger.sandbox import unguarded     # the store's own write, also inside a sandboxed body
 
@@ -2280,11 +2281,15 @@ class Dat(Value, metaclass=_DatMeta):
                     (dest / rel).parent.mkdir(parents=True, exist_ok=True)
                     (old / rel).rename(dest / rel)
                 shutil.rmtree(old, ignore_errors=True)
+            placed = False
             for rel, h in files.items():
                 p = dest / rel
                 if not p.exists():
                     store.get_to(h, p)
+                    placed = True
             dest.mkdir(parents=True, exist_ok=True)
+            if placed:
+                store.stamp(dest, files)
         return dest
 
     @classmethod
@@ -2449,9 +2454,11 @@ class _DatPreds(dict):
 
 
 def _holds(dest: Path, files: Dict[str, str], store: Any) -> bool:
-    """Does the folder hold exactly these files with these hashes (a linked file is checked by inode)?  A
-    subdat placed inside it is not among them."""
-    from .ledger.store import file_sha
+    """Does the folder hold exactly these files with these hashes?  A file standing as `store.stamp` recorded it (same
+    inode, size, mtime and ctime) is not re-hashed; any other is, and a folder found to hold them is stamped again. A
+    file that is its blob's own inode (a hardlink placed before SVP 1780) is not held, so the folder is placed anew
+    and the alias cut. A subdat placed inside it is not among them."""
+    from .ledger.store import file_sha, stamp_holds
 
     found = set()
     for root, dirs, names in os.walk(dest):
@@ -2460,15 +2467,22 @@ def _holds(dest: Path, files: Dict[str, str], store: Any) -> bool:
             found.add(Path(root, n).relative_to(dest).as_posix())
     if found != set(files):
         return False
+    rows = store.stamps(dest)
+    stale = False
     for rel, h in files.items():
-        p, blob = dest / rel, store.path(h)
+        p = dest / rel
         try:
-            if os.path.samefile(p, blob):
-                continue
+            if os.path.samefile(p, store.path(h)):
+                return False
         except OSError:
             pass
+        if stamp_holds(rows.get(rel), p, h):
+            continue
+        stale = True
         if file_sha(p) != h:
             return False
+    if stale:
+        store.stamp(dest, files)
     return True
 
 

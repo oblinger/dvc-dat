@@ -83,7 +83,7 @@ class Kept:
         if keep:
             names = []
             for h, source in parts:
-                place(source, self._blob_path(h), h, link=False, clone_ok=True, durable=True)
+                place(source, self._blob_path(h), h, durable=True)
                 names.append(h)
             b = rec["hash"]
             self.blob(b)                        # written through sink() before the record

@@ -9,9 +9,9 @@ backend. ``SqliteStore`` is below; ``PostgresStore`` is in ``pgstore``.
 
 A SQLite ledger is a folder: ``ledger.db`` and ``art/`` (bytes by hash,
 and ``art/dats/`` where a ``Dat`` is materialised) inside it (A54). A large
-value's parts enter the art store by ``put_path`` (a hardlink on the same
-filesystem, else a streamed copy) and leave by ``get_to``; no part's bytes
-are ever held in memory whole.
+value's parts enter the art store by ``put_path`` (a copy-on-write clone where
+the filesystem can, else a streamed copy; never a hardlink) and leave by
+``get_to``; no part's bytes are ever held in memory whole.
 
 ``quads(rev, ord, subject, predicate, object, added)``: ``rev`` the revision,
 ``ord`` the row's place within its transaction, ``object`` the tagged string
@@ -25,14 +25,16 @@ Revisions come from ``MAX(rev) + 1`` under SQLite's write lock.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import sqlite3
+import stat
 import threading
 import uuid
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import IO, Any, Callable, ContextManager, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import IO, Any, Callable, ContextManager, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 from .codec import HashSink, hash_text
 
@@ -94,8 +96,16 @@ def flush_path(path: Path) -> None:
         os.close(fd)
 
 
+class Changed(ValueError):
+    """Bytes placed under the name ``h`` hash to ``got``: the source changed since it was hashed."""
+
+    def __init__(self, h: str, got: str) -> None:
+        super().__init__(f"a part named {h[:12]}… hashes to {got[:12]}…: its source changed since it was hashed")
+        self.h, self.got = h, got
+
+
 def _copy(src: IO[bytes], dest: Path, h: str) -> None:
-    """Stream ``src`` into ``dest`` block by block; ``ValueError`` when the bytes do not hash to ``h``."""
+    """Stream ``src`` into ``dest`` block by block; ``Changed`` when the bytes do not hash to ``h``."""
     d = hashlib.sha256()
     with open(dest, "wb") as out:
         for block in iter(lambda: src.read(BLOCK), b""):
@@ -103,8 +113,7 @@ def _copy(src: IO[bytes], dest: Path, h: str) -> None:
             out.write(block)
     if d.hexdigest() != h:
         dest.unlink(missing_ok=True)
-        raise ValueError(f"a part named {h[:12]}… hashes to {d.hexdigest()[:12]}…: its source changed since it "
-                         "was hashed")
+        raise Changed(h, d.hexdigest())
 
 
 def clone(src: Any, dest: Path) -> bool:
@@ -143,19 +152,23 @@ def clone(src: Any, dest: Path) -> bool:
     return False
 
 
-#: How many parts ``place(..., clone=True)`` cloned in this process (the tests read it).
+#: How many parts ``place`` cloned in this process (the tests read it).
 CLONES = [0]
 
 
-def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bool = False,
-          durable: bool = False) -> bool:
+def place(source: Source, dest: Path, h: str, *, durable: bool = False, checked: bool = False) -> bool:
     """Put the bytes of ``source`` (sha256 ``h``) at ``dest``, write-once; ``True`` when written here.
 
-    A ``Path`` is hardlinked when ``link`` and the filesystem allows it, else, with ``clone_ok``,
-    cloned copy-on-write where the filesystem can (``clone``; the clone is checked against ``h``),
-    else copied in blocks (and checked against ``h``); an opener is always copied. The bytes land at
-    a temp name and are renamed into place, so a reader never sees a partial file. With ``durable``
-    the temp file is flushed (:func:`flush`) before the rename and the folder after it.
+    A ``Path`` is cloned copy-on-write where the filesystem can (``clone``: no disk), else copied in
+    blocks; an opener is always copied; either way the bytes are checked against ``h``. Never a hardlink:
+    the placed file and its source are two inodes, so an in-place write to either (a rolling
+    ``_result_.yaml``, an editor saving a page) cannot reach the other, and a blob keeps its name (SVP 1780).
+    A ``Path``'s mode and mtime are carried over, as stat'ed before its bytes are read: a write landing after
+    the check leaves the source newer than the placed file, never the reverse. The bytes land at a temp name
+    and are renamed into place, so a reader never sees a partial file. With ``durable`` the temp file is
+    flushed (:func:`flush`) before the rename and the folder after it. ``Changed`` when the bytes do not hash
+    to ``h``. ``checked``: the source's bytes were hashed to ``h`` a moment ago by the caller, so a clone is not
+    hashed again (a copy is hashed as it is written, at no extra read).
     """
     if dest.exists():
         return False
@@ -163,24 +176,18 @@ def place(source: Source, dest: Path, h: str, *, link: bool = True, clone_ok: bo
     tmp = dest.with_name(f"{dest.name}.tmp-{uuid.uuid4().hex[:8]}")
     try:
         if isinstance(source, (str, os.PathLike)):
-            linked = False
-            if link:
-                try:
-                    os.link(source, tmp)
-                    linked = True
-                except OSError:
-                    pass
-            if not linked and clone_ok and clone(source, tmp):
-                linked = True
+            st = os.stat(source)
+            if clone(source, tmp):
                 CLONES[0] += 1
-                got = file_sha(tmp)
+                got = h if checked else file_sha(tmp)
                 if got != h:
                     tmp.unlink(missing_ok=True)
-                    raise ValueError(f"a part named {h[:12]}… hashes to {got[:12]}…: its source changed since it "
-                                     "was hashed")
-            if not linked:
+                    raise Changed(h, got)
+            else:
                 with open(source, "rb") as f:
                     _copy(f, tmp, h)
+            os.chmod(tmp, stat.S_IMODE(st.st_mode))
+            os.utime(tmp, ns=(st.st_atime_ns, st.st_mtime_ns))
         else:
             with source() as f:
                 _copy(f, tmp, h)
@@ -265,6 +272,7 @@ class ArtStore:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
         self._scope = threading.local()
+        self._fresh: set = set()        # blobs put_path just placed and hashed; the next get_to of each skips a re-hash
 
     @contextmanager
     def fetching(self, fetch: Optional[Callable[[str, Path], None]]) -> Iterator[None]:
@@ -305,17 +313,125 @@ class ArtStore:
         return FileSink(self.root / "tmp", None if staged else self.path)
 
     def put_path(self, source: Source, h: str) -> bool:
-        """Store a part by its hash ``h`` without reading it into memory: a hardlink to the file on the
-        same filesystem, else a streamed copy to a temp name and a rename; ``True`` when written here."""
-        return place(source, self.path(h), h)
+        """Store a part by its hash ``h`` without reading it into memory (:func:`place`: a clone where the
+        filesystem can, else a streamed copy, never a link); ``True`` when written here. A blob placed here was
+        hashed as placed, so the next ``get_to`` of it (a seal's view, in the same call) does not hash it again."""
+        placed = place(source, self.path(h), h)
+        if placed:
+            self._fresh.add(h)
+        return placed
 
     def open(self, h: str) -> IO[bytes]:
         """The bytes of ``h`` as a read stream (a real, seekable file); inside ``fetching`` a miss fetches first."""
         return open(self._have(h), "rb")
 
+    def put_staged(self, path: Path, h: str) -> bool:
+        """Move a temp file this store wrote itself (``sink(staged=True)``, hashed as written to ``h``) into place
+        by rename: no copy, and no other name is left on it. ``True`` when moved; ``False`` when ``h`` is held
+        already, the temp file left for its owner to discard."""
+        dest = self.path(h)
+        if dest.exists():
+            return False
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(path, dest)
+        return True
+
     def get_to(self, h: str, dest: Path) -> None:
-        """Put the bytes of ``h`` at ``dest`` (a hardlink on the same filesystem, else a streamed copy)."""
-        place(self._have(h), Path(dest), h)
+        """Put the bytes of ``h`` at ``dest`` (a clone or a copy, never a link: :func:`place`); ``ValueError`` naming
+        the blob when its bytes no longer hash to ``h``."""
+        checked = h in self._fresh and self.path(h).exists()    # a blob dropped since, then fetched, is hashed
+        self._fresh.discard(h)
+        blob = self._have(h)
+        try:
+            place(blob, Path(dest), h, checked=checked)
+        except Changed as e:
+            raise ValueError(f"art store {self.root}: the blob {blob} is corrupt: its bytes hash to {e.got}, not to "
+                             "its name") from None
+
+    def _scanned(self) -> List[Path]:
+        """The folders whose ``sha256/`` blobs :meth:`mismatched` reads."""
+        return [self.root]
+
+    def _writable(self) -> List[Path]:
+        """The folders whose ``sha256/`` blobs :meth:`detach` may replace."""
+        return [self.root]
+
+    @staticmethod
+    def _blobs(roots: List[Path]) -> List[Path]:
+        """Every blob file under each root's ``sha256/`` (temp files left out), in name order."""
+        return sorted(p for r in roots for p in (r / "sha256").glob("*/*") if p.is_file() and len(p.name) == 64)
+
+    def mismatched(self) -> List[Tuple[str, str]]:
+        """``(name, sha256 of its bytes)`` for every blob under ``sha256/`` whose bytes no longer hash to its name,
+        in name order; reads every blob, writes nothing (SVP 1780). Covers this art store (a read-only handle's
+        overlay too), not ``Kept``'s ``blobs/`` nor a dat manager's ``art/``."""
+        out = []
+        for p in self._blobs(self._scanned()):
+            got = file_sha(p)
+            if got != p.name:
+                out.append((p.name, got))
+        return out
+
+    def detach(self, *, dry_run: bool = False) -> int:
+        """Give every blob that shares its inode with another file (``st_nlink > 1``: a hardlink placed before SVP
+        1780) an inode of its own, so an in-place write to the other name can no longer reach it; the count of such
+        blobs. Each is replaced by a clone or copy of itself (mode and mtime kept, checked against the bytes it had,
+        renamed over it), so its bytes never change, a corrupt one included; the other names keep the old inode.
+        ``dry_run``: only count. A read-only handle detaches its overlay's blobs only."""
+        n = 0
+        for p in self._blobs(self._writable()):
+            if p.stat().st_nlink <= 1:
+                continue
+            n += 1
+            if dry_run:
+                continue
+            tmp = p.with_name(f".detach-{uuid.uuid4().hex[:8]}")
+            try:
+                if not place(p, tmp, file_sha(p)):
+                    raise FileExistsError(tmp)
+                os.replace(tmp, p)
+            except BaseException:
+                tmp.unlink(missing_ok=True)
+                raise
+        return n
+
+    def _stamp_path(self, dest: Path) -> Path:
+        return self.dats.parent / "stamps" / f"{hashlib.sha256(os.fsencode(os.path.abspath(dest))).hexdigest()[:32]}.json"
+
+    def stamp(self, dest: Path, files: Dict[str, str]) -> None:
+        """Record, for the folder ``dest`` holding ``files`` (``{relpath: sha256}``), each file's (inode, size, mtime,
+        ctime) beside the store (``stamps/``, outside every folder and hash), for :meth:`stamped`."""
+        rows = {}
+        for rel, h in sorted(files.items()):
+            st = os.stat(Path(dest) / rel)
+            rows[rel] = [h, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns]
+        out = self._stamp_path(dest)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_name(f"{out.name}.tmp-{uuid.uuid4().hex[:8]}")
+        tmp.write_text(json.dumps({"path": os.path.abspath(dest), "files": rows}, sort_keys=True))
+        os.replace(tmp, out)
+
+    def stamps(self, dest: Path) -> Dict[str, List[Any]]:
+        """The rows :meth:`stamp` last recorded for ``dest``, ``{relpath: [sha256, inode, size, mtime, ctime]}``;
+        ``{}`` with no stamp."""
+        try:
+            files = json.loads(self._stamp_path(dest).read_text())["files"]
+        except (OSError, ValueError, KeyError, TypeError):
+            return {}
+        return files if isinstance(files, dict) else {}
+
+
+def stamp_holds(row: Any, path: Path, h: str) -> bool:
+    """Does the file ``path`` stand as its :meth:`ArtStore.stamp` row recorded it holding ``h``: the same inode, size,
+    mtime and ctime? A ctime cannot be set back from userspace, so a write or a replacement since, its mtime restored
+    or not, reads ``False``; so does a missing row."""
+    if not isinstance(row, list) or len(row) != 5 or row[0] != h:
+        return False
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    return row[1:] == [st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns]
 
 
 class ReadOnlyArt(ArtStore):
@@ -334,6 +450,12 @@ class ReadOnlyArt(ArtStore):
     @property
     def dats(self) -> Path:
         return self.overlay / "dats"
+
+    def _scanned(self) -> List[Path]:
+        return [self.root, self.overlay]
+
+    def _writable(self) -> List[Path]:
+        return [self.overlay]
 
 
 def index_name(pred: str) -> str:
