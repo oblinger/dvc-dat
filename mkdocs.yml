@@ -28,6 +28,7 @@ nav:
       - "Ledger: just": DAT Demos/ledger-just.ipynb
   - How-to:
       - how-to.md
+      - Use a ledger: how-to-ledger.md
       - Command line: cli.md
       - Mounts: mount-commands.md
       - "The {} grammar": expand.md

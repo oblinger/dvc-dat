@@ -8,6 +8,7 @@ You have a task and know the library. Each row is one task, its page or section 
 | Run from a shell | [`just run`](cli.md) · [`dvc_dat.just` in every project](cli.md#dvc_datjust-run-and-mounts-in-every-project) |
 | Declare a command | [`@dat.command`](cli.md#commands-datcommand-and-dattargetsjust) |
 | Mount a folder or a module | [Mounts](mount-commands.md) |
+| Use a ledger: create it, seal values and a dat, push and pull, read a revision, choose a memo policy | [How to use a ledger](how-to-ledger.md) |
 | Put a value on the ledger, find it by preds; read as of a revision | [The ledger verbs](cli.md#the-ledger-verbs) · the [ledger: values](DAT%20Demos/ledger-values.ipynb) notebook |
 | Write a `${…}` reference in a spec | [The ${…} grammar](expand.md) |
 | Look up a key of `_spec_.yaml` or `_result_.yaml` | [Spec format](spec-format.md) |
