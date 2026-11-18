@@ -8,6 +8,7 @@ Every user-visible change to `dvc_dat`, newest first.
 
 ## Unreleased
 
+- **A hand seal records `platform/record` beside `platform` (SVP R0069).** As a run's entry has since 1474: the full platform record (card, driver, CUDA, torch, CPU) of the machine `v.seal()` ran on, when the environment has one; an environment that knows only its tag writes `platform` alone. The record enters the subject, so the same bytes sealed on two machines whose records differ are two subjects. Memo lookups are unchanged.
 - **`DatManager.below(name)` and `DatManager.standing_of(name)`: the per-dat steps of a seal's trim and standing walk, overridable (SVP 1493; additive).** `roots` reads each entry's own list through `below`, and the standing walk each input's standing through `standing_of`; behaviour is unchanged. A manager that holds a dat's record elsewhere (sv-pipe's folded assets ledger) overrides those two instead of copying `roots`.
 
 ## 3.2.0 — 2026-11-16
