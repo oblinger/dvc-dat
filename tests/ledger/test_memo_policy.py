@@ -195,3 +195,53 @@ def test_nvidia_smi_output_parses_to_card_and_driver():
     assert parse_smi(text, None) == ("NVIDIA H100 80GB HBM3 + NVIDIA RTX PRO 6000 Blackwell", "550.54.15")
     assert parse_smi(text, "1") == ("NVIDIA RTX PRO 6000 Blackwell", "550.54.15")
     assert parse_smi("", None) == (None, None)
+
+
+# -- R0069: a hand seal writes the record too -------------------------------------------------------------------------
+
+def _hand(L, payload, name, game="G1", **seal):
+    v = Video(payload)
+    v.preds.update(game=game)
+    with L.transaction(by="t") as t:
+        v.seal(t, name=name, **seal)
+    return v
+
+
+def test_a_hand_seal_records_the_full_record_beside_the_short_item(world, envbox):
+    """SVP R0069: a hand seal's dependencies carry ``platform/record`` as a run's entry does, so a GPU run dat
+    sealed by hand says the card it was made on."""
+    v = _hand(world, b"G1 hand", "video/G1-hand")
+    assert world.at()[v.subject, "db/deps/platform"] == TAG
+    assert json.loads(world.at()[v.subject, "db/deps/platform/record"]) == dict(H100, platform=TAG)
+
+
+def test_a_hand_seal_with_no_record_writes_the_short_item_alone(world, envbox):
+    envbox.set(record=None)                         # an environment that knows only its tag
+    v = _hand(world, b"G1 tag only", "video/G1-tag")
+    assert world.at()[v.subject, "db/deps/platform"] == TAG
+    assert world.at().get(v.subject, "db/deps/platform/record") is None
+
+
+def test_the_record_enters_a_hand_seals_subject(world, envbox):
+    """The same bytes and preds sealed on two cards are two subjects: the record is evidence, and evidence is hashed."""
+    a = _hand(world, b"G1 same", "video/G1-a")
+    on(envbox, PRO6000)
+    b = _hand(world, b"G1 same", "video/G1-b")
+    assert a.hash == b.hash and a.subject != b.subject
+
+
+def test_a_kept_seal_records_the_machine_that_sealed_it(world, envbox):
+    """``v.seal()`` on one machine, saved later on another: the record is the sealing machine's."""
+    v = Video(b"G1 kept")
+    v.preds.update(game="G1")
+    v.seal()
+    on(envbox, PRO6000)
+    with world.transaction(by="t") as t:
+        v.seal(t, name="video/G1-kept")
+    assert json.loads(world.at()[v.subject, "db/deps/platform/record"])["card"] == H100["card"]
+
+
+def test_a_hand_seal_leaves_the_memo_hitting(world, envbox):
+    a = cut(world)
+    _hand(world, b"G9 between", "video/G9", game="G9")   # a game the cut does not query
+    assert cut(world, seal="get").subject == a.subject

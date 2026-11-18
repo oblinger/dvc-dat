@@ -1062,12 +1062,15 @@ class Transaction:
                 trace[f"{name} db/alias"] = text
 
     def _env_items(self, trace: Dict[str, str], repos: Optional[Sequence[str]] = None, env: Any = None) -> None:
-        from .env import current_env
+        from .env import current_env, platform_items
 
         env = env if env is not None else current_env()
         for repo in (env.code if repos is None else repos):
             trace[f"code/{repo}"] = code_token(env.code[repo].commit if repo in env.code else None)
-        trace["platform"] = env.platform
+        if env.record is None:                  # an environment that knows only its tag (a seal record before 1474)
+            trace["platform"] = env.platform
+        else:                                   # R0069: the full record beside the tag, as a run's entry has
+            trace.update(platform_items(env))
 
     def _seal_value(self, value: Value, *, deps: Sequence[Any] = (), name: Optional[str] = None,
                     provenance: Optional[str] = None, skip: Optional[Iterable[str]] = None,
