@@ -32,7 +32,7 @@ from .policy import register_policy
 from .backends import Values, register_triples, register_values
 from .helpers import SourceBump, bump, bump_source
 from .ledger import Ledger
-from .named import L, ledgers, register_read_guard
+from .named import L, ledgers, register_dat_guard, register_read_guard, register_row_guard
 from .rev import Head, Ref, Rev, Row
 from .spill import Spilled
 from .txn import Transaction, attr
@@ -41,7 +41,7 @@ from .video import Video
 
 __all__ = ["Ledger", "ledgers", "L", "Rev", "Head", "Ref", "Row", "Spilled", "Transaction", "Value", "Video", "Fn", "FnMark", "Code",
            "LedgerNamespace", "Rerun",
-           "ledger_class", "register_policy", "register_read_guard", "register_values", "register_triples", "Values", "bump", "bump_source", "SourceBump", "attr",
+           "ledger_class", "register_policy", "register_read_guard", "register_row_guard", "register_dat_guard", "register_values", "register_triples", "Values", "bump", "bump_source", "SourceBump", "attr",
            "LedgerError", "Multiple", "NotEvaluated", "NotClean", "NotPinned", "NotCopied", "SpecOnly", "Differed",
            "UnmountedImport", "UntracedRead", "ConfinedWrite", "ConfinedNetwork", "ConfinedProcess", "LockTimeout", "Unindexed", "Exists", "Undeclared", "Unlocked",
            "AliasLoop", "SealBroken", "FactTooLarge"]

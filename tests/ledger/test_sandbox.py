@@ -67,9 +67,23 @@ PKG = {
     "sbx/stage/helper.py": "def double(x):\n    return 2 * x\n",
     "sbx/stage/guard.py": textwrap.dedent('''
         def refuse(name):
-            """The read guard of the tests (SVP 1596): ``far`` is refused."""
-            if name == "far":
-                raise PermissionError(f"{name}: refused by the read guard")
+            """The read guard of the tests (SVP 1596): ``far`` is refused, by name or by a location ending in it."""
+            if name == "far" or str(name).rstrip("/").endswith("/far"):
+                raise PermissionError("far: refused by the read guard")
+
+        def rows(ledger, subject, predicate):
+            """The row guard of the tests: ``game/hidden`` and the load of the value named ``S1`` are refused."""
+            if subject == "game/hidden":
+                return PermissionError(f"{subject}: refused by the row guard")
+            if predicate is None and str(ledger.at().get("S1", "db/alias")).endswith(subject):
+                return PermissionError("a secret value: refused by the row guard")
+            return None
+
+        def dats(path):
+            """The dat guard of the tests: a dat folder named ``hidden-dat`` is refused."""
+            if str(path).rstrip("/").endswith("hidden-dat"):
+                return PermissionError(f"{path}: refused by the dat guard")
+            return None
     '''),
     "sbx/stage/runs.py": textwrap.dedent('''
         import os
@@ -223,6 +237,22 @@ PKG = {
         def raw_row(rev, *, ledger: str, s: str, p: str) -> dict:
             from dvc_dat import ledgers
             return {"seen": ledgers[ledger].at()[s, p]}
+
+        @dat.fn
+        def scan(rev, *, ledger: str) -> dict:
+            from dvc_dat import ledgers
+            at = ledgers[ledger].at()
+            return {"pattern": sorted(s for s, _o in at.all("game/*", "n")),
+                    "history": sorted({r.subject for r in at.history("game/*")})}
+
+        @dat.fn
+        def record(rev, *, ledger: str, s: str) -> dict:
+            from dvc_dat import ledgers
+            return {"seen": ledgers[ledger].at()[s]}
+
+        @dat.fn
+        def loads_ref(rev, *, ref) -> dict:
+            return {"seen": ref.load().obj}
 
         @dat.fn
         def reads_a_run(rev, *, ledger: str, game: str, mode: str = "") -> dict:
@@ -1523,6 +1553,105 @@ def test_a_read_guard_is_a_function_its_import_path_finds(sbx):
     for bad in (local, lambda name: None, "sbx.stage.guard.refuse"):
         with pytest.raises(TypeError):
             register_read_guard(bad)
+
+
+@pytest.fixture
+def row_guarded(other, tmp_path):
+    """``other`` with ``game/hidden`` and a value ``S1`` on ``games``, a value ``F1`` on ``far``, and the
+    tests' row and dat guards registered (removed after). -> ``(L, games, far)``."""
+    from dvc_dat.ledger import Ledger, Value, register_dat_guard, register_read_guard, register_row_guard
+    from sbx.stage.guard import dats, refuse, rows
+
+    L, games, _first, _second = other
+    with games.transaction(by="t") as t:
+        t.add("game/hidden", "n", "9")
+        Value.Blob({"secret": 1}).seal(t, name="S1")
+    far = Ledger(tmp_path / "far") if not isinstance(games.path, str) else None
+    if far is not None:
+        with far.transaction(by="t") as t:
+            Value.Blob({"far": 1}).seal(t, name="F1")
+    register_read_guard(refuse)
+    register_row_guard(rows)
+    register_dat_guard(dats)
+    try:
+        yield L, games, far
+    finally:
+        register_row_guard(None)
+        register_dat_guard(None)
+        register_read_guard(None)
+
+
+def test_the_row_guard_refuses_a_named_read_in_a_sandboxed_body(row_guarded):
+    """A row naming the refused subject, its whole record, and a refused value's load: the guard's exception, the
+    caller's. Rows and values the guard allows read as before."""
+    L, _games, _far = row_guarded
+    for fn, keys in (("raw_row", {"ledger": "games", "s": "game/hidden", "p": "n"}),
+                     ("record", {"ledger": "games", "s": "game/hidden"})):
+        with pytest.raises(PermissionError, match="game/hidden: refused by the row guard"):
+            L.at().run(f"mnt.sbx.stage.fns.{fn}", **keys)
+    with pytest.raises(PermissionError, match="a secret value: refused by the row guard"):
+        L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="S1")
+    assert L.at().run("mnt.sbx.stage.fns.raw_row", ledger="games", s="game/G1", p="n").obj == {"seen": "3"}
+    assert L.at().run("mnt.sbx.stage.fns.record", ledger="games", s="game/G1").obj == {"seen": {"n": "3"}}
+    assert L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=None, name="G1").obj == {"seen": {"game": 2}}
+
+
+def test_a_scan_in_a_sandboxed_body_leaves_a_refused_row_out(row_guarded):
+    L, _games, _far = row_guarded
+    seen = L.at().run("mnt.sbx.stage.fns.scan", ledger="games").obj
+    assert seen == {"pattern": ["game/G1", "game/raw"], "history": ["game/G1", "game/raw"]}
+
+
+def test_the_row_guard_is_inert_outside_a_run(row_guarded):
+    """Outside a body the caller's code is its own: the guard is not consulted."""
+    _L, games, _far = row_guarded
+    assert games.at()["game/hidden", "n"] == "9"
+    assert games.at().load("S1").obj == {"secret": 1}
+    assert sorted(s for s, _o in games.at().all("game/*", "n")) == ["game/G1", "game/hidden", "game/raw"]
+
+
+def test_a_ref_key_on_a_refused_ledger_is_refused_by_its_location(row_guarded):
+    """A ledger reached by location, not by name (a ``Ref`` key's, opened in the worker), meets the read guard."""
+    from dvc_dat.ledger import Ref
+
+    L, _games, far = row_guarded
+    if far is None:
+        pytest.skip("each Postgres test ledger is a schema of one database: no folder names it")
+    with pytest.raises(PermissionError, match="far: refused by the read guard"):
+        L.at().run("mnt.sbx.stage.fns.loads_ref", ref=Ref(far.at(), "F1"))
+
+
+def test_the_dat_guard_refuses_a_dat_load_in_a_run(row_guarded, tmp_path):
+    """The dat world's load of a refused dat folder, while a run's body runs; outside a run, or in the ledger's own
+    machinery, the guard is not consulted."""
+    from dvc_dat import Dat
+    from dvc_dat.ledger.sandbox import unguarded
+    from dvc_dat.ledger.trace import RunFrame, running
+
+    L, _games, _far = row_guarded
+    hidden, shown = tmp_path / "hidden-dat", tmp_path / "shown-dat"
+    for folder in (hidden, shown):
+        folder.mkdir()
+        (folder / "_spec_.yaml").write_text("dat: {}\n")
+    assert Dat.manager.load(str(hidden)) is not None
+    with running(RunFrame(L.at(), {}, "{}")):
+        with pytest.raises(PermissionError, match="refused by the dat guard"):
+            Dat.manager.load(str(hidden))
+        assert Dat.manager.load(str(shown)) is not None
+        with unguarded():
+            assert Dat.manager.load(str(hidden)) is not None
+
+
+def test_a_row_or_dat_guard_is_a_function_its_import_path_finds(sbx):
+    from dvc_dat.ledger import register_dat_guard, register_row_guard
+
+    def local(*args):
+        pass
+
+    for register in (register_row_guard, register_dat_guard):
+        for bad in (local, lambda *a: None, "sbx.stage.guard.rows"):
+            with pytest.raises(TypeError):
+                register(bad)
 
 
 def test_rev_has_one_run_and_ns():

@@ -149,13 +149,18 @@ def current_run() -> Optional[RunFrame]:
 
 @contextmanager
 def running(frame: RunFrame) -> Iterator[RunFrame]:
-    """``frame`` is the current run inside the block; blocks nest, so a nested run sees its own reads."""
+    """``frame`` is the current run inside the block; blocks nest, so a nested run sees its own reads. A body is a
+    body again even when the ledger's own machinery (``unguarded``) started it, as a nested eval's is."""
+    from .sandbox import STATE
+
     token = _RUN.set(frame)
+    machinery, STATE.machinery = STATE.machinery, 0
     frame.open = True
     try:
         yield frame
     finally:
         frame.open = False
+        STATE.machinery = machinery
         _RUN.reset(token)
 
 

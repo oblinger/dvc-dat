@@ -59,6 +59,10 @@ Module page: [DAT Ledger](../DAT%20Modules/ledger/DAT%20Ledger.md).
 
 ::: dvc_dat.ledger.register_read_guard
 
+::: dvc_dat.ledger.register_row_guard
+
+::: dvc_dat.ledger.register_dat_guard
+
 ::: dvc_dat.ledger.register_values
 
 ::: dvc_dat.ledger.register_triples
