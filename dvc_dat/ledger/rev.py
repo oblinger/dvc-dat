@@ -240,7 +240,20 @@ class Rev:
             raise TypeError(f"since is a Rev, not {type(since).__name__}")
         return since.id
 
+    def _guarded(self, s: str, p: Optional[str], named: bool) -> bool:
+        """Whether the row guard lets a body read ``s`` (``p``) here: a read naming the subject raises its refusal,
+        a scan is told to leave the row out (the module docstring of ``named``)."""
+        from .named import check_row
+
+        refusal = check_row(self.ledger, s, p)
+        if refusal is None:
+            return True
+        if named:
+            raise refusal
+        return False
+
     def _held(self, s: str, p: str, after: int = 0) -> List[Held]:
+        self._guarded(s, p, True)
         return fold(self._store.rows(self.id, subject=s, predicate=p, after=after), self._card(p))
 
     def _held_rows(self, after: int = 0, *, subject: Optional[str] = None, predicate: Optional[str] = None,
@@ -251,6 +264,8 @@ class Rev:
             groups.setdefault((r[2], r[3]), []).append(r)
         out = []
         for (s, p), rows in groups.items():
+            if not self._guarded(s, p, subject is not None):
+                continue
             for h in fold(rows, self._card(p)):
                 out.append((s, p, h))
         out.sort(key=lambda x: (x[2].rev, x[2].ord))
@@ -545,7 +560,11 @@ class Rev:
         if n == 3:
             wants = self._wants(strip_hint(self._objtext(pattern[2])))
             found = [r for r in found if strip_hint(r[4]) in wants]
-        return found
+        allowed: Dict[Tuple[str, str], bool] = {}
+        for r in found:
+            if (r[2], r[3]) not in allowed:
+                allowed[(r[2], r[3])] = self._guarded(r[2], r[3], exact is not None)
+        return [r for r in found if allowed[(r[2], r[3])]]
 
     # -- subject reads --------------------------------------------------------
 
@@ -1165,6 +1184,8 @@ class Ref:
         No value is ``KeyError``; a ``decode`` returning a non-``Value`` is ``TypeError``; a ``Dat`` whose ``_spec_``
         names a ``dat.kind`` the row's class does not accept is ``TypeError``.
         """
+        if self.subject is not None:
+            self._p._guarded(self.subject, None, True)
         v = self._load()
         self.rev._record_value(v, self._given)
         return v

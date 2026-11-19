@@ -783,6 +783,9 @@ class DatManager:
                 f"as a mounted dat, or in {self._dat_folders}"
             )
         path = os.path.abspath(path)
+        from .ledger.named import check_dat
+
+        check_dat(path)                     # a run's body: the dat guard, if one is registered
         if (cached := self._dat_cache.get(path)) is not None and (
                 dat_class is None or type(cached) is dat_class):
             return cached

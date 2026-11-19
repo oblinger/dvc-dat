@@ -40,8 +40,18 @@ root's location, read there on the first name asked. Every handle it gives is re
 ``ledgers.<name>``, ``dat.at("<name>@<rev>")`` and ``dat.load("<name>@<rev>:…")`` open the ledger ``name``; it refuses
 by raising, and its exception is the caller's. One guard per process (registering again replaces it; ``None``
 removes it). It crosses to a sandbox worker by its import path (``module:qualname``) and is imported there at the
-body's first named open, so it is a module-level function. ``L``, a ``Ledger(location)`` and a ``Ref`` key's ledger
-are not opened by name and are not guarded.
+body's first named open, so it is a module-level function. ``L`` and a ``Ledger(location)`` are not opened by name
+and are not guarded; a ``Ref`` key's ledger, opened by its location in a sandbox worker, is guarded by that location.
+
+**The row guard and the dat guard**: a second layer for what a run's body reads once a ledger is open.
+``register_row_guard(guard)`` makes ``guard(ledger, subject, predicate)`` run before a body reads a row or loads a
+value on any ledger (``predicate`` ``None`` for a value's load); ``register_dat_guard(guard)`` makes ``guard(path)``
+run before a body loads a dat from the dat folders. Each returns ``None`` to allow the read or the exception that
+refuses it: a read naming the subject raises it, a scan (a subject glob, or no subject) leaves the row out. They run
+only while a ledger function's body runs (``rev.run``, sandboxed or not), never in the ledger's own machinery
+(``unguarded``) or outside a run, where the caller's code is its own. Each crosses to a sandbox worker by its import
+path, as the read guard does, and its import there is not credited to the body's code. A guard reads through any
+ledger freely: its own reads are not guarded.
 """
 
 from __future__ import annotations
@@ -100,15 +110,7 @@ def register_read_guard(guard: Optional[Callable[[str], Any]]) -> None:
         return
     if not callable(guard):
         raise TypeError(f"a read guard is a function of a ledger's name, not {guard!r}")
-    ref = f"{getattr(guard, '__module__', None)}:{getattr(guard, '__qualname__', None)}"
-    try:
-        found = None if ref.startswith("__main__:") else _resolve_guard(ref)
-    except (ImportError, AttributeError):
-        found = None
-    if found is not guard:
-        raise TypeError(f"a read guard crosses to a sandbox worker by its import path, and {guard!r} is not found "
-                        f"at {ref!r}: register a module-level function of an importable module")
-    _guard, _guard_ref = guard, ref
+    _guard, _guard_ref = guard, _guard_ref_of(guard, "read")
 
 
 def check_read(name: str) -> None:
@@ -135,6 +137,102 @@ def adopt_read_guard(ref: Optional[str]) -> None:
     """In a sandbox worker: the caller's read guard, by its import path, imported at the first named open."""
     global _guard, _guard_ref
     _guard, _guard_ref = None, ref
+
+
+#: The row guard and the dat guard: ``{"row": fn, "dat": fn}`` and their import paths; in a sandbox worker each
+#: function is imported from its path at its first use.
+_body_guards: Dict[str, Optional[Callable[..., Any]]] = {"row": None, "dat": None}
+_body_refs: Dict[str, Optional[str]] = {"row": None, "dat": None}
+
+
+def _guard_ref_of(guard: Callable[..., Any], what: str) -> str:
+    """``module:qualname`` of a guard, checked to import back to the same function; else ``TypeError``."""
+    if not callable(guard):
+        raise TypeError(f"a {what} guard is a function, not {guard!r}")
+    ref = f"{getattr(guard, '__module__', None)}:{getattr(guard, '__qualname__', None)}"
+    try:
+        found = None if ref.startswith("__main__:") else _resolve_guard(ref)
+    except (ImportError, AttributeError):
+        found = None
+    if found is not guard:
+        raise TypeError(f"a {what} guard crosses to a sandbox worker by its import path, and {guard!r} is not found "
+                        f"at {ref!r}: register a module-level function of an importable module")
+    return ref
+
+
+def _register_body(what: str, guard: Optional[Callable[..., Any]]) -> None:
+    if guard is None:
+        _body_guards[what] = _body_refs[what] = None
+        return
+    _body_refs[what] = _guard_ref_of(guard, what)
+    _body_guards[what] = guard
+
+
+def register_row_guard(guard: Optional[Callable[[Ledger, str, Optional[str]], Optional[BaseException]]]) -> None:
+    """Make ``guard`` the row guard: while a run's body runs, ``guard(ledger, subject, predicate)`` before each read of
+    a row or load of a value (``predicate`` ``None``) on any ledger; it returns the refusal or ``None``. A read naming
+    the subject raises the refusal; a scan leaves the row out. ``None`` removes it; registering again replaces it."""
+    _register_body("row", guard)
+
+
+def register_dat_guard(guard: Optional[Callable[[str], Optional[BaseException]]]) -> None:
+    """Make ``guard`` the dat guard: while a run's body runs, ``guard(path)`` before a dat is loaded from its folder
+    ``path``; it returns the refusal, raised, or ``None``. ``None`` removes it; registering again replaces it."""
+    _register_body("dat", guard)
+
+
+def _in_body() -> bool:
+    """Whether a ledger function's body is running here, outside the ledger's own machinery."""
+    from .sandbox import STATE
+    from .trace import current_run
+
+    return STATE.machinery == 0 and current_run() is not None
+
+
+def _body_guard(what: str) -> Optional[Callable[..., Any]]:
+    guard = _body_guards[what]
+    if guard is None and _body_refs[what] is not None:     # a sandbox worker: the caller's guard, at its first use
+        from .sandbox import unguarded
+
+        with unguarded():
+            guard = _body_guards[what] = _resolve_guard(str(_body_refs[what]))
+    return guard
+
+
+def check_row(ledger: Ledger, subject: str, predicate: Optional[str]) -> Optional[BaseException]:
+    """The row guard's refusal of a body's read of ``subject`` (and ``predicate``) on ``ledger``, or ``None``."""
+    if _body_guards["row"] is None and _body_refs["row"] is None or not _in_body():
+        return None
+    from .sandbox import unguarded
+
+    guard = _body_guard("row")
+    with unguarded():                               # the caller's policy: its own reads are not the body's
+        return guard(ledger, subject, predicate) if guard is not None else None
+
+
+def check_dat(path: str) -> None:
+    """The dat guard on a body's load of the dat at ``path``: its refusal raised, else nothing."""
+    if _body_guards["dat"] is None and _body_refs["dat"] is None or not _in_body():
+        return
+    from .sandbox import unguarded
+
+    guard = _body_guard("dat")
+    with unguarded():
+        refusal = guard(path) if guard is not None else None
+    if refusal is not None:
+        raise refusal
+
+
+def shipped_body_guards() -> Dict[str, Optional[str]]:
+    """The row and dat guards' import paths, as a request ships them to a sandbox worker."""
+    return dict(_body_refs)
+
+
+def adopt_body_guards(refs: Optional[Dict[str, Optional[str]]]) -> None:
+    """In a sandbox worker: the caller's row and dat guards, by their import paths, imported at their first use."""
+    for what in _body_guards:
+        _body_guards[what] = None
+        _body_refs[what] = (refs or {}).get(what)
 
 
 def _handle(target: Any, given: Any, base: Path, cfg: Optional[Path]) -> Ledger:
@@ -345,7 +443,9 @@ def adopt_section(section: Section, read_only: Any) -> None:
 
 
 def handle_at(location: str) -> Ledger:
-    """In a sandbox worker: the handle on a ledger named by location, for a ``Ref`` key on it."""
+    """In a sandbox worker: the handle on a ledger named by location, for a ``Ref`` key on it; the read guard first,
+    given the location."""
+    check_read(location)
     return _handle(location if is_uri(location) else Path(location), location, Path.cwd(), None)
 
 
@@ -467,4 +567,4 @@ class _Active(Ledger):
 ledgers = Ledgers()
 L: Ledger = _Active()
 
-__all__ = ["ledgers", "L", "Ledgers", "register_read_guard"]
+__all__ = ["ledgers", "L", "Ledgers", "register_read_guard", "register_row_guard", "register_dat_guard"]

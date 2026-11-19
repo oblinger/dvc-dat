@@ -113,7 +113,7 @@ from .errors import ConfinedNetwork, ConfinedProcess, ConfinedWrite, NotEvaluate
 from .code import Code
 from . import hooks
 from .backends import CACHE_ENV
-from .named import shipped_read_guard, shipped_section
+from .named import shipped_body_guards, shipped_read_guard, shipped_section
 from .fn import (REDUCE_PARAMS, Fn, alias_reads, attach_run, drop_work, fn_mark, fn_mark_in_source, mounted_name,
                  mounts_at, mounts_hash, path_template, reduce_args, run_trace, save_run, seal_entry, wrap_result)
 
@@ -628,7 +628,7 @@ def _credit(names: List[str], before: Optional[Set[str]]) -> None:
                     break
                 pulled.add(m)
             _PULLED[n] = pulled
-    if STATE.frames:
+    if STATE.frames and not STATE.machinery:        # an import the ledger's own work makes (a guard's) is not the body's
         STATE.frames[-1].requested.update(n for n in names if n in sys.modules)
 
 
@@ -697,6 +697,7 @@ class _State:
     mounts: List[Mount] = []
     frames: List[_Frame] = []
     guard = False
+    machinery = 0                                   # depth of ``unguarded``: the ledger's own work, not the body's
     reads: List[str] = []                           # the mounted roots and the art store (the dats)
     importable: List[str] = []                      # sys.path and the mounts: where the import system reads
     interpreter: List[str] = []                     # where an unmounted module's own import may read
@@ -717,9 +718,11 @@ def unguarded() -> Iterator[None]:
     its reads and writes are the view's, not the function's, so the open hook stands aside for it."""
     old = STATE.guard
     STATE.guard = False
+    STATE.machinery += 1
     try:
         yield
     finally:
+        STATE.machinery -= 1
         STATE.guard = old
 
 
@@ -1358,7 +1361,8 @@ class Server:
                 keys[p] = [encode_key(v, plain) for v in kw[p]]
         req = {"op": "call", "ledger": str(plain.ledger.path), "rev": plain.id, "name": fn.name,
                "keys": keys, "seal": seal, "env": _ship_env(env), "reduce": reduce,
-               "ledgers": shipped_section(), "read_guard": shipped_read_guard(), "cache": _cache_root()}
+               "ledgers": shipped_section(), "read_guard": shipped_read_guard(),
+               "body_guards": shipped_body_guards(), "cache": _cache_root()}
         if fn.kind == "dat":
             req.update({"template": fn._template, "returns": fn._returns, "world": hooks.layer()["world_of"]()})
         return _result(plain, self._ask(req), seal)
@@ -1537,7 +1541,7 @@ def serve(req: Dict[str, Any], out: Any) -> None:
     """In the forked child: confine this process, run the call, reply on ``out``."""
     from .env import Checkout, platform_record, platform_tag, set_env_provider
     from .ledger import Ledger
-    from .named import adopt_read_guard, adopt_section, handle_at
+    from .named import adopt_body_guards, adopt_read_guard, adopt_section, handle_at
     from .rev import Ref
 
     try:
@@ -1560,6 +1564,7 @@ def serve(req: Dict[str, Any], out: Any) -> None:
                 [os.path.realpath(w["art_folder"])] if w["art_folder"] else [])
         adopt_section(req["ledgers"], read_only_ledger)
         adopt_read_guard(req["read_guard"])
+        adopt_body_guards(req.get("body_guards"))
 
         def key(v: Any) -> Any:
             if not (isinstance(v, tuple) and v and v[0] == "__ref__"):
