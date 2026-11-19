@@ -13,7 +13,7 @@
 # ---
 
 # %% [markdown]
-# > **Plan** (delete once the sections carry it). The ledger keeps every past state of its rows, so a past execution can be reproduced two ways: today's code over the old rows, or the old code itself.
+# > **Plan**. The ledger keeps every past state of its rows, so a past execution can be reproduced two ways: today's code over the old rows, or the old code itself.
 # >
 # > 1. **Reading a past revision**: `L.at(which)` is the ledger as it stood at a revision.
 # > 2. **Running today's code over a past revision**: `L.at(which).run(...)` runs the checkout's code over that revision's rows; `v.at` says what it read, `v.rev` where it was saved.
