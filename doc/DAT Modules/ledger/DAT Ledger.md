@@ -279,6 +279,22 @@ backends: [myproject.bucket]   # imported on a scheme miss
 cache: ~/data/ledgers          # <cache>/<ledger name>/art
 ```
 
+### Credentialed ledgers
+A **credentialed ledger** is a Postgres ledger that one named login opens and no other does. Its URI carries `credential=<VAR>` in its query; the password of the URI's user is the value of the environment variable `VAR`, and nothing else.
+
+- **Opening.** The parameter is not sent to the server. The password goes to libpq explicitly, with `passfile` set to the null device, so neither `PGPASSWORD` nor a `~/.pgpass` line opens the ledger in that variable's place. An IAM login works the same way: the variable holds the login token.
+- **Refusals.** `VAR` unset or empty is `LedgerError` naming the variable, before any connection. A URI that also carries a password, an empty `credential=` or two of them is `LedgerError`. The value is never in a message, a `repr` or the URI, which is safe to store in a registry.
+- **What keeps other logins out is the server.** The parameter only says which credential a tool must hold. The database is owned by a role no other login is a member of, with `REVOKE CONNECT ON DATABASE … FROM PUBLIC` and `CONNECT` granted to the ledger's own login; any other login is refused by the server, and sees none of its tables.
+- **Its bytes.** A values backend may take the same parameter on its values URI for its own credential; dvc-dat passes the values URI to the backend unchanged.
+- **Every other ledger is unchanged**: a URI without `credential=` is opened exactly as before.
+
+```python
+# the password is in the environment, set by whoever
+# runs the tool; never a file in the repository
+L = Ledger("postgresql://grader@db:5432/test"
+           "?credential=DAT_CREDENTIAL_TEST")
+```
+
 
 ## Many ledgers
 A project may keep several ledgers, split by how long their data lives, so cleanup is dropping a whole ledger rather than thinning one row by row (SVP 239). The list of them lives in one place, on the **root ledger**: `.datconfig.yaml`, the one config file, committed, says only how to reach root, and root's *registry* names every other ledger. Every name but `root` resolves through it.
