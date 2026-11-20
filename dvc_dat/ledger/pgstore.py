@@ -28,17 +28,29 @@ are never server-prepared, so each is planned with its values (a partial index
 or a prefix range is usable only then). Postgres text cannot hold NUL: a row
 carrying one is refused (``LedgerError``); a read asking for one finds nothing.
 
+**A credentialed ledger** carries ``credential=<VAR>`` in its URI's query
+(``postgresql://grader@host:5432/test?credential=DAT_CREDENTIAL_TEST``): the password
+of the URI's user is the value of the environment variable ``VAR`` and nothing else.
+The parameter is not sent to the server; the password is given to libpq explicitly,
+with ``passfile`` set to the null device, so neither ``PGPASSWORD`` nor a
+``~/.pgpass`` line opens it in that variable's place. ``VAR`` unset or empty is
+``LedgerError`` naming the variable, at the open and before any connection; the
+value is never in a message, a ``repr`` or the URI. What keeps every other login out
+is the server's own grants (``REVOKE CONNECT … FROM PUBLIC``); this parameter only
+says which credential a tool must hold. A URI without it is opened as before.
+
 Needs psycopg 3: ``pip install 'dvc_dat[pg]'``.
 """
 
 from __future__ import annotations
 
+import os
 import threading
 from collections import OrderedDict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, List, Optional, Sequence, Tuple
-from urllib.parse import parse_qsl, urlsplit, urlunsplit
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .errors import LedgerError, LockTimeout
 from .store import ArtStore, ReadOnlyArt, Row, Store, Writer, index_name
@@ -70,6 +82,38 @@ def _psycopg() -> Any:
     return psycopg
 
 
+#: The URI query parameter naming the environment variable that holds a credentialed ledger's password.
+CREDENTIAL = "credential"
+
+
+def credential_of(dsn: str) -> Optional[str]:
+    """The environment variable a credentialed ledger's password is in (``?credential=VAR``), or ``None``."""
+    found = [v for k, v in parse_qsl(urlsplit(dsn).query, keep_blank_values=True) if k == CREDENTIAL]
+    if len(found) > 1 or (found and not found[0]):
+        raise LedgerError(f"Postgres ledger {split_dsn(dsn)[1]}: '{CREDENTIAL}=' names one environment variable")
+    return found[0] if found else None
+
+
+def conninfo(dsn: str) -> Tuple[str, Dict[str, str]]:
+    """``(conninfo, keyword arguments)`` that libpq opens ``dsn`` with: without ``credential=``, and for a
+    credentialed ledger its password from the variable it names (``LedgerError`` when unset) and no passfile."""
+    var = credential_of(dsn)
+    if var is None:
+        return dsn, {}
+    parts = urlsplit(dsn)
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != CREDENTIAL])
+    bare = urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+    redacted = split_dsn(dsn)[1]
+    if "@" in parts.netloc and ":" in parts.netloc.split("@", 1)[0]:
+        raise LedgerError(f"Postgres ledger {redacted}: a credentialed ledger's URI carries no password; it is "
+                          f"the environment variable {var}")
+    secret = os.environ.get(var)
+    if not secret:
+        raise LedgerError(f"Postgres ledger {redacted} is credentialed: its password is the environment variable "
+                          f"{var}, which is not set")
+    return bare, {"password": secret, "passfile": os.devnull}
+
+
 def split_dsn(dsn: str) -> Tuple[str, str]:
     """``(dsn, redacted dsn)``; a ``?art=`` parameter (removed, SVP 1599) is ``LedgerError`` naming what replaces it."""
     parts = urlsplit(dsn)
@@ -99,7 +143,7 @@ class PostgresStore(Store):
         from .backends import cache_folder
 
         self.dsn, self.redacted = split_dsn(dsn)
-        self._conninfo = self.dsn
+        self._conninfo, self._conn_kw = conninfo(self.dsn)
         self.read_only = overlay is not None
         parts = urlsplit(self.dsn)
         self.name = parts.path.lstrip("/") or (parts.username or "")      # libpq's default database: the user
@@ -135,7 +179,7 @@ class PostgresStore(Store):
 
     def _connect(self, timeout: float, *, autocommit: bool) -> Any:
         conn = self._pg.connect(self._conninfo, autocommit=autocommit, prepare_threshold=None,
-                                connect_timeout=max(1, int(timeout)))
+                                connect_timeout=max(1, int(timeout)), **self._conn_kw)
         if self.read_only:
             conn.execute("SET default_transaction_read_only = on")
             if not autocommit:
@@ -353,9 +397,10 @@ def migrate(uri: str, *, timeout: float = 30.0) -> List[str]:
     from .store import index_name as _name
 
     dsn, redacted = split_dsn(uri)
+    info, kw = conninfo(dsn)
     pg = _psycopg()
     try:
-        conn = pg.connect(dsn, autocommit=False, prepare_threshold=None, connect_timeout=max(1, int(timeout)))
+        conn = pg.connect(info, autocommit=False, prepare_threshold=None, connect_timeout=max(1, int(timeout)), **kw)
     except pg.Error as e:
         raise LedgerError(f"Postgres ledger {redacted}: cannot connect ({e})") from e
     try:
