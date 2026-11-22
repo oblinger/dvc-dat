@@ -1,8 +1,13 @@
 # DVC-DAT
 
-**Datomic for Python — an append-only artifact ledger for ML experiment tracking.**
+**Datomic for Python — a functional DB for ML experiment tracking.**
 
-Objects are versioned as triples, and every artifact carries its provenance: the sandboxed, git-tracked Python module that built it, the commit it ran at, and the inputs it read, so it can be rebuilt.
+- Git-versioned, sandboxed Python execution with reproducible provenance
+- Content-addressed blob store of serialized objects and folder trees
+- Triples-based, append-only, incrementally updated JSON structures:<br>
+  a compact, timeless view of large, ever-changing configurations
+
+Used to represent large Python computation graphs with fully reproducible provenance.
 
 **[Architecture](https://oblinger.github.io/dvc-dat/DAT%20Architecture/)** · **[Tutorials](https://oblinger.github.io/dvc-dat/tutorials/)** · **[Documentation](https://oblinger.github.io/dvc-dat/)** · **[API reference](https://oblinger.github.io/dvc-dat/api/)** · **[Code](https://github.com/oblinger/dvc-dat)**
 
