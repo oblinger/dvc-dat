@@ -13,6 +13,21 @@
 # ---
 
 # %% [markdown]
+# <!-- contents: written by add_contents.py -->
+# **Ledger: triples**
+#
+# Contents:
+#
+# - [Setup](#setup)
+# - [One constructor](#one-constructor)
+# - [One transaction is one revision](#one-transaction-is-one-revision)
+# - [A second transaction, and the ledger as rows](#a-second-transaction-and-the-ledger-as-rows)
+# - [Folding semantics](#folding-semantics)
+# - [The `[]` accessor](#the-accessor)
+# - [Triple accessors](#triple-accessors)
+# - [Ledger management](#ledger-management)
+
+# %% [markdown]
 # #### Setup
 
 # %%

@@ -13,15 +13,19 @@
 # ---
 
 # %% [markdown]
-# > **Plan** (delete once the sections carry it). An ETL pipeline computes over a set of inputs in stages, and the ledger recomputes only the stages whose inputs moved.
-# >
-# > 1. **Setup: the city data**: each city's year of daily weather is a sealed value found by an alias; the city set the pipeline runs over is rows.
-# > 2. **A pipeline of stages**: a daily comfort per city (its weather plus a comfort column), a city comfort per city over a date range (the days binned by comfort level), a comfort report reduced over a city set and a date range; asked once, every stage runs; asked again, every stage is a hit.
-# > 3. **Summer, and one more city**: the range narrows to summer, so every city's summer binning and the report run; then a city joins, and only its own stages and one report step over it run.
-# > 4. **Changing a city's data**: only that city's daily comfort and what is downstream of it run.
-# > 5. **Changing one stage's code**: only that stage runs; the stages below it are hits.
-# >
-# > Each section ends on the count of stages that ran, read off the ledger.
+# <!-- contents: written by add_contents.py -->
+# **ETL pipelines: computing, recomputing only what moved**
+#
+# Contents:
+#
+# - [Setup](#setup)
+# - [Setup: the city data](#setup-the-city-data)
+# - [A pipeline of stages](#a-pipeline-of-stages)
+# - [Summer, and one more city](#summer-and-one-more-city)
+# - [Two reports merged](#two-reports-merged)
+# - [Changing a city's data](#changing-a-citys-data)
+# - [Changing one stage's code](#changing-one-stages-code)
+# - [Reading a result's dependencies back](#reading-a-results-dependencies-back)
 
 # %% [markdown]
 # #### Setup

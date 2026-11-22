@@ -13,13 +13,17 @@
 # ---
 
 # %% [markdown]
-# > **Plan**. The ledger keeps every past state of its rows, so a past execution can be reproduced two ways: today's code over the old rows, or the old code itself.
-# >
-# > 1. **Reading a past revision**: `L.at(which)` is the ledger as it stood at a revision.
-# > 2. **Running today's code over a past revision**: `L.at(which).run(...)` runs the checkout's code over that revision's rows; `v.at` says what it read, `v.rev` where it was saved.
-# > 3. **Sweeping a set of revisions**: `L.revs(...)` names past revisions by label; the sweep is a comprehension over it.
-# > 4. **What a sweep recomputes**: one run per distinct set of reads; changed code misses at every revision.
-# > 5. **Rerunning a value from its own commit**: `pin` tags and pushes the commit that made a value; `rerun` runs that commit's code again over the revision it read.
+# <!-- contents: written by add_contents.py -->
+# **Rerunning: reproducing past executions**
+#
+# Contents:
+#
+# - [Setup](#setup)
+# - [Reading a past revision](#reading-a-past-revision)
+# - [Running today's code over a past revision](#running-todays-code-over-a-past-revision)
+# - [Sweeping a set of revisions](#sweeping-a-set-of-revisions)
+# - [What a sweep recomputes](#what-a-sweep-recomputes)
+# - [Rerunning a value from its own commit](#rerunning-a-value-from-its-own-commit)
 
 # %% [markdown]
 # #### Setup

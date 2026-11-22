@@ -13,6 +13,19 @@
 # ---
 
 # %% [markdown]
+# <!-- contents: written by add_contents.py -->
+# **The CLI**
+#
+# Contents:
+#
+# - [Setup](#setup)
+# - [Running](#running)
+# - [Finding computed values](#finding-computed-values)
+# - [Updating](#updating)
+# - [Releasing](#releasing)
+# - [Other commands](#other-commands)
+
+# %% [markdown]
 # #### Setup
 
 # %%

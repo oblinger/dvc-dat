@@ -13,35 +13,17 @@
 # ---
 
 # %% [markdown]
-# > **Plan** (what this notebook teaches; delete once the sections
-# > carry it on their own)
-# >
-# > The ledger holds **values**: stored objects named by the hash of
-# > their content, each carrying **predicates**, facts about it
-# > (`version=1.5.3`, `camera=wide`). A **name** is a predicate that
-# > points at a value. Every predicate ever written is kept, with who
-# > wrote it and at which revision. From a shell a person works the
-# > ledger by typing `just <verb>`; each verb is one ledger API call.
-# > Three sections, one per thing a person does:
-# >
-# > 1. **Running** — `just run <function|spec> k=v …` executes it through the
-# >    ledger: the result is a value, found if computed before, else made
-# >    and sealed; `alias=` names it. A function marked `@command` runs as
-# >    `just <name>` without `run`. `run` is dvc-dat's (`dvc_dat.just`).
-# > 2. **Listing values by predicate** — `values` lists values by predicate;
-# >    `value` gets exactly one; `history` lists every predicate a subject
-# >    has held; `why` lists what a value was computed from.
-# > 3. **Updating values** — `set` adds a predicate to a subject, a
-# >    name's `alias=` among them; `index` makes a predicate fast
-# >    to list by; `bump` edits a module's `__version__` in its source,
-# >    or moves the ledger's own version (a release).
-# >
-# > A predicate on the command line is `k=v`: v is JSON when it parses
-# > (a number, a list), else the text as typed (`G1`, `1.5.3`), the one
-# > grammar `just run` uses too. The example data is one game, its video and two cuts of it;
-# > the verbs are the same for any values. Each section: the shell line and
-# > its output, one sentence saying what the verb does, then the API
-# > call it wraps.
+# <!-- contents: written by add_contents.py -->
+# **Ledger: just**
+#
+# Contents:
+#
+# - [Setup](#setup)
+# - [Running](#running)
+# - [Listing values by predicate](#listing-values-by-predicate)
+# - [Updating values](#updating-values)
+# - [What the recipes hide](#what-the-recipes-hide)
+# - [Footnote: which ledger](#footnote-which-ledger)
 
 # %% [markdown]
 # #### Setup
