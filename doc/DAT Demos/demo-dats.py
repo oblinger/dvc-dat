@@ -13,6 +13,16 @@
 # ---
 
 # %% [markdown]
+# <!-- contents: written by add_contents.py -->
+# **Demo: dats, dependencies and versions**
+#
+# Contents:
+#
+# - [A store, and two dats](#a-store-and-two-dats)
+# - [A compute dat, and its dependencies](#a-compute-dat-and-its-dependencies)
+# - [Versions](#versions)
+
+# %% [markdown]
 # # Demo: dats, dependencies and versions
 #
 # A **dat** is a folder: a call (`_spec_.yaml`, fixed when the folder is made), the data it

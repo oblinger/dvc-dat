@@ -13,6 +13,20 @@
 # ---
 
 # %% [markdown]
+# <!-- contents: written by add_contents.py -->
+# **Ledger: values**
+#
+# Contents:
+#
+# - [Setup](#setup)
+# - [Values](#values)
+# - [Value predicates](#value-predicates)
+# - [Revising a value](#revising-a-value)
+# - [Ledger functions](#ledger-functions)
+# - [Ledger evaluation](#ledger-evaluation)
+# - [Edge cases](#edge-cases)
+
+# %% [markdown]
 # #### Setup
 
 # %%

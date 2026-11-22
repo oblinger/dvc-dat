@@ -1,14 +1,17 @@
 ---
-description: "three subsystems and where they meet"
+description: "the two halves, the dat and the ledger, and where they meet"
 ---
-:>> [DAT](DAT.md) → [DAT Architecture](DAT%20Architecture.md) 
-# DAT Architecture
-`dvc_dat` keeps two kinds of record. A **dat** is a folder that is its
-own recipe: a spec, the files a run wrote, and a result, sealed under a
-content hash. The **ledger** is the history around it: every fact a row
-stamped with a revision, every read the state as of one revision, and
-every value stored by its content. The dat half is the package
-`dvc_dat`; the ledger is `dvc_dat.ledger`. Each half has a module doc:
+:>> [DAT](DAT.md) → [DVC-DAT Architecture](DAT%20Architecture.md) 
+# DVC-DAT Architecture
+`dvc_dat` has two halves: the dat, a folder that is its own recipe, and the ledger, an append-only database of its history.
+
+The **dat** half (the package `dvc_dat`) keeps
+folders that are their own recipe: a spec, the files a run wrote, and a
+result, sealed under a content hash. The **ledger** half
+(`dvc_dat.ledger`) keeps the history around them: an append-only
+database where every fact is a row stamped with a revision, every read
+sees the state as of one revision, and every value is stored by its
+content. Each half has a module doc:
 
 - [DAT Dat](DAT%20Modules/DAT%20Dat.md): `Dat`, `DatManager`,
   `DatContainer`, `Namespace`; specs, sealing, standing, the manager.
@@ -17,6 +20,21 @@ every value stored by its content. The dat half is the package
   the sandbox, evaluation and the dependencies.
 
 ![The dat and the ledger](DAT%20Architecture.svg) 
+
+What each piece is (square boxes are classes; rounded ones are not):
+
+- **Dat** — a folder that is its own recipe: spec, files, result.
+- **DatManager** — finds dat folders, runs them, loads them by name.
+- **Ledger** — an append-only database of facts, one revision each.
+- **Rev** — a frozen view of the ledger at one time point.
+- **Ref** — a pointer to a value, not yet loaded.
+- **Value** — a serialized Python object, stored by its content hash.
+- **Value function** — a sandboxed, versioned Python function
+  (`@dat.fn`); a call is evaluated once and remembered.
+- **Just recipes** — the human's verbs, one ledger call each.
+- **ArtStore** — the bytes of every value, by sha256, written once.
+- **A dat is a value** — the ledger stores a dat folder as a `Value`
+  whose encoding is its manifest, `{relpath: sha256}`.
 
 ## Purpose
 

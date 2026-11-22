@@ -8,21 +8,21 @@
 
   <!-- nodes: column A handle and storage, B reads and writes, C values, D functions -->
   <g stroke="#37474f" stroke-width="2">
-    <rect x="40" y="90" width="300" height="120" rx="10" fill="#eceff1"/>
-    <rect x="40" y="360" width="300" height="120" rx="10" fill="#fff8e1"/>
-    <rect x="40" y="630" width="300" height="120" rx="10" fill="#fff8e1"/>
-    <rect x="440" y="90" width="320" height="120" rx="10" fill="#e3f2fd"/>
-    <rect x="440" y="360" width="320" height="120" rx="10" fill="#ffebee"/>
-    <rect x="440" y="630" width="320" height="120" rx="10" fill="#eceff1"/>
-    <rect x="860" y="90" width="300" height="120" rx="10" fill="#e3f2fd"/>
-    <rect x="860" y="360" width="300" height="120" rx="10" fill="#e8f5e9"/>
-    <rect x="1260" y="90" width="300" height="120" rx="10" fill="#f3e5f5"/>
-    <rect x="1260" y="360" width="300" height="120" rx="10" fill="#f3e5f5"/>
+    <rect x="40" y="90" width="300" height="120" rx="0" fill="#eceff1"/>
+    <rect x="40" y="360" width="300" height="120" rx="0" fill="#fff8e1"/>
+    <rect x="40" y="630" width="300" height="120" rx="0" fill="#fff8e1"/>
+    <rect x="440" y="90" width="320" height="120" rx="0" fill="#e3f2fd"/>
+    <rect x="440" y="360" width="320" height="120" rx="0" fill="#ffebee"/>
+    <rect x="440" y="630" width="320" height="120" rx="22" fill="#eceff1"/>
+    <rect x="860" y="90" width="300" height="120" rx="0" fill="#e3f2fd"/>
+    <rect x="860" y="360" width="300" height="120" rx="0" fill="#e8f5e9"/>
+    <rect x="1260" y="90" width="300" height="120" rx="0" fill="#f3e5f5"/>
+    <rect x="1260" y="360" width="300" height="120" rx="22" fill="#f3e5f5"/>
   </g>
 
   <g fill="#263238" text-anchor="middle">
     <text x="190" y="136" font-size="24" font-weight="bold">Ledger</text>
-    <text x="190" y="162" font-size="15" fill="#607d8b">class · a folder or a DSN</text>
+    <text x="190" y="162" font-size="15" fill="#607d8b">append-only database</text>
     <text x="190" y="190" font-size="15">at · transaction · close</text>
 
     <text x="190" y="406" font-size="24" font-weight="bold">Store</text>
@@ -30,15 +30,15 @@
     <text x="190" y="460" font-size="15">quads, append-only; read by Rev</text>
 
     <text x="190" y="676" font-size="24" font-weight="bold">ArtStore</text>
-    <text x="190" y="702" font-size="15" fill="#607d8b">class · bytes by sha256</text>
-    <text x="190" y="730" font-size="15">write-once, hardlinked parts</text>
+    <text x="190" y="702" font-size="15" fill="#607d8b">bytes by sha256</text>
+    <text x="190" y="730" font-size="15">write-once, cloned copy-on-write</text>
 
     <text x="600" y="136" font-size="24" font-weight="bold">Rev</text>
-    <text x="600" y="162" font-size="15" fill="#607d8b">class · frozen view at one revision</text>
+    <text x="600" y="162" font-size="15" fill="#607d8b">frozen view (time point)</text>
     <text x="600" y="190" font-size="15">[ ] · get · all · refs · values · select</text>
 
     <text x="600" y="406" font-size="24" font-weight="bold">Transaction</text>
-    <text x="600" y="432" font-size="15" fill="#607d8b">class · one revision on exit</text>
+    <text x="600" y="432" font-size="15" fill="#607d8b">one revision on exit</text>
     <text x="600" y="460" font-size="15">add · remove · t[s, p] = o · del</text>
 
     <text x="600" y="676" font-size="24" font-weight="bold">Kept cache</text>
@@ -46,16 +46,16 @@
     <text x="600" y="730" font-size="15">seal records of unsaved seals</text>
 
     <text x="1010" y="136" font-size="24" font-weight="bold">Ref</text>
-    <text x="1010" y="162" font-size="15" fill="#607d8b">class · a value at a revision</text>
+    <text x="1010" y="162" font-size="15" fill="#607d8b">pointer to a value</text>
     <text x="1010" y="190" font-size="15">subject · hash · preds · load</text>
 
     <text x="1010" y="406" font-size="24" font-weight="bold">Value</text>
-    <text x="1010" y="432" font-size="15" fill="#607d8b">class · Pickled · Table · Dat</text>
+    <text x="1010" y="432" font-size="15" fill="#607d8b">serialized Python object</text>
     <text x="1010" y="460" font-size="15">encode · decode · seal · dependencies</text>
 
     <text x="1410" y="136" font-size="24" font-weight="bold">Fn</text>
-    <text x="1410" y="162" font-size="15" fill="#607d8b">class · a @ledger_fn at a revision</text>
-    <text x="1410" y="190" font-size="15">calling it is eval, memoised</text>
+    <text x="1410" y="162" font-size="15" fill="#607d8b">versioned Python function</text>
+    <text x="1410" y="190" font-size="15">@dat.fn; a call is eval, memoised</text>
 
     <text x="1410" y="406" font-size="24" font-weight="bold">Worker</text>
     <text x="1410" y="432" font-size="15" fill="#607d8b">process · python -I, one per mount</text>
@@ -105,5 +105,12 @@
     <text x="202" y="290">owns</text>
     <text x="202" y="560">art/</text>
     <text x="842" y="570">seal()</text>
+  </g>
+  <!-- key: shape says kind -->
+  <g font-size="15" fill="#37474f">
+    <rect x="860" y="690" width="34" height="22" rx="0" fill="#ffffff" stroke="#37474f" stroke-width="2"/>
+    <text x="904" y="707">class</text>
+    <rect x="970" y="690" width="34" height="22" rx="8" fill="#ffffff" stroke="#37474f" stroke-width="2"/>
+    <text x="1014" y="707">folder or process</text>
   </g>
 </svg>

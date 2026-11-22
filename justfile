@@ -34,6 +34,11 @@ walkthrough:
     uv run python "doc/DAT Demos/build_notebook.py" api-walkthrough
     JUPYTER_PATH={{justfile_directory()}}/.venv/share/jupyter uv run jupyter nbconvert --execute --to notebook --inplace "doc/DAT Demos/api-walkthrough.ipynb"
 
+# the contents cell at the top of every tutorial (its title and a link per section), written into each .py and
+# its .ipynb; run it after a tutorial's headings change. Outputs are kept and nothing is re-executed.
+contents:
+    uv run --group docs python "doc/DAT Demos/add_contents.py"
+
 # the documentation site (doc/ -> site/), with the generated API reference (doc/api/) and cli.md's usage block;
 # `just docs check` leaves the tracked files alone and fails on a stale block, a strict-build warning or a site test
 docs *mode:

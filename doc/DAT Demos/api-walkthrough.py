@@ -13,6 +13,30 @@
 # ---
 
 # %% [markdown]
+# <!-- contents: written by add_contents.py -->
+# **Triples**
+#
+# Contents:
+#
+# - [Setup](#setup)
+# - [A ledger and a transaction](#a-ledger-and-a-transaction)
+# - [A second transaction, and folding](#a-second-transaction-and-folding)
+# - [One and many](#one-and-many)
+# - [The `[]` accessor](#the-accessor)
+# - [Reading triple data](#reading-triple-data)
+# - [Declaring an index](#declaring-an-index)
+# - [Naming a revision](#naming-a-revision)
+# - [Typing a predicate](#typing-a-predicate)
+# - [Locking the ledger](#locking-the-ledger)
+# - [Value objects](#value-objects)
+# - [Ledger functions](#ledger-functions)
+# - [Ledger evaluation](#ledger-evaluation)
+# - [Provenance](#provenance)
+# - [Running a dat, step by step](#running-a-dat-step-by-step)
+# - [Running and storing a dat on the ledger](#running-and-storing-a-dat-on-the-ledger)
+# - [A pipeline run: the base case on one game](#a-pipeline-run-the-base-case-on-one-game)
+
+# %% [markdown]
 # #### Setup
 
 # %%

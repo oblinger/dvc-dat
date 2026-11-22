@@ -13,6 +13,19 @@
 # ---
 
 # %% [markdown]
+# <!-- contents: written by add_contents.py -->
+# **Ledger: dats**
+#
+# Contents:
+#
+# - [Setup](#setup)
+# - [A dat is a value](#a-dat-is-a-value)
+# - [The dat constructor](#the-dat-constructor)
+# - [An ETL chain](#an-etl-chain)
+# - [Releases and old revisions](#releases-and-old-revisions)
+# - [Edge cases](#edge-cases)
+
+# %% [markdown]
 # #### Setup
 
 # %%

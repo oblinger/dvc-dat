@@ -14,6 +14,20 @@
 # ---
 
 # %% [markdown]
+# <!-- contents: written by add_contents.py -->
+# **dvc-dat walkthrough**
+#
+# Contents:
+#
+# - [The project](#the-project)
+# - [Mount the catalog](#mount-the-catalog)
+# - [Run a template, then fork it](#run-a-template-then-fork-it)
+# - [Load a dat](#load-a-dat)
+# - [A variation: `merge_dicts`](#a-variation-merge_dicts)
+# - [The command line](#the-command-line)
+# - [Clean up](#clean-up)
+
+# %% [markdown]
 # # dvc-dat walkthrough
 #
 # One small project, built in a temp folder, run top to bottom against dvc-dat 2.12:

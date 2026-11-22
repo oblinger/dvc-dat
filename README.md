@@ -1,43 +1,56 @@
 # DVC-DAT
 
-Data artifact management with metadata and provenance for ML experimentation.
+**Datomic for Python — an append-only artifact ledger for ML experiment tracking.**
+
+Objects are versioned as triples, and every artifact carries its provenance: the sandboxed, git-tracked Python module that built it, the commit it ran at, and the inputs it read, so it can be rebuilt.
+
+**[Architecture](https://oblinger.github.io/dvc-dat/DAT%20Architecture/)** · **[Tutorials](https://oblinger.github.io/dvc-dat/tutorials/)** · **[Documentation](https://oblinger.github.io/dvc-dat/)** · **[API reference](https://oblinger.github.io/dvc-dat/api/)** · **[Code](https://github.com/oblinger/dvc-dat)**
+
+| See it work | In one notebook |
+| --- | --- |
+| [The ledger: triples](https://oblinger.github.io/dvc-dat/DAT%20Demos/ledger-triples/) | facts with revisions, read as they were at any point in time |
+| [Rerunning](https://oblinger.github.io/dvc-dat/DAT%20Demos/demo-rerunning/) | today's code over past revisions, and a value rebuilt at its own commit |
+| [API walkthrough](https://oblinger.github.io/dvc-dat/DAT%20Demos/api-walkthrough/) | dats, the namespace, values and the ledger on one sheet |
+| [A project end to end](https://oblinger.github.io/dvc-dat/DAT%20Demos/demo-walkthrough/) | a small project set up, run, forked and reloaded |
 
 ## Overview
 
-A **dat** is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
-itself; `_result_.yaml` holds only what running it produced. `ns` is the one
-namespace; `Dat.manager.run` is the one run.
+A **ledger** keeps facts that are never overwritten, each true from one revision
+on. Code joins it by a mount: a folder of a git repository, whose functions run
+sandboxed. A call through the ledger is traced, sealed and remembered. What a
+call builds is often a **dat**: a folder holding its files, the spec that is a
+complete recipe for it, and its result.
 
 ```python
-from dvc_dat import Dat
+from dvc_dat.ledger import Ledger
 
-ns = Dat.ns   # the namespace; follows Dat.manager
+L = Ledger("experiments", create=True)
 
-# Importing reads no files; the first use finds .datconfig.yaml.
-# A dotted name resolves through ns.mount names, then by import.
-template = ns.load("catalog.experiment")
+# Mount a folder of a git repository; its functions run sandboxed.
+with L.transaction(by="human:me") as t:
+    t.ns.mount("mnt.exp", root="exp", repo="my-experiments")
 
-# Arguments fork a spec: they are written into the new dat's
-# _spec_.yaml, and the run reads them back from there.
-result = Dat.manager.run("catalog.experiment", epochs=200)
+# A call through the ledger is traced and sealed.
+model = L.at().run("mnt.exp.train.fit", lr=1e-3, epochs=10)
 
-# Create a dat without running it, and open one.
-dat = Dat.create("catalog.experiment", path="runs/exp1",
-                 epochs=10)
-dat = Dat.load("runs/exp1")
+# The same call again is answered from the ledger: nothing runs.
+again = L.at().run("mnt.exp.train.fit", lr=1e-3, epochs=10)
+assert again.subject == model.subject
+
+# Pin the commit it ran at, so it can be re-executed;
+# then rebuild it from its inputs and compare.
+L.at().pin(model)
+print(L.at().rerun(model).outcome)   # 'reproduced'
+
+past = L.at(3)   # the ledger as it was at revision 3
+
+# An artifact can be a dat: a folder the ledger stores.
+print(*sorted(p.name for p in model.path.iterdir()))
 ```
 
-`Dat.manager.run(spec, **kw)` creates a dat and runs it; `Dat.create(spec, **kw)`
-creates one and runs nothing; `dat.run` is the record a run leaves. Both take
-keywords: they are merged into `dat.kwargs` over the spec's own, key by key (the
-spec's `dat.kwargs` are its defaults, and the stored spec holds the merged ones),
-and a template reads them as `${dat.kwargs.x}` in `dat.name`, `dat.preds` and the
-rest of the spec. `dat.preds` are preds the dat carries onto the value it seals as.
-A dat is run once, by the call that makes it; its recipe runs again as a new dat
-with `Dat.manager.run(dat.get_spec(), x=1)`. A run saves nothing by itself: `dat.save()` inside it seals the
-dat when the run returns, stamping its `dat.standing`; `dat.standing: rolling`
-in a spec declares one that is saved at will. Nothing about the arguments is recorded in `_result_.yaml` — the
-spec is the record.
+```text
+_result_.yaml _spec_.yaml metrics.json weights.pt
+```
 
 See the [full documentation](doc/index.md) for details.
 
@@ -65,7 +78,8 @@ The base install needs pyyaml alone; it stores a spec as given and expands `${un
 just run catalog.experiment epochs=200
 # the same: bin/x is `exec just run "$@"`
 x catalog.experiment epochs=200
-# print that Dat.manager.run(...) call instead of making it, then the resolved spec
+# print the Dat.manager.run(...) call instead of making it,
+# then the resolved spec
 x catalog.experiment epochs=200 --dry-run
 just mounts catalog
 x --info
