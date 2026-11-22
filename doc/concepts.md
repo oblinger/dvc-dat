@@ -2,7 +2,7 @@
 # Core Concepts
 The core ideas of dvc_dat: dats, specs, results and the namespace `ns`.
 The record in time — values found by their inputs, `L` and `rev.run` — is the
-ledger's: [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md).
+ledger's: [DAT Ledger](api/ledger.md).
 
 A **dat** is a folder whose `_spec_.yaml` is a complete, argumentless recipe for
 itself. `_result_.yaml` holds only what running it produced.

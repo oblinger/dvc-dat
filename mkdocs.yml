@@ -35,8 +35,6 @@ nav:
       - Spec format: spec-format.md
   - Architecture:
       - DAT Architecture.md
-      - Dat: DAT Modules/DAT Dat.md
-      - Ledger: DAT Modules/ledger/DAT Ledger.md
       - Concepts: concepts.md
   - API Reference:
       - api/index.md

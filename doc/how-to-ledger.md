@@ -2,7 +2,7 @@
 # How to use a ledger
 At the end you will have a ledger of your own holding values and a dat, their bytes pushed to a values store and pulled back on a second machine, a value read as of an older revision, and a memo policy chosen.
 
-Needs: `dvc_dat` installed (in a checkout of this repository, `uv sync`), `git`, and an empty folder to work in. Every command below runs in that folder and printed what is shown under it. What a ledger is, a project's history of facts with every value stored by its content, is [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md); the four ledger notebooks under [Tutorials](tutorials.md) teach it at length.
+Needs: `dvc_dat` installed (in a checkout of this repository, `uv sync`), `git`, and an empty folder to work in. Every command below runs in that folder and printed what is shown under it. What a ledger is, a project's history of facts with every value stored by its content, is [DAT Ledger](api/ledger.md); the four ledger notebooks under [Tutorials](tutorials.md) teach it at length.
 
 ## 1. Create the ledger and give it a values store
 A folder ledger is a SQLite file, `ledger.db`, beside its cache of bytes, `art/`. Nothing is made on disk without `create=True`. The row `(db, db/values, <uri>)` names where the ledger's bytes live beyond this machine; here a local folder, `bucket/`, stands in for a cloud bucket.
@@ -33,7 +33,7 @@ values at: True
 revision: 1
 ```
 
-Each `with L.transaction(...)` block becomes exactly one revision when it closes, or nothing if it raises. A cloud store is a backend you register (`register_values`, [Backends](DAT%20Modules/ledger/DAT%20Ledger.md#backends)); a ledger shared by a team is a Postgres location instead of a folder, and nothing else on this page changes.
+Each `with L.transaction(...)` block becomes exactly one revision when it closes, or nothing if it raises. A cloud store is a backend you register (`register_values`, [Backends](api/ledger.md#backends)); a ledger shared by a team is a Postgres location instead of a folder, and nothing else on this page changes.
 
 ## 2. Declare a value class and seal two values
 A value is an object stored by its content. Its class says how it becomes bytes (`encode`) and back (`decode`), and `@ledger_class(preds=...)` names the predicates, the searchable facts, its values may carry. The class lives in a module so a later `load` can import it:
@@ -167,7 +167,7 @@ own folder: True
 pushed: 5 blobs
 ```
 
-The three new blobs are the two files and the manifest. A dat whose spec names a `dat.kind` subclass carries that class's preds; [DAT Dat](DAT%20Modules/DAT%20Dat.md) and the [ledger: dats](DAT%20Demos/ledger-dats.ipynb) notebook cover it.
+The three new blobs are the two files and the manifest. A dat whose spec names a `dat.kind` subclass carries that class's preds; [DAT Dat](api/core.md) and the [ledger: dats](DAT%20Demos/ledger-dats.ipynb) notebook cover it.
 
 ## 5. Pull the bytes on another machine
 Every reader of a ledger shares its rows and its values store; each machine keeps its own cache. A read takes the bytes from the cache and, on a miss, pulls them from the values store, checked against their hash. Here a copy of the rows with an empty cache stands in for the second machine:
@@ -349,4 +349,4 @@ db/memo-policy), which no code in this process registered
 (built-in: card, platform; register_policy)
 ```
 
-The rules behind each step: [Revisions and transactions](DAT%20Modules/ledger/DAT%20Ledger.md#revisions-and-transactions), [Storage](DAT%20Modules/ledger/DAT%20Ledger.md#storage), [Backends](DAT%20Modules/ledger/DAT%20Ledger.md#backends), [Memoization and the platform](DAT%20Modules/ledger/DAT%20Ledger.md#memoization-and-the-platform).
+The rules behind each step: [Revisions and transactions](api/ledger.md#revisions-and-transactions), [Storage](api/ledger.md#storage), [Backends](api/ledger.md#backends), [Memoization and the platform](api/ledger.md#memoization-and-the-platform).

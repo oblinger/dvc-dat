@@ -23,7 +23,9 @@ from dvc_dat.docs.vault import VaultPlugin, _first_line, public_members  # noqa:
 
 REPO = Path(__file__).parent.parent
 SITE = REPO / "site"
-MODULE_PAGES = ["DAT Modules/DAT Dat", "DAT Modules/ledger/DAT Ledger"]
+# a module's one home: its design on top, its generated reference under `# Reference`
+MODULE_PAGES = ["api/core", "api/do", "api/ledger"]
+SMALL = {"api/do"}   # one interface, so few links: the counts below are floors for the others
 needs_site = pytest.mark.skipif(not SITE.exists(), reason="no site/: run `just docs`")
 
 
@@ -179,25 +181,40 @@ def test_every_heading_link_of_a_module_page_resolves_in_obsidian(page):
         checked += 1
         if not target.exists() or unquote(fragment) not in headings(target):
             unresolved.append(f"{path}#{fragment}")
-    assert checked > 5
+    assert checked >= (0 if page in SMALL else 6)
     assert not unresolved, f"{page}: {len(unresolved)} of {checked} heading links resolve to no heading: {unresolved}"
 
 
 def test_reduce_in_the_methods_table_lands_on_the_reduce_section():
-    text = (REPO / "doc" / "DAT Modules/ledger/DAT Ledger.md").read_text()
+    text = (REPO / "doc" / "api/ledger.md").read_text()
     rev_row = next(line for line in text.splitlines() if line.startswith("| Rev "))
     assert "[reduce](#Reduce)" in rev_row
     assert re.search(r"^### Reduce$", text, re.MULTILINE)
 
 
 @pytest.mark.parametrize("page", sorted((REPO / "doc" / "api").glob("*.md")), ids=lambda p: p.stem)
-def test_every_api_page_opens_with_its_modules_figure_and_a_link_back(page):
-    head = page.read_text().split("\n")[:7]
+def test_every_api_page_opens_with_its_modules_figure(page):
+    head = page.read_text().split("\n")[:12]
     figure = next((line for line in head if line.startswith("![")), None)
-    back = next((line for line in head if line.startswith("Module page: [")), None)
-    assert figure and back, f"{page.name}: no figure and link back in its first lines"
-    for target in (re.search(r"\]\(([^)#]+)", line).group(1) for line in (figure, back)):
-        assert (page.parent / unquote(target)).exists(), target
+    assert figure, f"{page.name}: no figure in its first lines"
+    assert (page.parent / unquote(re.search(r"\]\(([^)#]+)", figure).group(1))).exists(), figure
+
+
+@pytest.mark.parametrize("page", MODULE_PAGES)
+def test_a_module_page_holds_its_reference_below_its_design(page):
+    text = (REPO / "doc" / f"{page}.md").read_text()
+    assert re.search(r"^# Reference$", text, re.MULTILINE), f"{page}: no `# Reference` heading"
+    design, _, reference = text.partition("\n# Reference\n")
+    assert "\n::: " not in design, f"{page}: a `:::` directive above `# Reference`"
+    assert "\n::: " in reference
+
+
+def test_the_old_module_pages_point_to_their_new_home():
+    for old, new in (("DAT Modules/DAT Dat.md", "api/core.md"), ("DAT Modules/ledger/DAT Ledger.md", "api/ledger.md")):
+        text = (REPO / "doc" / old).read_text()
+        assert len(text.strip().splitlines()) == 1, old
+        target = re.search(r"\]\(([^)#]+)\)", text).group(1)
+        assert ((REPO / "doc" / old).parent / unquote(target)).resolve() == (REPO / "doc" / new).resolve()
 
 
 @pytest.mark.skipif(shutil.which("just") is None, reason="no just")
@@ -225,8 +242,8 @@ def test_every_notebook_is_a_page():
 def test_every_method_row_resolves_to_an_id_in_the_api_reference(page):
     html = (SITE / page / "index.html").read_text()
     ids = {i for p in (SITE / "api").glob("*/index.html") for i in re.findall(r'id="([^"]+)"', p.read_text())}
-    hrefs = {unquote(h) for h in re.findall(r'href="[^"#]*api/[^"#]*#(dvc_dat\.[^"]+)"', html)}
-    assert len(hrefs) > 20
+    hrefs = {unquote(h) for h in re.findall(r'href="[^"#]*#(dvc_dat\.[^"]+)"', html)}
+    assert len(hrefs) >= (5 if page in SMALL else 21)
     missing = sorted(hrefs - ids)
     assert not missing, f"{page}: method rows with no API anchor: {missing}"
 
@@ -237,7 +254,7 @@ def test_every_in_page_link_of_a_module_page_resolves_on_the_site(page):
     html = (SITE / page / "index.html").read_text()
     ids = set(re.findall(r'id="([^"]+)"', html))
     fragments = {unquote(h) for h in re.findall(r'href="#([^"]+)"', html)}
-    assert len(fragments) > 5
+    assert len(fragments) >= (1 if page in SMALL else 6)
     missing = sorted(fragments - ids)
     assert not missing, f"{page}: in-page links with no heading id: {missing}"
 
