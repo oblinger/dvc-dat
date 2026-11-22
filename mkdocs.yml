@@ -13,7 +13,8 @@ theme:
     - content.code.copy
 
 nav:
-  - Home: index.md
+  - Overview: index.md
+  - Concepts: concepts.md
   - Tutorials:
       - tutorials.md
       - API walkthrough: DAT Demos/api-walkthrough.ipynb
@@ -33,18 +34,17 @@ nav:
       - Mounts: mount-commands.md
       - "The {} grammar": expand.md
       - Spec format: spec-format.md
-  - Concepts: concepts.md
+  - API:
+      - api/index.md
+      - Dat, DatManager, DatContainer: api/core.md
+      - Namespace: api/do.md
+      - Ledger: api/ledger.md
+      - Commands: api/just.md
+      - Dat tools: api/dat_tools.md
   - Design:
       - Architecture: DAT Architecture.md
       - Design notes: Design/DAT Design Notes.md
       - Summary: Design/DAT Summary.md
-      - Modules:
-          - api/index.md
-          - Dat, DatManager, DatContainer: api/core.md
-          - Namespace: api/do.md
-          - Ledger: api/ledger.md
-          - Commands: api/just.md
-          - Dat tools: api/dat_tools.md
   - About: about.md
 
 plugins:
@@ -88,3 +88,8 @@ exclude_docs: |
   DAT Demos/*/
   DAT Demos/jupytext.toml
   .obsidian/
+# Built so old links still land, but never in the nav: the one-line pages pointing at a module page's new
+# home under api/, and their empty folder page.
+not_in_nav: |
+  DAT Modules.md
+  DAT Modules/
