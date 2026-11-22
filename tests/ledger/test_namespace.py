@@ -1,4 +1,4 @@
-"""SVP 1500: ``expand`` is a ``Namespace`` method; the ledger namespace counts ``${unique:}``. SVP 1505 Q2: the display zone.
+"""``expand`` is a ``Namespace`` method; the ledger namespace counts ``${unique:}``; the display zone.
 
 ``ns.expand``, ``manager.ns.expand`` and ``rev.ns.expand`` each resolve through their own names; on a ledger
 namespace ``${unique:}`` counts against the revision (a whole segment ``1, 2, 3``, a suffix ``"", _2, _3``), and

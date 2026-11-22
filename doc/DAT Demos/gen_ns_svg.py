@@ -182,7 +182,7 @@ P('<rect x="830" y="236" width="160" height="56" fill="#fff" stroke="#222" strok
 mono(910, 276, ".ns", 30, fill="#000", bold=True, anchor="middle")
 P('<path d="M990,252 H1062 V590" fill="none" stroke="#222" stroke-width="1.5"/>')
 mono(1026, 244, "load", 13, fill="#000", bold=True, anchor="middle")
-for y, v in ((500, "2.7.1"), (570, "2.7.2")):          # a mounted name starts mnt. (1467 Q14); the box fits it
+for y, v in ((500, "2.7.1"), (570, "2.7.2")):          # a mounted name starts mnt.; the box fits it
     P(f'<rect x="780" y="{y}" width="264" height="40" fill="#fff" stroke="#222" stroke-width="1.5"/>')
     mono(790, y + 24, f"<Fn mnt.plane.measure.length@{v}>", 11.5, fill="#555")
     arrow(f"M1062,{y+20} H1046")

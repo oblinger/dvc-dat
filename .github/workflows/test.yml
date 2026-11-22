@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # the install tiers (1519 R4): base (pyyaml), expand (omegaconf), all (every extra)
+        # the install tiers: base (pyyaml), expand (omegaconf), all (every extra)
         python-version: ["3.11", "3.14"]
         tier: [all]
         include:
@@ -36,13 +36,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
       - uses: extractions/setup-just@v2     # `just run`, `x` and the ledger-just notebook
-      - uses: ./.github/actions/ffmpeg   # Video (SVP 249)
+      - uses: ./.github/actions/ffmpeg   # Video
       - run: uv sync --locked ${{ matrix.tier == 'all' && '--all-extras' || matrix.tier == 'expand' && '--extra expand' || '' }}
       - run: uv run --no-sync python -m pytest -q -n auto --dist loadgroup
 
   # One process, in collection order: a test that leaves process-wide state behind (the default
   # `Dat.manager`, the working directory, an environment variable) breaks a later one only here; the
-  # parallel run above spreads them across workers and hides it (SVP 1546).
+  # parallel run above spreads them across workers and hides it.
   sequential:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -53,12 +53,12 @@ jobs:
           python-version: "3.11"
           enable-cache: true
       - uses: extractions/setup-just@v2
-      - uses: ./.github/actions/ffmpeg   # Video (SVP 249)
+      - uses: ./.github/actions/ffmpeg   # Video
       - run: uv sync --locked --all-extras
       - run: uv run python -m pytest -q -p no:xdist
 
   # The `pg` cases skip without DVC_DAT_TEST_PG (no default address); here the whole suite runs with
-  # them against Postgres 16 (tests/pg_server.py reads it; port 5433 is refused there, SVP 1548).
+  # them against Postgres 16 (tests/pg_server.py reads it; port 5433 is refused there).
   postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -80,6 +80,6 @@ jobs:
           python-version: "3.11"
           enable-cache: true
       - uses: extractions/setup-just@v2
-      - uses: ./.github/actions/ffmpeg   # Video (SVP 249)
+      - uses: ./.github/actions/ffmpeg   # Video
       - run: uv sync --locked --all-extras
       - run: uv run python -m pytest -q -n auto --dist loadgroup

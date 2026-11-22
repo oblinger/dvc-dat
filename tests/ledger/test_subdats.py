@@ -1,4 +1,4 @@
-"""SVP 241: a dat in a dat is a repo in a repo. The subdat is out of its parent's bytes and hashes, seals with
+"""A dat in a dat is a repo in a repo. The subdat is out of its parent's bytes and hashes, seals with
 the parent as a value of its own, named ``<parent>/<relpath>`` and reached by that name alone."""
 
 import json
@@ -313,7 +313,7 @@ def test_naming_an_unnamed_parent_names_its_tree_and_unnaming_unnames_it(L, tmp_
     assert Ref(L.at(), "run/G1/viz").hash is None
 
 
-# -- copy follows the subdats (SVP 252) ---------------------------------------------------------------------------
+# -- copy follows the subdats ---------------------------------------------------------------------------
 
 def published(path: Path) -> Dat:
     """A saved dat at ``path`` holding ``result.json``, a ``run/`` subdat and the ``viz/`` subdat."""

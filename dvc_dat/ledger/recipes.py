@@ -1,10 +1,10 @@
 """The ledger's just verbs: `python -m dvc_dat.ledger.recipes <verb> [args]`.
 
 `values`, `value`, `history`, `why`, `set`, `index`, `bump`, `pin`, `rerun` and `reduce`, the
-recipes `dvc_dat.just` ships beside `run` and `mounts` (SVP 1465 Q1 (A)); a project
+recipes `dvc_dat.just` ships beside `run` and `mounts`; a project
 that does not import that file trampolines to this module. Each verb is one
 ledger call; running a function or a spec is not here but `just run`, the one
-way to run, except `reduce`, a reduce function's own call (SVP 242). What a Python caller spells out the verb supplies: the ledger
+way to run, except `reduce`, a reduce function's own call. What a Python caller spells out the verb supplies: the ledger
 (`Ledger()`: `DAT_LEDGER`, else the nearest `.datconfig.yaml`'s `default:`),
 `by=human:$USER`, `confirm=` (a typed `yes`), the checkout's packages on
 `sys.path` (`why`, `bump <module>`), short kind names, hash prefixes, and
@@ -63,7 +63,7 @@ def short_kind(rev, name):
 
 
 def short(subject):
-    """A subject as a value prints it (DAT 1036): a 64-hex hash as ``#`` + its first 8, else as is."""
+    """A subject as a value prints it: a 64-hex hash as ``#`` + its first 8, else as is."""
     if len(subject) == 64 and all(c in "0123456789abcdef" for c in subject):
         return "#" + subject[:8]
     return subject
@@ -105,9 +105,9 @@ def history(args):
         if row.subject == args[0]:
             obj = short(row.object) if isinstance(row.object, str) else row.object
             if row.predicate in TIME_PREDICATES and isinstance(row.object, str):
-                obj = rev.show_time(row.object)       # stored UTC, printed in the display zone (SVP 1505 Q2)
+                obj = rev.show_time(row.object)       # stored UTC, printed in the display zone
             sign = "" if row.added else "-"
-            by = rev[row.rev.tx, "db/by"]       # a str, or a JSON dict printed canonically (DAT 1024)
+            by = rev[row.rev.tx, "db/by"]       # a str, or a JSON dict printed canonically
             by = by if isinstance(by, str) else json.dumps(by, sort_keys=True, separators=(",", ":"))
             print(f"{row.rev.id:>3}  {by:<10} {sign + row.predicate:<10} {obj}")
 
@@ -152,7 +152,7 @@ def why(args):
 
 
 def reduced_from(rev, subject):
-    """A reduce step's line (SVP 242): the entries it merged and the inputs it added; ``None`` for any other value."""
+    """A reduce step's line: the entries it merged and the inputs it added; ``None`` for any other value."""
     from .fn import reduce_sources
 
     rfrom = rev.get(subject, "db/reduce/from")
@@ -229,7 +229,7 @@ def bump_recipe(args):
 
 
 def pin_recipe(args):
-    """`pin VALUE [recursive=true] [rerun=true]`: tag and push the value's commit, write the rows (SVP 250)."""
+    """`pin VALUE [recursive=true] [rerun=true]`: tag and push the value's commit, write the rows."""
     import_checkout()                       # the checkout the tag is made in is found by discovery
     name, kw = args[0], parse(args[1:])
     bad = set(kw) - {"recursive", "rerun"}
@@ -245,7 +245,7 @@ def pin_recipe(args):
 
 
 def reduce_recipe(args):
-    """`reduce NAME over=A,B,C [k=v ...]`: `rev.reduce` at the head, then the step's line (SVP 242)."""
+    """`reduce NAME over=A,B,C [k=v ...]`: `rev.reduce` at the head, then the step's line."""
     import_checkout()                       # an installed function resolves in the checkout
     if not args:
         sys.exit("reduce NAME over=A,B,C [k=v ...]")
@@ -262,7 +262,7 @@ def reduce_recipe(args):
 
 
 def rerun_recipe(args):
-    """`rerun VALUE`: run the pinned function again at its tag and compare the hash (SVP 250)."""
+    """`rerun VALUE`: run the pinned function again at its tag and compare the hash."""
     import_checkout()
     out = Ledger().at().rerun(args[0])
     print(f"{args[0]}: {out.outcome} at {out.tag} ({out.hash[:12]} vs {out.expected[:12]})")

@@ -1,4 +1,4 @@
-"""``Code``: the code a function is loaded from, at a version, as a ``Value`` (DAT 1037).
+"""``Code``: the code a function is loaded from, at a version, as a ``Value``.
 
 One object whether the function is installed in the ledger's own Python environment or mounted from a
 checkout (``code.sandboxed``). Only the snapshot has identity; a function is a name looked up inside it
@@ -10,12 +10,12 @@ installed code), ``commit`` (the checkout's at load), ``lock`` (the blob id of t
 ``uv.lock``), ``sandboxed``, ``version`` and ``package`` (the dotted root whose declared version it is, or
 ``None``). The version is a name over the hash, never the identity, and the commit is a result's
 ``code/<repo>`` dependency item, so neither moves the hash. ``decode`` gives back that identity, and the
-description only as far as the name it is loaded by says (SVP 1543). Its name is
+description only as far as the name it is loaded by says. Its name is
 ``<unit>@<version>``: the unit is the mount prefix for mounted code (``plane``, ``algs.ocr``) and the
 function's top-level package for installed code (``geometry``). Immutable: accessors only.
 
 The version is read as a module attribute after import, never parsed from source, and a declared
-version counts only from a clean checkout (DAT 1043): when the checkout holding the code has modified
+version counts only from a clean checkout: when the checkout holding the code has modified
 tracked files, the version is ``<commit 8>+dirty`` whatever ``__version__`` says (mounted: the last
 commit that touched the loaded files, else HEAD; installed: the checkout's HEAD). Clean, mounted: the root
 package's ``__version__``; else the last commit that touched the loaded files (8 hex, ``+dirty`` when one
@@ -112,7 +112,7 @@ class Code(Value):
 
     @property
     def package(self) -> Optional[str]:
-        """The dotted root whose declared version ``version`` is (DAT 1044): the unit (``plane``,
+        """The dotted root whose declared version ``version`` is: the unit (``plane``,
         ``demo_game.etl``, ``geometry``), the ``<package>`` of the ``db/repo/<repo>/<package>`` clock a clean
         run moves; ``None`` when the version came from a commit or the hash (or a dirty checkout)."""
         return self._manifest["package"]
@@ -135,7 +135,7 @@ class Code(Value):
         """The ``Code`` whose identity ``src`` holds: equal to the one encoded, so it encodes to the same bytes.
 
         Equal means the same identity (``modules`` and the mounts hash), as for ``hash``: the description is not
-        in the bytes, so it does not survive a decode beyond what its name says (SVP 1543). Loaded by its name
+        in the bytes, so it does not survive a decode beyond what its name says. Loaded by its name
         ``<unit>@<version>``, the unit and version are restored; else the unit is ``code`` and the version
         ``#`` + 8 hex of the hash, the ladder's last rung. ``sandboxed`` is whether a mounts hash is held;
         ``mounts`` is empty and ``commit``, ``lock`` and ``package`` are ``None``.

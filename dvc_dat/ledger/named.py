@@ -1,4 +1,4 @@
-"""``ledgers`` and ``L``: the project's ledgers by name, and the active one (SVP 239).
+"""``ledgers`` and ``L``: the project's ledgers by name, and the active one.
 
     from dvc_dat import L, dat, ledgers
     ledgers.games.at()           # a ledger registered on root, by name
@@ -7,7 +7,7 @@
     ledgers["tmp"] = Ledger(p)   # a ledger by hand, for this process
     L.at()                       # the active ledger: DAT_LEDGER, else the config's default:
     dat.at("do26@512")           # a revision on any registered ledger
-    dat.load("do26@512:run/G1")  # a value by the global reference <ledger>@<rev>:<name-or-sha> (SVP 248)
+    dat.load("do26@512:run/G1")  # a value by the global reference <ledger>@<rev>:<name-or-sha>
 
 **Root, the one list.** ``.datconfig.yaml`` names one ledger, ``root:`` (a folder relative to the file, or a DSN);
 without it the root is a SQLite folder under the first dat folder, made on first use, so a project that never asks a
@@ -31,12 +31,12 @@ import. A checkout with neither imports it fine and raises the one-line ``Ledger
 is the ``Head`` of the real handle, the same handle ``ledgers.<name>`` gives for that ledger; ``repr(L)`` names it, or
 says why it is unresolved. See [Many ledgers][many-ledgers].
 
-In a sandbox worker (SVP 1521 Q3 (A)) ``ledgers`` is the caller's view, shipped on the request
+In a sandbox worker ``ledgers`` is the caller's view, shipped on the request
 (``shipped_section``, ``adopt_section``): its names as the caller has them, or, when the caller never read root, the
 root's location, read there on the first name asked. Every handle it gives is read-only; a body's
 ``ledgers.<name>``, ``dat.at`` and ``dat.load`` all come through it.
 
-**The read guard** (SVP 1596): ``register_read_guard(guard)`` makes ``guard(name)`` run before ``ledgers[name]``,
+**The read guard**: ``register_read_guard(guard)`` makes ``guard(name)`` run before ``ledgers[name]``,
 ``ledgers.<name>``, ``dat.at("<name>@<rev>")`` and ``dat.load("<name>@<rev>:…")`` open the ledger ``name``; it refuses
 by raising, and its exception is the caller's. One guard per process (registering again replaces it; ``None``
 removes it). It crosses to a sandbox worker by its import path (``module:qualname``) and is imported there at the
@@ -67,7 +67,7 @@ from .ledger import CONFIG, ENV, ROOT, Ledger, Target, _find, _is_name, _target,
     root_target
 from .backends import is_uri
 
-#: The registry's subject prefix and predicates on root (SVP 1516): ``ledger/<name> ledger/location <where>``.
+#: The registry's subject prefix and predicates on root: ``ledger/<name> ledger/location <where>``.
 REGISTRY = "ledger/"
 LOCATION = "ledger/location"
 DROPPED = "ledger/dropped"
@@ -81,7 +81,7 @@ Section = Optional[Dict[str, Any]]
 _worker: Optional[Tuple[Section, Any]] = None
 
 
-#: The read guard (SVP 1596): called with a ledger's name before a named open; ``None``, none. In a sandbox worker it is
+#: The read guard: called with a ledger's name before a named open; ``None``, none. In a sandbox worker it is
 #: imported from ``_guard_ref`` at the first named open.
 _guard: Optional[Callable[[str], Any]] = None
 #: The guard's import path, ``module:qualname``: what crosses to a sandbox worker.
@@ -366,7 +366,7 @@ class Ledgers(MutableMapping):
     ``del ledgers[name]`` and ``ledgers[name] = Ledger(...)`` change this process's view only, never the registry
     (``just create ledger`` writes that). A named handle asserts no ``mounts:``; only the active ledger does. In a
     sandboxed body it is the caller's view, and every handle is read-only (DAT Ledger § Another ledger from a
-    sandboxed body, SVP 1521).
+    sandboxed body).
     """
 
     def __getitem__(self, name: str) -> Ledger:
@@ -500,7 +500,7 @@ def _ledger_of(default: Any) -> Ledger:
 
 def at(ref: Any, default: Any = None) -> Any:
     """The plain ``Rev`` ``ref`` names: ``<ledger>@<rev>`` on any registered ledger; a bare revision on ``default``
-    (a ``Ledger`` or a name; None: the active ledger). SVP 248: ``ledger.at(rev)`` works on that ledger alone."""
+    (a ``Ledger`` or a name; None: the active ledger). ``ledger.at(rev)`` works on that ledger alone."""
     text = str(ref)
     if "@" in text:
         return rev_named(text)

@@ -1,5 +1,5 @@
-"""DAT 1038: a dat is a value. The core ``Dat`` seals, loads and is found with no subclass; ``rev.run`` of
-a spec makes, runs and seals one through the ledger, memoised (DAT 1046: one ``run``)."""
+"""A dat is a value. The core ``Dat`` seals, loads and is found with no subclass; ``rev.run`` of
+a spec makes, runs and seals one through the ledger, memoised (one ``run``)."""
 
 import os
 
@@ -127,7 +127,7 @@ def test_rev_run_kwargs_fork_the_spec_and_path_names_it(coded, world):
 
 
 def test_rev_run_fills_the_name_and_seals_the_preds(coded, world):
-    """SVP 1508, 1519 (Dan 2026-11-07): the spec's own ``dat.kwargs`` are its defaults, the call's keywords over them
+    """The spec's own ``dat.kwargs`` are its defaults, the call's keywords over them
     key by key; they fill ``dat.name`` and ``dat.preds``; the preds are rows on the sealed value; the memo key keeps
     the preds' template, not their expansion, and the merged kwargs."""
     pytest.importorskip("omegaconf")
@@ -218,7 +218,7 @@ def test_a_ledger_project_gets_the_ledgers_do_and_a_plain_one_the_plain_do(tmp_p
 
 
 def test_a_path_template_counts_a_whole_segment_through_rev_ns(coded, world):
-    """SVP 1500: ``dat.name``'s ``${unique:}`` on a ledger run is ``rev.ns.expand``'s counter."""
+    """``dat.name``'s ``${unique:}`` on a ledger run is ``rev.ns.expand``'s counter."""
     spec = {"dat": {"do": "ledger_kinds.build_table", "name": "tables/${unique:}", "kwargs": {"n": 12, "start": 1}}}
     assert str(coded.at().run(spec, n=5)) == "tables/1"
     assert str(coded.at().run(spec, n=6)) == "tables/2"

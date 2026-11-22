@@ -1,4 +1,4 @@
-"""The in-process leg: N ``Ledger`` handles on one ledger, M threads across them, one flipper (SVP 1468, R0001).
+"""The in-process leg: N ``Ledger`` handles on one ledger, M threads across them, one flipper.
 
 The multiprocess harness (``harness.py``) gives every process one handle. This leg opens ``--handles``
 handles on one ledger in one process and runs ``--threads`` threads over them (thread ``j`` on handle

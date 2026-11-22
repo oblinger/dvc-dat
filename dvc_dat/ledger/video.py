@@ -1,12 +1,12 @@
 """``Video``: a video as a ledger value, a lazy handle over a source that is read only where an operation needs it
-(SVP 249).
+.
 
 A ``Video`` holds a source, a URL (``gs://…``, ``https://…``, anything ``fsspec`` opens), a local file or frames in
 memory, and its stored form is a folder of segments plus a manifest. Sealing never re-encodes a source: it splits
 the file at its keyframes through one ``ffmpeg`` process, keeping the codec and the audio, and stores each segment
 as a part, never holding the video whole in memory; a loaded ``Video`` reads its manifest alone, and ``frame``,
 ``frames``, ``clip``, ``path`` and ``iter`` fetch the segments they cover, once, into the local art store. Any
-representation goes on any ledger, and changing one is an explicit ``convert``, which gives a new value (SVP 1557).
+representation goes on any ledger, and changing one is an explicit ``convert``, which gives a new value.
 
 ``ffmpeg`` and ``ffprobe`` must be on ``PATH`` to seal or read one; a URL source needs ``fsspec`` (the ``video``
 extra) and the filesystem package its scheme names (``gcsfs`` for ``gs://``).
@@ -123,7 +123,7 @@ def _listing(parts: List[Tuple[Path, Fraction, Fraction, Fraction]], dest: Path)
     """An ``ffmpeg`` concat listing of ``parts``, each ``(path, video start, from, to)``: the file's own timestamps
     start at its video's start, and it covers ``[from, to)`` seconds of the joined video. Without the two the concat
     demuxer starts each file at its earliest stream and advances by its longest, so an audio packet running past
-    a segment's last frame, or a first segment's B-frame delay, moves every later frame (SVP 249, 2026-11-11).
+    a segment's last frame, or a first segment's B-frame delay, moves every later frame.
     The ends are rounded to microseconds, the listing's unit, never the lengths, so the rounding never adds up."""
     quote = chr(39) + chr(92) + chr(39) + chr(39)
     dest.write_text("".join(f"file '{str(p).replace(chr(39), quote)}'\ninpoint {_time(_us(start))}\n"
@@ -167,7 +167,7 @@ def _spool(url: str, dest: Path) -> None:
 
 
 class Video(Value):
-    """A video: a handle over a source, stored as segments plus a manifest, read lazily (SVP 249).
+    """A video: a handle over a source, stored as segments plus a manifest, read lazily.
 
     Made from a source with ``Video.from_url``, ``Video.from_path`` or ``Video.from_frames``; loaded from a ledger
     as any value (``rev.load(name)``), and then it holds only its manifest. ``frame(n)``, ``frames(a, b)``,
@@ -181,7 +181,7 @@ class Video(Value):
     folder's content manifest, ``{"files": {relpath: sha256}}`` in canonical JSON, a ``Dat``'s shape, so two videos
     with the same segments have one hash and a segment two videos share is stored once.
 
-    **Sealing keeps what it is given** (SVP 1557). A source's packets are copied, video and every audio stream, and
+    **Sealing keeps what it is given**. A source's packets are copied, video and every audio stream, and
     split at the keyframe at or after each ``SEGMENT_SECONDS``; nothing is decoded, on any ledger. Only frames in
     memory, which have no codec to keep, are encoded (H.264, yuv420p, constant rate). ``convert`` is the one way to
     change a video's representation.

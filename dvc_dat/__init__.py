@@ -8,7 +8,7 @@
     Dat.manager = DatManager(dat_folders=["/work"])   # replaces the default world
     ns = Dat.ns                              # the namespace: ns.load, ns.mount, ns.mounts()
 
-``import dvc_dat`` loads the ledger, ``L``, ``ledgers`` and ``dat``; the classes load on first use (1519 R1). The
+``import dvc_dat`` loads the ledger, ``L``, ``ledgers`` and ``dat``; the classes load on first use. The
 package exports four classes, the two ledger handles, `L` (the active
 ledger) and `ledgers` (the project's ledgers by name, `ledgers.record`), and `dat`,
 the decorators (`@dat.fn`, `@dat.reduce_fn`, `@dat.warm`, `@dat.command`); the

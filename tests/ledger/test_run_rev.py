@@ -1,4 +1,4 @@
-"""SVP 1521: a dat's run function sees the revision it was run against, and a run records every value and run it
+"""A dat's run function sees the revision it was run against, and a run records every value and run it
 reaches through any ``Rev``, on any ledger.
 
 ``dat.run_rev`` is ``<ledger>@<rev>`` in the run sub-dat's results; ``dat.at`` the ``Rev`` it names, recording during
@@ -187,7 +187,7 @@ def test_a_read_on_another_ledger_is_an_item_with_ledger_rev_name_and_hash(coded
 
 
 def test_a_foreign_item_survives_the_ledger_and_is_in_no_hit_test(coded, games):
-    """Q2 (A): a name moving on another ledger does not invalidate a memo hit."""
+    """A name moving on another ledger does not invalidate a memo hit."""
     rev = homed(coded).at()
     a = rev.run("ledger_kinds.reads_foreign", where=str(games.path), name="G1")
     n = ledger_kinds.CALLS["reads_foreign"]
@@ -250,7 +250,7 @@ def test_a_thread_the_body_started_reads_for_the_run(coded, games):
 
 
 def test_a_thread_started_outside_any_run_reads_for_no_run(coded, games):
-    """SVP 1549: a read in a thread no body started joins no run, even while another thread's run is open.
+    """A read in a thread no body started joins no run, even while another thread's run is open.
 
     The interleaving is forced: one thread holds its run open inside the body; a second thread, started by the
     test, reads a value on another ledger meanwhile. That read is the second thread's own; the held run records
@@ -278,7 +278,7 @@ def test_a_thread_started_outside_any_run_reads_for_no_run(coded, games):
 
 
 def test_a_pool_made_outside_the_run_reads_for_the_run_that_hands_it_work(coded, games):
-    """SVP 1551: a read on a pool thread started before the run, made for work the body submitted, is the run's.
+    """A read on a pool thread started before the run, made for work the body submitted, is the run's.
 
     The pool's thread exists before the run opens (its first task runs outside every run), so the run did not
     start it. Its read through a plain ``Rev`` is a ``foreign:`` item of the run; its read through the run's own
@@ -305,9 +305,9 @@ def test_a_pool_made_outside_the_run_reads_for_the_run_that_hands_it_work(coded,
 
 
 def test_a_pool_thread_a_run_started_reads_for_whoever_hands_it_work(coded, games):
-    """SVP 1551: the run travels with the work, not the thread. A pool's thread started inside one run (its first
+    """The run travels with the work, not the thread. A pool's thread started inside one run (its first
     task) and handed work by a thread outside every run, while that run is still open, reads for no run; under
-    2.65.1 it carried the run's mark and the read joined the open run (the SVP 1549 bug by another road)."""
+    2.65.1 it carried the run's mark and the read joined the open run (the thread-read bug above by another road)."""
     import threading
     from concurrent.futures import ThreadPoolExecutor
 

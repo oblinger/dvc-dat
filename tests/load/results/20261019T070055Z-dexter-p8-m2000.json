@@ -9,7 +9,7 @@
   "sqlite": "3.53.1"
  },
  "config": {
-  "ledger": "/Users/oblinger/t541-load/runs/ledger-p8",
+  "ledger": "/tmp/load/runs/ledger-p8",
   "transactions": 2000,
   "seed": 0,
   "lock": 10.0,

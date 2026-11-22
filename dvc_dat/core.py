@@ -3,7 +3,7 @@
 A Dat is a folder carrying a `_spec_.yaml` that is a complete, argumentless recipe
 for itself, plus a `_result_.yaml` holding what running it produced.  The namespace
 (`dvc_dat.do`) names specs; this module stores and loads them.  A Dat is also a
-ledger `Value` (DAT 1038): its folder is its bytes, by the folder codec below, so
+ledger `Value`: its folder is its bytes, by the folder codec below, so
 `dat.seal(t)` saves it and `rev.load(name)` brings it back with no subclass.
 """
 
@@ -105,8 +105,8 @@ _DEFAULT_ART_FOLDER = "art"           # beside the dat folder, never inside it
 
 
 def _ledger_namespace(config_path: Optional[Path], values: Dict[str, Any]) -> bool:
-    """Whether the project's names are its active ledger's `db/mount` rows (DAT 1046): `namespace: ledger`, the
-    one switch (SVP 239)."""
+    """Whether the project's names are its active ledger's `db/mount` rows: `namespace: ledger`, the
+    one switch."""
     mode = values.get("namespace")
     if mode is None:
         return False
@@ -193,7 +193,7 @@ DAT_DEPENDENCIES = "dat.dependencies"  # result: every dat and artifact the run 
 DAT_SHA256 = "dat.sha256"              # result: the dat's content hash, stamped by save()
 _HASH_PLACEHOLDER = "excluded"         # what dat.sha256 reads while the dat is hashed
 DAT_HASH = "dat.hash"                  # result: `functional` since 3.0 -- the rule dat.sha256 follows
-HASH_FUNCTIONAL = "functional"         # ... name and run/ left out; the only rule (SVP 1467 Q9)
+HASH_FUNCTIONAL = "functional"         # ... name and run/ left out; the only rule
 DEP_MANUAL = "$MANUAL"                 # dependency of a dat sealed without a run
 DEP_UNSEALED = "unsealed"              # the hash recorded for a dat still open
 DAT_STANDING = "dat.standing"          # spec: a demand; results: what the last save earned
@@ -259,7 +259,7 @@ def _record_dat(dat: "Dat") -> None:
         return
     runner = stack[-1][1]
     if _inside(dat.get_path(), runner.get_path()):
-        return                          # a subdat is the running dat's output, never its input (SVP 241)
+        return                          # a subdat is the running dat's output, never its input
     standing = dat._standing()
     sha256 = dat._sha256()
     _record(dat.get_path_name(),
@@ -278,7 +278,7 @@ def _inside(path: Union[str, Path], folder: Union[str, Path]) -> bool:
 def is_subdat_dir(path: Union[str, Path]) -> bool:
     """Is the folder `path` a dat: does its `_spec_.yaml` or `_spec_.json` name `dat.kind`?  Inside another
     dat's folder such a folder is a subdat, like a git repo inside a git repo: out of the enclosing dat's
-    bytes and both its hashes, and sealed as a value of its own (SVP 241)."""
+    bytes and both its hashes, and sealed as a value of its own."""
     path = os.fspath(path)
     if not (os.path.exists(os.path.join(path, SPEC_YAML)) or os.path.exists(os.path.join(path, SPEC_JSON))):
         return False
@@ -354,7 +354,7 @@ def _hash_payload(folder: str, payload: str) -> str:
 def _hash_dat(folder: Union[str, Path], results: Dict[str, Any]) -> str:
     """`"sha256:<hex>"` over a dat's folder by the functional rule, the only one
     (`dat.hash: functional`, stamped by every save, names it; a hash a 2.x save
-    stamped does not verify, SVP 1467 Q9).
+    stamped does not verify).
 
     Every file but its subdats (`is_subdat_dir`: `run/` and any other dat in
     its folder tree) and `dat.name` -- a subdat is a value of its own, and the
@@ -450,7 +450,7 @@ DatType = TypeVar("DatType", bound="Dat")
 
 
 def check_preds(spec: Dict[str, Any]) -> None:
-    """Refuse an expanded spec's `dat.preds` (SVP 1508) unless it is a mapping of pred names (str, not
+    """Refuse an expanded spec's `dat.preds` unless it is a mapping of pred names (str, not
     `db/...`) to strings, numbers or bools."""
     preds = Dat.get(spec, DAT_PREDS, None)
     if preds is None:
@@ -553,13 +553,13 @@ class DatManager:
 
         Default the working directory; a file path names the config file itself. Precedence, lowest to highest: the
         file, then `DAT_FOLDERS` (one folder, not split) / `DAT_ART_FOLDER` in the environment; there is no override
-        file (SVP 239), and one beside the config is `ValueError`, as is a removed key (`ledger:`, `ledgers:`) naming
+        file, and one beside the config is `ValueError`, as is a removed key (`ledger:`, `ledgers:`) naming
         what replaces it. Relative folders resolve against the file's folder, which goes first on `sys.path`; with no file
         they resolve against `start`. `art_folder` defaults to `art/` beside the file, a sibling of `data/`; `index:`
         moves the store's index file. An unknown key, or a malformed value, is `ValueError`. `ns` as in the
         constructor.
 
-        `namespace: ledger`, the one switch (SVP 239), makes the namespace the active ledger's (DAT 1046): `ns` is a
+        `namespace: ledger`, the one switch, makes the namespace the active ledger's: `ns` is a
         `LedgerNamespace`, its names the ledger's `db/mount` rows at the head, and `mount` refused; an adopted `ns`
         that is not one is not kept. `root:` and `default:` alone keep the plain namespace.
 
@@ -635,7 +635,7 @@ class DatManager:
         Merge `dat.base`, merge `kwargs` into `dat.kwargs`, run `validate_spec`, place it, write `_spec_.yaml` with
         its keys sorted, so equal specs give the same bytes (no `_result_.yaml` is written). `spec` may be a dict or a
         dotted name loaded through `ns`. `kwargs` are data
-        (1467 Q2 (A)): they reach `dat.kwargs` as given, `${` and all (`spec` and `path` are this call's own names,
+        they reach `dat.kwargs` as given, `${` and all (`spec` and `path` are this call's own names,
         never keywords). The folder is `path` if given, else the spec's `dat.name` template, else
         `anonymous/Dat${unique:}`, under the first dat folder; `dat.target_exists` says what happens when the folder is
         already there -- `FileExistsError` by default, and `use` returns the dat already there. Every `${…}` in the
@@ -644,7 +644,7 @@ class DatManager:
         `dat.preds` (a mapping) is resolved with the rest, and each value must come out a string, number or bool:
         they are the dat's own preds, carried onto the value when it is sealed. The resolved spec is what is written,
         except `dat.name`: the spec stores the path template as given (`path`, else the spec's own), never the path it
-        resolved to (F447 Q36); the folder's path is the dat's name. A `dat.name` in the `{…}` grammar retired in 3.0
+        resolved to; the folder's path is the dat's name. A `dat.name` in the `{…}` grammar retired in 3.0
         (`{YYYY}`, `{unique}`, `{a.b}`) is `ValueError` naming its new spelling, and so is a `dat.defaults` node
         (gone in 3.0: the spec's own `dat.kwargs` are its defaults, the call's keywords over them key by key, and the
         spec written holds the merged `dat.kwargs`). `dat.kind` is written as the class's dotted `module.qualname`.
@@ -675,7 +675,7 @@ class DatManager:
         template = path
         refuse_old_name(template)
         if "defaults" in spec["dat"]:
-            raise ValueError("dat.defaults is gone (3.0, SVP 1519): write the value under dat.kwargs, "
+            raise ValueError("dat.defaults is gone (3.0): write the value under dat.kwargs, "
                              "or under any plain node and read it by its path")
         target_exists = Dat.get(spec, DAT_TARGET_EXISTS, "error")
         if target_exists == "overwrite" and path.lower() == "${cwd:}":
@@ -695,7 +695,7 @@ class DatManager:
         spec.pop(_NAME_KEY)
         check_preds(spec)
         if own is not None:
-            Dat.set(spec, DAT_NAME, own)            # the template, never its resolution (Q36)
+            Dat.set(spec, DAT_NAME, own)            # the template, never its resolution
         within = _within(os.path.realpath(path), self._dat_folders[0])
         if within:
             Dat.set(spec, DAT_NAME, template if "${" in template else self._get_path_name(path))
@@ -854,7 +854,7 @@ class DatManager:
         A URN not in the index is looked for in the dat folders, as `reindex()` does
         (each saved dat's stored hash, nothing re-hashed); the first dat holding it
         is keyed to it and found, so deleting one of two same-hash dats never strands
-        the other (1467 Q4 (A)). `KeyError` when none does; a name both hold is
+        the other. `KeyError` when none does; a name both hold is
         `ValueError`."""
         text = str(name)
         if text.startswith(URN_PREFIX):
@@ -1336,7 +1336,7 @@ class DatManager:
         return path
 
     def run(self, target: Any, /, *args: Any, **kwargs: Any) -> Any:
-        """Create a dat and run it, in this world: the one way to run a dat outside a ledger, fixed (2.35, DAT 1049).
+        """Create a dat and run it, in this world: the one way to run a dat outside a ledger, fixed (2.35).
 
         `target` is first loaded through `ns` when it is a name. A **spec** (a dict, or a dotted name that loads to
         one) is a template: `args` replace `dat.args`, `kwargs` merge into `dat.kwargs` (see `create`, which this is
@@ -1350,7 +1350,7 @@ class DatManager:
         dat when the spec has no `dat.do` -- as does `dat.target_exists: use` finding the dat already there. Saves
         nothing by itself; a `dat.save()` inside `fn` is answered with the seal when `fn` returns. A `Dat` is
         `TypeError`: a dat is run once, by the call that makes it; another run of its recipe is `run(dat.get_spec(),
-        ...)` (`run(dat.get_spec(), **kwargs)`), a new dat (SVP 1508). A sealed dat is `RuntimeError`, a non-callable
+        ...)` (`run(dat.get_spec(), **kwargs)`), a new dat. A sealed dat is `RuntimeError`, a non-callable
         `dat.do` `TypeError`, and a spec demanding `referenceable` is `RuntimeError` when the code is dirty or outside
         a git checkout. Every error is re-raised as `Exception("In <target>")` chained from the original. Every run in
         the world -- nested ones and a ledger's dat runs included -- is recorded this way; `dat.run` is the `run/`
@@ -1410,7 +1410,7 @@ class DatManager:
         if isinstance(fn, str):
             fn = self.ns.load(fn)
         from .ledger.fn import Fn
-        if isinstance(fn, Fn):                  # a ledger project's name for a function (DAT 1046)
+        if isinstance(fn, Fn):                  # a ledger project's name for a function
             if fn.kind != "dat":
                 raise TypeError(f"{DAT_DO} in {dat!r} is the ledger function {fn.name}; "
                                 f"rev.run({fn.name!r}, ...) runs it")
@@ -1471,7 +1471,7 @@ class DatManager:
         from .ledger.trace import current_run
         frame = current_run()
         dat.__dict__.pop("_at", None)
-        if frame is not None:                   # a run on a ledger: `dat.at` is its recording Rev (SVP 1521)
+        if frame is not None:                   # a run on a ledger: `dat.at` is its recording Rev
             Dat.set(run.get_results(), DAT_RUN_REV, frame.at)
             dat.__dict__["_at"] = frame.rev
         _write_run(run)
@@ -1545,7 +1545,7 @@ class DatManager:
 
     def _refuse_delete_on_a_ledger(self, what: str) -> None:
         """`TypeError` on a ledger project (its `ns` a `LedgerNamespace`, the test that refuses
-        `Dat.ns.mount`): a ledger only appends rows, so no delete can reclaim saved bytes (1467 Q15 (A))."""
+        `Dat.ns.mount`): a ledger only appends rows, so no delete can reclaim saved bytes."""
         from .ledger.namespace import LedgerNamespace
 
         if isinstance(self.ns, LedgerNamespace):
@@ -1558,7 +1558,7 @@ class DatManager:
         """`overwrite` never deletes a folder holding the working directory, a dat folder, the
         artifact folder or the config's folder: a name such as `.` or `..` expands to one. Nor
         one outside every dat folder and the artifact folder: an absolute name (or a `..`) may
-        place a dat anywhere, but overwrite deletes only inside the store (1467 Q13 (A))."""
+        place a dat anywhere, but overwrite deletes only inside the store."""
         real = os.path.realpath(path)
         for keep in (os.getcwd(), *self._dat_folders, self._art_folder, self._config_dir):
             if keep and _within(os.path.realpath(keep), real):
@@ -1630,7 +1630,7 @@ class Dat(Value, metaclass=_DatMeta):
     created, and `get_spec()` returns it as written.  `get_results()` is the
     mutable `_result_.yaml`.
 
-    A dat is a ledger `Value` (DAT 1038): its bytes are its folder's content
+    A dat is a ledger `Value`: its bytes are its folder's content
     manifest, `{"files": {relpath: sha256}}`, the files themselves going to the
     art store, so `dat.seal(t, name=...)` saves the folder of a saved dat and
     `rev.load(name)` rebuilds it, as a view in the ledger's data folder.  Its
@@ -1679,8 +1679,8 @@ class Dat(Value, metaclass=_DatMeta):
         """The dat already in the folder ``path``, its spec and results read from ``_spec_.yaml`` and ``_result_.yaml``.
 
         A value whose bytes are the folder's content manifest; each file reads as ``{}`` when absent. ``name`` is the
-        name a save gives it. ``Dat.create(spec=...)`` and ``Dat.load(name)`` make one through the dat manager ([DAT
-        Class API](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Design/DAT%20API/DAT%20Class%20API.md)).
+        name a save gives it. ``Dat.create(spec=...)`` and ``Dat.load(name)`` make one through the dat manager ([Dat,
+        DatManager, DatContainer](https://oblinger.github.io/dvc-dat/api/core/)).
         """
         if not isinstance(path, (str, Path)):
             raise TypeError(
@@ -1743,7 +1743,7 @@ class Dat(Value, metaclass=_DatMeta):
         Its results hold ``dat.run_at``, ``dat.run_time``, ``dat.host``, ``dat.pid``, ``dat.code``, ``dat.run_rev``
         (on a ledger) and ``dat.content``, and its ``work/`` is the run's scratch. ``None`` is also returned for a dat
         filled by hand, and for one loaded off a ledger with no ``run/`` in its folder: its run is a subdat, a value
-        of its own under the alias ``<name>/run``, placed by a load of that name and by nothing else (SVP 241). Loaded
+        of its own under the alias ``<name>/run``, placed by a load of that name and by nothing else. Loaded
         as a plain ``Dat``, outside the load cache.
 
         A run is not content: it is outside the dat's hash, and nothing may depend on it. So a run function reads the
@@ -1759,7 +1759,7 @@ class Dat(Value, metaclass=_DatMeta):
     def at(self) -> Any:
         """The ``Rev`` the dat's run was against, named by ``dat.run_rev`` (``<ledger>@<rev>``).
 
-        The ledger is named rather than fixed, since a run may be on any ledger (SVP 1521). During the run it is the
+        The ledger is named rather than fixed, since a run may be on any ledger. During the run it is the
         recording ``Rev``, so a read through it enters the entry's provenance and a memo hit stays sound; afterwards a
         plain one, its ledger the value's, else the one open under that name, else ``ledgers[name]`` (root's registry). A run
         function reads through it, and a result must not vary with the string ``dat.run_rev`` itself. A runtime
@@ -2063,20 +2063,20 @@ class Dat(Value, metaclass=_DatMeta):
         """`<Dat: tables/table12>`, its name in its dat folder.
 
         Once a value is sealed from it, its label as every value prints (`<Dat table/12>`,
-        `<Dat sealed #2db69ce1>`, DAT 1036).
+        `<Dat sealed #2db69ce1>`).
         """
         if self.sealed:
             return Value.__repr__(self)
         return f"<{type(self).__name__}: {self.get_path_name()}>"
 
-    # -- the value: preds and the folder codec (DAT 1038) ----------------------
+    # -- the value: preds and the folder codec ----------------------
 
     @property
     def preds(self) -> Dict[str, Any]:  # type: ignore[override]
         """Unsealed, the folder's facts (``_default_preds``); sealed, the read-only mapping the seal fixed.
 
         Unsealed, read afresh on each access and built from the scalar entries of the spec's ``dat.kwargs``, then the
-        scalar top-level entries of ``_result_.yaml`` other than ``dat:``, then the spec's ``dat.preds`` (SVP 1508; a
+        scalar top-level entries of ``_result_.yaml`` other than ``dat:``, then the spec's ``dat.preds`` (a
         later source wins a clash), under every pred written by hand, which wins. The names are the class's
         ``@ledger_class(preds=...)`` plus the folder's own; the ``dat:`` record of the results (dependencies,
         standing, sha256) is never a pred.
@@ -2097,7 +2097,7 @@ class Dat(Value, metaclass=_DatMeta):
 
     def _default_preds(self) -> Dict[str, Any]:
         """A dat's own preds: the scalar entries of its spec's `dat.kwargs`, then the scalar top-level
-        entries of `_result_.yaml` other than `dat:`, then its spec's `dat.preds` (SVP 1508), read from the
+        entries of `_result_.yaml` other than `dat:`, then its spec's `dat.preds`, read from the
         folder; a later source wins a clash."""
         spec, result = _read_folder(self._path)
         dat = spec.get("dat")
@@ -2459,7 +2459,7 @@ class _DatPreds(dict):
 def _holds(dest: Path, files: Dict[str, str], store: Any) -> bool:
     """Does the folder hold exactly these files with these hashes?  A file standing as `store.stamp` recorded it (same
     inode, size, mtime and ctime) is not re-hashed; any other is, and a folder found to hold them is stamped again. A
-    file that is its blob's own inode (a hardlink placed before SVP 1780) is not held, so the folder is placed anew
+    file that is its blob's own inode (a hardlink placed by an older release) is not held, so the folder is placed anew
     and the alias cut. A subdat placed inside it is not among them."""
     from .ledger.store import file_sha, stamp_holds
 

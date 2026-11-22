@@ -212,7 +212,7 @@ def _plan(L, sql, params):
 
 
 def test_pg_a_20kb_object_is_stored_and_found_by_object_equality(dsn):
-    """``quads_po`` and a ``db/index`` partial index hold ``md5(object)``, not the object (SVP 255 Q3): a
+    """``quads_po`` and a ``db/index`` partial index hold ``md5(object)``, not the object: a
     20 KB object commits, reads back whole, and an object-equality lookup finds it through the index."""
     L = Ledger(dsn, create=True)
     with L.transaction(by="t") as t:
@@ -259,7 +259,7 @@ def test_pg_migrate_rebuilds_the_object_indexes_and_is_idempotent(dsn):
 
 
 def test_pg_a_read_at_a_committed_revision_is_answered_once_then_from_memory(dsn):
-    """SVP 255: rows are only appended, a revision in one transaction, so a read at or below a top this store saw
+    """Rows are only appended, a revision in one transaction, so a read at or below a top this store saw
     committed never changes: its second asking is no round trip. A read above it, or through an open write
     transaction, always goes to the server; a later commit is seen at the new top."""
     L = Ledger(dsn, create=True)

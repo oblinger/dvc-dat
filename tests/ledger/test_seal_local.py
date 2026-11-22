@@ -1,4 +1,4 @@
-"""v.seal() with no target: identity fixed now, saved later by v.seal(t) or v.seal(L) (T543 Q4 (D))."""
+"""v.seal() with no target: identity fixed now, saved later by v.seal(t) or v.seal(L)."""
 
 import pytest
 
@@ -28,15 +28,15 @@ def test_seal_fixes_identity_and_writes_nothing(L):
 
 def test_a_save_carries_the_environment_of_the_seal(L, envbox):
     v = Plain(b"clip")
-    v.seal(provenance="human:dan")
+    v.seal(provenance="human:ann")
     envbox.code(commit="later99")
     s = v.seal(L, name="clip/1")
     held = Ref(L.at(), "clip/1")
     assert held.subject == s == v.subject and v.rev is not None
     assert v.dependencies["code/testrepo"] == "abc1234"
-    assert L.at()[s, "db/provenance"] == "human:dan"
+    assert L.at()[s, "db/provenance"] == "human:ann"
     assert L.at()[s, "db/sealed-at"] == v.sealed
-    assert L.at()[L.at().tx, "db/by"] == "human:dan"
+    assert L.at()[L.at().tx, "db/by"] == "human:ann"
 
 
 def test_changed_bytes_break_the_seal_unless_kept(L):

@@ -1,4 +1,4 @@
-"""Deep scan round 4 leans on the ledger (SVP 1467 Q9, Q12): a row read whose subject looks like another
+"""Deep scan round 4 leans on the ledger: a row read whose subject looks like another
 dependency item is checked as a row read; a memo key JSON would collapse into another call's is refused."""
 
 import pytest

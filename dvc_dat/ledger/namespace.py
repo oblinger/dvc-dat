@@ -1,7 +1,7 @@
-"""The ledger's namespace: a dotted name resolved through the ``db/mount`` rows at a revision (DAT 1046).
+"""The ledger's namespace: a dotted name resolved through the ``db/mount`` rows at a revision.
 
 ``resolve_name(rev, name)`` is ``rev.ns.load(name)``. A mounted name starts with
-the reserved segment ``mnt`` (1467 Q14 (B)): ``mnt.<prefix>...``, the segment
+the reserved segment ``mnt``: ``mnt.<prefix>...``, the segment
 stripped, is matched against the ``db/mount/<prefix>`` rows as of the rev,
 longest prefix first; under a mount the name is a
 path in the mount's tree in the checkout discovery reports for its ``db/repo``:
@@ -232,7 +232,7 @@ def mounted_commands(rev: "Rev") -> Iterator[Tuple[str, Dict[str, str], Path]]:
 
 
 class LedgerNamespace(Namespace):
-    """The namespace of a ledger (DAT 1046, 1051): names resolve through its ``db/mount`` rows.
+    """The namespace of a ledger: names resolve through its ``db/mount`` rows.
 
     ``rev.ns`` is the one at a revision, ``t.ns`` the one at a transaction's ``previous_rev``, and
     ``Dat.manager.ns`` in a project whose ``.datconfig.yaml`` names a ledger the one at the head
@@ -259,7 +259,7 @@ class LedgerNamespace(Namespace):
 
     def rev(self) -> "Rev":
         """The revision names resolve at: the one it was made for (a transaction's ``previous_rev``), else, as
-        the manager's namespace inside a run, the run's (SVP 1521, as the sandbox worker's), else the ledger's
+        the manager's namespace inside a run, the run's (as the sandbox worker's), else the ledger's
         head now."""
         if self._rev is not None:
             return self._rev
@@ -288,7 +288,7 @@ class LedgerNamespace(Namespace):
         return self.rev().ledger
 
     def _tz(self) -> Any:
-        """The display zone of this namespace's revision (``db db/timezone``, UTC with none; SVP 1505 Q2); a
+        """The display zone of this namespace's revision (``db db/timezone``, UTC with none); a
         transaction's is its snapshot at open's."""
         return (self._txn._snapshot() if self._txn is not None else self.rev()).timezone
 
@@ -334,7 +334,7 @@ class LedgerNamespace(Namespace):
         ``db/root`` and ``db/repo`` are written through ``t.update``; its names load as ``at`` names them,
         ``mnt.<prefix>...``. ``repo`` defaults to the project's own repository (``project_repo``). Only a
         transaction's namespace mounts; an ``at`` outside ``mnt.`` (``mnt`` alone included) is ``ValueError``
-        (1505 Q1 (A): nothing is prefixed for you)."""
+        (nothing is prefixed for you)."""
         if self._txn is None:
             raise TypeError("a ledger project names things through its db/mount rows (`mounts:` in "
                             ".datconfig.yaml, or t.ns.mount(at, root=...) in a transaction); "

@@ -190,7 +190,7 @@ class TestVerbs:
 
 class TestArguments:
     def test_keyword_values_are_json_else_the_text(self):
-        """DAT 1041: one k=v grammar; v is JSON, else the string exactly as typed."""
+        """One k=v grammar; v is JSON, else the string exactly as typed."""
         code, out, _ = dat("echo_args", "n=12", "x=1.5", "flag=true", "z=null", "ids=[1,2]",
                            'cfg={"a":1}', "start=2026-01-01", "name=foo", 'q="12"', "e=",
                            "nan=NaN", "y=yes")
@@ -204,7 +204,7 @@ class TestArguments:
         assert (code, out) == (0, "args=[7, True, [1, 2], 'x', 'bare', '2026-01-01'] kwargs={}")
 
     def test_colon_equals_is_no_notation(self):
-        """`k:=v` is gone (DAT 1041): it is not NAME=, so it is a fixed word, as typed."""
+        """`k:=v` is gone: it is not NAME=, so it is a fixed word, as typed."""
         assert dat("echo_args", "k:=3") == (0, "args=['k:=3'] kwargs={}", "")
 
     def test_arg_value_is_the_one_grammar(self):
@@ -257,7 +257,7 @@ class TestArguments:
         assert code == 0 and "dat.title='Quickie'" in out and "n=3" in out
 
     def test_a_dry_run_prints_the_resolved_spec(self):
-        """SVP 1138 Q1 (A): after the call, the spec the line would create -- its `dat.base` merged, the overrides
+        """After the call, the spec the line would create -- its `dat.base` merged, the overrides
         applied, resolved -- as YAML."""
         import yaml
         code, out, _ = dat("my_letters", "dat.title=Quickie", "n=3", "--dry-run")
@@ -371,7 +371,7 @@ class TestRun:
 
 
 class TestImportRoot:
-    """The config folder is the project's import root (T010)."""
+    """The config folder is the project's import root."""
 
     @staticmethod
     def _project(root: Path) -> Path:
@@ -404,7 +404,7 @@ class TestImportRoot:
 
 def make_ledger_project(root: Path, hand: str = "", targets: bool = True) -> None:
     """A project with a ledger: `root:`, `default: root` and `namespace: ledger` in the config and the package `proj` mounted on it
-    (`mounts:`, its db/mount rows: its names are the ledger's, DAT 1046), a main handing the line to
+    (`mounts:`, its db/mount rows: its names are the ledger's), a main handing the line to
     `cli_main`, and a justfile importing the generated commands."""
     from dvc_dat.ledger import Ledger
     (root / ".datconfig.yaml").write_text(
@@ -454,7 +454,7 @@ def make_ledger_project(root: Path, hand: str = "", targets: bool = True) -> Non
 
 @needs_just
 class TestLedgerRun:
-    """With `ledger:` in the config, `just run` is `rev.run` (F447 Q40 (A), DAT 1046)."""
+    """With `ledger:` in the config, `just run` is `rev.run`."""
 
     def test_a_function_runs_then_hits(self, tmp_path):
         make_ledger_project(tmp_path)
@@ -492,7 +492,7 @@ class TestLedgerRun:
         assert code == 2 and "nothing" in err
 
     def test_a_date_reaches_the_function_as_a_string(self, tmp_path):
-        """DAT 1041: `start=2026-01-01` was a YAML date, refused as not JSON-encodable."""
+        """`start=2026-01-01` was a YAML date, refused as not JSON-encodable."""
         make_ledger_project(tmp_path)
         code, out, err = run_x("mnt.proj.fns.span", "start=2026-01-01", "end=2027-01-01", "n=2",
                                "alias=year", cwd=tmp_path)
@@ -528,7 +528,7 @@ def make_dat_spec_project(root: Path) -> None:
 
 @needs_just
 class TestLedgerDatRun:
-    """With `ledger:` in the config, `just run <dat spec>` is `rev.run` of the spec (DAT 1038, 1046)."""
+    """With `ledger:` in the config, `just run <dat spec>` is `rev.run` of the spec."""
 
     def test_a_spec_runs_then_hits(self, tmp_path):
         make_dat_spec_project(tmp_path)
@@ -567,7 +567,7 @@ class TestLedgerDatRun:
 
 @needs_just
 class TestTargets:
-    """`.dat/targets.just`: one recipe per mounted `@command` (A64, A65, A67)."""
+    """`.dat/targets.just`: one recipe per mounted `@command`."""
 
     def test_run_writes_the_commands_and_skips_a_hand_recipe(self, tmp_path):
         make_ledger_project(tmp_path, hand="hand:\n    @echo hand\n")
@@ -622,7 +622,7 @@ def just(*args: str, cwd, stdin: str = None):
 
 @needs_just
 class TestLedgerVerbs:
-    """The ledger verbs shipped in `dvc_dat.just` (SVP 1465 Q1 (A)): each recipe is
+    """The ledger verbs shipped in `dvc_dat.just`: each recipe is
     `python -m dvc_dat.ledger.recipes VERB`, so a project importing the file has them."""
 
     def test_set_then_history(self, tmp_path):

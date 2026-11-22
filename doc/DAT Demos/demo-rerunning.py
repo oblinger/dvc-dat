@@ -97,7 +97,7 @@ sys.path.insert(0, str(repo_path))
 import clips  # noqa: E402,F401  (the environment finds the checkout through it)
 
 L = Ledger(scratch_path / "ledger", create=True)
-with L.transaction(by="human:dan", why="mount the code") as t:
+with L.transaction(by="human:ann", why="mount the code") as t:
     t.ns.mount("mnt.clips", root="clips", repo="clips-repo")
 RATE = "mnt.clips.rates.frame_rate"
 
@@ -125,11 +125,11 @@ def runs_of(fn_name: str = RATE) -> int:
 history = [("2025-11-20T12:00:00Z", "3000", "100"), ("2026-01-20T12:00:00Z", "3000", "120"),
            ("2026-03-20T12:00:00Z", "3600", "120"), ("2026-07-20T12:00:00Z", "3600", "100")]
 for stamp_text, frame_count, second_count in history:
-    with dated(stamp_text), L.transaction(by="human:dan", lock=10, why="a correction") as t:
+    with dated(stamp_text), L.transaction(by="human:ann", lock=10, why="a correction") as t:
         t["clip/C1", "frames"] = frame_count
         t["clip/C1", "seconds"] = second_count
         bump(t, "db")                             # a release: the ledger's version moves
-with dated("2026-08-20T12:00:00Z"), L.transaction(by="human:dan") as t:
+with dated("2026-08-20T12:00:00Z"), L.transaction(by="human:ann") as t:
     t.add("x", "note", "nothing about the clip")
     t.add("db", "db/tag", "summer-review")
 

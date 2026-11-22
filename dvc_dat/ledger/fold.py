@@ -1,14 +1,14 @@
 """The as-of fold: what the rows on one ``(subject, predicate)`` hold, by cardinality.
 
 Rows arrive in ``(rev, ord)`` order, ``ord`` the place in the transaction body
-(A50). ``one`` (the default): the latest ``add`` wins; re-adding the held
-object changes nothing, its revision included (A12); a ``remove`` of the held
+. ``one`` (the default): the latest ``add`` wins; re-adding the held
+object changes nothing, its revision included; a ``remove`` of the held
 object leaves nothing (a tombstone); a ``remove`` of any other changes
 nothing. ``many``: a set; each member at its earliest add not since removed,
 members in that order; re-adding a present member keeps its place, a remove
-then re-add moves it to the end (Q27).
+then re-add moves it to the end.
 
-An object stored as a ``spill:`` reference (SVP 1738) is the same object as its inline text (``codec.same``), so a
+An object stored as a ``spill:`` reference is the same object as its inline text (``codec.same``), so a
 remove or re-add written under another spill threshold still finds it.
 """
 

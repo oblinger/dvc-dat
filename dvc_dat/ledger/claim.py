@@ -1,4 +1,4 @@
-"""The reproducibility claim (SVP 251 Q2): how far a rerun of a function can be trusted, one ordered scale.
+"""The reproducibility claim: how far a rerun of a function can be trusted, one ordered scale.
 
 ``@dat.fn(reproducible=...)`` takes a level, ``"exact"`` (bit-identical), ``True`` (good enough, no need to save
 it), ``None`` (unknown, the default) or ``False`` (flaky, save it); a clause, a tuple of a level and the predicates

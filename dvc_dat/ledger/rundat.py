@@ -1,4 +1,4 @@
-"""``rev.run(target, **kwargs)``: one call for a ledger function and a dat (DAT 1038, 1045, 1046).
+"""``rev.run(target, **kwargs)``: one call for a ledger function and a dat.
 
 The target is resolved through the ledger's namespace (``rev.ns.load``): a
 ``@dat.fn`` comes back its ``Fn`` and is called with the kwargs as its keys.

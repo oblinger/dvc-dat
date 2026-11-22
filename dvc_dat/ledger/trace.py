@@ -3,24 +3,24 @@
 Items (Module § Value ``Dependencies``):
 
 ``code``
-    the ``db/code/<hash 16>`` subject of the code that ran (DAT 1037); holds when
+    the ``db/code/<hash 16>`` subject of the code that ran; holds when
     the function the ``fn`` item names resolves at the rev to the same subject
     (unsandboxed: the static import closure; sandbox: exactly the modules the
-    run loaded, re-hashed as they are now, on disk or installed, A38, Q37, Q39).
+    run loaded, re-hashed as they are now, on disk or installed).
 ``fn``
     the function's dotted name inside that code (``plane.measure.length``);
     holds beside a ``code`` item, which does the checking.
 ``code/<repo>``
     ``<commit 8>``; holds when the commit agrees with the environment's,
-    whatever the ``db/repo/<repo> db/commit`` row says (T543 Q7 (C); Q1: the
+    whatever the ``db/repo/<repo> db/commit`` row says (the
     commit is the pin). A label, not a subject. The version is not in the
-    item (T034); it stays readable from the ``db/repo/<repo>/<package>``
-    clocks at the revision (DAT 1044).
+    item; it stays readable from the ``db/repo/<repo>/<package>``
+    clocks at the revision.
 ``platform``
     the short tag ``<os>-<machine>-py<X.Y>`` of the platform it ran on; holds when the
     ledger's memo policy (``policy``, the ``(db, db/memo-policy)`` row at the top) reduces the
     stored record and the environment's to the same string, card and driver added under
-    a claim of ``exact`` (SVP 1474). (A sandboxed entry's third-party modules are in
+    a claim of ``exact``. (A sandboxed entry's third-party modules are in
     ``code``, each by its bytes or its distribution's ``RECORD``; there is no
     whole-``uv.lock`` item.)
 ``platform/record``
@@ -30,21 +30,21 @@ Items (Module § Value ``Dependencies``):
 ``<subject> <predicate>``
     a two-position bracket read or ``get``: the held object.
 ``<name> db/alias``
-    a load through an alias: the ``ref:`` the name resolves to (A35).
+    a load through an alias: the ``ref:`` the name resolves to.
 ``ref:<class>:<hash>``
-    a loaded value, named by its bytes; always holds (A27).
+    a loaded value, named by its bytes; always holds.
 ``eval:<name>{keys}``
     a nested eval: holds iff the nested lookup at the rev, never running,
-    yields an entry with the recorded hash (A42, A45).
+    yields an entry with the recorded hash.
 ``salt``
     the ``db/salt`` of the mount a sandboxed function ran under, when set.
 ``foreign:{"at": "<ledger>@<rev>", "name": <name>}``
     a value or a run reached in the body through any ``Rev`` but the recording one, on any ledger
-    (``note_read``, SVP 1521 Q2 (A)) -> the ``ref:`` it gave. Provenance only: always holds, so it never
+    (``note_read``) -> the ``ref:`` it gave. Provenance only: always holds, so it never
     enters the hit test and a name moving on another ledger is no miss. ``deep`` and ``safe`` read it.
 ``q:{...}``
     a ``refs``/``values``/``value``/``select`` query (the whole query as
-    canonical JSON, ``kind`` dotted, A41, A47) -> the sorted ``ref:`` list it
+    canonical JSON, ``kind`` dotted) -> the sorted ``ref:`` list it
     answered; any other read (``all``, ``in``, a 1- or
     3-position bracket, ``history`` (recorded as ``rows``), ``last_rev``, ``get`` with
     ``since``) is ``q:{"__call__": …}`` -> a token of its result (for
@@ -98,8 +98,8 @@ class RunFrame:
         return rev_text(self.plain)
 
 
-#: The current run. A read during a run is recorded on the run whose work made it, never on another (SVP 1549) and
-#: never dropped (SVP 1551): Python gives neither a new thread nor a pool's work item its starter's context, so
+#: The current run. A read during a run is recorded on the run whose work made it, never on another and
+#: never dropped: Python gives neither a new thread nor a pool's work item its starter's context, so
 #: ``Thread.start`` and ``ThreadPoolExecutor.submit`` are patched below to carry this one variable. Work handed over
 #: by any other road reads for no run unless wrapped in ``contextvars.copy_context().run``.
 _RUN: "contextvars.ContextVar[Optional[RunFrame]]" = contextvars.ContextVar("dvc_dat_run", default=None)
@@ -108,7 +108,7 @@ _pool_submit = ThreadPoolExecutor.submit
 
 
 def _carried(frame: Optional[RunFrame], work: Callable[..., Any]) -> Callable[..., Any]:
-    """``work``, run with ``frame`` as the current run whatever thread runs it (SVP 1551)."""
+    """``work``, run with ``frame`` as the current run whatever thread runs it."""
     def carried(*args: Any, **kwargs: Any) -> Any:
         token = _RUN.set(frame)
         try:
@@ -129,7 +129,7 @@ def _start(self: threading.Thread) -> None:
 
 def _submit(self: ThreadPoolExecutor, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
     """``ThreadPoolExecutor.submit``: the work reads for the submitter's run, or for none, whichever thread of the
-    pool runs it and whenever that thread was started (SVP 1551). An ``InterpreterPoolExecutor`` is out of scope, as
+    pool runs it and whenever that thread was started. An ``InterpreterPoolExecutor`` is out of scope, as
     a child process is."""
     interp = sys.modules.get("concurrent.futures.interpreter")
     if interp is not None and isinstance(self, interp.InterpreterPoolExecutor):
@@ -165,12 +165,12 @@ def running(frame: RunFrame) -> Iterator[RunFrame]:
 
 
 def rev_text(rev: "Rev") -> str:
-    """``<ledger>@<rev>``: a revision by the ledger's name, the global reference of SVP 239."""
+    """``<ledger>@<rev>``: a revision by the ledger's name, its global reference."""
     return f"{rev.ledger._store.name}@{rev.id}"
 
 
 def note_read(rev: "Rev", name: str, text: str) -> None:
-    """The ambient hook (SVP 1521 Q2 (A)): a value or a run reached through ``rev``, which records nothing, joins
+    """The ambient hook: a value or a run reached through ``rev``, which records nothing, joins
     the current run as a ``foreign:`` item. Raw rows are not tracked. A value the run was called with, on its
     own ledger, is in its keys already. Outside any run: nothing."""
     from .fn import ledger_key
@@ -348,7 +348,7 @@ def present(rev: "Rev", item: str, recorded: str, env: Any, trace: Optional[Dict
     # the other items hold no space (a ref, an eval: name, a q: item outside its JSON, a repo by name).
     if " " not in item and item.startswith("ref:"):
         return True
-    if foreign_of(item) is not None:            # provenance only (SVP 1521 Q2 (A))
+    if foreign_of(item) is not None:            # provenance only
         return True
     if item.startswith("code/") and (" " not in item or item[len("code/"):] in env().code):
         code = env().code.get(item[len("code/"):])

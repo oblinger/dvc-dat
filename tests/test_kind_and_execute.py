@@ -1,8 +1,8 @@
 """2.3: the sidecar names the class, and every run goes through the manager.
 
-SVP's handoff, 2026-09-22: `dat.kind` is a dotted `module.qualname`, imported
+`dat.kind` is a dotted `module.qualname`, imported
 on load; `manager.load` / `manager.create` take no class; `Cls.load` is typed;
-`manager.run(spec)` is the run (DAT 1049; `execute` until 2.35), nested runs included, and records the code.
+`manager.run(spec)` is the run (`execute` until 2.35), nested runs included, and records the code.
 """
 import subprocess
 import sys

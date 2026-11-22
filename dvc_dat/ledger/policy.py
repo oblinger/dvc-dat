@@ -1,4 +1,4 @@
-"""The memo policy (SVP 1474): what of a platform record a memo lookup compares.
+"""The memo policy: what of a platform record a memo lookup compares.
 
 A memo entry stores the full platform record of the machine its function ran on (``env.platform_record``,
 the ``platform/record`` dependency item); a lookup hits an entry only when

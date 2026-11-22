@@ -1,4 +1,4 @@
-"""``dat``: dvc-dat's decorators under one name (SVP 250 Q4), so code says what each belongs to.
+"""``dat``: dvc-dat's decorators under one name, so code says what each belongs to.
 
     from dvc_dat import dat
 
@@ -8,7 +8,7 @@
     @dat.fn(reproducible="exact")        # ... claiming a rerun gives the same bytes (on one card)
     def detect(rev, *, video: Video) -> Table: ...
 
-    @dat.reduce_fn                       # a reduce function: rev.reduce(name, over=[...]) runs it (SVP 242)
+    @dat.reduce_fn                       # a reduce function: rev.reduce(name, over=[...]) runs it
     def total(rev, *, accs: list, more: list) -> dict: ...
 
     @dat.warm                            # a process-level memo by the canonical hash of the arguments
@@ -21,7 +21,7 @@
     dat.at("do26@512")                   # a revision on any registered ledger
     dat.load("do26@512:sha256:<hex>")    # a value by the global reference; a bare name reads the active ledger
 
-``at`` and ``load`` are ``dvc_dat.ledger.named``'s; ``ledger.at(rev)`` stays that ledger's alone (SVP 248).
+``at`` and ``load`` are ``dvc_dat.ledger.named``'s; ``ledger.at(rev)`` stays that ledger's alone.
 ``fn`` is ``dvc_dat.ledger.fn.fn``, ``reduce_fn`` is ``dvc_dat.ledger.fn.reduce_fn``, ``warm`` is ``dvc_dat.ledger.warm.warm`` and ``command`` is
 ``dvc_dat.just.command``; each is documented there.
 """

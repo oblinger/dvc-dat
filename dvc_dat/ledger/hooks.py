@@ -1,6 +1,6 @@
 """The Dat layer as the ledger sees it: a registry the Dat side fills, so the ledger never imports it first.
 
-``import dvc_dat.ledger`` loads no ``dvc_dat.core`` and no ``dvc_dat.do`` (1519 R1). ``dvc_dat.core`` registers
+``import dvc_dat.ledger`` loads no ``dvc_dat.core`` and no ``dvc_dat.do``. ``dvc_dat.core`` registers
 ``Dat`` here when it is imported, and ``dvc_dat.datrun`` registers the dat branch of a sandboxed run; the ledger
 asks through these functions:
 

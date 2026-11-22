@@ -13,7 +13,7 @@ escape `\\${`). A tree is the worst of its strings. Plain is returned as given a
 `ImportError` before anything is written. With omegaconf the tree is one `OmegaConf.create(..., allow_objects)` and
 `to_container(resolve=True)`, the four resolvers bound to the call's namespace, moment and count, and every
 `${unique:}` filled by the same `unique_text` rule, so both tiers give the same strings. A brace without `$` is
-plain text. This module imports neither `dvc_dat.core` nor `dvc_dat.do` (1519 R1).
+plain text. This module imports neither `dvc_dat.core` nor `dvc_dat.do`.
 """
 
 import contextvars
@@ -298,7 +298,7 @@ _OLD_BUILTINS = {"YYYY": "${now:%Y}", "YY": "${now:%y}", "MM": "${now:%m}", "DD"
 
 
 def refuse_old_name(template: Any) -> None:
-    """`ValueError` for a `dat.name` holding a reference in the `{…}` grammar retired in 3.0 (1519 decision 3),
+    """`ValueError` for a `dat.name` holding a reference in the `{…}` grammar retired in 3.0,
     naming its new spelling; anything else passes."""
     if not isinstance(template, str):
         return

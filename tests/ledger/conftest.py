@@ -1,6 +1,6 @@
 """Fixtures for the ledger suite: a fresh ledger per test, once per store (``backends``), and a pinned environment.
 
-The environment provider (the test seam, A51) is pinned so ``run`` is
+The environment provider (the test seam) is pinned so ``run`` is
 deterministic: one repo, ``testrepo``, at commit ``abc1234``, clean, its
 checkout this folder; ``coded`` writes the matching ``db/repo/testrepo`` clocks.
 """
@@ -56,7 +56,7 @@ def kept_folder(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def cache_root(tmp_path, monkeypatch):
-    """A Postgres ledger's bytes are cached under the test's own folder: ``<tmp>/cache/<database>/art`` (SVP 1599)."""
+    """A Postgres ledger's bytes are cached under the test's own folder: ``<tmp>/cache/<database>/art``."""
     monkeypatch.setenv("DAT_CACHE", str(tmp_path / "cache"))
     return tmp_path / "cache"
 

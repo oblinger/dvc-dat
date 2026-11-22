@@ -67,7 +67,7 @@ Fresh schema per row (`--ledger
   (`test_pg_lock_alarm_mid_read_leaves_the_reader_usable`).
 - Run-to-run spread is wide: another run's 4-process row gave 107 tx/s.
 
-Cloud SQL, 2026-10-24 (SVP 1450, R0037): `svp-ledger`, PostgreSQL
+Cloud SQL, 2026-10-24: a `ledger` instance, PostgreSQL
 17.11 on db-f1-micro (shared vCPU, 0.6 GB), us-central1, reached from
 a laptop in California (Merlin, macOS 26.6.2, arm64, 12 CPUs, Python
 3.12.0) through `cloud-sql-proxy` 2.26.3 on localhost; round trip 42 ms
@@ -105,7 +105,7 @@ below half the 4-process value recorded on the machine running it:
 On a host with no recorded floor only the invariants are checked. A
 floor, not a target: it catches a regression of 2x, not drift.
 
-**In one process** (SVP 1468, R0001): `tests/load/inproc.py`, `uv run python -m
+**In one process**: `tests/load/inproc.py`, `uv run python -m
 tests.load.inproc --handles N --threads M --transactions T --ledger <fresh folder or
 DSN>`; `tests/load/test_inproc.py` runs a small one (SQLite, and Postgres when
 `DVC_DAT_TEST_PG` is set) in the normal suite, and `tests/ledger/test_handles.py`

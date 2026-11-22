@@ -2,15 +2,15 @@
 
 A history is a list of rows ``(rev, ord, s, p, o, added)`` with ``o`` a plain
 string; within a revision the body's rows come first, in body order, then the
-transaction's own ``db/tx/<rev> db/by`` and ``db/time`` rows (A50). Every read is a function of
+transaction's own ``db/tx/<rev> db/by`` and ``db/time`` rows. Every read is a function of
 the rows at or before a revision R (and after ``since``), folded per (s, p) by
 the cardinality ``db/pred/<p> db/cardinality`` declares as of R:
 
 ``one``
-    the latest add wins; re-adding the held object keeps its revision (A12);
+    the latest add wins; re-adding the held object keeps its revision;
     a remove of exactly the held object clears it.
 ``many``
-    a set: each member at its earliest add not since removed (Q27).
+    a set: each member at its earliest add not since removed.
 """
 
 
@@ -36,7 +36,7 @@ class Model:
             self.rows.append((1, n, "db", "db/format", FORMAT, True))
             n += 1
             if not any(op[1] == "db" and op[2] == "db/memo-policy" for op in ops):
-                self.rows.append((1, n, "db", "db/memo-policy", "platform", True))   # SVP 1474
+                self.rows.append((1, n, "db", "db/memo-policy", "platform", True))
                 n += 1
         self.rows.append((self.top, n, f"db/tx/{self.top}", "db/by", by, True))
         self.rows.append((self.top, n + 1, f"db/tx/{self.top}", "db/time", time, True))

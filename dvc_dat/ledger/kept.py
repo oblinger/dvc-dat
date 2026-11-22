@@ -64,7 +64,7 @@ class Kept:
 
     def sink(self) -> FileSink:
         """A write stream for one kept encoding: hashed as written, renamed at close to ``blobs/<sha256>``
-        (write-once), never held in memory whole (DAT 240)."""
+        (write-once), never held in memory whole."""
         return FileSink(self.root / "blobs", self._blob_path, durable=True)
 
     def seal(self, record: Dict[str, Any], keep: bool = False, parts: Iterable[Part] = ()) -> str:
@@ -186,7 +186,7 @@ class SealedRef:
 
 class SealedFn:
     """A function dep as a seal record holds it: its dotted name, its code's subject and that
-    ``db/code/<hash 16>`` item's rows (DAT 1037)."""
+    ``db/code/<hash 16>`` item's rows."""
 
     __slots__ = ("name", "code_subject", "rows")
 

@@ -33,7 +33,7 @@ def folder(path, **files):
 
 
 def test_a_write_through_a_working_or_materialised_file_never_reaches_a_sealed_blob(L, tmp_path):
-    """SVP 1780: a document sealed from its working folder, loaded by name, then each file rewritten in place (as a
+    """A document sealed from its working folder, loaded by name, then each file rewritten in place (as a
     rolling save rewrites ``_result_.yaml``, or an editor its page): every blob still hashes to its name."""
     src = folder(tmp_path / "src", **{"page.md": "one", "_result_.yaml": "rev: 4\n"})
     d = Dat(src)
@@ -50,7 +50,7 @@ def test_a_write_through_a_working_or_materialised_file_never_reaches_a_sealed_b
     assert Ref(L.at(), "pub/D1").hash == d.hash
 
 
-# -- SVP 1780, the review's probes: each reloads through a fresh handle, so the view is checked again -----------------
+# -- the review's probes: each reloads through a fresh handle, so the view is checked again -----------------
 
 def _fresh(tmp_path):
     from dvc_dat.ledger import Ledger
@@ -135,7 +135,7 @@ def test_a_view_hardlinked_before_the_fix_is_placed_anew_on_load(tmp_path):
     d.seal(L, name="old/1")
     blob, view = _blob(L, d, "a.txt"), d.path
     (view / "a.txt").unlink()
-    os.link(blob, view / "a.txt")                          # what get_to made before SVP 1780
+    os.link(blob, view / "a.txt")                          # what get_to made up to 3.2.0
     w = Ref(_fresh(tmp_path).at(), "old/1").load()
     assert not os.path.samefile(w.path / "a.txt", blob)
     with open(w.path / "a.txt", "r+") as out:
@@ -151,7 +151,7 @@ def test_detach_gives_every_linked_blob_its_own_inode_and_keeps_its_bytes(tmp_pa
     d.seal(L, name="old/1")
     art, blob = L._store.art, _blob(L, d, "a.txt")
     os.chmod(blob, 0o755)
-    os.link(blob, tmp_path / "alias")                      # a working file linked to it before SVP 1780
+    os.link(blob, tmp_path / "alias")                      # a working file linked to it up to 3.2.0
     before = blob.stat()
     assert art.detach(dry_run=True) == 1 and os.path.samefile(blob, tmp_path / "alias")
     assert art.detach() == 1 and art.detach(dry_run=True) == 0

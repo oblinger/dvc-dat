@@ -8,7 +8,7 @@ transaction), ``reading_through`` (reads routed through that transaction) and
 backend. ``SqliteStore`` is below; ``PostgresStore`` is in ``pgstore``.
 
 A SQLite ledger is a folder: ``ledger.db`` and ``art/`` (bytes by hash,
-and ``art/dats/`` where a ``Dat`` is materialised) inside it (A54). A large
+and ``art/dats/`` where a ``Dat`` is materialised) inside it. A large
 value's parts enter the art store by ``put_path`` (a copy-on-write clone where
 the filesystem can, else a streamed copy; never a hardlink) and leave by
 ``get_to``; no part's bytes are ever held in memory whole.
@@ -162,7 +162,7 @@ def place(source: Source, dest: Path, h: str, *, durable: bool = False, checked:
     A ``Path`` is cloned copy-on-write where the filesystem can (``clone``: no disk), else copied in
     blocks; an opener is always copied; either way the bytes are checked against ``h``. Never a hardlink:
     the placed file and its source are two inodes, so an in-place write to either (a rolling
-    ``_result_.yaml``, an editor saving a page) cannot reach the other, and a blob keeps its name (SVP 1780).
+    ``_result_.yaml``, an editor saving a page) cannot reach the other, and a blob keeps its name.
     A ``Path``'s mode and mtime are carried over, as stat'ed before its bytes are read: a write landing after
     the check leaves the source newer than the placed file, never the reverse. The bytes land at a temp name
     and are renamed into place, so a reader never sees a partial file. With ``durable`` the temp file is
@@ -203,7 +203,7 @@ def place(source: Source, dest: Path, h: str, *, durable: bool = False, checked:
 
 
 class FileSink(HashSink):
-    """A sink backed by a temp file in ``folder`` (DAT 240): the bytes stream to disk as they are hashed,
+    """A sink backed by a temp file in ``folder``: the bytes stream to disk as they are hashed,
     never held whole. At close, with ``dest`` (hash -> path), the file is renamed to ``dest(hash)``, write-once
     (``created`` says whether it landed here; with ``expect``, a hash other than ``expect`` lands nowhere);
     without ``dest`` it stays at ``path``, staged, until the owner places or ``discard``s it. Used as a
@@ -277,7 +277,7 @@ class ArtStore:
     @contextmanager
     def fetching(self, fetch: Optional[Callable[[str, Path], None]]) -> Iterator[None]:
         """For the block, in this thread, a miss in ``open``/``get_to`` calls ``fetch(h, path)`` first, which puts
-        the bytes of ``h`` at ``path`` (the ledger's values URI, SVP 1599); ``None`` fetches nothing."""
+        the bytes of ``h`` at ``path`` (the ledger's values URI); ``None`` fetches nothing."""
         old = getattr(self._scope, "fetch", None)
         self._scope.fetch = fetch
         try:
@@ -307,7 +307,7 @@ class ArtStore:
         return self.path(h).exists()
 
     def sink(self, *, staged: bool = False) -> FileSink:
-        """A write stream for one encoding (DAT 240): hashed as written, renamed at close to its place by hash,
+        """A write stream for one encoding: hashed as written, renamed at close to its place by hash,
         write-once (``created``), so a reader never sees a partial file. ``staged``: left at a temp name in
         the store's folder (``path``) for the owner to place with ``put_path`` or ``discard``."""
         return FileSink(self.root / "tmp", None if staged else self.path)
@@ -363,7 +363,7 @@ class ArtStore:
 
     def mismatched(self) -> List[Tuple[str, str]]:
         """``(name, sha256 of its bytes)`` for every blob under ``sha256/`` whose bytes no longer hash to its name,
-        in name order; reads every blob, writes nothing (SVP 1780). Covers this art store (a read-only handle's
+        in name order; reads every blob, writes nothing. Covers this art store (a read-only handle's
         overlay too), not ``Kept``'s ``blobs/`` nor a dat manager's ``art/``."""
         out = []
         for p in self._blobs(self._scanned()):
@@ -373,8 +373,8 @@ class ArtStore:
         return out
 
     def detach(self, *, dry_run: bool = False) -> int:
-        """Give every blob that shares its inode with another file (``st_nlink > 1``: a hardlink placed before SVP
-        1780) an inode of its own, so an in-place write to the other name can no longer reach it; the count of such
+        """Give every blob that shares its inode with another file (``st_nlink > 1``: a hardlink placed by a release up
+        to 3.2.0) an inode of its own, so an in-place write to the other name can no longer reach it; the count of such
         blobs. Each is replaced by a clone or copy of itself (mode and mtime kept, checked against the bytes it had,
         renamed over it), so its bytes never change, a corrupt one included; the other names keep the old inode.
         ``dry_run``: only count. A read-only handle detaches its overlay's blobs only."""
@@ -435,7 +435,7 @@ def stamp_holds(row: Any, path: Path, h: str) -> bool:
 
 
 class ReadOnlyArt(ArtStore):
-    """A ledger's art store as a read-only handle sees it (SVP 1521 Q3 (A)): bytes come from ``root``; what a read
+    """A ledger's art store as a read-only handle sees it: bytes come from ``root``; what a read
     has to place (a ``Dat``'s folder, bytes fetched from the value's store) lands in ``overlay``, the reader's own,
     so that nothing lands on the ledger."""
 

@@ -1,4 +1,4 @@
-"""The documentation site (246): the `dat-vault` plugin's rewrites, and, after a build, the site's shape.
+"""The documentation site: the `dat-vault` plugin's rewrites, and, after a build, the site's shape.
 
 The plugin needs mkdocs (`uv sync --group docs`), so these skip under the plain dev group. The checks on
 `site/` skip until `mkdocs build` has run; `.github/workflows/docs.yml` runs them after its build.
@@ -148,7 +148,7 @@ def test_a_module_page_holds_no_third_level(page):
 
 @pytest.mark.parametrize("page", MODULE_PAGES)
 def test_a_module_page_links_no_member_anchor_of_the_api_reference(page):
-    """A method links to its section of the module page (SVP 1731): an `api/*.md#…` anchor exists only on the
+    """A method links to its section of the module page: an `api/*.md#…` anchor exists only on the
     site, so in the vault the click lands at the top of a `:::` stub. The `api::` line links the page itself."""
     text = (REPO / "doc" / f"{page}.md").read_text()
     into_api = re.findall(r"\]\((?:\.\./)*api/[^)#\s]*#[^)]*\)", text)
@@ -170,7 +170,7 @@ def headings(path: Path) -> set:
 @pytest.mark.parametrize("page", MODULE_PAGES)
 def test_every_heading_link_of_a_module_page_resolves_in_obsidian(page):
     """Obsidian resolves `[x](#Heading%20Text)` by the decoded heading's exact text in the target file, not by
-    a slug, so a GitHub-style `#heading-text` lands at the top of the page there (SVP 1731)."""
+    a slug, so a GitHub-style `#heading-text` lands at the top of the page there."""
     source = REPO / "doc" / f"{page}.md"
     links = re.findall(r"\]\(([^)#\s:]*\.md|)#([^)\s]+)\)", source.read_text())
     checked, unresolved = 0, []

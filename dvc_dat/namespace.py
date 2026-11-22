@@ -10,7 +10,7 @@ A dotted name is a mounted name, else exactly what `import` means in this enviro
 Mounts are `ns.mount(...)` calls in the program; `.datconfig.yaml` holds none. Every `DatManager` builds its own
 (`manager.ns`); `Dat.ns` (`dvc_dat.do.ns`) forwards to `Dat.manager.ns`. The ledger's `LedgerNamespace`
 (`dvc_dat.ledger.namespace`) subclasses this one, which is why it lives outside `dvc_dat.do`: this module imports
-neither `dvc_dat.core` nor `dvc_dat.do` at import (1519 R1); the parts that make a dat import `core` when used.
+neither `dvc_dat.core` nor `dvc_dat.do` at import; the parts that make a dat import `core` when used.
 """
 
 import copy
@@ -77,10 +77,10 @@ class Namespace:
                   kwargs: Optional[Dict[str, Any]] = None) -> Spec:
         """A copy of `spec` with `args` as `dat.args` and `kwargs` merged into `dat.kwargs`.
 
-        Call-site arguments are data (1467 Q2 (A)): each `${` in them is escaped (`\\${`) before the merge, so the
+        Call-site arguments are data: each `${` in them is escaped (`\\${`) before the merge, so the
         spec's resolve at create hands the run exactly what was passed, while the spec's own references still
         resolve. On the base install a value is stored as given and one holding `${` is `ValueError` naming
-        `dvc-dat[expand]` (1519 decision 8)."""
+        `dvc-dat[expand]`."""
         spec = copy.deepcopy(spec)
         args = quote_spec(list(args))
         if args:
@@ -125,7 +125,7 @@ class Namespace:
 
         Keys are left alone and the built-ins taken at one moment (`expand`'s grammar; `${batch}` a node of the
         merged spec). A value that is exactly
-        one reference is the object it names: `cfg: ${ns:svp.defaults}` inlines the dict. A spec that is not a dict
+        one reference is the object it names: `cfg: ${ns:proj.defaults}` inlines the dict. A spec that is not a dict
         has no bases and is only resolved."""
         if isinstance(spec, dict):
             spec = self._merge_bases(copy.deepcopy(spec))

@@ -67,7 +67,7 @@ PKG = {
     "sbx/stage/helper.py": "def double(x):\n    return 2 * x\n",
     "sbx/stage/guard.py": textwrap.dedent('''
         def refuse(name):
-            """The read guard of the tests (SVP 1596): ``far`` is refused, by name or by a location ending in it."""
+            """The read guard of the tests: ``far`` is refused, by name or by a location ending in it."""
             if name == "far" or str(name).rstrip("/").endswith("/far"):
                 raise PermissionError("far: refused by the read guard")
 
@@ -655,7 +655,7 @@ def sbx(tmp_path, monkeypatch, backend):
     set_env_provider(old)
 
 
-# --- 1467 Q14 (B): a ledger-mounted name is mnt.<at>...; any other name imports --------------------------------
+# --- A ledger-mounted name is mnt.<at>...; any other name imports --------------------------------
 def test_a_mnt_name_resolves_through_the_mount(sbx):
     L, repo = sbx
     f = L.at().ns.load("mnt.sbx.stage.fns.count")
@@ -751,7 +751,7 @@ def test_an_unsandboxed_body_reading_its_repo_outside_the_dats_is_refused(sbx):
 
 
 def test_a_nested_run_records_only_its_own_modules_not_its_callers(sbx):
-    """SVP 1729: a body nested in another under the same mount records its own closure, never the modules its
+    """A body nested in another under the same mount records its own closure, never the modules its
     caller loaded (``sbx/stage/top.py`` here), so an edit to the caller alone reruns the caller alone."""
     L, repo = sbx
     v = L.at().run("mnt.sbx.stage.top.top", game="G1")
@@ -772,7 +772,7 @@ def test_a_nested_run_records_only_its_own_modules_not_its_callers(sbx):
 def test_a_nested_eval_under_another_mount_runs_in_a_fresh_child(sbx):
     L, _repo = sbx
     v = L.at().run("mnt.sbx.stage.fns.cross", game="G1")
-    assert v.obj["same"] == v.obj["me"]                         # its own mount: in-process (Q37 (ii))
+    assert v.obj["same"] == v.obj["me"]                         # its own mount: in-process
     assert v.obj["other"]["pid"] != v.obj["me"] and v.obj["other"]["stage"] == []    # fresh, nothing of the caller's
     other = L.at().run("mnt.flatpkg.where.pid", side=2, seal="get")
     assert other is not None and other.obj == v.obj["other"]
@@ -801,7 +801,7 @@ def test_a_bodys_first_read_can_be_all_in_a_fresh_worker(sbx):
 
 
 def test_a_past_revision_crosses_the_pipe_and_a_draft_saved_later_says_it(sbx):
-    """SVP 245: the worker's ``Rev`` reads at the revision, ``db/at`` is written by either side of the pipe."""
+    """The worker's ``Rev`` reads at the revision, ``db/at`` is written by either side of the pipe."""
     L, _repo = sbx
     read = L.at().id
     with L.transaction(by="t") as t:
@@ -831,7 +831,7 @@ def test_refusals(sbx):
     git(repo, "commit", "-q", "-am", "elsewhere")
     with pytest.raises(NotClean, match="binds db/repo/sbx-repo to"):
         old.run("mnt.sbx.stage.fns.count", game="G1", clean=True)
-    assert old.run("mnt.sbx.stage.fns.count", game="G1").obj == {"n": 6}   # no gate: it runs at HEAD (Q39)
+    assert old.run("mnt.sbx.stage.fns.count", game="G1").obj == {"n": 6}   # no gate: it runs at HEAD
 
 
 def test_salt_item(sbx):
@@ -861,7 +861,7 @@ def test_a_draft_keeps_preds_and_runs_on_a_dirty_tree(sbx):
     assert not v.sealed and v.preds == {"game": "G1"} and v.dependencies["code"].startswith("db/code/")
     (repo / "sbx/other.py").write_text("X = 3\n")              # dirty
     assert L.at().run("mnt.sbx.stage.fns.count", game="G1", seal=False).obj == {"n": 6}
-    assert L.at().run("mnt.sbx.stage.fns.count", game="G1").obj == {"n": 6}      # a miss runs dirty (Q39)
+    assert L.at().run("mnt.sbx.stage.fns.count", game="G1").obj == {"n": 6}      # a miss runs dirty
     with pytest.raises(NotClean, match="uncommitted changes"):
         L.at().run("mnt.sbx.stage.fns.count", game="G1", clean=True)
 
@@ -961,7 +961,7 @@ def test_network_refused(sbx):
     assert L.at().run("mnt.sbx.stage.net.pair", text="hi").obj == {"echo": "hi"}   # a local socket is not the network
 
 
-# --- 1467 Q8 (A): a sandboxed body creates no process; a body that needs a tool runs unsandboxed ---------------
+# --- A sandboxed body creates no process; a body that needs a tool runs unsandboxed ---------------
 PROC_HOWS = {"run": "subprocess.Popen", "system": "os.system", "posix_spawn": "os.posix_spawn", "fork": "os.fork",
              "exec": "os.exec"}
 
@@ -1072,7 +1072,7 @@ def test_a_sandboxed_run_saves_into_a_transaction(sbx):
     assert L.at().run("mnt.sbx.stage.fns.count", game="G1").subject == v.subject
 
 
-# -- DAT 1045, 1046: rev.run of a spec whose run function is mounted runs in the worker -----------------
+# -- rev.run of a spec whose run function is mounted runs in the worker -----------------
 
 @pytest.fixture
 def world(tmp_path):
@@ -1185,7 +1185,7 @@ def test_a_spec_naming_a_mounted_ledger_function_is_refused(sbx, world):
 
 
 def test_a_sandboxed_dat_body_names_through_the_ledger_mounts(sbx, world):
-    """DAT 1047: inside a sandboxed dat body ``Dat.manager.ns`` is a ``LedgerNamespace`` at the run's rev, so a
+    """Inside a sandboxed dat body ``Dat.manager.ns`` is a ``LedgerNamespace`` at the run's rev, so a
     mounted spec, literal or function resolves through the mounts the caller used; ``mount`` is refused.
     The caller's own world (here a plain ``Namespace``) is not what the body sees."""
     from dvc_dat.namespace import Namespace
@@ -1273,7 +1273,7 @@ def text_of(v):
 
 
 def test_ledger_at_a_location_stays_refused_in_a_body(other):
-    """SVP 1521: only a name opens read-only; ``Ledger(location)`` opens a store that may write."""
+    """Only a name opens read-only; ``Ledger(location)`` opens a store that may write."""
     L, games, _first, _second = other
     if isinstance(games.path, str):
         pytest.skip("SQLite's refusal: a Postgres location opens on the run's server, as the network hook allows")
@@ -1282,7 +1282,7 @@ def test_ledger_at_a_location_stays_refused_in_a_body(other):
 
 
 def test_a_body_reads_a_registered_ledger_by_name_and_it_is_recorded(other):
-    """Q3 (A): the read works, and is one ``foreign:`` item with the revision and the name."""
+    """The read works, and is one ``foreign:`` item with the revision and the name."""
     L, games, first, second = other
     v = L.at().run("mnt.sbx.stage.fns.by_name", ledger="games", at=second, name="G1")
     assert v.obj == {"seen": {"game": 2}}
@@ -1292,7 +1292,7 @@ def test_a_body_reads_a_registered_ledger_by_name_and_it_is_recorded(other):
 
 
 def test_a_name_the_caller_dropped_does_not_cross_to_the_body(other):
-    """SVP 239: the caller's view crosses, ``del`` included; a caller that never read root ships root's location,
+    """The caller's view crosses, ``del`` included; a caller that never read root ships root's location,
     and the body reads the registry there (the test above)."""
     from dvc_dat import ledgers
 
@@ -1329,7 +1329,7 @@ def test_the_global_reference_reaches_a_registered_ledger(other, tmp_path, fn, k
 
 
 def test_a_foreign_read_in_a_body_is_provenance_only(other):
-    """Q2 (A) unchanged in the sandbox: a name moving on another ledger is no miss."""
+    """Unchanged in the sandbox: a name moving on another ledger is no miss."""
     from dvc_dat.ledger import Value
 
     L, games, _first, second = other
@@ -1379,7 +1379,7 @@ def test_a_read_of_a_ledger_not_there_says_so(other):
 
 
 def register(root, **where):
-    """Rows of root's registry (SVP 239): ``ledger/<name> ledger/location <where>``."""
+    """Rows of root's registry: ``ledger/<name> ledger/location <where>``."""
     with root.transaction(by="t") as t:
         for name, loc in where.items():
             t.add(f"ledger/{name}", "ledger/location", str(loc))
@@ -1401,7 +1401,7 @@ def test_a_registered_ledger_not_on_disk_and_a_caller_with_no_section_say_so(sbx
 
 
 def test_a_ref_key_on_another_ledger_loads_in_the_worker(other):
-    """SVP 1521: ``encode_key`` carries the ledger and the revision beside the subject, so the key holds its value,
+    """``encode_key`` carries the ledger and the revision beside the subject, so the key holds its value,
     at the Ref's revision, and the load is a ``foreign:`` item."""
     from dvc_dat.ledger import Ref
 
@@ -1430,7 +1430,7 @@ def test_a_ref_key_on_the_runs_own_ledger_adds_nothing(sbx):
 
 
 def test_an_unsaved_value_is_still_no_key(sbx):
-    """Q4 (A): not part of the standard for now."""
+    """Not part of the standard for now."""
     from dvc_dat.ledger import Value
 
     L, _repo = sbx
@@ -1500,7 +1500,7 @@ def test_a_nested_run_under_another_mount_sees_the_same_ledgers(other):
 
 
 
-# --- SVP 1596: the read guard, called with a ledger's name before a named open --------------------------------------
+# --- The read guard, called with a ledger's name before a named open --------------------------------------
 @pytest.fixture
 def guarded(other):
     """``other`` with ``sbx.stage.guard.refuse`` registered (``far`` refused), removed after."""
@@ -1673,7 +1673,7 @@ def test_a_call_interrupted_while_the_worker_runs_leaves_the_next_call_its_own_r
 
 
 def test_a_sandboxed_entry_records_the_platform_of_the_worker_it_ran_in(sbx, monkeypatch):
-    """SVP 1474: the record is captured where the function runs, not where the caller sits."""
+    """The record is captured where the function runs, not where the caller sits."""
     import json
 
     from dvc_dat.ledger import env as env_module
@@ -1686,7 +1686,7 @@ def test_a_sandboxed_entry_records_the_platform_of_the_worker_it_ran_in(sbx, mon
     assert L.at().run("mnt.sbx.stage.fns.count", game="G1", seal="get").subject == v.subject   # the default policy
 
 
-# -- SVP 1738: a value spilled by a sandboxed body reaches the ledger's values URI -------------------------------
+# -- A value spilled by a sandboxed body reaches the ledger's values URI -------------------------------
 def _spilled_pred_reaches_the_values_uri(L, tmp_path, subject, fill):
     """The row is a ``spill:`` reference, its bytes are at the values URI, and with the local copy gone only the
     values URI can supply them: the read pulls them back."""

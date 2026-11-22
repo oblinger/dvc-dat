@@ -1,4 +1,4 @@
-"""Large values spilled to the art store (SVP 1738): a row too big for the triples holds a reference to its bytes.
+"""Large values spilled to the art store: a row too big for the triples holds a reference to its bytes.
 
 Two per-ledger settings, rows of the subject ``db`` as every setting is (``db/memo-policy``, ``db/timezone``,
 ``db/values``), read at the transaction's base, each a ``str`` of a whole number of bytes:
@@ -74,7 +74,7 @@ def decode_plain(text: str) -> Any:
 
 
 class Spilled:
-    """A row's object stored in the art store (SVP 1738), as a listing, scan or query returns it: ``tag`` (``str`` or
+    """A row's object stored in the art store, as a listing, scan or query returns it: ``tag`` (``str`` or
     ``json``), ``hash`` (the sha256 of its encoded text) and ``size`` (bytes), all read off the row. ``load()``
     fetches the bytes (from the values URI on a miss) and returns the ``str``, ``dict`` or ``list`` itself. Equal to
     another by its bytes."""

@@ -1,4 +1,4 @@
-"""SVP 1738: a value too large for a row is spilled to the art store, transparently; ``db/spill-threshold`` and
+"""A value too large for a row is spilled to the art store, transparently; ``db/spill-threshold`` and
 ``db/max-fact`` per ledger."""
 
 import pytest

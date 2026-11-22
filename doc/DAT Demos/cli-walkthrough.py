@@ -109,7 +109,7 @@ for args in (["init", "-q"], ["config", "user.name", "demo"], ["config", "user.e
     subprocess.run(["git", *args], check=True)
 
 import mymodule.mult                              # discovery finds the checkout, the repo q-cli
-with L.transaction(by="human:dan", why="mount mymodule") as t:   # mymodule's code is the mount's: its files, hashed
+with L.transaction(by="human:ann", why="mount mymodule") as t:   # mymodule's code is the mount's: its files, hashed
     t.ns.mount("mnt.mymodule", root="mymodule")   # the two db/mount/mymodule rows; the repo is the project's, q-cli
     t.add("db", "db/version", "3.1.4")
 just_done = subprocess.run(["just", "mounts"], check=True, capture_output=True)   # writes .dat/targets.just, the declared commands
@@ -298,7 +298,7 @@ table12_prefix = L.at().load("table/12").subject[:8]   # the value's hash, short
 # | Command | What it does |
 # | --- | --- |
 # | `x TARGET k=v` | `bin/x`, the same as `just run TARGET k=v` |
-# | `just mounts` · `x --info` | the mounted names (`x --list`), the version and config; with no ledger in the config `just run` is the bare `Dat.manager.run(TARGET, …)` ([DAT CLI](../DAT%20Design/DAT%20API/DAT%20CLI.md)) |
+# | `just mounts` · `x --info` | the mounted names (`x --list`), the version and config; with no ledger in the config `just run` is the bare `Dat.manager.run(TARGET, …)` ([Command line](../cli.md)) |
 # | `just sealed` | in the dvc-dat repo: values sealed with `v.seal()` and never saved; `just sealed purge older=14d` drops the old ones |
 # | `just test` | in the dvc-dat repo: the test suite |
 # | `just demo` | in the dvc-dat repo: sync and execute the `demo-*` notebooks |

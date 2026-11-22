@@ -1,4 +1,4 @@
-"""What an import loads (1519 R1, R2): the ledger with no Dat layer, and no pandas without the tables.
+"""What an import loads: the ledger with no Dat layer, and no pandas without the tables.
 
 Each check runs in a fresh interpreter: this process has long since imported everything.
 """

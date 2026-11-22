@@ -1,4 +1,4 @@
-"""Transaction latent bugs (deep scan round 4, 2026-10-27): bytes dropped outside the write lock or after
+"""Transaction latent bugs (deep scan round 4): bytes dropped outside the write lock or after
 COMMIT, a record write left half done, the caller's itimer cancelled, the clock keeping a lower version, the
 subjects order past 10**6 rows, a NaN stored as JSON, a create that breaks the config, an empty location."""
 
@@ -149,7 +149,7 @@ def test_the_clock_takes_the_highest_version_one_body_ran(L):
 
 
 def test_the_clock_orders_a_dev_version_below_its_patch(L):
-    """SVP 1482: ``1.3.5 < 1.3.6.dev1 < 1.3.6.dev2 < 1.3.6``; a clean run at a ``.devN`` moves both clocks."""
+    """``1.3.5 < 1.3.6.dev1 < 1.3.6.dev2 < 1.3.6``; a clean run at a ``.devN`` moves both clocks."""
     with L.transaction(by="a") as t:
         t._advance_clock("testrepo", "pkg", "1.3.5", "abc1234")
     for version, commit in (("1.3.6.dev1", "def5678"), ("1.3.6.dev2", "fed8765"), ("1.3.6", "aaa1111")):
@@ -163,7 +163,7 @@ def test_the_clock_orders_a_dev_version_below_its_patch(L):
     assert t.rev["db/repo/testrepo/pkg", "db/version"] == "1.3.6"
 
 
-# --- 1467 Q3 (A): an unlocked transaction re-checks the clock and a value's names at commit, in the lock ---
+# --- An unlocked transaction re-checks the clock and a value's names at commit, in the lock ---
 def test_an_unlocked_clock_never_moves_back_past_a_commit_made_meanwhile(L):
     subj = "db/repo/testrepo/pkg"
     write(L, (subj, "db/version", "1.0.0"))

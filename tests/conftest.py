@@ -34,7 +34,7 @@ _OWN_WORLD = {"test_capture_and_artifacts.py"}
 def _the_default_world_is_restored():
     """A test that replaces `Dat.manager` puts it back.  One that does not fails here, at itself, and the
     world is restored: left changed, every later test in the process reads the wrong one, which only a
-    sequential run shows (SVP 1546)."""
+    sequential run shows."""
     from dvc_dat import core
     before = core._default_manager
     yield
@@ -45,7 +45,7 @@ def _the_default_world_is_restored():
 
 
 def pytest_configure(config):
-    pg_server.check_environment()       # DVC_DAT_TEST_PG on port 5433 stops the run before it starts (SVP 1548)
+    pg_server.check_environment()       # DVC_DAT_TEST_PG on port 5433 stops the run before it starts
 
 
 @pytest.hookimpl(tryfirst=True)

@@ -1,4 +1,4 @@
-"""DAT 1051: `ns`, one namespace object on `Dat`, on a revision and on a transaction."""
+"""`ns`, one namespace object on `Dat`, on a revision and on a transaction."""
 import os
 
 import pytest

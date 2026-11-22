@@ -1,15 +1,15 @@
 """``Value``: everything the ledger holds and hands back, with its provenance on it.
 
 A subclass says how it becomes bytes (``encode`` writes them to a binary stream the store opens) and
-back (``decode`` reads them from one), never holding them whole (DAT 240), and,
+back (``decode`` reads them from one), never holding them whole, and,
 with ``@ledger_class(preds=...)``, which pred names its values may carry.
 ``preds`` is a plain dict while the value is unsealed, filled by whoever builds
 it; the seal (``v.seal(t)`` or an ``run``) freezes it into a
-read-only mapping and fixes ``subject``, ``rev`` and ``dependencies`` (Q25 (D)). A
+read-only mapping and fixes ``subject``, ``rev`` and ``dependencies``. A
 subclass's own ``__init__`` need not call ``super().__init__``. Shipped
 subclasses: ``Value.Blob`` (any Python object, pickled), ``Value.Table`` (parquet),
-``dvc_dat.core.Dat`` (a dat: its folder, encoded as its content manifest, DAT 1038), and ``Video`` (segments plus
-a manifest, read lazily, SVP 249; ``dvc_dat.ledger.video``).
+``dvc_dat.core.Dat`` (a dat: its folder, encoded as its content manifest), and ``Video`` (segments plus
+a manifest, read lazily; ``dvc_dat.ledger.video``).
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ _EMPTY: Mapping[str, str] = MappingProxyType({})
 class FrozenPreds(dict):
     """A sealed value's preds: a dict that refuses every change (``TypeError``).
 
-    A pred stored spilled (SVP 1738) is a ``Spilled`` in the dict; ``preds[p]`` and ``preds.get(p)`` load it, while
+    A pred stored spilled is a ``Spilled`` in the dict; ``preds[p]`` and ``preds.get(p)`` load it, while
     iterating (``items``, ``values``) hands back the ``Spilled`` unfetched."""
 
     def __getitem__(self, k: Any) -> Any:
@@ -72,7 +72,7 @@ class Value:
     """The type of ``dependencies``, for annotations: item name to version or hash."""
     #: The pred names a kind declares (``@ledger_class``); none by default.
     _ledger_preds: ClassVar[tuple] = ()
-    #: Relative-path suffixes of the subdats a seal declines by default (SVP 241); ``seal(skip=)`` adds to them.
+    #: Relative-path suffixes of the subdats a seal declines by default; ``seal(skip=)`` adds to them.
     skip_subdats: ClassVar[Tuple[str, ...]] = ()
     """Relative-path suffixes of the subdats a seal declines by default; ``seal(skip=)`` adds to them, ``skip=()`` clears them."""
 
@@ -103,7 +103,7 @@ class Value:
 
     @property
     def name(self) -> Optional[str]:
-        """The value's one name (Q36): an alias, relative to the data folder, not part of its identity.
+        """The value's one name: an alias, relative to the data folder, not part of its identity.
 
         Saved: the alias naming it at the head (the latest written), else ``None``. Unsaved: the name a
         save will give it. Setting it on a saved value moves its name in a revision of its own (a name
@@ -170,7 +170,7 @@ class Value:
         self.__dict__["_preds"] = dict(value)
 
     def encode(self, out: IO[bytes]) -> None:
-        """Write the bytes to store to ``out``, once, forward, returning nothing (DAT 240).
+        """Write the bytes to store to ``out``, once, forward, returning nothing.
 
         Abstract: every ``Value`` subclass must implement it (``NotImplementedError`` otherwise). ``out`` is a sink
         the store opens, a write-only binary stream that hashes and counts what passes and refuses ``seek``
@@ -253,7 +253,7 @@ class Value:
              skip: Optional[Iterable[str]] = None) -> str:
         """Fix the value's identity; with a transaction or a ledger, save it too.
 
-        ``to`` takes what ``seal=`` on a run takes (DAT 1028), so ``f(seal=x)`` and a later ``v.seal(x)`` end in one
+        ``to`` takes what ``seal=`` on a run takes, so ``f(seal=x)`` and a later ``v.seal(x)`` end in one
         place.
 
         ``v.seal()`` (``v.seal(True)``) writes to no ledger: it freezes ``preds``, fixes the bytes' hash, ``deps``,
@@ -272,7 +272,7 @@ class Value:
         ``TypeError``: nothing to do to an object. A provenance beginning ``eval:`` is ``ValueError``; a second seal
         is ``ValueError``.
 
-        A save of a ``Dat`` seals the subdats in its folder tree in the same transaction (SVP 241), as
+        A save of a ``Dat`` seals the subdats in its folder tree in the same transaction, as
         [Subdats][subdats]: each its own value, named ``<name>/<relpath>``, depending on this one, with its
         provenance, and a row ``(<subject>, db/subdat/<relpath>, <ref to it>)``. ``skip`` names relative-path suffixes
         to decline, on top of the class's ``skip_subdats`` (``viz`` declines ``viz/`` and ``run/viz/``; a plain folder
@@ -446,7 +446,7 @@ class Value:
 
     @property
     def at(self) -> Optional["Rev"]:
-        """The revision the value's run read (SVP 245): its ``db/at`` row.
+        """The revision the value's run read: its ``db/at`` row.
 
         ``rev`` is where it was saved, ``at`` what it was computed from, so a run at ``L.at(412)`` saved at 902 has
         ``v.at.id == 412``, ``v.rev.id == 902``. A draft's comes from its trace. A memo hit hands back the entry it
@@ -502,7 +502,7 @@ class Value:
         self.__dict__.pop("_name", None)            # saved: the name is the ledger's now
 
     def _label(self) -> Optional[str]:
-        """What it prints as (DAT 1036): its name at the head, else ``#`` + the hash's first 8;
+        """What it prints as: its name at the head, else ``#`` + the hash's first 8;
         ``None`` for a draft, which has no identity yet."""
         if not self.sealed:
             return None
@@ -548,7 +548,7 @@ def shown_in(text: str, zone: Any) -> str:
     return _dt.datetime.fromisoformat(text).astimezone(zone).isoformat(timespec="seconds")
 
 
-#: A moment named by an ISO 8601 prefix (SVP 1507): a date, then optionally the hour, minute and second; a
+#: A moment named by an ISO 8601 prefix: a date, then optionally the hour, minute and second; a
 #: single space may replace ``T``; with a time, an optional zone suffix ``Z`` or ``+hh:mm`` / ``-hh:mm``.
 _MOMENT = re.compile(r"(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2})(?::(\d{2})(?::(\d{2}))?)?(Z|[+-]\d{2}:\d{2})?)?")
 
@@ -595,7 +595,7 @@ def stored_moment(text: str) -> Any:
     return _dt.datetime.fromisoformat(text).astimezone(_dt.timezone.utc)
 
 
-#: The display-zone setting (SVP 1505 Q2): the row ``db db/timezone <IANA name>``; absent, UTC.
+#: The display-zone setting: the row ``db db/timezone <IANA name>``; absent, UTC.
 TIMEZONE = "db/timezone"
 
 
@@ -654,7 +654,7 @@ def takes_name(cls: type) -> bool:
 
 
 def ledger_class(*, preds: Iterable[str] = ()):
-    """Class decorator: the pred names a ``Value`` subclass's values may carry (Q22); writes nothing.
+    """Class decorator: the pred names a ``Value`` subclass's values may carry; writes nothing.
 
     A name that is empty, not a ``str``, or starts ``db/`` is ``TypeError``, as is decorating a class that is not a
     ``Value``.
@@ -673,9 +673,9 @@ def ledger_class(*, preds: Iterable[str] = ()):
 
 
 class Blob(Value):
-    """Any pickleable object; ``obj`` is the object. Declares no preds (A16).
+    """Any pickleable object; ``obj`` is the object. Declares no preds.
 
-    Plain data is encoded canonically (SVP 1543): within ``dict``, ``list``, ``tuple``, ``set`` and ``frozenset``
+    Plain data is encoded canonically: within ``dict``, ``list``, ``tuple``, ``set`` and ``frozenset``
     (exactly those types), every dict's items and every set's members are written in one order, chosen from
     their values and never from insertion or a hash seed, and no ``str``, ``bytes`` or plain container is written
     as a back-reference to an earlier copy of itself, so a repeated object and an equal copy encode alike. So
@@ -770,7 +770,7 @@ class Table(Value):
     (pandas writes its own there), is not part of it: ``pyarrow.Table.equals`` ignores it, and ``encode`` drops
     it, so a ``DataFrame`` and the ``pyarrow.Table`` it converts to give the same bytes, and a decoded table
     carries none (a ``DataFrame``'s index comes back as a column when pandas stored one, else not at all).
-    Equal tables give the same bytes whatever their chunking and whichever pyarrow wrote them (SVP 1543).
+    Equal tables give the same bytes whatever their chunking and whichever pyarrow wrote them.
     """
 
     def __init__(self, table: Any, *, name: Optional[str] = None) -> None:

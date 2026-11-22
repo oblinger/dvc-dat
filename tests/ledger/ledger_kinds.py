@@ -68,7 +68,7 @@ def cut(rev, *, game: str, version: str = "1.0.0") -> Cut:
 
 @dat.fn(reproducible="exact")
 def cut_det(rev, *, game: str, version: str = "1.0.0") -> Cut:
-    """``cut`` claiming ``exact`` (SVP 251 Q2): its lookups ask for the same card and driver."""
+    """``cut`` claiming ``exact``: its lookups ask for the same card and driver."""
     _count("cut_det")
     home = rev[f"game/{game}", "home"]
     raw = rev.value(kind=Video, game=game)
@@ -224,7 +224,7 @@ ENCODES = {}
 
 
 class Streamed(Value):
-    """A value of ``blocks`` MiB generated block by block: its bytes are never whole in memory (DAT 240)."""
+    """A value of ``blocks`` MiB generated block by block: its bytes are never whole in memory."""
 
     def __init__(self, blocks: int):
         self.blocks = blocks
@@ -242,7 +242,7 @@ class Streamed(Value):
         return cls(n >> 20)
 
 
-# -- SVP 1521: what a run reads through any Rev but its recording one, and dat.at ------------------------------
+# -- What a run reads through any Rev but its recording one, and dat.at ------------------------------
 
 @dat.fn
 def reads_foreign(rev, *, where: str, name: str) -> dict:
@@ -283,21 +283,21 @@ GATE = {}
 
 @dat.fn
 def held_open(rev, *, where: str, name: str) -> dict:
-    """A body that holds its run open until the test lets it go (SVP 1549): it reads nothing."""
+    """A body that holds its run open until the test lets it go: it reads nothing."""
     GATE["opened"].set()
     if not GATE["go"].wait(30):
         raise TimeoutError("held_open: the test never let the run go")
     return {"where": where, "name": name}
 
 
-#: The thread pool the SVP 1551 tests hand work to, made by the test outside any run: ``ex``.
+#: The thread pool the pool-thread tests hand work to, made by the test outside any run: ``ex``.
 POOL = {}
 
 
 @dat.fn
 def reads_on_a_pool(rev, *, where: str, name: str) -> dict:
     """Reads ``name`` off the ledger at ``where`` and a row through its own ``Rev``, each on a pool thread the run
-    did not start (SVP 1551)."""
+    did not start."""
     _count("reads_on_a_pool")
     ex = POOL["ex"]
     return {"seen": ex.submit(lambda: Ledger(where).at().load(name).obj).result(),
@@ -373,7 +373,7 @@ def runs_plain_inside(dat):
 
 
 def makes_a_subdat(dat):
-    """A dat's run function that makes a subdat by a nested run inside its own folder (SVP 241)."""
+    """A dat's run function that makes a subdat by a nested run inside its own folder."""
     Dat.manager.run({"dat": {"do": "ledger_kinds.build_table", "name": str(dat.path / "viz"),
                              "kwargs": {"n": 2, "start": 1}}})
     dat.get_results()["cells"] = 4
@@ -387,7 +387,7 @@ class NumberedDat(Dat):
 
 
 #: Each step of ``count``: the ``more`` it was handed, an input by its name, and the ``accs``, each by its names
-#: (SVP 242).
+#:.
 STEPS = []
 MERGED = []
 
@@ -398,7 +398,7 @@ def _input_name(x):
 
 @dat.reduce_fn
 def count(rev, *, accs, more: list, tag: str = "t") -> dict:
-    """A counting reduce (SVP 242): each input's name -> the times it was handed to a step. Lawful: an input is
+    """A counting reduce: each input's name -> the times it was handed to a step. Lawful: an input is
     handed once in any chain, and the merge is a sum. The steps are counted outside the bytes: ``STEPS`` the ``more``
     of each, ``MERGED`` the ``accs`` of each, each acc by its sorted names."""
     _count("count")
@@ -415,7 +415,7 @@ def count(rev, *, accs, more: list, tag: str = "t") -> dict:
 
 @dat.reduce_fn
 def count_calls(rev, *, accs, more: list) -> dict:
-    """``count`` with its steps in the bytes, ``calls``: it breaks the law, so ``fresh=True`` differs (SVP 242)."""
+    """``count`` with its steps in the bytes, ``calls``: it breaks the law, so ``fresh=True`` differs."""
     out = {"calls": 1 + sum(a.obj["calls"] for a in accs)}
     for acc in accs:
         out.update({k: v for k, v in acc.obj.items() if k != "calls"})

@@ -1,4 +1,4 @@
-"""Root, the one list (SVP 239): `root:` in the one `.datconfig.yaml`, the registry on root as the list of ledgers,
+"""Root, the one list: `root:` in the one `.datconfig.yaml`, the registry on root as the list of ledgers,
 `ledgers` a mutable mapping filled lazily from it, and `L`, the active ledger (`DAT_LEDGER` over `default:`)."""
 
 import pytest
@@ -320,7 +320,7 @@ def test_x_without_namespace_ledger_is_the_bare_run(here, monkeypatch):
     assert ledgers.games.at().get("db", "db/version") is None       # nothing sealed in the active ledger
 
 
-# -- two registered ledgers on one Postgres server, each its own database (SVP 239 § How it will be verified) ----------
+# -- two registered ledgers on one Postgres server, each its own database ----------
 
 def test_two_registered_postgres_ledgers_are_separate_databases(here):
     import uuid

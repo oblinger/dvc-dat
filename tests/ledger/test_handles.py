@@ -1,4 +1,4 @@
-"""Several ``Ledger`` handles on one ledger in one process (SVP 1468, R0001): a declaration written
+"""Several ``Ledger`` handles on one ledger in one process: a declaration written
 through one handle is what every other handle's next read answers; an earlier ``Rev`` keeps its own."""
 
 import threading

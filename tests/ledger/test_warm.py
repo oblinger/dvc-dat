@@ -1,4 +1,4 @@
-"""``@dat.warm`` (SVP 250 A7): a process-level memo keyed by the canonical hash of the arguments, bounded by bytes."""
+"""``@dat.warm``: a process-level memo keyed by the canonical hash of the arguments, bounded by bytes."""
 
 import pytest
 

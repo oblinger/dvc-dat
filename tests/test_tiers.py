@@ -1,4 +1,4 @@
-"""The install tiers of the expander (1519 R3): base expands `${unique:}` alone and refuses any other `${`; with
+"""The install tiers of the expander: base expands `${unique:}` alone and refuses any other `${`; with
 omegaconf (`dvc-dat[expand]`) the whole grammar, giving the same strings for a unique-only template.
 
 The base tier is simulated in a fresh interpreter with `omegaconf` blocked (`sys.modules["omegaconf"] = None`), so

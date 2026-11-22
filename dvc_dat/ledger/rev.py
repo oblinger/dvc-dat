@@ -2,13 +2,13 @@
 
 Every read lives on ``Rev``. The row reads (``[]``, ``get``, ``all``, ``in``)
 fold the rows at or before the revision by each predicate's cardinality as of
-that revision, at every arity (Q19); ``history`` takes the same pattern and
+that revision, at every arity; ``history`` takes the same pattern and
 walks history unfolded, removes included. The subject reads (``refs``, ``values``,
 ``value``, ``select``, ``load``, ``run``) treat the store as a table whose
 rows are subjects. No pattern read decodes a ``ref:`` object: it comes back a
-``Ref``, unloaded (Q35). Inside a value function the ``Rev`` handed to the body
+``Ref``, unloaded. Inside a value function the ``Rev`` handed to the body
 traces what it reads into the value's dependencies (``dependencies``).
-A ``spill:`` object (SVP 1738, ``spill``) comes back a ``Spilled`` from every read but the single-object ones
+A ``spill:`` object (``spill``) comes back a ``Spilled`` from every read but the single-object ones
 (``rev[s, p]``, ``rev.get(s, p)``), which load it.
 """
 
@@ -41,7 +41,7 @@ FIXED_MANY = frozenset({"db/tag"})
 def fixed_one(p: str) -> bool:
     """Every ``db/`` predicate's cardinality is fixed at ``one`` (the clocks ``db/version`` and ``db/commit``
     among them) but ``db/tag``, fixed at ``many``; a bare predicate, ``version`` and ``commit`` included, is
-    the user's (DAT 1052 Q3)."""
+    the user's."""
     return p.startswith("db/") and p not in FIXED_MANY
 
 
@@ -50,7 +50,7 @@ TIME_PREDICATES = frozenset({"db/time", "db/sealed-at"})
 
 
 class Row(NamedTuple):
-    """A single row in the ledger: revision, subject, predicate, object, and ``added`` (false on a remove, A48)."""
+    """A single row in the ledger: revision, subject, predicate, object, and ``added`` (false on a remove)."""
 
     rev: "Rev"
     """The revision that wrote the row."""
@@ -80,7 +80,7 @@ class Row(NamedTuple):
 
 
 def class_named(ledger: "Ledger", name: str) -> type:
-    """The class a dotted name resolves to, following ``db/kind/<old> db/moved`` rows at the head (A19)."""
+    """The class a dotted name resolves to, following ``db/kind/<old> db/moved`` rows at the head."""
     head = ledger.at()
     seen = {name}
     while True:
@@ -109,7 +109,7 @@ def class_named(ledger: "Ledger", name: str) -> type:
 
 
 def kind_names(ledger: "Ledger", kind: Any, rev: "Rev") -> List[str]:
-    """``kind=``: a class or dotted name, plus every earlier name a ``db/moved`` chain leads from (A32)."""
+    """``kind=``: a class or dotted name, plus every earlier name a ``db/moved`` chain leads from."""
     if isinstance(kind, type):
         kind = dotted(kind)
     if not isinstance(kind, str) or not kind:
@@ -127,7 +127,7 @@ def kind_names(ledger: "Ledger", kind: Any, rev: "Rev") -> List[str]:
 
 
 def name_of(rev: "Rev", subject: str) -> Optional[str]:
-    """A value's one name at ``rev`` (Q36): the ``db/alias`` naming it written latest; ``None`` if none."""
+    """A value's one name at ``rev``: the ``db/alias`` naming it written latest; ``None`` if none."""
     best = None
     for n in rev._aliases_of(subject):
         h = rev._held(n, "db/alias")[0]
@@ -138,7 +138,7 @@ def name_of(rev: "Rev", subject: str) -> Optional[str]:
 
 def display_name(ledger: "Ledger", subject: str) -> str:
     """A value's label: its name at the head, else ``#`` + the hash's first 8, like a short git sha
-    (Q36, DAT 1036)."""
+    ."""
     name = name_of(ledger.at(), subject)
     if name is not None:
         return name
@@ -166,13 +166,13 @@ class Rev:
     def __repr__(self) -> str:
         return f"Rev({self.id})"
 
-    # -- the display zone (SVP 1505 Q2) ----------------------------------------------------------------------
+    # -- the display zone ----------------------------------------------------------------------
 
     @property
     def timezone(self) -> Any:
         """The zone this revision prints times in, as a ``ZoneInfo``, UTC when none is set.
 
-        The ``(db, db/timezone, <IANA name>)`` row as of this revision names it (SVP 1505 Q2). Stamps are stored UTC
+        The ``(db, db/timezone, <IANA name>)`` row as of this revision names it. Stamps are stored UTC
         and never move; the setting decides only how they print, so any revision may add, change or remove it
         (``t.add("db", "db/timezone", "America/Los_Angeles")``). The clock built-ins of ``rev.ns.expand`` are in it
         too ([Expansion][expansion-nsexpand]).
@@ -513,7 +513,7 @@ class Rev:
     def history(self, *pattern: Any, since: Optional["Rev"] = None) -> List[Row]:
         """The history of a pattern, unfolded: every row that holds at or before this revision.
 
-        Rows are in ``(rev, ord)`` order (A48); removes are included, and when ``since`` is given, only rows in
+        Rows are in ``(rev, ord)`` order; removes are included, and when ``since`` is given, only rows in
         ``(since, id]`` show. ``all`` is the same pattern folded.
 
         No pattern is the ledger as stored; ``history(s, p, o)`` with ``added`` true says when a triple was set. The
@@ -533,7 +533,7 @@ class Rev:
     def last_rev(self, *pattern: Any, default: Any = None, since: Optional["Rev"] = None) -> Any:
         """The ``Rev`` of the last row matching the pattern at or before this revision, removes included, or ``default``
         with none: what ``history(*pattern)[-1].rev`` gives, without decoding a row; the pattern and ``since`` as
-        ``history`` takes them (SVP 1521 A2).
+        ``history`` takes them.
 
         ``L.at(412).last_rev("game/G1").id`` is the revision that last touched those rows, 137, so ``G1@137`` names what
         ``G1`` was at 412. A read through a body's recording ``Rev`` is traced as the revision found, so a memo entry
@@ -758,16 +758,16 @@ class Rev:
     def load(self, subject: str) -> Value:
         """``Ref(rev, subject).load()``: the value under a subject or an alias, decoded, its provenance restored.
 
-        An alias resolves; reading through one records the binding (A35).
+        An alias resolves; reading through one records the binding.
         """
         return Ref(self, subject).load()
 
     @property
     def ns(self) -> "LedgerNamespace":
-        """The ledger's namespace at this revision (DAT 1046, DAT 1051).
+        """The ledger's namespace at this revision.
 
-        It is the ``Namespace`` interface of [DAT Namespace
-        API](https://github.com/oblinger/dvc-dat/blob/main/doc/DAT%20Design/DAT%20API/DAT%20Namespace%20API.md):
+        It is the ``Namespace`` interface of [the
+        namespace reference](https://oblinger.github.io/dvc-dat/api/do/):
         ``rev.ns.load(name)`` is what the dotted ``name`` denotes here, ``rev.ns.mounts()`` the ``db/mount`` rows as
         ``{prefix: {"root": ..., "repo": ...}}``, ``rev.ns.expand(template, **vars)`` a template filled through these
         names in this revision's [display zone][dvc_dat.ledger.Rev.timezone] with ``${unique:}`` counted against this
@@ -788,7 +788,7 @@ class Rev:
         one, a dat's ``run`` function, which runs only through a spec ([``run``][dvc_dat.ledger.Rev.run]).
 
         In a project whose ``.datconfig.yaml`` names a ledger, ``Dat.manager.ns`` is this namespace at the head,
-        ``mount`` refused; inside a sandboxed dat body it is this namespace at the run's revision (DAT 1047). See
+        ``mount`` refused; inside a sandboxed dat body it is this namespace at the run's revision. See
         [Execution Semantics][execution-semantics].
         """
         from .namespace import LedgerNamespace
@@ -799,7 +799,7 @@ class Rev:
             **kwargs: Any) -> Optional[Value]:
         """The result of ``target``, already sealed if one from the same code and memo key still holds.
 
-        This is the API form of ``just run TARGET KEY=VALUE`` (DAT 1046); a miss runs the target and seals the result
+        This is the API form of ``just run TARGET KEY=VALUE``; a miss runs the target and seals the result
         as the memo entry.
 
         ``target`` is a dotted name, resolved as by [``ns.load``][dvc_dat.ledger.Rev.ns], or a spec dict. A ledger
@@ -848,7 +848,7 @@ class Rev:
 
     def reduce(self, name: str, /, *, over: Any, seal: Any = OWN, clean: bool = False, fresh: bool = False,
                **keys: Any) -> Optional[Value]:
-        """One value reduced from the set ``over``, merging results of subsets already reduced (SVP 242).
+        """One value reduced from the set ``over``, merging results of subsets already reduced.
 
         This is the API form of ``just reduce NAME over=A,B,C KEY=VALUE``. ``name`` resolves as on
         [``run``][dvc_dat.ledger.Rev.run] and names a reduce function, marked ``@dat.reduce_fn``:
@@ -901,7 +901,7 @@ class Rev:
 
         This is a ``Rerun`` ([Rerunnability][rerunnability]) whose ``outcome`` is ``reproduced``,
         ``differed-as-allowed``, ``differed-nondeterministic`` or ``differed-deterministic``, read off the value's
-        claim (SVP 250, SVP 251 Q2); it also carries ``hash``, ``expected``, ``reproducible`` (the level the value's
+        claim; it also carries ``hash``, ``expected``, ``reproducible`` (the level the value's
         claim gave it, [Reproducibility][reproducibility]), ``commit``, ``tag`` and ``worktree``.
 
         ``value`` is a sealed ``Value``, a ``Ref`` or a name. Its commit must be pinned on this ledger (``t.pin``),
@@ -926,7 +926,7 @@ def default_by() -> str:
 
 
 def _one_shot(name: str) -> Any:
-    """``Head.<name>``: the ``Transaction`` method of that name, in a transaction of its own (SVP 250 A13): declared
+    """``Head.<name>``: the ``Transaction`` method of that name, in a transaction of its own: declared
     once, on ``Transaction``; here opened (``by=``, default ``default_by()``), called and committed."""
     import functools
 
@@ -944,7 +944,7 @@ def _one_shot(name: str) -> Any:
 
 
 class Head(Rev):
-    """The top of the ledger, ``L.at()`` with no argument (SVP 250 A13): a ``Rev`` that is also a transaction.
+    """The top of the ledger, ``L.at()`` with no argument: a ``Rev`` that is also a transaction.
     Every read is the ``Rev``'s; each transaction method listed in ``ONE_SHOT`` is here the one-shot form,
     opening a transaction, calling the method on it and committing: ``L.at().pin(value)``, ``L.at().copy(value)``."""
 
@@ -988,7 +988,7 @@ def type_ok(ledger: "Ledger", decl: str, text: str) -> bool:
 
 
 class Ref:
-    """A reference to one value at one moment: ``Ref(rev, name)``, the alias chain resolved when made (Q30).
+    """A reference to one value at one moment: ``Ref(rev, name)``, the alias chain resolved when made.
 
     Made from the recording ``Rev`` a value function's body holds, it keeps the recorder: resolving an
     alias records ``<name> db/alias``, ``load`` the ``ref:`` item, and ``preds``, ``aliases``,
@@ -1041,7 +1041,7 @@ class Ref:
 
     @classmethod
     def _from_text(cls, rev: Rev, text: str) -> "Ref":
-        """A stored ``ref:``: its hint names the subject; hint-less, the subject resolves lazily (A28, A36)."""
+        """A stored ``ref:``: its hint names the subject; hint-less, the subject resolves lazily."""
         c, h, subj = parse_ref(text)
         r = cls.__new__(cls)
         r._init(rev, subj or "", subj, c, h, subj is None)
@@ -1051,7 +1051,7 @@ class Ref:
     def name(self) -> str:
         """The print name of this value: its alias at the head (the latest written), else ``#`` + the hash's first 8 hex.
 
-        That ``#`` form is DAT 1036; this is also ``str(ref)``.
+        That ``#`` form is also ``str(ref)``.
 
         Unique one way: a name points at one value at a time, and re-pointing it moves it to another value; a value
         may carry several names (``aliases``). ``subject`` is what the reference resolved to.
@@ -1109,7 +1109,7 @@ class Ref:
     def preds(self) -> FrozenPreds:
         """The subject's non-``db/`` rows at ``rev``, annotations included.
 
-        One view (A24); unchecked. A typed pred is an unloaded ``Ref``.
+        One view; unchecked. A typed pred is an unloaded ``Ref``.
         """
         out = self._preds()
         self.rev._record_call("preds", (self._given,), None, dict(out))
@@ -1117,7 +1117,7 @@ class Ref:
 
     @property
     def aliases(self) -> List[str]:
-        """Every ``db/alias`` name pointing at the subject as of ``rev`` (A25)."""
+        """Every ``db/alias`` name pointing at the subject as of ``rev``."""
         s = self.subject
         out = [] if s is None else self._p._aliases_of(s)
         self.rev._record_call("aliases", (self._given,), None, sorted(out))
@@ -1133,7 +1133,7 @@ class Ref:
         """The revision of the subject's ``db/value`` row.
 
         The value was sealed into the ledger at or before ``rev``, since a reference made later can point at a value
-        sealed earlier; ``None`` while the subject holds no value (A41).
+        sealed earlier; ``None`` while the subject holds no value.
         """
         out = self._sealed_at()
         self.rev._record_call("sealed_at", (self._given,), None, out)
@@ -1148,21 +1148,21 @@ class Ref:
         return hash(self.subject if self.subject is not None else self._text())
 
     def __str__(self) -> str:
-        """The bare label: the name at the head, else ``#`` + the hash's first 8 (DAT 1036)."""
+        """The bare label: the name at the head, else ``#`` + the hash's first 8."""
         s = self.subject
         if s is None:
             return "#" + (self._hash or "")[:8]
         return display_name(self._p.ledger, s)
 
     def __repr__(self) -> str:
-        """``<Ref video/G1>``, ``<Ref #2db69ce1>`` (DAT 1036)."""
+        """``<Ref video/G1>``, ``<Ref #2db69ce1>``."""
         return f"<Ref {self}>"
 
     def __reduce__(self) -> Any:
         raise TypeError("a Ref is bound to an open ledger and does not pickle")
 
     def _fetch(self) -> Any:
-        """The pull from the ledger's values URI (its ``db/values`` row at the top, SVP 1599), for a miss in the
+        """The pull from the ledger's values URI (its ``db/values`` row at the top), for a miss in the
         cache folder; with no row it pulls nothing: the folder alone."""
         from .backends import puller
 
@@ -1191,7 +1191,7 @@ class Ref:
         return v
 
     def _spec_only(self) -> bool:
-        """A copy that holds the value's spec and not its bytes (SVP 251): a later run may have brought them."""
+        """A copy that holds the value's spec and not its bytes: a later run may have brought them."""
         return self._p._spec_only_at(self.subject) if self.subject is not None else False
 
     def _stored_hashes(self) -> List[str]:

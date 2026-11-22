@@ -1,4 +1,4 @@
-"""Backends by URI scheme (SVP 1599): where a ledger's records and its bytes live.
+"""Backends by URI scheme: where a ledger's records and its bytes live.
 
 A ledger carries two URIs. **triples** is its location, the records: a folder (the SQLite
 ledger there, also written ``sqlite://<folder>``) or ``postgresql://…``. **values** is where its

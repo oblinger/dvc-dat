@@ -1,4 +1,4 @@
-"""Names (F447 Q36, A70) and the control options (Q41): path=, Value(name=), kwargs=."""
+"""Names and the control options: path=, Value(name=), kwargs=."""
 
 import os
 

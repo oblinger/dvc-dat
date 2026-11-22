@@ -1,4 +1,4 @@
-"""Namespace latent bugs (deep scan round 4, 2026-10-27): a name that leaves its mount, a folder at a
+"""Namespace latent bugs (deep scan round 4): a name that leaves its mount, a folder at a
 dotted at, an unreachable ledger mount, a null in a mounted file, a remount serving the old content."""
 import subprocess
 import sys

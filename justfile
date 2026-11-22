@@ -7,7 +7,7 @@ import 'dvc_dat/dvc_dat.just'
 test *ARGS:
     uv run python -m pytest -q {{ARGS}}
 
-# the suite once per install tier (1519 R4): base (pyyaml alone), expand (omegaconf), every extra
+# the suite once per install tier: base (pyyaml alone), expand (omegaconf), every extra
 test-tiers *ARGS:
     uv run --exact python -m pytest -q {{ARGS}}
     uv run --exact --extra expand python -m pytest -q {{ARGS}}

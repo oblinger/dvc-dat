@@ -11,7 +11,7 @@
   "postgres": "17.11"
  },
  "config": {
-  "ledger": "postgresql://svp@127.0.0.1:5433/ledger?options=-csearch_path%3Dload_p8&art=/private/tmp/claude-501/-Users-oblinger-ob-grove-svgrove-sv-pipe/8a199b19-997d-4feb-b88f-c94da5f57767/scratchpad/load/art-p8",
+  "ledger": "postgresql://postgres@127.0.0.1:5433/ledger?options=-csearch_path%3Dload_p8&art=/tmp/load/load/art-p8",
   "transactions": 100,
   "seed": 0,
   "lock": 10.0,

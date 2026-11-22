@@ -1,6 +1,6 @@
 """The reference model. Hypothesis writes random histories of add / remove / cardinality
 flips; every row read at every revision is checked against ``model.Model``: ``all`` at
-every arity, ``[]``/``get`` (a ``many`` predicate refused by its declaration, Q26), ``in``,
+every arity, ``[]``/``get`` (a ``many`` predicate refused by its declaration), ``in``,
 ``rows`` (by pattern, unfolded) and the where clause of ``refs``."""
 
 import tempfile

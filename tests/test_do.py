@@ -57,8 +57,8 @@ class TestLoad:
                (7, "hello, My lucky number is 7")
 
     def test_do_on_a_configuration_file(self, capsys):
-        Dat.manager.run("hello_config", "Martin")
-        assert capsys.readouterr().out == "   Martin, My lucky number is 7\n"
+        Dat.manager.run("hello_config", "Alice")
+        assert capsys.readouterr().out == "   Alice, My lucky number is 7\n"
 
     def test_do_on_a_shadowed_config(self, capsys):
         Dat.manager.run("hello_shadowed_config")
@@ -208,7 +208,7 @@ class TestDatCallArgs:
 
 
 class TestManagerRun:
-    """DAT 1049: `Dat.manager.run(target, ...)` is the one run; `Dat.ns` is the namespace only."""
+    """`Dat.manager.run(target, ...)` is the one run; `Dat.ns` is the namespace only."""
 
     @pytest.fixture
     def m(self, tmp_path):

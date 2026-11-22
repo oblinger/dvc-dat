@@ -6,7 +6,7 @@ live in the database (in the first schema of the connection's ``search_path``;
 serves every host; a cloud's login stays outside (a proxy, a token in the
 URI). The bytes are cached in ``<cache root>/<database>/art`` on this machine
 (``DAT_CACHE``, else ``cache:`` in ``.datconfig.yaml``) and live at the
-ledger's values URI (``backends``, SVP 1599).
+ledger's values URI (``backends``).
 
 Same rows, same order, same fold as ``SqliteStore``. What differs underneath:
 the write lock is ``SELECT … FOR UPDATE`` on the one row of ``ledger_lock``
@@ -14,7 +14,7 @@ the write lock is ``SELECT … FOR UPDATE`` on the one row of ``ledger_lock``
 ``text_pattern_ops`` operators ``~>=~`` / ``~<~`` (a ``C``-order range, as
 SQLite's), which the ``text_pattern_ops`` index serves whatever the
 database's collation; ``db/index`` is a partial index as in SQLite. An index
-over the object holds ``md5(object)``, not the object (3.1.1, SVP 255 Q3): a
+over the object holds ``md5(object)``, not the object (3.1.1): a
 btree entry is at most 8191 bytes and an object has no limit (a sandboxed call's
 ``db/modules`` is ~20 KB), so an object lookup reads
 ``md5(object) = md5(%s) AND object = %s``. A ledger made before 3.1.1 indexes
@@ -22,7 +22,7 @@ the object itself until ``migrate(uri)`` rebuilds those indexes
 (``python -m dvc_dat.ledger.pgstore migrate URI``). A read at or below a revision this
 store has seen committed (``top()`` on its own connection) is answered from a bounded in-process cache after
 its first round trip: rows are only ever appended, each revision in one transaction, so such a read never
-changes (SVP 255: a memo hit repeated ~36 of its ~64 reads, each a ~40 ms round trip through a Cloud SQL
+changes (a memo hit repeated ~36 of its ~64 reads, each a ~40 ms round trip through a Cloud SQL
 proxy). A read through an open write transaction is never cached, nor sets what counts as committed. Statements
 are never server-prepared, so each is planned with its values (a partial index
 or a prefix range is usable only then). Postgres text cannot hold NUL: a row
@@ -115,7 +115,7 @@ def conninfo(dsn: str) -> Tuple[str, Dict[str, str]]:
 
 
 def split_dsn(dsn: str) -> Tuple[str, str]:
-    """``(dsn, redacted dsn)``; a ``?art=`` parameter (removed, SVP 1599) is ``LedgerError`` naming what replaces it."""
+    """``(dsn, redacted dsn)``; a ``?art=`` parameter (removed) is ``LedgerError`` naming what replaces it."""
     parts = urlsplit(dsn)
     netloc = parts.netloc
     if "@" in netloc and ":" in netloc.split("@", 1)[0]:
@@ -125,7 +125,7 @@ def split_dsn(dsn: str) -> Tuple[str, str]:
         redacted_netloc = netloc
     redacted = urlunsplit((parts.scheme, redacted_netloc, parts.path, parts.query, ""))
     if any(k == "art" for k, _v in parse_qsl(parts.query, keep_blank_values=True)):
-        raise LedgerError(f"Postgres ledger {redacted}: '?art=' was removed (SVP 1599). The bytes' cache on this "
+        raise LedgerError(f"Postgres ledger {redacted}: '?art=' was removed. The bytes' cache on this "
                           "machine is <root>/<database>/art, <root> being DAT_CACHE or 'cache:' in .datconfig.yaml; "
                           "where they live beyond it is the ledger's row (db, db/values, <uri>)")
     return urlunsplit((parts.scheme, netloc, parts.path, parts.query, "")), redacted

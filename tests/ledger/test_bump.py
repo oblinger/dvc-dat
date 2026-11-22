@@ -1,7 +1,7 @@
-"""DAT 1043, 1044: a code version lives in its source. ``bump_source`` edits ``__version__``; ``bump`` refuses
+"""A code version lives in its source. ``bump_source`` edits ``__version__``; ``bump`` refuses
 ``db/repo/`` subjects; a declared version counts only from a clean checkout; a clean seal moves the
 ``db/repo/<repo>/<package> db/version`` clock to the version the run was exposed to, one per package, and
-``db/repo/<repo> db/commit`` to the commit of the latest clean run (DAT 1052 Q2 B)."""
+``db/repo/<repo> db/commit`` to the commit of the latest clean run."""
 
 import re
 import warnings
@@ -113,7 +113,7 @@ def test_a_clean_seal_moves_the_clock_once(mounted):
 
 
 def test_the_clocks_are_db_predicates(mounted):
-    """DAT 1052 Q2 (B): ``db/version`` and ``db/commit`` are hidden from ``preds``, kept by ``t[s] = {...}``,
+    """``db/version`` and ``db/commit`` are hidden from ``preds``, kept by ``t[s] = {...}``,
     fixed at ``one``; no bare ``version`` or ``commit`` row is written."""
     L, repo = mounted
     head = git(repo, "rev-parse", "HEAD")

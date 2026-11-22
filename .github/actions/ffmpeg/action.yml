@@ -3,7 +3,7 @@ description: ffmpeg and ffprobe, a pinned static build from a GitHub release, so
 runs:
   using: composite
   steps:
-    # apt's azure.archive.ubuntu.com stalled for 6 h on one run and 40 min on another (2026-11-06), and a
+    # apt's azure.archive.ubuntu.com stalled for 6 h on one run and 40 min on another, and a
     # 6-minute limit on it failed outright. Same choice as pandoc in docs.yml.
     - shell: bash
       run: |
