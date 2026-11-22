@@ -11,11 +11,12 @@ result, sealed under a content hash. The **ledger** half
 (`dvc_dat.ledger`) keeps the history around them: an append-only
 database where every fact is a row stamped with a revision, every read
 sees the state as of one revision, and every value is stored by its
-content. Each half has a module doc:
+content. Each half has one module page, its design first and its
+reference, generated from the docstrings, below:
 
-- [DAT Dat](DAT%20Modules/DAT%20Dat.md): `Dat`, `DatManager`,
+- [DAT Dat](api/core.md): `Dat`, `DatManager`,
   `DatContainer`, `Namespace`; specs, sealing, standing, the manager.
-- [DAT Ledger](DAT%20Modules/ledger/DAT%20Ledger.md): `Ledger`, `Rev`,
+- [DAT Ledger](api/ledger.md): `Ledger`, `Rev`,
   `Ref`, `Transaction`, `Value`, `Fn`; the fold, sealing and saving,
   the sandbox, evaluation and the dependencies.
 
@@ -95,7 +96,8 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 
 ## Where the detail lives
 
-- `DAT Modules/`: the two module docs above.
+- `api/`: the module pages above, and the reference pages of
+  `dvc_dat.just` and `dvc_dat.dat_tools`.
 - The notebooks in `DAT Demos/`:
   [`ledger-triples.py`](DAT%20Demos/ledger-triples.ipynb) (the quad store
   alone), [`ledger-values.py`](DAT%20Demos/ledger-values.ipynb) (values,

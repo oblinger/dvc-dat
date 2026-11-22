@@ -60,7 +60,7 @@ Dats, specs, and the one call that runs them. The world they live in is [DAT Man
 ## Dat Interface
 A folder holding `_spec_.yaml` — a complete, argumentless recipe, expanded once at create and never rewritten — and `_result_.yaml`, what running it produced. The class is chosen by the spec's `dat.kind`; subclass `Dat` to give a kind its own rules. `Dat(path)` is the dat already in a folder, its spec and results read from there, writing nothing; `create` makes one, `load` finds one by name.
 
-Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Value`, so `seal`, `preds`, `subject`, `sealed` and `hash` are on every dat; the ledger loads without it (`from dvc_dat.ledger import Ledger` imports no `dvc_dat.core`) and `Dat` registers itself with the ledger (`dvc_dat.ledger.hooks`) when it is imported. A saved dat seals with `dat.seal(t, name=...)`, its folder's files going to the ledger's art store and its `db/value` row naming `dat.kind`; `preds` default to the spec's scalar `dat.kwargs` and the results' scalar top-level entries; `L.at().run(spec)` is `Dat.manager.run(spec)` remembered. The ledger side is [DAT Ledger § Dat Interface](../../DAT%20Modules/ledger/DAT%20Ledger.md#Dat%20Interface). Two words: a dat's *standing* (`sealed` by `save()`) is the dat world's; `dat.sealed` (a moment, or `None`) is the ledger's.
+Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Value`, so `seal`, `preds`, `subject`, `sealed` and `hash` are on every dat; the ledger loads without it (`from dvc_dat.ledger import Ledger` imports no `dvc_dat.core`) and `Dat` registers itself with the ledger (`dvc_dat.ledger.hooks`) when it is imported. A saved dat seals with `dat.seal(t, name=...)`, its folder's files going to the ledger's art store and its `db/value` row naming `dat.kind`; `preds` default to the spec's scalar `dat.kwargs` and the results' scalar top-level entries; `L.at().run(spec)` is `Dat.manager.run(spec)` remembered. The ledger side is [DAT Ledger § Dat Interface](../../api/ledger.md#Dat%20Interface). Two words: a dat's *standing* (`sealed` by `save()`) is the dat world's; `dat.sealed` (a moment, or `None`) is the ledger's.
 
 | Dat | |
 | --- | --- |
@@ -85,7 +85,7 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
 | [set](#^set) | Dotted-key write, making mappings on the way |
 | [merge_dicts](#^merge-dicts) | The merge `dat.base` uses |
 | [cli_main](#^cli-main) | The command line `just run` launches, for your own main |
-| seal, preds, subject, hash | A dat is a ledger `Value` ([DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md#Value%20Interface)) |
+| seal, preds, subject, hash | A dat is a ledger `Value` ([DAT Ledger](../../api/ledger.md#Value%20Interface)) |
 
 **manager**`: DatManager`
     A plain class attribute: `None` until first use, when the getter builds the default world with `DatManager.load_dat_config()`. Assign a manager to replace the default world (`Dat.manager = Store(dat_folders=[...], ns=Dat.ns)` keeps the mounts). Every subclass sees the same object. `dat.manager` on an instance is the manager that loaded it, else this one — a run's function loads through `dat.manager`. ^manager
@@ -130,7 +130,7 @@ Every dat is also a ledger value (DAT 1038): `Dat` subclasses `dvc_dat.ledger.Va
     The folder relative to the dat folder holding it — the dat's name; the absolute path when it lies outside every dat folder. ^get-path-name
 
 **delete**`(*, must_exist: bool = True) -> bool`
-    Remove the folder; `True` when removed. On a ledger project it is `TypeError`, as is `target_exists: overwrite` onto an existing dat: retract the dat's rows (`del t[s]`) instead ([DAT Ledger](../../DAT%20Modules/ledger/DAT%20Ledger.md#Revisions%20and%20transactions)). ^delete
+    Remove the folder; `True` when removed. On a ledger project it is `TypeError`, as is `target_exists: overwrite` onto an existing dat: retract the dat's rows (`del t[s]`) instead ([DAT Ledger](../../api/ledger.md#Revisions%20and%20transactions)). ^delete
 
 **copy**`(new_path: str | Path, *, run: bool = True) -> Dat`
     The same spec in a new folder, loaded, same class; `run=False` leaves `run/` behind, which changes nothing about the copy's hash. ^copy
@@ -192,7 +192,7 @@ A dat whose folder holds dats.
 | a **template spec** (dict, or a name loading to one) | create the dat, run it | fork, then the forked spec creates the dat, which runs |
 | a **`Dat`** | `TypeError`: a dat runs once, when made | `TypeError`; `run(dat.get_spec(), ...)` runs its recipe as a new dat |
 
-`Dat.manager.run` remembers nothing: a template makes a fresh folder every time. On a ledger, `rev.run(target, **kwargs)` takes the same targets (a template spec, its name, or a run function's dotted name) and remembers the answer: the dat made, run and sealed as a value once, then found ([DAT Ledger § run](../../DAT%20Modules/ledger/DAT%20Ledger.md#Rev%20Interface)).
+`Dat.manager.run` remembers nothing: a template makes a fresh folder every time. On a ledger, `rev.run(target, **kwargs)` takes the same targets (a template spec, its name, or a run function's dotted name) and remembers the answer: the dat made, run and sealed as a value once, then found ([DAT Ledger § run](../../api/ledger.md#Rev%20Interface)).
 
 A dat's run is `fn(dat, *dat.args, **dat.kwargs)` with `fn` the object `dat.do` names, inside a recording, with `run/work/` as the working directory; `dat.dependencies` lands in the results beside whatever the function put in `dat.get_results()`, and reaches `_result_.yaml` when the dat is saved; `dat.run_at`, `dat.run_time`, `dat.host`, `dat.pid`, `dat.code` and `dat.content` are the run's, in the sub-dat `run/` (`dat.run`), outside the hash. **Nothing about arguments is recorded in the results — the spec is the record.** A template with no `dat.do` just creates the dat and returns it; `dat.target_exists: use` on an existing folder returns that dat without running. In-place iteration (profiling, a report you re-run): a fixed `dat.name` plus `dat.target_exists: overwrite`.
 
@@ -259,7 +259,7 @@ The whole grammar, as `ns.expand`: [Expansion](../../expand.md).
 | `manager` | Optional: the `DatManager` subclass to build, dotted; its `CONFIG_KEYS` may appear as keys too — [DAT Manager API](DAT%20Manager%20API.md) § The config file |
 | `run` | Optional. The command the `run` recipe of `dvc_dat.just` hands its arguments to — `uv run python -m dvc_dat`, or your program's own main when it mounts names ([DAT Namespace API](DAT%20Namespace%20API.md)); default `.venv/bin/python -m dvc_dat` beside the config, else `python3 -m dvc_dat` |
 | `index` | Optional: the index file (default `_index_.json` in `art_folder`) |
-| `root` | Optional: the root ledger, a folder or a Postgres DSN, whose registry names every other ledger; without it a SQLite root under the first dat folder, made on first use; read by `ledgers` and `L` ([DAT Ledger § Many ledgers](../../DAT%20Modules/ledger/DAT%20Ledger.md#Many%20ledgers)) |
+| `root` | Optional: the root ledger, a folder or a Postgres DSN, whose registry names every other ledger; without it a SQLite root under the first dat folder, made on first use; read by `ledgers` and `L` ([DAT Ledger § Many ledgers](../../api/ledger.md#Many%20ledgers)) |
 | `default` | Optional: the active ledger when `DAT_LEDGER` is unset, a name (`root`, or one registered on root) or a location; read by `Ledger()` and `L` |
 | `mounts` | Optional: prefix-to-folder mounts the ledger asserts as rows; read by `Ledger()` |
 | `namespace` | Optional, `ledger`: the project's names are its active ledger's `db/mount` rows (`Dat.ns.mount` refused); the one switch |

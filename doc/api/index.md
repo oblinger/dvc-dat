@@ -5,7 +5,7 @@ The reference generated from `dvc_dat`'s source: every public class and function
 
 Module page: [DAT Architecture](../DAT%20Architecture.md).
 
-These pages are built from the code, so they always say what the installed version does. The hand-written guides say why and show the calls together: [Concepts](../concepts.md), [Spec Format](../spec-format.md), [Command Line](../cli.md).
+Each module's page is its one home: its design first (its classes, its figure, the rules that span them), then under **Reference** the classes and functions built from the code, so they always say what the installed version does. The hand-written guides say why and show the calls together: [Concepts](../concepts.md), [Spec Format](../spec-format.md), [Command Line](../cli.md).
 
 ## What the package exports
 
@@ -39,9 +39,9 @@ Everything else hangs off those four classes:
 
 | Page | What it covers |
 |------|----------------|
-| [Dat, DatManager, DatContainer](core.md) | `dvc_dat.core`: the dat folder, the manager that creates, loads and runs dats, and `merge_dicts`; the `${…}` grammar is `Namespace.expand` |
+| [Dat, DatManager, DatContainer](core.md) | The dat half's module page (specs, sealing, standing, the manager), then `dvc_dat.core`: the dat folder, the manager that creates, loads and runs dats, and `merge_dicts`; the `${…}` grammar is `Namespace.expand` |
 | [Namespace](do.md) | `dvc_dat.do`: `ns`, dotted names to objects, mounts, and `cli_main`, the command line |
-| [Ledger](ledger.md) | `dvc_dat.ledger`: `Ledger`, `Rev`, `Transaction`, `Value`, the decorators `dat.fn`, `dat.reduce_fn`, `dat.warm`, `dat.command`, pin and rerun, the active ledger `L` and `ledgers`, the release helpers, the errors |
+| [Ledger](ledger.md) | The ledger's module page (revisions, storage, execution, provenance), then `dvc_dat.ledger`: `Ledger`, `Rev`, `Transaction`, `Value`, the decorators `dat.fn`, `dat.reduce_fn`, `dat.warm`, `dat.command`, pin and rerun, the active ledger `L` and `ledgers`, the release helpers, the errors |
 | [Commands](just.md) | `dvc_dat.just`: `@dat.command`, the declared commands that become `just <name>` recipes |
 | [Dat tools](dat_tools.md) | `dvc_dat.dat_tools`, mounted as `dt`: listing dats and reporting over them |
 

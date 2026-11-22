@@ -1,9 +1,9 @@
 # Dat tools
 `dvc_dat.dat_tools`, mounted as `dt`: listing the mounted names (`dt.list`, `just mounts`) and reporting over sets of dats.
 
-![DAT Dat](../DAT%20Modules/DAT%20Dat.svg)
+![DAT Dat](DAT%20Dat.svg)
 
-Module page: [DAT Dat](../DAT%20Modules/DAT%20Dat.md).
+Module page: [DAT Dat](core.md).
 
 ::: dvc_dat.dat_tools
     options:
