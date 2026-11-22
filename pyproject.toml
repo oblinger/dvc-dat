@@ -1,16 +1,36 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "dvc_dat"
+description = "Datomic for Python — a functional DB for ML experiment tracking."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "pyyaml",
 ]
 requires-python = ">=3.11"
-keywords = ["dvc"]
-readme = "README.md"
+keywords = ["dvc", "provenance", "reproducibility", "experiment tracking", "machine learning", "ledger", "content-addressed"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/oblinger/dvc-dat"
+Documentation = "https://oblinger.github.io/dvc-dat/"
+Source = "https://github.com/oblinger/dvc-dat"
+Changelog = "https://github.com/oblinger/dvc-dat/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 # the tables (`dt.from_dat`, `dt.to_excel`, `Cube`): pandas, out of the base install

@@ -1,5 +1,8 @@
 # DVC-DAT
 
+[![test](https://github.com/oblinger/dvc-dat/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/oblinger/dvc-dat/actions/workflows/test.yml)
+[![docs](https://github.com/oblinger/dvc-dat/actions/workflows/docs.yml/badge.svg?branch=main)](https://oblinger.github.io/dvc-dat/)
+
 **Datomic for Python — a functional DB for ML experiment tracking.**
 
 - Git-versioned, sandboxed Python execution with reproducible provenance
@@ -61,11 +64,13 @@ See the [full documentation](doc/index.md) for details.
 
 ## Installation
 
+From PyPI:
+
 ```bash
-pip install -e .
+pip install dvc-dat
 ```
 
-The base install needs pyyaml alone; it stores a spec as given and expands `${unique:}`, and nothing else.
+From a clone: `pip install -e .`. The base install needs pyyaml alone; it stores a spec as given and expands `${unique:}`, and nothing else.
 
 | Extra | Adds |
 | --- | --- |

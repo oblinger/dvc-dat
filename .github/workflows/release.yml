@@ -1,0 +1,53 @@
+# Publish to PyPI on a version tag (`git push origin vX.Y.Z`): build the sdist and the wheel, then upload them
+# by trusted publishing (OIDC). No API token is stored anywhere; PyPI accepts the upload only from this
+# workflow, in the `pypi` environment, as configured in the project's trusted publishers on PyPI.
+# The tag must equal `__version__` in dvc_dat/__init__.py, or nothing is built.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86   # v5.4.2
+        with:
+          python-version: "3.11"
+      - name: the tag names the package's version
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' dvc_dat/__init__.py)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match __version__ $version" >&2
+            exit 1
+          fi
+      - run: uv build
+      - run: uvx twine check --strict dist/*
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4.6.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/dvc-dat/
+    permissions:
+      id-token: write   # trusted publishing
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4.3.0
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086   # v1.14.3
