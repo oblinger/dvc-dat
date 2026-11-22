@@ -5,6 +5,42 @@ description: "what dvc-dat is, in one sentence, and what each part of that sente
 # DAT Summary
 What dvc-dat is, in one sentence, and what each part of the sentence stands for in the code.
 
+## Descriptive overview
+
+**Datomic for Python — a functional DB for ML experiment tracking.**
+- Git-versioned, sandboxed Python execution with reproducible provenance
+- Content-addressed blob store of serialized objects and folder trees
+- Triples-based, append-only, incrementally updated JSON structures:
+  a compact, timeless view of large, ever-changing configurations
+
+Used to represent large Python computation graphs with fully reproducible provenance.
+
+|                        |                                                                   |
+| ---------------------- | ----------------------------------------------------------------- |
+| **HISTORY**            | incremental and infinite                                          |
+| Append-only            | a write adds facts under a new revision; nothing is overwritten   |
+| Full-history           | every revision stays readable, back to the first                  |
+| Point-in-time          | a revision is a frozen view; reads against it never change        |
+| Incremental            | a repeated call is a hit; a change recomputes only its dependents |
+| Retractable            | ending a fact is itself a fact, with when and why                 |
+|                        |                                                                   |
+| **STORAGE**            | serialization of folders and blobs                                |
+| Serialized             | any Python value or JSON, sealed by a codec and read back whole   |
+| Folder-tree            | a dat, a folder that is its own recipe, stored as one value       |
+| Content-<br>addressed  | bytes stored once by sha256, write-once, shared by every value    |
+| Lazy-loaded            | bytes are fetched on load; a machine holds only what it reads     |
+|                        |                                                                   |
+| **PROVENANCE**         | code and inputs                                                   |
+| Git-versioned          | functions from a mounted git repository, at a known commit        |
+| Sandboxed              | each call runs in a fresh process holding only the mounted code   |
+| Dependency-<br>tracked | each result records its function, commit and every value read     |
+| Reproducible           | a pinned result re-executes from its inputs; the hashes compare   |
+|                        |                                                                   |
+| **USE**                | ML experiment tracking                                            |
+| Queryable              | runs, models and metrics are values, queried by their predicates  |
+| Retroactive            | today's code runs over any past revision, or a sweep of them      |
+| Shared                 | one Postgres ledger serves every machine; a folder serves one     |
+
 ## The sentence
 
 **Datomic for Python — an append-only artifact ledger for ML experiment tracking.**
