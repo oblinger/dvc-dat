@@ -3,7 +3,7 @@
 A `Value` subclass lives in a module, never in a notebook cell: the
 `db/value` row names its class by dotted name (`Ref.type`), and a
 class defined in a cell has no name a later `load` can import.
-Written to the ledger design of 2026-10-18 (T534).
+Written to the ledger design of 2026-10-18.
 """
 import random
 import time
@@ -98,7 +98,7 @@ def poster(rev, *, game: str) -> dict:
 
 @dat.fn
 def noisy(rev, *, game: str) -> dict:
-    """A nondeterministic stand-in (T527's case): runs disagree."""
+    """A nondeterministic stand-in (the case): runs disagree."""
     time.sleep(1)                   # long enough for two to race
     return {"game": game, "draw": random.random()}
 

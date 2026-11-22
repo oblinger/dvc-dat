@@ -13,7 +13,7 @@ from dvc_dat.dat_tools import to_excel, Cube, from_dat
 
 ns.mount(at="test_dat_tools", module="tests.test_dat_tools")
 
-# inside the test world's dat folder: `overwrite` deletes only there or in the art folder (1467 Q13 (A))
+# inside the test world's dat folder: `overwrite` deletes only there or in the art folder
 TMP_PATH = os.path.join(Dat.manager._dat_folders[0], "test_dats", "job_test")
 TMP_PATH2 = os.path.join(Dat.manager._dat_folders[0], "test_dats", "job_test2")
 

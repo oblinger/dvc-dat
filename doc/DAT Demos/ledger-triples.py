@@ -98,7 +98,7 @@ L = Ledger()                              # the project's ledger
 # ## One transaction is one revision
 
 # %%
-with L.transaction(by="human:dan",
+with L.transaction(by="human:ann",
                    why="season opener") as t:
     t.add("game/G1", "home", "G4")
     t.add("game/G1", "away", "G5")
@@ -106,7 +106,7 @@ with L.transaction(by="human:dan",
     t.add("game/G1", "court", "north")
 rev1 = t.rev
 print(rev1.id, rev1.tx)              # 1 db/tx/1
-print(rev1.get(rev1.tx, "db/by"))    # human:dan
+print(rev1.get(rev1.tx, "db/by"))    # human:ann
 print(rev1.get(rev1.tx, "db/time"))  # 2026-10-18T15:52:07Z (UTC)
 print(sorted(p for p, o in rev1.all(rev1.tx)))
 # ['db/by', 'db/time', 'why']
@@ -131,7 +131,7 @@ print(rev1.get(rev1.tx, "why"))      # season opener
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         t.add("game/G1", "court", "east")
         raise RuntimeError("changed my mind")
 except RuntimeError as e:
@@ -146,7 +146,7 @@ print(L.at().get("game/G1", "court"))    # north
 # named. `t[s, p] = o` is an `add` (more under The `[]` accessor).
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t["game/G1", "court"] = "south"
     t.add("game/G1", "officials", "kim")
     t.add("game/G1", "officials", "ortiz")
@@ -170,13 +170,13 @@ for r in rows:
 #   1  game/G1            date            2026-10-11
 #   1  game/G1            court           north
 #   1  db                 db/format       dvc-dat-ledger/1
-#   1  db/tx/1            db/by           human:dan
+#   1  db/tx/1            db/by           human:ann
 #   1  db/tx/1            db/time         2026-10-18T15:52:07Z
 #   1  db/tx/1            why             season opener
 #   2  game/G1            court           south
 #   2  game/G1            officials       kim
 #   2  game/G1            officials       ortiz
-#   2  db/tx/2            db/by           human:dan
+#   2  db/tx/2            db/by           human:ann
 
 # %% [markdown]
 # ## Folding semantics
@@ -222,7 +222,7 @@ print(rev2.all("game/G1", "officials"))   # ['ortiz']
 # `db/pred/officials`, written by an ordinary transaction.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db/pred/officials", "db/cardinality", "many")
 rev3 = t.rev
 print(rev3.all("game/G1", "officials"))   # ['kim', 'ortiz']
@@ -242,7 +242,7 @@ print(rev2.get("game/G1", "officials"))   # ortiz
 # again while held, changes nothing.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("game/G1", "officials", "lee")
     t.add("game/G1", "officials", "kim")   # held: no change
 rev4 = t.rev
@@ -252,10 +252,10 @@ print(rev4.all("game/G1", "officials"))   # ['kim', 'ortiz', 'lee']
 # A remove, then a re-add. Notice `kim` comes back at the end.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.remove("game/G1", "officials", "kim")
 rev5 = t.rev
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("game/G1", "officials", "kim")
 rev6 = t.rev
 print(rev5.all("game/G1", "officials"))   # ['ortiz', 'lee']
@@ -274,7 +274,7 @@ print(rev6.all("game/G1", "officials"))   # ['ortiz', 'lee', 'kim']
 # Notice the answer is `kim`, added last at `rev6`.
 
 # %%
-with L.transaction(by="human:dan", why="one lead official") as t:
+with L.transaction(by="human:ann", why="one lead official") as t:
     t.add("db/pred/officials", "db/cardinality", "one")
 rev7 = t.rev
 print(rev7.get("game/G1", "officials"))   # kim: latest add wins
@@ -294,7 +294,7 @@ except TypeError as e:
 # `many` again brings the set back whole. Read at every revision:
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db/pred/officials", "db/cardinality", "many")
 rev8 = t.rev
 for n in range(rev1.id, rev8.id + 1):
@@ -318,7 +318,7 @@ for n in range(rev1.id, rev8.id + 1):
 # A second game first, so the reads have two subjects.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("game/G2", "home", "G1")
     t.add("game/G2", "away", "G3")
     t.add("game/G2", "date", "2026-10-12")
@@ -408,10 +408,10 @@ print(rev["db/pred/officials"])      # {'db/cardinality': 'many'}
 # third game, written as a record, then rewritten without its `date`.
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:
+with L.transaction(by="human:ann", lock=10) as t:
     t["game/G3"] = {"home": "G2", "away": "G5",
                     "date": "2026-10-13", "court": "east"}
-with L.transaction(by="human:dan", lock=10) as t:
+with L.transaction(by="human:ann", lock=10) as t:
     t["game/G3"] = {"home": "G2", "away": "G5", "court": "east"}
 rev11 = t.rev
 print(rev11["game/G3"] == {"home": "G2", "away": "G5",
@@ -422,7 +422,7 @@ print(rev11["game/G3"] == {"home": "G2", "away": "G5",
 # retracts what the predicate holds.
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:
+with L.transaction(by="human:ann", lock=10) as t:
     t["game/G3", "date"] = "2026-10-14"
     del t["game/G3", "court"]
 rev12 = t.rev
@@ -430,7 +430,7 @@ print(rev12["game/G3", "date"])                # 2026-10-14
 print(rev12.get("game/G3", "court"))           # None: retracted
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:
+with L.transaction(by="human:ann", lock=10) as t:
     t["game/G3"] = t["game/G3"]
 noop_rev = t.rev
 print([row for row in noop_rev.all(since=rev12)
@@ -446,7 +446,7 @@ print([row for row in noop_rev.all(since=rev12)
 
 # %%
 try:
-    with L.transaction(by="human:dan", lock=10) as t:
+    with L.transaction(by="human:ann", lock=10) as t:
         t["game/G3"] = {**t["game/G3"], "db/doc": "a game"}
 except TypeError as e:
     print("TypeError:", e)               # db/doc differs
@@ -458,7 +458,7 @@ except TypeError as e:
 # world, `t.update` is open world: what the dict omits stays.
 
 # %%
-with L.transaction(by="human:dan") as t:    # no lock=: nothing is read
+with L.transaction(by="human:ann") as t:    # no lock=: nothing is read
     t.update("game/G3", {"court": "west"})
 print("game/G3:", t.rev["game/G3"])
 # → game/G3: {'home': 'G2', 'away': 'G5', 'date': '2026-10-14',
@@ -475,13 +475,13 @@ print("game/G3:", t.rev["game/G3"])
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         t["game/G1", "officials"] = "park"
 except TypeError as e:
     print("TypeError:", e)                 # t[s, p] = o: one only
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:
+with L.transaction(by="human:ann", lock=10) as t:
     del t["game/G3"]
 print(t.rev.get("game/G3", "home"))      # None: every row retracted
 
@@ -587,7 +587,7 @@ print(rev9.select(("home", "court"), where={"court": None},
 # ### Declaring an index
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db/pred/home", "db/index", "true")
 rev = L.at()
 print(rev["db/pred/home"])                  # {'db/index': 'true'}
@@ -608,7 +608,7 @@ print(rev.select(("away",), home="G1"))     # [('G3',)]
 # digit-only string as a revision id.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t["env/prod", "rev"] = str(rev2.id)
 rev = L.at()
 prod_rev = L.at(rev["env/prod", "rev"])       # L.at("2")
@@ -620,9 +620,9 @@ print(prod_rev.id, prod_rev.get("game/G1", "court"))   # 2 south
 # Checked at the write and on the strict reads.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("game/G1", "score", {"home": 61, "away": 58})   # json
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db/pred/score", "db/type", "str")
     t.add("db/pred/date", "db/type", "str")
 top_rev = L.at()
@@ -634,7 +634,7 @@ top_rev = L.at()
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         t.add("game/G2", "date", {"y": 2026, "m": 10})
 except TypeError as e:
     print("TypeError:", e)               # json under a str pred
@@ -664,13 +664,13 @@ print(rev["game/G1", "date"])            # a str: passes
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         t.add("game/G1", "attendance", 1200)
 except TypeError as e:
     print("TypeError:", e)               # a number is its string
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("game/G1", "attendance", "1200")
 
 # %% [markdown]
@@ -708,7 +708,7 @@ import demo_game                       # discovery sees it imported
 # %%
 demo_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=demo_repo_path, check=True,
                              capture_output=True, text=True).stdout.strip()
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db/repo/demo-game/demo_game", "db/version", demo_game.__version__)
     t.add("db/repo/demo-game", "db/commit", demo_commit)
 print("db/repo/demo-game/demo_game:", L.at()["db/repo/demo-game/demo_game"])
@@ -722,8 +722,8 @@ print("db/repo/demo-game:", L.at()["db/repo/demo-game"])
 # `bump` raises every other clock, here a schema's.
 
 # %%
-with L.transaction(by="human:dan", lock=10,
-                   why="T531 re-baseline") as t:
+with L.transaction(by="human:ann", lock=10,
+                   why="re-baseline") as t:
     new = bump(t, "schema/tape")          # patch: 0.0.0 -> 0.0.1
     t.add(t.tx, "checked", "G1,G4,G5")
 rev = t.rev
@@ -740,7 +740,7 @@ print("schema/tape:", new)   # schema/tape: 0.0.1
 # back. Here one more official joins `game/G1`.
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:
+with L.transaction(by="human:ann", lock=10) as t:
     g1 = t["game/G1"]                              # the record as it stands now
     t["game/G1"] = {**g1, "officials": g1["officials"] + ["vance"]}   # one more, written back
 print("officials:", t.rev.all("game/G1", "officials"))
@@ -756,7 +756,7 @@ print("previous_rev:", repr(t.previous_rev))     # the revision the body read
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:       # no lock=
+    with L.transaction(by="human:ann") as t:       # no lock=
         t["game/G1"]
 except Unlocked as e:
     print("Unlocked:", e)
@@ -767,7 +767,7 @@ except Unlocked as e:
 # and `t.add` read nothing, so they need no lock.
 
 # %%
-with L.transaction(by="human:dan") as t:           # no lock=: nothing is read
+with L.transaction(by="human:ann") as t:           # no lock=: nothing is read
     t["game/G1", "court"] = "south"                # an add on a one predicate
     t.add("game/G1", "officials", "wu")            # an add on a many predicate
 print("court:", t.rev["game/G1", "court"])
@@ -788,7 +788,7 @@ print(rev[rev.tx, "db/time"])            # UTC, on every revision
 
 # %%
 try:
-    with L.transaction(by="human:dan", lock=10) as t:
+    with L.transaction(by="human:ann", lock=10) as t:
         bump(t, "schema/tape", "minor")
 except ValueError as e:
     print("ValueError:", e)              # minor needs confirm=
@@ -799,16 +799,16 @@ except ValueError as e:
 
 # %%
 try:
-    with L.transaction(by="human:dan", lock=10) as t:
+    with L.transaction(by="human:ann", lock=10) as t:
         bump(t, "db/repo/dvc-dat/dvc_dat")
 except TypeError as e:
     print("TypeError:", e)               # db/repo/dvc-dat/dvc_dat: a code version lives in its source; …
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:
+with L.transaction(by="human:ann", lock=10) as t:
     print(bump(t, "schema/tape", "minor",
                confirm=lambda old, new: True))   # 0.1.0
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("schema/tape", "db/version", "0.0.9")
 print(L.at()["schema/tape", "db/version"])  # 0.0.9: add went back
 
@@ -842,7 +842,7 @@ print(L.at()["rel/demo-game", "pair"])    # 0.1.0+<commit>
 rev = L.at()
 when = [r.rev for r in rev.history("db/repo/demo-game/demo_game", "db/version", "0.1.0") if r.added]
 print(when)                               # [Rev(...)]: when it was set
-print(when[0][when[0].tx, "db/by"])       # human:dan: by whom
+print(when[0][when[0].tx, "db/by"])       # human:ann: by whom
 
 # %% [markdown]
 # The reverse lookup for a version: `history` names the revision,

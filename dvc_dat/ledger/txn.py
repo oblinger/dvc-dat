@@ -13,13 +13,13 @@ lock. Everything that must see the transaction's
 own rows is checked at commit, inside the write lock, against the state the
 new revision would have (the rows are inserted, read back through the open
 write transaction, and rolled back on a refusal): ``Exists`` (a write on a
-sealed subject's own predicates), the ``db/alias`` target check (A18, A45)
-and the ``db/type`` check (A36, A44). Rows land in body order, then
+sealed subject's own predicates), the ``db/alias`` target check
+and the ``db/type`` check. Rows land in body order, then
 ``(db, db/format, …)`` and, unless the body wrote one, ``(db, db/memo-policy, platform)`` on a
 ledger's first transaction, then the
-transaction's own ``db/tx/<rev>`` rows (A50). A user row whose object is over the ledger's ``db/max-fact`` is
+transaction's own ``db/tx/<rev>`` rows. A user row whose object is over the ledger's ``db/max-fact`` is
 refused at commit, and one over its ``db/spill-threshold`` is written as a ``spill:`` reference, its bytes stored and
-pushed with the seals' (SVP 1738, ``spill``).
+pushed with the seals' (``spill``).
 """
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ def _name(x: Any, what: str) -> str:
 
 
 def by_text(by: Any) -> str:
-    """The ``db/by`` row object of a writer (DAT 1024): a non-empty ``str`` as ``str:<by>``, a non-empty
+    """The ``db/by`` row object of a writer: a non-empty ``str`` as ``str:<by>``, a non-empty
     ``dict`` as ``json:<canonical document>``, so a structured identity (a hosted user is a host, a user
     and its administrators) needs no encoding inside a string. The ``eval:`` prefix is a string's alone."""
     if isinstance(by, str) and by:
@@ -171,7 +171,7 @@ _SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:\.dev(\d+))?$")
 
 def _semver(text: Any) -> Optional[Tuple[int, ...]]:
     """``MAJOR.MINOR.PATCH`` or ``MAJOR.MINOR.PATCH.devN`` as a tuple of ints in version order, else ``None``:
-    ``1.3.5 < 1.3.6.dev1 < 1.3.6.dev2 < 1.3.6`` (PEP 440, SVP 1482)."""
+    ``1.3.5 < 1.3.6.dev1 < 1.3.6.dev2 < 1.3.6`` (PEP 440)."""
     m = _SEMVER.match(text) if isinstance(text, str) else None
     if m is None:
         return None
@@ -191,8 +191,8 @@ def _tag_name(subject: str, name: Any) -> None:
 
 def code_token(env_commit: Optional[str]) -> str:
     """The ``code/<repo>`` dependency item (a label, not a subject): the environment's commit, 8 hex
-    (T034), the commit the code ran at, whatever the ``db/repo/<repo> db/commit`` row says. The version is
-    not in the item; it stays readable from the ``db/repo/<repo>/<package>`` clocks (DAT 1044)."""
+    the commit the code ran at, whatever the ``db/repo/<repo> db/commit`` row says. The version is
+    not in the item; it stays readable from the ``db/repo/<repo>/<package>`` clocks."""
     return (env_commit or "")[:8]
 
 
@@ -246,11 +246,11 @@ class Transaction:
         self._frozen: List[Tuple[Value, Optional[Dict[str, Any]]]] = []
         self._to_store: List[Value] = []
         self._new_seals: List[Tuple[Value, str]] = []      # values this transaction writes db/value for
-        self._copied: set = set()               # the subjects this transaction copied in (SVP 251)
+        self._copied: set = set()               # the subjects this transaction copied in
         #: (subject, the source's art store, its fetch, the hashes to bring): placed at commit, with the rows.
         self._copies: List[Tuple[str, Any, Any, List[str]]] = []
-        self._staged: Dict[int, Any] = {}       # id(value) -> FileSink: its encoding, written once (DAT 240)
-        #: Spills (SVP 1738), decided at commit: the stored text of an op (by id) or a keyword (by index), when it
+        self._staged: Dict[int, Any] = {}       # id(value) -> FileSink: its encoding, written once
+        #: Spills, decided at commit: the stored text of an op (by id) or a keyword (by index), when it
         #: differs from the body's; the bytes each spill text written needs, hash -> source; and where the bytes of a
         #: spill text carried in from a ledger (a copy, a ``Spilled`` added) are read, hash -> opener.
         self._spilled: Dict[int, str] = {}
@@ -283,7 +283,7 @@ class Transaction:
 
     @property
     def ns(self) -> "LedgerNamespace":
-        """The ledger's namespace at ``previous_rev`` (DAT 1051).
+        """The ledger's namespace at ``previous_rev``.
 
         ``t.ns.load(name)`` as [`rev.ns`][dvc_dat.ledger.Rev.ns] (it reads, so it needs ``lock=``);
         ``t.ns.expand(template, **vars)`` counts ``${unique:}`` against the snapshot at open and skips the names this
@@ -298,16 +298,16 @@ class Transaction:
         ``ValueError`` naming ``repo=``. A mount from another repo names it.
 
         A missing or non-``str`` ``root``, an empty ``repo``, or a ``folder=``-style keyword is ``TypeError``; an
-        ``at`` outside ``mnt.`` (``mnt`` alone included) is ``ValueError``; nothing is prefixed for you (1505 Q1).
+        ``at`` outside ``mnt.`` (``mnt`` alone included) is ``ValueError``; nothing is prefixed for you.
         """
         from .namespace import LedgerNamespace
 
         return LedgerNamespace(txn=self, unguarded=True)
 
-    # -- reads: the previous revision's (DAT 1051) ---------------------------
+    # -- reads: the previous revision's ---------------------------
 
     def get(self, *pattern: Any, **kwargs: Any) -> Any:
-        """``Rev.get`` at ``previous_rev`` (DAT 1051): the [Rev][rev-interface] reads of the same names.
+        """``Rev.get`` at ``previous_rev``: the [Rev][rev-interface] reads of the same names.
 
         So they need ``lock=`` and are ``Unlocked`` without it. This transaction's own ``add``, ``update``, bracket
         writes and seals are pending and not seen: ``t[s, p] = o; t[s, p]`` reads the old value.
@@ -479,7 +479,7 @@ class Transaction:
         return False
 
     def _abandon(self, drop_bytes: bool = True) -> None:
-        """Nothing was written: unseal every value this body froze (A43) and drop bytes it stored
+        """Nothing was written: unseal every value this body froze and drop bytes it stored
         (``drop_bytes``; called with the write lock held, so no other writer has found them stored)."""
         from .value import _EMPTY
 
@@ -508,7 +508,7 @@ class Transaction:
         self._staged = {}
 
     def _hash_of(self, value: Value) -> str:
-        """The hash of the encoding a save of ``value`` stores, encoded once per transaction (DAT 240): written
+        """The hash of the encoding a save of ``value`` stores, encoded once per transaction: written
         through a sink to a staged file in the art store's folder, hashed as it goes, never held whole. The
         upload sends that file and the commit links it into place; the staged copy goes when the transaction
         ends, either way."""
@@ -524,7 +524,7 @@ class Transaction:
 
     def _upload(self) -> None:
         """Push every part and the encoding of each value this transaction seals to the ledger's values URI, its
-        ``(db, db/values, <uri>)`` row at the transaction's base (SVP 1599): nothing with no row, or inside a
+        ``(db, db/values, <uri>)`` row at the transaction's base: nothing with no row, or inside a
         sandboxed body (its seal's push runs in the parent). Write-once by hash, so a blob a failed commit leaves
         behind is harmless."""
         from .backends import VALUES, values_at
@@ -550,7 +550,7 @@ class Transaction:
 
     def _spill(self) -> None:
         """Judge every user row's object against the ledger's ``db/max-fact`` and ``db/spill-threshold`` at the
-        base (SVP 1738): over the max, ``FactTooLarge``; over the threshold, the row is written as ``spill_text`` and
+        base: over the max, ``FactTooLarge``; over the threshold, the row is written as ``spill_text`` and
         its bytes are stored with the seals'. A ``spill:`` text carried in is judged by the size it names: kept, its
         bytes brought, or written inline when this ledger would not spill it."""
         rows = [(id(op), op.s, op.p, op.o, op.added, self._spilled) for op in self._ops]
@@ -644,7 +644,7 @@ class Transaction:
         """Write this transaction's rows as revision ``rev``, inside the write lock.
 
         The head ``before`` (``rev - 1``) is read here, so what an unlocked transaction decided at open from its
-        snapshot is re-checked against what other writers committed meanwhile (1467 Q3 (A)): a value sealed
+        snapshot is re-checked against what other writers committed meanwhile: a value sealed
         meanwhile is not sealed again; a clock add (``db/repo/<repo>/<package> db/version``) at or below the
         head's version is dropped, so the clock never moves back; a naming's name add (``db/alias`` from
         ``_name_value``) retracts every other name the head holds for that value, so a value has one name. Only a
@@ -676,7 +676,7 @@ class Transaction:
             from .policy import DEFAULT, PREDICATE, SUBJECT
 
             if not any(r[0] == SUBJECT and r[1] == PREDICATE for r in rows):
-                rows.append((SUBJECT, PREDICATE, "str:" + DEFAULT, True))      # the memo policy (SVP 1474)
+                rows.append((SUBJECT, PREDICATE, "str:" + DEFAULT, True))      # the memo policy
         rows.append((txs, "db/by", self._by, True))
         rows.append((txs, "db/time", "str:" + stamp(), True))
         rows.extend((txs, k, self._kw_spilled.get(i, o), True) for i, (k, o) in enumerate(self._preds))
@@ -820,7 +820,7 @@ class Transaction:
         self._ops.append(_Op(subject, predicate, o, True))
 
     def update(self, subject: str, record: Dict[str, Any]) -> None:
-        """An ``add`` per key of ``record``, nothing else (DAT 1050).
+        """An ``add`` per key of ``record``, nothing else.
 
         A ``list`` under a ``many`` predicate adds each element; any other value is one row. It reads nothing and
         retracts nothing, so it needs no ``lock=`` (``t.update(s, {p: o, ...})``); ``db/`` keys are taken as ``add``
@@ -857,7 +857,7 @@ class Transaction:
         self._ops.append(_Op(subject, predicate, self._encode(object), False))
 
     def pin(self, value: Any, *, recursive: bool = False, rerun: bool = False) -> str:
-        """Make ``value`` rerunnable ([Rerunnability][rerunnability]; SVP 250).
+        """Make ``value`` rerunnable ([Rerunnability][rerunnability]).
 
         Tag the commit its run names, ``dat/<commit12>``, in the repo's checkout here, push the tag to its remote and
         wait, then add ``(db/repo/<repo>/<commit12>, db/pinned, dat/<commit12>)`` (once per commit per ledger) and
@@ -883,11 +883,11 @@ class Transaction:
 
     def copy(self, *values: Any, deep: bool = False, safe: bool = True, rerunnable: bool = False,
              skip: Optional[Sequence[str]] = None) -> List[str]:
-        """Copy each sealed ``Value`` or ``Ref`` onto this transaction's ledger ([Copying][copying]; SVP 251).
+        """Copy each sealed ``Value`` or ``Ref`` onto this transaction's ledger ([Copying][copying]).
 
         Its bytes if absent (same hash), its subject and provenance rows, its name, and ``(<value>, db/copied-from,
         <ledger>@<rev>)``, landing with this revision; its subdats (the ``db/subdat/`` rows) with it, recursively,
-        all or none (SVP 252). ``skip``: relative-path suffixes of the subdats left on their ledger, as ``seal(skip=)``
+        all or none. ``skip``: relative-path suffixes of the subdats left on their ledger, as ``seal(skip=)``
         takes them; ``None`` is ``("run",)``, ``()`` follows every subdat, any other adds to ``("run",)``. A skipped
         subdat's row here is the global reference ``<ledger>@<rev>:<subject>`` to the original, a ``str``.
         ``deep``: its inputs too, recursively, whatever their ledgers; it does not override ``skip``.
@@ -943,7 +943,7 @@ class Transaction:
         return ref_text(dotted(type(v)), v.hash)
 
     def _encode_preds(self, value: Value) -> Tuple[List[Tuple[str, str]], Dict[str, Any]]:
-        """The pred rows of a seal and the canonical form that enters the subject hash (A23, A30)."""
+        """The pred rows of a seal and the canonical form that enters the subject hash."""
         from .kept import SealedRef
         from .rev import Ref
 
@@ -1069,7 +1069,7 @@ class Transaction:
             trace[f"code/{repo}"] = code_token(env.code[repo].commit if repo in env.code else None)
         if env.record is None:                  # an environment that knows only its tag (a seal record before 1474)
             trace["platform"] = env.platform
-        else:                                   # R0069: the full record beside the tag, as a run's entry has
+        else:                                   # the full record beside the tag, as a run's entry has
             trace.update(platform_items(env))
 
     def _seal_value(self, value: Value, *, deps: Sequence[Any] = (), name: Optional[str] = None,
@@ -1080,7 +1080,7 @@ class Transaction:
         On this line the seal freezes ``preds`` (read-only), and sets ``sealed``, ``subject`` and
         ``dependencies``; only ``rev`` waits for the commit. A seal refused here, or a transaction abandoned
         later (a body exception, a refusal at commit), leaves the value unsealed with its preds a plain
-        dict (A43). Its subdats seal with it (``_seal_subdats``; ``skip``: ``Value.seal``).
+        dict. Its subdats seal with it (``_seal_subdats``; ``skip``: ``Value.seal``).
         """
         self._open("seal")
         if not isinstance(value, Value):
@@ -1092,7 +1092,7 @@ class Transaction:
         plan = self._subdat_plan(value, skip) if plan is None else plan
         local = value.__dict__.get("_local")
         run = value.__dict__.get("_run")
-        if run is not None:                             # a run's result: its memo entry (DAT 1028)
+        if run is not None:                             # a run's result: its memo entry
             from .env import current_env
             from .fn import check_late_code, save_run
 
@@ -1157,7 +1157,7 @@ class Transaction:
     def _seal_subdats(self, plan: List[Any], value: Value, subject: str, name: Optional[str],
                       provenance: str) -> None:
         """Seal the subdats of ``value``, just sealed as ``subject``, and write its ``db/subdat/<relpath>`` rows
-        (SVP 241): each a value of its own, ``<name>/<relpath>``, its one dep the parent, the parent's provenance;
+        each a value of its own, ``<name>/<relpath>``, its one dep the parent, the parent's provenance;
         one carrying a run's trace or a ``v.seal()`` keeps what it carries. The rows are outside the subject hash
         and re-point: they land even when the subject exists already, each revision reading its own. Children
         finish before their parent, whose folder a commit may move (a subclass's ``_after_seal``)."""
@@ -1178,7 +1178,7 @@ class Transaction:
             self._finalize.append(self._finalize.pop(mark - 1))
 
     def _freeze(self, value: Value, subject: str, trace: Dict[str, str]) -> None:
-        """The seal fixes subject, dependencies and preds now; the revision is assigned at commit (Q25 (D))."""
+        """The seal fixes subject, dependencies and preds now; the revision is assigned at commit."""
         from types import MappingProxyType
         from .value import FrozenPreds
 
@@ -1218,7 +1218,7 @@ class Transaction:
             self._name_value(subject, alias)
 
     def _name_value(self, subject: str, name: Optional[str]) -> None:
-        """Name ``subject`` (Q36, A70): ``name db/alias subject``, every other name of it retracted, so a
+        """Name ``subject``: ``name db/alias subject``, every other name of it retracted, so a
         value has one name; ``None`` unnames it. The other names are read at open; ``_write`` retracts any added
         meanwhile."""
         for other in self._snapshot()._aliases_of(subject):
@@ -1230,7 +1230,7 @@ class Transaction:
             self._namings.append(op)
 
     def _ensure_code(self, subject: str, rows: Sequence[Tuple[str, str]]) -> None:
-        """Write the ``db/code/<hash 16>`` item once (DAT 1037): many results, and many functions, share it."""
+        """Write the ``db/code/<hash 16>`` item once: many results, and many functions, share it."""
         if subject in self._codes:
             return
         self._codes.add(subject)
@@ -1240,13 +1240,13 @@ class Transaction:
             self._ops.append(_Op(subject, p, o, True))
 
     def _advance_clock(self, repo: str, package: str, version: str, commit: str) -> None:
-        """Move the clocks of a clean run (DAT 1043, 1044): ``db/repo/<repo>/<package> db/version``, the version
+        """Move the clocks of a clean run: ``db/repo/<repo>/<package> db/version``, the version
         the run was exposed to, one per versioned package; ``db/repo/<repo> db/commit``, the latest clean run
-        of any package in the repo. Both are ``db/`` predicates (DAT 1052 Q2 B): fixed one, hidden from
+        of any package in the repo. Both are ``db/`` predicates (fixed one, hidden from
         ``preds()``, kept by ``t[s] = {...}``. Written by the ledger alone, never by a person (``bump_source`` edits
         the source).
 
-        Only a ``MAJOR.MINOR.PATCH[.devN]`` counts (``.devN`` below its patch, SVP 1482): a dirty checkout's
+        Only a ``MAJOR.MINOR.PATCH[.devN]`` counts (``.devN`` below its patch): a dirty checkout's
         ``<commit 8>+dirty``, a bare commit or a ``#hash`` moves neither. Read through the snapshot at open, and re-checked at commit in the write
         lock (``_write``). The version, per package (the highest this body ran): absent or lower, this transaction
         adds it; equal, nothing; higher on the row, a warning and nothing (the clock never moves back). The commit:
@@ -1287,7 +1287,7 @@ class Transaction:
         """``t[s, p] = o``: an ``add`` on a ``one`` predicate, no lock needed.
 
         A ``many`` or ``db/`` predicate is ``TypeError``. ``t[s] = {...}`` makes the subject's user rows equal to the
-        dict at the next revision (A34, A43), reading what the subject holds through ``previous_rev``, so it needs
+        dict at the next revision, reading what the subject holds through ``previous_rev``, so it needs
         ``lock=`` (``Unlocked`` without); ``t[s] = t.previous_rev[s]`` writes nothing.
 
         Brackets take exact subjects; a glob is ``TypeError``.

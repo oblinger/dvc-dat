@@ -27,7 +27,7 @@ class NotClean(NotEvaluated):
 
 
 class NotPinned(LedgerError, RuntimeError):
-    """A [``pin``][dvc_dat.ledger.Transaction.pin] or [``rerun``][dvc_dat.ledger.Rev.rerun] refused (SVP 250).
+    """A [``pin``][dvc_dat.ledger.Transaction.pin] or [``rerun``][dvc_dat.ledger.Rev.rerun] refused.
 
     The value is no run's result, its revision names no commit, the commit is unknown here or does not hold the code
     that ran, the function is not importable by its name at the commit, an input is on no ledger, the remote refused
@@ -36,7 +36,7 @@ class NotPinned(LedgerError, RuntimeError):
 
 
 class NotCopied(LedgerError, RuntimeError):
-    """A [``copy``][dvc_dat.ledger.Transaction.copy] refused, nothing written (SVP 251).
+    """A [``copy``][dvc_dat.ledger.Transaction.copy] refused, nothing written.
 
     A value on no ledger or on this one already, an input that cannot be found, a ledger whose lifetime root does
     not declare (or declares twice, or a root that does not open) for ``safe`` to read, or a pred declared otherwise
@@ -45,7 +45,7 @@ class NotCopied(LedgerError, RuntimeError):
 
 
 class SpecOnly(LedgerError, LookupError):
-    """A load of a value this ledger holds as its spec alone (SVP 251).
+    """A load of a value this ledger holds as its spec alone.
 
     Its rows, no bytes ([Copying][copying]); ``rev.rerun`` makes it again.
     """
@@ -54,7 +54,7 @@ class SpecOnly(LedgerError, LookupError):
 class Differed(LedgerError, RuntimeError):
     """A ``pin(rerun=True)`` of a value claiming ``exact`` whose rerun produced a different hash.
 
-    (SVP 250 A4, SVP 251 Q2). Nothing written.
+    . Nothing written.
     """
 
 
@@ -83,7 +83,7 @@ class ConfinedNetwork(LedgerError, PermissionError):
 class ConfinedProcess(LedgerError, PermissionError):
     """A sandboxed function created a process (``subprocess``, ``os.system``, ``os.exec*``, ``os.posix_spawn``,
     ``os.fork``): what a child process reads and writes is beyond the audit hook. A body that needs a tool runs
-    unsandboxed (base mode) (SVP 1467 Q8 (A))."""
+    unsandboxed (base mode)."""
 
 
 class LockTimeout(LedgerError, TimeoutError):

@@ -1,12 +1,12 @@
 """`demo_game.etl.dat`: a `Dat` as a `Value`, and the dat constructor.
 
 `dat(spec, path, **kwargs)` builds a dat in
-the folder the eval hands it as `path` (F447 Q36) and runs the spec's
+the folder the eval hands it as `path` and runs the spec's
 `main` there; the result is named by the call's `path=`, else the
 anonymous template. Its preds merge spec keys and result metrics under one
 namespace: `game`, `stage`, `bins` from the spec, `metrics.<m>` from
 the result. `main` is imported by the spec's key at run time, so the
-one `fn` dependency item hashes the modules the run loaded (Q37, lean A).
+one `fn` dependency item hashes the modules the run loaded (lean A).
 """
 import importlib
 from pathlib import Path

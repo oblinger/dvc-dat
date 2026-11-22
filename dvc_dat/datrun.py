@@ -1,6 +1,6 @@
-"""The dat branch of a sandboxed run (DAT 1045, 1046): the Dat layer's side of ``dvc_dat.ledger.sandbox``.
+"""The dat branch of a sandboxed run: the Dat layer's side of ``dvc_dat.ledger.sandbox``.
 
-The sandbox imports nothing of the Dat layer (1519 R1); it reaches these through ``dvc_dat.ledger.hooks``, which
+The sandbox imports nothing of the Dat layer; it reaches these through ``dvc_dat.ledger.hooks``, which
 imports this module by name the first time a dat runs in a process. Importing it imports ``dvc_dat.core``, which
 registers ``Dat``; this module registers the three parts below:
 
@@ -26,9 +26,9 @@ if TYPE_CHECKING:
 
 
 class _WorkerWorld(DatManager):
-    """The dat world of a dat run in the worker (DAT 1045): the caller's dat folders and art folder. Its
+    """The dat world of a dat run in the worker: the caller's dat folders and art folder. Its
     index (a dat's hash to its name) is the dat world's own machinery, so its writes stand outside the
-    guard, as the ledger's own. Its ``ns`` is a ``LedgerNamespace`` bound to the run's rev (DAT 1047): a name the
+    guard, as the ledger's own. Its ``ns`` is a ``LedgerNamespace`` bound to the run's rev: a name the
     body looks up (``Dat.manager.ns.load``, a spec's ``base``/``do``, ``{}`` expansion) walks the same
     ``db/mount`` rows the caller resolved the run through, read from the worker's checkout; ``mount`` is
     refused."""

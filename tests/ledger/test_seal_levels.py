@@ -1,4 +1,4 @@
-"""``seal=`` on a run and ``v.seal(x)`` on its result (DAT 1028): get, draft, sealed, saved (L or t).
+"""``seal=`` on a run and ``v.seal(x)`` on its result: get, draft, sealed, saved (L or t).
 
 Every run carries its trace on the result, so a draft or a locally sealed result saved later is the
 memo entry the memoised run writes, and the next identical call hits."""

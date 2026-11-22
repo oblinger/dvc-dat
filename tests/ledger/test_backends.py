@@ -1,7 +1,7 @@
-"""SVP 1599: backends registered by URI scheme. A ledger's bytes live at its values URI, ``(db, db/values, <uri>)``.
+"""Backends registered by URI scheme. A ledger's bytes live at its values URI, ``(db, db/values, <uri>)``.
 
 Every case runs against a fake, folder-backed values backend registered through the public ``register_values``
-under the scheme ``bucket`` (``bucket://<name>`` is the folder ``<tmp>/<name>``): what a consumer (sv-pipe, ``gs``)
+under the scheme ``bucket`` (``bucket://<name>`` is the folder ``<tmp>/<name>``): what a consumer (``gs``, say)
 does with its own cloud code.
 """
 
@@ -305,7 +305,7 @@ def test_a_dats_parts_travel_with_it(L, clouds, tmp_path):
         drop_cache(L)
         back = L.at().load("table/12")
         assert (back.path / "table.csv").read_text() == "12 from 1\n"
-        assert set(az.pulls) < set(az.pushes)              # its run is a subdat, fetched by its own name (SVP 241)
+        assert set(az.pulls) < set(az.pushes)              # its run is a subdat, fetched by its own name
         L.at().load("table/12/run")
         assert set(az.pulls) == set(az.pushes)
     finally:
@@ -422,7 +422,7 @@ def test_a_fresh_process_with_an_empty_cache_pulls(tmp_path, clouds):
 
 
 def test_a_copy_pulls_from_the_sources_values_and_pushes_to_the_destinations(L, clouds, tmp_path):
-    """SVP 251: the bytes reach a copy by hash, through both values URIs."""
+    """The bytes reach a copy by hash, through both values URIs."""
     from dvc_dat.ledger import Ref
 
     store(L, "gcp")

@@ -93,7 +93,7 @@ from demo_game.game import PlainVideo
 
 # %%
 video_value = PlainVideo(b"G1 wide camera, 9000 frames")
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     video_subject = video_value.seal(t, name="video/G1")
 print("video:", repr(video_value))
 # → video: <PlainVideo video/G1>
@@ -128,7 +128,7 @@ print("ref:", repr(video_ref), " type:", video_ref.type)
 # ### Adding an alias
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("raw/G1/wide-camera", "db/alias", video_subject)
 rev = L.at()
 camera_ref = Ref(rev, "raw/G1/wide-camera")
@@ -169,7 +169,7 @@ print("same subject:", rev.load("video/G1").subject == video_subject)
 
 # %%
 retake_video = PlainVideo(b"G1 wide camera, retake, 9100 frames")
-with L.transaction(by="human:dan", why="the retake") as t:
+with L.transaction(by="human:ann", why="the retake") as t:
     retake_subject = retake_video.seal(t, name="video/G1")
 rev = L.at()
 print("by name:", rev.load("video/G1").frames)
@@ -211,7 +211,7 @@ from demo_game.game import Video
 # `json` (Edge cases § A pred with many values says why).
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db/pred/span", "db/type", "json")
 
 # %% [markdown]
@@ -220,7 +220,7 @@ with L.transaction(by="human:dan") as t:
 # %%
 wide_video = Video(b"G1 wide camera, 9000 frames")
 wide_video.preds.update(game="G1", camera="wide", span=[0, 9000])
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     wide_video.seal(t, name="video/G1",
                     provenance="import:archive")
 print("video:", repr(wide_video))
@@ -243,7 +243,7 @@ print("preds:", wide_video.preds)
 # %%
 g2_video = Video(b"G2 wide camera, 8400 frames")
 g2_video.preds.update(game="G2", camera="wide", span=[0, 8400])
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     g2_video.seal(t, name="video/G2",
                   provenance="import:archive")
 
@@ -267,7 +267,7 @@ for row in stored_rev.history(since=L.at(stored_rev.id - 1)):
 # →    7 + <hash>   camera                wide
 # →    7 + <hash>   span                  [0,9000]
 # →    7 + video/G1 db/alias              <hash>
-# →    7 + db/tx/7  db/by                 human:dan
+# →    7 + db/tx/7  db/by                 human:ann
 
 # %% [markdown]
 # `db/value` names the bytes by class and hash. `db/kind` is the
@@ -363,7 +363,7 @@ except TypeError as e:
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         t.add(wide_video.subject, "camera", "tele")
 except Exists as e:
     print("Exists:", e)
@@ -380,7 +380,7 @@ except Exists as e:
 tele_video = Video(b"G1 tele camera, 9000 frames")
 tele_video.preds.update(game="G1", camera="tele", lens="85mm")
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         tele_video.seal(t)
 except Undeclared as e:
     print("Undeclared:", e)
@@ -389,7 +389,7 @@ except Undeclared as e:
 
 # %% [markdown]
 # A refused seal leaves the value exactly as it was, unsealed, its
-# `preds` a plain dict (A43), so the stray `lens` can simply be
+# `preds` a plain dict, so the stray `lens` can simply be
 # taken out of the same object.
 
 # %%
@@ -403,7 +403,7 @@ del tele_video.preds["lens"]
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         tele_video.seal(t, provenance="eval:sandbox")
 except ValueError as e:
     print("ValueError:", e)
@@ -416,7 +416,7 @@ except ValueError as e:
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         t.add("video/G1-tele", "note", tele_video)
 except TypeError as e:
     print("TypeError:", e)
@@ -437,7 +437,7 @@ except TypeError as e:
 # A new pred on every video.
 
 # %%
-with L.transaction(by="human:dan", why="format survey") as t:
+with L.transaction(by="human:ann", why="format survey") as t:
     for video_ref in L.at().refs(kind=Video):
         t.add(video_ref.subject, "resolution", "1080p")
 rev = L.at()
@@ -462,7 +462,7 @@ print("seal's preds:", rev[wide_video.subject, "db/preds"])
 
 # %%
 tele_video.preds["camera"] = "tlee"              # a typo
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     wrong_subject = tele_video.seal(t, name="video/G1-tele",
                                     provenance="import:archive")
 print("camera:", Ref(L.at(), "video/G1-tele").preds["camera"])
@@ -476,7 +476,7 @@ print("camera:", Ref(L.at(), "video/G1-tele").preds["camera"])
 # %%
 fixed_video = Video(tele_video.frames)           # the same bytes
 fixed_video.preds.update(game="G1", camera="tele", span=[0, 9000])
-with L.transaction(by="human:dan", why="camera typo") as t:
+with L.transaction(by="human:ann", why="camera typo") as t:
     right_subject = fixed_video.seal(t, name="video/G1-tele",
                                      provenance="import:archive")
 rev = L.at()
@@ -501,11 +501,11 @@ print("tlee refs:", rev.refs(kind=Video, camera="tlee"))
 # %%
 trimmed_video = Video(b"G1 wide camera, frames 600-9000")
 trimmed_video.preds.update(game="G1", camera="wide", span=[600, 9000])
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     trimmed_video.seal(t, deps=[wide_video])
 print("trimmed:", repr(trimmed_video))
 # → trimmed: <Video #<8 hex>>: no alias yet
-with L.transaction(by="human:dan", why="warm-up trimmed") as t:
+with L.transaction(by="human:ann", why="warm-up trimmed") as t:
     t.add("video/G1", "db/alias", trimmed_video.subject)
 print("trimmed:", repr(trimmed_video), " wide:", repr(wide_video))
 # → trimmed: <Video video/G1>  wide: <Video #<8 hex>>
@@ -666,7 +666,7 @@ def length(rev, a, b) -> float:
 git("add", "plane")
 git("commit", "-m", "plane: measure, units")
 
-with L.transaction(by="human:dan", why="mount plane") as t:
+with L.transaction(by="human:ann", why="mount plane") as t:
     # the two db/mount/plane rows: mnt.plane.measure loads from plane/measure.py in the geometry repo
     t.ns.mount("mnt.plane", root="plane", repo="geometry")
 rev = L.at()
@@ -766,7 +766,7 @@ except ConfinedWrite as e:
 # to the function's own folder, the dat being produced (not the
 # worker's scratch, not the store); reads are confined to the
 # mounted folders, the store and that folder. A function that
-# builds a folder declares a parameter `path: Path` (Q36), never a
+# builds a folder declares a parameter `path: Path`, never a
 # key: the run binds it to a fresh folder in the scratch, the seal
 # moves what was built there into the store, and the call's
 # `path=` (a control option, never hashed) names the result.
@@ -802,8 +802,8 @@ for item in sorted(far_value.dependencies):
 # - `code/geometry` — `distance` is global, so the code it ran is
 #   known only as its repo's commit.
 # - `code` — the code the name resolved to, its `Code` subject: the
-#   hash of the module's source and what it imports from its repo
-#   (A39), beside the commit.
+#   hash of the module's source and what it imports from its repo,
+#   beside the commit.
 # - `fn` — the function's dotted name inside that code.
 # - `platform` — the environment, discovered.
 #
@@ -922,7 +922,7 @@ for item in sorted(opening_clip.dependencies):
 # `-> Video` names a `Value` subclass, so the clip is sealed as it
 # was returned, no boxing. The load through `video/G1` recorded the
 # binding, the name to the bytes it resolved to, beside the value
-# item. Neither holds the subject (A35): what `clip` depends on is
+# item. Neither holds the subject: what `clip` depends on is
 # the bytes the name gives, not the entry they sit in.
 
 # %% [markdown]
@@ -932,7 +932,7 @@ for item in sorted(opening_clip.dependencies):
 # %%
 stable_video = Video(b"G1 stabilised, frames 600-9000")
 stable_video.preds.update(game="G1", camera="wide", span=[600, 9000])
-with L.transaction(by="human:dan", why="stabilised") as t:
+with L.transaction(by="human:ann", why="stabilised") as t:
     stable_video.seal(t, deps=[trimmed_video], name="video/G1")
 rev = L.at()
 stable_clip = rev.run("clips.clip", video="video/G1", start=0, end=8)
@@ -972,7 +972,7 @@ print("obj:", shifted_value.obj, " same bytes:", shifted_value.same_as(hypotenus
 # %%
 restamped_video = Video(stable_video.frames)     # the same bytes
 restamped_video.preds.update(game="G1", camera="wide", span=[600, 8990])
-with L.transaction(by="human:dan", why="span off by ten") as t:
+with L.transaction(by="human:ann", why="span off by ten") as t:
     restamped_video.seal(t, deps=[trimmed_video], name="video/G1")
 rev = L.at()
 print("restamped:", repr(restamped_video), " stable:", repr(stable_video))
@@ -983,7 +983,7 @@ print("same subject:", again_clip.subject == stable_clip.subject)
 
 # %% [markdown]
 # `video/G1` now names identical bytes, so the binding item is
-# unchanged and `clip` hits (A35, A21).
+# unchanged and `clip` hits.
 
 # %% [markdown]
 # ### Checking an entry, and evaluating without keeping
@@ -1024,9 +1024,9 @@ print("nothing written:", L.at().id == rev.id)
 # the videos, as annotation.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db/pred/tag", "db/cardinality", "many")
-with L.transaction(by="human:dan", why="tagging") as t:
+with L.transaction(by="human:ann", why="tagging") as t:
     t.add(restamped_video.subject, "tag", "opener")
     t.add(restamped_video.subject, "tag", "home-court")
     t.add(g2_video.subject, "tag", "home-court")
@@ -1043,14 +1043,14 @@ print("span:", wide_video.preds["span"])
 # %% [markdown]
 # `tag` is declared `many`, so a video's tags are a list and a
 # keyword matches any member. `span` is typed `json`, so a `one`
-# pred may hold a list (A36). A list under an untyped `one` pred is
+# pred may hold a list. A list under an untyped `one` pred is
 # refused at the seal.
 
 # %%
 two_camera_video = Video(b"G1 both cameras, 9000 frames")
 two_camera_video.preds["camera"] = ["tele", "wide"]
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         two_camera_video.seal(t)
 except TypeError as e:
     print("TypeError:", e)
@@ -1065,7 +1065,7 @@ except TypeError as e:
 # hops; a ninth, like a cycle, is `AliasLoop`.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("hop-chain/1", "db/alias", video_value.subject)
     for i in range(2, 10):
         t.add(f"hop-chain/{i}", "db/alias", f"hop-chain/{i - 1}")
@@ -1082,11 +1082,11 @@ except AliasLoop as e:
 # %% [markdown]
 # ### A sealed pred cannot be removed
 #
-# A `remove` of a frozen pred is refused like an `add` (A38).
+# A `remove` of a frozen pred is refused like an `add`.
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         t.remove(wrong_subject, "camera", "tlee")
 except Exists as e:
     print("Exists:", e)
@@ -1103,7 +1103,7 @@ except Exists as e:
 # latest alias), else `#` and the hash's first eight characters.
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:
+with L.transaction(by="human:ann", lock=10) as t:
     t.add("review/G1", "clip", Ref(t.previous_rev, stable_clip.subject))
 pick_ref = L.at()["review/G1", "clip"]
 print("pick:", repr(pick_ref), " same subject:", pick_ref.subject == stable_clip.subject)

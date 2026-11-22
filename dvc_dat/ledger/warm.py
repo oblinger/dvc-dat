@@ -1,4 +1,4 @@
-"""``@dat.warm``: a process-level memo for boot computations the author promises not to mutate (SVP 250 A7).
+"""``@dat.warm``: a process-level memo for boot computations the author promises not to mutate.
 
     from dvc_dat import dat
 
@@ -102,7 +102,7 @@ def size_of(obj: Any) -> int:
 
 
 class Warm:
-    """``@dat.warm``: a process-level memo for boot computations the author promises not to mutate (SVP 250 A7).
+    """``@dat.warm``: a process-level memo for boot computations the author promises not to mutate.
 
     The process's warm store and its decorator: ``warm.clear()`` drops everything; ``warm.stats()`` reports
     ``entries``, ``bytes``, ``max_bytes``, ``hits`` and ``misses``.
@@ -118,8 +118,8 @@ class Warm:
     and str by length, containers and objects summed); a result over the whole budget is returned and not kept.
 
     Invisible to the ledger: a value function calling a warm function traces the same reads, so rerunnability is
-    untouched, and a fresh-process rerun catches a broken promise as a hash that differs. In SVP, ``kit_at(ledger,
-    rev)`` and ``load_model(asset)``.
+    untouched, and a fresh-process rerun catches a broken promise as a hash that differs. Typical warm functions load a
+    configuration kit or a model asset.
     """
 
     def __init__(self, max_bytes: Optional[int] = None) -> None:

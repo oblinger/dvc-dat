@@ -33,16 +33,18 @@ nav:
       - Mounts: mount-commands.md
       - "The {} grammar": expand.md
       - Spec format: spec-format.md
-  - Architecture:
-      - DAT Architecture.md
-      - Concepts: concepts.md
-  - API Reference:
-      - api/index.md
-      - Dat, DatManager, DatContainer: api/core.md
-      - Namespace: api/do.md
-      - Ledger: api/ledger.md
-      - Commands: api/just.md
-      - Dat tools: api/dat_tools.md
+  - Concepts: concepts.md
+  - Design:
+      - Architecture: DAT Architecture.md
+      - Design notes: Design/DAT Design Notes.md
+      - Summary: Design/DAT Summary.md
+      - Modules:
+          - api/index.md
+          - Dat, DatManager, DatContainer: api/core.md
+          - Namespace: api/do.md
+          - Ledger: api/ledger.md
+          - Commands: api/just.md
+          - Dat tools: api/dat_tools.md
   - About: about.md
 
 plugins:
@@ -71,15 +73,14 @@ plugins:
             show_signature_annotations: true
             filters: ["!^_[^_]"]
 
-# The anchor pages that share doc/ with the site source (2026-10-19), the spines the nav replaces (246 A4),
+# The anchor pages that share doc/ with the site source, the spines the nav replaces,
 # the notebooks' scripts and the demos' working folders: never built into the site. Only the notebooks and
 # their figures publish from DAT Demos/.
 exclude_docs: |
   DAT Track/
   DAT Design/
   Track/
-  Design/
-  DAT Hooks.md
+  *Hooks.md
   DAT.md
   Docs.md
   DAT User Docs.md

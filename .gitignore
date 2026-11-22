@@ -19,7 +19,7 @@ __pycache__
 /tests/art/
 .vscode/
 
-# Anchor (DAS repo-anchor shape, 2026-10-19): the Track folder is a plain ignored folder, never history
+# local tracking notes: a plain ignored folder, never history
 
 /doc/*Track/
 /doc/**/*Track/
@@ -27,12 +27,23 @@ __pycache__
 /doc/.obsidian/
 
 /.claude/settings.local.json
-# anchor-vault (HA F471)
+# editor settings of the docs vault
 .obsidian/
 doc/*Track/
 
-# Yore folders stay on disk, out of git: unzip there to look inside without it being swept in; restic backs up all of ~/ob (Dan, 2026-10-22)
+# local archive folders stay on disk, out of git
 Yore/
 
 # the ledger notebooks build their demo projects here when run
 doc/DAT Demos/scratch/
+
+# local agent and tool files, kept on disk, never tracked
+CLAUDE.md
+.anchor
+.ids
+.sweep-report
+# the notes vault's anchor page and its hook indexes, written by local tools
+/doc/DAT.md
+*Hooks.md
+# design-discussion records and feature docs, kept locally, never published
+/Design Local/

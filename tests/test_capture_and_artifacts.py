@@ -19,7 +19,7 @@ from dvc_dat.core import ART_FILE, DAT_CONFIG_FILE, INDEX_FILE, RESULT_YAML  # n
 
 def run_cause(m, dat):
     """The run of a dat just created, `m._execute(dat)`: the step `m.run(spec)` takes after the create
-    (a dat runs once, by the call that makes it, SVP 1508), raising what the run raised."""
+    (a dat runs once, by the call that makes it), raising what the run raised."""
     return m._execute(dat)
 
 
@@ -318,7 +318,7 @@ class TestOneNamespace:
 
 
 class TestOldStoreNotRead:
-    """No legacy stores (SVP 1467 Q9): what 2.13 wrote is not read."""
+    """No legacy stores: what 2.13 wrote is not read."""
 
     @pytest.fixture
     def old(self, tmp_path):
@@ -629,7 +629,7 @@ class TestStanding:
 
 
 class TestOldResultsNotRead:
-    """No legacy stores (SVP 1467 Q9): a results file with no stamped `dat.standing` is open,
+    """No legacy stores: a results file with no stamped `dat.standing` is open,
     whatever 2.13 keys it carries."""
 
     def write(self, tmp_path, name, spec, result=None):
@@ -691,7 +691,7 @@ class TestHeldAsks:
         assert list(m.roots({"a": "x", "b": "y"})) == ["b"]
 
     def test_below_is_the_trims_per_dat_step(self, m, clip, tmp_path):
-        """SVP 1493: `roots` reads each entry's list through `below`; empty for $MANUAL, an artifact, a dat not
+        """`roots` reads each entry's list through `below`; empty for $MANUAL, an artifact, a dat not
         found; a subclass answering a dat with no folder trims as if it were there."""
         m.create({"dat": {}}, path="a").save()
         mid = m.create({"dat": {}}, path="b")
@@ -710,7 +710,7 @@ class TestHeldAsks:
         assert list(held.roots({"a": "x", "b": "y"})) == ["b"]
 
     def test_standing_of_is_the_walks_per_dat_step(self, m, tmp_path):
-        """SVP 1493: the standing walk reads a dat's standing through `standing_of`; None for a dat not found, so a
+        """The standing walk reads a dat's standing through `standing_of`; None for a dat not found, so a
         hashed entry with no folder counts referenceable -- unless a subclass that holds its record says otherwise."""
         m.create({"dat": {}}, path="a").save()
         assert m.standing_of("a") == m.standing("a") == "referenceable" and m.standing_of("nothing") is None
@@ -855,7 +855,7 @@ class TestTheRun:
         assert first["run_at"] <= second["run_at"]
 
     def test_a_dat_hashed_by_the_2x_rule_no_longer_verifies(self, m, tmp_path):
-        """No legacy stores (SVP 1467 Q9): one rule, the functional one; a 2.x hash is refused."""
+        """No legacy stores: one rule, the functional one; a 2.x hash is refused."""
         folder = tmp_path / "dats" / "old"
         folder.mkdir(parents=True)
         (folder / "_spec_.yaml").write_text(yaml.safe_dump({"dat": {"kind": "dvc_dat.core.Dat", "name": "old"}}))

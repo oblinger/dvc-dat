@@ -1,4 +1,4 @@
-"""``L.at(timestamp)`` (SVP 1507): an ISO 8601 prefix at any precision names the latest revision whose
+"""``L.at(timestamp)``: an ISO 8601 prefix at any precision names the latest revision whose
 ``db/time`` is at or before the start of its span, read in the display zone (``db db/timezone`` at the top,
 UTC with none) unless it carries ``Z`` or an offset."""
 

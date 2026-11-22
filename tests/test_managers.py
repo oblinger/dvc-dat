@@ -1,6 +1,6 @@
 """2.3: a `DatManager` owns its `ns`; two worlds in one process stay apart.
 
-The 1.x ownership restored (Dan, 2026-09-22): the manager holds the folders and
+The 1.x ownership restored: the manager holds the folders and
 the namespace, `Dat.create` / `Dat.load` trampoline to `Dat.manager`, and the
 module-level `ns` forwards to that manager's namespace.
 """
@@ -108,7 +108,7 @@ class TestAdoption:
         probe = Namespace()
         probe.mount(value={"x": 1}, at="bare")
         assert probe.load("bare.x") == 1
-        with pytest.raises(TypeError, match="not callable"):   # running is a manager's (DAT 1049)
+        with pytest.raises(TypeError, match="not callable"):   # running is a manager's
             probe({"dat": {"do": "bare"}})
         with pytest.raises(RuntimeError, match="no manager"):
             probe.manager

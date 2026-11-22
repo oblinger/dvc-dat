@@ -5,8 +5,7 @@ Who built dvc_dat, and the versioning rule for its public contract.
 DVC-DAT - A Data Management Framework for managing Machine Learning related
 data and code.
 
-Developed by Dan Oblinger <dan@sportsvisio.com>
-CTO SportsVisio Inc.
+Developed by Dan Oblinger.
 
 ## Version numbers
 

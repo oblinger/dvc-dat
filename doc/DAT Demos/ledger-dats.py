@@ -130,7 +130,7 @@ from demo_game.etl.dat import StageDat, build
 # games:
 
 # %%
-with L.transaction(by="human:dan", why="four games", lock=10) as t:
+with L.transaction(by="human:ann", why="four games", lock=10) as t:
     for game, court in [("G1", "north"), ("G2", "east"),
                         ("G3", "south"), ("G4", "west")]:
         t[f"game/{game}"] = {"court": court}
@@ -144,8 +144,8 @@ work_path.mkdir(parents=True)
 hand_dat = build(rev, detect_spec_record, work_path)
 print("files:", sorted(file_path.name for file_path in work_path.iterdir()))
 # → files: ["_result_.yaml", "_spec_.yaml", "boxes.json"]
-with L.transaction(by="human:dan") as t:
-    hand_dat.seal(t, name="detect/G1", provenance="human:dan")
+with L.transaction(by="human:ann") as t:
+    hand_dat.seal(t, name="detect/G1", provenance="human:ann")
 print("dat:", repr(hand_dat), " sealed:", hand_dat.sealed)     # → dat: <StageDat detect/G1>  sealed: <the seal's moment>
 
 # %% [markdown]
@@ -213,7 +213,7 @@ print("G1 dats:", rev.values(kind=StageDat, game="G1"))    # → G1 dats: [<Stag
 # `db/commit`. Both predicates are the ledger's, so they carry `db/`.
 
 # %%
-with L.transaction(by="human:dan", why="mount the etl") as t:
+with L.transaction(by="human:ann", why="mount the etl") as t:
     t.ns.mount("mnt.demo_game.etl", root="demo_game/etl", repo="demo-game")   # two db/mount rows
 rev = L.at()
 dat_fn = rev.ns.load("mnt.demo_game.etl.dat.dat")
@@ -235,9 +235,9 @@ print("db/version:", L.at()["db/repo/demo-game/demo_game.etl", "db/version"])
 # → db/version: 0.1.0: this first clean run wrote the clock
 
 # %% [markdown]
-# The spec is the whole memo key: one key, a JSON object (A38), in
-# the one `db/keys` row, numbers kept native. `path` is not a key
-# (Q36): the run bound it to a fresh scratch folder, the function
+# The spec is the whole memo key: one key, a JSON object, in
+# the one `db/keys` row, numbers kept native. `path` is not a key:
+# the run bound it to a fresh scratch folder, the function
 # built the dat there, and the seal moved the folder into the art
 # store by its manifest, as `v.seal(t)` did by hand. With no
 # `path=` on the call the result is named `anonymous/Dat${unique:}`;
@@ -255,7 +255,7 @@ print("modules:", sorted(module_paths))
 #    "demo_game/etl/detect.py"]: the package's __init__ runs too
 
 # %% [markdown]
-# The `code` item hashes the modules the run loaded (Q37, open;
+# The `code` item hashes the modules the run loaded (open;
 # lean): this entry's code is `dat.py` and `detect.py`. An edit to
 # `detect.py` misses it, and a spec naming another stage is
 # another `code` subject; `fn` names the function inside it.
@@ -334,7 +334,7 @@ print("count:", detections_ref.preds["metrics.count"])        # → count: 40
 # config and each game's set, which `train` reads:
 
 # %%
-with L.transaction(by="human:dan", why="training", lock=10) as t:
+with L.transaction(by="human:ann", why="training", lock=10) as t:
     t["cfg/train"] = {"epochs": "8"}
     for game, gameset in [("G1", "normie"), ("G2", "normie"),
                           ("G3", "pro"), ("G4", "pro")]:
@@ -416,7 +416,7 @@ print("model matches:", model_dat.matches(rev))     # → model matches: False, 
 # %% [markdown]
 # A sandboxed value's dependencies pin the modules a stage loaded,
 # not the repo's commit, so `detections` still matches. `track.py` changed, so the tracks' `code` item moved. The
-# model reads as stale too: `matches` never runs a stage (A42), and
+# model reads as stale too: `matches` never runs a stage, and
 # its nested `tracks` item has no entry that holds at this rev yet.
 
 # %%
@@ -455,9 +455,9 @@ work_path = Path("by-hand/model-G3").resolve()
 work_path.mkdir(parents=True)
 hand_model_dat = build(rev, fit_spec_record, work_path)
 hand_model_dat.preds["gameset"] = "pro"
-with L.transaction(by="human:dan", why="a long run by hand") as t:
+with L.transaction(by="human:ann", why="a long run by hand") as t:
     hand_model_dat.seal(t, deps=[tracks_g3_dat],
-                        provenance="human:dan")
+                        provenance="human:ann")
 print("deps:", dict(sorted(hand_model_dat.dependencies.items())))
 # → deps: {"code/demo-game": "<8 hex>",
 #          "platform": "darwin-arm64-py3.11",
@@ -508,7 +508,7 @@ except Unindexed as e:
 # ### A release pins every clock
 
 # %%
-with L.transaction(by="human:dan", lock=10,
+with L.transaction(by="human:ann", lock=10,
                    why="October release") as t:
     bump(t, "db", "minor",                   # 0.0.0 -> 0.1.0
          confirm=lambda old, new: True)
@@ -534,7 +534,7 @@ print("subjects since:", sorted({row.subject
 # games retrained.
 
 # %%
-with L.transaction(by="human:dan", why="train longer") as t:
+with L.transaction(by="human:ann", why="train longer") as t:
     t["cfg/train", "epochs"] = "12"
 rev = L.at()
 for game in ("G1", "G2"):
@@ -600,7 +600,7 @@ print("latest scores:", {game: model_ref.preds["metrics.score"]
 
 # %% [markdown]
 # Nothing is loaded: `Ref.preds` and `Ref.sealed_at` come with the
-# rows, so "latest" by revision is a compare of `sealed_at` (A41).
+# rows, so "latest" by revision is a compare of `sealed_at`.
 # By `version` it would be a semver compare, since preds are
 # strings.
 
@@ -627,13 +627,13 @@ print("models read:", len(json.loads(scores_table.dependencies[q_items[0]])))   
 
 # %% [markdown]
 # The query inside the function is a dependency item, `q:` and its where
-# clause, holding the refs it answered (A41): four models, two per
+# clause, holding the refs it answered: four models, two per
 # normie game. Moving G3 into the set makes G3's model stale, its
 # retrain is a fifth normie model, and the table's query now
 # answers differently: a miss, not a stale hit.
 
 # %%
-with L.transaction(by="human:dan", why="G3 plays normie") as t:
+with L.transaction(by="human:ann", why="G3 plays normie") as t:
     t["game/G3", "gameset"] = "normie"
 rev = L.at()
 rev.run("mnt.demo_game.etl.model.train", game="G3")  # re-derived
@@ -656,7 +656,7 @@ print("config:", Path(".datconfig.yaml").read_text())   # → config: default: r
 # its `default:` names (`root`: the root ledger, a SQLite folder under
 # `data/` when no `root:` key says where); `DAT_LEDGER`, when set, overrides
 # the walk, which is how a sandbox worker in a scratch cwd finds its
-# parent's ledger (A44). A `mounts:` key is sugar for the mount
+# parent's ledger. A `mounts:` key is sugar for the mount
 # rows this notebook wrote by hand:
 #
 # ```yaml

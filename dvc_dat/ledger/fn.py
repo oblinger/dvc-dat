@@ -1,20 +1,20 @@
 """``dat.fn``, ``Fn`` and ``run`` (``Fn.__call__``): a revision function resolved at a ``Rev``.
 
-``@dat.fn`` (``from dvc_dat import dat``) declares and returns the function unchanged (A52): a plain call
+``@dat.fn`` (``from dvc_dat import dat``) declares and returns the function unchanged: a plain call
 runs the body and returns an unsealed ``Value``, recording nothing;
-``@dat.fn(reproducible=...)`` adds a claim about the function (``FnMark``, ``claim``, SVP 251 Q2).
+``@dat.fn(reproducible=...)`` adds a claim about the function (``FnMark``, ``claim``).
 ``rev.ns.load(name)`` resolves a dotted name at a revision; a function comes
 back an ``Fn``: under a mounted prefix (``db/mount/<prefix>`` rows) a sandboxed
 function, read off the mounted file and run in a worker (``sandbox``);
 otherwise an installed one, resolved in this process. Its ``kind`` is
 ``"ledger"`` for a ``@dat.fn`` (its keys are its memo key and it receives
 them) and ``"dat"`` for an undecorated function, a dat's run function (its memo
-key is the expanded spec, and it receives the dat made from it; DAT 1046).
+key is the expanded spec, and it receives the dat made from it).
 Calling the ``Fn`` is ``run``: a memo lookup over
 every entry at the top whose ``db/fn`` and ``db/keys`` rows match, each
 candidate's dependencies matched against the rev, the latest-sealed match winning
-(Q20, A20); on a miss, run, trace its reads, and send the result where ``seal=``
-says (DAT 1028): ``"get"`` never runs; ``False`` keeps nothing; ``True`` seals it
+on a miss, run, trace its reads, and send the result where ``seal=``
+says: ``"get"`` never runs; ``False`` keeps nothing; ``True`` seals it
 locally; a ``Ledger`` (the default: the fn's own) or an open ``Transaction`` saves
 it as the memo entry, ``db/fn``, ``db/keys`` and ``db/provenance
 eval:unsandboxed|eval:sandbox``. Every run attaches its trace to the result
@@ -46,8 +46,8 @@ from . import hooks
 if TYPE_CHECKING:
     from .rev import Rev
 
-#: The control options of a call (Q41): never keys, never hashed. A function may declare one as a
-#: key and is then called through ``kwargs=``; a declared ``path`` is the folder it builds (Q36).
+#: The control options of a call: never keys, never hashed. A function may declare one as a
+#: key and is then called through ``kwargs=``; a declared ``path`` is the folder it builds.
 RESERVED_KEYS = ("seal", "clean", "path", "kwargs")
 #: The name a folder-producing miss gets with neither ``path=`` nor a template (as ``Dat.create``).
 ANONYMOUS = "anonymous/Dat${unique:}"
@@ -60,13 +60,13 @@ class _Own:
         return "<the fn's ledger>"
 
 
-#: A run's result: the revision its run read (SVP 245), beside ``db/fn`` and ``db/keys``; read back as ``v.at``.
+#: A run's result: the revision its run read, beside ``db/fn`` and ``db/keys``; read back as ``v.at``.
 AT = "db/at"
 
 #: The default of ``seal=`` (``Fn.__call__``, ``Rev.run``): save to the fn's own ledger.
 OWN: Any = _Own()
 
-#: The keyword parameters a ``@dat.reduce_fn`` takes (SVP 242): ``accs``, earlier results of the same function over
+#: The keyword parameters a ``@dat.reduce_fn`` takes: ``accs``, earlier results of the same function over
 #: pairwise-disjoint subsets of the ask (``[]`` on the first step), and ``more``, the inputs none of them covers.
 REDUCE_PARAMS = ("accs", "more")
 #: A reduce step's rows beside a run's: the subjects of its ``accs`` entries, sorted (canonical JSON, ``[]`` for none),
@@ -86,18 +86,18 @@ def ledger_key(ledger: Any) -> str:
 @dataclass(frozen=True)
 class RunTrace:
     """What one run knew, kept on its unsaved result (``v.__dict__["_run"]``): enough for a later
-    ``v.seal(L)`` / ``v.seal(t)`` to write the memo entry a memoised run writes (DAT 1028).
+    ``v.seal(L)`` / ``v.seal(t)`` to write the memo entry a memoised run writes.
 
     ``trace`` is the dependencies (``code``, ``fn``, platform, ``code/<repo>``, every read); ``code_rows``
     the ``db/code/<hash 16>`` item's rows; ``repo`` and ``dirty`` the checkout that vouches for an
     unsandboxed run (``repo`` ``None`` outside any), for the code check at a late save. ``clock`` is
     ``(repo, package, version, commit)`` of the code that ran, sandboxed or not, for the
-    ``db/repo/<repo>/<package> db/version`` and ``db/repo/<repo> db/commit`` a seal advances (DAT 1043, 1044);
+    ``db/repo/<repo>/<package> db/version`` and ``db/repo/<repo> db/commit`` a seal advances;
     ``None`` outside any checkout or when the code declares no version. ``reproducible`` is the function's claim as
     its ``db/reproducible`` row holds it (``claim``), ``None`` for no row. ``at`` is the revision the run read, its
-    ``db/at`` row (SVP 245); ``None`` only on a seal record written before the row existed. ``reduce_from`` and
+    ``db/at`` row; ``None`` only on a seal record written before the row existed. ``reduce_from`` and
     ``reduce_more`` are a reduce step's ``db/reduce/from`` (the ``accs`` entries' subjects, sorted, canonical JSON) and
-    ``db/reduce/more`` (the identities handed as ``more``, canonical JSON), ``None`` on any other run (SVP 242)."""
+    ``db/reduce/more`` (the identities handed as ``more``, canonical JSON), ``None`` on any other run."""
 
     name: str
     enc: str
@@ -145,7 +145,7 @@ def run_trace(fn: "Fn", plain: "Rev", trace: Dict[str, str], enc: str, provenanc
               code: Code, repo: Optional[str] = None, dirty: bool = False,
               reduce: Optional[Tuple[str, str]] = None) -> RunTrace:
     """``code`` is what ran: ``fn.code``, with a sandboxed run's run-time loads beside its own; ``reduce`` a reduce
-    step's ``(from, more)`` rows (SVP 242)."""
+    step's ``(from, more)`` rows."""
     rfrom, rmore = reduce if reduce is not None else (None, None)
     return RunTrace(name=fn.name, enc=enc, trace=dict(trace), provenance=provenance, code_subject=code.subject,
                     code_rows=tuple(code._rows()), ledger=ledger_key(plain.ledger), sandboxed=fn.code.sandboxed,
@@ -162,7 +162,7 @@ def attach_run(value: Value, run: RunTrace) -> Value:
 
 
 def check_late_code(run: RunTrace, env: Env) -> None:
-    """A late save of an unsandboxed run (DAT 1028): the code that ran is vouched for by a clean
+    """A late save of an unsandboxed run: the code that ran is vouched for by a clean
     checkout at the commit the trace names, as a memoised run's ``_check_code``; ``NotEvaluated``."""
     if run.sandboxed:
         return                              # the code item records the bytes it loaded
@@ -188,10 +188,10 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
 
     The entry ``seal_entry`` always wrote: ``db/fn`` (the dotted name), ``db/keys``, ``db/returns``
     (the function's return annotation), ``db/reproducible`` (its claim, when it makes one), ``db/at`` (the
-    revision the run read: provenance, outside the subject's hash and the hit test, SVP 245), the trace as
+    revision the run read: provenance, outside the subject's hash and the hit test), the trace as
     ``db/deps/*`` (``code`` naming the ``db/code/<hash 16>`` item, written once), ``db/value``, under
     ``<hash of (fn, keys, trace, preds, value)>``, its subdats with it (``plan``, ``Transaction._subdat_plan``); a
-    reduce step adds ``db/reduce/from`` and ``db/reduce/more`` (SVP 242), outside the hash. ``refuse_held``: an identical entry already on the ledger raises ``_AlreadySealed`` (the caller loads it)."""
+    reduce step adds ``db/reduce/from`` and ``db/reduce/more``, outside the hash. ``refuse_held``: an identical entry already on the ledger raises ``_AlreadySealed`` (the caller loads it)."""
 
     if value.sealed and value.subject is None and "_run" not in value.__dict__:
         raise TypeError(f"{run.name} returned a {type(value).__name__} sealed by v.seal(); run seals its "
@@ -208,7 +208,7 @@ def save_run(t: Any, value: Value, run: RunTrace, name: Optional[str],
     subject = hash_text(canonical({"fn": run.name, "keys": json.loads(run.enc), "trace": run.trace,
                                    "preds": canon, "value": vtext}))
     if refuse_held and t._snapshot()._held(subject, "db/value") and not _spec_only(t._snapshot(), subject):
-        raise _AlreadySealed(subject)           # a spec-only entry takes the bytes of this run (SVP 251)
+        raise _AlreadySealed(subject)           # a spec-only entry takes the bytes of this run
     t._ensure_code(run.code_subject, run.code_rows)
     if run.clock is not None:
         t._advance_clock(*run.clock)
@@ -238,15 +238,15 @@ MARK = "__dat_fn__"
 @dataclass(frozen=True)
 class FnMark:
     """What ``@dat.fn`` or ``@dat.reduce_fn`` declares of a function, held on the function object: ``reproducible``,
-    its claim as written (``claim``, SVP 251 Q2), which a run writes as the ``db/reproducible`` row; ``reduce``, True
-    for a ``@dat.reduce_fn`` (SVP 242), run only by ``rev.reduce``."""
+    its claim as written (``claim``), which a run writes as the ``db/reproducible`` row; ``reduce``, True
+    for a ``@dat.reduce_fn``, run only by ``rev.reduce``."""
 
     reproducible: Any = None
     reduce: bool = False
 
 
 def reduce_sources(obj: Any) -> List[str]:
-    """A ``db/reduce/from`` row as a list of subjects (SVP 242): a list as is; its text (canonical JSON) parsed; a bare
+    """A ``db/reduce/from`` row as a list of subjects: a list as is; its text (canonical JSON) parsed; a bare
     subject from before steps merged several ``accs`` is a one-element list, ``none`` the empty one."""
     if isinstance(obj, str):
         if obj.startswith("["):
@@ -260,7 +260,7 @@ def reduce_sources(obj: Any) -> List[str]:
 
 def check_reduce_params(what: str, params: Dict[str, str], reduce: bool) -> None:
     """The definition-time checks on a function's parameters, ``name -> kind`` (``"pos"`` the first positional,
-    ``"kw"`` any other parameter a keyword can bind, ``"other"`` a ``*args``/``**kw`` or positional-only one; SVP 242).
+    ``"kw"`` any other parameter a keyword can bind, ``"other"`` a ``*args``/``**kw`` or positional-only one).
     A ``@dat.reduce_fn`` takes keyword parameters ``accs`` and ``more`` and no ``acc``; a ``@dat.fn`` taking ``accs``,
     or ``acc`` beside ``more``, is a reduce function marked wrong. ``TypeError`` naming the fix."""
     if reduce:
@@ -301,11 +301,11 @@ def fn(func: Optional[Callable] = None, *, reproducible: Any = None) -> Any:
     """``@dat.fn`` / ``@dat.fn(reproducible=...)``: mark a value function.
 
     It takes the ``Rev`` first and keywords after, and returns a ``Value``. ``func`` comes back unchanged and still
-    callable (A52): a plain call runs the body with whatever ``Rev`` it is given, records nothing and seals nothing,
+    callable: a plain call runs the body with whatever ``Rev`` it is given, records nothing and seals nothing,
     which is how it is unit-tested; nothing is written on import.
 
     The return annotation is required (``TypeError`` at decoration): a ``Value`` subclass means the result must be
-    one; any other annotation means a bare result is wrapped in ``Value.Blob`` (A31). A non-callable or a class is
+    one; any other annotation means a bare result is wrapped in ``Value.Blob``. A non-callable or a class is
     ``TypeError`` too.
 
     ``reproducible`` (``FnMark``, the grammar in ``claim``) is how far a rerun of it can be trusted
@@ -315,13 +315,13 @@ def fn(func: Optional[Callable] = None, *, reproducible: Any = None) -> Any:
     predicate, ...)``, or a list of clauses, first match wins. ``TypeError`` for anything else.
 
     A function taking ``accs``, or ``acc`` beside ``more``, is a reduce function: ``TypeError`` pointing to
-    ``@dat.reduce_fn`` (SVP 242).
+    ``@dat.reduce_fn``.
     """
     return _mark(func, reproducible, False)
 
 
 def reduce_fn(func: Optional[Callable] = None, *, reproducible: Any = None) -> Any:
-    """``@dat.reduce_fn`` / ``@dat.reduce_fn(reproducible=...)``: mark a reduce function (SVP 242), run by
+    """``@dat.reduce_fn`` / ``@dat.reduce_fn(reproducible=...)``: mark a reduce function, run by
     ``rev.reduce``.
 
     ``f(rev, *, accs: list[R], more: list[T], **keys) -> R``: ``accs`` are earlier results of ``f`` itself over
@@ -440,14 +440,14 @@ def returns_class(func: Callable) -> Optional[type]:
 
 
 def encode_keys(kw: Dict[str, Any]) -> Dict[str, Any]:
-    """``db/keys``: a ``Value``/``Ref`` top-level key as ``ref:<class>:<hash>``, the rest native JSON (A17, A38)."""
+    """``db/keys``: a ``Value``/``Ref`` top-level key as ``ref:<class>:<hash>``, the rest native JSON."""
     from .rev import Ref
 
     def nested(x: Any, k: str) -> Any:
         # what JSON would turn into another value is refused, never collapsed into another call's memo
         # key: a non-str dict key (1 as "1"), a NaN or an infinity; a tuple is its list, as documented
         if isinstance(x, (Value, Ref)):
-            raise TypeError(f"key {k!r}: a Value or Ref is a key only at the top level, never nested (A44)")
+            raise TypeError(f"key {k!r}: a Value or Ref is a key only at the top level, never nested")
         if isinstance(x, dict):
             bad = [a for a in x if not isinstance(a, str)]
             if bad:
@@ -476,7 +476,7 @@ def encode_keys(kw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def reduces(fn: "Fn") -> bool:
-    """Is ``fn`` a reduce function: a ``@dat.reduce_fn`` (SVP 242)."""
+    """Is ``fn`` a reduce function: a ``@dat.reduce_fn``."""
     return fn.kind == "ledger" and fn.reducer
 
 
@@ -496,7 +496,7 @@ class Input:
 
 
 def reduce_keys(fn: "Fn", over: Any, keys: Dict[str, Any]) -> Tuple[Dict[str, Any], List[Input], str]:
-    """``(the other keys bound, the inputs sorted by identity, db/keys)`` of a reduce (SVP 242): ``db/keys`` is
+    """``(the other keys bound, the inputs sorted by identity, db/keys)`` of a reduce: ``db/keys`` is
     ``{"over": [...sorted], **keys}``, canonical. ``over`` a str, bytes or a mapping is ``TypeError``; two inputs of
     one identity ``ValueError``; a key named ``accs``, ``more`` or ``over`` ``TypeError``."""
     if isinstance(over, (str, bytes, dict)) or not hasattr(over, "__iter__"):
@@ -549,9 +549,9 @@ def reduce_args(rev: "Rev", kw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 MNT = "mnt"
-"""The reserved top segment of a ledger-mounted name (1467 Q14 (B)): ``mnt.<at>...`` names what the mount
+"""The reserved top segment of a ledger-mounted name: ``mnt.<at>...`` names what the mount
 ``db/mount/<at>`` serves; a name not starting ``mnt.`` is never a mount and is imported. A mount is named with
-it, ``t.ns.mount("mnt.<at>", ...)`` and a ``.datconfig.yaml`` ``mounts:`` key ``mnt.<at>`` alike (1505 Q1); the
+it, ``t.ns.mount("mnt.<at>", ...)`` and a ``.datconfig.yaml`` ``mounts:`` key ``mnt.<at>`` alike; the
 rows, ``mounts()`` and the in-process module names never carry it."""
 
 
@@ -562,7 +562,7 @@ def mounted_name(dotted: str) -> str:
 
 def mount_prefix(at: str, where: str) -> str:
     """The prefix of the ``db/mount/<prefix>`` rows a mount named ``at`` writes: ``at`` is ``mnt.<prefix>``
-    (1505 Q1), and anything outside ``mnt.`` (``mnt`` alone included) is ``ValueError``; nothing is prefixed for
+    and anything outside ``mnt.`` (``mnt`` alone included) is ``ValueError``; nothing is prefixed for
     you."""
     rest = at[len(MNT) + 1:] if at.startswith(MNT + ".") else ""
     if not rest or not all(rest.split(".")):
@@ -609,7 +609,7 @@ def resolve_in_process(name: str) -> Any:
 
 
 def path_template(default: Any) -> Optional[str]:
-    """A declared ``path`` parameter's default, the path template (Q36); ``None`` for no default."""
+    """A declared ``path`` parameter's default, the path template; ``None`` for no default."""
     if default is inspect.Parameter.empty or default is None:
         return None
     if not isinstance(default, (str, os.PathLike)):
@@ -660,7 +660,7 @@ def source_of(name: str, obj: Any) -> Tuple[str, Path]:
 
 
 def _closure_files(modname: str, src: Path, env: Env) -> Tuple[Path, Path, List[Path]]:
-    """The installed function's static import closure (Q37 (iii)): ``(root, within, files)``, ``root`` the
+    """The installed function's static import closure: ``(root, within, files)``, ``root`` the
     ``sys.path`` entry its top-level package sits in, ``within`` its checkout (else ``root``)."""
     from .sandbox import static_closure
 
@@ -675,8 +675,8 @@ def _closure_files(modname: str, src: Path, env: Env) -> Tuple[Path, Path, List[
 
 
 def installed_code(modname: str, src: Path, env: Env) -> Code:
-    """An installed function's ``Code`` (DAT 1037): its top-level package at the version its environment
-    carries; ``modules`` the static import closure within its checkout (Q37 (iii)), relative to the
+    """An installed function's ``Code``: its top-level package at the version its environment
+    carries; ``modules`` the static import closure within its checkout, relative to the
     top-level package's parent, each by its sha256 (outside any checkout, the module file alone); never
     sandboxed, no mounts."""
     from .code import declared_version, identity_hash, installed_version, lock_of
@@ -704,10 +704,10 @@ def installed_code(modname: str, src: Path, env: Env) -> Code:
 class Fn:
     """A revision function, resolved at ``_rev``; calling it is ``run``. Not on the timeline: no subject.
     ``name`` is the dotted string it was loaded by; ``code`` the snapshot it is looked up in, which alone
-    has identity (``code.subject``, DAT 1037). ``kind`` is read off the function: ``"ledger"`` for a
+    has identity (``code.subject``). ``kind`` is read off the function: ``"ledger"`` for a
     ``@dat.fn``, ``"dat"`` for an undecorated one, a dat's run function, which runs only through a
-    spec (``rev.run(spec)``; its keys are the expanded spec, DAT 1046). ``reproducible`` is the function's
-    own claim as written (``@dat.fn(reproducible=...)``, SVP 251 Q2)."""
+    spec (``rev.run(spec)``; its keys are the expanded spec). ``reproducible`` is the function's
+    own claim as written (``@dat.fn(reproducible=...)``)."""
 
     name: str
     """The dotted name it was resolved by."""
@@ -722,7 +722,7 @@ class Fn:
     code: Code
     """The code it is loaded from, at a version: the snapshot, which alone has identity.
 
-    A ``Code(Value)`` (DAT 1037), computed at ``rev.ns.load``; a run writes its identity as the ``db/code/<16 hex>``
+    A ``Code(Value)``, computed at ``rev.ns.load``; a run writes its identity as the ``db/code/<16 hex>``
     item, and the rest of it is not written to the ledger. Its name is ``<unit>@<version>``: the unit is the mount
     prefix for mounted code (``plane``, ``algs.ocr``) and the function's top-level package for installed code
     (``geometry``).
@@ -738,10 +738,10 @@ class Fn:
     ``commit`` (the checkout's at load, or ``None``), ``lock`` (the git blob id of that checkout's ``uv.lock``, or
     ``None``) and ``package`` (the dotted root whose declared version ``version`` is, the unit, or ``None`` when the
     version came from a commit or the hash: the ``<package>`` of the ``db/repo/<repo>/<package>`` clock a clean run
-    moves, DAT 1044).
+    moves).
 
     The version is read as a module attribute after import, never parsed from source, and a declared version counts
-    only from a clean checkout (DAT 1043): when the checkout holding the code has modified tracked files, the version
+    only from a clean checkout: when the checkout holding the code has modified tracked files, the version
     is ``<commit 8>+dirty`` whatever ``__version__`` says (mounted: the last commit touching the loaded files, else
     HEAD; installed: HEAD).
 
@@ -764,7 +764,7 @@ class Fn:
     """``"ledger"`` or ``"dat"``, read off the function.
 
     ``"ledger"`` for a ``@dat.fn``: its keys are its memo key and it receives them. ``"dat"`` for an undecorated
-    function, a dat's run function (DAT 1046): its memo key is the expanded spec, and it receives the dat made from
+    function, a dat's run function: its memo key is the expanded spec, and it receives the dat made from
     that spec in its work folder; it runs only through a spec (``rev.run(spec)``, ``rev.run(name, **kwargs)``), and a
     direct call is ``TypeError``. A plain ``Dat.manager.run`` in a ledger project runs a mounted one in the calling
     process, nothing memoised.
@@ -776,10 +776,10 @@ class Fn:
     ``db/reproducible`` row, which is what ``rerun`` and ``safe`` read ([Reproducibility][reproducibility]).
     """
     reducer: bool = False
-    """True for a ``@dat.reduce_fn`` (SVP 242): ``rev.reduce`` runs it, ``rev.run`` refuses it."""
+    """True for a ``@dat.reduce_fn``: ``rev.reduce`` runs it, ``rev.run`` refuses it."""
 
     def __repr__(self) -> str:
-        """``<Fn plane.measure.length@2.7.1>``: the name, ``@`` its code's version (DAT 1036, 1037)."""
+        """``<Fn plane.measure.length@2.7.1>``: the name, ``@`` its code's version."""
         return f"<Fn {self}>"
 
     def __str__(self) -> str:
@@ -810,9 +810,9 @@ class Fn:
         """``f(k=v, ...)`` or ``f(kwargs={...})``: eval.
 
         The control options are exactly ``seal``, ``clean``, ``path`` and ``kwargs``, never keys and never hashed
-        (Q41).
+        .
 
-        ``seal``: where the result goes (DAT 1028, [Running][running]). ``"get"``: the saved result if one holds, else
+        ``seal``: where the result goes ([Running][running]). ``"get"``: the saved result if one holds, else
         ``None``; never runs. ``False``: run, keep nothing; the trace is on the result. ``True``: run, seal it locally
         (``v.seal()``), off the ledger. A ``Ledger`` (default: the one the fn was loaded from): the saved result if
         one holds, else run and save it as the memo entry in a transaction of its own, the value's subject fixed at
@@ -822,19 +822,19 @@ class Fn:
         saved under.
 
         ``clean=True``: the code must be a clean representation of a version, the checkout clean and at the commit the
-        rev's ``db/repo/<repo> db/commit`` row names, else ``NotClean`` (Q39), before any lookup; ``False`` (default):
+        rev's ``db/repo/<repo> db/commit`` row names, else ``NotClean``, before any lookup; ``False`` (default):
         a sandboxed call runs at HEAD, clean or dirty. An unsandboxed call needs the function's code in a clean git
         checkout regardless, else ``NotEvaluated``.
 
         ``path``: the result's name, relative to the data folder (``<art store>/dats``), its folder there a view when
-        it is a ``Dat``; an absolute path makes the folder there and names nothing (Q36). A hit asked for under a new
+        it is a ``Dat``; an absolute path makes the folder there and names nothing. A hit asked for under a new
         name takes that name. Keys bind to the signature with defaults applied; ``kwargs={...}`` passes the whole key
         set instead, for a key that is also a control option's name; inline keys beside it are ``TypeError``.
 
-        A function claiming ``exact`` in any clause (``@dat.fn(reproducible="exact")``, SVP 251 Q2): the lookup also
+        A function claiming ``exact`` in any clause (``@dat.fn(reproducible="exact")``): the lookup also
         asks that the entry ran on the same ``card`` and ``driver``
         ([``reproducible``][dvc_dat.ledger.Fn.reproducible]), on top of the ledger's memo policy ([Memoization and the
-        platform][memoization-and-the-platform], SVP 1474); the entry written is the same either way.
+        platform][memoization-and-the-platform]); the entry written is the same either way.
 
         A result that is not an instance of a ``Value``-subclass return annotation is ``TypeError``.
         """
@@ -910,7 +910,7 @@ class Fn:
 
     def _reduce(self, over: Any, keys: Dict[str, Any], seal: Any = OWN, clean: bool = False,
                 fresh: bool = False) -> Optional[Value]:
-        """``rev.reduce``: the result of this reduce function over the set ``over`` (SVP 242).
+        """``rev.reduce``: the result of this reduce function over the set ``over``.
 
         An exact hit over the sorted set is returned and nothing runs (``seal="get"`` stops there, ``None`` on a miss);
         else the function runs once with ``accs`` the results of disjoint subsets already reduced whose entries hold
@@ -994,7 +994,7 @@ class Fn:
                   name: Optional[str] = None, reduce: Optional[Tuple[str, str]] = None) -> Value:
         """Run in this process. ``save``: ``False``, a draft carrying its ``RunTrace``; ``True``, the
         memo entry in a transaction of its own; a ``Transaction``, the memo entry in it (named ``name``).
-        ``reduce``: a reduce step's ``(from, more)`` rows, its ``accs`` and ``more`` loaded here (SVP 242)."""
+        ``reduce``: a reduce step's ``(from, more)`` rows, its ``accs`` and ``more`` loaded here."""
         from .sandbox import base_confined
         from .trace import RunFrame, running
         from .txn import code_token
@@ -1034,7 +1034,7 @@ class Fn:
                  env: Env, repo: Optional[str]) -> Value:
         """A dat's run function, run here (``_run_base``): the dat made from the spec in a work folder and
         run (``manager._execute``), its recorded dependencies that are ledger names entered as alias reads.
-        The run is the current run, so the manager's namespace and ``dat.at`` are at ``plain`` (SVP 1521)."""
+        The run is the current run, so the manager's namespace and ``dat.at`` are at ``plain``."""
         from .sandbox import base_confined
         from .trace import RunFrame, running
         from .txn import code_token
@@ -1087,7 +1087,7 @@ def _dats(plain: "Rev", work: Optional[Path]) -> List[Any]:
 
 def dat_spec(keys: Dict[str, Any], template: Optional[str]) -> Dict[str, Any]:
     """The spec a dat is created from: its memo key (the expanded spec) quoted, so ``create``'s expansion hands
-    its values back as they are, with its ``dat.preds`` template (SVP 1508) and its ``dat.name`` template
+    its values back as they are, with its ``dat.preds`` template and its ``dat.name`` template
     back, which that expansion fills."""
     from ..expand import quote_spec
 
@@ -1143,7 +1143,7 @@ def seal_level(name: str, plain: "Rev", seal: Any, clean: Any, path: Any) -> Any
 
 
 def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
-    """``clean=True`` (Q39): the checkout clean and at the commit ``plain``'s ``db/repo/<repo> db/commit`` row names."""
+    """``clean=True``: the checkout clean and at the commit ``plain``'s ``db/repo/<repo> db/commit`` row names."""
     repo = fn._info.get("repo") if fn.code.sandboxed else repo_of(env, fn.module)
     code = env.code.get(repo) if repo else None
     if code is None:
@@ -1160,9 +1160,9 @@ def check_clean(fn: Fn, plain: "Rev", env: Env) -> None:
 
 
 def fresh_name(ns: Any, template: str, keys: Dict[str, Any]) -> str:
-    """The path template expanded with the call's keys through the ledger namespace ``ns`` (Q36):
+    """The path template expanded with the call's keys through the ledger namespace ``ns``:
     ``ns.expand`` counts ``${unique:}`` until no name holds a value there and no folder is at it; without
-    ``${unique:}`` the name moves to the new value (A70)."""
+    ``${unique:}`` the name moves to the new value."""
     text = ns.expand(template, **keys)
     if not text:
         raise TypeError(f"path template {template!r} expanded to {text!r}, not a path")
@@ -1170,7 +1170,7 @@ def fresh_name(ns: Any, template: str, keys: Dict[str, Any]) -> str:
 
 
 def place(ledger: Any, value: Value, target: str) -> Value:
-    """``path=`` on a result (Q36, A70): relative, the value's name, its folder (a ``Dat``) rebuilt at
+    """``path=`` on a result: relative, the value's name, its folder (a ``Dat``) rebuilt at
     ``<data folder>/<name>`` as a view; absolute, the folder made there, no name. Unsaved
     (``seal=False`` or ``True``): the name is set on the object, saved with it."""
     if os.path.isabs(target):
@@ -1263,14 +1263,14 @@ def lookup(plain: "Rev", name: str, enc: str, widen: Sequence[str] = ()) -> Opti
     """The latest-sealed entry for ``(name, keys)`` whose dependencies hold at ``plain``; never runs.
     The memo index (``policy.reduced``) skips a candidate whose platform the policy already rules out;
     every other candidate is judged in full (``trace_matches``, ``widen`` added to the policy). A spec-only copy
-    (SVP 251) holds no bytes to hand back: it is no hit."""
+    holds no bytes to hand back: it is no hit."""
     from .rev import Ref
 
     top = plain.ledger.at()
     cands = []
     # Two indexed reads, then rows only for the entries of this function under these keys. Every function
     # called with the same keys (91 metrics over one run's line-up) shares ``db/keys``: reading each of those
-    # entries' rows cost two round trips apiece, growing with the ledger (SVP 255).
+    # entries' rows cost two round trips apiece, growing with the ledger.
     of_fn = set(top._store.subjects(top.id, predicate="db/fn", obj="str:" + name))
     for s in top._store.subjects(top.id, predicate="db/keys", obj="json:" + enc):
         if s not in of_fn:
@@ -1288,7 +1288,7 @@ def lookup(plain: "Rev", name: str, enc: str, widen: Sequence[str] = ()) -> Opti
 
 def _holding(plain: "Rev", top: "Rev", widen: Sequence[str]) -> Callable[[str], bool]:
     """``holds(subject)``: is that memo entry a hit at ``plain`` (``lookup``'s test, one candidate at a time): its
-    platform not ruled out by the memo index (``policy.reduced``), its bytes here (not spec-only, SVP 251), and
+    platform not ruled out by the memo index (``policy.reduced``), its bytes here (not spec-only), and
     every dependency holding (``trace_matches``, ``widen`` added to the policy)."""
     from .policy import judge, policy_at, reduced
     from .trace import trace_matches
@@ -1311,7 +1311,7 @@ def _holding(plain: "Rev", top: "Rev", widen: Sequence[str]) -> Callable[[str], 
 def partials(plain: "Rev", name: str, enc: str, have: Sequence[str],
              widen: Sequence[str] = ()) -> List[Tuple[str, Value, frozenset]]:
     """``[(subject, value, its identities)]``: the results already reduced over pairwise-disjoint, proper, non-empty
-    subsets of the ask whose entries hold at ``plain``, in the order picked (SVP 242); never runs. Candidates are the
+    subsets of the ask whose entries hold at ``plain``, in the order picked; never runs. Candidates are the
     function's entries (``db/fn``, indexed) whose ``db/keys`` other than ``over`` equal the ask's (``enc``) and whose
     ``over`` is within ``have``, the ask's identities. Greedy: the largest that holds (ties newest seal first, as
     ``lookup`` judges one), then the largest holding one disjoint from all picked, and so on."""

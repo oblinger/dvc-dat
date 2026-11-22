@@ -1,4 +1,4 @@
-"""SVP 249: a video as a ledger value, sealed from a URL, a file or frames, stored as segments plus a manifest, and
+"""A video as a ledger value, sealed from a URL, a file or frames, stored as segments plus a manifest, and
 read lazily: ``frame(n)`` fetches one segment, ``clip(a, b)`` the segments it covers, ``path()`` joins them once.
 
 Every video here is a few seconds of synthetic frames made in the test (64x48 at 10 fps unless a test needs more);
@@ -239,7 +239,7 @@ def video_timing(path):
 
 
 def test_the_joined_path_has_the_sources_frame_rate_and_duration(world, tmp_path):
-    """SVP 249, 2026-11-11: G1's ``path()`` read 29.986 fps and 1.488 s more than its mp4 (30 fps), 328 segments.
+    """G1's ``path()`` read 29.986 fps and 1.488 s more than its mp4 (30 fps), 328 segments.
     The concat join advanced each segment by its whole length, audio overhang included, and the first segment's
     timestamps start one B-frame delay late. A source shaped like a game's (30 fps H.264 with B-frames, 48 kHz AAC,
     keyframes every 31 frames, off the audio frame grid) joins back to the same frames, frame rate and duration."""

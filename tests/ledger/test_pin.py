@@ -1,4 +1,4 @@
-"""Rerunnability (SVP 250): ``t.pin`` tags and pushes a value's commit to a bare remote, ``rev.rerun`` runs the
+"""Rerunnability: ``t.pin`` tags and pushes a value's commit to a bare remote, ``rev.rerun`` runs the
 function again at the tag, from a fresh clone that never held the commit, in a fresh interpreter.
 
 A tiny repo ``pinrepo`` (package ``pinpkg``, ``__version__`` declared so a clean run moves the ``db/repo/pinrepo
@@ -230,14 +230,14 @@ def test_rerun_reproduces_from_a_fresh_clone_after_the_branch_is_squashed_and_co
     assert out.hash == out.expected == v.hash and out.reproducible is None and out.tag == tag_of(w.commit)
     assert out.worktree.is_dir() and git(out.worktree, "rev-parse", "HEAD") == w.commit
     assert out.worktree.resolve().is_relative_to(Path(w.L._store.art.root).parent.resolve()), \
-        "the worktree lives with the ledger's art store"          # `L.path` is a DSN on Postgres (SVP 1546)
+        "the worktree lives with the ledger's art store"          # `L.path` is a DSN on Postgres
     again = w.L.at().rerun(v)
     assert again.worktree == out.worktree and again.reproduced     # reused, not fetched again
 
 
 
 def test_a_value_run_at_a_past_revision_reruns_at_the_revision_it_read(world):
-    """SVP 245: the rows moved after the run; the rerun reads ``db/at``, not the revision that saved it."""
+    """The rows moved after the run; the rerun reads ``db/at``, not the revision that saved it."""
     w = world
     read = w.L.at().id
     with w.L.transaction(by="t") as t:

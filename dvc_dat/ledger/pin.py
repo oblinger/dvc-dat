@@ -1,4 +1,4 @@
-"""``pin`` and ``rerun`` (SVP 250): a sealed value's commit tagged and pushed, so its run can be rerun.
+"""``pin`` and ``rerun``: a sealed value's commit tagged and pushed, so its run can be rerun.
 
 A memo entry names the code that made it (``db/fn``, the ``db/code/<hash 16>`` item, the ``db/repo/<repo>
 db/commit`` clock at its revision), but nothing keeps that commit alive: a squash-merge with the branch
@@ -221,7 +221,7 @@ def inputs_of(run: Run) -> List[str]:
 
 
 def foreign_inputs(trace: Dict[str, str]) -> List[Tuple[str, str]]:
-    """``(<ledger>@<rev>, ref: text)`` of each value the run reached through another ``Rev`` (SVP 1521)."""
+    """``(<ledger>@<rev>, ref: text)`` of each value the run reached through another ``Rev``."""
     from .trace import foreign_of
 
     return sorted({(body["at"], v) for k, v in trace.items() if (body := foreign_of(k)) is not None})
@@ -467,7 +467,7 @@ def rerun(rev: "Rev", value: Any) -> Rerun:
 
 
 def origin_of(rev: "Rev", subject: str) -> Optional["Rev"]:
-    """The revision a copied value was copied from, while its ledger can be found (SVP 251); ``None`` otherwise."""
+    """The revision a copied value was copied from, while its ledger can be found; ``None`` otherwise."""
     from .named import rev_named
 
     text = rev.get(subject, "db/copied-from")

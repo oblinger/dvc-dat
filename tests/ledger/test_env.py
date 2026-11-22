@@ -1,4 +1,4 @@
-"""Discovery (A56): the dvc-dat checkout itself is never a repo of the process, a nested demo checkout is."""
+"""Discovery: the dvc-dat checkout itself is never a repo of the process, a nested demo checkout is."""
 
 import subprocess
 import sys
@@ -37,7 +37,7 @@ def test_a_module_inside_the_dvc_dat_checkout_is_not_a_repo(tmp_path, monkeypatc
 
 
 def test_a_dat_noncode_path_leaves_the_checkout_clean(tmp_path, monkeypatch):
-    """T560: `.gitattributes` `doc/** dat-noncode` keeps a doc edit out of both dirty bits; a code edit is dirty."""
+    """`.gitattributes` `doc/** dat-noncode` keeps a doc edit out of both dirty bits; a code edit is dirty."""
     from dvc_dat.core import _code_of
     from dvc_dat.ledger.env import code_at
 
@@ -85,7 +85,7 @@ def _twin(run, modname):
 
 
 def test_a_deleted_checkout_is_not_discovered_when_a_live_one_shares_its_name(tmp_path, monkeypatch):
-    """DAT 1023: a re-run's previous scratch checkout, deleted, still has modules in ``sys.modules``;
+    """A re-run's previous scratch checkout, deleted, still has modules in ``sys.modules``;
     discovery reports the live checkout of that name, never the deleted one (whichever sorts last)."""
     import shutil
 
@@ -106,7 +106,7 @@ def test_a_deleted_checkout_is_not_discovered_when_a_live_one_shares_its_name(tm
 
 
 def test_two_live_checkouts_sharing_a_name_resolve_to_the_latest_imported(tmp_path, monkeypatch):
-    """DAT 1023: of two existing same-named checkouts, the one the most recently imported module was
+    """Of two existing same-named checkouts, the one the most recently imported module was
     loaded from wins, not the one whose path sorts last."""
     first = _twin(tmp_path / "run-b", "twin_first_1023")
     second = _twin(tmp_path / "run-a", "twin_second_1023")
@@ -122,7 +122,7 @@ def test_two_live_checkouts_sharing_a_name_resolve_to_the_latest_imported(tmp_pa
 
 
 def test_pinned_shares_one_discovery_until_a_module_is_imported(tmp_path, monkeypatch):
-    """SVP 255: inside ``pinned`` (one memo lookup, one name's resolution) ``current_env`` discovers once; an import
+    """Inside ``pinned`` (one memo lookup, one name's resolution) ``current_env`` discovers once; an import
     since discovers again; outside it, every call discovers (a notebook commits mid-session)."""
     from dvc_dat.ledger import set_env_provider
     from dvc_dat.ledger.env import Env, current_env, pinned

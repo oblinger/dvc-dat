@@ -1,4 +1,4 @@
-"""Executable docs: the fenced Python blocks of the SVP447 Ledger Module page, copied in, one test each.
+"""Executable docs: the fenced Python blocks of the ledger design page, copied in, one test each.
 
 Lines are as written on the page except where a comment marked ADAPTED says what changed and why;
 the page's `# result` comments become asserts below them. The page's stand-ins (`Video(read_mp4(...))`,
@@ -47,7 +47,7 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev.get("model/shot", "db/value") is None           # a Ref, or None
     assert rev.history("model/demo", "version", "0.2.1") == []      # [Row]: when, unfolded
     assert [(r.rev.id, r.object, r.added) for r in rev.history("model/demo", "version")] == [(1, "0.2.2", True)]
-    assert rev.history(since=L.at(0))                              # [Row], unfolded (A48)
+    assert rev.history(since=L.at(0))                              # [Row], unfolded
     assert [r.subject for r in rev.refs(s="db/pred/*", where={"db/index": "true"})] == ["db/pred/game"]
     assert ("db/pred/game", "db/index", "true") in rev
 
@@ -76,37 +76,37 @@ def test_usage_block(L, tmp_path, monkeypatch):
     assert rev.select(("game", "version"), fn="ledger_kinds.cut") == [("G1", "1.0.0")]   # tuples
     assert rev.all(since=L.at(1))            # every row in (1, rev.id]
 
-    with L.transaction(by="human:dan", why="T531", lock=10) as t:
-        assert bump(t, "model/demo") == "0.0.1"   # ADAPTED: a code version lives in its source (DAT 1043, 1044); bump moves db/version, not the bare row (DAT 1052 Q3)
+    with L.transaction(by="human:ann", why="re-baseline", lock=10) as t:
+        assert bump(t, "model/demo") == "0.0.1"   # ADAPTED: a code version lives in its source; bump moves db/version, not the bare row
         t["env/prod", "rev"] = "413"         # add, on a one pred
         t.add(t.tx, "checked", "G1,G4,G5")
     assert t.rev.id == L.at().id
-    assert t.rev[t.rev.tx, "db/by"] == "human:dan"
+    assert t.rev[t.rev.tx, "db/by"] == "human:ann"
 
-    with L.transaction(by="agent:svp", lock=30) as t:
-        v = t.previous_rev["model/demo", "db/version"]    # nothing can move  ADAPTED: db/version (DAT 1052 Q3)
+    with L.transaction(by="agent:bot", lock=30) as t:
+        v = t.previous_rev["model/demo", "db/version"]    # nothing can move  ADAPTED: db/version
         mv = Ref(t.previous_rev, m.subject).preds["version"]   # a value's version is a pred  ADAPTED: m's subject
         t.add("rel/pipe", "pair", f"{v}+{mv}")
     assert L.at()["rel/pipe", "pair"] == "0.0.1+1.0.0"
 
-    # the worked example (SVP447 Values): a game, its video, its cut
-    with L.transaction(by="human:dan") as t:
+    # the worked example: a game, its video, its cut
+    with L.transaction(by="human:ann") as t:
         t.add("game/G2", "home", "G4")       # ADAPTED: game/G2, G1 is above
         t.add("game/G2", "away", "G5")
     raw = Video(read_mp4("G2.mp4"))
     raw.preds.update(game="G2", camera="wide")
-    with L.transaction(by="human:dan") as t:
-        raw.seal(t, provenance="import:alg2")
+    with L.transaction(by="human:ann") as t:
+        raw.seal(t, provenance="import:legacy")
     cut = L.at().run("ledger_kinds.cut", game="G2", version="1.5.3")
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         t.add("game/G2", "db/alias", cut.subject)
-        t["game/G2", "court"] = "C2"         # literal: the game's own row beside its alias (A34)
+        t["game/G2", "court"] = "C2"         # literal: the game's own row beside its alias
     rev = L.at()
     assert rev.load("game/G2").subject == cut.subject   # the current cut, alias resolved
     assert rev["game/G2"]["court"] == "C2"               # rev["game/G2"] is the literal record
     c = Ref(rev, "game/G2")
-    assert repr(c) == "<Ref game/G2>"        # repr: <Ref game/G2> (DAT 1036)
-    assert isinstance(c.preds["video"], Ref)  # a Ref, unloaded (Q35)
+    assert repr(c) == "<Ref game/G2>"        # repr: <Ref game/G2>
+    assert isinstance(c.preds["video"], Ref)  # a Ref, unloaded
     assert c.preds["video"].load().frames == raw.frames   # the video: the one explicit act
 
 
@@ -129,7 +129,7 @@ def test_all_block(L):
 
 
 def test_seal_block(L):
-    """§ Value `seal`: Dan cuts game G1 by hand. ADAPTED: `Cut` is ``ledger_kinds.Cut`` (module level,
+    """§ Value `seal`: A person cuts game G1 by hand. ADAPTED: `Cut` is ``ledger_kinds.Cut`` (module level,
     so `load` can import it; it also declares `team`), `Video` ``ledger_kinds.Video``."""
     raw0 = Video(read_mp4("G1.mp4"))
     raw0.preds.update(game="G1")
@@ -140,22 +140,22 @@ def test_seal_block(L):
     raw: Video = rev.value(kind=Video, game="G1")  # loaded
     v = Cut(cut_by_hand(raw))                     # an ordinary object
     v.preds.update(game="G1", version="1.5.4",    # a dict until sealed;
-                   video=raw)                     #   a typed pred (Q35)
+                   video=raw)                     #   a typed pred
 
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         subj: str = v.seal(t, deps=[raw],
                            name="game/G1",  # seal, then re-point
-                           provenance="human:dan")
+                           provenance="human:ann")
         t.add(subj, "note", "cut by hand")        # any further row
     assert (bool(v.sealed), v.subject) == (True, subj)
     with pytest.raises(TypeError):
         v.preds["game"] = "G2"            # TypeError: read-only once sealed
-    assert isinstance(v.preds["video"], Ref)      # a Ref now, as loaded (A36)
+    assert isinstance(v.preds["video"], Ref)      # a Ref now, as loaded
     rh = f"ref:ledger_kinds.Video:{raw.hash}"
     assert v.dependencies == {rh: rh, "code/testrepo": "abc1234",
                        "platform": "test-platform"}
     r = L.at()
-    assert r[subj, "db/kind"] == "ledger_kinds.Cut" and r[subj, "db/provenance"] == "human:dan"
+    assert r[subj, "db/kind"] == "ledger_kinds.Cut" and r[subj, "db/provenance"] == "human:ann"
     assert r[subj, "db/preds"] == ["game", "version", "video", "team"]
     assert r[subj, "note"] == "cut by hand" and r["game/G1", "db/alias"] == subj
 
@@ -164,8 +164,8 @@ def test_seal_block(L):
     assert again.same_as(v) and again.matches(rev2)   # True, moved?
     assert isinstance(again.preds["video"], Ref)  # a Ref, unloaded
     assert rev2.value(kind=Cut, game="G1", version="1.5.4").subject == subj   # by its preds
-    assert repr(Ref(rev2, subj)) == "<Ref game/G1>"   # its alias (DAT 1036)
-    assert Ref(rev2, subj).aliases == ["game/G1"]  # ["game/G1"] (A25)
+    assert repr(Ref(rev2, subj)) == "<Ref game/G1>"   # its alias
+    assert Ref(rev2, subj).aliases == ["game/G1"]  # ["game/G1"]
 
 
 def test_putting_an_artifact_in_block(L):
@@ -174,13 +174,13 @@ def test_putting_an_artifact_in_block(L):
         t["game/G1"] = {"home": "G4", "away": "G5"}
     raw = Video(read_mp4("G1.mp4"))
     raw.preds.update(game="G1", camera="wide")
-    with L.transaction(by="human:dan") as t:
-        raw.seal(t, provenance="import:alg2")
+    with L.transaction(by="human:ann") as t:
+        raw.seal(t, provenance="import:legacy")
     rows = {r.predicate for r in L.at().history(since=L.at(L.at().id - 1)) if r.subject == raw.subject}
     assert {"db/value", "db/kind", "db/provenance", "db/preds", "game", "camera"} <= rows
     assert any(p.startswith("db/deps/") for p in rows)
     cut = L.at().run("ledger_kinds.cut", game="G1", version="1.5.3")
-    with L.transaction(by="human:dan") as t:   # seal-then-repoint
+    with L.transaction(by="human:ann") as t:   # seal-then-repoint
         t.add("game/G1", "db/alias", cut.subject)   # the current cut
     r = L.at()
     assert r[cut.subject, "db/fn"] == "ledger_kinds.cut"
@@ -200,19 +200,19 @@ def test_new_pred_later_block(L):
         hand.seal(t, name="game/G1")
     rev = L.at()
 
-    with L.transaction(by="human:dan") as t:        # allowed: gameset
+    with L.transaction(by="human:ann") as t:        # allowed: gameset
         for r in rev.refs(kind=Cut):                #   is not in their
             t.add(r.subject, "gameset", "normie")   #   db/preds, so it is annotation
 
     c = rev.load("game/G1")              # the hand cut, sealed with game "G2": wrong
     with pytest.raises(Exists):
-        with L.transaction(by="human:dan") as t:
+        with L.transaction(by="human:ann") as t:
             t.add(c.subject, "game", "G1")   # Exists at commit: game frozen
 
     fixed = Cut(c.clip)                  # same bytes, corrected preds
-    video = c.preds["video"]             # a Ref (Q35): allowed as is
+    video = c.preds["video"]             # a Ref: allowed as is
     fixed.preds.update(game="G1", version="1.5.4", video=video)
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         fixed.seal(t, deps=[video], name="game/G1")
     now = L.at()
     assert fixed.subject != c.subject and Ref(now, "game/G1").subject == fixed.subject

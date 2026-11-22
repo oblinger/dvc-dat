@@ -1,8 +1,8 @@
-"""The environment a function runs in, found by discovery; ``set_env_provider`` is the test seam (A51).
+"""The environment a function runs in, found by discovery; ``set_env_provider`` is the test seam.
 
 Discovery: git over the folder of each module the process imported, skipping
 the standard library, ``site-packages`` and the dvc-dat checkout itself, its
-demo folders included (A56: the ledger's own repo is infrastructure, like
+demo folders included (the ledger's own repo is infrastructure, like
 ``site-packages``; a demo repository is its own nested checkout). A checkout is a repo; its
 name is ``[project].name`` of the ``pyproject.toml`` at its root, normalised
 (``dvc_dat`` -> ``dvc-dat``), else the checkout folder's name. ``Checkout`` holds
@@ -11,10 +11,9 @@ path the repo's ``.gitattributes`` marks ``dat-noncode``, as ``core._code_of``),
 checkout ``path`` a mount's ``db/root`` resolves under. The commit is read on
 every call, never cached: a notebook commits mid-session. The one exception is
 ``pinned()``: inside it (one memo lookup, one name's resolution) every call shares
-one discovery, made again only when the process has imported a module since (SVP 255:
-a memo hit discovered nine times, each a few git calls and a ``realpath`` per module).
+one discovery, made again only when the process has imported a module since (a memo hit discovered nine times, each a few git calls and a ``realpath`` per module).
 
-The platform record (SVP 1474) is what a memo entry stores of the machine its function ran on:
+The platform record is what a memo entry stores of the machine its function ran on:
 ``platform`` (today's short tag, ``<os>-<machine>-py<X.Y>``), ``os``, ``machine``, ``python``
 (``X.Y.Z``), ``cpu`` (the CPU model), and ``card``, ``driver``, ``cuda``, ``torch``, each ``None``
 when absent (no NVIDIA card, no torch). It is probed once per process; ``Env.record`` carries it,
@@ -80,7 +79,7 @@ class Env:
 
 
 Provider = Callable[[], Env]
-#: The ledger's own repo: discovery never reports it (A56), whatever folder of it a module sits in.
+#: The ledger's own repo: discovery never reports it, whatever folder of it a module sits in.
 SELF = "dvc-dat"
 _provider: Optional[Provider] = None
 
@@ -280,7 +279,7 @@ def _skip_roots() -> list:
 def discover() -> Env:
     """The default provider: git over the folders of the modules this process imported.
 
-    A folder that no longer exists is skipped (DAT 1023): a deleted checkout's modules stay in
+    A folder that no longer exists is skipped: a deleted checkout's modules stay in
     ``sys.modules`` and its toplevel in the ``_toplevel`` cache, so without the check a re-run's previous,
     deleted scratch checkout was reported. Of two existing checkouts sharing a name, the one the most
     recently imported module was loaded from wins (``sys.modules`` is in import order), not the one whose
@@ -303,7 +302,7 @@ def discover() -> Env:
     chosen: Dict[str, str] = {}
     for top in sorted(tops, key=lambda t: (tops[t], t)):
         name = repo_name(Path(top))
-        if name != SELF:                        # dvc-dat itself, its demos included (A56)
+        if name != SELF:                        # dvc-dat itself, its demos included
             chosen[name] = top                  # a later import overrides an earlier same-named checkout
     return Env({name: code_at(top) for name, top in sorted(chosen.items())}, platform_tag(),
                record=platform_record())

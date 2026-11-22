@@ -1,4 +1,4 @@
-"""``rev.reduce`` (SVP 242): a ``@dat.reduce_fn`` over a set of inputs, each step a memo entry keyed by the sorted set,
+"""``rev.reduce``: a ``@dat.reduce_fn`` over a set of inputs, each step a memo entry keyed by the sorted set,
 the next ask merging the results of disjoint subsets already reduced (``accs``) and adding the rest (``more``)."""
 
 import subprocess

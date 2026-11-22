@@ -6,7 +6,7 @@ docker ``postgres`` container, CI's service). A server that is set and does not 
 so CI's ``postgres`` job never skips green.
 
 Port 5433 is refused unless ``DVC_DAT_TEST_PG_ALLOW_5433=1`` is also set: on the development
-laptop 5433 is where the Cloud SQL proxy to the production ledger database listens (SVP 1548).
+laptop 5433 is where the Cloud SQL proxy to the production ledger database listens.
 The port counted is every one the address names (each host of a multi-host URL, a ``port=``
 query parameter), and ``PGPORT`` or 5432 for a host that names none, as libpq resolves it.
 ``tests/conftest.py`` checks this before collection, so a refused address stops the run whole.

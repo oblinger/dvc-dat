@@ -1,0 +1,20 @@
+# Every tracked file is scanned for references to a private workspace (notes-vault links, home paths, people,
+# internal tracking ids, internal codebases); any hit fails. No path filter: a doc-only change is checked too.
+
+name: public
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python scripts/check_public.py

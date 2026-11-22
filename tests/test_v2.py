@@ -97,7 +97,7 @@ class TestForkRule:
         spec_file = Path(dat.get_path(), SPEC_YAML)
         before = spec_file.read_bytes()
 
-        # A dat is not a run target (SVP 1508): it ran once, when made.
+        # A dat is not a run target: it ran once, when made.
         with pytest.raises(Exception) as err:
             Dat.manager.run(dat, 9)
         assert isinstance(err.value.__cause__, TypeError)
@@ -175,7 +175,7 @@ class TestBaseList:
 
 
 class TestExpand:
-    """`ns.expand` (doc/expand.md): a str to a str, through the namespace's own names (the `${…}` grammar, 1519 R3)."""
+    """`ns.expand` (doc/expand.md): a str to a str, through the namespace's own names (the `${…}` grammar)."""
 
     @pytest.fixture(autouse=True)
     def _expand_tier(self):
@@ -233,7 +233,7 @@ class TestExpand:
             ns.expand("${ns:builtins.round, 2.567, ndigits=1}")
 
     def test_mounted_functions_are_called_and_callable_objects_are_not(self):
-        class Proxy:                      # like SVP's `asset`: callable, attribute access
+        class Proxy:                      # like a model asset: callable, attribute access
             ocr = "ocr-2026-09-23"
 
             def __call__(self):
@@ -276,7 +276,7 @@ class TestExpand:
 
 class TestGetSpec:
     def test_create_expands_once_and_the_file_is_the_record(self):
-        """T011 Q7 (B): every `${…}` is resolved at create; the file holds the values."""
+        """Every `${…}` is resolved at create; the file holds the values."""
         pytest.importorskip("omegaconf")
         dat = Dat.create(path=f"{V2}/expanded", spec={
             "dat": {"kind": "Dat", "target_exists": "overwrite"},
@@ -302,7 +302,7 @@ class TestGetSpec:
         template = {"dat": {"do": "v2_echo", "name": f"{V2}/parent${{unique:}}"}}
         Dat.manager.run(template, 1)
         parent = Dat.load(f"{V2}/parent")
-        assert parent.get_spec()["dat"]["name"] == f"{V2}/parent${{unique:}}"   # the template (Q36)
+        assert parent.get_spec()["dat"]["name"] == f"{V2}/parent${{unique:}}"   # the template
         assert parent.get_path_name() == f"{V2}/parent"                         # its expansion, the folder
         Dat.manager.run(parent.get_spec(), 2)
         child = Dat.load(f"{V2}/parent_2")
@@ -424,8 +424,8 @@ class TestCleanup:
 
 
 def test_first_use_installs_the_config(tmp_path):
-    """T010 Q1: nobody configures anything; the first use builds `Dat.manager`
-    from cwd.  The namespace is what the program imported (T011, Dan)."""
+    """Nobody configures anything; the first use builds `Dat.manager`
+    from cwd.  The namespace is what the program imported."""
     pkg = tmp_path / "lazypkg"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("")

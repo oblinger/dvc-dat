@@ -17,7 +17,7 @@ never reads the filesystem; the first use builds `Dat.manager` from the
 nearest `.datconfig.yaml`.
 
 In a project whose `.datconfig.yaml` says `namespace: ledger`, `Dat.manager.ns` is a
-`LedgerNamespace` (`dvc_dat.ledger.namespace`, DAT 1046, 1051): the same interface, its
+`LedgerNamespace` (`dvc_dat.ledger.namespace`): the same interface, its
 names the ledger's `db/mount` rows, and `mount` refused.
 """
 
@@ -70,7 +70,7 @@ ns = _DefaultNamespace()
 # =============================================================================
 
 # =============================================================================
-# Overrides: `KEY=VALUE` on base, Hydra's override grammar with dvc-dat[hydra] (1519 R5)
+# Overrides: `KEY=VALUE` on base, Hydra's override grammar with dvc-dat[hydra]
 # =============================================================================
 
 #: An override's key: a name, or a dotted path into the spec (`dat.base`, `model.width`).
@@ -121,7 +121,7 @@ def _top_level_comma(text: str) -> bool:
 
 
 def needs_hydra(word: str, multirun: bool = False) -> bool:
-    """Whether a word is Hydra's override grammar beyond today's `KEY=VALUE` (1519 decision 7): `-m`, or a `+`, `++`
+    """Whether a word is Hydra's override grammar beyond today's `KEY=VALUE`: `-m`, or a `+`, `++`
     or `~` before a key; under `-m` also a value that is a choice (`a,b`) or a sweep function (`range(1,3)`). Without
     `-m` a comma is text, as it always was (`modules=a,b`): Hydra itself runs a sweep only under `-m`."""
     if word in MULTIRUN or _HYDRA_PREFIX.match(word):
@@ -416,7 +416,7 @@ _SpecDumper.add_multi_representer(object, lambda dumper, obj: dumper.represent_s
 
 
 def _print_spec(namespace: Namespace, spec: Dict[str, Any]) -> None:
-    """`--dry-run`'s second part (SVP 1138 Q1 (A)): the spec this line would create, merged over its `dat.base`
+    """`--dry-run`'s second part: the spec this line would create, merged over its `dat.base`
     chain and resolved (`namespace.expand_spec`), as YAML; keys in the spec's order."""
     print(yaml.dump(namespace.expand_spec(spec), Dumper=_SpecDumper, sort_keys=False,
                     default_flow_style=False, allow_unicode=True), end="")
@@ -455,7 +455,7 @@ RESERVED_RUN_KEYS = ("alias",)                # control options on a ledger run,
 
 def _cmd_eval(ledger: Any, args: List[str], points: List[List[Override]], flags: set) -> int:
     """`x TARGET k=v ...` with a ledger: `rev.run(TARGET, **keys)`, found if computed before, else run and sealed
-    (DAT 1046); each sweep point (`-m`) is one `rev.run`.
+    each sweep point (`-m`) is one `rev.run`.
 
     TARGET is what `rev.run` takes: a dotted name through the ledger's mounts (a ledger function, its keys the
     `k=v` pairs; a spec, or a dat's run function, the overrides applied to the spec, an undotted key being
@@ -592,7 +592,7 @@ def _parse_argv(argv: List[str]) -> Tuple[List[str], List[str], set]:
 
 
 def arg_value(text: str) -> Any:
-    """One command-line value: JSON, else the text exactly as typed (DAT 1041).
+    """One command-line value: JSON, else the text exactly as typed.
 
     The one `k=v` grammar of every dat command line (`x`, `just run`, `--set`, the
     ledger recipes): `12` an int, `1.5` a float, `true` a bool, `null` None, `[1,2]`

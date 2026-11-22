@@ -106,7 +106,7 @@ def show_file(path):
 # %%
 L = Ledger(scratch_path / "ledger", create=True)
 
-with L.transaction(by="human:dan", why="season opener") as t:
+with L.transaction(by="human:ann", why="season opener") as t:
     t.add("game/G1", "home", "G4")
     t.add("game/G1", "away", "G5")
     t.add("game/G1", "court", "north")
@@ -124,7 +124,7 @@ print("rev1 id, court:", rev1.id, rev1.get("game/G1", "court"))   # 1 north
 # they mean: on an undeclared predicate the latest add wins.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("game/G1", "court", "south")
 rev2 = t.rev
 print("rev2 court:", rev2.get("game/G1", "court"))   # south: the latest add
@@ -142,7 +142,7 @@ print("history:", *rev2.history("game/G1", "court"), sep="\n")   # both rows are
 # predicate replaces, the `many` one accumulates.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db/pred/officials", "db/cardinality", "many")
     t.add("game/G1", "court", "east")       # one: replaces south
     t.add("game/G1", "officials", "kim")    # many: accumulates
@@ -165,7 +165,7 @@ print("rev1 court, officials:", rev1.get("game/G1", "court"),
 # key.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t["game/G1", "court"] = "west"                       # one predicate: an add
     t.update("game/G2", {"home": "G1", "away": "G3",     # a record: an add per key
                          "officials": ["lee", "park"]})  # a list under a many key adds each
@@ -183,7 +183,7 @@ print("game/G2:", rev["game/G2"])
 # stays. `db/` keys go in as `add` takes them.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.update("game/G2", {"court": "north"})      # one add; the rest stays
 print("game/G2:", t.rev["game/G2"])
 #   game/G2: {'home': 'G1', 'away': 'G3',
@@ -198,7 +198,7 @@ print("game/G2:", t.rev["game/G2"])
 # ## Reading triple data
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.remove("game/G1", "officials", "kim")   # a remove is a row too
 rev = t.rev
 print("score:", rev.get("game/G1", "score", default="tbd"))   # tbd: no raise
@@ -235,7 +235,7 @@ print("home and away, west court:", rev.select(("home", "away"), court="west")) 
 # ## Declaring an index
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db/pred/home", "db/index", "true")
 
 # %% [markdown]
@@ -251,7 +251,7 @@ with L.transaction(by="human:dan") as t:
 # ### By version
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db", "db/version", "0.1.0")            # the ledger's version: a row on db
 print(f"written at rev {t.rev.id}; L.at('0.1.0') is rev {L.at('0.1.0').id}, court {L.at('0.1.0')['game/G1', 'court']}")
 # written at rev 8; L.at('0.1.0') is rev 8, court west
@@ -265,7 +265,7 @@ print(f"written at rev {t.rev.id}; L.at('0.1.0') is rev {L.at('0.1.0').id}, cour
 # ### By tag
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db", "db/tag", "2026-Q4-official")     # a tag: another row on db
 print(f"written at rev {t.rev.id}; L.at('2026-Q4-official') is rev {L.at('2026-Q4-official').id}")
 # written at rev 9; L.at('2026-Q4-official') is rev 9
@@ -278,10 +278,10 @@ print(f"written at rev {t.rev.id}; L.at('2026-Q4-official') is rev {L.at('2026-Q
 # ## Typing a predicate
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db/pred/date", "db/type", "str")
 try:
-    with L.transaction(by="human:dan") as t:
+    with L.transaction(by="human:ann") as t:
         t.add("game/G1", "date", {"y": 2026, "m": 10})
 except TypeError as e:
     print("TypeError:", e)   # json under a str predicate: not written
@@ -307,7 +307,7 @@ except TypeError as e:
 # Here one more official joins `game/G2`.
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:
+with L.transaction(by="human:ann", lock=10) as t:
     g2 = t["game/G2"]                              # the record immediately before this transaction
     t["game/G2"] = {**g2, "officials": g2["officials"] + ["vance"]}   # one more, written back
 print("officials:", t.rev.all("game/G2", "officials"))
@@ -319,7 +319,7 @@ print("officials:", t.rev.all("game/G2", "officials"))
 # own clock, then a schema's.
 
 # %%
-with L.transaction(by="human:dan", lock=10) as t:
+with L.transaction(by="human:ann", lock=10) as t:
     print("db:", bump(t, "db", "minor", confirm=lambda old, new: True))                   # 0.1.0 -> 0.2.0
     print("schema/tape:", bump(t, "schema/tape", "minor", confirm=lambda old, new: True)) # none -> 0.1.0
 print("L.at('0.2.0') id:", L.at("0.2.0").id)   # 12
@@ -331,7 +331,7 @@ print("L.at('0.2.0') id:", L.at("0.2.0").id)   # 12
 
 # %%
 try:
-    with L.transaction(by="human:dan") as t:       # no lock=
+    with L.transaction(by="human:ann") as t:       # no lock=
         t["game/G2"]
 except Unlocked as e:
     print("Unlocked:", e)
@@ -342,7 +342,7 @@ except Unlocked as e:
 # and need none.
 
 # %%
-with L.transaction(by="human:dan") as t:           # no lock=: nothing is read
+with L.transaction(by="human:ann") as t:           # no lock=: nothing is read
     t["game/G2", "court"] = "east"                 # an add on a one predicate
     t.add("game/G2", "officials", "wu")            # an add on a many predicate
 print("game/G2:", t.rev["game/G2"])
@@ -388,7 +388,7 @@ video_value = Video(b"G1 wide camera, 9000 frames")
 # add preds to the value
 video_value.preds.update(game="G1", camera="wide")
 # save the value under its name
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     video_subject = video_value.seal(t, name="video/G1")
 
 print("video:", repr(video_value))           # → video: <Video video/G1>
@@ -428,7 +428,7 @@ print("loaded from the ref:", video_ref.load().frames)   # → b'G1 wide camera,
 # create a second value, add its preds, save it under its name
 g2_video = Video(b"G2 wide camera, 8400 frames")
 g2_video.preds.update(game="G2", camera="wide")
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     g2_subject = g2_video.seal(t, name="video/G2")
 
 rev2 = L.at()
@@ -450,7 +450,7 @@ print("every Video:", rev2.refs(kind=Video))                # → [<Ref video/G1
 # latest, and removing the row takes a name away.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("raw/G1/wide-camera", "db/alias", video_subject)   # a second alias for video/G1
     t.add("game/G2/baseline", "db/alias", g2_subject)        # video/G2 renamed: the new alias in,
     t.remove("video/G2", "db/alias", g2_subject)             # the old one out
@@ -586,7 +586,7 @@ print("db/repo/geometry-app:", L.at()["db/repo/geometry-app"])
 # it loaded is its identity.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.ns.mount("mnt.plane", root="plane", repo="geometry-app")   # the two db/mount/plane rows
 print("mounts:", L.at().ns.mounts())
 # → mounts: {'plane': {'root': 'plane', 'repo': 'geometry-app'}}
@@ -673,7 +673,7 @@ distance_fn = L.at().ns.load("geometry.main.distance")                   # (1) l
 print("fn:", repr(distance_fn))                                     # → fn: <Fn geometry.main.distance@5.3.9>
 draft_value = distance_fn(a=(0, 0), b=(9, 12), seal=False)          # (2) run it, provenance captured, nothing kept
 print("draft:", draft_value.obj, " sealed:", draft_value.sealed)    # → 15.0 None
-with L.transaction(by="human:dan", why="keep it") as t:             # (3) put it on the ledger
+with L.transaction(by="human:ann", why="keep it") as t:             # (3) put it on the ledger
     draft_value.seal(t)
 kept_value = L.at().run("geometry.main.distance", a=(0, 0), b=(9, 12))   # the same call: a hit
 print("hit:", kept_value.subject == draft_value.subject)            # → True: nothing ran
@@ -731,7 +731,7 @@ except Exception as error:
     print("change refused:", type(error).__name__, error)             # → TypeError cannot modify a sealed value's preds
 print("G1 videos on the ledger:", L.at().values(game="G1"))           # not on the timeline yet
 
-with L.transaction(by="human:dan", why="keep the highlights") as t:   # 3. keep it
+with L.transaction(by="human:ann", why="keep the highlights") as t:   # 3. keep it
     highlight_video.seal(t, name="video/G1/highlights")
 print("G1 videos on the ledger:", L.at().values(game="G1"))           # now it is
 
@@ -923,7 +923,7 @@ Dat.manager = None                   # the dat world reloads, its namespace the 
 print(".datconfig.yaml:", Path(".datconfig.yaml").read_text().splitlines())
 # → .datconfig.yaml: ['dat_folders: data', 'default: root', 'namespace: ledger']
 import timestables                      # discovery finds the checkout, the repo dats-demo
-with L.transaction(by="human:dan", why="mount timestables") as t:
+with L.transaction(by="human:ann", why="mount timestables") as t:
     t.ns.mount("mnt.timestables", root="timestables")   # the two db/mount rows: the folder, and the repo, by default this project's, dats-demo
 spec_file_path = Path("timestables/specs/times12.yaml")   # a ledger-mounted name starts mnt.: base: and do: name the mount
 spec_file_path.write_text(spec_file_path.read_text().replace(" timestables.", " mnt.timestables."))
@@ -988,7 +988,7 @@ print("hit:", again_value.subject == times12_value.subject,
 # read from the folder.
 
 # %%
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     times12_dat.seal(t, name="table/12")   # the folder's files go to the art store; the row names the kind, dvc_dat.core.Dat
 print("dat:", repr(times12_dat), " sealed:", times12_dat.sealed)   # dat: <Dat table/12>  sealed: <the seal's moment>
 
@@ -1078,7 +1078,7 @@ dat:
   preds: {pipeline: base}
 ''')
 git_commit("game_pipeline", "game_pipeline")
-with L.transaction(by="human:dan", why="mount the pipeline") as t:
+with L.transaction(by="human:ann", why="mount the pipeline") as t:
     t.ns.mount("mnt.game_pipeline", root="game_pipeline")
 
 # %% [markdown]

@@ -1,14 +1,14 @@
-"""``Ledger``: the store handle. One constructor (A49), ``at`` for views, ``transaction`` for writes.
+"""``Ledger``: the store handle. One constructor, ``at`` for views, ``transaction`` for writes.
 
 A ledger is a folder holding the database and the art store (A54.2, also
 written ``sqlite://<folder>``), or a URI whose scheme a triples backend is
 registered for (``postgresql://…``, ``pgstore``); its location is either, and
 where its bytes live beyond this machine is its row ``(db, db/values, <uri>)``
-(``backends``, SVP 1599). ``Ledger(location)`` opens it; ``Ledger()`` opens the project's *active*
-ledger (A37, A44): ``DAT_LEDGER``, else the ``default:`` of the nearest
+(``backends``). ``Ledger(location)`` opens it; ``Ledger()`` opens the project's *active*
+ledger: ``DAT_LEDGER``, else the ``default:`` of the nearest
 ``.datconfig.yaml`` at or above the working directory, each a name (``root``,
 or one registered on root) or a location. ``root:`` in that file is the root
-ledger, whose registry is the list of every other ledger (``named``, SVP 239);
+ledger, whose registry is the list of every other ledger (``named``);
 without it the root is a SQLite folder under the first dat folder, made on first
 use. ``create=True`` is the one act that makes any other ledger
 (``Ledger(location, create=True)``), or a project in the working directory
@@ -18,7 +18,7 @@ use. ``create=True`` is the one act that makes any other ledger
 Every stamp the ledger writes (``db/time``, ``sealed``) is UTC. The zone a time
 is shown in is a setting, the row ``db db/timezone <IANA name>``, read as of a
 revision (``rev.timezone``; UTC with no row): it changes only how times print, so
-it may change at any revision (SVP 1505 Q2).
+it may change at any revision.
 
 The named handles (``ledgers.record``) and ``L``, the active ledger as one
 object, are ``named``.
@@ -57,7 +57,7 @@ PERIODS = ("day", "week", "month")         # ``revs``'s calendar selectors
 Target = Union[str, Path]                  # a URI, or a folder
 
 #: Every ledger open in this process, oldest first: what ``<ledger>@<rev>`` resolves through first
-#: (``opened``). The latest handle on a name wins; a name is never reused (SVP 1516).
+#: (``opened``). The latest handle on a name wins; a name is never reused.
 _OPEN: List["weakref.ref[Ledger]"] = []
 
 
@@ -104,26 +104,26 @@ def period_starts(kind: str, first: _dt.date, last: _dt.date) -> Iterator[Tuple[
             day = (day.replace(day=28) + _dt.timedelta(days=4)).replace(day=1)
 
 
-_RETIRED_OVERRIDE = ".datconfig.override.yaml"  # read until 2.63 (SVP 239: one config file); now refused
+_RETIRED_OVERRIDE = ".datconfig.override.yaml"  # read until 2.63 (one config file); now refused
 
 
 def refuse_removed(path: Optional[Path], values: Dict[str, Any]) -> None:
     """`ValueError` for a config key removed in 2.63, naming what replaces it, and for an override file beside the
-    config (SVP 239: one `.datconfig.yaml`, committed; the per-checkout fact is `DAT_LEDGER`)."""
+    config (one `.datconfig.yaml`, committed; the per-checkout fact is `DAT_LEDGER`)."""
     if path is not None and (Path(path).parent / _RETIRED_OVERRIDE).is_file():
         raise ValueError(f"{Path(path).parent / _RETIRED_OVERRIDE}: the override file is no longer read (dvc-dat "
-                         "2.63, SVP 239: one config file); the active ledger is DAT_LEDGER=<name>, the local store "
+                         "2.63: one config file); the active ledger is DAT_LEDGER=<name>, the local store "
                          "DAT_STORE_LOCAL; move what it says there and remove the file")
     if "ledger" in values:
-        raise ValueError(f"{path}: 'ledger:' was removed in dvc-dat 2.63 (SVP 239): write 'root: "
+        raise ValueError(f"{path}: 'ledger:' was removed in dvc-dat 2.63: write 'root: "
                          f"{values['ledger']}' and 'default: root', and 'namespace: ledger' when its names were "
                          "the ledger's")
     if "stores" in values:
-        raise ValueError(f"{path}: 'stores:' was removed (SVP 1599): where a ledger's bytes live is its own row "
+        raise ValueError(f"{path}: 'stores:' was removed: where a ledger's bytes live is its own row "
                          "(db, db/values, <uri>), the same on every machine; list the modules that register its "
                          "scheme under 'backends:'")
     if "ledgers" in values:
-        raise ValueError(f"{path}: 'ledgers:' was removed in dvc-dat 2.63 (SVP 239): the list of ledgers is the "
+        raise ValueError(f"{path}: 'ledgers:' was removed in dvc-dat 2.63: the list of ledgers is the "
                          "registry on the root ledger; write 'root: <location of the ledger holding the registry>' "
                          "and register each ledger there (subject ledger/<name>, predicate ledger/location)")
 
@@ -135,7 +135,7 @@ def _read_config(cfg: Path) -> Dict[str, Any]:
 
 def _values(cfg: Path) -> Dict[str, Any]:
     """The config's keys. A removed key (``ledger:``, ``ledgers:``) or a ``.datconfig.override.yaml`` beside it is
-    ``LedgerError`` naming what replaces it (SVP 239: one config file)."""
+    ``LedgerError`` naming what replaces it (one config file)."""
     data = _read_config(cfg)
     try:
         refuse_removed(cfg, data)
@@ -350,7 +350,7 @@ class Ledger:
 
     @property
     def read_only(self) -> bool:
-        """Is this a read-only handle: a ledger a sandboxed body opened by name (SVP 1521 Q3 (A))."""
+        """Is this a read-only handle: a ledger a sandboxed body opened by name."""
         return self._store.read_only
 
     def __repr__(self) -> str:
@@ -367,8 +367,8 @@ class Ledger:
         self.close()
 
     def _assert_mounts(self, cfg: Path) -> None:
-        """``mounts:`` sugar: assert the rows when they differ from what the ledger holds (A47, A54.3). A key is
-        the mount's name, ``mnt.<prefix>`` as ``t.ns.mount`` takes it (1505 Q1); the rows are ``db/mount/<prefix>``."""
+        """``mounts:`` sugar: assert the rows when they differ from what the ledger holds (A54.3). A key is
+        the mount's name, ``mnt.<prefix>`` as ``t.ns.mount`` takes it; the rows are ``db/mount/<prefix>``."""
         mounts = _read_config(cfg).get("mounts") or {}
         if not isinstance(mounts, dict) or not mounts:
             return
@@ -395,7 +395,7 @@ class Ledger:
 
         ``None`` (no argument) is the top, as a ``Head``: a ``Rev`` that is also a transaction, each transaction
         method listed on it the one-shot form that opens a transaction, calls the method and commits
-        (``L.at().pin(v)``, ``by=`` the writer, ``human:<user>`` by default; SVP 250 A13).
+        (``L.at().pin(v)``, ``by=`` the writer, ``human:<user>`` by default).
 
         An ``int`` or a digit string is that revision (``KeyError`` outside ``0..top``).
 
@@ -409,7 +409,7 @@ class Ledger:
         [``timezone``][dvc_dat.ledger.Rev.timezone] at the top (UTC with no row), unless it ends ``Z`` or
         ``+hh:mm``/``-hh:mm``; a local time a DST change makes ambiguous or skips is read with ``fold=0`` (the first
         of two; a skipped one at the offset before the change); before the first stamped revision it is ``KeyError``,
-        and a field out of range (``2026-13-02``) is ``ValueError`` (SVP 1507).
+        and a field out of range (``2026-13-02``) is ``ValueError``.
 
         Any other str is the revision whose ``(db, db/tag, name)`` row added that name, ``L.at("2026-Q4-official")``;
         the forms are tried in that order. A ``bool``, or a str that is none of them, is ``TypeError``.
@@ -440,7 +440,7 @@ class Ledger:
                         f"db/tag name, not {which!r}")
 
     def _at_moment(self, text: str, top: int) -> Rev:
-        """The latest revision whose ``db/time`` is at or before the moment ``text`` names (SVP 1507)."""
+        """The latest revision whose ``db/time`` is at or before the moment ``text`` names."""
         when = moment(text, Rev(self, top).timezone)
         stamped = self._stamped(top)
         found = [rev for rev, t in stamped if t <= when]
@@ -460,7 +460,7 @@ class Ledger:
 
         It reads the ledger, runs nothing, and the loop is the caller's (``{label: rev.run("metrics.rate", game="G1")
         for label, rev in L.revs("month", since="2025-11").items()}``, [Running over past
-        revisions][running-over-past-revisions]; SVP 245).
+        revisions][running-over-past-revisions]).
 
         ``which`` is ``"release"``, each ``(db, db/version, v)`` add, labelled by the version; ``"tag"``, each ``(db,
         db/tag, name)`` add, labelled by the tag; ``"day"``, ``"week"`` (a Monday) or ``"month"``, each period whose
@@ -536,9 +536,9 @@ class Ledger:
                     **preds: Any) -> Transaction:
         """A write set that becomes one revision on exit; use it only as ``with L.transaction(by=...) as t:``.
 
-        ``by`` names the writer and is required: a non-empty ``str`` (``"human:dan"``), or a non-empty JSON ``dict``
+        ``by`` names the writer and is required: a non-empty ``str`` (``"human:ann"``), or a non-empty JSON ``dict``
         for a structured identity (``{"host": ..., "user": ..., "admins": [...]}``), stored under the ``json:`` tag
-        and read back as written, so no identity is parsed out of a string (DAT 1024); anything else is ``TypeError``.
+        and read back as written, so no identity is parsed out of a string; anything else is ``TypeError``.
 
         The ``eval:`` prefix convention is a string's alone; ``lock=`` holds the write lock for the whole body, at
         most that many seconds.

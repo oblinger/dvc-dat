@@ -1,11 +1,11 @@
-"""A value's encoding is deterministic and lossless (SVP 1542): equal values encode to the same bytes in any
+"""A value's encoding is deterministic and lossless: equal values encode to the same bytes in any
 process on any machine, and ``decode`` gives back an equal value whose encoding is those bytes.
 
 Each shipped class is measured against both clauses. A case the class breaks today is ``xfail(strict=True)``:
 changing a class's encoding moves the hash of everything stored under it, a migration the owner decides, so the
 failure stays visible here and turns the suite red the day the class is fixed. ``test_the_harness_...`` prove
 the assertions can fail, and a new class with its own ``encode`` fails ``test_every_encoding_is_measured_here``
-until it is added. ``Video`` (SVP 249) is measured on its stored form, and its sources' conversion is the limit
+until it is added. ``Video`` is measured on its stored form, and its sources' conversion is the limit
 its class states: ``canonical=False`` keeps a source's codec, so equal frames in two encodings are two values.
 """
 
@@ -377,7 +377,7 @@ def test_a_code_decodes():
 
 def test_a_code_decoded_by_its_name_keeps_its_unit_and_version():
     """The description is not the identity, so it is not in the bytes: the name restores the unit and version,
-    and nothing restores the commit, lock or mounts (SVP 1543)."""
+    and nothing restores the commit, lock or mounts."""
     mounted = code(mounts_hash="4" * 16, sandboxed=True, commit="abc1234", mounts={"pkg": {"repo": "r", "root": "."}})
     back = Code.decode(io.BytesIO(encoded(mounted)), None, name="pkg@1.0.0")
     assert (back.name, back.hash, back.sandboxed) == ("pkg@1.0.0", mounted.hash, True)

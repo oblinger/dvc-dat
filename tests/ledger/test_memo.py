@@ -94,7 +94,7 @@ def test_code_commit_pins_the_version_and_the_env_commit_decides(world, envbox):
     with world.transaction(by="t") as t:
         t.add("db/repo/testrepo/ledger_kinds", "db/version", "1.0.1")   # version moves, commit does not
     assert a.matches(world.at())
-    envbox.code(commit="def5678")                          # a later commit: the row no longer gates (Q7 (C))
+    envbox.code(commit="def5678")                          # a later commit: the row no longer gates
     assert not a.matches(world.at())                       # a hit holds at the commit it ran at
     b = world.at().run("ledger_kinds.cut", game="G2")
     assert b.dependencies["code/testrepo"] == "def5678"           # the environment's commit; the version is the row's
@@ -219,7 +219,7 @@ def _hit_reads(world, monkeypatch):
 
 
 def test_a_memo_hit_reads_a_bounded_number_of_rows_whatever_else_shares_its_keys(world, monkeypatch):
-    """SVP 255: every entry sharing the hit's ``db/keys`` (91 metrics over one run) cost two reads per lookup, so a
+    """Every entry sharing the hit's ``db/keys`` (91 metrics over one run) cost two reads per lookup, so a
     hit slowed as the ledger grew (444 round trips, 22 s through a Cloud SQL proxy). Only the function's own
     entries under those keys are read now."""
     a = world.at().run("ledger_kinds.cut", game="G1")

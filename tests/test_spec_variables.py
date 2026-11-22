@@ -1,7 +1,6 @@
-"""SVP 1508, on the `${…}` grammar (1519 R3): the keywords of `run` and `create` merge into `dat.kwargs` as data, a
+"""On the `${…}` grammar: the keywords of `run` and `create` merge into `dat.kwargs` as data, a
 template names the node it reads (`${dat.kwargs.game}`); the spec's own `dat.kwargs` are its defaults, the call's
-keywords over them key by key, and the spec written holds the merged kwargs (`dat.defaults` is gone, Dan
-2026-11-07); `dat.preds` is a map of pred names to templates, resolved at create and
+keywords over them key by key, and the spec written holds the merged kwargs (`dat.defaults` is gone); `dat.preds` is a map of pred names to templates, resolved at create and
 carried as the dat's own preds."""
 import sys
 from pathlib import Path
@@ -83,7 +82,7 @@ def test_a_template_only_value_lives_under_a_plain_node(m):
 
 
 def test_a_dat_defaults_node_is_refused(m):
-    with pytest.raises(ValueError, match=r"dat\.defaults is gone \(3\.0, SVP 1519\)"):
+    with pytest.raises(ValueError, match=r"dat\.defaults is gone \(3\.0\)"):
         m.create({"dat": {"defaults": {"game": "G1"}}}, path="t")
 
 

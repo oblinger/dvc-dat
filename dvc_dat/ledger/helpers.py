@@ -1,5 +1,5 @@
-"""``bump``: raise a clock subject's version inside a transaction (Q33); ``bump_source``: raise a module's
-``__version__`` in its source (DAT 1043). (``attr`` lives in ``txn``.)"""
+"""``bump``: raise a clock subject's version inside a transaction; ``bump_source``: raise a module's
+``__version__`` in its source. (``attr`` lives in ``txn``.)"""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def bump(t: Transaction, subject: str, part: str = "patch", *,
          confirm: Optional[Callable[[str, str], bool]] = None) -> str:
     """Read ``subject``'s ``db/version`` through ``t.previous_rev``, add the next by ``part``, and return it.
 
-    ``db/version`` (``0.0.0`` when absent) is the version predicate on every subject (DAT 1052 Q3): on ``db`` it is
+    ``db/version`` (``0.0.0`` when absent) is the version predicate on every subject: on ``db`` it is
     the release ``L.at("M.m.p")`` reads; a bare ``version`` row is user data and is not read.
 
     A read-then-write, so ``t`` must be opened with ``lock=``: unlocked, ``t.previous_rev`` raises ``Unlocked`` and
@@ -28,8 +28,8 @@ def bump(t: Transaction, subject: str, part: str = "patch", *,
     For clocks only: a subject holding a ``db/alias`` row raises ``TypeError`` naming the alias (a value's version is
     a pred; a new version is a new seal and a re-point), and so does a ``db/repo/`` subject: a code version lives in
     its source (``bump_source``), and the first clean run after it moves the ``db/repo/<repo>/<package>`` clock, which
-    the ledger alone writes (DAT 1043, 1044). ``minor`` and ``major`` need ``confirm(old, new)`` to answer ``True``;
-    without ``confirm`` they are refused (A38). Nothing is written on any refusal.
+    the ledger alone writes. ``minor`` and ``major`` need ``confirm(old, new)`` to answer ``True``;
+    without ``confirm`` they are refused. Nothing is written on any refusal.
     """
     if subject.startswith("db/repo/"):
         raise TypeError(f"{subject}: a code version lives in its source; just bump <module> [part] edits "
@@ -90,7 +90,7 @@ def bump_source(module: str, part: str = "patch", *,
     one line ``__version__ = "X.Y.Z"`` (so ``demo_game.etl``, a mount's root declaring its own, finds
     ``demo_game/etl/__init__.py``; ``mymodule.mult`` finds ``mymodule/__init__.py``). ``minor`` and ``major`` need
     ``confirm(old, new)`` to answer ``True``, as ``bump``. Never commits and never touches a ledger: the first clean
-    run after the commit moves the ``db/repo/<repo>/<package>`` clock (DAT 1043, 1044). ``repo`` is the checkout's
+    run after the commit moves the ``db/repo/<repo>/<package>`` clock. ``repo`` is the checkout's
     name by discovery, ``None`` outside one.
 
     Refusals, nothing written: ``ModuleNotFoundError`` for a module that does not resolve, ``ValueError`` for no

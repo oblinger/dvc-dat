@@ -1,4 +1,4 @@
-"""SVP 245: present code over past revisions. ``L.revs`` names a set of revisions by label; ``rev.run`` at each is
+"""Present code over past revisions. ``L.revs`` names a set of revisions by label; ``rev.run`` at each is
 today's run; the result's ``db/at`` row, ``v.at``, is the revision it read, ``v.rev`` the one that saved it.
 
 The sweep runs over a tiny repo ``revrepo`` (package ``revpkg``), a counting function in it, the environment reporting
@@ -271,7 +271,7 @@ def test_the_row_cannot_be_retracted(world):
 
 
 def test_last_rev_is_the_last_row_of_a_pattern_removes_included(tmp_path):
-    """SVP 1521 A2: the revision of the last matching row at or before the view, as ``history`` gives it."""
+    """The revision of the last matching row at or before the view, as ``history`` gives it."""
     from dvc_dat.ledger import Ledger
 
     L = Ledger(tmp_path / "led", create=True)

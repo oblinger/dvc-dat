@@ -179,7 +179,7 @@ def test_a_kept_part_is_a_clone_where_the_filesystem_can(tmp_path, kept_folder):
 
 
 def test_every_seal_write_is_flushed_before_its_rename(tmp_path, monkeypatch):
-    """SVP 1561: a kept folder on a removable drive. The record and the kept blob are flushed at their temp
+    """A kept folder on a removable drive. The record and the kept blob are flushed at their temp
     name (F_FULLFSYNC on macOS), renamed, then their folder is flushed: a drive pulled holds all of one or none."""
     from dvc_dat.ledger import kept as kept_mod, store
 

@@ -61,7 +61,7 @@ dat is run once, by the call that makes it; running its recipe again is
 `Dat.manager.run(dat.get_spec(), **kwargs)`, a new dat beside it.
 `Dat.create(spec, **kwargs)` is the same create with no run.
 
-**Keywords are also expansion variables** (SVP 1508). The keywords of `run` and
+**Keywords are also expansion variables**. The keywords of `run` and
 `create` merge into the spec's own `dat.kwargs` key by key -- the spec's are its
 defaults, a keyword wins -- and the stored spec holds the merged `dat.kwargs`. A
 template anywhere in the spec, `dat.name` included, reads one as

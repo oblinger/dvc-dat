@@ -2,14 +2,14 @@
 
 Parent side (``load_sandboxed``, ``run_sandboxed``): the name resolves through
 the mounts as of the rev to a file under ``<checkout>/<db/root>``, the checkout
-being what discovery reports for the mount's ``db/repo`` (A40); no checkout is
-``NotEvaluated`` naming the repo. A miss runs at HEAD, clean or dirty (Q39 (A));
+being what discovery reports for the mount's ``db/repo``; no checkout is
+``NotEvaluated`` naming the repo. A miss runs at HEAD, clean or dirty;
 ``clean=True`` asks for a clean checkout at the rev's commit (``fn.check_clean``).
 It runs in a fresh process forked for the one call from a warm server, one per
 environment (the interpreter): the server is started ``python -I`` (the
 standard library, ``site-packages`` and nothing else on its path), imports the
 ledger's machinery and no mounted module, never initialises CUDA, and forks a
-child per request. The child opens the request's ledger (A44), runs the call,
+child per request. The child opens the request's ledger, runs the call,
 seals the entry itself and hands back its subject; an exception comes back
 with the child's traceback, nothing sealed; the child then exits, so nothing a
 body loaded or changed outlives its call. A server idle for ``IDLE_SECONDS`` (600) is retired; the next
@@ -36,15 +36,15 @@ And it refuses process creation (``ConfinedProcess``: ``subprocess``, ``os.syste
 ``os.exec*``, ``os.posix_spawn``, ``os.fork``), whose reads and writes it could not see; a body
 that needs a tool runs unsandboxed (base mode). The worker's own fork happens in the server, outside the guard.
 A nested eval under the running body's own mount runs in-process and its loads count toward its own
-entry (Q37 (ii)); one under another mount runs in a fresh child of the server, asked for up the child's
+entry; one under another mount runs in a fresh child of the server, asked for up the child's
 channel. A nested unsandboxed (base-mode) call is refused, ``NotEvaluated`` naming the mount and the
 function. An in-process nested eval's code includes a module its
 caller loaded first: the worker's ``__import__`` credits every import a body makes, loaded
 already or not, with what that module's first import pulled in.
 
-Another ledger from a body (SVP 1521 Q3 (A)): the caller's ``ledgers`` view crosses on the request (``shipped_section``), and
+Another ledger from a body: the caller's ``ledgers`` view crosses on the request (``shipped_section``), and
 ``ledgers.<name>``, ``dat.at("<name>@<rev>")`` and ``dat.load("<name>@<rev>:<value>")`` open that ledger read-only
-(``read_only_ledger``), once per child, SQLite or Postgres, after the caller's read guard (SVP 1596: shipped by its
+(``read_only_ledger``), once per child, SQLite or Postgres, after the caller's read guard (shipped by its
 import path, ``shipped_read_guard``, imported at the body's first named open); a ``Ref`` or sealed ``Value`` key on another ledger crosses
 with its location and opens the same way. Opening one adds its art store to ``STATE.reads``, its database to
 ``STATE.foreign`` (a ``sqlite3.connect`` there passes only as ``mode=ro``) and its endpoint to the network hook's.
@@ -55,14 +55,14 @@ handle writes nothing: ``Transaction`` refuses it (``ConfinedWrite``), its datab
 body is still ``ConfinedWrite`` at its open: a store it opens may write. Not closed: a body holding psycopg can connect to
 a Postgres endpoint the network hook passes and, with write rights on that login, write through its own connection.
 
-A dat's run function under a mount (an ``Fn`` of kind ``"dat"``, DAT 1045, 1046)
+A dat's run function under a mount (an ``Fn`` of kind ``"dat"``)
 runs through the same call: its keys are the spec, expanded in the parent, and the
 caller's dat world (its dat folders, art folder and index, readable in the child)
 crosses the pipe beside them; in the child ``run_here`` imports the function from
 the mounts, creates the dat in its work folder and runs it (``_execute``), the body
 confined as a ledger function's, the dat world's index writes its own machinery.
 
-The ``code`` item (Q37 (A); Dan 2026-10-21; DAT 1037): exactly the modules the run loaded
+The ``code`` item: exactly the modules the run loaded
 (beside the function's ``Code``), hashed with the mount rows into ``db/code/<hash 16>``; the
 ``fn`` item beside it is the function's dotted name. A mounted module (and
 the static import closure of the function's module), and a mounted file the body
@@ -71,7 +71,7 @@ the file as read; a third-party one is ``dist:<name> -> <version>:<sha256 of its
 RECORD>`` when its distribution has a ``RECORD``, else ``py:<path under its
 sys.path entry> -> sha256`` of the file (the standard library, an editable
 source). dvc-dat and what the server holds before the fork (the standard
-library pieces the ledger uses, pyyaml) are infrastructure, like dvc-dat (A56).
+library pieces the ledger uses, pyyaml) are infrastructure, like dvc-dat.
 A lookup re-hashes exactly those as they are now: a mounted file on disk
 (whatever commit the rev's ``db/repo/<repo> db/commit`` row names), a third-party one as
 installed. Any byte changed in a loaded module is a different entry.
@@ -287,7 +287,7 @@ def closure(mounts: List[Mount], start: List[str]) -> Dict[str, Tuple[Mount, Pat
 
 
 def static_closure(root: Path, start: str, within: Path) -> Dict[str, Path]:
-    """Unsandboxed (Q37 (iii)): every module under ``within`` reachable from ``start`` by import statements,
+    """Unsandboxed: every module under ``within`` reachable from ``start`` by import statements,
     resolving a dotted name under ``root`` (the ``sys.path`` entry the start module was imported from)."""
     within = Path(os.path.realpath(within))
     seen: Dict[str, Path] = {}
@@ -307,7 +307,7 @@ def static_closure(root: Path, start: str, within: Path) -> Dict[str, Path]:
 
 def module_shas(mods: Dict[str, Tuple[Mount, Path]]) -> Dict[str, str]:
     """``relpath -> sha256`` of mounted modules, the bytes on disk: what a run reads, what a lookup
-    compares (a sandboxed entry is its modules' bytes, whatever commit a rev names, Q39)."""
+    compares (a sandboxed entry is its modules' bytes, whatever commit a rev names)."""
     out = {}
     for _d, (m, path) in mods.items():
         rel = path.relative_to(m.checkout).as_posix()
@@ -373,7 +373,7 @@ def _dist_map() -> Dict[Tuple[str, str], Tuple[str, str]]:
 
 
 def third_party_items(names: Set[str]) -> Dict[str, str]:
-    """The ``code`` item's entries for the non-mounted modules ``names`` (dvc-dat itself excluded, A56)."""
+    """The ``code`` item's entries for the non-mounted modules ``names`` (dvc-dat itself excluded)."""
     roots = _path_roots()
     dists = _dist_map()
     out: Dict[str, str] = {}
@@ -468,10 +468,10 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
         fdef = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == attr_name), None)
         if fdef is None:
             raise ImportError(f"{name!r}: no function {attr_name!r} in {f[0]}")
-        mark = fn_mark_in_source(tree, fdef)     # @dat.fn, read off the source (SVP 250 Q4, A11)
+        mark = fn_mark_in_source(tree, fdef)     # @dat.fn, read off the source
         if mark is not None:
             sig, takes_path, template, returns = _signature(fdef, name)
-        else:                                       # a dat's run function: its keys are a spec (DAT 1046)
+        else:                                       # a dat's run function: its keys are a spec
             sig, takes_path, template, returns = inspect.Signature(), True, None, ""
         check_mounted_imports(mounts, modname, attr_name)
         mods = module_shas(closure(mounts, [modname]))
@@ -486,7 +486,7 @@ def load_sandboxed(rev: "Rev", name: str, prefix: str, info: Dict[str, str]) -> 
 
 
 def mounted_code(plain: "Rev", env: Env, m: Mount, modname: str, mods: Dict[str, str]) -> Code:
-    """A mounted function's ``Code`` (DAT 1037): the mount at the version its root package declares.
+    """A mounted function's ``Code``: the mount at the version its root package declares.
 
     ``modules`` are the files the loader walks, relative to the repo root, each by its sha256: the
     function's static closure plus the packages Python imports on the way to it, from the mount's
@@ -557,11 +557,11 @@ def sandbox_code_at(rev: "Rev", name: str, modules: Dict[str, str]) -> Optional[
 
 def run_sandboxed(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any,
                   name: Optional[str] = None, reduce: Optional[Tuple[str, str]] = None) -> Any:
-    """A miss: at HEAD, clean or dirty (Q39 (A)); the ``code`` item records the bytes it loaded.
+    """A miss: at HEAD, clean or dirty; the ``code`` item records the bytes it loaded.
 
     ``save`` and ``reduce`` as ``Fn._run_base``'s. Into a ``Transaction`` (open here, in the parent), the worker runs
     a draft and the parent saves it, since the transaction cannot cross the pipe. A reduce step ships its ``db/keys``
-    (``enc``) and rows, its ``accs`` and ``more`` by subject (SVP 242)."""
+    (``enc``) and rows, its ``accs`` and ``more`` by subject."""
     env = current_env()
     if fn._info["repo"] not in env.code:
         raise NotEvaluated(f"{fn.name}: repo {fn._info['repo']!r} has no checkout in this environment")
@@ -613,7 +613,7 @@ def _credit(names: List[str], before: Optional[Set[str]]) -> None:
     One import statement can load several modules of a chain (``import a.b`` loads ``a``, then ``a.b``), each
     placed in ``sys.modules`` before its own code runs, so the order of ``sys.modules`` splits what was added:
     a module pulled in what was added after it and before the next module of the chain, never that next module
-    or what it pulled (SVP 1729: a package is not credited with a sibling submodule its first import loaded, so
+    or what it pulled (a package is not credited with a sibling submodule its first import loaded, so
     a nested body importing the package is not credited with its caller's module). An import nested in a
     module's own code was credited first, by its own call: ``setdefault`` keeps that."""
     if before is not None:
@@ -647,7 +647,7 @@ def _absolute(name: str, globals: Any, level: int) -> str:
 
 def _tracking_import(name: str, globals: Any = None, locals: Any = None, fromlist: Any = (), level: int = 0) -> Any:
     """``builtins.__import__`` in the worker: an import statement in a body is credited to it even when
-    the module is loaded already (a nested body importing what its caller loaded, Q37 (ii))."""
+    the module is loaded already (a nested body importing what its caller loaded)."""
     if not STATE.frames:
         return _REAL_IMPORT(name, globals, locals, fromlist, level)
     full = _absolute(name, globals, level)
@@ -855,7 +855,7 @@ def _network(event: str, args: Any) -> None:
         raise ConfinedNetwork(f"{addr[0]}:{addr[1]}: a sandboxed function does not use the network")
 
 
-# process creation: what a child reads and writes is beyond this hook (1467 Q8 (A)). The worker's own fork is the
+# process creation: what a child reads and writes is beyond this hook. The worker's own fork is the
 # server's, outside the guard.
 _PROCESS = frozenset({"subprocess.Popen", "os.exec", "os.posix_spawn", "os.fork", "os.system"})
 _OS_READS = ("os.listdir", "os.scandir", "os.listxattr", "os.getxattr")
@@ -1090,7 +1090,7 @@ def install_worker(ledger: Any, mounts: List[Mount]) -> None:
         import builtins
 
         _REAL_IMPORT, _REAL_IMPORT_MODULE = builtins.__import__, importlib.import_module
-        builtins.__import__ = _tracking_import      # a body's imports, loaded already or not (Q37 (ii))
+        builtins.__import__ = _tracking_import      # a body's imports, loaded already or not
         importlib.import_module = _tracking_import_module
         global _REAL_OS_OPEN
         _REAL_OS_OPEN, os.open = os.open, _os_open  # the ``open`` audit event carries no ``dir_fd``
@@ -1115,7 +1115,7 @@ def _cache_root() -> Optional[str]:
 
 
 def read_only_ledger(target: Any, given: Any, base: Path) -> Any:
-    """In the worker: a read-only handle on a ledger a body names (SVP 1521 Q3 (A)), and what the hooks let it reach."""
+    """In the worker: a read-only handle on a ledger a body names, and what the hooks let it reach."""
     from .ledger import Ledger
 
     with unguarded():
@@ -1137,7 +1137,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
     """In the worker: import the function from the mounts and run it, confined, then seal (``_close_run``).
     A ledger function gets the recording ``Rev``, its keys and, when it takes one, its ``path`` folder; a
     dat's run function (``fn.kind == "dat"``) gets the dat made from its keys, the spec, in the work
-    folder, run by the dat world's ``_execute`` (DAT 1046)."""
+    folder, run by the dat world's ``_execute``."""
     from .trace import RunFrame, running
 
     outer_guard = STATE.guard
@@ -1156,7 +1156,7 @@ def run_here(fn: Fn, plain: "Rev", kw: Dict[str, Any], enc: str, save: Any, name
             try:
                 if work is not None and fn.kind != "dat":
                     os.chdir(work)                  # a relative path resolves in the dat being produced
-                if reduce is not None:              # accs and more loaded and recorded (SVP 242)
+                if reduce is not None:              # accs and more loaded and recorded
                     kw = reduce_args(reading.rev, kw)
                 STATE.guard = True                  # the module's own load is confined like the body
                 try:
@@ -1207,7 +1207,7 @@ def _body(work: Optional[Path], mount: Optional[str] = None) -> Iterator[_Frame]
         base = STATE.frames[0].before if STATE.frames else frame.before     # what the server held: infrastructure
         frame.loaded = (new - frame.claimed) | _pulled(frame.requested, base)
         if STATE.frames:
-            STATE.frames[-1].claimed |= new         # a nested body's loads are its own entry's (Q37 (ii))
+            STATE.frames[-1].claimed |= new         # a nested body's loads are its own entry's
 
 
 def _close_run(fn: Fn, plain: "Rev", rec: Dict[str, str], frame: _Frame, mounts: List[Mount],
@@ -1254,7 +1254,7 @@ def recv(stream: Any) -> Any:
 def encode_key(v: Any, plain: "Rev") -> Any:
     """A key across the pipe: a ``Ref`` or a sealed ``Value`` by its subject; on another ledger by the name it was
     given, with that ledger's location and the revision, so that a read through it is recorded under that name
-    (SVP 1521)."""
+    ."""
     from .fn import ledger_key
     from .rev import Ref
     from .value import Value
@@ -1352,9 +1352,9 @@ class Server:
 
     def call(self, fn: Fn, plain: "Rev", kw: Dict[str, Any], seal: bool, env: Env,
              reduce: Optional[Dict[str, Any]] = None) -> Any:
-        """One call in a forked child. A dat's run function (DAT 1045, 1046) also ships its template, its
+        """One call in a forked child. A dat's run function also ships its template, its
         class and the caller's dat world (its folders, built afresh there as a ``DatManager``). A reduce step
-        (SVP 242) ships ``reduce``, its ``db/keys`` and rows, and ``accs`` and ``more`` as lists, each by its subject."""
+        ships ``reduce``, its ``db/keys`` and rows, and ``accs`` and ``more`` as lists, each by its subject."""
         keys = {k: encode_key(v, plain) for k, v in kw.items()}
         if reduce is not None:
             for p in REDUCE_PARAMS:
@@ -1386,7 +1386,7 @@ class Server:
 
 def _result(plain: "Rev", resp: Dict[str, Any], seal: bool) -> Any:
     """A child's reply as the call's value: the sealed entry loaded, or the draft unpickled with its preds;
-    what the run warned is warned here (DAT 1044)."""
+    what the run warned is warned here."""
     from .rev import Ref
 
     for category, message in resp.get("warnings", ()):
@@ -1446,13 +1446,13 @@ atexit.register(shutdown)
 
 def _warm() -> None:
     """What every child shares, loaded once before any fork: the ledger's machinery and the Dat layer (never a
-    mounted module, never CUDA), the installed distributions' map and the platform record (SVP 1474: probed
+    mounted module, never CUDA), the installed distributions' map and the platform record (probed
     once here, so no child runs ``nvidia-smi``)."""
     from . import kept, ledger, namespace, rev, rundat, store, trace, txn, value  # noqa: F401
     from .. import do, just  # noqa: F401 - `@command` on a mounted function imports just in the body
     from .env import platform_record
 
-    hooks.layer()                       # the Dat layer: a body's `Dat`, a dat run's world (1519 R1)
+    hooks.layer()                       # the Dat layer: a body's `Dat`, a dat run's world
     _dist_map()
     platform_record()
 
@@ -1546,7 +1546,7 @@ def serve(req: Dict[str, Any], out: Any) -> None:
 
     try:
         code = {r: Checkout(v, c, d, Path(p) if p else None) for r, (v, c, d, p) in req["env"].items()}
-        env = Env(code, platform_tag(), record=platform_record())     # where the function runs (SVP 1474)
+        env = Env(code, platform_tag(), record=platform_record())     # where the function runs
         set_env_provider(lambda env=env: env)
         if req.get("cache"):                        # the caller's cache root, whatever named it there
             os.environ[CACHE_ENV] = req["cache"]
@@ -1572,7 +1572,7 @@ def serve(req: Dict[str, Any], out: Any) -> None:
             return Ref(ledger.at() if len(v) == 2 else handle_at(v[2]).at(v[3]), v[1])
         keys = {k: key(v) for k, v in req["keys"].items()}
         step = req.get("reduce")
-        if step is not None:                        # accs and more: lists, each ref unshipped (SVP 242)
+        if step is not None:                        # accs and more: lists, each ref unshipped
             for p in REDUCE_PARAMS:
                 keys[p] = [key(v) for v in keys[p]]
         fn = plain.ns.load(req["name"])

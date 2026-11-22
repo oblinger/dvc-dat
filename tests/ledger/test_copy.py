@@ -1,4 +1,4 @@
-"""SVP 251: ``t.copy`` moves a value onto another ledger with the same hash; ``deep`` its inputs, ``safe`` what the
+"""``t.copy`` moves a value onto another ledger with the same hash; ``deep`` its inputs, ``safe`` what the
 ledgers' lifetimes require, or only the spec of a value its claim lets be rerun.
 
 Three SQLite ledgers, ``results`` (permanent), ``cold`` (archival) and ``do26`` (transient), and ``games`` (permanent)
@@ -298,7 +298,7 @@ def test_a_lifetime_is_a_row_of_three_words(w):
 
 
 def test_a_lifetime_is_read_on_root_never_on_the_ledger_itself(w):
-    """SVP 251 Q3 (B): the row lives on root, so a row the ledger writes about itself declares nothing."""
+    """The row lives on root, so a row the ledger writes about itself declares nothing."""
     own = ledger(w.tmp, "own26")
     with own.transaction(by="t") as t:
         t.add("ledger/own26", LIFETIME, "permanent")
@@ -689,7 +689,7 @@ def test_a_spec_only_source_copies_as_a_spec(w):
 
 
 def test_safe_applies_to_the_subdats_a_copy_follows(w):
-    """SVP 252: a safe copy follows the subdats under the same lifetime rules, one revision, the run referred to."""
+    """A safe copy follows the subdats under the same lifetime rules, one revision, the run referred to."""
     from dvc_dat import Dat
 
     def made(path, text, name="f.txt"):

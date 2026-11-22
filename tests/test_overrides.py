@@ -1,4 +1,4 @@
-"""The command line's overrides (1519 R5): `KEY=VALUE` on every install, Hydra's override grammar with
+"""The command line's overrides: `KEY=VALUE` on every install, Hydra's override grammar with
 dvc-dat[hydra] (`+`, `++`, `~`, choices, sweeps, `-m`), each sweep point one spec, one dat."""
 import subprocess
 import sys

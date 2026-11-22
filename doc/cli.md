@@ -21,7 +21,7 @@ reduce name *args      # reduce NAME over=A,B,C [k=v ...]: a reduce function ove
 
 `x TARGET` is `just run TARGET`; the flags `x --info`, `x --version` and `x --help` are in [Commands](#commands).
 
-`just run TARGET` is the one way to run (F447 Q40): the `run` recipe of
+`just run TARGET` is the one way to run: the `run` recipe of
 `dvc_dat.just`, which every project's justfile imports. `x TARGET` is the
 same command, two lines of `sh` in `bin/x`: `exec just run "$@"`. There is
 no `dat` command any more.
@@ -61,7 +61,7 @@ dotted one a path from the spec's root (`dat.title=T`, `model.width=64`); the
 fixed arguments become its `dat.args`; the spec creates a dat, which runs. A
 **callable** is called with the fixed arguments and the undotted pairs as
 keywords; a dotted key on one is an error. A one-segment top-level key has no
-spelling (1519 Q4).
+spelling.
 
 Every fixed argument and every `KEY=VALUE` value is read as **JSON, else the text exactly as typed** — the one `k=v` grammar of every dat command line (`dvc_dat.do.arg_value`):
 
@@ -142,7 +142,7 @@ serial loop over the points is the whole sweeper.
 
 When the project's names are its ledger's (`namespace: ledger` in its `.datconfig.yaml`),
 `x TARGET KEY=VALUE ...` runs
-through the ledger (F447 Q40): `rev.run` of the ledger function TARGET
+through the ledger: `rev.run` of the ledger function TARGET
 names, found if computed before from the same inputs by the same code,
 else run and sealed. It prints `hit` or `ran`, the value (its name, else
 a hash prefix) and its preds. Otherwise it is the bare run above and
@@ -270,9 +270,9 @@ short kind names and hash prefixes.
 | `just set SUBJECT k=v ... [alias=TARGET]` | rows on a subject; `alias=` points the name at a value (a hash prefix expands) | `t[s, p] = o`, `t.add(s, "db/alias", ...)` |
 | `just index PRED` | declares the pred indexed | `t.add("db/pred/PRED", "db/index", "true")` |
 | `just bump NAME [patch\|minor\|major]` | a module: its `__version__` in the source; `db` or a `a/b` subject: a ledger clock | `bump_source`, `bump` |
-| `just pin VALUE [recursive=true] [rerun=true]` | tag and push the commit behind a value; assert it is rerunnable (SVP 250) | `L.at().pin(value, ...)` |
+| `just pin VALUE [recursive=true] [rerun=true]` | tag and push the commit behind a value; assert it is rerunnable | `L.at().pin(value, ...)` |
 | `just rerun VALUE` | run a pinned value's function again at its tag and compare the hash | `rev.rerun(value)` |
-| `just reduce NAME over=A,B,C [k=v ...]` | a `@dat.reduce_fn` over a set of inputs, merging the results of disjoint subsets already reduced; prints the entry and the step (`reduced from:` its accs, `more:`), which `just why` prints too (SVP 242) | `rev.reduce(name, over=[...], **keys)` |
+| `just reduce NAME over=A,B,C [k=v ...]` | a `@dat.reduce_fn` over a set of inputs, merging the results of disjoint subsets already reduced; prints the entry and the step (`reduced from:` its accs, `more:`), which `just why` prints too | `rev.reduce(name, over=[...], **keys)` |
 
 A `k=v` value is JSON when it parses, else the text as typed. A refusal
 prints `<Error>: <message>` and exits `1`. The interpreter is

@@ -1,4 +1,4 @@
-"""``copy`` (SVP 251): a value, or a reference to one, moved onto another ledger with the same hash.
+"""``copy``: a value, or a reference to one, moved onto another ledger with the same hash.
 
 ``t.copy(*values, deep=False, safe=True, rerunnable=False, skip=None)`` is on the destination's transaction, since every write
 goes through the transaction on the ledger written; ``L.at().copy(v)`` is the head form (``Head``). A value is a
@@ -9,13 +9,13 @@ rows, its provenance rows (the ``db/code/<hash 16>`` item, the declarations of i
 run as ``(<value>, db/commit, <sha>)``, since one revision's clock cannot carry several commits), its one name, and
 ``(<value>, db/copied-from, <ledger>@<rev>)``. The per-ledger rows ``db/at``, ``db/rerunnable``, ``db/rerun``
 and an earlier ``db/copied-from`` stay behind. The subject is the source's, so a second copy adds nothing. A pred
-stored spilled there (SVP 1738) is judged by this ledger's settings at commit: its bytes brought when it spills here
+stored spilled there is judged by this ledger's settings at commit: its bytes brought when it spills here
 too, else written inline.
 
-A copy follows the value's subdats (SVP 241, 252): each ``db/subdat/<relpath>`` row's child is copied with it, and
+A copy follows the value's subdats: each ``db/subdat/<relpath>`` row's child is copied with it, and
 the child's subdats in turn, all in this revision. ``skip`` declines some, by relative-path suffix from the copied
 value (``Transaction.copy``): a declined child is not copied, and the parent's row for it here becomes the global
-reference ``str:<ledger>@<rev>:<child subject>`` to the original (SVP 239's ``load`` grammar), which ``dat.load``
+reference ``str:<ledger>@<rev>:<child subject>`` to the original (the ``load`` grammar), which ``dat.load``
 reads on that ledger. A ``str:declined`` row, or such a reference, travels as it is. The rows are outside the
 parent's hash, so what happens to its subdats never moves it.
 
@@ -32,13 +32,13 @@ parent's hash, so what happens to its subdats never moves it.
     A source's ``db/rerunnable`` claim is asserted again here. ``NotCopied``, nothing written, when an input cannot be
     found. A plain copy of a rerunnable value promises nothing at the destination.
 ``rerunnable``
-    asserts the claim here after the copy, as ``t.pin`` would (SVP 250 A9): the commit pinned, the function importable,
+    asserts the claim here after the copy, as ``t.pin`` would: the commit pinned, the function importable,
     every input found.
 ``skip``
     relative-path suffixes of the subdats to leave on their ledger, as ``seal(skip=)`` takes them (``declined_by``):
     ``None`` is ``SKIP``, ``("run",)``; ``()`` follows every subdat; any other adds to ``SKIP``.
 
-Inputs are the run's value keys, every value its trace read, and its ``foreign:`` items (SVP 1521).
+Inputs are the run's value keys, every value its trace read, and its ``foreign:`` items.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     from .rev import Rev
     from .txn import Transaction
 
-#: The row of root's registry that declares a ledger's lifetime (SVP 1516 A1, SVP 251 Q1, Q3 (B)):
+#: The row of root's registry that declares a ledger's lifetime:
 #: ``(ledger/<name>, ledger/lifetime, <word>)`` on the root ledger, written once by whatever creates the ledger.
 LIFETIME = "ledger/lifetime"
 #: Lifetimes, lowest first: ``permanent`` always reachable, ``archival`` kept in principle and nothing may depend on
@@ -72,14 +72,14 @@ SPEC_ONLY = "db/spec-only"
 COMMIT = "db/commit"
 #: The rows of a value that are about the ledger holding it, not about the value.
 LEFT_BEHIND = frozenset({AT, RERUNNABLE, RERUN, COPIED_FROM, SPEC_ONLY, COMMIT})
-#: The subdats a copy leaves on their ledger by default (SVP 252): a run is provenance, recomputable.
+#: The subdats a copy leaves on their ledger by default: a run is provenance, recomputable.
 SKIP = ("run",)
 
 
 def lifetime_of(ledger: Any) -> str:
     """The lifetime root's registry declares for ``ledger``: the row ``(ledger/<name>, ledger/lifetime, <word>)`` on
     the root ledger (``ledgers.root``), ``<name>`` the ledger's folder or database, read at root's head. Read there,
-    not on the ledger, so a ledger that is gone or offline is still judged (SVP 251 Q3 (B)). ``NotCopied`` when root
+    not on the ledger, so a ledger that is gone or offline is still judged. ``NotCopied`` when root
     does not open, or declares none, more than one, or a word outside ``LIFETIMES``: ``safe`` compares what is
     declared, and guesses nothing."""
     from .ledger import ROOT
@@ -304,7 +304,7 @@ def _claims(t: "Transaction", plan: _Plan, new: Dict[str, Any], safe: bool) -> N
 
 
 def skipped(skip: Optional[Iterable[str]]) -> Tuple[str, ...]:
-    """The suffixes a copy declines: ``None`` is ``SKIP``, ``()`` none, any other adds to ``SKIP`` (SVP 241's rule)."""
+    """The suffixes a copy declines: ``None`` is ``SKIP``, ``()`` none, any other adds to ``SKIP`` (the rule)."""
     if isinstance(skip, str):
         raise TypeError(f"skip takes relative-path suffixes, a tuple or list, not the str {skip!r}")
     if skip is None:

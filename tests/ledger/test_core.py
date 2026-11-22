@@ -16,7 +16,7 @@ def write(L, *ops, by="t"):
     return t.rev
 
 
-# -- the constructor (A49, A54) ------------------------------------------------------------------
+# -- the constructor ------------------------------------------------------------------
 
 def test_path_opens_and_missing_is_ledger_error(tmp_path):
     with pytest.raises(LedgerError):
@@ -86,7 +86,7 @@ def test_mounts_sugar_refuses_a_key_outside_mnt(tmp_path, monkeypatch, key):
 # -- transactions ---------------------------------------------------------------------------------
 
 def test_one_transaction_one_revision_and_tx_rows_last(L):
-    with L.transaction(by="human:dan", why="w") as t:
+    with L.transaction(by="human:ann", why="w") as t:
         t.add("s", "p", "1")
         t.add(t.tx, "checked", "yes")
     rev = t.rev
@@ -153,7 +153,7 @@ def test_lock_timeout_writes_nothing(L):
     assert L.at().id == 0
 
 
-# -- the fold (Q19, Q27, A12, A50) ----------------------------------------------------------------
+# -- the fold ----------------------------------------------------------------
 
 def test_one_latest_add_wins_in_body_order(L):
     rev = write(L, ("g", "o", "kim"), ("g", "o", "ortiz"))
@@ -242,7 +242,7 @@ def test_unindexed_dotted_typo(L):
         rev.refs(where={"metrics.scroe": "1"})
 
 
-# -- the bracket write (Q29, A34, A43, A44) -------------------------------------------------------
+# -- the bracket write -------------------------------------------------------
 
 def test_record_write_is_closed_world_over_user_rows(L):
     with L.transaction(by="t", lock=10) as t:
@@ -276,7 +276,7 @@ def test_bracket_many_and_glob_refusals(L):
             t["g*", "x"] = "y"
 
 
-# -- update: an add per key (DAT 1050) ---------------------------------------------------------------
+# -- update: an add per key ---------------------------------------------------------------
 
 def test_update_adds_a_row_per_key_and_retracts_nothing(L):
     write(L, ("db/pred/o", "db/cardinality", "many"))
@@ -308,7 +308,7 @@ def test_update_takes_db_keys_as_add_does_and_refuses_bad_records(L):
     assert t.rev["g2"] == {"q": "o"}                        # the refused record wrote no row
 
 
-# -- db/type (Q35, A36) ---------------------------------------------------------------------------
+# -- db/type ---------------------------------------------------------------------------
 
 def test_db_type_checked_at_commit_and_on_strict_reads(L):
     write(L, ("g", "score", {"h": 1}))
@@ -325,7 +325,7 @@ def test_db_type_checked_at_commit_and_on_strict_reads(L):
         write(L, ("db/pred/n", "db/type", "json"), ("g", "n", "text"))
 
 
-# -- bump (Q33, A38, DAT 1043) -------------------------------------------------------------------------
+# -- bump -------------------------------------------------------------------------
 
 def test_bump_patch_minor_confirm_and_backwards_add(L):
     with L.transaction(by="t", lock=10) as t:
@@ -340,7 +340,7 @@ def test_bump_patch_minor_confirm_and_backwards_add(L):
 
 
 def test_the_release_row_is_db_db_version(L):
-    """DAT 1052 Q3 (A), widened 2026-10-29: ``db/version`` is the version predicate on every subject. The
+    """``db/version`` is the version predicate on every subject. The
     release is ``db db/version``, read by ``L.at("M.m.p")``; ``bump`` on a user subject moves its
     ``db/version`` too; a bare ``version`` row is never read, on ``db`` or anywhere."""
     with L.transaction(by="t", lock=10, why="release") as t:
@@ -394,7 +394,7 @@ def test_bare_version_is_opaque_user_data(L):
 
 
 def test_a_dev_version_is_a_clock_version_but_not_a_ledger_release(L):
-    """SVP 1482: ``.devN`` is legal on a clock subject; the release on ``db`` is what ``L.at("M.m.p")`` reads, plain."""
+    """``.devN`` is legal on a clock subject; the release on ``db`` is what ``L.at("M.m.p")`` reads, plain."""
     write(L, ("model/m", "db/version", "1.3.6.dev2"))
     assert L.at()["model/m", "db/version"] == "1.3.6.dev2"
     with pytest.raises(ValueError, match="a ledger's release"):
@@ -422,7 +422,7 @@ def test_bump_refuses_a_code_subject(L):
     assert L.at().get("db/repo/testrepo/ledger_kinds", "db/version") is None
 
 
-# -- previous_rev and the lock (DAT 1039) --------------------------------------------------------
+# -- previous_rev and the lock --------------------------------------------------------
 
 def test_previous_rev_unlocked_raises_unlocked(L):
     with L.transaction(by="t") as t:

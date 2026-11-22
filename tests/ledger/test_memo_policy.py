@@ -1,4 +1,4 @@
-"""SVP 1474 (Q1 D): record the full platform at write, judge it by the ledger's memo policy at lookup.
+"""Record the full platform at write, judge it by the ledger's memo policy at lookup.
 
 Every memo entry stores the platform record where its function ran (``platform/record``); a lookup
 hits when ``policy(stored) == policy(current)``, the policy named by the ``(db, db/memo-policy)``
@@ -105,7 +105,7 @@ def test_changing_the_policy_triple_rejudges_old_entries(world, envbox):
 
 
 def test_a_deterministic_function_adds_card_and_driver(world, envbox):
-    """SVP 250 A11, 251 Q2: the claim is the function's (``@dat.fn(reproducible="exact")``), not a call-time keyword."""
+    """The claim is the function's (``@dat.fn(reproducible="exact")``), not a call-time keyword."""
     a = cut_det(world)
     assert world.at().ns.load("ledger_kinds.cut_det").reproducible == "exact"
     assert world.at().ns.load("ledger_kinds.cut").reproducible is None
@@ -197,7 +197,7 @@ def test_nvidia_smi_output_parses_to_card_and_driver():
     assert parse_smi("", None) == (None, None)
 
 
-# -- R0069: a hand seal writes the record too -------------------------------------------------------------------------
+# -- a hand seal writes the record too -------------------------------------------------------------------------
 
 def _hand(L, payload, name, game="G1", **seal):
     v = Video(payload)
@@ -208,7 +208,7 @@ def _hand(L, payload, name, game="G1", **seal):
 
 
 def test_a_hand_seal_records_the_full_record_beside_the_short_item(world, envbox):
-    """SVP R0069: a hand seal's dependencies carry ``platform/record`` as a run's entry does, so a GPU run dat
+    """A hand seal's dependencies carry ``platform/record`` as a run's entry does, so a GPU run dat
     sealed by hand says the card it was made on."""
     v = _hand(world, b"G1 hand", "video/G1-hand")
     assert world.at()[v.subject, "db/deps/platform"] == TAG

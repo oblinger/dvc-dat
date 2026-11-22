@@ -1,4 +1,4 @@
-"""Core latent bugs (deep scan round 4, 2026-10-27): a fork that wipes or reuses its parent, an overwrite
+"""Core latent bugs (deep scan round 4): a fork that wipes or reuses its parent, an overwrite
 that hands back the old object or wipes the old dat before its spec is made, a stored literal brace
 re-expanded, a dat.base cycle, a _spec_.json dat's save, the k=v grammar, a dotted override under a scalar."""
 import json
@@ -29,7 +29,7 @@ def _seal(dat, *a, **k):
     return dat
 
 
-# --- F1 (SVP 1508): a Dat is not a run target; its folder is untouched by the refusal --------
+# --- F1: a Dat is not a run target; its folder is untouched by the refusal --------
 def test_run_of_a_dat_is_refused_and_keeps_it(world):
     world.ns.mount(at="seal_fn", value=_seal)
     parent = world.run({"dat": {"do": "seal_fn", "name": "exp1", "target_exists": "overwrite",
@@ -64,7 +64,7 @@ def test_rerun_of_a_stored_spec_with_a_literal_brace(world):
     assert child.get_path_name() == "exp4_2" and Dat.get(child.get_spec(), "dat.kwargs.x") == 2
 
 
-# --- 1467 Q2 (A): a call-site argument is data; the run receives exactly what was passed ---
+# --- A call-site argument is data; the run receives exactly what was passed ---
 def _kw(dat, *args, **kwargs):
     return [list(args), kwargs]
 
@@ -186,7 +186,7 @@ def test_an_override_sets_the_key_it_names(world):
     assert spec["dat"]["do"] == "see_fn" and spec["dat"]["title"] == "T"     # a dotted key sets one leaf
 
 
-# --- round 4, the core items still open on 2026-10-29 (Tink's 31-item list, #1-#20) ---------------------------
+# --- round 4, the core items still open on 2026-10-29 (the 31-item list, #1-#20) ---------------------------
 
 def test_overwrite_never_deletes_a_folder_holding_the_dat_folder(world, tmp_path):
     (tmp_path / "keep").write_text("k")
@@ -301,7 +301,7 @@ def test_an_array_mounted_as_a_value_loads(world):
     assert list(world.ns.load("arr")) == [0, 1, 2]
 
 
-# --- 1467 Q4 (A): a URN whose index key a same-hash twin's delete dropped is found by a walk on the miss ------
+# --- A URN whose index key a same-hash twin's delete dropped is found by a walk on the miss ------
 def test_urn_survives_deleting_a_same_hash_twin(world):
     world.ns.mount(at="seal_fn", value=_seal)
     a = world.run({"dat": {"do": "seal_fn", "name": "twin_a"}, "k": 1})
@@ -317,7 +317,7 @@ def test_urn_survives_deleting_a_same_hash_twin(world):
         world.load(urn)
 
 
-# --- 1467 Q13 (A): overwrite deletes only inside dat_folders or the art_folder --------------------------------
+# --- Overwrite deletes only inside dat_folders or the art_folder --------------------------------
 def test_overwrite_outside_the_dat_folders_is_refused_and_deletes_nothing(world, tmp_path):
     outside = tmp_path / "elsewhere" / "exp"
     outside.mkdir(parents=True)

@@ -16,7 +16,7 @@ from dvc_dat import Dat, DatManager  # noqa: E402
 
 ns, cli_main = Dat.ns, Dat.cli_main
 from dvc_dat.core import DAT_CONFIG_FILE  # noqa: E402
-OVERRIDE = ".datconfig.override.yaml"   # read until 2.63; refused since (SVP 239)
+OVERRIDE = ".datconfig.override.yaml"   # read until 2.63; refused since
 from dvc_dat.namespace import Namespace  # noqa: E402
 
 
@@ -54,7 +54,7 @@ class TestLoadDatConfig:
         assert manager._dat_folders == [os.path.join(root, "x"), os.path.join(root, "y")]
 
     def test_an_override_file_is_refused(self, tmp_path):
-        """SVP 239: one config file; an override file beside it says what replaced it."""
+        """One config file; an override file beside it says what replaced it."""
         Path(tmp_path, DAT_CONFIG_FILE).write_text("dat_folders: base/\n")
         Path(tmp_path, OVERRIDE).write_text("dat_folders: over/\n")
         with pytest.raises(ValueError, match="override file is no longer read.*DAT_LEDGER"):
@@ -161,7 +161,7 @@ class TestDefaultWorld:
 
     def test_the_package_exports_the_four_classes_the_ledger_handles_and_dat(self):
         assert sorted(dvc_dat.__all__) == ["Dat", "DatContainer", "DatManager", "L", "Namespace", "dat", "ledgers"]
-        assert dvc_dat.dat.fn is dvc_dat.ledger.fn.fn and dvc_dat.dat.command is dvc_dat.just.command  # SVP 250 Q4
+        assert dvc_dat.dat.fn is dvc_dat.ledger.fn.fn and dvc_dat.dat.command is dvc_dat.just.command
         for gone in ("cli_main", "expand_spec", "merge_dicts"):
             assert not hasattr(dvc_dat, gone)
         assert not callable(getattr(dvc_dat, "expand", None))     # the expander's module, not a function
@@ -267,7 +267,7 @@ def test_merge_dicts_is_the_base_zipper():
 
 
 class TestMergeByName:
-    """Dan, 2026-09-23 (SVP T150 Q1): named list entries merge by name."""
+    """Named list entries merge by name."""
     stages = {"stages": [{"name": "detect", "fps": 30}, {"name": "track", "k": 5},
                          {"name": "score"}]}
 
@@ -301,7 +301,7 @@ class TestMergeByName:
 
 
 class TestMountRefusesImportClash:
-    """A mounted name is never also an importable one (Dan, 2026-09-22, F012 Q2)."""
+    """A mounted name is never also an importable one."""
 
     @pytest.fixture
     def importable(self, tmp_path, monkeypatch):

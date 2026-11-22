@@ -1,4 +1,4 @@
-"""``dat.at`` and ``dat.load``: the global reference resolves across ledgers (SVP 248)."""
+"""``dat.at`` and ``dat.load``: the global reference resolves across ledgers."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def test_no_ledger_is_the_managers_load(tmp_path, monkeypatch):
         made = Dat.manager.create({"dat": {"do": "builtins.print"}}, path="one/two")
         assert dat.load("one/two").get_path() == made.get_path()
     finally:
-        Dat.manager = before        # `None` here left the next reader to build one from its own cwd (SVP 1546)
+        Dat.manager = before        # `None` here left the next reader to build one from its own cwd
 
 
 def test_a_project_with_a_ledger_never_falls_through(tmp_path, monkeypatch):

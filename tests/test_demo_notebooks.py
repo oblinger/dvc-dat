@@ -29,7 +29,7 @@ def test_every_notebook_has_its_script():
     assert sorted(p.name for p in HERE.glob("demo-*.py")) == [Path(n).with_suffix(".py").name for n in DEMOS]
 
 
-#: The notebooks whose specs use the `${…}` grammar beyond `${unique:}`: run on the expand tier only (1519 R4).
+#: The notebooks whose specs use the `${…}` grammar beyond `${unique:}`: run on the expand tier only.
 NEEDS_EXPAND = {"api-walkthrough.ipynb", "cli-walkthrough.ipynb", "demo-walkthrough.ipynb"}
 
 

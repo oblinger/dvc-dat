@@ -11,7 +11,7 @@
   "postgres": "17.11 (Homebrew)"
  },
  "config": {
-  "ledger": "postgresql://postgres@localhost:5544/postgres?options=-csearch_path%3Dload_p8_lock&art=/Users/oblinger/t541-load/runs/load_p8_lock-art",
+  "ledger": "postgresql://postgres@localhost:5544/postgres?options=-csearch_path%3Dload_p8_lock&art=/tmp/load/runs/load_p8_lock-art",
   "transactions": 2000,
   "seed": 0,
   "lock": 0.02,

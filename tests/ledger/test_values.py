@@ -99,7 +99,7 @@ def test_alias_chain_repr_and_aliases(L):
         t.add("raw/G1/long-name", "db/alias", s)
     rev = L.at()
     r = Ref(rev, "raw/G1/long-name")
-    assert r.subject == s and r.name == "raw/G1/long-name" and str(r) == "raw/G1/long-name"   # its name: the latest (Q36)
+    assert r.subject == s and r.name == "raw/G1/long-name" and str(r) == "raw/G1/long-name"   # its name: the latest
     assert sorted(r.aliases) == ["raw/G1/long-name", "video/G1"]
     assert rev["video/G1"] == {"db/alias": s}           # literal
     assert rev.load("video/G1").subject == s
@@ -201,11 +201,11 @@ def test_ledger_class_rejects_non_values():
 
 def test_seal_on_a_ledger_commits_its_own_transaction(L):
     top = L.at().id
-    s = Plain(b"alone").seal(L, name="note/alone", provenance="human:dan")
+    s = Plain(b"alone").seal(L, name="note/alone", provenance="human:ann")
     now = L.at()
     assert now.id == top + 1
     assert Ref(now, "note/alone").subject == s
-    assert now[now.tx, "db/by"] == "human:dan"
+    assert now[now.tx, "db/by"] == "human:ann"
 
 
 def test_seal_on_a_ledger_takes_a_json_by(L):

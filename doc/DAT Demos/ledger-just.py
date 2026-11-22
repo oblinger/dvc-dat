@@ -85,29 +85,29 @@ os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"  # re
 
 from demo_game.game import Video, Cut
 
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("db", "db/version", "3.1.4")
     t.add("db/pred/team", "db/cardinality", "many")
     t.add("db/pred/video", "db/type", "demo_game.game.Video")
     t.add("db/pred/span", "db/type", "json")
-with L.transaction(by="human:dan", lock=10) as t:                 # rev 2
+with L.transaction(by="human:ann", lock=10) as t:                 # rev 2
     t["game/G1"] = {"home": "G4", "away": "G5", "court": "north"}
 video_value = Video(b"G1 wide camera, 9000 frames")
 video_value.preds.update(game="G1", camera="wide", span=[0, 9000])
-with L.transaction(by="human:dan") as t:                 # rev 3
+with L.transaction(by="human:ann") as t:                 # rev 3
     video_value.seal(t, name="video/G1",
                      provenance="import:archive")
 cut_153_value = L.at().run("demo_game.game.cut",       # rev 4, and db/repo/demo-game/demo_game 0.1.0
                             game="G1", version="1.5.3")
-with L.transaction(by="human:dan") as t:                 # rev 5
+with L.transaction(by="human:ann") as t:                 # rev 5
     t.add("game/G1", "db/alias", cut_153_value.subject)
-with L.transaction(by="human:dan", why="home was G6") as t:
+with L.transaction(by="human:ann", why="home was G6") as t:
     t["game/G1", "home"] = "G6"                          # rev 6
 cut_154_value = L.at().run("demo_game.game.cut",       # rev 7
                             game="G1", version="1.5.4")
-with L.transaction(by="human:dan") as t:                 # rev 8
+with L.transaction(by="human:ann") as t:                 # rev 8
     t.add("game/G1", "db/alias", cut_154_value.subject)
-with L.transaction(by="human:dan") as t:                 # rev 9
+with L.transaction(by="human:ann") as t:                 # rev 9
     t["cfg/train", "epochs"] = "8"             # what train reads
     t["game/G1", "gameset"] = "normie"
 
@@ -171,7 +171,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # %% [markdown]
 # The dat is a value. It is
 # `rev.run("mnt.demo_game.etl.model.train", game="G1", path="model/prod")`:
-# `path=` names the result and builds its folder there (Q36).
+# `path=` names the result and builds its folder there.
 #
 # The file's contents are the whole set of keys; a key on the line
 # overrides the file's. Handing the model to prod is the name, the
@@ -277,13 +277,13 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # %%
 # !just history game/G1
 # → rev  by         predicate  object
-# →   2  human:dan  home       G4
-# →   2  human:dan  away       G5
-# →   2  human:dan  court      north
-# →   5  human:dan  db/alias   #<the 1.5.3 cut, 8 hex>
-# →   6  human:dan  home       G6
-# →   8  human:dan  db/alias   #<the 1.5.4 cut, 8 hex>
-# →   9  human:dan  gameset    normie
+# →   2  human:ann  home       G4
+# →   2  human:ann  away       G5
+# →   2  human:ann  court      north
+# →   5  human:ann  db/alias   #<the 1.5.3 cut, 8 hex>
+# →   6  human:ann  home       G6
+# →   8  human:ann  db/alias   #<the 1.5.4 cut, 8 hex>
+# →   9  human:ann  gameset    normie
 
 # %% [markdown]
 # Each line carries the revision it was written at and who wrote it.
@@ -330,7 +330,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # It is
 # `t["game/G1", "texture"] = "hardwood"`.
 #
-# A row on the named subject, literal (A34): on `game/G1` it is a
+# A row on the named subject, literal: on `game/G1` it is a
 # fact about the game, not about its cut, and it is never a seal.
 # There is no `just set <hash> game=G2`: a wrong pred on a sealed
 # value is a new seal and an alias move, made by `just run` or, in
@@ -366,7 +366,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # It is
 # `t.add("db/pred/game", "db/index", "true")`.
 #
-# The store builds the index over existing rows itself (Q18), so
+# The store builds the index over existing rows itself, so
 # there is nothing to back-fill; the count says how much the index
 # covers.
 #
@@ -430,7 +430,7 @@ with L.transaction(by="human:dan") as t:                 # rev 9
 # ## What the recipes hide
 #
 # What the Python notebooks spell out on every call, and where each
-# recipe gets it instead; this is the just layer's input (Q4).
+# recipe gets it instead; this is the just layer's input.
 #
 # - **The ledger** — `Ledger()`: `DAT_LEDGER` if set, else the walk
 #   up to `.datconfig.yaml`.

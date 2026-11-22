@@ -1,4 +1,4 @@
-"""Ledger latent bugs left open from deep scan round 4 (Tink's 31-item list, 2026-10-27): a recorded query
+"""Ledger latent bugs left open from deep scan round 4 (the 31-item list): a recorded query
 that no longer parses, a post-commit hook that raises, a value class defined in a function, a transaction
 keyword against its db/type."""
 

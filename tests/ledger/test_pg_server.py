@@ -1,4 +1,4 @@
-"""How the suite gets its Postgres server (``tests/pg_server.py``, SVP 1548): only from ``DVC_DAT_TEST_PG``;
+"""How the suite gets its Postgres server (``tests/pg_server.py``): only from ``DVC_DAT_TEST_PG``;
 unset skips; port 5433 refused unless ``DVC_DAT_TEST_PG_ALLOW_5433=1``.
 
 No test here connects to anything: every refused address is on ``refused.invalid``, a name that never

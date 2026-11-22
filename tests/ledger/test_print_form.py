@@ -1,6 +1,6 @@
-"""What a value, a ref and a fn print as (DAT 1036, option A): ``repr`` is ``<Type label>``, ``str`` the
+"""What a value, a ref and a fn print as (option A): ``repr`` is ``<Type label>``, ``str`` the
 bare label; the label is the name at the head, else ``#`` + the hash's first 8. A fn's label is its name
-``@`` its code's version (DAT 1037)."""
+``@`` its code's version."""
 
 import pytest
 

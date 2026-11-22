@@ -155,7 +155,7 @@ def seal_weather(city: str, seed: int) -> None:
         days.append([(date(2026, 1, 1) + timedelta(n)).isoformat(), temp, rng.randrange(20, 90)])
     weather_value = Days(days)
     weather_value.preds["city"] = city
-    with L.transaction(by="human:dan", why=f"{city}'s data") as t:
+    with L.transaction(by="human:ann", why=f"{city}'s data") as t:
         weather_value.seal(t, name=f"weather/{city}")
 
 
@@ -171,7 +171,7 @@ print(L.at().load("weather/Austin").days[:3])
 # `all` answers in revision order, the order the rows were added.
 
 # %%
-with L.transaction(by="human:dan", why="the city set") as t:
+with L.transaction(by="human:ann", why="the city set") as t:
     t.add("db/pred/contains", "db/cardinality", "many")
     for city in ("Boston", "Austin", "Chicago"):
         t.add("cityset/representative", "contains", city)
@@ -205,7 +205,7 @@ show("comfort/report.py")
 # A `# same as` line is the shell form, typed in the code's repo, whose justfile imports `run` and the ledger verbs from dvc-dat (`dvc_dat.just`).
 
 # %%
-with L.transaction(by="human:dan", why="mount the stages") as t:
+with L.transaction(by="human:ann", why="mount the stages") as t:
     t.ns.mount("mnt.comfort", root="comfort", repo="comfort-repo")   # the two db/mount/comfort rows
 report_fn = L.at().ns.load("mnt.comfort.report.comfort_report")
 print("sandboxed:", report_fn.code.sandboxed, " code:", report_fn.code)
@@ -281,11 +281,11 @@ print(ran_since(counts_before))
 # Now Denver joins the set. The summer report over four cities finds the report over three, its largest subset already reduced, and runs one step: `accs` that report alone, `more` Denver alone.
 
 # %%
-with L.transaction(by="human:dan", why="Denver joins") as t:
+with L.transaction(by="human:ann", why="Denver joins") as t:
     t.add("cityset/representative", "contains", "Denver")
 counts_before = entry_counts()
 comfort_report_value = L.at().reduce(REPORT, over=cities(), start="2026-06-01", end="2026-09-01")
-with L.transaction(by="human:dan", why="name the summer report") as t:
+with L.transaction(by="human:ann", why="name the summer report") as t:
     t.add("report/summer", "db/alias", comfort_report_value.subject)
 print(shown(comfort_report_value))
 # → {'comfortable': '175/368 days', 'top': ['Denver', 'Boston']}
@@ -333,7 +333,7 @@ print("same as from scratch:", fresh_value.same_as(autumn_value))
 seal_weather("Boston", seed=22)                 # Boston re-reported
 counts_before = entry_counts()
 comfort_report_value = L.at().reduce(REPORT, over=cities(), start="2026-06-01", end="2026-09-01")
-with L.transaction(by="human:dan", why="name the summer report") as t:
+with L.transaction(by="human:ann", why="name the summer report") as t:
     t.add("report/summer", "db/alias", comfort_report_value.subject)
 print(ran_since(counts_before))
 # → {'daily_comfort': 1, 'city_comfort': 1, 'comfort_report': 1}
@@ -356,7 +356,7 @@ report_path.write_text(report_source)
 commit("report: the one most comfortable city", "comfort/report.py")
 counts_before = entry_counts()
 comfort_report_value = L.at().reduce(REPORT, over=cities(), start="2026-06-01", end="2026-09-01")
-with L.transaction(by="human:dan", why="name the summer report") as t:
+with L.transaction(by="human:ann", why="name the summer report") as t:
     t.add("report/summer", "db/alias", comfort_report_value.subject)
 print(shown(comfort_report_value))
 # → {'comfortable': '182/368 days', 'top': ['Boston']}
@@ -367,7 +367,7 @@ print(ran_since(counts_before))
 # The comfort report ran one step over the four cities: its run loaded `report.py`, and every report under the old code is stale, so the new one starts from none of them.
 # The stages below were hits: they ran nested inside the report's body, in its worker, and a nested run records only the modules it loaded itself, `stages.py` and `values.py`, never `report.py`, which its caller loaded.
 # Read back as hits, their results were decoded in the report's own body, so `values.py`, the module of their kind, is part of the report's code item this time.
-# No version bump was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a miss, and a miss runs at HEAD, clean or dirty (F520 Q39).
+# No version bump was needed: a sandboxed stage's identity is the bytes of the modules its run loaded, so the edit alone made the comfort report a miss, and a miss runs at HEAD, clean or dirty.
 
 # %% [markdown]
 # ## Reading a result's dependencies back

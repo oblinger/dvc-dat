@@ -1,4 +1,4 @@
-"""``dvc_dat.ledger``: the ledger, rebuilt to the value-space design (SVP447 Ledger Module).
+"""``dvc_dat.ledger``: the ledger, rebuilt to the value-space design.
 
 One logical store: every fact is a quad ``(rev, subject, predicate, object)``;
 every read is a function of a ``Rev``; every write is a ``Transaction``;
@@ -9,15 +9,15 @@ process) or sandboxed (under a ``db/mount/<prefix>``, in a worker).
     from dvc_dat.ledger import Ledger, Ref, ledger_class, bump, bump_source, attr
     from dvc_dat import L, ledgers, dat  # L: the active ledger; ledgers.record: one by name; dat: @dat.fn
     rev = L.at()                         # the head: a Rev that is also a transaction (L.at().pin(v))
-    with L.transaction(by="human:dan", lock=10, why="release") as t:
+    with L.transaction(by="human:ann", lock=10, why="release") as t:
         bump(t, "db", "minor", confirm=lambda old, new: True)   # the release row: db db/version; L.at("0.1.0") reads it
     bump_source("demo_game")             # __version__ in the source; the next clean run moves db/repo/demo-game/demo_game
 
-``Dat`` is ``dvc_dat.Dat``: the ledger loads without the Dat layer (1519 R1), which registers itself with
+``Dat`` is ``dvc_dat.Dat``: the ledger loads without the Dat layer, which registers itself with
 ``dvc_dat.ledger.hooks`` when it is imported, so a dat is a ``Value`` the moment ``Dat`` exists.
 
 The environment is found by discovery; ``set_env_provider``, ``Env`` and
-``Checkout`` are the test suite's seam only (A51), importable by name.
+``Checkout`` are the test suite's seam only, importable by name.
 """
 
 from .code import Code

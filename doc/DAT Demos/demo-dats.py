@@ -112,9 +112,9 @@ from dvc_dat.ledger import Ledger
 
 ledger_path = Path(tempfile.mkdtemp(prefix="demo-dats-ledger-"))
 L = Ledger(ledger_path / "ledger", create=True)
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("demo/c", "db/version", "1.0.0")
-with L.transaction(by="human:dan") as t:
+with L.transaction(by="human:ann") as t:
     t.add("demo/c", "db/version", "1.0.1")
 print(f"{L.at().get('demo/c', 'db/version')=}")
 print("history:", [(r.rev.id, r.object, r.added) for r in L.at().history("demo/c", "db/version")])

@@ -1,4 +1,4 @@
-"""Deep scan round 4 leans (SVP 1467 Q10, Q11; auto-resolved (A)): the inline-YAML marker is `yaml` alone
+"""Deep scan round 4 leans (auto-resolved (A)): the inline-YAML marker is `yaml` alone
 on the first line; a bare folder on sys.path does not block a mount of its name."""
 import sys
 

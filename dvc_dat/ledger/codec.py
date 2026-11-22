@@ -9,13 +9,13 @@ The third position of a row is stored as one of three tagged strings:
 ``ref:<dotted class>:<hex sha256>[:<subject>]``
     a sealed value: the class that decodes it and the hash of its bytes; the
     subject is an optional hint, written only on a row ``add`` made from a
-    ``Ref`` (A28). In ``db/value``, typed preds, ``db/keys`` and dependencies it is
-    omitted, so a dependency is its bytes, not its entry (A21).
+    ``Ref``. In ``db/value``, typed preds, ``db/keys`` and dependencies it is
+    omitted, so a dependency is its bytes, not its entry.
 ``spill:<str|json>:<hex sha256>:<size>``
-    a ``str`` or JSON object too large for the row (SVP 1738, ``spill``): the sha256 and byte size of its
+    a ``str`` or JSON object too large for the row (``spill``): the sha256 and byte size of its
     ``str:``/``json:`` text, whose bytes are in the art store under that hash.
 
-A bare ``int``, ``float``, ``bool`` or ``None`` is refused by ``add`` (Q5 (A)).
+A bare ``int``, ``float``, ``bool`` or ``None`` is refused by ``add``.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def sha256(data: bytes) -> str:
 
 
 class HashSink(io.RawIOBase):
-    """A write-only, forward-only binary stream that hashes and counts what passes through it (DAT 240):
+    """A write-only, forward-only binary stream that hashes and counts what passes through it:
     ``hash`` (hex sha256) and ``size`` read what was written so far. A subclass also writes the bytes
     somewhere (``store.FileSink``). ``seek`` is refused: an encoder that seeks back would make the digest
     wrong."""
@@ -180,7 +180,7 @@ def encode_plain(obj: Any) -> Optional[str]:
 def refuse_scalar(obj: Any) -> None:
     if obj is None or isinstance(obj, (bool, int, float)):
         raise TypeError(f"a ledger object is a str, a JSON dict or list, or a Ref; not {type(obj).__name__} "
-                        f"({obj!r}): a number is its string (Q5), say {str(obj)!r}")
+                        f"({obj!r}): a number is its string, say {str(obj)!r}")
 
 
 def show(text: str) -> str:

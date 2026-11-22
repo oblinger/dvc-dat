@@ -72,7 +72,7 @@ run *args:
 mounts *args:
     @"{{just_executable()}}" -f "{{justfile()}}" run --list "$@"
 
-# The ledger verbs (SVP 1465): each is `python -m dvc_dat.ledger.recipes VERB`,
+# The ledger verbs: each is `python -m dvc_dat.ledger.recipes VERB`,
 # one ledger call (`Ledger()`, the active ledger: $DAT_LEDGER, else the nearest
 # .datconfig.yaml's `ledgers:` default or `ledger:`), run from the working directory. The interpreter is
 # $DAT_PYTHON, else .venv/bin/python beside the justfile, else python3. A

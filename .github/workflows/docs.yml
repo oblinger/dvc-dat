@@ -1,7 +1,7 @@
 # Build the documentation site on every push to main and deploy it to GitHub Pages:
-# https://oblinger.github.io/dvc-dat/ (246 Q2). One site tracking main, not versioned by release (246 A5).
+# https://oblinger.github.io/dvc-dat/. One site tracking main, not versioned by release.
 # The repository's Pages source is GitHub Actions. Notebooks are rendered with the outputs they were
-# committed with, never executed here (246 A3).
+# committed with, never executed here.
 
 name: docs
 

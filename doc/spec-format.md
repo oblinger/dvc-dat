@@ -43,8 +43,8 @@ dat:
 | `name` | The path template for the dat's folder. Used when `Dat.create()` is given no `path`. |
 | `do` | Dotted name of the function to run. |
 | `args` | Positional arguments for it, after the dat itself. |
-| `kwargs` | Keyword arguments for it, and the spec's defaults for them: a keyword on `run` or `create` overrides one key by key, and the stored spec holds the merged `dat.kwargs`. A template reads one as `${dat.kwargs.tag}`. A value a template reads that is not an argument of the function lives under any plain node (`params: {tag: base}`, read `${params.tag}`). A `dat.defaults` node is refused at create (gone in 3.0, SVP 1519). |
-| `preds` | Pred names to templates (SVP 1508), resolved at create like every string; each must come out a string, number or bool. They are the dat's own preds, sealed onto its value on a ledger. |
+| `kwargs` | Keyword arguments for it, and the spec's defaults for them: a keyword on `run` or `create` overrides one key by key, and the stored spec holds the merged `dat.kwargs`. A template reads one as `${dat.kwargs.tag}`. A value a template reads that is not an argument of the function lives under any plain node (`params: {tag: base}`, read `${params.tag}`). A `dat.defaults` node is refused at create (gone in 3.0). |
+| `preds` | Pred names to templates, resolved at create like every string; each must come out a string, number or bool. They are the dat's own preds, sealed onto its value on a ledger. |
 | `target_exists` | What to do when the folder is already there. |
 
 `kind`, `name`, `do` and `target_exists` are strings. A value that arrives as

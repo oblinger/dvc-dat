@@ -1,5 +1,5 @@
 """On a ledger project `Dat.delete()` and `Dat.create(target_exists="overwrite")` onto an existing dat
-refuse (SVP 1467 Q15 (A)): a ledger only appends rows and never reclaims bytes.
+refuse: a ledger only appends rows and never reclaims bytes.
 
 The non-ledger half -- `delete()` still removes the folder -- is
 `tests/test_dat.py::TestDatCopyMoveDelete::test_copy_exists_and_delete`.

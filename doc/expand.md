@@ -12,7 +12,7 @@ brace without `$` is plain text: `{asset.pose}` is the string it reads.
 from dvc_dat import ns
 
 ns.expand("runs/${now:%Y-%m}/baseline")     # 'runs/2026-11/baseline'
-ns.expand("${ns:svp.RUN_DIR}/exp")          # through the namespace
+ns.expand("${ns:proj.RUN_DIR}/exp")          # through the namespace
 # keywords are top-level nodes; see Counting
 ns.expand("ann/${g}/${kind}/${unique:}",
           g="G7", kind="events")
@@ -63,10 +63,10 @@ dat folder (below).
 An interpolation may sit inside a resolver's argument:
 `${ns:asset.detector_b${batch}}`. A missing node and a cycle are each one
 error at create. A value that is *exactly* one reference inlines the object:
-`cfg: ${ns:svp.defaults}` puts the dict in, `${ns:mymod.fn}` the function;
+`cfg: ${ns:proj.defaults}` puts the dict in, `${ns:mymod.fn}` the function;
 inside a longer string it is text. A path cannot walk *into* an object a
-resolver returned (`cfg: ${ns:svp.defaults}` then `${cfg.lr}` fails): spell it
-`${ns:svp.defaults.lr}` (1519 decision 5).
+resolver returned (`cfg: ${ns:proj.defaults}` then `${cfg.lr}` fails): spell it
+`${ns:proj.defaults.lr}`.
 
 **The clock.** Every `${now:…}` in one resolve is one moment, so
 `${now:%Y}-${now:%m}` on either side of midnight agrees with itself, and the
@@ -88,7 +88,7 @@ DAT's wins whichever was imported last.
 | `{{` | `{` (a brace is text) |
 
 A `dat.name` still in the old grammar is refused at create, naming its new
-spelling (1519 decision 3).
+spelling.
 
 ## What the namespace holds
 
@@ -148,7 +148,7 @@ with ledger.transaction(by="load", lock=30) as t:
 - **A call-site value is data.** A keyword of `run`/`create`/`rev.run` reaches
   `dat.kwargs` as given: on `[expand]` each `${` in it is escaped (`\${`)
   before the merge; on the base install one holding `${` is `ValueError`
-  naming `dvc-dat[expand]` (1519 decision 8). `ns.quote_spec(spec)` is that
+  naming `dvc-dat[expand]`. `ns.quote_spec(spec)` is that
   escape.
 
 `ns.expand_spec(spec)` merges a dict's `dat.base` chain and resolves every

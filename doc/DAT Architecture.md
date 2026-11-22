@@ -78,7 +78,7 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
   bytes by sha256; they are separate folders.
 - **One configuration file.** `.datconfig.yaml` configures the dat
   manager and, under `root:`, names the root ledger, whose registry
-  lists every other ledger (`ledgers.games`, SVP 239); without it the
+  lists every other ledger (`ledgers.games`); without it the
   root is a SQLite folder under the first dat folder, made on first
   use. `Ledger()` and `L` find the active one by walking up from the
   working directory (`DAT_LEDGER`, else the file's `default:`) and
@@ -107,6 +107,4 @@ reads no `_spec_.yaml` beyond checking its `dat.kind` on load.
 - The dat half's guides: [Concepts](concepts.md),
   [Spec Format](spec-format.md), [Mounts](mount-commands.md),
   [Command Line](cli.md).
-- The design pages live in the project's design vault, found by name:
-  **SVP447 Ledger Module**, **SVP447 Eval**, **SVP447 Versions**,
-  **SVP447 Values**.
+- The design choices and the reason for each: [DAT Design Notes](Design/DAT%20Design%20Notes.md).

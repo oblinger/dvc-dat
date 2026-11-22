@@ -1,4 +1,4 @@
-"""``fn.code`` (DAT 1037): the code a function is loaded from, at a version, as a ``Code`` value.
+"""``fn.code``: the code a function is loaded from, at a version, as a ``Code`` value.
 
 Installed code reads its version from its environment; mounted code from the mounted root's
 ``__version__``, read after import, else from git. ``Fn.mode`` is gone. Only the snapshot has identity
@@ -195,7 +195,7 @@ def test_a_changed_module_changes_the_subject(mounted):
     (repo / "plane/measure.py").write_text(FN.replace("0.5", "0.25"))
     after = L.at().ns.load("mnt.plane.measure.length").code
     assert after.subject != before.subject and before.version == "2.7.1"
-    assert re.fullmatch(r"[0-9a-f]{8}\+dirty", after.version)          # uncommitted: no declared version (DAT 1043)
+    assert re.fullmatch(r"[0-9a-f]{8}\+dirty", after.version)          # uncommitted: no declared version
 
 
 def test_two_functions_in_one_snapshot_share_its_subject(mounted):
