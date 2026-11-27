@@ -1,7 +1,7 @@
 ---
 description: "what dvc-dat is, in its descriptive overview, and what each part of it means in the code"
 ---
-:>>
+:>> [DAT](../DAT.md) → [DAT Summary](DAT%20Summary.md) 
 # DAT Summary
 What dvc-dat is, in its descriptive overview, and what each part stands for in the code.
 

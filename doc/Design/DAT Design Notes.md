@@ -1,7 +1,7 @@
 ---
 description: "The main design choices behind dvc-dat, and the reason for each."
 ---
-:>> 
+:>> [DAT](../DAT.md) → [DAT Design Notes](DAT%20Design%20Notes.md) 
 # DAT Design Notes
 The main design choices behind dvc-dat, and the reason for each.
 
