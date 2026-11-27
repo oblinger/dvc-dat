@@ -1,4 +1,4 @@
-:>> [DAT](DAT.md) → [How-to](how-to.md) → [how-to-ledger](how-to-ledger.md) 
+:>> [DAT](DAT.md) → [how-to-ledger](how-to-ledger.md) 
 # How to use a ledger
 At the end you will have a ledger of your own holding values and a dat, their bytes pushed to a values store and pulled back on a second machine, a value read as of an older revision, and a memo policy chosen.
 

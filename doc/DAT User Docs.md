@@ -2,13 +2,13 @@
 description: "User documentation for dvc-dat: the tutorials, the API reference and the site, and the architecture beneath them."
 ---
 
-| -[DAT User Docs](DAT%20User%20Docs.md)- | : user documentation for dvc-dat: the tutorials, the API reference, the architecture<br>→ [DAT](DAT.md) |
-| --------------------------------------- | --- |
-| Tutorials                               | [API walkthrough](DAT%20Demos/api-walkthrough.ipynb),  [CLI walkthrough](DAT%20Demos/cli-walkthrough.ipynb) |
+| -[DAT User Docs](DAT%20User%20Docs.md)- | : user documentation for dvc-dat: the tutorials, the API reference, the architecture<br>→ [DAT](DAT.md) → [DAT User Docs](DAT%20User%20Docs.md)                                                                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tutorials                               | [API walkthrough](DAT%20Demos/api-walkthrough.ipynb),  [CLI walkthrough](DAT%20Demos/cli-walkthrough.ipynb)                                                                                                                                                     |
 | API reference                           | [API reference](api/index.md):  [core](api/core.md),  [namespace](api/do.md),  [ledger](api/ledger.md),  [commands](api/just.md),  [dat tools](api/dat_tools.md);  design:  [Design notes](Design/DAT%20Design%20Notes.md),  [Summary](Design/DAT%20Summary.md) |
-| Site (mkdocs)                           | [index](index.md),  [concepts](concepts.md),  [cli](cli.md),  [spec-format](spec-format.md),  [mount-commands](mount-commands.md),  [about](about.md) |
-| Architecture                            | [DAT Architecture](DAT%20Architecture.md),  [Ledger](api/ledger.md),  [Dat](api/core.md) |
-| .                                       |  |
+| Site (mkdocs)                           | [index](index.md),  [concepts](concepts.md),  [cli](cli.md),  [spec-format](spec-format.md),  [mount-commands](mount-commands.md),  [about](about.md)                                                                                                           |
+| Architecture                            | [DAT Architecture](DAT%20Architecture.md),  [Ledger](api/ledger.md),  [Dat](api/core.md)                                                                                                                                                                        |
+| .                                       |                                                                                                                                                                                                                                                                 |
 
 # DAT User Docs
 What a user of dvc-dat reads, by kind: two tutorials to run, the API reference (generated from the source, then the hand-written API design), the site `just docs` builds from the pages above, and the architecture the library is built on.

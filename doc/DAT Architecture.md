@@ -1,7 +1,7 @@
 ---
 description: "the two halves, the dat and the ledger, and where they meet"
 ---
-:>> [DAT](DAT.md) → [DVC-DAT Architecture](DAT%20Architecture.md) 
+:>> [DAT](DAT.md) → [DAT Architecture](DAT%20Architecture.md) 
 # DVC-DAT Architecture
 `dvc_dat` has two halves: the dat, a folder that is its own recipe, and the ledger, an append-only database of its history.
 
